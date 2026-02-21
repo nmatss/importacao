@@ -5,6 +5,8 @@ import { checkEmails } from './email-check.js';
 import { logger } from '../shared/utils/logger.js';
 
 export function startScheduler() {
+  const tz = { timezone: 'America/Sao_Paulo' };
+
   // Daily at 8:00 AM - Check deadlines (LI + currency)
   cron.schedule('0 8 * * *', async () => {
     try {
@@ -12,7 +14,7 @@ export function startScheduler() {
     } catch (error) {
       logger.error({ error }, 'Deadline check job failed');
     }
-  });
+  }, tz);
 
   // Daily at 9:00 AM - Check stalled processes
   cron.schedule('0 9 * * *', async () => {
@@ -21,7 +23,7 @@ export function startScheduler() {
     } catch (error) {
       logger.error({ error }, 'Stalled process check job failed');
     }
-  });
+  }, tz);
 
   // Every 5 minutes - Check for new emails
   cron.schedule('*/5 * * * *', async () => {
@@ -30,7 +32,7 @@ export function startScheduler() {
     } catch (error) {
       logger.error({ error }, 'Email check job failed');
     }
-  });
+  }, tz);
 
-  logger.info('Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min)');
+  logger.info('Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min) - timezone: America/Sao_Paulo');
 }

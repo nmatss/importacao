@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { users } from '../../shared/database/schema.js';
 import type { CreateUserInput, UpdateUserInput } from './schema.js';
+import { auditService } from '../audit/service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
@@ -26,6 +27,8 @@ export const authService = {
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES_IN as any }
     );
+
+    auditService.log(user.id, 'login', 'user', user.id, { email: user.email }, null);
 
     return {
       token,

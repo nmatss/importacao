@@ -1,12 +1,18 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Inbox, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Inbox, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, AlertCircle } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { api } from '@/shared/lib/api-client';
+
+interface AttachmentDetail {
+  filename: string;
+  type: string;
+  documentId: string | null;
+}
 
 interface EmailLog {
   id: string;
@@ -18,6 +24,7 @@ interface EmailLog {
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
   attachmentsCount: number;
   processedAttachments: number;
+  processedAttachmentDetails?: AttachmentDetail[];
   errorMessage: string | null;
   processCode: string | null;
   createdAt: string;
@@ -76,6 +83,7 @@ export function EmailIngestionPage() {
   const [page, setPage] = useState(1);
   const [triggering, setTriggering] = useState(false);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const limit = 20;
 
   const { data: statusResponse, isLoading: statusLoading } = useApiQuery<StatusResponse>(
@@ -231,8 +239,11 @@ export function EmailIngestionPage() {
                 <tbody className="divide-y divide-gray-100">
                   {logs.map((log) => {
                     const badge = statusBadgeConfig[log.status] ?? statusBadgeConfig.pending;
+                    const isExpanded = expandedLogId === log.id;
+                    const hasDetails = log.status === 'failed' && log.errorMessage
+                      || log.status === 'completed' && log.processedAttachmentDetails?.length;
                     return (
-                      <tr key={log.id} className="hover:bg-gray-50">
+                      <tr key={log.id} className="hover:bg-gray-50 group">
                         <td className="whitespace-nowrap px-4 py-3 text-gray-600">
                           {formatDateTime(log.receivedAt)}
                         </td>
@@ -240,7 +251,35 @@ export function EmailIngestionPage() {
                           {log.fromAddress}
                         </td>
                         <td className="max-w-[220px] truncate px-4 py-3 text-gray-900" title={log.subject}>
-                          {log.subject}
+                          <div className="flex items-center gap-1">
+                            {log.subject}
+                            {hasDetails && (
+                              <button
+                                onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                                className="ml-1 text-gray-400 hover:text-gray-600"
+                              >
+                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                              </button>
+                            )}
+                          </div>
+                          {/* Error message for failed (Gap 8) */}
+                          {isExpanded && log.status === 'failed' && log.errorMessage && (
+                            <div className="mt-2 flex items-start gap-1.5 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
+                              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                              {log.errorMessage}
+                            </div>
+                          )}
+                          {/* Attachment details for completed (Gap 8) */}
+                          {isExpanded && log.status === 'completed' && log.processedAttachmentDetails && (
+                            <div className="mt-2 space-y-1 text-xs">
+                              {log.processedAttachmentDetails.map((att, i) => (
+                                <div key={i} className="flex items-center gap-2 rounded bg-green-50 px-2 py-1 text-green-700">
+                                  <span className="font-medium">{att.filename}</span>
+                                  <span className="text-green-500">({att.type})</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3">
                           {log.processId ? (

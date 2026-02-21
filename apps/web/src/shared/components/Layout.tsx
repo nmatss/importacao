@@ -8,6 +8,7 @@ import {
   Mail,
   Bell,
   Inbox,
+  Shield,
   Settings,
   LogOut,
   Menu,
@@ -24,6 +25,7 @@ const navItems = [
   { to: '/comunicacoes', label: 'Comunicacoes', icon: Mail },
   { to: '/alertas', label: 'Alertas', icon: Bell },
   { to: '/email-ingestion', label: 'E-mail', icon: Inbox },
+  { to: '/auditoria', label: 'Auditoria', icon: Shield },
   { to: '/configuracoes', label: 'Configuracoes', icon: Settings },
 ];
 
@@ -36,6 +38,7 @@ const pageTitles: Record<string, string> = {
   '/comunicacoes': 'Comunicacoes',
   '/alertas': 'Alertas',
   '/email-ingestion': 'Ingestao de E-mail',
+  '/auditoria': 'Auditoria',
   '/configuracoes': 'Configuracoes',
 };
 

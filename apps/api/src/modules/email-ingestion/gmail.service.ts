@@ -91,14 +91,24 @@ export const gmailService = {
     const emails: FetchedEmail[] = [];
 
     try {
-      // List unread messages
-      const listResponse = await gmail.users.messages.list({
-        userId: 'me',
-        q: 'is:unread has:attachment to:global@grupounico.com',
-        maxResults: 20,
-      });
+      // List unread messages with pagination to fetch ALL
+      const allMessageIds: gmail_v1.Schema$Message[] = [];
+      let pageToken: string | undefined;
 
-      const messageIds = listResponse.data.messages || [];
+      do {
+        const listResponse = await gmail.users.messages.list({
+          userId: 'me',
+          q: 'is:unread has:attachment to:global@grupounico.com',
+          maxResults: 100,
+          pageToken,
+        });
+
+        const messages = listResponse.data.messages || [];
+        allMessageIds.push(...messages);
+        pageToken = listResponse.data.nextPageToken ?? undefined;
+      } while (pageToken);
+
+      const messageIds = allMessageIds;
 
       if (messageIds.length === 0) {
         logger.debug('No unread emails with attachments found');

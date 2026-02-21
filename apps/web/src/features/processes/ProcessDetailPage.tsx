@@ -10,9 +10,10 @@ import {
   CalendarDays,
   MessageSquare,
   CheckCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
-import { cn, formatDate } from '@/shared/lib/utils';
+import { cn, formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
@@ -33,7 +34,14 @@ interface Process {
   exporterName: string | null;
   importerName: string | null;
   totalFobValue: number | null;
+  freightValue: number | null;
+  totalBoxes: number | null;
+  totalNetWeight: number | null;
+  totalGrossWeight: number | null;
+  totalCbm: number | null;
+  shipmentDate: string | null;
   notes: string | null;
+  driveFolderId: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +120,15 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
   );
 }
 
+function InfoField({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-gray-500">{label}</p>
+      <p className="mt-0.5 text-sm text-gray-900">{value || '-'}</p>
+    </div>
+  );
+}
+
 export function ProcessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -162,18 +179,79 @@ export function ProcessDetailPage() {
             </p>
           </div>
         </div>
-        <button
-          onClick={() => navigate(`/processos/${id}/editar`)}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-        >
-          <Edit className="h-4 w-4" />
-          Editar
-        </button>
+        <div className="flex items-center gap-2">
+          {process.driveFolderId && (
+            <a
+              href={`https://drive.google.com/drive/folders/${process.driveFolderId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Abrir no Drive
+            </a>
+          )}
+          <button
+            onClick={() => navigate(`/processos/${id}/editar`)}
+            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <Edit className="h-4 w-4" />
+            Editar
+          </button>
+        </div>
       </div>
 
       {/* Stepper */}
       <div className="rounded-lg border border-gray-200 bg-white p-4">
         <Stepper currentStatus={process.status} />
+      </div>
+
+      {/* Process Info Card (Gap 3) */}
+      <div className="rounded-lg border border-gray-200 bg-white p-5">
+        <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-500">
+          Informacoes do Processo
+        </h3>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+          <InfoField label="Exportador" value={process.exporterName} />
+          <InfoField label="Importador" value={process.importerName} />
+          <InfoField label="Porto Embarque" value={process.portOfLoading} />
+          <InfoField label="Porto Destino" value={process.portOfDischarge} />
+          <InfoField label="Incoterm" value={process.incoterm} />
+          <InfoField
+            label="Valor FOB"
+            value={process.totalFobValue != null ? formatCurrency(process.totalFobValue) : null}
+          />
+          <InfoField
+            label="Frete"
+            value={process.freightValue != null ? formatCurrency(process.freightValue) : null}
+          />
+          <InfoField
+            label="Caixas"
+            value={process.totalBoxes != null ? String(process.totalBoxes) : null}
+          />
+          <InfoField
+            label="Peso Liquido"
+            value={process.totalNetWeight != null ? formatWeight(process.totalNetWeight) : null}
+          />
+          <InfoField
+            label="Peso Bruto"
+            value={process.totalGrossWeight != null ? formatWeight(process.totalGrossWeight) : null}
+          />
+          <InfoField
+            label="CBM"
+            value={process.totalCbm != null ? `${process.totalCbm.toFixed(3)} m3` : null}
+          />
+          <InfoField
+            label="Data Embarque"
+            value={process.shipmentDate ? formatDate(process.shipmentDate) : null}
+          />
+        </div>
+        {process.notes && (
+          <div className="mt-4 border-t border-gray-100 pt-3">
+            <p className="text-xs font-medium text-gray-500">Observacoes</p>
+            <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{process.notes}</p>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}

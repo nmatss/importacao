@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Clock, AlertTriangle, CheckCircle, Calendar } from 'lucide-react';
+import { ClipboardList, Clock, AlertTriangle, CheckCircle, Calendar, ChevronDown } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -14,6 +14,13 @@ interface FollowUpProcess {
   lastUpdateDate: string;
   daysSinceUpdate: number;
   status: 'on_track' | 'approaching' | 'overdue';
+  documentsReceivedAt: string | null;
+  preInspectionAt: string | null;
+  ncmVerifiedAt: string | null;
+  espelhoGeneratedAt: string | null;
+  sentToFeniciaAt: string | null;
+  liSubmittedAt: string | null;
+  liApprovedAt: string | null;
 }
 
 interface LiDeadline {
@@ -51,9 +58,32 @@ const brandColors: Record<string, string> = {
   imaginarium: 'bg-violet-100 text-violet-700',
 };
 
+function formatStageDate(date: string | null): string {
+  if (!date) return '-';
+  const d = new Date(date);
+  return d.toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+const STAGE_DATE_LABELS: { key: keyof FollowUpProcess; label: string }[] = [
+  { key: 'documentsReceivedAt', label: 'Docs Recebidos' },
+  { key: 'preInspectionAt', label: 'Pre-Inspecao' },
+  { key: 'ncmVerifiedAt', label: 'NCM Verificado' },
+  { key: 'espelhoGeneratedAt', label: 'Espelho Gerado' },
+  { key: 'sentToFeniciaAt', label: 'Enviado Fenicia' },
+  { key: 'liSubmittedAt', label: 'LI Submetida' },
+  { key: 'liApprovedAt', label: 'LI Aprovada' },
+];
+
 export function FollowUpPage() {
   const navigate = useNavigate();
   const [showDeadlines, setShowDeadlines] = useState(true);
+  const [expandedProcessId, setExpandedProcessId] = useState<string | null>(null);
 
   const { data: followUpData, isLoading } = useApiQuery<FollowUpProcess[]>(
     ['follow-up'],
@@ -118,27 +148,55 @@ export function FollowUpPage() {
                       <p className="py-8 text-center text-xs text-gray-400">Nenhum processo</p>
                     ) : (
                       processes.map((proc) => (
-                        <button
+                        <div
                           key={proc.id}
-                          onClick={() => navigate(`/processes/${proc.id}`)}
-                          className={`w-full rounded-lg border-l-4 p-3 text-left shadow-sm transition-shadow hover:shadow-md ${statusColorMap[proc.status]}`}
+                          className={`w-full rounded-lg border-l-4 shadow-sm transition-shadow hover:shadow-md ${statusColorMap[proc.status]}`}
                         >
-                          <div className="flex items-center justify-between">
-                            <span className="text-sm font-medium text-gray-900">{proc.processCode}</span>
-                            <span className={`inline-block h-2 w-2 rounded-full ${statusDotMap[proc.status]}`} />
-                          </div>
-                          <span
-                            className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                              brandColors[proc.brand] || 'bg-gray-100 text-gray-700'
-                            }`}
+                          <button
+                            onClick={() => navigate(`/processos/${proc.id}`)}
+                            className="w-full p-3 text-left"
                           >
-                            {proc.brand}
-                          </span>
-                          <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
-                            <Clock className="h-3 w-3" />
-                            {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''} sem atualizacao
-                          </div>
-                        </button>
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-gray-900">{proc.processCode}</span>
+                              <span className={`inline-block h-2 w-2 rounded-full ${statusDotMap[proc.status]}`} />
+                            </div>
+                            <span
+                              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                brandColors[proc.brand] || 'bg-gray-100 text-gray-700'
+                              }`}
+                            >
+                              {proc.brand}
+                            </span>
+                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
+                              <Clock className="h-3 w-3" />
+                              {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''} sem atualizacao
+                            </div>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedProcessId(expandedProcessId === proc.id ? null : proc.id);
+                            }}
+                            className="flex w-full items-center justify-center border-t border-gray-200 py-1 text-xs text-gray-400 hover:text-gray-600"
+                          >
+                            <ChevronDown className={`h-3 w-3 transition-transform ${expandedProcessId === proc.id ? 'rotate-180' : ''}`} />
+                          </button>
+                          {expandedProcessId === proc.id && (
+                            <div className="border-t border-gray-200 px-3 pb-2 pt-1 space-y-0.5">
+                              {STAGE_DATE_LABELS.map((s) => {
+                                const val = proc[s.key] as string | null;
+                                return (
+                                  <div key={s.key} className="flex justify-between text-[10px]">
+                                    <span className="text-gray-500">{s.label}</span>
+                                    <span className={val ? 'text-gray-800 font-medium' : 'text-gray-300'}>
+                                      {formatStageDate(val)}
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
                       ))
                     )}
                   </div>

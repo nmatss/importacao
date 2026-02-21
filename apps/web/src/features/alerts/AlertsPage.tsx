@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Bell, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { formatDate, cn } from '@/shared/lib/utils';
@@ -8,7 +9,8 @@ import { EmptyState } from '@/shared/components/EmptyState';
 
 interface Alert {
   id: string;
-  processId: string;
+  processId: string | null;
+  processCode: string | null;
   severity: 'info' | 'warning' | 'critical';
   title: string;
   message: string;
@@ -194,6 +196,16 @@ export function AlertsPage() {
                         )}
                       </div>
                       <p className="mt-1 text-sm text-gray-600">{alert.message}</p>
+                      {alert.processId && (
+                        <p className="mt-1 text-xs">
+                          <Link
+                            to={`/processos/${alert.processId}`}
+                            className="text-blue-600 hover:text-blue-700 hover:underline font-medium"
+                          >
+                            {alert.processCode || alert.processId}
+                          </Link>
+                        </p>
+                      )}
                       <div className="mt-2 flex items-center gap-3 text-xs text-gray-400">
                         <span>{formatDate(alert.createdAt)}</span>
                         {alert.acknowledgedAt && (

@@ -6,12 +6,14 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { ProcessListPage } from '@/features/processes/ProcessListPage';
 import { ProcessDetailPage } from '@/features/processes/ProcessDetailPage';
 import { ProcessCreatePage } from '@/features/processes/ProcessCreatePage';
+import { ProcessEditPage } from '@/features/processes/ProcessEditPage';
 import { CurrencyExchangePage } from '@/features/currency-exchange/CurrencyExchangePage';
 import { FollowUpPage } from '@/features/follow-up/FollowUpPage';
 import { CommunicationsPage } from '@/features/communications/CommunicationsPage';
 import { SettingsPage } from '@/features/settings/SettingsPage';
 import { AlertsPage } from '@/features/alerts/AlertsPage';
 import { EmailIngestionPage } from '@/features/email-ingestion/EmailIngestionPage';
+import { AuditLogPage } from '@/features/audit/AuditLogPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -35,11 +37,13 @@ export function AppRoutes() {
                 <Route path="/processos" element={<ProcessListPage />} />
                 <Route path="/processos/novo" element={<ProcessCreatePage />} />
                 <Route path="/processos/:id" element={<ProcessDetailPage />} />
+                <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
                 <Route path="/cambios" element={<CurrencyExchangePage />} />
                 <Route path="/follow-up" element={<FollowUpPage />} />
                 <Route path="/comunicacoes" element={<CommunicationsPage />} />
                 <Route path="/alertas" element={<AlertsPage />} />
                 <Route path="/email-ingestion" element={<EmailIngestionPage />} />
+                <Route path="/auditoria" element={<AuditLogPage />} />
                 <Route path="/configuracoes" element={<SettingsPage />} />
               </Routes>
             </Layout>

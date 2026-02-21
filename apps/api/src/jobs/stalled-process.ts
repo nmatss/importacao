@@ -15,6 +15,9 @@ export async function checkStalledProcesses() {
     ));
 
   for (const process of stalledProcesses) {
+    const title = 'Processo Parado';
+    if (await alertService.hasDuplicateRecent(process.id, title)) continue;
+
     const daysSinceUpdate = Math.floor(
       (Date.now() - new Date(process.updatedAt!).getTime()) / (1000 * 60 * 60 * 24)
     );
@@ -22,7 +25,7 @@ export async function checkStalledProcesses() {
     await alertService.create({
       processId: process.id,
       severity: 'warning',
-      title: 'Processo Parado',
+      title,
       message: `O processo ${process.processCode} está sem atividade há ${daysSinceUpdate} dias. Status atual: ${process.status}.`,
       processCode: process.processCode,
     });

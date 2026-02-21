@@ -4,7 +4,9 @@ import { validationResults, documents, importProcesses, followUpTracking } from 
 import { allChecks } from './checks/index.js';
 import type { CheckInput, CheckResult } from './checks/index.js';
 import { aiService } from '../ai/service.js';
+import { alertService } from '../alerts/service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { auditService } from '../audit/service.js';
 
 export const validationService = {
   async runAllChecks(processId: number): Promise<CheckResult[]> {
@@ -88,6 +90,24 @@ export const validationService = {
         .where(eq(importProcesses.id, processId));
     }
 
+    auditService.log(null, 'validation_run', 'process', processId, {
+      total: results.length,
+      passed: results.filter((r) => r.status === 'passed').length,
+      failed: results.filter((r) => r.status === 'failed').length,
+    }, null);
+
+    // 8. Create alert if any checks failed
+    const failedChecks = results.filter((r) => r.status === 'failed');
+    if (failedChecks.length > 0) {
+      await alertService.create({
+        processId,
+        severity: 'warning',
+        title: 'Falhas na Validação',
+        message: `Processo ${process?.processCode ?? processId}: ${failedChecks.length} verificação(ões) falharam: ${failedChecks.map(c => c.checkName).join(', ')}.`,
+        processCode: process?.processCode,
+      });
+    }
+
     return results;
   },
 
@@ -113,6 +133,7 @@ export const validationService = {
       throw new Error('Validation result not found');
     }
 
+    auditService.log(userId, 'manual_resolution', 'validation', resultId, null, null);
     logger.info({ resultId, userId }, 'Validation result resolved manually');
     return updated;
   },

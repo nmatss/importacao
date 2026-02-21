@@ -26,21 +26,27 @@ export async function checkDeadlines() {
     const daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysRemaining < 0) {
-      await alertService.create({
-        processId: process.id,
-        severity: 'critical',
-        title: 'Prazo LI Excedido',
-        message: `O prazo de LI do processo ${process.processCode} expirou há ${Math.abs(daysRemaining)} dias. Deadline era: ${deadline.toLocaleDateString('pt-BR')}.`,
-        processCode: process.processCode,
-      });
+      const title = 'Prazo LI Excedido';
+      if (!(await alertService.hasDuplicateRecent(process.id, title))) {
+        await alertService.create({
+          processId: process.id,
+          severity: 'critical',
+          title,
+          message: `O prazo de LI do processo ${process.processCode} expirou há ${Math.abs(daysRemaining)} dias. Deadline era: ${deadline.toLocaleDateString('pt-BR')}.`,
+          processCode: process.processCode,
+        });
+      }
     } else if (daysRemaining <= 3) {
-      await alertService.create({
-        processId: process.id,
-        severity: 'warning',
-        title: 'Prazo LI se Aproximando',
-        message: `O prazo de LI do processo ${process.processCode} vence em ${daysRemaining} dias (${deadline.toLocaleDateString('pt-BR')}).`,
-        processCode: process.processCode,
-      });
+      const title = 'Prazo LI se Aproximando';
+      if (!(await alertService.hasDuplicateRecent(process.id, title))) {
+        await alertService.create({
+          processId: process.id,
+          severity: 'warning',
+          title,
+          message: `O prazo de LI do processo ${process.processCode} vence em ${daysRemaining} dias (${deadline.toLocaleDateString('pt-BR')}).`,
+          processCode: process.processCode,
+        });
+      }
     }
   }
 
@@ -53,12 +59,15 @@ export async function checkDeadlines() {
     const daysRemaining = Math.ceil((deadline.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
     if (daysRemaining <= 3 && daysRemaining >= 0) {
-      await alertService.create({
-        processId: exchange.processId,
-        severity: 'warning',
-        title: 'Câmbio Vencendo',
-        message: `Pagamento de câmbio de USD ${exchange.amountUsd} vence em ${daysRemaining} dias.`,
-      });
+      const title = 'Câmbio Vencendo';
+      if (!(await alertService.hasDuplicateRecent(exchange.processId, title))) {
+        await alertService.create({
+          processId: exchange.processId,
+          severity: 'warning',
+          title,
+          message: `Pagamento de câmbio de USD ${exchange.amountUsd} vence em ${daysRemaining} dias.`,
+        });
+      }
     }
   }
 

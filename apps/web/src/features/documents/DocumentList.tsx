@@ -6,6 +6,9 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
+  Mail,
+  Upload,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
@@ -22,6 +25,12 @@ interface Document {
   aiProcessingStatus: 'pending' | 'processing' | 'completed' | 'failed';
   aiParsedData?: Record<string, unknown>;
   aiConfidence?: number;
+  driveFileId?: string | null;
+}
+
+interface DocumentSource {
+  source: 'email' | 'manual';
+  emailSubject?: string;
 }
 
 interface DocumentListProps {
@@ -64,11 +73,29 @@ export function DocumentList({ processId }: DocumentListProps) {
   const queryClient = useQueryClient();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [sources, setSources] = useState<Record<string, DocumentSource>>({});
 
   const { data: documents, isLoading } = useApiQuery<Document[]>(
     ['documents', processId],
     `/api/documents?processId=${processId}`,
   );
+
+  const fetchSource = async (docId: string) => {
+    if (sources[docId]) return;
+    try {
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '/api';
+      const res = await fetch(`${baseUrl}/api/documents/${docId}/source`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSources((prev) => ({ ...prev, [docId]: data }));
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   const reprocessMutation = useApiMutation<void, void>(
     '', // overridden per call
@@ -145,10 +172,48 @@ export function DocumentList({ processId }: DocumentListProps) {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {/* Source tag (Gap 11) */}
+                  <button
+                    onClick={() => fetchSource(doc.id)}
+                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+                    title="Ver origem"
+                  >
+                    {sources[doc.id] ? (
+                      sources[doc.id].source === 'email' ? (
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
+                          <Mail className="h-3 w-3" />
+                          {sources[doc.id].emailSubject
+                            ? sources[doc.id].emailSubject!.slice(0, 20) + (sources[doc.id].emailSubject!.length > 20 ? '...' : '')
+                            : 'Email'}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600">
+                          <Upload className="h-3 w-3" />
+                          Manual
+                        </span>
+                      )
+                    ) : (
+                      <Mail className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+
                   <AiStatusIndicator status={doc.aiProcessingStatus} />
 
                   {doc.aiParsedData && doc.aiConfidence != null && (
                     <ConfidenceIndicator value={doc.aiConfidence} />
+                  )}
+
+                  {/* Drive link (Gap 1) */}
+                  {doc.driveFileId && (
+                    <a
+                      href={`https://drive.google.com/file/d/${doc.driveFileId}/view`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-green-600 transition-colors"
+                      title="Abrir no Drive"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </a>
                   )}
 
                   {doc.aiParsedData && (

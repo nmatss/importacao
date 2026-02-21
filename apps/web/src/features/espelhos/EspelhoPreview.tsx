@@ -6,6 +6,7 @@ import {
   FileSpreadsheet,
   Plus,
   RefreshCw,
+  CheckCircle,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -39,6 +40,10 @@ interface Espelho {
   totalNetWeight: number;
   totalGrossWeight: number;
   totalBoxes: number;
+  driveFileId?: string | null;
+  driveSentAt?: string | null;
+  sentToFenicia?: boolean;
+  sentToFeniciaAt?: string | null;
 }
 
 interface EspelhoPreviewProps {
@@ -234,6 +239,40 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           <span className="flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded bg-orange-200" /> Certificado
           </span>
+        </div>
+      )}
+
+      {/* Sent status indicators (Gap 7) */}
+      {espelho && (espelho.driveFileId || espelho.sentToFenicia) && (
+        <div className="flex flex-wrap gap-3">
+          {espelho.driveFileId && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+              <CheckCircle className="h-4 w-4" />
+              Enviado ao Drive
+              {espelho.driveSentAt && (
+                <span className="text-xs text-green-600">
+                  em {new Date(espelho.driveSentAt).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              )}
+            </div>
+          )}
+          {espelho.sentToFenicia && (
+            <div className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700">
+              <CheckCircle className="h-4 w-4" />
+              Enviado a Fenicia
+              {espelho.sentToFeniciaAt && (
+                <span className="text-xs text-orange-600">
+                  em {new Date(espelho.sentToFeniciaAt).toLocaleDateString('pt-BR', {
+                    day: '2-digit', month: '2-digit', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
 

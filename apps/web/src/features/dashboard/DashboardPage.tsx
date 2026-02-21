@@ -14,6 +14,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
 } from 'recharts';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
@@ -47,6 +53,19 @@ interface StatusCount {
   count: number;
 }
 
+interface MonthlyTrend {
+  month: string;
+  count: number;
+  fobValue: number;
+}
+
+interface FobByBrand {
+  brand: string;
+  totalFob: number;
+}
+
+const PIE_COLORS = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+
 const severityStyles: Record<string, string> = {
   critical: 'bg-red-100 text-red-700',
   warning: 'bg-amber-100 text-amber-700',
@@ -65,6 +84,12 @@ export function DashboardPage() {
 
   const { data: byStatus, isLoading: loadingStatus } =
     useApiQuery<StatusCount[]>(['dashboard', 'by-status'], '/api/dashboard/by-status');
+
+  const { data: byMonth } =
+    useApiQuery<MonthlyTrend[]>(['dashboard', 'by-month'], '/api/dashboard/by-month');
+
+  const { data: fobByBrand } =
+    useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
 
   if (loadingOverview || loadingStatus) {
     return <LoadingSpinner size="lg" className="py-24" />;
@@ -181,6 +206,92 @@ export function DashboardPage() {
                   </div>
                 </div>
               ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Monthly Trend + FOB by Brand Charts (Gap 5) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* Monthly Trend */}
+        <div className="lg:col-span-2 rounded-lg border border-gray-200 bg-white p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            Tendencia Mensal
+          </h3>
+          <div className="h-72">
+            {byMonth && byMonth.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={byMonth} margin={{ bottom: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" fontSize={12} />
+                  <YAxis yAxisId="left" allowDecimals={false} />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip />
+                  <Legend />
+                  <Line
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="count"
+                    name="Processos"
+                    stroke="#3b82f6"
+                    strokeWidth={2}
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="fobValue"
+                    name="FOB (USD)"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="flex h-full items-center justify-center text-sm text-gray-400">
+                Sem dados mensais disponiveis.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* FOB by Brand */}
+        <div className="rounded-lg border border-gray-200 bg-white p-5">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">
+            FOB por Marca
+          </h3>
+          <div className="h-72">
+            {fobByBrand && fobByBrand.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={fobByBrand}
+                    dataKey="totalFob"
+                    nameKey="brand"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    label={({ brand, percent }) =>
+                      `${brand} (${(percent * 100).toFixed(0)}%)`
+                    }
+                  >
+                    {fobByBrand.map((_entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: number) =>
+                      formatCurrency(value)
+                    }
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="flex h-full items-center justify-center text-sm text-gray-400">
+                Sem dados de FOB por marca.
+              </p>
             )}
           </div>
         </div>

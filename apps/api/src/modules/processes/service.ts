@@ -2,6 +2,7 @@ import { eq, desc, ilike, and, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { importProcesses, documents, followUpTracking } from '../../shared/database/schema.js';
 import type { CreateProcessInput, UpdateProcessInput, ProcessFilter } from './schema.js';
+import { auditService } from '../audit/service.js';
 
 export const processService = {
   async list(filter: ProcessFilter) {
@@ -77,6 +78,8 @@ export const processService = {
       processId: process.id,
     });
 
+    auditService.log(userId, 'create', 'process', process.id, { processCode: input.processCode }, null);
+
     return process;
   },
 
@@ -87,6 +90,7 @@ export const processService = {
       .returning();
 
     if (!process) throw new Error('Processo não encontrado');
+    auditService.log(null, 'update', 'process', id, { fields: Object.keys(input) }, null);
     return process;
   },
 
@@ -107,6 +111,7 @@ export const processService = {
       .returning({ id: importProcesses.id });
 
     if (!process) throw new Error('Processo não encontrado');
+    auditService.log(null, 'delete', 'process', id, null, null);
     return process;
   },
 

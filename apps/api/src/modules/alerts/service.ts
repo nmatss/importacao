@@ -1,8 +1,9 @@
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { alerts, systemSettings } from '../../shared/database/schema.js';
 import { sendToGoogleChat } from './google-chat.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { auditService } from '../audit/service.js';
 
 export const alertService = {
   async list(filters?: { processId?: number; severity?: string; acknowledged?: boolean }) {
@@ -47,7 +48,22 @@ export const alertService = {
       logger.error({ alertId: alert.id }, 'Failed to send alert to Google Chat');
     }
 
+    auditService.log(null, 'alert_created', 'alert', alert.id, { severity: data.severity, title: data.title }, null);
+
     return alert;
+  },
+
+  async hasDuplicateRecent(processId: number | undefined, title: string): Promise<boolean> {
+    if (!processId) return false;
+    const [existing] = await db.select({ id: alerts.id })
+      .from(alerts)
+      .where(and(
+        eq(alerts.processId, processId),
+        eq(alerts.title, title),
+        sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
+      ))
+      .limit(1);
+    return !!existing;
   },
 
   async acknowledge(id: number, userId: number) {
@@ -57,6 +73,7 @@ export const alertService = {
       .returning();
 
     if (!alert) throw new Error('Alerta não encontrado');
+    auditService.log(userId, 'acknowledge', 'alert', id, null, null);
     return alert;
   },
 };

@@ -4,10 +4,10 @@ import { eq, desc, count, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { emailIngestionLogs, importProcesses, followUpTracking } from '../../shared/database/schema.js';
 import { documentService } from '../documents/service.js';
-import { googleDriveService } from '../integrations/google-drive.service.js';
 import { gmailService } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { auditService } from '../audit/service.js';
 
 const UPLOAD_DIR = path.resolve('uploads');
 
@@ -157,22 +157,6 @@ export const emailProcessor = {
 
             const doc = await documentService.upload(processId, docType, fakeFile);
 
-            try {
-              const driveConfigured = await googleDriveService.isConfigured();
-              if (driveConfigured) {
-                const [process] = await db.select()
-                  .from(importProcesses)
-                  .where(eq(importProcesses.id, processId))
-                  .limit(1);
-
-                if (process?.driveFolderId) {
-                  await googleDriveService.uploadFile(filePath, att.filename, process.driveFolderId);
-                }
-              }
-            } catch (driveErr) {
-              logger.error({ err: driveErr }, 'Drive upload failed, continuing');
-            }
-
             processedAttachments.push({ filename: att.filename, type: docType, documentId: doc.id });
           } else {
             processedAttachments.push({ filename: att.filename, type: docType });
@@ -188,6 +172,7 @@ export const emailProcessor = {
           })
           .where(eq(emailIngestionLogs.id, logEntry.id));
 
+        auditService.log(null, 'email_processed', 'email', logEntry.id, { from: email.from, subject: email.subject, processCode, attachments: processedAttachments.length }, null);
         logger.info({ messageId: email.messageId, processCode, attachments: processedAttachments.length }, 'Email processed successfully');
       } catch (error: any) {
         await db.update(emailIngestionLogs)
@@ -257,9 +242,57 @@ export const emailProcessor = {
     if (log.status !== 'failed') throw new Error('Apenas emails com falha podem ser reprocessados');
 
     await db.update(emailIngestionLogs)
-      .set({ status: 'pending', errorMessage: null })
+      .set({ status: 'processing', errorMessage: null })
       .where(eq(emailIngestionLogs.id, logId));
 
-    return { message: 'Email marcado para reprocessamento' };
+    try {
+      // Try to re-fetch from Gmail if configured
+      if (gmailService.isConfigured() && log.messageId) {
+        const gmail = await import('@googleapis/gmail');
+        // Re-process using processNewEmails flow but for single message
+        // Reset the log so processNewEmails won't skip it
+        await db.update(emailIngestionLogs)
+          .set({ status: 'pending', errorMessage: null })
+          .where(eq(emailIngestionLogs.id, logId));
+
+        // Delete old log so processNewEmails re-processes the messageId
+        await db.delete(emailIngestionLogs)
+          .where(eq(emailIngestionLogs.id, logId));
+
+        // Trigger a new email check which will pick up the message again
+        await this.processNewEmails();
+
+        return { message: 'Email reprocessado via Gmail API' };
+      }
+
+      // Fallback: re-process from locally saved attachments if a process was created
+      if (log.processId) {
+        const processedAttachments = log.processedAttachments as Array<{ filename: string; type: string; documentId?: number }> | null;
+        if (processedAttachments && processedAttachments.length > 0) {
+          for (const att of processedAttachments) {
+            if (att.documentId) {
+              await documentService.reprocess(att.documentId);
+            }
+          }
+
+          await db.update(emailIngestionLogs)
+            .set({ status: 'completed', errorMessage: null })
+            .where(eq(emailIngestionLogs.id, logId));
+
+          return { message: 'Documentos reprocessados a partir dos arquivos locais' };
+        }
+      }
+
+      await db.update(emailIngestionLogs)
+        .set({ status: 'failed', errorMessage: 'Nenhum método de reprocessamento disponível' })
+        .where(eq(emailIngestionLogs.id, logId));
+
+      return { message: 'Nenhum método de reprocessamento disponível' };
+    } catch (error: any) {
+      await db.update(emailIngestionLogs)
+        .set({ status: 'failed', errorMessage: error.message })
+        .where(eq(emailIngestionLogs.id, logId));
+      throw error;
+    }
   },
 };

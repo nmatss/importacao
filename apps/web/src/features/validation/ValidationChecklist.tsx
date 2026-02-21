@@ -21,6 +21,9 @@ interface ValidationCheck {
   expectedValue?: string;
   actualValue?: string;
   message?: string;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  manuallyResolved?: boolean;
 }
 
 interface Anomaly {
@@ -200,7 +203,21 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                           )}
                         </div>
                       )}
-                    {check.status === 'fail' && (
+                    {check.manuallyResolved && check.resolvedBy && (
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                        <Wrench className="h-3 w-3" />
+                        Resolvido por {check.resolvedBy}
+                        {check.resolvedAt && (
+                          <span className="text-blue-500">
+                            em {new Date(check.resolvedAt).toLocaleDateString('pt-BR', {
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                              hour: '2-digit', minute: '2-digit',
+                            })}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {check.status === 'fail' && !check.manuallyResolved && (
                       <button
                         onClick={() => resolveManually(check.id)}
                         className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"

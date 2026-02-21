@@ -13,6 +13,7 @@ import {
 import { generatePuketSheet } from './templates/puket.template.js';
 import { generateImaginariumSheet } from './templates/imaginarium.template.js';
 import { logger } from '../../shared/utils/logger.js';
+import { auditService } from '../audit/service.js';
 
 const UPLOAD_DIR = 'uploads';
 
@@ -103,6 +104,8 @@ export const espelhoService = {
       .update(followUpTracking)
       .set({ espelhoGeneratedAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, processId));
+
+    auditService.log(null, 'generate', 'espelho', espelho.id, { processId, version: nextVersion, itemCount: items.length }, null);
 
     logger.info(
       { processId, espelhoId: espelho.id, version: nextVersion },
@@ -353,6 +356,8 @@ export const espelhoService = {
       .update(followUpTracking)
       .set({ sentToFeniciaAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, updated.processId));
+
+    auditService.log(null, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
 
     return updated;
   },

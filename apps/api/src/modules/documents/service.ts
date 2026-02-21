@@ -5,8 +5,10 @@ import * as XLSX from 'xlsx';
 import { db } from '../../shared/database/connection.js';
 import { documents, importProcesses, followUpTracking } from '../../shared/database/schema.js';
 import { aiService } from '../ai/service.js';
+import { alertService } from '../alerts/service.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { auditService } from '../audit/service.js';
 
 export const documentService = {
   async upload(processId: number, type: string, file: Express.Multer.File) {
@@ -36,7 +38,20 @@ export const documentService = {
       await db.update(followUpTracking)
         .set({ documentsReceivedAt: new Date(), updatedAt: new Date() })
         .where(eq(followUpTracking.processId, processId));
+
+      // Alert: all 3 documents received
+      const [proc] = await db.select({ processCode: importProcesses.processCode })
+        .from(importProcesses).where(eq(importProcesses.id, processId)).limit(1);
+      alertService.create({
+        processId,
+        severity: 'info',
+        title: 'Documentos Completos',
+        message: `Todos os 3 documentos recebidos para processo ${proc?.processCode ?? processId}.`,
+        processCode: proc?.processCode,
+      }).catch(err => logger.error({ err }, 'Failed to create documents-received alert'));
     }
+
+    auditService.log(null, 'upload', 'document', doc.id, { processId, type, filename: file.originalname }, null);
 
     // Trigger AI extraction in background
     this.processWithAI(doc.id, type).catch(err =>
@@ -81,15 +96,34 @@ export const documentService = {
       })
       .where(eq(documents.id, documentId));
 
-    // Update process AI extracted data
+    // Merge AI extracted data with existing data (avoid overwriting other doc types)
+    const [currentProcess] = await db.select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, doc.processId))
+      .limit(1);
+
+    const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
+    const mergedAiData = { ...existingAiData, [type]: result.data };
+
     await db.update(importProcesses)
       .set({
-        aiExtractedData: { [type]: result.data },
+        aiExtractedData: mergedAiData,
         updatedAt: new Date(),
       })
       .where(eq(importProcesses.id, doc.processId));
 
     logger.info({ documentId, type, confidence: result.confidenceScore }, 'AI extraction completed');
+
+    // Auto-trigger validation when all 3 doc types have AI data
+    if (mergedAiData.invoice && mergedAiData.packing_list && mergedAiData.ohbl) {
+      try {
+        const { validationService } = await import('../validation/service.js');
+        await validationService.runAllChecks(doc.processId);
+        logger.info({ processId: doc.processId }, 'Auto-validation triggered after all 3 AI extractions completed');
+      } catch (valErr) {
+        logger.error({ err: valErr, processId: doc.processId }, 'Auto-validation failed');
+      }
+    }
   },
 
   async extractText(filePath: string, mimeType: string): Promise<string> {
@@ -131,6 +165,8 @@ export const documentService = {
       .set({ isProcessed: false, aiParsedData: null, confidenceScore: null, updatedAt: new Date() })
       .where(eq(documents.id, documentId));
 
+    auditService.log(null, 'reprocess', 'document', documentId, { type: doc.type }, null);
+
     await this.processWithAI(documentId, doc.type);
     return this.getById(documentId);
   },
@@ -147,6 +183,7 @@ export const documentService = {
     }
 
     await db.delete(documents).where(eq(documents.id, id));
+    auditService.log(null, 'delete', 'document', id, { processId: doc.processId, filename: doc.originalFilename }, null);
     return { id };
   },
 

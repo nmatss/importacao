@@ -99,10 +99,19 @@ class AIService {
     return { score, lowConfidenceFields };
   }
 
+  private safeJsonParse(response: string, context: string): any {
+    try {
+      return JSON.parse(response);
+    } catch (err) {
+      logger.error({ err, context, rawResponse: response.substring(0, 500) }, 'Failed to parse AI JSON response');
+      throw new Error(`Failed to parse AI response for ${context}: invalid JSON`);
+    }
+  }
+
   async extractInvoiceData(text: string): Promise<ExtractionResult> {
     const messages = buildInvoicePrompt(text);
     const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const data = JSON.parse(response);
+    const data = this.safeJsonParse(response, 'invoice extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
@@ -116,7 +125,7 @@ class AIService {
   async extractPackingListData(text: string): Promise<ExtractionResult> {
     const messages = buildPackingListPrompt(text);
     const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const data = JSON.parse(response);
+    const data = this.safeJsonParse(response, 'packing list extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
@@ -130,7 +139,7 @@ class AIService {
   async extractBLData(text: string): Promise<ExtractionResult> {
     const messages = buildBLPrompt(text);
     const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const data = JSON.parse(response);
+    const data = this.safeJsonParse(response, 'bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
@@ -148,7 +157,7 @@ class AIService {
   ): Promise<{ anomalies: Array<{ field: string; description: string; severity: string }> }> {
     const messages = buildAnomalyPrompt(invoiceData, packingListData, blData);
     const response = await this.chat('anthropic/claude-sonnet-4', messages);
-    const result = JSON.parse(response);
+    const result = this.safeJsonParse(response, 'anomaly detection');
 
     logger.info(
       { anomalyCount: result.anomalies?.length ?? 0 },
@@ -164,7 +173,7 @@ class AIService {
   ): Promise<{ subject: string; body: string }> {
     const messages = buildEmailPrompt(processData, recipientType);
     const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const result = JSON.parse(response);
+    const result = this.safeJsonParse(response, 'email draft generation');
 
     logger.info({ recipientType }, 'Email draft generated');
 
@@ -203,7 +212,7 @@ Rules:
     ];
 
     const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const result = JSON.parse(response);
+    const result = this.safeJsonParse(response, 'NCM validation');
 
     logger.info({ ncmCode, isValid: result.isValid }, 'NCM validation completed');
 
