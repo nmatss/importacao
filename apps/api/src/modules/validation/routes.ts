@@ -1,0 +1,14 @@
+import { Router } from 'express';
+import { validationController } from './controller.js';
+import { authMiddleware } from '../../shared/middleware/auth.js';
+
+const router = Router();
+
+router.use(authMiddleware);
+
+router.post('/:processId/run', validationController.runAllChecks);
+router.get('/:processId', validationController.getResults);
+router.patch('/results/:id/resolve', validationController.resolveManually);
+router.post('/:processId/anomalies', validationController.runAnomalyDetection);
+
+export { router as validationRoutes };

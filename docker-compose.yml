@@ -1,0 +1,64 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-importacao}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-importacao123}
+      POSTGRES_DB: ${POSTGRES_DB:-importacao}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-importacao}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      API_PORT: 3001
+      NODE_ENV: ${NODE_ENV:-production}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      GOOGLE_DRIVE_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
+      GOOGLE_DRIVE_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
+      GOOGLE_DRIVE_ROOT_FOLDER_ID: ${GOOGLE_DRIVE_ROOT_FOLDER_ID:-}
+      GOOGLE_CHAT_WEBHOOK_URL: ${GOOGLE_CHAT_WEBHOOK_URL:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      ODOO_URL: ${ODOO_URL:-}
+      ODOO_DB: ${ODOO_DB:-}
+      ODOO_USER: ${ODOO_USER:-}
+      ODOO_PASSWORD: ${ODOO_PASSWORD:-}
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  uploads:
