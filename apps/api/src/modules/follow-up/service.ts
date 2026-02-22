@@ -62,11 +62,17 @@ export const followUpService = {
   },
 
   async update(processId: number, data: Record<string, any>) {
-    const overallProgress = calculateProgress(data);
+    const ALLOWED_FIELDS = ['documentsReceivedAt', 'preInspectionAt', 'ncmVerifiedAt', 'espelhoGeneratedAt', 'sentToFeniciaAt', 'liSubmittedAt', 'liApprovedAt', 'liDeadline', 'notes'] as const;
+    const safeData: Record<string, any> = {};
+    for (const field of ALLOWED_FIELDS) {
+      if (field in data) safeData[field] = data[field];
+    }
+
+    const overallProgress = calculateProgress(safeData);
 
     const [tracking] = await db.update(followUpTracking)
       .set({
-        ...data,
+        ...safeData,
         overallProgress,
         updatedAt: new Date(),
       })

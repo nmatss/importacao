@@ -10,6 +10,7 @@ import {
   date,
   timestamp,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core';
 
 // ── Enums ──────────────────────────────────────────────────────────────
@@ -103,7 +104,10 @@ export const importProcesses = pgTable('import_processes', {
   createdBy: integer('created_by').references(() => users.id),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => [
+  index('import_processes_status_idx').on(table.status),
+  index('import_processes_brand_idx').on(table.brand),
+]);
 
 export const documents = pgTable('documents', {
   id: serial('id').primaryKey(),
@@ -121,7 +125,9 @@ export const documents = pgTable('documents', {
   isProcessed: boolean('is_processed').default(false),
   createdAt: timestamp('created_at').defaultNow(),
   updatedAt: timestamp('updated_at').defaultNow(),
-});
+}, (table) => [
+  index('documents_process_id_idx').on(table.processId),
+]);
 
 export const processItems = pgTable('process_items', {
   id: serial('id').primaryKey(),
@@ -144,7 +150,9 @@ export const processItems = pgTable('process_items', {
   requiresCertification: boolean('requires_certification').default(false),
   odooProductId: integer('odoo_product_id'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('process_items_process_id_idx').on(table.processId),
+]);
 
 export const validationResults = pgTable('validation_results', {
   id: serial('id').primaryKey(),
@@ -161,7 +169,9 @@ export const validationResults = pgTable('validation_results', {
   resolvedBy: integer('resolved_by').references(() => users.id),
   resolvedAt: timestamp('resolved_at'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('validation_results_process_id_idx').on(table.processId),
+]);
 
 export const currencyExchanges = pgTable('currency_exchanges', {
   id: serial('id').primaryKey(),
@@ -176,7 +186,9 @@ export const currencyExchanges = pgTable('currency_exchanges', {
   expirationDate: date('expiration_date'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('currency_exchanges_process_id_idx').on(table.processId),
+]);
 
 export const followUpTracking = pgTable('follow_up_tracking', {
   id: serial('id').primaryKey(),
@@ -211,7 +223,9 @@ export const espelhos = pgTable('espelhos', {
   sentToFenicia: boolean('sent_to_fenicia').default(false),
   sentAt: timestamp('sent_at'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('espelhos_process_id_idx').on(table.processId),
+]);
 
 export const communications = pgTable('communications', {
   id: serial('id').primaryKey(),
@@ -225,7 +239,9 @@ export const communications = pgTable('communications', {
   sentAt: timestamp('sent_at'),
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('communications_process_id_idx').on(table.processId),
+]);
 
 export const alerts = pgTable('alerts', {
   id: serial('id').primaryKey(),
@@ -239,7 +255,9 @@ export const alerts = pgTable('alerts', {
   acknowledgedBy: integer('acknowledged_by').references(() => users.id),
   acknowledgedAt: timestamp('acknowledged_at'),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('alerts_process_id_idx').on(table.processId),
+]);
 
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
@@ -250,7 +268,9 @@ export const auditLogs = pgTable('audit_logs', {
   details: jsonb('details'),
   ipAddress: varchar('ip_address', { length: 45 }),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('audit_logs_user_id_idx').on(table.userId),
+]);
 
 export const systemSettings = pgTable('system_settings', {
   id: serial('id').primaryKey(),
@@ -281,7 +301,10 @@ export const emailIngestionLogs = pgTable('email_ingestion_logs', {
   errorMessage: text('error_message'),
   processCode: varchar('process_code', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(),
-});
+}, (table) => [
+  index('email_ingestion_logs_process_id_idx').on(table.processId),
+  index('email_ingestion_logs_status_idx').on(table.status),
+]);
 
 // ── TypeScript Types ───────────────────────────────────────────────────
 

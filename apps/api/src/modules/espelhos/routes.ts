@@ -12,6 +12,10 @@ router.get('/:processId', espelhoController.getEspelho);
 router.get('/:processId/items', espelhoController.getItems);
 router.post('/:processId/items', espelhoController.addItem);
 router.post('/:processId/generate-partial', espelhoController.generatePartial);
+router.post('/:processId/generate-li', espelhoController.generatePartial);
+router.post('/:processId/send-drive', espelhoController.sendToDrive);
+router.post('/:processId/send-fenicia', espelhoController.sendToFenicia);
+router.patch('/:processId/items/:id', espelhoController.updateItem);
 
 // Item-scoped routes
 router.put('/items/:id', espelhoController.updateItem);

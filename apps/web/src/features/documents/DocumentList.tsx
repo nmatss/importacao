@@ -77,7 +77,7 @@ export function DocumentList({ processId }: DocumentListProps) {
 
   const { data: documents, isLoading } = useApiQuery<Document[]>(
     ['documents', processId],
-    `/api/documents?processId=${processId}`,
+    `/api/documents/process/${processId}`,
   );
 
   const fetchSource = async (docId: string) => {

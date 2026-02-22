@@ -85,6 +85,24 @@ export const espelhoController = {
     }
   },
 
+  async sendToDrive(req: Request, res: Response) {
+    try {
+      const espelho = await espelhoService.sendToDrive(Number(req.params.processId));
+      sendSuccess(res, espelho);
+    } catch (error: any) {
+      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+    }
+  },
+
+  async sendToFenicia(req: Request, res: Response) {
+    try {
+      const espelho = await espelhoService.sendToFeniciaByProcess(Number(req.params.processId));
+      sendSuccess(res, espelho);
+    } catch (error: any) {
+      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+    }
+  },
+
   async generatePartial(req: Request, res: Response) {
     try {
       const espelho = await espelhoService.generatePartial(Number(req.params.processId));

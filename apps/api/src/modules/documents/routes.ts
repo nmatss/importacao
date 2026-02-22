@@ -10,6 +10,7 @@ router.use(authMiddleware);
 router.post('/upload', upload.single('file'), documentController.upload);
 router.get('/process/:processId', documentController.getByProcess);
 router.get('/:id', documentController.getById);
+router.get('/:id/source', documentController.getSource);
 router.post('/:id/reprocess', documentController.reprocess);
 router.delete('/:id', documentController.delete);
 

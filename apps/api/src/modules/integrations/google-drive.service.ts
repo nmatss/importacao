@@ -11,6 +11,10 @@ const folderCache = new Map<string, string>();
 
 const SUBFOLDER_NAMES = ['Invoice', 'Packing List', 'BL', 'Espelho', 'Outros'] as const;
 
+function escapeDriveQuery(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 const DOC_TYPE_TO_SUBFOLDER: Record<string, string> = {
   invoice: 'Invoice',
   packing_list: 'Packing List',
@@ -87,7 +91,7 @@ export const googleDriveService = {
   async findFolder(parentId: string, folderName: string): Promise<string | null> {
     const drive = getDriveClient();
     const response = await drive.files.list({
-      q: `'${parentId}' in parents and name = '${folderName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+      q: `'${parentId}' in parents and name = '${escapeDriveQuery(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
       fields: 'files(id, name)',
       pageSize: 1,
     });

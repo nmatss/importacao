@@ -3,7 +3,7 @@ import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { db } from '../../shared/database/connection.js';
-import { documents, importProcesses, followUpTracking } from '../../shared/database/schema.js';
+import { documents, importProcesses, followUpTracking, emailIngestionLogs } from '../../shared/database/schema.js';
 import { aiService } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
@@ -155,6 +155,31 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new Error('Documento não encontrado');
     return doc;
+  },
+
+  async getSource(id: number) {
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+    if (!doc) throw new Error('Documento não encontrado');
+
+    // Check if this document came from email ingestion
+    const emailLogs = await db.select()
+      .from(emailIngestionLogs)
+      .where(eq(emailIngestionLogs.processId, doc.processId))
+      .limit(10);
+
+    for (const log of emailLogs) {
+      const attachments = log.processedAttachments as any[];
+      if (Array.isArray(attachments)) {
+        const match = attachments.some((a: any) =>
+          a.filename === doc.originalFilename || a.documentId === doc.id
+        );
+        if (match) {
+          return { source: 'email' as const, emailSubject: log.subject };
+        }
+      }
+    }
+
+    return { source: 'manual' as const };
   },
 
   async reprocess(documentId: number) {

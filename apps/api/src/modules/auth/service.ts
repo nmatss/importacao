@@ -8,7 +8,8 @@ import { users } from '../../shared/database/schema.js';
 import type { CreateUserInput, UpdateUserInput } from './schema.js';
 import { auditService } from '../audit/service.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || '';

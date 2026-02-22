@@ -34,6 +34,15 @@ export const documentController = {
     }
   },
 
+  async getSource(req: Request, res: Response) {
+    try {
+      const source = await documentService.getSource(Number(req.params.id));
+      sendSuccess(res, source);
+    } catch (error: any) {
+      sendError(res, error.message, error.message.includes('não encontrado') ? 404 : 400);
+    }
+  },
+
   async reprocess(req: Request, res: Response) {
     try {
       const doc = await documentService.reprocess(Number(req.params.id));

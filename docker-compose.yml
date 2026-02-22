@@ -48,6 +48,16 @@ services:
       postgres:
         condition: service_healthy
 
+  # cert-api:
+  #   build: ./apps/cert-api
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+
   web:
     build:
       context: ./apps/web

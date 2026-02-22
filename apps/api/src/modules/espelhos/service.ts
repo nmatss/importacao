@@ -337,6 +337,46 @@ export const espelhoService = {
     }
   },
 
+  async sendToDrive(processId: number) {
+    const espelho = await this.getEspelho(processId);
+    if (!espelho) throw new Error('Espelho nao encontrado para este processo');
+
+    const data = espelho.generatedData as any;
+    if (!data?.filePath || !data?.filename) {
+      throw new Error('Arquivo do espelho nao disponivel');
+    }
+
+    const [process] = await db.select({
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+    })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!process) throw new Error('Processo nao encontrado');
+
+    const { googleDriveService } = await import('../integrations/google-drive.service.js');
+    const driveFileId = await googleDriveService.uploadToProcessFolder(
+      process.processCode,
+      process.brand,
+      'espelho',
+      data.filePath,
+      data.filename,
+    );
+
+    const [updated] = await db
+      .update(espelhos)
+      .set({ driveFileId })
+      .where(eq(espelhos.id, espelho.id))
+      .returning();
+
+    auditService.log(null, 'send_to_drive', 'espelho', espelho.id, { processId, driveFileId }, null);
+    logger.info({ processId, espelhoId: espelho.id, driveFileId }, 'Espelho sent to Drive');
+
+    return updated;
+  },
+
   async markSentToFenicia(espelhoId: number) {
     const [updated] = await db
       .update(espelhos)
@@ -360,6 +400,12 @@ export const espelhoService = {
     auditService.log(null, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
 
     return updated;
+  },
+
+  async sendToFeniciaByProcess(processId: number) {
+    const espelho = await this.getEspelho(processId);
+    if (!espelho) throw new Error('Espelho nao encontrado para este processo');
+    return this.markSentToFenicia(espelho.id);
   },
 
   async generatePartial(processId: number) {
