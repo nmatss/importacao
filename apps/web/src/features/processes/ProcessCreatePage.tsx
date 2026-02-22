@@ -41,7 +41,7 @@ export function ProcessCreatePage() {
     'post',
     {
       onSuccess: (data) => {
-        navigate(`/processos/${data.id}`);
+        navigate(`/importacao/processos/${data.id}`);
       },
     },
   );
@@ -60,7 +60,7 @@ export function ProcessCreatePage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => navigate('/processos')}
+          onClick={() => navigate('/importacao/processos')}
           className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 transition-colors"
         >
           <ArrowLeft className="h-5 w-5" />
@@ -185,7 +185,7 @@ export function ProcessCreatePage() {
         <div className="flex justify-end gap-3">
           <button
             type="button"
-            onClick={() => navigate('/processos')}
+            onClick={() => navigate('/importacao/processos')}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
           >
             Cancelar

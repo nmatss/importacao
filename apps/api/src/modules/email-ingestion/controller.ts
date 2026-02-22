@@ -24,9 +24,10 @@ export const emailIngestionController = {
     }
   },
 
-  async triggerCheck(_req: Request, res: Response) {
+  async triggerCheck(req: Request, res: Response) {
     try {
-      await emailProcessor.processNewEmails();
+      const includeRead = req.query.includeRead === 'true';
+      await emailProcessor.processNewEmails(includeRead);
       sendSuccess(res, { message: 'Verificação de emails concluída' });
     } catch (error: any) {
       logger.error({ error }, 'Manual email check failed');

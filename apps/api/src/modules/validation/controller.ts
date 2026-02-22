@@ -7,6 +7,9 @@ export const validationController = {
   async runAllChecks(req: Request, res: Response) {
     try {
       const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
       const results = await validationService.runAllChecks(processId);
       sendSuccess(res, results);
     } catch (error: any) {
@@ -17,6 +20,9 @@ export const validationController = {
   async getResults(req: Request, res: Response) {
     try {
       const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
       const results = await validationService.getResults(processId);
       sendSuccess(res, results);
     } catch (error: any) {
@@ -27,6 +33,9 @@ export const validationController = {
   async resolveManually(req: Request, res: Response) {
     try {
       const resultId = Number(req.params.id);
+      if (isNaN(resultId) || resultId <= 0) {
+        return sendError(res, 'ID do resultado invalido', 400);
+      }
       const userId = (req as AuthenticatedRequest).user.id;
       const result = await validationService.resolveManually(resultId, userId);
       sendSuccess(res, result);
@@ -38,6 +47,9 @@ export const validationController = {
   async runAnomalyDetection(req: Request, res: Response) {
     try {
       const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
       const anomalies = await validationService.runAnomalyDetection(processId);
       sendSuccess(res, anomalies);
     } catch (error: any) {

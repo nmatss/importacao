@@ -30,22 +30,18 @@ interface EmailLog {
   createdAt: string;
 }
 
-interface StatusResponse {
-  success: boolean;
-  data: {
-    enabled: boolean;
-    method: 'gmail_api' | 'imap' | 'none';
-    gmailConfigured: boolean;
-    imapConfigured: boolean;
-    sharedMailbox: string | null;
-    allowedSenders: string;
-    lastRun: string | null;
-    todayStats: { status: string; count: number }[];
-  };
+interface EmailStatus {
+  enabled: boolean;
+  method: 'gmail_api' | 'imap' | 'none';
+  gmailConfigured: boolean;
+  imapConfigured: boolean;
+  sharedMailbox: string | null;
+  allowedSenders: string;
+  lastRun: string | null;
+  todayStats: { status: string; count: number }[];
 }
 
 interface LogsResponse {
-  success: boolean;
   data: EmailLog[];
   pagination: {
     page: number;
@@ -86,7 +82,7 @@ export function EmailIngestionPage() {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const limit = 20;
 
-  const { data: statusResponse, isLoading: statusLoading } = useApiQuery<StatusResponse>(
+  const { data: status, isLoading: statusLoading } = useApiQuery<EmailStatus>(
     ['email-ingestion-status'],
     '/api/email-ingestion/status',
   );
@@ -96,7 +92,6 @@ export function EmailIngestionPage() {
     `/api/email-ingestion/logs?page=${page}&limit=${limit}`,
   );
 
-  const status = statusResponse?.data;
   const logs = logsResponse?.data;
   const pagination = logsResponse?.pagination;
 
@@ -110,10 +105,11 @@ export function EmailIngestionPage() {
 
   const totalToday = status?.todayStats?.reduce((sum, s) => sum + s.count, 0) ?? 0;
 
-  const handleTrigger = async () => {
+  const handleTrigger = async (includeRead = false) => {
     setTriggering(true);
     try {
-      await api.post<TriggerResponse>('/api/email-ingestion/trigger');
+      const qs = includeRead ? '?includeRead=true' : '';
+      await api.post<TriggerResponse>(`/api/email-ingestion/trigger${qs}`);
       queryClient.invalidateQueries({ queryKey: ['email-ingestion-status'] });
       queryClient.invalidateQueries({ queryKey: ['email-ingestion-logs'] });
     } finally {
@@ -179,14 +175,24 @@ export function EmailIngestionPage() {
                 {status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}
               </div>
             </div>
-            <button
-              onClick={handleTrigger}
-              disabled={triggering}
-              className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-            >
-              <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
-              Verificar Agora
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleTrigger(false)}
+                disabled={triggering}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                Verificar Novos
+              </button>
+              <button
+                onClick={() => handleTrigger(true)}
+                disabled={triggering}
+                className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+              >
+                <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                Buscar Todos
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -284,7 +290,7 @@ export function EmailIngestionPage() {
                         <td className="whitespace-nowrap px-4 py-3">
                           {log.processId ? (
                             <Link
-                              to={`/processos/${log.processId}`}
+                              to={`/importacao/processos/${log.processId}`}
                               className="text-blue-600 hover:text-blue-800 hover:underline"
                             >
                               {log.processCode ?? log.processId}

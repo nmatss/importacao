@@ -20,9 +20,8 @@ export default function boxQuantityMatch(input: CheckInput): CheckResult {
 
   const invBoxes = input.invoiceData?.totalBoxes != null ? Number(input.invoiceData.totalBoxes) : null;
   const plBoxes = input.packingListData?.totalBoxes != null ? Number(input.packingListData.totalBoxes) : null;
-  const blBoxes = input.blData?.totalBoxes ?? input.blData?.totalPackages != null
-    ? Number(input.blData?.totalBoxes ?? input.blData?.totalPackages)
-    : null;
+  const blRaw = input.blData?.totalBoxes ?? input.blData?.totalPackages;
+  const blBoxes = blRaw != null ? Number(blRaw) : null;
 
   const sources: string[] = [];
   const values: number[] = [];

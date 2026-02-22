@@ -15,16 +15,15 @@ interface CheckResult {
   message: string;
 }
 
-const TOLERANCE = 0.01;
+const TOLERANCE = 0.1;
 
 export default function cbmMatch(input: CheckInput): CheckResult {
   const checkName = 'cbm-match';
 
   const invCbm = input.invoiceData?.totalCbm != null ? Number(input.invoiceData.totalCbm) : null;
   const plCbm = input.packingListData?.totalCbm != null ? Number(input.packingListData.totalCbm) : null;
-  const blCbm = input.blData?.totalCbm ?? input.blData?.totalVolume != null
-    ? Number(input.blData?.totalCbm ?? input.blData?.totalVolume)
-    : null;
+  const blRaw = input.blData?.totalCbm ?? input.blData?.totalVolume;
+  const blCbm = blRaw != null ? Number(blRaw) : null;
 
   const sources: string[] = [];
   const values: number[] = [];

@@ -19,11 +19,29 @@ function normalize(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function normalizeDate(value: string): string {
+  if (!value) return '';
+  // Try parsing as Date to normalize different formats
+  const parsed = new Date(value);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().slice(0, 10); // YYYY-MM-DD
+  }
+  // Try DD/MM/YYYY format common in Brazilian documents
+  const brMatch = value.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
+  if (brMatch) {
+    const d = new Date(`${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  return value;
+}
+
 export default function datesMatch(input: CheckInput): CheckResult {
   const checkName = 'dates-match';
 
-  const invEtd = normalize(input.invoiceData?.etd ?? input.invoiceData?.shipmentDate);
-  const blShippedOnBoard = normalize(input.blData?.shippedOnBoardDate ?? input.blData?.etd);
+  const invEtdRaw = normalize(input.invoiceData?.etd ?? input.invoiceData?.shipmentDate);
+  const blShippedRaw = normalize(input.blData?.shippedOnBoardDate ?? input.blData?.etd);
+  const invEtd = normalizeDate(invEtdRaw);
+  const blShippedOnBoard = normalizeDate(blShippedRaw);
 
   if (!invEtd && !blShippedOnBoard) {
     return {

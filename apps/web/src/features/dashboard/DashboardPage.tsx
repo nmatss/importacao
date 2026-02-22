@@ -304,7 +304,7 @@ export function DashboardPage() {
             Processos Recentes
           </h3>
           <Link
-            to="/processos"
+            to="/importacao/processos"
             className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
           >
             Ver todos <ArrowRight className="h-4 w-4" />
@@ -339,7 +339,7 @@ export function DashboardPage() {
                 >
                   <td className="px-5 py-3 text-sm">
                     <Link
-                      to={`/processos/${proc.id}`}
+                      to={`/importacao/processos/${proc.id}`}
                       className="font-medium text-blue-600 hover:text-blue-700"
                     >
                       {proc.processCode}

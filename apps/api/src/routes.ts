@@ -16,6 +16,11 @@ import { auditRoutes } from './modules/audit/routes.js';
 
 const apiRouter = Router();
 
+// Public health check (no auth required)
+apiRouter.get('/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/processes', processRoutes);
 apiRouter.use('/documents', documentRoutes);

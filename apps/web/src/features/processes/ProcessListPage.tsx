@@ -20,10 +20,12 @@ interface Process {
 
 interface ProcessListResponse {
   data: Process[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    pages: number;
+  };
 }
 
 export function ProcessListPage() {
@@ -47,7 +49,7 @@ export function ProcessListPage() {
   );
 
   const processes = data?.data ?? [];
-  const totalPages = data?.totalPages ?? 1;
+  const totalPages = data?.pagination?.pages ?? 1;
 
   return (
     <div className="space-y-6">
@@ -55,7 +57,7 @@ export function ProcessListPage() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-gray-900">Processos</h2>
         <Link
-          to="/processos/novo"
+          to="/importacao/processos/novo"
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -117,7 +119,7 @@ export function ProcessListPage() {
         <EmptyState
           title="Nenhum processo encontrado"
           description="Tente ajustar os filtros ou crie um novo processo."
-          action={{ label: 'Novo Processo', onClick: () => navigate('/processos/novo') }}
+          action={{ label: 'Novo Processo', onClick: () => navigate('/importacao/processos/novo') }}
         />
       ) : (
         <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
@@ -149,7 +151,7 @@ export function ProcessListPage() {
                 {processes.map((proc) => (
                   <tr
                     key={proc.id}
-                    onClick={() => navigate(`/processos/${proc.id}`)}
+                    onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                     className="hover:bg-gray-50 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3 text-sm font-medium text-blue-600">
@@ -182,7 +184,7 @@ export function ProcessListPage() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
               <p className="text-sm text-gray-500">
-                Página {page} de {totalPages} ({data?.total ?? 0} resultados)
+                Página {page} de {totalPages} ({data?.pagination?.total ?? 0} resultados)
               </p>
               <div className="flex gap-2">
                 <button

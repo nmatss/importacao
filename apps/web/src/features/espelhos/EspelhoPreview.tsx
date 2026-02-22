@@ -66,7 +66,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
   const apiCall = async (path: string, method = 'POST', body?: unknown) => {
     const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = import.meta.env.VITE_API_URL || '';
     const res = await fetch(`${baseUrl}${path}`, {
       method,
       headers: {
@@ -90,7 +90,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
   const downloadXlsx = async () => {
     const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = import.meta.env.VITE_API_URL || '';
     const res = await fetch(`${baseUrl}/api/espelhos/${processId}/download`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });

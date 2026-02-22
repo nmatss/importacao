@@ -57,12 +57,12 @@ function isAllowedSender(from: string): boolean {
 }
 
 export const emailProcessor = {
-  async processNewEmails() {
+  async processNewEmails(includeRead = false) {
     // Prefer Gmail API (service account), fall back to IMAP
     let emails;
     if (gmailService.isConfigured()) {
-      logger.info('Using Gmail API for email ingestion');
-      emails = await gmailService.fetchUnseenEmails();
+      logger.info({ includeRead }, 'Using Gmail API for email ingestion');
+      emails = await gmailService.fetchUnseenEmails(includeRead);
     } else {
       logger.info('Gmail API not configured, falling back to IMAP');
       emails = await imapService.fetchUnseenEmails();

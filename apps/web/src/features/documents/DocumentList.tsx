@@ -84,7 +84,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     if (sources[docId]) return;
     try {
       const token = localStorage.getItem('importacao_token');
-      const baseUrl = import.meta.env.VITE_API_URL || '/api';
+      const baseUrl = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${baseUrl}/api/documents/${docId}/source`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -116,7 +116,7 @@ export function DocumentList({ processId }: DocumentListProps) {
   const handleReprocess = (docId: string) => {
     // Use fetch directly since URL varies per document
     const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = import.meta.env.VITE_API_URL || '';
     fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -127,7 +127,7 @@ export function DocumentList({ processId }: DocumentListProps) {
 
   const handleDelete = (doc: Document) => {
     const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
+    const baseUrl = import.meta.env.VITE_API_URL || '';
     fetch(`${baseUrl}/api/documents/${doc.id}`, {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

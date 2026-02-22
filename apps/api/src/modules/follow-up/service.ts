@@ -84,8 +84,8 @@ export const followUpService = {
       brand: importProcesses.brand,
       status: importProcesses.status,
       shipmentDate: importProcesses.shipmentDate,
-      liDeadline: sql<string>`${importProcesses.shipmentDate}::date + interval '13 days'`,
-      daysRemaining: sql<number>`(${importProcesses.shipmentDate}::date + interval '13 days' - CURRENT_DATE)::integer`,
+      liDeadline: sql<string>`${importProcesses.shipmentDate}::date + 13`,
+      daysRemaining: sql<number>`${importProcesses.shipmentDate}::date + 13 - CURRENT_DATE`,
       liSubmittedAt: followUpTracking.liSubmittedAt,
       liApprovedAt: followUpTracking.liApprovedAt,
     })

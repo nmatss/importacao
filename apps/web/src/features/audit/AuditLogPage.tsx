@@ -18,7 +18,6 @@ interface AuditLog {
 }
 
 interface ApiResponse {
-  success: boolean;
   data: AuditLog[];
   pagination: {
     total: number;
@@ -256,7 +255,7 @@ export function AuditLogPage() {
                       {log.entityId != null ? (
                         log.entityType === 'process' ? (
                           <a
-                            href={`/processos/${log.entityId}`}
+                            href={`/importacao/processos/${log.entityId}`}
                             className="text-blue-600 hover:underline"
                           >
                             #{log.entityId}

@@ -58,7 +58,8 @@ export function CommunicationsPage() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
 
-  const { data: processes } = useApiQuery<Process[]>(['processes'], '/api/processes');
+  const { data: processResponse } = useApiQuery<{ data: Process[]; pagination: unknown }>(['processes'], '/api/processes');
+  const processes = processResponse?.data;
 
   const { data: communications, isLoading: loadingComms } = useApiQuery<Communication[]>(
     ['communications'],

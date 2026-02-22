@@ -85,10 +85,20 @@ function findAttachmentParts(
 }
 
 export const gmailService = {
-  async fetchUnseenEmails(): Promise<FetchedEmail[]> {
+  async fetchUnseenEmails(includeRead = false): Promise<FetchedEmail[]> {
     const gmail = getGmailClient();
-    const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX!;
     const emails: FetchedEmail[] = [];
+
+    // Build search query from EMAIL_ALLOWED_SENDERS
+    const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
+      ?.split(',').map(s => s.trim()).filter(Boolean) || [];
+    const fromFilter = allowedSenders.length > 0
+      ? `{${allowedSenders.map(s => `from:${s}`).join(' ')}}`
+      : '';
+    const unreadFilter = includeRead ? '' : 'is:unread';
+    const searchQuery = `${unreadFilter} has:attachment ${fromFilter}`.trim();
+
+    logger.info({ searchQuery }, 'Gmail search query');
 
     try {
       // List unread messages with pagination to fetch ALL
@@ -98,7 +108,7 @@ export const gmailService = {
       do {
         const listResponse = await gmail.users.messages.list({
           userId: 'me',
-          q: 'is:unread has:attachment to:global@grupounico.com',
+          q: searchQuery,
           maxResults: 100,
           pageToken,
         });

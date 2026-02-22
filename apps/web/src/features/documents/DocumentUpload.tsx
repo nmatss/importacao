@@ -39,7 +39,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
       try {
         const token = localStorage.getItem('importacao_token');
-        const baseUrl = import.meta.env.VITE_API_URL || '/api';
+        const baseUrl = import.meta.env.VITE_API_URL || '';
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${baseUrl}/api/documents/upload`);

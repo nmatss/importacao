@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -17,13 +18,17 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 interface ValidationCheck {
   id: string;
   checkName: string;
-  status: 'pass' | 'fail' | 'warning' | 'skipped';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   message?: string;
   resolvedBy?: string | null;
   resolvedAt?: string | null;
-  manuallyResolved?: boolean;
+  resolvedManually?: boolean;
+}
+
+interface AnomalyDetectionResult {
+  anomalies: Anomaly[];
 }
 
 interface Anomaly {
@@ -41,13 +46,13 @@ const checkLabel = (name: string) =>
   VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
 
 const statusConfig = {
-  pass: {
+  passed: {
     icon: CheckCircle,
     border: 'border-green-200',
     bg: 'bg-green-50',
     iconColor: 'text-green-500',
   },
-  fail: {
+  failed: {
     icon: XCircle,
     border: 'border-red-200',
     bg: 'bg-red-50',
@@ -81,12 +86,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const runValidation = async () => {
     setRunning(true);
     try {
-      const token = localStorage.getItem('importacao_token');
-      const baseUrl = import.meta.env.VITE_API_URL || '/api';
-      await fetch(`${baseUrl}/api/validation/${processId}/run`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      await api.post(`/api/validation/${processId}/run`);
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
     } finally {
       setRunning(false);
@@ -96,30 +96,15 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const detectAnomalies = async () => {
     setDetectingAnomalies(true);
     try {
-      const token = localStorage.getItem('importacao_token');
-      const baseUrl = import.meta.env.VITE_API_URL || '/api';
-      const res = await fetch(`${baseUrl}/api/validation/${processId}/anomalies`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
-      setAnomalies(data.anomalies ?? data);
+      const data = await api.post<AnomalyDetectionResult>(`/api/validation/${processId}/anomalies`);
+      setAnomalies(data.anomalies ?? []);
     } finally {
       setDetectingAnomalies(false);
     }
   };
 
-  const resolveManually = async (checkId: string) => {
-    const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '/api';
-    await fetch(`${baseUrl}/api/validation/${processId}/checks/${checkId}/resolve`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ resolution: 'manual' }),
-    });
+  const resolveManually = async (resultId: string) => {
+    await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
     queryClient.invalidateQueries({ queryKey: ['validation', processId] });
   };
 
@@ -127,10 +112,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     return <LoadingSpinner className="py-8" />;
   }
 
+  const passedCount = checks?.filter((c) => c.status === 'passed').length ?? 0;
+  const failedCount = checks?.filter((c) => c.status === 'failed').length ?? 0;
+  const warningCount = checks?.filter((c) => c.status === 'warning').length ?? 0;
+
   return (
     <div className="space-y-4">
       {/* Actions */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={runValidation}
           disabled={running}
@@ -141,7 +130,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           ) : (
             <Play className="h-4 w-4" />
           )}
-          Executar Validação
+          Executar Validacao
         </button>
         <button
           onClick={detectAnomalies}
@@ -155,13 +144,28 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           )}
           Detectar Anomalias (IA)
         </button>
+
+        {/* Summary badges */}
+        {checks && checks.length > 0 && (
+          <div className="flex items-center gap-2 ml-auto text-xs">
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 font-medium text-green-700">
+              <CheckCircle className="h-3 w-3" /> {passedCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 font-medium text-red-700">
+              <XCircle className="h-3 w-3" /> {failedCount}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+              <AlertTriangle className="h-3 w-3" /> {warningCount}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Checks grid */}
       {checks && checks.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {checks.map((check) => {
-            const config = statusConfig[check.status];
+            const config = statusConfig[check.status] ?? statusConfig.warning;
             const Icon = config.icon;
 
             return (
@@ -182,7 +186,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     {check.message && (
                       <p className="mt-0.5 text-xs text-gray-600">{check.message}</p>
                     )}
-                    {check.status === 'fail' &&
+                    {check.status === 'failed' &&
                       (check.expectedValue || check.actualValue) && (
                         <div className="mt-2 space-y-1 text-xs">
                           {check.expectedValue && (
@@ -203,7 +207,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                           )}
                         </div>
                       )}
-                    {check.manuallyResolved && check.resolvedBy && (
+                    {check.resolvedManually && check.resolvedBy && (
                       <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
                         <Wrench className="h-3 w-3" />
                         Resolvido por {check.resolvedBy}
@@ -217,7 +221,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                         )}
                       </div>
                     )}
-                    {check.status === 'fail' && !check.manuallyResolved && (
+                    {check.status === 'failed' && !check.resolvedManually && (
                       <button
                         onClick={() => resolveManually(check.id)}
                         className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
@@ -234,7 +238,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         </div>
       ) : (
         <p className="py-6 text-center text-sm text-gray-500">
-          Nenhuma validação executada ainda. Clique em "Executar Validação" para iniciar.
+          Nenhuma validacao executada ainda. Clique em "Executar Validacao" para iniciar.
         </p>
       )}
 

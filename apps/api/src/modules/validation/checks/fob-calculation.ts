@@ -46,7 +46,9 @@ export default function fobCalculation(input: CheckInput): CheckResult {
 
   const difference = Math.abs(calculatedTotal - totalFob);
 
-  if (difference <= 0.01) {
+  // Use proportional tolerance: max(1.00, 0.1% of total) to handle floating-point accumulation
+  const tolerance = Math.max(1.0, totalFob * 0.001);
+  if (difference <= tolerance) {
     return {
       checkName,
       status: 'passed',

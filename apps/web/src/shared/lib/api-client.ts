@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'importacao_token';
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
@@ -33,7 +33,11 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     return undefined as T;
   }
 
-  return response.json();
+  const json = await response.json();
+  if (json.data !== undefined && json.pagination !== undefined) {
+    return { data: json.data, pagination: json.pagination } as T;
+  }
+  return (json.data !== undefined ? json.data : json) as T;
 }
 
 export const api = {

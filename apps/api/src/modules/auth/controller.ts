@@ -14,6 +14,19 @@ export const authController = {
     }
   },
 
+  async loginWithGoogle(req: Request, res: Response) {
+    try {
+      const { credential } = req.body;
+      if (!credential) {
+        return sendError(res, 'Token Google não fornecido', 400);
+      }
+      const result = await authService.loginWithGoogle(credential);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 401);
+    }
+  },
+
   async getMe(req: Request, res: Response) {
     try {
       const { id } = (req as AuthenticatedRequest).user;

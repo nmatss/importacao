@@ -153,7 +153,7 @@ export function FollowUpPage() {
                           className={`w-full rounded-lg border-l-4 shadow-sm transition-shadow hover:shadow-md ${statusColorMap[proc.status]}`}
                         >
                           <button
-                            onClick={() => navigate(`/processos/${proc.id}`)}
+                            onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                             className="w-full p-3 text-left"
                           >
                             <div className="flex items-center justify-between">

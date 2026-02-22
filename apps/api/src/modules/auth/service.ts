@@ -1,5 +1,7 @@
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { OAuth2Client } from 'google-auth-library';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { users } from '../../shared/database/schema.js';
@@ -8,6 +10,10 @@ import { auditService } from '../audit/service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || '';
+
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
 export const authService = {
   async login(email: string, password: string) {
@@ -29,6 +35,52 @@ export const authService = {
     );
 
     auditService.log(user.id, 'login', 'user', user.id, { email: user.email }, null);
+
+    return {
+      token,
+      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    };
+  },
+
+  async loginWithGoogle(credential: string) {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      throw new Error('Token Google inválido');
+    }
+
+    if (ALLOWED_DOMAIN && !payload.email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      throw new Error(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
+    }
+
+    let [user] = await db.select().from(users).where(eq(users.email, payload.email)).limit(1);
+
+    if (!user) {
+      const randomPassword = crypto.randomBytes(32).toString('hex');
+      const passwordHash = await bcrypt.hash(randomPassword, 10);
+      [user] = await db.insert(users).values({
+        name: payload.name || payload.email.split('@')[0],
+        email: payload.email,
+        passwordHash,
+        role: 'analyst',
+      }).returning();
+    }
+
+    if (!user.isActive) {
+      throw new Error('Conta desativada');
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: JWT_EXPIRES_IN as any }
+    );
+
+    auditService.log(user.id, 'login_google', 'user', user.id, { email: user.email }, null);
 
     return {
       token,

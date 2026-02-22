@@ -5,6 +5,7 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  envDir: path.resolve(__dirname, '../..'),
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -13,6 +14,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
+      '/cert-api': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/cert-api/, ''),
+      },
       '/api': {
         target: 'http://localhost:3001',
         changeOrigin: true,

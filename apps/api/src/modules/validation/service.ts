@@ -10,9 +10,23 @@ import { auditService } from '../audit/service.js';
 
 export const validationService = {
   async runAllChecks(processId: number): Promise<CheckResult[]> {
+    if (!processId || isNaN(processId)) {
+      throw new Error('ID do processo invalido');
+    }
+
     logger.info({ processId }, 'Starting validation checks');
 
-    // 1. Get all documents for the process with aiParsedData
+    // 1. Verify process exists
+    const [process] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId));
+
+    if (!process) {
+      throw new Error('Processo nao encontrado');
+    }
+
+    // 2. Get all documents for the process with aiParsedData
     const docs = await db
       .select()
       .from(documents)
@@ -22,34 +36,28 @@ export const validationService = {
     const packingListDoc = docs.find((d) => d.type === 'packing_list');
     const blDoc = docs.find((d) => d.type === 'ohbl');
 
-    // Get process data
-    const [process] = await db
-      .select()
-      .from(importProcesses)
-      .where(eq(importProcesses.id, processId));
-
     // Get follow-up data
     const [followUp] = await db
       .select()
       .from(followUpTracking)
       .where(eq(followUpTracking.processId, processId));
 
-    // 2. Build CheckInput from document data
+    // 3. Build CheckInput from document data
     const checkInput: CheckInput = {
       invoiceData: (invoiceDoc?.aiParsedData as Record<string, any>) ?? undefined,
       packingListData: (packingListDoc?.aiParsedData as Record<string, any>) ?? undefined,
       blData: (blDoc?.aiParsedData as Record<string, any>) ?? undefined,
-      processData: process ? { ...process } : undefined,
+      processData: { ...process },
       followUpData: followUp ? { ...followUp } : undefined,
     };
 
-    // 3. Update process status to 'validating'
+    // 4. Update process status to 'validating'
     await db
       .update(importProcesses)
       .set({ status: 'validating', updatedAt: new Date() })
       .where(eq(importProcesses.id, processId));
 
-    // 4. Run all 14 checks
+    // 5. Run all 14 checks
     const results: CheckResult[] = allChecks.map((check) => check(checkInput));
 
     logger.info(
@@ -63,23 +71,24 @@ export const validationService = {
       'Validation checks completed',
     );
 
-    // 5. Delete old validation results for this process
-    await db
-      .delete(validationResults)
-      .where(eq(validationResults.processId, processId));
+    // 6. Atomic: delete old results + insert new ones in a transaction
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(validationResults)
+        .where(eq(validationResults.processId, processId));
 
-    // 6. Insert new results
-    await db.insert(validationResults).values(
-      results.map((r) => ({
-        processId,
-        checkName: r.checkName,
-        status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
-        expectedValue: r.expectedValue ?? null,
-        actualValue: r.actualValue ?? null,
-        documentsCompared: r.documentsCompared,
-        message: r.message,
-      })),
-    );
+      await tx.insert(validationResults).values(
+        results.map((r) => ({
+          processId,
+          checkName: r.checkName,
+          status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
+          expectedValue: r.expectedValue ?? null,
+          actualValue: r.actualValue ?? null,
+          documentsCompared: r.documentsCompared,
+          message: r.message,
+        })),
+      );
+    });
 
     // 7. Update process status based on results
     const hasFailed = results.some((r) => r.status === 'failed');
@@ -102,9 +111,9 @@ export const validationService = {
       await alertService.create({
         processId,
         severity: 'warning',
-        title: 'Falhas na Validação',
-        message: `Processo ${process?.processCode ?? processId}: ${failedChecks.length} verificação(ões) falharam: ${failedChecks.map(c => c.checkName).join(', ')}.`,
-        processCode: process?.processCode,
+        title: 'Falhas na Validacao',
+        message: `Processo ${process.processCode ?? processId}: ${failedChecks.length} verificacao(oes) falharam: ${failedChecks.map(c => c.checkName).join(', ')}.`,
+        processCode: process.processCode,
       });
     }
 

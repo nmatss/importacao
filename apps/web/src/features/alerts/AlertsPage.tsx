@@ -22,15 +22,7 @@ interface Alert {
   createdAt: string;
 }
 
-interface ApiResponse {
-  success: boolean;
-  data: Alert[];
-}
-
-interface AckResponse {
-  success: boolean;
-  data: Alert;
-}
+type AckResponse = Alert;
 
 const severityConfig = {
   info: {
@@ -66,12 +58,10 @@ export function AlertsPage() {
   if (ackFilter !== 'all') queryParams.set('acknowledged', ackFilter);
   const qs = queryParams.toString();
 
-  const { data: response, isLoading } = useApiQuery<ApiResponse>(
+  const { data: alerts, isLoading } = useApiQuery<Alert[]>(
     ['alerts', severityFilter, ackFilter],
     `/api/alerts${qs ? `?${qs}` : ''}`,
   );
-
-  const alerts = response?.data;
 
   const acknowledgeMutation = useApiMutation<AckResponse, void>(
     '',
@@ -199,7 +189,7 @@ export function AlertsPage() {
                       {alert.processId && (
                         <p className="mt-1 text-xs">
                           <Link
-                            to={`/processos/${alert.processId}`}
+                            to={`/importacao/processos/${alert.processId}`}
                             className="text-blue-600 hover:text-blue-700 hover:underline font-medium"
                           >
                             {alert.processCode || alert.processId}

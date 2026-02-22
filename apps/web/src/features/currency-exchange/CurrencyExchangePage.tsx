@@ -52,10 +52,11 @@ export function CurrencyExchangePage() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: processes, isLoading: loadingProcesses } = useApiQuery<Process[]>(
+  const { data: processResponse, isLoading: loadingProcesses } = useApiQuery<{ data: Process[]; pagination: unknown }>(
     ['processes'],
     '/api/processes',
   );
+  const processes = processResponse?.data;
 
   const { data: exchanges, isLoading: loadingExchanges } = useApiQuery<CurrencyExchange[]>(
     ['currency-exchange', selectedProcessId],

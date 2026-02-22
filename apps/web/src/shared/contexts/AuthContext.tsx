@@ -15,6 +15,7 @@ export interface AuthContextValue {
   user: User | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -33,21 +34,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     api
-      .get<{ user: User }>('/auth/me')
-      .then((data) => setUser(data.user))
+      .get<User>('/api/auth/me')
+      .then((data) => setUser(data))
       .catch(() => localStorage.removeItem(TOKEN_KEY))
       .finally(() => setLoading(false));
   }, []);
 
   const login = useCallback(
     async (email: string, password: string) => {
-      const data = await api.post<{ token: string; user: User }>('/auth/login', {
+      const data = await api.post<{ token: string; user: User }>('/api/auth/login', {
         email,
         password,
       });
       localStorage.setItem(TOKEN_KEY, data.token);
       setUser(data.user);
-      navigate('/dashboard');
+      navigate('/portal');
+    },
+    [navigate],
+  );
+
+  const loginWithGoogle = useCallback(
+    async (credential: string) => {
+      const data = await api.post<{ token: string; user: User }>('/api/auth/google', {
+        credential,
+      });
+      localStorage.setItem(TOKEN_KEY, data.token);
+      setUser(data.user);
+      navigate('/portal');
     },
     [navigate],
   );
@@ -59,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [navigate]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
