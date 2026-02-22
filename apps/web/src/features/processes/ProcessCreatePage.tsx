@@ -2,11 +2,11 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Ship, Building2, Warehouse, FileText } from 'lucide-react';
 import { useApiMutation } from '@/shared/hooks/useApi';
 
 const processSchema = z.object({
-  processCode: z.string().min(1, 'Código do processo é obrigatório'),
+  processCode: z.string().min(1, 'Codigo do processo e obrigatorio'),
   brand: z.enum(['puket', 'imaginarium'], { required_error: 'Selecione a marca' }),
   incoterm: z.string().default('FOB'),
   portOfLoading: z.string().optional(),
@@ -51,9 +51,9 @@ export function ProcessCreatePage() {
   };
 
   const inputClass =
-    'w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500';
-  const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
-  const errorClass = 'mt-1 text-xs text-red-600';
+    'w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all';
+  const labelClass = 'block text-sm font-medium text-slate-700 mb-1.5';
+  const errorClass = 'mt-1.5 text-xs text-red-600';
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -61,24 +61,36 @@ export function ProcessCreatePage() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate('/importacao/processos')}
-          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 transition-colors"
+          className="rounded-xl p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
-        <h2 className="text-2xl font-bold text-gray-900">Novo Processo</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Novo Processo</h2>
+          <p className="text-sm text-slate-500">Preencha os dados para criar um novo processo de importacao</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Main Fields */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
-          <h3 className="text-lg font-semibold text-gray-900">Dados Gerais</h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Ship className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Dados Gerais</h3>
+          </div>
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className={labelClass}>
-                Código do Processo <span className="text-red-500">*</span>
+                Codigo do Processo <span className="text-red-500">*</span>
               </label>
-              <input {...register('processCode')} className={inputClass} />
+              <input
+                {...register('processCode')}
+                placeholder="Ex: IMP-2024-001"
+                className={inputClass}
+              />
               {errors.processCode && (
                 <p className={errorClass}>{errors.processCode.message}</p>
               )}
@@ -89,7 +101,7 @@ export function ProcessCreatePage() {
                 Marca <span className="text-red-500">*</span>
               </label>
               <select {...register('brand')} className={inputClass}>
-                <option value="">Selecione...</option>
+                <option value="">Selecione a marca...</option>
                 <option value="puket">Puket</option>
                 <option value="imaginarium">Imaginarium</option>
               </select>
@@ -100,17 +112,25 @@ export function ProcessCreatePage() {
 
             <div>
               <label className={labelClass}>Incoterm</label>
-              <input {...register('incoterm')} className={inputClass} />
+              <input {...register('incoterm')} placeholder="FOB" className={inputClass} />
             </div>
 
             <div>
               <label className={labelClass}>Porto de Embarque</label>
-              <input {...register('portOfLoading')} className={inputClass} />
+              <input
+                {...register('portOfLoading')}
+                placeholder="Ex: Shanghai"
+                className={inputClass}
+              />
             </div>
 
             <div>
               <label className={labelClass}>Porto de Destino</label>
-              <input {...register('portOfDischarge')} className={inputClass} />
+              <input
+                {...register('portOfDischarge')}
+                placeholder="Ex: Santos"
+                className={inputClass}
+              />
             </div>
 
             <div>
@@ -126,18 +146,28 @@ export function ProcessCreatePage() {
         </div>
 
         {/* Exporter */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
-          <h3 className="text-lg font-semibold text-gray-900">Exportador</h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Exportador</h3>
+          </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
               <label className={labelClass}>Nome</label>
-              <input {...register('exporterName')} className={inputClass} />
+              <input
+                {...register('exporterName')}
+                placeholder="Nome do exportador"
+                className={inputClass}
+              />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelClass}>Endereço</label>
+              <label className={labelClass}>Endereco</label>
               <textarea
                 {...register('exporterAddress')}
                 rows={2}
+                placeholder="Endereco completo do exportador"
                 className={inputClass}
               />
             </div>
@@ -145,18 +175,28 @@ export function ProcessCreatePage() {
         </div>
 
         {/* Importer */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
-          <h3 className="text-lg font-semibold text-gray-900">Importador</h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <Warehouse className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Importador</h3>
+          </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
               <label className={labelClass}>Nome</label>
-              <input {...register('importerName')} className={inputClass} />
+              <input
+                {...register('importerName')}
+                placeholder="Nome do importador"
+                className={inputClass}
+              />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelClass}>Endereço</label>
+              <label className={labelClass}>Endereco</label>
               <textarea
                 {...register('importerAddress')}
                 rows={2}
+                placeholder="Endereco completo do importador"
                 className={inputClass}
               />
             </div>
@@ -164,36 +204,41 @@ export function ProcessCreatePage() {
         </div>
 
         {/* Notes */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 space-y-5">
-          <h3 className="text-lg font-semibold text-gray-900">Observações</h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <FileText className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Observacoes</h3>
+          </div>
           <textarea
             {...register('notes')}
             rows={4}
-            placeholder="Observações adicionais..."
+            placeholder="Observacoes adicionais sobre o processo..."
             className={inputClass}
           />
         </div>
 
         {/* Error message */}
         {mutation.error && (
-          <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700">
             {mutation.error.message}
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3">
+        <div className="flex items-center justify-end gap-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
           <button
             type="button"
             onClick={() => navigate('/importacao/processos')}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-all"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={isSubmitting || mutation.isPending}
-            className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all"
           >
             {mutation.isPending ? 'Criando...' : 'Criar Processo'}
           </button>

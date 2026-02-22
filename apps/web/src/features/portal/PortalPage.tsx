@@ -14,9 +14,8 @@ import {
   Activity,
   TrendingUp,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Clock,
+  Ship,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -65,25 +64,68 @@ function UserAvatar({ name }: { name: string }) {
     .join('')
     .toUpperCase();
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-xs font-bold text-white shadow-sm">
+    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-bold text-white ring-2 ring-white shadow">
       {initials}
     </div>
   );
 }
 
-function SkeletonBlock({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-100 rounded-md animate-pulse', className)} />;
+function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
 }
 
-function HealthDot({ status }: { status: HealthStatus | null }) {
-  if (!status) return <span className="h-2 w-2 rounded-full bg-slate-300 animate-pulse" />;
+function StatCard({
+  value,
+  label,
+  color,
+  loading,
+}: {
+  value: number;
+  label: string;
+  color: 'blue' | 'red' | 'emerald' | 'slate';
+  loading?: boolean;
+}) {
+  if (loading) return <Skeleton className="h-[72px]" />;
+
+  const colorMap = {
+    blue: 'text-blue-600',
+    red: 'text-red-500',
+    emerald: 'text-emerald-600',
+    slate: 'text-slate-700',
+  };
+
   return (
-    <span
+    <div className="rounded-xl bg-white border border-slate-100 px-4 py-3 text-center shadow-sm">
+      <p className={cn('text-2xl font-bold tabular-nums', value === 0 && color !== 'blue' && color !== 'slate' ? 'text-slate-300' : colorMap[color])}>
+        {value}
+      </p>
+      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">{label}</p>
+    </div>
+  );
+}
+
+function QuickLink({
+  to,
+  icon: Icon,
+  label,
+  hoverColor = 'hover:text-blue-600 hover:bg-blue-50',
+}: {
+  to: string;
+  icon: typeof Plus;
+  label: string;
+  hoverColor?: string;
+}) {
+  return (
+    <Link
+      to={to}
       className={cn(
-        'h-2 w-2 rounded-full',
-        status.connected ? 'bg-emerald-500' : 'bg-red-400',
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition-colors',
+        hoverColor,
       )}
-    />
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </Link>
   );
 }
 
@@ -131,15 +173,15 @@ export function PortalPage() {
   const firstName = user?.name?.split(' ')[0] || '';
 
   return (
-    <div className="min-h-screen bg-slate-50/80">
-      {/* ---- Header ---- */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-slate-200/60">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50">
+      {/* Header */}
+      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm shadow-slate-100/50">
         <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo-unico.png" alt="Uni.co" className="h-8 w-8 rounded-full ring-1 ring-slate-200" />
+            <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-full" />
             <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-slate-900 leading-none">Uni.co</p>
-              <p className="text-[10px] text-slate-400 mt-0.5">Sistema Integrado</p>
+              <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">Uni.co</p>
+              <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Sistema Integrado</p>
             </div>
           </div>
 
@@ -147,14 +189,14 @@ export function PortalPage() {
             {user && (
               <>
                 <div className="text-right hidden sm:block mr-1">
-                  <p className="text-sm font-medium text-slate-800 leading-tight">{user.name}</p>
-                  <p className="text-[11px] text-slate-400">{user.role}</p>
+                  <p className="text-sm font-semibold text-slate-800 leading-tight">{user.name}</p>
+                  <p className="text-[11px] text-slate-400 font-medium">{user.role === 'admin' ? 'Administrador' : 'Analista'}</p>
                 </div>
                 <UserAvatar name={user.name || 'U'} />
-                <div className="w-px h-6 bg-slate-200 mx-1" />
+                <div className="w-px h-7 bg-slate-200 mx-1" />
                 <button
                   onClick={logout}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Sair</span>
@@ -166,32 +208,32 @@ export function PortalPage() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-10">
-        {/* ---- Welcome ---- */}
+        {/* Welcome */}
         <section className="mb-10">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
             {getGreeting()}, {firstName}
           </h1>
-          <p className="mt-1.5 text-sm text-slate-500 first-letter:capitalize">
+          <p className="mt-2 text-sm text-slate-500 first-letter:capitalize">
             {formatDatePtBr()}
           </p>
 
           {/* Summary pills */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-5 flex flex-wrap items-center gap-2">
             {importLoading ? (
-              <SkeletonBlock className="h-7 w-44" />
+              <Skeleton className="h-7 w-44 rounded-full" />
             ) : overview ? (
               <>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                   <Activity className="h-3 w-3" />
                   {overview.activeProcesses} processo{overview.activeProcesses !== 1 ? 's' : ''} ativo{overview.activeProcesses !== 1 ? 's' : ''}
                 </span>
                 {overview.overdueProcesses > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-xs font-medium text-red-600">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-100 px-3 py-1 text-xs font-semibold text-red-600">
                     <AlertTriangle className="h-3 w-3" />
                     {overview.overdueProcesses} atrasado{overview.overdueProcesses !== 1 ? 's' : ''}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
                   <TrendingUp className="h-3 w-3" />
                   {overview.completedThisMonth} concluido{overview.completedThisMonth !== 1 ? 's' : ''} no mes
                 </span>
@@ -199,9 +241,9 @@ export function PortalPage() {
             ) : null}
 
             {certLoading ? (
-              <SkeletonBlock className="h-7 w-40" />
+              <Skeleton className="h-7 w-40 rounded-full" />
             ) : certStats ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
                 <Package className="h-3 w-3" />
                 {certStats.total_products} produtos monitorados
               </span>
@@ -209,200 +251,151 @@ export function PortalPage() {
           </div>
         </section>
 
-        {/* ---- Module Cards ---- */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Module Cards */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Importacao */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
-            {/* Top accent bar */}
-            <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
+          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-lg hover:border-blue-200/60 transition-all duration-300 overflow-hidden">
+            <div className="h-1.5 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600" />
 
-            <div className="p-6">
-              {/* Title row */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition-colors">
-                  <FileBox className="h-5 w-5" />
+            <div className="p-7">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow">
+                  <Ship className="h-6 w-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-semibold text-slate-900">Importacao</h2>
-                  <p className="mt-0.5 text-sm text-slate-500 leading-snug">
+                  <h2 className="text-lg font-bold text-slate-900">Importacao</h2>
+                  <p className="mt-0.5 text-sm text-slate-500">
                     Processos, documentos, validacao, cambios e follow-up
                   </p>
                 </div>
               </div>
 
-              {/* Stats */}
-              <div className="mt-5 grid grid-cols-3 gap-3">
-                {importLoading ? (
-                  <>
-                    <SkeletonBlock className="h-16 rounded-xl" />
-                    <SkeletonBlock className="h-16 rounded-xl" />
-                    <SkeletonBlock className="h-16 rounded-xl" />
-                  </>
-                ) : overview ? (
-                  <>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className="text-xl font-bold text-blue-600">{overview.activeProcesses}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Ativos</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className={cn('text-xl font-bold', overview.overdueProcesses > 0 ? 'text-red-500' : 'text-slate-400')}>
-                        {overview.overdueProcesses}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Atrasados</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className="text-xl font-bold text-emerald-600">{overview.completedThisMonth}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Concluidos</p>
-                    </div>
-                  </>
-                ) : (
-                  <div className="col-span-3 rounded-xl bg-slate-50 py-4 text-center text-xs text-slate-400">
-                    Sem dados disponiveis
-                  </div>
-                )}
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-3 mb-6">
+                <StatCard
+                  value={overview?.activeProcesses ?? 0}
+                  label="Ativos"
+                  color="blue"
+                  loading={importLoading}
+                />
+                <StatCard
+                  value={overview?.overdueProcesses ?? 0}
+                  label="Atrasados"
+                  color="red"
+                  loading={importLoading}
+                />
+                <StatCard
+                  value={overview?.completedThisMonth ?? 0}
+                  label="Concluidos"
+                  color="emerald"
+                  loading={importLoading}
+                />
               </div>
 
-              {/* CTA */}
               <Link
                 to="/importacao/dashboard"
-                className="mt-5 flex items-center justify-center gap-2 w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800 transition-colors"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-sm font-semibold text-white hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] transition-all shadow-sm shadow-blue-600/20"
               >
-                Acessar Modulo
-                <ArrowRight className="h-4 w-4" />
+                <BarChart3 className="h-4 w-4" />
+                Acessar Dashboard
+                <ArrowRight className="h-4 w-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-3 flex items-center gap-5">
-              <Link to="/importacao/processos/novo" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
-                <Plus className="h-3.5 w-3.5" />
-                Novo Processo
-              </Link>
-              <Link to="/importacao/processos" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
-                <Eye className="h-3.5 w-3.5" />
-                Ver Processos
-              </Link>
-              <Link to="/importacao/follow-up" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors">
-                <CalendarClock className="h-3.5 w-3.5" />
-                Follow-Up
-              </Link>
+            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5 flex items-center gap-1">
+              <QuickLink to="/importacao/processos/novo" icon={Plus} label="Novo" />
+              <QuickLink to="/importacao/processos" icon={Eye} label="Processos" />
+              <QuickLink to="/importacao/follow-up" icon={CalendarClock} label="Follow-Up" />
             </div>
           </div>
 
           {/* Certificacoes */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
-            {/* Top accent bar */}
-            <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
+          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-lg hover:border-emerald-200/60 transition-all duration-300 overflow-hidden">
+            <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600" />
 
-            <div className="p-6">
-              {/* Title row */}
-              <div className="flex items-start gap-4">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-100 transition-colors">
-                  <ShieldCheck className="h-5 w-5" />
+            <div className="p-7">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25 group-hover:shadow-emerald-500/40 transition-shadow">
+                  <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-semibold text-slate-900">Certificacoes</h2>
-                  <p className="mt-0.5 text-sm text-slate-500 leading-snug">
-                    Verificacao INMETRO/ANATEL nos e-commerces Puket e Imaginarium
+                  <h2 className="text-lg font-bold text-slate-900">Certificacoes</h2>
+                  <p className="mt-0.5 text-sm text-slate-500">
+                    Verificacao INMETRO / ANATEL nos e-commerces
                   </p>
                 </div>
               </div>
 
-              {/* Stats */}
-              <div className="mt-5 grid grid-cols-3 gap-3">
+              {/* Stats grid */}
+              <div className="grid grid-cols-3 gap-3 mb-6">
                 {certLoading ? (
                   <>
-                    <SkeletonBlock className="h-16 rounded-xl" />
-                    <SkeletonBlock className="h-16 rounded-xl" />
-                    <SkeletonBlock className="h-16 rounded-xl" />
+                    <Skeleton className="h-[72px]" />
+                    <Skeleton className="h-[72px]" />
+                    <Skeleton className="h-[72px]" />
                   </>
                 ) : certStats ? (
                   <>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className="text-xl font-bold text-slate-700">{certStats.total_products}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Produtos</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className="text-xl font-bold text-emerald-600">{certStats.ok}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Conforme</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 px-3 py-3 text-center">
-                      <p className={cn('text-xl font-bold', problems > 0 ? 'text-red-500' : 'text-slate-400')}>
-                        {problems}
-                      </p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Pendencias</p>
-                    </div>
+                    <StatCard value={certStats.total_products} label="Produtos" color="slate" />
+                    <StatCard value={certStats.ok} label="Conforme" color="emerald" />
+                    <StatCard value={problems} label="Pendencias" color="red" />
                   </>
                 ) : (
-                  <div className="col-span-3 rounded-xl bg-slate-50 py-4 text-center text-xs text-slate-400">
+                  <div className="col-span-3 rounded-xl bg-slate-50 border border-slate-100 py-5 text-center text-xs text-slate-400 font-medium">
                     API indisponivel
                   </div>
                 )}
               </div>
 
-              {/* CTA */}
               <Link
                 to="/certificacoes"
-                className="mt-5 flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 active:bg-emerald-800 transition-colors"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm shadow-emerald-600/20"
               >
-                Acessar Modulo
-                <ArrowRight className="h-4 w-4" />
+                <ShieldCheck className="h-4 w-4" />
+                Acessar Certificacoes
+                <ArrowRight className="h-4 w-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/50 px-6 py-3 flex items-center gap-5">
-              <Link to="/certificacoes/validacao" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-emerald-600 transition-colors">
-                <Play className="h-3.5 w-3.5" />
-                Nova Validacao
-              </Link>
-              <Link to="/certificacoes/produtos" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-emerald-600 transition-colors">
-                <Package className="h-3.5 w-3.5" />
-                Produtos
-              </Link>
-              <Link to="/certificacoes/relatorios" className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-emerald-600 transition-colors">
-                <FileBarChart className="h-3.5 w-3.5" />
-                Relatorios
-              </Link>
+            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5 flex items-center gap-1">
+              <QuickLink to="/certificacoes/validacao" icon={Play} label="Validar" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
+              <QuickLink to="/certificacoes/produtos" icon={Package} label="Produtos" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
+              <QuickLink to="/certificacoes/relatorios" icon={FileBarChart} label="Relatorios" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
             </div>
           </div>
         </div>
 
-        {/* ---- Status Footer ---- */}
-        <footer className="mt-10 rounded-xl border border-slate-200/60 bg-white px-5 py-3 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-5">
+        {/* Status footer */}
+        <footer className="mt-10 rounded-xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <HealthDot status={importHealth} />
-              <span>
-                Importacao{' '}
-                {importHealth ? (
-                  importHealth.connected ? (
-                    <span className="text-emerald-600 font-medium">{importHealth.latencyMs}ms</span>
-                  ) : (
-                    <span className="text-red-500 font-medium">offline</span>
-                  )
-                ) : (
-                  <span className="text-slate-400">...</span>
-                )}
-              </span>
+              <span className={cn(
+                'h-2 w-2 rounded-full',
+                importHealth === null ? 'bg-slate-300 animate-pulse' : importHealth.connected ? 'bg-emerald-500' : 'bg-red-400',
+              )} />
+              <span className="font-medium">Importacao</span>
+              {importHealth && (
+                importHealth.connected
+                  ? <span className="text-emerald-600">{importHealth.latencyMs}ms</span>
+                  : <span className="text-red-500">offline</span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <HealthDot status={certHealth} />
-              <span>
-                Certificacoes{' '}
-                {certHealth ? (
-                  certHealth.connected ? (
-                    <span className="text-emerald-600 font-medium">{certHealth.latencyMs}ms</span>
-                  ) : (
-                    <span className="text-red-500 font-medium">offline</span>
-                  )
-                ) : (
-                  <span className="text-slate-400">...</span>
-                )}
-              </span>
+              <span className={cn(
+                'h-2 w-2 rounded-full',
+                certHealth === null ? 'bg-slate-300 animate-pulse' : certHealth.connected ? 'bg-emerald-500' : 'bg-red-400',
+              )} />
+              <span className="font-medium">Certificacoes</span>
+              {certHealth && (
+                certHealth.connected
+                  ? <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
+                  : <span className="text-red-500">offline</span>
+              )}
             </div>
           </div>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-slate-400 font-medium">
             v1.0.0
           </p>
         </footer>

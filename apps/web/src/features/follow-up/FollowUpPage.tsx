@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Clock, AlertTriangle, CheckCircle, Calendar, ChevronDown } from 'lucide-react';
+import { ClipboardList, Clock, AlertTriangle, CheckCircle, Calendar, ChevronDown, LayoutGrid } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -32,31 +32,45 @@ interface LiDeadline {
 }
 
 const STAGES = [
-  { key: 'docs_received', label: 'Docs Recebidos' },
-  { key: 'pre_inspection', label: 'Pre-Inspecao' },
-  { key: 'ncm_verification', label: 'Verificacao NCM' },
-  { key: 'espelho_generated', label: 'Espelho Gerado' },
-  { key: 'sent_fenicia', label: 'Enviado Fenicia' },
-  { key: 'li_submitted', label: 'LI Submetida' },
-  { key: 'li_approved', label: 'LI Aprovada' },
+  { key: 'docs_received', label: 'Docs Recebidos', color: 'bg-sky-500' },
+  { key: 'pre_inspection', label: 'Pre-Inspecao', color: 'bg-indigo-500' },
+  { key: 'ncm_verification', label: 'Verificacao NCM', color: 'bg-violet-500' },
+  { key: 'espelho_generated', label: 'Espelho Gerado', color: 'bg-fuchsia-500' },
+  { key: 'sent_fenicia', label: 'Enviado Fenicia', color: 'bg-amber-500' },
+  { key: 'li_submitted', label: 'LI Submetida', color: 'bg-orange-500' },
+  { key: 'li_approved', label: 'LI Aprovada', color: 'bg-emerald-500' },
 ] as const;
 
-const statusColorMap = {
-  on_track: 'border-l-green-500 bg-green-50/50',
-  approaching: 'border-l-yellow-500 bg-yellow-50/50',
-  overdue: 'border-l-red-500 bg-red-50/50',
+const statusConfig = {
+  on_track: {
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
+    accent: 'bg-emerald-500',
+    text: 'text-emerald-700',
+    label: 'No prazo',
+  },
+  approaching: {
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    accent: 'bg-amber-500',
+    text: 'text-amber-700',
+    label: 'Proximo ao prazo',
+  },
+  overdue: {
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    accent: 'bg-red-500',
+    text: 'text-red-700',
+    label: 'Atrasado',
+  },
 };
 
-const statusDotMap = {
-  on_track: 'bg-green-500',
-  approaching: 'bg-yellow-500',
-  overdue: 'bg-red-500',
+const brandColors: Record<string, { bg: string; text: string; dot: string }> = {
+  puket: { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-400' },
+  imaginarium: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-400' },
 };
 
-const brandColors: Record<string, string> = {
-  puket: 'bg-pink-100 text-pink-700',
-  imaginarium: 'bg-violet-100 text-violet-700',
-};
+const defaultBrandColor = { bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-400' };
 
 function formatStageDate(date: string | null): string {
   if (!date) return '-';
@@ -102,102 +116,145 @@ export function FollowUpPage() {
     return <LoadingSpinner className="py-24" size="lg" />;
   }
 
+  const totalProcesses = followUpData?.length ?? 0;
+  const overdueCount = followUpData?.filter((p) => p.status === 'overdue').length ?? 0;
+  const approachingCount = followUpData?.filter((p) => p.status === 'approaching').length ?? 0;
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Follow-Up</h2>
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm">
+            <LayoutGrid className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">Follow-Up</h2>
+            <p className="text-sm text-slate-500">
+              {totalProcesses} processo{totalProcesses !== 1 ? 's' : ''} em andamento
+            </p>
+          </div>
+        </div>
         <button
           onClick={() => setShowDeadlines(!showDeadlines)}
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 lg:hidden"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow lg:hidden"
         >
-          <Calendar className="h-4 w-4" />
+          <Calendar className="h-4 w-4 text-slate-400" />
           Prazos LI
         </button>
       </div>
 
-      <div className="flex items-center gap-6 text-sm text-gray-600">
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-          No prazo
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-yellow-500" />
-          Proximo ao prazo
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
-          Atrasado
-        </div>
+      {/* Status Legend */}
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-sm">
+        {Object.entries(statusConfig).map(([key, config]) => {
+          const count = key === 'overdue' ? overdueCount : key === 'approaching' ? approachingCount : totalProcesses - overdueCount - approachingCount;
+          return (
+            <div key={key} className="flex items-center gap-2 text-sm">
+              <span className={`inline-block h-2.5 w-2.5 rounded-full ${config.accent}`} />
+              <span className="text-slate-600">{config.label}</span>
+              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${config.bg} ${config.text}`}>
+                {count}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
+      {/* Main Content */}
       <div className="flex gap-6">
+        {/* Kanban Board */}
         <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-4" style={{ minWidth: `${STAGES.length * 220}px` }}>
+          <div className="flex gap-4" style={{ minWidth: `${STAGES.length * 240}px` }}>
             {STAGES.map((stage) => {
               const processes = getProcessesForStage(stage.key);
               return (
-                <div key={stage.key} className="w-[220px] shrink-0">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-700">{stage.label}</h3>
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                <div key={stage.key} className="w-[240px] shrink-0">
+                  {/* Column Header */}
+                  <div className="mb-3 flex items-center gap-2.5">
+                    <div className={`h-2 w-2 rounded-full ${stage.color}`} />
+                    <h3 className="text-sm font-semibold text-slate-700">{stage.label}</h3>
+                    <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
                       {processes.length}
                     </span>
                   </div>
-                  <div className="space-y-2 rounded-lg bg-gray-50 p-2 min-h-[200px]">
+
+                  {/* Column Body */}
+                  <div className="space-y-2.5 rounded-2xl border border-slate-200/60 bg-slate-50/50 p-2.5 min-h-[220px]">
                     {processes.length === 0 ? (
-                      <p className="py-8 text-center text-xs text-gray-400">Nenhum processo</p>
-                    ) : (
-                      processes.map((proc) => (
-                        <div
-                          key={proc.id}
-                          className={`w-full rounded-lg border-l-4 shadow-sm transition-shadow hover:shadow-md ${statusColorMap[proc.status]}`}
-                        >
-                          <button
-                            onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                            className="w-full p-3 text-left"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-gray-900">{proc.processCode}</span>
-                              <span className={`inline-block h-2 w-2 rounded-full ${statusDotMap[proc.status]}`} />
-                            </div>
-                            <span
-                              className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                brandColors[proc.brand] || 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {proc.brand}
-                            </span>
-                            <div className="mt-2 flex items-center gap-1 text-xs text-gray-500">
-                              <Clock className="h-3 w-3" />
-                              {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''} sem atualizacao
-                            </div>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedProcessId(expandedProcessId === proc.id ? null : proc.id);
-                            }}
-                            className="flex w-full items-center justify-center border-t border-gray-200 py-1 text-xs text-gray-400 hover:text-gray-600"
-                          >
-                            <ChevronDown className={`h-3 w-3 transition-transform ${expandedProcessId === proc.id ? 'rotate-180' : ''}`} />
-                          </button>
-                          {expandedProcessId === proc.id && (
-                            <div className="border-t border-gray-200 px-3 pb-2 pt-1 space-y-0.5">
-                              {STAGE_DATE_LABELS.map((s) => {
-                                const val = proc[s.key] as string | null;
-                                return (
-                                  <div key={s.key} className="flex justify-between text-[10px]">
-                                    <span className="text-gray-500">{s.label}</span>
-                                    <span className={val ? 'text-gray-800 font-medium' : 'text-gray-300'}>
-                                      {formatStageDate(val)}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
+                      <div className="flex flex-col items-center justify-center py-12 text-center">
+                        <div className="mb-2 h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                          <ClipboardList className="h-4 w-4 text-slate-300" />
                         </div>
-                      ))
+                        <p className="text-xs text-slate-400">Nenhum processo</p>
+                      </div>
+                    ) : (
+                      processes.map((proc) => {
+                        const status = statusConfig[proc.status];
+                        const brand = brandColors[proc.brand] ?? defaultBrandColor;
+                        const isExpanded = expandedProcessId === proc.id;
+
+                        return (
+                          <div
+                            key={proc.id}
+                            className={`rounded-xl border bg-white shadow-sm transition-all hover:shadow-md ${status.border}`}
+                          >
+                            {/* Status accent bar */}
+                            <div className={`h-1 rounded-t-xl ${status.accent}`} />
+
+                            <button
+                              onClick={() => navigate(`/importacao/processos/${proc.id}`)}
+                              className="w-full px-3.5 pt-2.5 pb-2 text-left"
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-semibold text-slate-900">{proc.processCode}</span>
+                                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${status.bg} ${status.text}`}>
+                                  {proc.status === 'overdue' ? 'Atrasado' : proc.status === 'approaching' ? 'Atencao' : 'OK'}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 flex items-center gap-1.5">
+                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`} />
+                                <span className={`text-xs font-medium ${brand.text}`}>
+                                  {proc.brand}
+                                </span>
+                              </div>
+                              <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                                <Clock className="h-3 w-3" />
+                                <span>
+                                  {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''} sem atualizacao
+                                </span>
+                              </div>
+                            </button>
+
+                            {/* Expand toggle */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedProcessId(isExpanded ? null : proc.id);
+                              }}
+                              className="flex w-full items-center justify-center border-t border-slate-100 py-1.5 text-xs text-slate-300 hover:text-slate-500 transition-colors"
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            {/* Expanded timeline */}
+                            {isExpanded && (
+                              <div className="border-t border-slate-100 px-3.5 pb-3 pt-2 space-y-1">
+                                {STAGE_DATE_LABELS.map((s) => {
+                                  const val = proc[s.key] as string | null;
+                                  return (
+                                    <div key={s.key} className="flex items-center justify-between text-[11px]">
+                                      <span className="text-slate-400">{s.label}</span>
+                                      <span className={val ? 'font-medium text-slate-700' : 'text-slate-300'}>
+                                        {formatStageDate(val)}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -206,57 +263,72 @@ export function FollowUpPage() {
           </div>
         </div>
 
+        {/* LI Deadlines Sidebar */}
         <div
           className={`w-80 shrink-0 ${showDeadlines ? 'block' : 'hidden'} lg:block`}
         >
-          <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-            <div className="border-b border-gray-200 px-4 py-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                Prazos LI
-              </h3>
+          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Prazos LI</h3>
+                  <p className="text-xs text-slate-400">
+                    {liDeadlines?.length ?? 0} prazo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''} ativo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
             </div>
             <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
               {loadingDeadlines ? (
                 <LoadingSpinner className="py-8" size="sm" />
               ) : !liDeadlines?.length ? (
-                <div className="flex flex-col items-center gap-2 py-8 text-center">
-                  <CheckCircle className="h-8 w-8 text-gray-300" />
-                  <p className="text-sm text-gray-400">Nenhum prazo de LI ativo</p>
+                <div className="flex flex-col items-center gap-3 py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50">
+                    <CheckCircle className="h-6 w-6 text-slate-300" />
+                  </div>
+                  <p className="text-sm text-slate-400">Nenhum prazo de LI ativo</p>
                 </div>
               ) : (
-                <ul className="divide-y divide-gray-100">
+                <ul className="divide-y divide-slate-100">
                   {liDeadlines.map((item) => {
                     const isUrgent = item.daysRemaining <= 3;
                     const isWarning = item.daysRemaining <= 7 && item.daysRemaining > 3;
+                    const brand = brandColors[item.brand] ?? defaultBrandColor;
+
+                    let urgencyBg = 'bg-emerald-50';
+                    let urgencyText = 'text-emerald-700';
+                    if (isUrgent) {
+                      urgencyBg = 'bg-red-50';
+                      urgencyText = 'text-red-700';
+                    } else if (isWarning) {
+                      urgencyBg = 'bg-amber-50';
+                      urgencyText = 'text-amber-700';
+                    }
+
                     return (
-                      <li key={item.id} className="px-4 py-3">
+                      <li key={item.id} className="px-5 py-3.5 transition-colors hover:bg-slate-50/50">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-medium text-gray-900">{item.processCode}</p>
-                            <span
-                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                brandColors[item.brand] || 'bg-gray-100 text-gray-700'
-                              }`}
-                            >
-                              {item.brand}
-                            </span>
+                            <p className="text-sm font-semibold text-slate-900">{item.processCode}</p>
+                            <div className="mt-1 flex items-center gap-1.5">
+                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`} />
+                              <span className={`text-xs font-medium ${brand.text}`}>
+                                {item.brand}
+                              </span>
+                            </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-gray-500">{formatDate(item.liDeadline)}</p>
-                            <p
-                              className={`text-sm font-semibold ${
-                                isUrgent
-                                  ? 'text-red-600'
-                                  : isWarning
-                                    ? 'text-yellow-600'
-                                    : 'text-green-600'
-                              }`}
+                            <p className="text-xs text-slate-400">{formatDate(item.liDeadline)}</p>
+                            <span
+                              className={`mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${urgencyBg} ${urgencyText}`}
                             >
                               {item.daysRemaining <= 0
                                 ? 'Vencido'
-                                : `${item.daysRemaining} dia${item.daysRemaining !== 1 ? 's' : ''}`}
-                            </p>
+                                : `${item.daysRemaining}d`}
+                            </span>
                           </div>
                         </div>
                       </li>
@@ -279,4 +351,3 @@ export function FollowUpPage() {
     </div>
   );
 }
-

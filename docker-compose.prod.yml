@@ -1,12 +1,14 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: importacao-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-importacao}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-importacao123}
       POSTGRES_DB: ${POSTGRES_DB:-importacao}
     ports:
-      - "5432:5432"
+      - "5450:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,14 +21,16 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    container_name: importacao-api
+    restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "3050:3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret-in-production}
+      JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       API_PORT: 3001
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: production
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       GOOGLE_DRIVE_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
@@ -62,25 +66,17 @@ services:
       postgres:
         condition: service_healthy
 
-  # cert-api:
-  #   build: ./apps/cert-api
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_API_URL: /api
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+    container_name: importacao-web
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8085:80"
     depends_on:
       - api
 

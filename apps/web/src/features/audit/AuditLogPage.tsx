@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Shield, ChevronDown, ChevronRight, ChevronLeft, Search, X, Code2, Clock, User } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -44,21 +44,23 @@ const actionLabels: Record<string, string> = {
   sent_to_fenicia: 'Envio Fenicia',
 };
 
-const actionColors: Record<string, string> = {
-  login: 'bg-blue-100 text-blue-700',
-  create: 'bg-green-100 text-green-700',
-  update: 'bg-yellow-100 text-yellow-700',
-  delete: 'bg-red-100 text-red-700',
-  upload: 'bg-indigo-100 text-indigo-700',
-  reprocess: 'bg-purple-100 text-purple-700',
-  email_processed: 'bg-teal-100 text-teal-700',
-  validation_run: 'bg-orange-100 text-orange-700',
-  manual_resolution: 'bg-amber-100 text-amber-700',
-  alert_created: 'bg-red-100 text-red-700',
-  acknowledge: 'bg-emerald-100 text-emerald-700',
-  generate: 'bg-violet-100 text-violet-700',
-  sent_to_fenicia: 'bg-cyan-100 text-cyan-700',
+const actionColors: Record<string, { bg: string; text: string; dot: string }> = {
+  login:              { bg: 'bg-blue-50',    text: 'text-blue-700',    dot: 'bg-blue-500' },
+  create:             { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  update:             { bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500' },
+  delete:             { bg: 'bg-red-50',     text: 'text-red-700',     dot: 'bg-red-500' },
+  upload:             { bg: 'bg-indigo-50',  text: 'text-indigo-700',  dot: 'bg-indigo-500' },
+  reprocess:          { bg: 'bg-purple-50',  text: 'text-purple-700',  dot: 'bg-purple-500' },
+  email_processed:    { bg: 'bg-teal-50',    text: 'text-teal-700',    dot: 'bg-teal-500' },
+  validation_run:     { bg: 'bg-orange-50',  text: 'text-orange-700',  dot: 'bg-orange-500' },
+  manual_resolution:  { bg: 'bg-amber-50',   text: 'text-amber-700',   dot: 'bg-amber-500' },
+  alert_created:      { bg: 'bg-rose-50',    text: 'text-rose-700',    dot: 'bg-rose-500' },
+  acknowledge:        { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+  generate:           { bg: 'bg-violet-50',  text: 'text-violet-700',  dot: 'bg-violet-500' },
+  sent_to_fenicia:    { bg: 'bg-cyan-50',    text: 'text-cyan-700',    dot: 'bg-cyan-500' },
 };
+
+const defaultActionColor = { bg: 'bg-slate-50', text: 'text-slate-700', dot: 'bg-slate-400' };
 
 const entityTypeLabels: Record<string, string> = {
   process: 'Processo',
@@ -82,26 +84,48 @@ function formatDateTime(dateStr: string): string {
   });
 }
 
+function formatDateShort(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function DetailsExpander({ details }: { details: Record<string, unknown> | null }) {
   const [open, setOpen] = useState(false);
 
   if (!details || Object.keys(details).length === 0) {
-    return <span className="text-gray-400 text-xs">-</span>;
+    return <span className="text-slate-300 text-xs">--</span>;
   }
 
   return (
     <div>
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800"
+        className={cn(
+          'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-200',
+          open
+            ? 'bg-slate-100 text-slate-700'
+            : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600',
+        )}
       >
-        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+        <Code2 className="h-3 w-3" />
         {open ? 'Ocultar' : 'Detalhes'}
+        {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {open && (
-        <pre className="mt-1 rounded bg-gray-100 p-2 text-xs text-gray-700 max-w-md overflow-auto">
-          {JSON.stringify(details, null, 2)}
-        </pre>
+        <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200/60 px-3 py-1.5">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">JSON</span>
+            <span className="text-[10px] text-slate-300">{Object.keys(details).length} campos</span>
+          </div>
+          <pre className="p-3 text-xs text-slate-600 max-w-lg overflow-auto font-mono leading-relaxed">
+            {JSON.stringify(details, null, 2)}
+          </pre>
+        </div>
       )}
     </div>
   );
@@ -130,87 +154,114 @@ export function AuditLogPage() {
 
   const logs = response?.data ?? [];
   const pagination = response?.pagination;
+  const hasFilters = action || entityType || startDate || endDate;
+
+  const clearFilters = () => {
+    setAction('');
+    setEntityType('');
+    setStartDate('');
+    setEndDate('');
+    setPage(1);
+  };
+
+  const selectClasses = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200 appearance-none cursor-pointer';
+  const inputClasses = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Auditoria</h2>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-end gap-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Acao</label>
-          <select
-            value={action}
-            onChange={(e) => { setAction(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Todas</option>
-            {Object.entries(actionLabels).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
-          <select
-            value={entityType}
-            onChange={(e) => { setEntityType(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          >
-            <option value="">Todos</option>
-            {Object.entries(entityTypeLabels).map(([key, label]) => (
-              <option key={key} value={key}>{label}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Data Inicio</label>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-          />
-        </div>
-
-        {(action || entityType || startDate || endDate) && (
-          <button
-            onClick={() => { setAction(''); setEntityType(''); setStartDate(''); setEndDate(''); setPage(1); }}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            Limpar Filtros
-          </button>
-        )}
+      {/* Page header */}
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Auditoria</h2>
+        <p className="mt-1 text-sm text-slate-500">Registro de atividades e acoes do sistema</p>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-5 py-4">
-          <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <Shield className="h-5 w-5 text-gray-500" />
-            Logs de Auditoria
+      {/* Filter bar */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-4">
+          <Search className="h-4 w-4 text-slate-400" />
+          <h3 className="text-sm font-semibold text-slate-700">Filtros</h3>
+          {hasFilters && (
+            <button
+              onClick={clearFilters}
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+            >
+              <X className="h-3 w-3" />
+              Limpar
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[160px]">
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Acao</label>
+            <select
+              value={action}
+              onChange={(e) => { setAction(e.target.value); setPage(1); }}
+              className={selectClasses}
+            >
+              <option value="">Todas as acoes</option>
+              {Object.entries(actionLabels).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="min-w-[140px]">
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Tipo</label>
+            <select
+              value={entityType}
+              onChange={(e) => { setEntityType(e.target.value); setPage(1); }}
+              className={selectClasses}
+            >
+              <option value="">Todos os tipos</option>
+              {Object.entries(entityTypeLabels).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">De</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setPage(1); }}
+              className={inputClasses}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 mb-1.5">Ate</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setPage(1); }}
+              className={inputClasses}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Table card */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        {/* Card header */}
+        <div className="border-b border-slate-100 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-800">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
+                <Shield className="h-4 w-4 text-slate-600" />
+              </div>
+              Logs de Auditoria
+            </h3>
             {pagination && (
-              <span className="text-sm font-normal text-gray-500">
-                ({pagination.total} registro{pagination.total !== 1 ? 's' : ''})
+              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+                {pagination.total.toLocaleString('pt-BR')} registro{pagination.total !== 1 ? 's' : ''}
               </span>
             )}
-          </h3>
+          </div>
         </div>
 
         {isLoading ? (
-          <LoadingSpinner className="py-12" />
+          <LoadingSpinner className="py-16" />
         ) : logs.length === 0 ? (
           <EmptyState
             icon={Shield}
@@ -219,60 +270,97 @@ export function AuditLogPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Data/Hora</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Usuario</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Acao</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Tipo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">ID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium uppercase text-gray-500">Detalhes</th>
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-slate-100 bg-slate-50/80">
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3 w-3" />
+                      Data/Hora
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <div className="flex items-center gap-1.5">
+                      <User className="h-3 w-3" />
+                      Usuario
+                    </div>
+                  </th>
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Acao</th>
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Entidade</th>
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">ID</th>
+                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Detalhes</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
-                {logs.map((log) => (
-                  <tr key={log.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {formatDateTime(log.createdAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
-                      {log.userName ?? <span className="text-gray-400">Sistema</span>}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3">
-                      <span
-                        className={cn(
-                          'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                          actionColors[log.action] ?? 'bg-gray-100 text-gray-700',
-                        )}
-                      >
-                        {actionLabels[log.action] ?? log.action}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {log.entityType ? (entityTypeLabels[log.entityType] ?? log.entityType) : '-'}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      {log.entityId != null ? (
-                        log.entityType === 'process' ? (
-                          <Link
-                            to={`/importacao/processos/${log.entityId}`}
-                            className="text-blue-600 hover:underline"
-                          >
-                            #{log.entityId}
-                          </Link>
-                        ) : (
-                          <span className="text-gray-600">#{log.entityId}</span>
-                        )
-                      ) : (
-                        <span className="text-gray-400">-</span>
+              <tbody>
+                {logs.map((log, idx) => {
+                  const colors = actionColors[log.action] ?? defaultActionColor;
+                  return (
+                    <tr
+                      key={log.id}
+                      className={cn(
+                        'group transition-colors duration-150 hover:bg-slate-50/80',
+                        idx !== logs.length - 1 && 'border-b border-slate-100/80',
                       )}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      <DetailsExpander details={log.details} />
-                    </td>
-                  </tr>
-                ))}
+                    >
+                      <td className="whitespace-nowrap px-6 py-3.5">
+                        <div className="text-sm font-medium text-slate-700">{formatDateShort(log.createdAt)}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 hidden xl:block">{formatDateTime(log.createdAt)}</div>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-3.5">
+                        {log.userName ? (
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">
+                              {log.userName.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                            </div>
+                            <span className="text-sm font-medium text-slate-700">{log.userName}</span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-slate-300 italic">Sistema</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-3.5">
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold',
+                            colors.bg,
+                            colors.text,
+                          )}
+                        >
+                          <span className={cn('h-1.5 w-1.5 rounded-full', colors.dot)} />
+                          {actionLabels[log.action] ?? log.action}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-3.5">
+                        {log.entityType ? (
+                          <span className="inline-flex items-center rounded-lg bg-slate-100/80 px-2 py-0.5 text-xs font-medium text-slate-600">
+                            {entityTypeLabels[log.entityType] ?? log.entityType}
+                          </span>
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-3.5 text-sm">
+                        {log.entityId != null ? (
+                          log.entityType === 'process' ? (
+                            <Link
+                              to={`/importacao/processos/${log.entityId}`}
+                              className="inline-flex items-center rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+                            >
+                              #{log.entityId}
+                            </Link>
+                          ) : (
+                            <span className="text-sm font-medium text-slate-500">#{log.entityId}</span>
+                          )
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-3.5 text-sm">
+                        <DetailsExpander details={log.details} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -280,15 +368,16 @@ export function AuditLogPage() {
 
         {/* Pagination */}
         {pagination && pagination.pages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
-            <p className="text-sm text-gray-600">
-              Pagina {pagination.page} de {pagination.pages}
+          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+            <p className="text-sm text-slate-500">
+              Pagina <span className="font-semibold text-slate-700">{pagination.page}</span> de{' '}
+              <span className="font-semibold text-slate-700">{pagination.pages}</span>
             </p>
             <div className="flex gap-2">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Anterior
@@ -296,7 +385,7 @@ export function AuditLogPage() {
               <button
                 disabled={page >= pagination.pages}
                 onClick={() => setPage(page + 1)}
-                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 Proximo
                 <ChevronRight className="h-4 w-4" />

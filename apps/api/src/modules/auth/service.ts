@@ -7,6 +7,7 @@ import { db } from '../../shared/database/connection.js';
 import { users } from '../../shared/database/schema.js';
 import type { CreateUserInput, UpdateUserInput } from './schema.js';
 import { auditService } from '../audit/service.js';
+import { googleGroupsService } from '../integrations/google-groups.service.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
@@ -56,6 +57,11 @@ export const authService = {
 
     if (ALLOWED_DOMAIN && !payload.email.endsWith(`@${ALLOWED_DOMAIN}`)) {
       throw new Error(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
+    }
+
+    const allowed = await googleGroupsService.isAllowed(payload.email);
+    if (!allowed) {
+      throw new Error('Acesso negado: usuário não pertence ao grupo autorizado');
     }
 
     let [user] = await db.select().from(users).where(eq(users.email, payload.email)).limit(1);

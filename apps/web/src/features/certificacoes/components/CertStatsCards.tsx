@@ -1,5 +1,4 @@
 import { CheckCircle2, XCircle, AlertTriangle, Search, Package } from "lucide-react"
-import { cn } from "@/shared/lib/utils"
 
 interface StatsData {
   total: number
@@ -10,11 +9,41 @@ interface StatsData {
 }
 
 const CARDS = [
-  { key: "total", label: "Total Produtos", icon: Package, color: "text-blue-600 bg-blue-50" },
-  { key: "ok", label: "OK", icon: CheckCircle2, color: "text-emerald-600 bg-emerald-50" },
-  { key: "missing", label: "Missing", icon: XCircle, color: "text-red-600 bg-red-50" },
-  { key: "inconsistent", label: "Inconsistente", icon: AlertTriangle, color: "text-amber-600 bg-amber-50" },
-  { key: "not_found", label: "Nao Encontrado", icon: Search, color: "text-slate-500 bg-slate-100" },
+  {
+    key: "total",
+    label: "Total Produtos",
+    icon: Package,
+    iconBg: "from-slate-500 to-slate-700",
+    shadowColor: "shadow-slate-500/25",
+  },
+  {
+    key: "ok",
+    label: "OK",
+    icon: CheckCircle2,
+    iconBg: "from-emerald-500 to-emerald-700",
+    shadowColor: "shadow-emerald-500/25",
+  },
+  {
+    key: "missing",
+    label: "Missing",
+    icon: XCircle,
+    iconBg: "from-red-500 to-red-700",
+    shadowColor: "shadow-red-500/25",
+  },
+  {
+    key: "inconsistent",
+    label: "Inconsistente",
+    icon: AlertTriangle,
+    iconBg: "from-amber-500 to-amber-600",
+    shadowColor: "shadow-amber-500/25",
+  },
+  {
+    key: "not_found",
+    label: "Nao Encontrado",
+    icon: Search,
+    iconBg: "from-slate-400 to-slate-600",
+    shadowColor: "shadow-slate-400/25",
+  },
 ] as const
 
 export function CertStatsCards({ data, loading }: { data?: StatsData; loading?: boolean }) {
@@ -23,17 +52,17 @@ export function CertStatsCards({ data, loading }: { data?: StatsData; loading?: 
       {CARDS.map((card) => (
         <div
           key={card.key}
-          className="bg-white rounded-xl border border-slate-200 p-4"
+          className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 transition-shadow hover:shadow-md"
         >
-          <div className="flex items-center gap-3">
-            <div className={cn("p-2 rounded-lg", card.color)}>
-              <card.icon className="w-4 h-4" />
+          <div className="flex items-center gap-4">
+            <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${card.iconBg} text-white shadow-lg ${card.shadowColor}`}>
+              <card.icon className="w-5 h-5" />
             </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">
+            <div className="min-w-0">
+              <p className="text-2xl font-bold text-slate-900 leading-none mb-1">
                 {loading ? "-" : (data?.[card.key] ?? 0)}
               </p>
-              <p className="text-xs text-slate-500">{card.label}</p>
+              <p className="text-xs font-medium text-slate-500 truncate">{card.label}</p>
             </div>
           </div>
         </div>

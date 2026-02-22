@@ -12,12 +12,18 @@ import {
   XCircle,
   Loader2,
   ShieldAlert,
+  Mail,
+  MessageSquare,
+  HardDrive,
+  Database,
+  Zap,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '@/shared/lib/api-client';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { cn } from '@/shared/lib/utils';
 
 interface User {
   id: string;
@@ -40,12 +46,17 @@ const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'integrations', label: 'Integracoes', icon: Link2 },
 ];
 
-const roleBadge: Record<string, string> = {
-  admin: 'bg-red-100 text-red-700',
-  manager: 'bg-blue-100 text-blue-700',
-  operator: 'bg-green-100 text-green-700',
-  viewer: 'bg-gray-100 text-gray-700',
+const roleBadge: Record<string, { bg: string; text: string }> = {
+  admin:    { bg: 'bg-red-50',    text: 'text-red-700' },
+  manager:  { bg: 'bg-blue-50',   text: 'text-blue-700' },
+  operator: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  viewer:   { bg: 'bg-slate-100', text: 'text-slate-600' },
 };
+
+const defaultRoleBadge = { bg: 'bg-slate-100', text: 'text-slate-600' };
+
+const inputClasses = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
+const labelClasses = 'block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider';
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -53,44 +64,115 @@ export function SettingsPage() {
 
   if (user?.role !== 'admin') {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <ShieldAlert className="h-12 w-12 text-red-400 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900">Acesso negado</h2>
-        <p className="mt-2 text-sm text-gray-500">Somente administradores podem acessar as configuracoes.</p>
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5">
+          <ShieldAlert className="h-8 w-8 text-red-400" />
+        </div>
+        <h2 className="text-xl font-bold text-slate-900">Acesso negado</h2>
+        <p className="mt-2 text-sm text-slate-500 max-w-sm">Somente administradores podem acessar as configuracoes do sistema.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Configuracoes</h2>
+      {/* Page header */}
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Configuracoes</h2>
+        <p className="mt-1 text-sm text-slate-500">Gerencie preferencias, usuarios e integracoes</p>
+      </div>
 
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-6">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-            return (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-2 border-b-2 px-1 py-3 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
+      {/* Pill tabs */}
+      <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-100/80 p-1">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={cn(
+                'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
+                isActive
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700',
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
       {activeTab === 'general' && <GeneralTab />}
       {activeTab === 'users' && <UsersTab />}
       {activeTab === 'integrations' && <IntegrationsTab />}
+    </div>
+  );
+}
+
+function SectionCard({
+  icon: Icon,
+  title,
+  description,
+  children,
+  actions,
+}: {
+  icon: typeof Settings;
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+  actions?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
+              <Icon className="h-4.5 w-4.5 text-slate-600" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+              {description && <p className="text-xs text-slate-400 mt-0.5">{description}</p>}
+            </div>
+          </div>
+          {actions}
+        </div>
+      </div>
+      <div className="p-6">{children}</div>
+    </div>
+  );
+}
+
+function SaveButton({
+  onClick,
+  saving,
+  saved,
+  label = 'Salvar',
+}: {
+  onClick: () => void;
+  saving: boolean;
+  saved: boolean;
+  label?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <button
+        onClick={onClick}
+        disabled={saving}
+        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
+      >
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+        {label}
+      </button>
+      {saved && (
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 animate-in fade-in">
+          <CheckCircle className="h-3.5 w-3.5" />
+          Salvo com sucesso
+        </span>
+      )}
     </div>
   );
 }
@@ -164,93 +246,69 @@ function GeneralTab() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Google Chat Webhook</h3>
-        <div className="space-y-3">
+      <SectionCard icon={MessageSquare} title="Google Chat Webhook" description="Notificacoes via Google Chat">
+        <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+            <label className={labelClasses}>Webhook URL</label>
             <input
               type="url"
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
               placeholder="https://chat.googleapis.com/v1/spaces/..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className={inputClasses}
             />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleSaveWebhook}
-              disabled={savingWebhook}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {savingWebhook ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              Salvar
-            </button>
-            {savedWebhook && (
-              <span className="flex items-center gap-1 text-sm text-green-600">
-                <CheckCircle className="h-4 w-4" /> Salvo
-              </span>
-            )}
-          </div>
+          <SaveButton onClick={handleSaveWebhook} saving={savingWebhook} saved={savedWebhook} />
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Configuracoes SMTP</h3>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Host</label>
-            <input
-              type="text"
-              value={smtpHost}
-              onChange={(e) => setSmtpHost(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
+      <SectionCard icon={Mail} title="Configuracoes SMTP" description="Servidor de envio de e-mails">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelClasses}>Host</label>
+              <input
+                type="text"
+                value={smtpHost}
+                onChange={(e) => setSmtpHost(e.target.value)}
+                placeholder="smtp.gmail.com"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Porta</label>
+              <input
+                type="text"
+                value={smtpPort}
+                onChange={(e) => setSmtpPort(e.target.value)}
+                placeholder="587"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Usuario</label>
+              <input
+                type="text"
+                value={smtpUser}
+                onChange={(e) => setSmtpUser(e.target.value)}
+                placeholder="usuario@empresa.com"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Remetente (From)</label>
+              <input
+                type="email"
+                value={smtpFrom}
+                onChange={(e) => setSmtpFrom(e.target.value)}
+                placeholder="noreply@empresa.com"
+                className={inputClasses}
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Porta</label>
-            <input
-              type="text"
-              value={smtpPort}
-              onChange={(e) => setSmtpPort(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
-            <input
-              type="text"
-              value={smtpUser}
-              onChange={(e) => setSmtpUser(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Remetente (From)</label>
-            <input
-              type="email"
-              value={smtpFrom}
-              onChange={(e) => setSmtpFrom(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
+          <SaveButton onClick={handleSaveSmtp} saving={savingSmtp} saved={savedSmtp} />
         </div>
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            onClick={handleSaveSmtp}
-            disabled={savingSmtp}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {savingSmtp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Salvar
-          </button>
-          {savedSmtp && (
-            <span className="flex items-center gap-1 text-sm text-green-600">
-              <CheckCircle className="h-4 w-4" /> Salvo
-            </span>
-          )}
-        </div>
-      </div>
+      </SectionCard>
     </div>
   );
 }
@@ -317,130 +375,160 @@ function UsersTab() {
     }
   };
 
-  if (isLoading) return <LoadingSpinner className="py-12" />;
+  if (isLoading) return <LoadingSpinner className="py-16" />;
 
   return (
-    <div className="space-y-4">
-      <div className="flex justify-end">
+    <div className="space-y-5">
+      {/* Action bar */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-slate-500">
+          <span className="font-semibold text-slate-700">{users?.length ?? 0}</span> usuarios cadastrados
+        </p>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
         >
           <Plus className="h-4 w-4" />
           Novo Usuario
         </button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Nome</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Perfil</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Ativo</th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Acoes</th>
+      {/* Users table */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <table className="min-w-full">
+          <thead>
+            <tr className="border-b border-slate-100 bg-slate-50/80">
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Usuario</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Email</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Perfil</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Acoes</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
-            {users?.map((user) => (
-              <tr key={user.id} className="hover:bg-gray-50">
-                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">{user.name}</td>
-                <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">{user.email}</td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <span
-                    className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      roleBadge[user.role] || roleBadge.viewer
-                    }`}
-                  >
-                    {user.role}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <button
-                    onClick={() => toggleActive(user)}
-                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${
-                      user.active ? 'bg-blue-600' : 'bg-gray-200'
-                    }`}
-                  >
+          <tbody>
+            {users?.map((user, idx) => {
+              const badge = roleBadge[user.role] ?? defaultRoleBadge;
+              return (
+                <tr
+                  key={user.id}
+                  className={cn(
+                    'group transition-colors duration-150 hover:bg-slate-50/80',
+                    idx !== (users?.length ?? 0) - 1 && 'border-b border-slate-100/80',
+                  )}
+                >
+                  <td className="whitespace-nowrap px-6 py-3.5">
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
+                        user.active
+                          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
+                          : 'bg-slate-100 text-slate-400',
+                      )}>
+                        {user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                      </div>
+                      <span className="text-sm font-semibold text-slate-800">{user.name}</span>
+                    </div>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-3.5 text-sm text-slate-500">{user.email}</td>
+                  <td className="whitespace-nowrap px-6 py-3.5">
                     <span
-                      className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
-                        user.active ? 'translate-x-5' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openEdit(user)}
-                      className="rounded p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
-                      title="Editar"
+                      className={cn(
+                        'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold',
+                        badge.bg,
+                        badge.text,
+                      )}
                     >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-3.5">
                     <button
-                      onClick={() => setDeactivateId(user.id)}
-                      className="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                      title="Desativar"
+                      onClick={() => toggleActive(user)}
+                      className={cn(
+                        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
+                        user.active ? 'bg-blue-600' : 'bg-slate-200',
+                      )}
                     >
-                      <UserX className="h-4 w-4" />
+                      <span
+                        className={cn(
+                          'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
+                          user.active ? 'translate-x-5' : 'translate-x-0',
+                        )}
+                      />
                     </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-3.5">
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => openEdit(user)}
+                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                        title="Editar"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => setDeactivateId(user.id)}
+                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                        title="Desativar"
+                      >
+                        <UserX className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       {/* User modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="fixed inset-0 bg-black/50" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-bold text-slate-900 mb-5">
               {editUser ? 'Editar Usuario' : 'Novo Usuario'}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+                <label className={labelClasses}>Nome</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClasses}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className={labelClasses}>Email</label>
                 <input
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClasses}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className={labelClasses}>
                   Senha{editUser ? ' (deixe vazio para manter)' : ''}
                 </label>
                 <input
                   type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClasses}
                   required={!editUser}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Perfil</label>
+                <label className={labelClasses}>Perfil</label>
                 <select
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className={inputClasses}
                 >
                   <option value="admin">Admin</option>
                   <option value="manager">Manager</option>
@@ -448,19 +536,20 @@ function UsersTab() {
                   <option value="viewer">Viewer</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
                 >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {saving ? 'Salvando...' : 'Salvar'}
                 </button>
               </div>
@@ -558,117 +647,117 @@ function IntegrationsTab() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Google Drive</h3>
-          <StatusIndicator status={driveStatus} />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Client Email</label>
-            <input
-              type="email"
-              value={driveEmail}
-              onChange={(e) => setDriveEmail(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
+      <SectionCard
+        icon={HardDrive}
+        title="Google Drive"
+        description="Armazenamento e sincronizacao de documentos"
+        actions={<StatusIndicator status={driveStatus} />}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelClasses}>Client Email</label>
+              <input
+                type="email"
+                value={driveEmail}
+                onChange={(e) => setDriveEmail(e.target.value)}
+                placeholder="service-account@project.iam.gserviceaccount.com"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Root Folder ID</label>
+              <input
+                type="text"
+                value={driveFolderId}
+                onChange={(e) => setDriveFolderId(e.target.value)}
+                placeholder="1a2b3c4d5e6f..."
+                className={inputClasses}
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Root Folder ID</label>
-            <input
-              type="text"
-              value={driveFolderId}
-              onChange={(e) => setDriveFolderId(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div className="mt-4">
-          <button
+          <TestConnectionButton
+            testing={testingDrive}
             onClick={testDrive}
-            disabled={testingDrive}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {testingDrive ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            Testar Conexao
-          </button>
+          />
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Odoo</h3>
-          <StatusIndicator status={odooStatus} />
-        </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">URL</label>
-            <input
-              type="url"
-              value={odooUrl}
-              onChange={(e) => setOdooUrl(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
+      <SectionCard
+        icon={Database}
+        title="Odoo ERP"
+        description="Integracao com sistema de gestao empresarial"
+        actions={<StatusIndicator status={odooStatus} />}
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div>
+              <label className={labelClasses}>URL</label>
+              <input
+                type="url"
+                value={odooUrl}
+                onChange={(e) => setOdooUrl(e.target.value)}
+                placeholder="https://erp.empresa.com"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Database</label>
+              <input
+                type="text"
+                value={odooDb}
+                onChange={(e) => setOdooDb(e.target.value)}
+                placeholder="production"
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Usuario</label>
+              <input
+                type="text"
+                value={odooUser}
+                onChange={(e) => setOdooUser(e.target.value)}
+                placeholder="admin@empresa.com"
+                className={inputClasses}
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Database</label>
-            <input
-              type="text"
-              value={odooDb}
-              onChange={(e) => setOdooDb(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
-            <input
-              type="text"
-              value={odooUser}
-              onChange={(e) => setOdooUser(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div className="mt-4">
-          <button
+          <TestConnectionButton
+            testing={testingOdoo}
             onClick={testOdoo}
-            disabled={testingOdoo}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-          >
-            {testingOdoo ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
-            Testar Conexao
-          </button>
+          />
         </div>
-      </div>
+      </SectionCard>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-        >
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar Integracoes
-        </button>
-        {saved && (
-          <span className="flex items-center gap-1 text-sm text-green-600">
-            <CheckCircle className="h-4 w-4" /> Salvo
-          </span>
-        )}
-      </div>
+      <SaveButton onClick={handleSave} saving={saving} saved={saved} label="Salvar Integracoes" />
     </div>
+  );
+}
+
+function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={testing}
+      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
+    >
+      {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-amber-500" />}
+      Testar Conexao
+    </button>
   );
 }
 
 function StatusIndicator({ status }: { status: 'idle' | 'success' | 'error' }) {
   if (status === 'idle') return null;
   return status === 'success' ? (
-    <span className="flex items-center gap-1 text-sm text-green-600">
-      <CheckCircle className="h-4 w-4" /> Conectado
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600">
+      <CheckCircle className="h-3.5 w-3.5" />
+      Conectado
     </span>
   ) : (
-    <span className="flex items-center gap-1 text-sm text-red-600">
-      <XCircle className="h-4 w-4" /> Falha na conexao
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">
+      <XCircle className="h-3.5 w-3.5" />
+      Falha na conexao
     </span>
   );
 }

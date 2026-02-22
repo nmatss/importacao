@@ -1,7 +1,23 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Inbox, RefreshCw, ChevronLeft, ChevronRight, ChevronDown, AlertCircle } from 'lucide-react';
+import {
+  Inbox,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  AlertCircle,
+  Wifi,
+  WifiOff,
+  Mail,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Paperclip,
+  RotateCcw,
+  ExternalLink,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -55,12 +71,12 @@ interface TriggerResponse {
   data: { message: string };
 }
 
-const statusBadgeConfig: Record<string, { classes: string; label: string }> = {
-  completed: { classes: 'bg-green-100 text-green-700', label: 'Concluido' },
-  failed: { classes: 'bg-red-100 text-red-700', label: 'Falha' },
-  processing: { classes: 'bg-blue-100 text-blue-700', label: 'Processando' },
-  ignored: { classes: 'bg-gray-100 text-gray-700', label: 'Ignorado' },
-  pending: { classes: 'bg-yellow-100 text-yellow-700', label: 'Pendente' },
+const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
+  completed: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Concluido' },
+  failed: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Falha' },
+  processing: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', label: 'Processando' },
+  ignored: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', label: 'Ignorado' },
+  pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
 };
 
 function formatDateTime(date: string): string {
@@ -128,70 +144,101 @@ export function EmailIngestionPage() {
   };
 
   const statsCards = [
-    { label: 'Total Hoje', value: totalToday, color: 'text-gray-900', bg: 'bg-gray-50' },
-    { label: 'Sucesso', value: getStat('completed'), color: 'text-green-700', bg: 'bg-green-50' },
-    { label: 'Falhas', value: getStat('failed'), color: 'text-red-700', bg: 'bg-red-50' },
-    { label: 'Ignorados', value: getStat('ignored'), color: 'text-yellow-700', bg: 'bg-yellow-50' },
+    { label: 'Total Hoje', value: totalToday, icon: Mail, gradient: 'from-slate-500 to-slate-600' },
+    { label: 'Sucesso', value: getStat('completed'), icon: CheckCircle2, gradient: 'from-emerald-500 to-emerald-600' },
+    { label: 'Falhas', value: getStat('failed'), icon: XCircle, gradient: 'from-red-500 to-red-600' },
+    { label: 'Ignorados', value: getStat('ignored'), icon: Clock, gradient: 'from-amber-500 to-amber-600' },
   ];
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Ingestao de E-mail</h2>
+    <div className="space-y-8">
+      {/* Page Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900">Ingestao de E-mail</h2>
+        <p className="mt-1 text-sm text-slate-500">Monitore e gerencie a ingestao automatica de emails</p>
+      </div>
 
       {/* Status Card */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        {/* Gradient top bar */}
+        <div className={cn(
+          'h-1',
+          status?.enabled ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-red-400 to-red-500',
+        )} />
+
         {statusLoading ? (
-          <LoadingSpinner className="py-4" />
+          <LoadingSpinner className="py-8" />
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-6">
-              <div className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    'h-3 w-3 rounded-full',
-                    status?.enabled ? 'bg-green-500' : 'bg-red-500',
+          <div className="p-6">
+            <div className="flex flex-wrap items-center justify-between gap-6">
+              <div className="flex flex-wrap items-center gap-6">
+                {/* Live indicator */}
+                <div className={cn(
+                  'flex items-center gap-2.5 rounded-xl px-4 py-2',
+                  status?.enabled ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200',
+                )}>
+                  {status?.enabled ? (
+                    <>
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                      </span>
+                      <Wifi className="h-4 w-4 text-emerald-600" />
+                      <span className="text-sm font-semibold text-emerald-700">Ativo</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                      <WifiOff className="h-4 w-4 text-red-600" />
+                      <span className="text-sm font-semibold text-red-700">Inativo</span>
+                    </>
                   )}
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  {status?.enabled ? 'Ativo' : 'Inativo'}
-                </span>
+                </div>
+
+                {/* Details */}
+                <div className="flex flex-wrap items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <span className="font-medium text-slate-400">Metodo:</span>
+                    {status?.method === 'gmail_api' ? (
+                      <span className="font-medium text-emerald-600">Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}</span>
+                    ) : status?.method === 'imap' ? (
+                      <span className="font-medium text-emerald-600">IMAP</span>
+                    ) : (
+                      <span className="font-medium text-red-600">Nao configurado</span>
+                    )}
+                  </div>
+                  <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <span className="font-medium text-slate-400">Remetentes:</span>
+                    <span>{status?.allowedSenders}</span>
+                  </div>
+                  <div className="hidden h-4 w-px bg-slate-200 sm:block" />
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <span className="font-medium text-slate-400">Ultima verificacao:</span>
+                    <span>{status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-sm text-gray-500">
-                <span className="font-medium">Metodo:</span>{' '}
-                {status?.method === 'gmail_api' ? (
-                  <span className="text-green-600">Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}</span>
-                ) : status?.method === 'imap' ? (
-                  <span className="text-green-600">IMAP</span>
-                ) : (
-                  <span className="text-red-600">Nao configurado</span>
-                )}
+
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleTrigger(false)}
+                  disabled={triggering}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all"
+                >
+                  <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                  Verificar Novos
+                </button>
+                <button
+                  onClick={() => handleTrigger(true)}
+                  disabled={triggering}
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 transition-all"
+                >
+                  <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                  Buscar Todos
+                </button>
               </div>
-              <div className="text-sm text-gray-500">
-                <span className="font-medium">Remetentes:</span>{' '}
-                {status?.allowedSenders}
-              </div>
-              <div className="text-sm text-gray-500">
-                <span className="font-medium">Ultima verificacao:</span>{' '}
-                {status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleTrigger(false)}
-                disabled={triggering}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
-                Verificar Novos
-              </button>
-              <button
-                onClick={() => handleTrigger(true)}
-                disabled={triggering}
-                className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-              >
-                <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
-                Buscar Todos
-              </button>
             </div>
           </div>
         )}
@@ -199,24 +246,43 @@ export function EmailIngestionPage() {
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {statsCards.map((card) => (
-          <div
-            key={card.label}
-            className={cn('rounded-lg border border-gray-200 p-4 shadow-sm', card.bg)}
-          >
-            <p className={cn('text-2xl font-bold', card.color)}>{card.value}</p>
-            <p className="text-sm text-gray-500">{card.label}</p>
-          </div>
-        ))}
+        {statsCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.label}
+              className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-2xl font-bold text-slate-900">{card.value}</p>
+                  <p className="mt-0.5 text-sm text-slate-500">{card.label}</p>
+                </div>
+                <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br', card.gradient)}>
+                  <Icon className="h-5 w-5 text-white" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* Logs Table */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-5 py-4">
-          <h3 className="flex items-center gap-2 text-lg font-semibold text-gray-900">
-            <Inbox className="h-5 w-5 text-gray-500" />
-            Emails Processados
-          </h3>
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-900">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
+                <Inbox className="h-4 w-4 text-slate-600" />
+              </div>
+              Emails Processados
+            </h3>
+            {pagination && (
+              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+                {pagination.total} registros
+              </span>
+            )}
+          </div>
         </div>
 
         {logsLoading ? (
@@ -232,98 +298,116 @@ export function EmailIngestionPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50 text-left">
-                    <th className="px-4 py-3 font-medium text-gray-700">Data/Hora</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">De</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">Assunto</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">Processo</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">Anexos</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">Status</th>
-                    <th className="px-4 py-3 font-medium text-gray-700">Acoes</th>
+                  <tr className="border-b border-slate-200 bg-slate-50/80 text-left">
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Data/Hora</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">De</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Assunto</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Processo</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Anexos</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Acoes</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {logs.map((log) => {
                     const badge = statusBadgeConfig[log.status] ?? statusBadgeConfig.pending;
                     const isExpanded = expandedLogId === log.id;
-                    const hasDetails = log.status === 'failed' && log.errorMessage
-                      || log.status === 'completed' && log.processedAttachmentDetails?.length;
+                    const hasDetails = (log.status === 'failed' && log.errorMessage)
+                      || (log.status === 'completed' && log.processedAttachmentDetails?.length);
                     return (
-                      <tr key={log.id} className="hover:bg-gray-50 group">
-                        <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                          {formatDateTime(log.receivedAt)}
-                        </td>
-                        <td className="max-w-[180px] truncate px-4 py-3 text-gray-900" title={log.fromAddress}>
-                          {log.fromAddress}
-                        </td>
-                        <td className="max-w-[220px] truncate px-4 py-3 text-gray-900" title={log.subject}>
-                          <div className="flex items-center gap-1">
-                            {log.subject}
-                            {hasDetails && (
-                              <button
-                                onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                className="ml-1 text-gray-400 hover:text-gray-600"
+                      <>
+                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
+                            {formatDateTime(log.receivedAt)}
+                          </td>
+                          <td className="max-w-[180px] truncate px-5 py-3.5 text-slate-900 font-medium" title={log.fromAddress}>
+                            {log.fromAddress}
+                          </td>
+                          <td className="max-w-[250px] px-5 py-3.5">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate text-slate-900" title={log.subject}>{log.subject}</span>
+                              {hasDetails && (
+                                <button
+                                  onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
+                                  className="shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                                >
+                                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-3.5">
+                            {log.processId ? (
+                              <Link
+                                to={`/importacao/processos/${log.processId}`}
+                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium transition-colors"
                               >
-                                <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                                {log.processCode ?? log.processId}
+                                <ExternalLink className="h-3 w-3" />
+                              </Link>
+                            ) : (
+                              <span className="text-slate-400">{log.processCode ?? '-'}</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-3.5">
+                            <div className="flex items-center gap-1.5 text-slate-600">
+                              <Paperclip className="h-3.5 w-3.5 text-slate-400" />
+                              {log.processedAttachments}/{log.attachmentsCount}
+                            </div>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-3.5">
+                            <span
+                              className={cn(
+                                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
+                                badge.bg,
+                                badge.text,
+                              )}
+                            >
+                              <span className={cn('h-1.5 w-1.5 rounded-full', badge.dot)} />
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="whitespace-nowrap px-5 py-3.5">
+                            {log.status === 'failed' && (
+                              <button
+                                onClick={() => handleReprocess(log.id)}
+                                disabled={reprocessingId === log.id}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all"
+                              >
+                                <RotateCcw className={cn('h-3 w-3', reprocessingId === log.id && 'animate-spin')} />
+                                {reprocessingId === log.id ? 'Reprocessando...' : 'Reprocessar'}
                               </button>
                             )}
-                          </div>
-                          {/* Error message for failed (Gap 8) */}
-                          {isExpanded && log.status === 'failed' && log.errorMessage && (
-                            <div className="mt-2 flex items-start gap-1.5 rounded bg-red-50 px-2 py-1.5 text-xs text-red-700">
-                              <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
-                              {log.errorMessage}
-                            </div>
-                          )}
-                          {/* Attachment details for completed (Gap 8) */}
-                          {isExpanded && log.status === 'completed' && log.processedAttachmentDetails && (
-                            <div className="mt-2 space-y-1 text-xs">
-                              {log.processedAttachmentDetails.map((att, i) => (
-                                <div key={i} className="flex items-center gap-2 rounded bg-green-50 px-2 py-1 text-green-700">
-                                  <span className="font-medium">{att.filename}</span>
-                                  <span className="text-green-500">({att.type})</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {log.processId ? (
-                            <Link
-                              to={`/importacao/processos/${log.processId}`}
-                              className="text-blue-600 hover:text-blue-800 hover:underline"
-                            >
-                              {log.processCode ?? log.processId}
-                            </Link>
-                          ) : (
-                            <span className="text-gray-400">{log.processCode ?? '-'}</span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                          {log.processedAttachments}/{log.attachmentsCount}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <span
-                            className={cn(
-                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
-                              badge.classes,
-                            )}
-                          >
-                            {badge.label}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3">
-                          {log.status === 'failed' && (
-                            <button
-                              onClick={() => handleReprocess(log.id)}
-                              disabled={reprocessingId === log.id}
-                              className="inline-flex items-center rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                            >
-                              {reprocessingId === log.id ? 'Reprocessando...' : 'Reprocessar'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                          </td>
+                        </tr>
+                        {/* Expanded details row */}
+                        {isExpanded && (
+                          <tr key={`${log.id}-details`}>
+                            <td colSpan={7} className="bg-slate-50/60 px-5 py-0">
+                              <div className="py-3 pl-4 border-l-2 border-slate-200">
+                                {log.status === 'failed' && log.errorMessage && (
+                                  <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                                    <span>{log.errorMessage}</span>
+                                  </div>
+                                )}
+                                {log.status === 'completed' && log.processedAttachmentDetails && (
+                                  <div className="space-y-1.5">
+                                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">Anexos processados</p>
+                                    {log.processedAttachmentDetails.map((att, i) => (
+                                      <div key={i} className="flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm">
+                                        <Paperclip className="h-3.5 w-3.5 text-emerald-500" />
+                                        <span className="font-medium text-emerald-800">{att.filename}</span>
+                                        <span className="text-emerald-500">({att.type})</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     );
                   })}
                 </tbody>
@@ -332,15 +416,15 @@ export function EmailIngestionPage() {
 
             {/* Pagination */}
             {pagination && totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-gray-200 px-4 py-3">
-                <p className="text-sm text-gray-500">
+              <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
+                <p className="text-sm text-slate-500">
                   Pagina {pagination.page} de {totalPages} ({pagination.total} registros)
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
@@ -348,7 +432,7 @@ export function EmailIngestionPage() {
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all"
                   >
                     Proximo
                     <ChevronRight className="h-4 w-4" />

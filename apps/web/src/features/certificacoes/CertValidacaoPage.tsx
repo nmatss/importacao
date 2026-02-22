@@ -3,7 +3,18 @@ import { CertValidationProgress } from "@/features/certificacoes/components/Cert
 import { CertStatsCards } from "@/features/certificacoes/components/CertStatsCards"
 import { startCertValidation, fetchCertStats } from "@/shared/lib/cert-api-client"
 import { cn } from "@/shared/lib/utils"
-import { PlayCircle, Loader2, ShieldCheck, Filter, Radio, Clock, Zap } from "lucide-react"
+import {
+  PlayCircle,
+  Loader2,
+  ShieldCheck,
+  Radio,
+  Clock,
+  Zap,
+  ChevronDown,
+  FileText,
+  CheckCircle2,
+  Sparkles,
+} from "lucide-react"
 
 interface BrandOption {
   value: string
@@ -70,25 +81,25 @@ export default function CertValidacaoPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6">
+    <div className="p-5 md:p-7 space-y-6">
       {/* Real-time Info Banner */}
-      <div className="rounded-xl border border-blue-200 bg-blue-50/50">
-        <div className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="p-2 rounded-lg bg-blue-100 text-blue-600 flex-shrink-0">
-              <Zap className="w-4 h-4" />
+      <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 overflow-hidden">
+        <div className="p-5">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25 flex-shrink-0">
+              <Zap className="w-5 h-5" />
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <p className="text-sm font-medium text-blue-900">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 mb-1.5">
+                <h3 className="text-sm font-semibold text-emerald-900">
                   Verificacao em Tempo Real
-                </p>
-                <span className="inline-flex items-center bg-blue-600 text-white text-[10px] px-1.5 py-0 rounded-full font-medium">
-                  <Radio className="w-2.5 h-2.5 mr-1" />
+                </h3>
+                <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-[10px] px-2 py-0.5 rounded-lg font-semibold shadow-sm">
+                  <Radio className="w-2.5 h-2.5 animate-pulse" />
                   Live
                 </span>
               </div>
-              <p className="text-xs text-blue-700/80">
+              <p className="text-sm text-emerald-700/80 leading-relaxed">
                 A verificacao consulta os sites em TEMPO REAL via API VTEX. Cada produto e verificado
                 individualmente, comparando o texto de certificacao no site com o valor esperado na planilha.
               </p>
@@ -97,58 +108,76 @@ export default function CertValidacaoPage() {
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="rounded-xl border border-slate-200 bg-white">
-        <div className="p-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-slate-500" />
-              <select
-                value={brand}
-                onChange={(e) => setBrand(e.target.value)}
-                disabled={running}
-                className="px-3 py-2 rounded-lg border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                {brands.map((b) => (
-                  <option key={b.value} value={b.value}>
-                    {b.label} ({b.count})
-                  </option>
-                ))}
-              </select>
+      {/* Controls Card */}
+      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white">
+        <div className="p-6 md:p-7">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+            {/* Brand Selector */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Marca
+              </label>
+              <div className="relative">
+                <select
+                  value={brand}
+                  onChange={(e) => setBrand(e.target.value)}
+                  disabled={running}
+                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 font-medium focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer min-w-[200px]"
+                >
+                  {brands.map((b) => (
+                    <option key={b.value} value={b.value}>
+                      {b.label} ({b.count})
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+              </div>
             </div>
 
-            <button
-              onClick={handleStart}
-              disabled={running}
-              className={cn(
-                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium text-white transition-colors",
-                running
-                  ? "bg-slate-400 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-700"
-              )}
-            >
-              {running ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Validando...
-                </>
-              ) : (
-                <>
-                  <PlayCircle className="w-4 h-4" />
-                  Iniciar Validacao
-                </>
-              )}
-            </button>
+            {/* Start Button */}
+            <div className="flex flex-col gap-1.5 sm:mt-0">
+              <label className="text-xs font-medium text-transparent select-none">_</label>
+              <button
+                onClick={handleStart}
+                disabled={running}
+                className={cn(
+                  "flex items-center gap-2.5 px-7 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm",
+                  running
+                    ? "bg-slate-300 cursor-not-allowed shadow-none"
+                    : "bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] shadow-emerald-600/20"
+                )}
+              >
+                {running ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Validando...
+                  </>
+                ) : (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    Iniciar Validacao
+                  </>
+                )}
+              </button>
+            </div>
 
-            <div className="flex items-center gap-2 text-xs text-slate-500 ml-auto">
-              <Clock className="w-3.5 h-3.5" />
-              <span>Tempo estimado: ~{estimatedMinutes} min ({productCount} produtos)</span>
+            {/* Estimated time */}
+            <div className="flex items-center gap-2 text-sm text-slate-500 sm:ml-auto bg-slate-50 px-4 py-2.5 rounded-xl">
+              <Clock className="w-4 h-4 text-slate-400" />
+              <span>
+                ~{estimatedMinutes} min
+                <span className="text-slate-400 mx-1">|</span>
+                {productCount} produtos
+              </span>
             </div>
           </div>
 
           {error && (
-            <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-              {error}
+            <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200/80 text-sm text-red-700 flex items-start gap-3">
+              <div className="p-1 rounded-lg bg-red-100 flex-shrink-0 mt-0.5">
+                <Sparkles className="w-3.5 h-3.5 text-red-500" />
+              </div>
+              <span>{error}</span>
             </div>
           )}
         </div>
@@ -159,28 +188,51 @@ export default function CertValidacaoPage() {
 
       {/* Summary */}
       {summary && (
-        <div className="space-y-4">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-lg font-semibold text-slate-900">
-              Resultado da Validacao
-            </h2>
+        <div className="space-y-6">
+          <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/50 to-white p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">
+                  Resultado da Validacao
+                </h2>
+                <p className="text-sm text-slate-500">Verificacao concluida com sucesso</p>
+              </div>
+              <div className="ml-auto">
+                <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Completo
+                </div>
+              </div>
+            </div>
+
+            <CertStatsCards
+              data={{
+                total: summary.total || 0,
+                ok: summary.ok || 0,
+                missing: summary.missing || 0,
+                inconsistent: summary.inconsistent || 0,
+                not_found: summary.not_found || 0,
+              }}
+            />
           </div>
-          <CertStatsCards
-            data={{
-              total: summary.total || 0,
-              ok: summary.ok || 0,
-              missing: summary.missing || 0,
-              inconsistent: summary.inconsistent || 0,
-              not_found: summary.not_found || 0,
-            }}
-          />
+
           {summary.report_file && (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50">
-              <div className="p-4">
-                <p className="text-sm text-emerald-700">
-                  Relatorio gerado: <span className="font-mono font-medium">{summary.report_file}</span>
-                </p>
+            <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 overflow-hidden">
+              <div className="p-5 flex items-center gap-4">
+                <div className="p-2.5 rounded-xl bg-emerald-100 flex-shrink-0">
+                  <FileText className="w-5 h-5 text-emerald-600" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-emerald-800">
+                    Relatorio gerado com sucesso
+                  </p>
+                  <p className="text-xs font-mono text-emerald-600/80 mt-0.5 truncate">
+                    {summary.report_file}
+                  </p>
+                </div>
               </div>
             </div>
           )}

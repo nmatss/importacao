@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, ChevronLeft, ChevronRight, Package, Filter } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { PROCESS_STATUSES, BRANDS } from '@/shared/lib/constants';
@@ -56,128 +56,169 @@ export function ProcessListPage() {
 
   const processes = data?.data ?? [];
   const totalPages = data?.pagination?.pages ?? 1;
+  const totalResults = data?.pagination?.total ?? 0;
+
+  const hasActiveFilters = debouncedSearch || status || brand;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Processos</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Processos</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Gerencie seus processos de importacao
+          </p>
+        </div>
         <Link
           to="/importacao/processos/novo"
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] transition-all"
         >
           <Plus className="h-4 w-4" />
           Novo Processo
         </Link>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por código..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="w-full rounded-lg border border-gray-300 py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
+      {/* Filter Bar */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar por codigo do processo..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all"
+            />
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-slate-400" />
+              <select
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+                className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all"
+              >
+                <option value="">Todos os status</option>
+                {PROCESS_STATUSES.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <select
+              value={brand}
+              onChange={(e) => {
+                setBrand(e.target.value);
+                setPage(1);
+              }}
+              className="rounded-xl border border-slate-200 px-3 py-2.5 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all"
+            >
+              <option value="">Todas as marcas</option>
+              {BRANDS.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={() => {
+                setSearch('');
+                setStatus('');
+                setBrand('');
+                setPage(1);
+              }}
+              className="rounded-xl px-3 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">Todos os status</option>
-          {PROCESS_STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={brand}
-          onChange={(e) => {
-            setBrand(e.target.value);
-            setPage(1);
-          }}
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        >
-          <option value="">Todas as marcas</option>
-          {BRANDS.map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.label}
-            </option>
-          ))}
-        </select>
       </div>
 
       {/* Table */}
       {isLoading ? (
         <LoadingSpinner size="lg" className="py-24" />
       ) : processes.length === 0 ? (
-        <EmptyState
-          title="Nenhum processo encontrado"
-          description="Tente ajustar os filtros ou crie um novo processo."
-          action={{ label: 'Novo Processo', onClick: () => navigate('/importacao/processos/novo') }}
-        />
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+          <EmptyState
+            title="Nenhum processo encontrado"
+            description={
+              hasActiveFilters
+                ? 'Tente ajustar os filtros para encontrar o que procura.'
+                : 'Comece criando seu primeiro processo de importacao.'
+            }
+            action={{ label: 'Novo Processo', onClick: () => navigate('/importacao/processos/novo') }}
+          />
+        </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full">
               <thead>
-                <tr className="bg-gray-50">
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Código
+                <tr className="bg-slate-50/80 border-b border-slate-200/80">
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Codigo
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Marca
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     FOB Total
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     ETD
                   </th>
-                  <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                    Data Criação
+                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Data Criacao
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-100">
                 {processes.map((proc) => (
                   <tr
                     key={proc.id}
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                    className="hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="hover:bg-slate-50 cursor-pointer transition-colors group"
                   >
-                    <td className="px-5 py-3 text-sm font-medium text-blue-600">
-                      {proc.processCode}
+                    <td className="px-6 py-4 text-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition-colors">
+                          <Package className="h-4 w-4" />
+                        </div>
+                        <span className="font-semibold text-blue-600 group-hover:text-blue-700 transition-colors">
+                          {proc.processCode}
+                        </span>
+                      </div>
                     </td>
-                    <td className="px-5 py-3 text-sm text-gray-700 capitalize">
+                    <td className="px-6 py-4 text-sm text-slate-600 capitalize">
                       {proc.brand}
                     </td>
-                    <td className="px-5 py-3 text-sm">
+                    <td className="px-6 py-4 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
-                    <td className="px-5 py-3 text-sm text-gray-700">
+                    <td className="px-6 py-4 text-sm font-medium text-slate-700">
                       {proc.totalFobValue != null
                         ? formatCurrency(proc.totalFobValue)
-                        : '-'}
+                        : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="px-5 py-3 text-sm text-gray-500">
-                      {proc.etd ? formatDate(proc.etd) : '-'}
+                    <td className="px-6 py-4 text-sm text-slate-500">
+                      {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="px-5 py-3 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-slate-500">
                       {formatDate(proc.createdAt)}
                     </td>
                   </tr>
@@ -188,15 +229,18 @@ export function ProcessListPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-200 px-5 py-3">
-              <p className="text-sm text-gray-500">
-                Página {page} de {totalPages} ({data?.pagination?.total ?? 0} resultados)
+            <div className="flex items-center justify-between border-t border-slate-200/80 px-6 py-4 bg-slate-50/40">
+              <p className="text-sm text-slate-500">
+                Mostrando pagina <span className="font-medium text-slate-700">{page}</span> de{' '}
+                <span className="font-medium text-slate-700">{totalPages}</span>
+                <span className="mx-1.5 text-slate-300">|</span>
+                <span className="font-medium text-slate-700">{totalResults}</span> resultados
               </p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage((p) => p - 1)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
@@ -204,9 +248,9 @@ export function ProcessListPage() {
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
-                  Próxima
+                  Proxima
                   <ChevronRight className="h-4 w-4" />
                 </button>
               </div>

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react"
 import { cn, certStatusColor } from "@/shared/lib/utils"
 import { streamCertValidation } from "@/shared/lib/cert-api-client"
-import { CheckCircle2, XCircle, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react"
 
 interface ProgressEvent {
   type: "progress" | "complete" | "error"
@@ -56,44 +56,86 @@ export function CertValidationProgress({
 
   const pct = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
+  const statusIcon = {
+    running: <Loader2 className="w-4.5 h-4.5 text-emerald-600 animate-spin" />,
+    complete: <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />,
+    error: <AlertCircle className="w-4.5 h-4.5 text-red-600" />,
+  }
+
+  const statusLabel = {
+    running: `Validando... ${progress.current}/${progress.total}`,
+    complete: "Validacao completa!",
+    error: "Erro na validacao",
+  }
+
+  const progressBarColor = {
+    running: "bg-gradient-to-r from-emerald-500 to-emerald-600",
+    complete: "bg-gradient-to-r from-emerald-500 to-emerald-600",
+    error: "bg-gradient-to-r from-red-500 to-red-600",
+  }
+
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="p-4 border-b border-slate-100">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            {status === "running" && <Loader2 className="w-4 h-4 text-blue-600 animate-spin" />}
-            {status === "complete" && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-            {status === "error" && <XCircle className="w-4 h-4 text-red-600" />}
-            <span className="text-sm font-medium text-slate-700">
-              {status === "running" && `Validando... ${progress.current}/${progress.total}`}
-              {status === "complete" && "Validacao completa!"}
-              {status === "error" && "Erro na validacao"}
+    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div className="p-5 border-b border-slate-100">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2.5">
+            {statusIcon[status]}
+            <span className="text-sm font-semibold text-slate-800">
+              {statusLabel[status]}
             </span>
           </div>
-          <span className="text-sm text-slate-500">{pct.toFixed(0)}%</span>
+          <span className={cn(
+            "text-xs font-bold px-2.5 py-1 rounded-lg",
+            status === "complete"
+              ? "bg-emerald-50 text-emerald-700"
+              : status === "error"
+                ? "bg-red-50 text-red-700"
+                : "bg-slate-100 text-slate-600"
+          )}>
+            {pct.toFixed(0)}%
+          </span>
         </div>
-        <div className="w-full bg-slate-100 rounded-full h-2">
+        <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
           <div
             className={cn(
-              "h-2 rounded-full transition-all duration-300",
-              status === "complete" ? "bg-emerald-500" : status === "error" ? "bg-red-500" : "bg-blue-600"
+              "h-2.5 rounded-full transition-all duration-500 ease-out",
+              progressBarColor[status],
+              status === "running" && "relative after:absolute after:inset-0 after:bg-gradient-to-r after:from-transparent after:via-white/20 after:to-transparent after:animate-pulse"
             )}
             style={{ width: `${pct}%` }}
           />
         </div>
       </div>
 
-      <div ref={logRef} className="max-h-64 overflow-auto p-3 space-y-1 font-mono text-xs">
-        {events.map((e, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="text-slate-400 w-8 text-right">{e.current}</span>
-            <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", certStatusColor(e.product?.status || ""))}>
-              {e.product?.status}
-            </span>
-            <span className="text-slate-600">{e.product?.sku}</span>
-            <span className="text-slate-400 truncate">{e.product?.name}</span>
-          </div>
-        ))}
+      <div ref={logRef} className="max-h-64 overflow-auto font-mono text-xs">
+        {events.map((e, i) => {
+          const statusDotColor = (() => {
+            switch (e.product?.status) {
+              case 'OK': return 'bg-emerald-500'
+              case 'MISSING': return 'bg-red-500'
+              case 'INCONSISTENT': return 'bg-amber-500'
+              default: return 'bg-slate-400'
+            }
+          })()
+
+          return (
+            <div
+              key={i}
+              className={cn(
+                "flex items-center gap-3 px-5 py-2",
+                i % 2 === 0 ? "bg-white" : "bg-slate-50/60"
+              )}
+            >
+              <span className="text-slate-400 w-8 text-right tabular-nums font-medium">{e.current}</span>
+              <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusDotColor)} />
+              <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-semibold min-w-[80px] text-center", certStatusColor(e.product?.status || ""))}>
+                {e.product?.status}
+              </span>
+              <span className="text-slate-700 font-medium shrink-0">{e.product?.sku}</span>
+              <span className="text-slate-400 truncate">{e.product?.name}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

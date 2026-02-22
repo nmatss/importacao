@@ -5,6 +5,10 @@ import {
   CheckCircle,
   DollarSign,
   ArrowRight,
+  TrendingUp,
+  Bell,
+  BarChart3,
+  Clock,
 } from 'lucide-react';
 import {
   BarChart,
@@ -64,19 +68,110 @@ interface FobByBrand {
   totalFob: number;
 }
 
-const PIE_COLORS = ['#ec4899', '#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444'];
 
-const severityStyles: Record<string, string> = {
-  critical: 'bg-red-100 text-red-700',
-  warning: 'bg-amber-100 text-amber-700',
-  info: 'bg-blue-100 text-blue-700',
+const severityConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
+  critical: {
+    dot: 'bg-red-500',
+    bg: 'bg-red-50 border-red-100',
+    text: 'text-red-700',
+    label: 'Critico',
+  },
+  warning: {
+    dot: 'bg-amber-500',
+    bg: 'bg-amber-50 border-amber-100',
+    text: 'text-amber-700',
+    label: 'Alerta',
+  },
+  info: {
+    dot: 'bg-blue-500',
+    bg: 'bg-blue-50 border-blue-100',
+    text: 'text-blue-700',
+    label: 'Info',
+  },
 };
 
-const severityLabels: Record<string, string> = {
-  critical: 'Crítico',
-  warning: 'Alerta',
-  info: 'Info',
-};
+function Skeleton({ className }: { className?: string }) {
+  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
+}
+
+function KpiSkeleton() {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div className="space-y-3 flex-1">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-20" />
+        </div>
+        <Skeleton className="h-12 w-12 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+      <Skeleton className="h-5 w-40 mb-6" />
+      <Skeleton className={cn(height, 'w-full rounded-xl')} />
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+        <Skeleton className="h-5 w-40" />
+        <Skeleton className="h-4 w-20" />
+      </div>
+      <div className="p-7 space-y-3">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <Skeleton key={i} className="h-12 w-full" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const kpiConfig = [
+  {
+    key: 'active',
+    label: 'Processos Ativos',
+    icon: FileBox,
+    gradient: 'from-blue-500 to-blue-700',
+    shadowColor: 'shadow-blue-500/25',
+    valueColor: 'text-blue-700',
+    borderColor: 'border-l-blue-500',
+  },
+  {
+    key: 'overdue',
+    label: 'Atrasados',
+    icon: AlertTriangle,
+    gradient: 'from-red-500 to-red-700',
+    shadowColor: 'shadow-red-500/25',
+    valueColor: 'text-red-600',
+    borderColor: 'border-l-red-500',
+  },
+  {
+    key: 'completed',
+    label: 'Concluidos no Mes',
+    icon: CheckCircle,
+    gradient: 'from-emerald-500 to-emerald-700',
+    shadowColor: 'shadow-emerald-500/25',
+    valueColor: 'text-emerald-600',
+    borderColor: 'border-l-emerald-500',
+  },
+  {
+    key: 'fob',
+    label: 'Valor FOB Total',
+    icon: DollarSign,
+    gradient: 'from-violet-500 to-violet-700',
+    shadowColor: 'shadow-violet-500/25',
+    valueColor: 'text-violet-700',
+    borderColor: 'border-l-violet-500',
+  },
+];
 
 export function DashboardPage() {
   const navigate = useNavigate();
@@ -92,150 +187,276 @@ export function DashboardPage() {
   const { data: fobByBrand } =
     useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
 
-  if (loadingOverview || loadingStatus) {
-    return <LoadingSpinner size="lg" className="py-24" />;
+  const isLoading = loadingOverview || loadingStatus;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8">
+        {/* Header skeleton */}
+        <div>
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+
+        {/* KPI skeletons */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <KpiSkeleton key={i} />
+          ))}
+        </div>
+
+        {/* Chart skeletons */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ChartSkeleton />
+          </div>
+          <ChartSkeleton />
+        </div>
+
+        <TableSkeleton />
+      </div>
+    );
   }
 
-  const kpiCards = [
-    {
-      label: 'Processos Ativos',
-      value: overview?.activeProcesses ?? 0,
-      icon: FileBox,
-      color: 'text-gray-700',
-      bg: 'bg-gray-50',
-    },
-    {
-      label: 'Atrasados',
-      value: overview?.overdueProcesses ?? 0,
-      icon: AlertTriangle,
-      color: 'text-red-700',
-      bg: 'bg-red-50',
-    },
-    {
-      label: 'Concluídos no Mês',
-      value: overview?.completedThisMonth ?? 0,
-      icon: CheckCircle,
-      color: 'text-green-700',
-      bg: 'bg-green-50',
-    },
-    {
-      label: 'Valor FOB Total',
-      value: formatCurrency(overview?.totalFobValue ?? 0),
-      icon: DollarSign,
-      color: 'text-blue-700',
-      bg: 'bg-blue-50',
-    },
-  ];
+  const kpiValues: Record<string, string | number> = {
+    active: overview?.activeProcesses ?? 0,
+    overdue: overview?.overdueProcesses ?? 0,
+    completed: overview?.completedThisMonth ?? 0,
+    fob: formatCurrency(overview?.totalFobValue ?? 0),
+  };
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {kpiCards.map((card) => (
-          <div
-            key={card.label}
-            className={cn('rounded-lg border border-gray-200 p-5', card.bg)}
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-500">{card.label}</p>
-                <p className={cn('mt-1 text-2xl font-semibold', card.color)}>
-                  {card.value}
-                </p>
-              </div>
-              <card.icon className={cn('h-8 w-8', card.color)} />
-            </div>
-          </div>
-        ))}
+    <div className="space-y-8">
+      {/* Page Header */}
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
+        <p className="mt-1 text-sm text-slate-500">
+          Visao geral dos processos de importacao
+        </p>
       </div>
 
-      {/* Chart + Alerts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {kpiConfig.map((card) => {
+          const Icon = card.icon;
+          const value = kpiValues[card.key];
+          const isZero = value === 0;
+
+          return (
+            <div
+              key={card.key}
+              className={cn(
+                'group rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm',
+                'hover:shadow-lg hover:border-slate-300/80 transition-all duration-300',
+                'border-l-4',
+                card.borderColor,
+              )}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-medium text-slate-500">{card.label}</p>
+                  <p
+                    className={cn(
+                      'mt-2 text-2xl font-bold tabular-nums tracking-tight',
+                      isZero ? 'text-slate-300' : card.valueColor,
+                    )}
+                  >
+                    {value}
+                  </p>
+                </div>
+                <div
+                  className={cn(
+                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
+                    'bg-gradient-to-br text-white shadow-lg transition-shadow',
+                    card.gradient,
+                    card.shadowColor,
+                    'group-hover:shadow-xl',
+                  )}
+                >
+                  <Icon className="h-6 w-6" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Charts Row 1: Status + Alerts */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Status Chart */}
-        <div className="lg:col-span-2 rounded-lg border border-gray-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Processos por Status
-          </h3>
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-500/20">
+              <BarChart3 className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Processos por Status
+            </h3>
+          </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={byStatus ?? []} margin={{ bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                 <XAxis
                   dataKey="label"
                   angle={-35}
                   textAnchor="end"
-                  fontSize={12}
+                  fontSize={11}
                   interval={0}
+                  tick={{ fill: '#64748b' }}
+                  axisLine={{ stroke: '#e2e8f0' }}
+                  tickLine={false}
                 />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#fff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                    fontSize: '13px',
+                  }}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="#3b82f6"
+                  radius={[6, 6, 0, 0]}
+                  name="Processos"
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Recent Alerts */}
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Alertas Recentes
-          </h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
+              <Bell className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Alertas Recentes
+            </h3>
+          </div>
           <div className="space-y-3">
             {(overview?.recentAlerts ?? []).length === 0 ? (
-              <p className="text-sm text-gray-500">Nenhum alerta recente.</p>
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+                  <Bell className="h-5 w-5 text-slate-300" />
+                </div>
+                <p className="text-sm font-medium text-slate-400">Nenhum alerta recente</p>
+                <p className="text-xs text-slate-300 mt-1">Tudo em ordem por aqui</p>
+              </div>
             ) : (
-              overview!.recentAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-start gap-3 rounded-lg border border-gray-100 p-3"
-                >
-                  <span
+              overview!.recentAlerts.map((alert) => {
+                const config = severityConfig[alert.severity] || severityConfig.info;
+                return (
+                  <div
+                    key={alert.id}
                     className={cn(
-                      'mt-0.5 inline-flex rounded-full px-2 py-0.5 text-xs font-medium',
-                      severityStyles[alert.severity],
+                      'rounded-xl border p-3.5 transition-colors hover:shadow-sm',
+                      config.bg,
                     )}
                   >
-                    {severityLabels[alert.severity]}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm text-gray-700">{alert.message}</p>
-                    <p className="mt-0.5 text-xs text-gray-400">
-                      {formatDate(alert.createdAt)}
-                    </p>
+                    <div className="flex items-start gap-3">
+                      <span
+                        className={cn(
+                          'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+                          config.dot,
+                        )}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span
+                            className={cn(
+                              'text-[10px] font-bold uppercase tracking-wider',
+                              config.text,
+                            )}
+                          >
+                            {config.label}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700 leading-relaxed">
+                          {alert.message}
+                        </p>
+                        <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
+                          {formatDate(alert.createdAt)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
       </div>
 
-      {/* Monthly Trend + FOB by Brand Charts (Gap 5) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Charts Row 2: Monthly Trend + FOB by Brand */}
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Monthly Trend */}
-        <div className="lg:col-span-2 rounded-lg border border-gray-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            Tendencia Mensal
-          </h3>
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
+              <TrendingUp className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Tendencia Mensal
+            </h3>
+          </div>
           <div className="h-72">
             {byMonth && byMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={byMonth} margin={{ bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" fontSize={12} />
-                  <YAxis yAxisId="left" allowDecimals={false} />
-                  <YAxis yAxisId="right" orientation="right" />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis
+                    dataKey="month"
+                    fontSize={11}
+                    tick={{ fill: '#64748b' }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    allowDecimals={false}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      fontSize: '13px',
+                    }}
+                  />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={{ fontSize: '12px', color: '#64748b' }}
+                  />
                   <Line
                     yAxisId="left"
                     type="monotone"
                     dataKey="count"
                     name="Processos"
                     stroke="#3b82f6"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
                   />
                   <Line
                     yAxisId="right"
@@ -243,23 +464,33 @@ export function DashboardPage() {
                     dataKey="fobValue"
                     name="FOB (USD)"
                     stroke="#10b981"
-                    strokeWidth={2}
+                    strokeWidth={2.5}
+                    dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }}
                   />
                 </LineChart>
               </ResponsiveContainer>
             ) : (
-              <p className="flex h-full items-center justify-center text-sm text-gray-400">
-                Sem dados mensais disponiveis.
-              </p>
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+                  <TrendingUp className="h-5 w-5 text-slate-300" />
+                </div>
+                <p className="text-sm font-medium text-slate-400">Sem dados mensais disponiveis</p>
+              </div>
             )}
           </div>
         </div>
 
         {/* FOB by Brand */}
-        <div className="rounded-lg border border-gray-200 bg-white p-5">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">
-            FOB por Marca
-          </h3>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
+              <DollarSign className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              FOB por Marca
+            </h3>
+          </div>
           <div className="h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -271,6 +502,9 @@ export function DashboardPage() {
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
+                    innerRadius={40}
+                    strokeWidth={2}
+                    stroke="#fff"
                     label={({ brand, percent }) =>
                       `${brand} (${(percent * 100).toFixed(0)}%)`
                     }
@@ -283,87 +517,116 @@ export function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    formatter={(value: number) =>
-                      formatCurrency(value)
-                    }
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '12px',
+                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                      fontSize: '13px',
+                    }}
+                    formatter={(value: number) => formatCurrency(value)}
                   />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              <p className="flex h-full items-center justify-center text-sm text-gray-400">
-                Sem dados de FOB por marca.
-              </p>
+              <div className="flex flex-col items-center justify-center h-full text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+                  <DollarSign className="h-5 w-5 text-slate-300" />
+                </div>
+                <p className="text-sm font-medium text-slate-400">Sem dados de FOB por marca</p>
+              </div>
             )}
           </div>
         </div>
       </div>
 
       {/* Recent Processes */}
-      <div className="rounded-lg border border-gray-200 bg-white">
-        <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Processos Recentes
-          </h3>
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-md shadow-slate-500/20">
+              <Clock className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Processos Recentes
+            </h3>
+          </div>
           <Link
             to="/importacao/processos"
-            className="flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-700"
+            className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
           >
             Ver todos <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead>
-              <tr className="bg-gray-50">
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Código
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Marca
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Status
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  ETD
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                  Data Criação
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {(overview?.recentProcesses ?? []).map((proc) => (
-                <tr
-                  key={proc.id}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                >
-                  <td className="px-5 py-3 text-sm">
-                    <Link
-                      to={`/importacao/processos/${proc.id}`}
-                      className="font-medium text-blue-600 hover:text-blue-700"
-                    >
-                      {proc.processCode}
-                    </Link>
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-700 capitalize">
-                    {proc.brand}
-                  </td>
-                  <td className="px-5 py-3 text-sm">
-                    <StatusBadge status={proc.status} />
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-500">
-                    {proc.etd ? formatDate(proc.etd) : '-'}
-                  </td>
-                  <td className="px-5 py-3 text-sm text-gray-500">
-                    {formatDate(proc.createdAt)}
-                  </td>
+
+        {(overview?.recentProcesses ?? []).length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
+              <FileBox className="h-6 w-6 text-slate-300" />
+            </div>
+            <p className="text-sm font-medium text-slate-400">Nenhum processo recente</p>
+            <p className="text-xs text-slate-300 mt-1">Processos criados aparecerao aqui</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-slate-50/80">
+                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Codigo
+                  </th>
+                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Marca
+                  </th>
+                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
+                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    ETD
+                  </th>
+                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Data Criacao
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {overview!.recentProcesses.map((proc, index) => (
+                  <tr
+                    key={proc.id}
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-blue-50/50',
+                      index % 2 === 1 && 'bg-slate-50/40',
+                    )}
+                    onClick={() => navigate(`/importacao/processos/${proc.id}`)}
+                  >
+                    <td className="px-7 py-3.5 text-sm">
+                      <Link
+                        to={`/importacao/processos/${proc.id}`}
+                        className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                      >
+                        {proc.processCode}
+                      </Link>
+                    </td>
+                    <td className="px-7 py-3.5 text-sm text-slate-700 font-medium capitalize">
+                      {proc.brand}
+                    </td>
+                    <td className="px-7 py-3.5 text-sm">
+                      <StatusBadge status={proc.status} />
+                    </td>
+                    <td className="px-7 py-3.5 text-sm text-slate-500">
+                      {proc.etd ? formatDate(proc.etd) : (
+                        <span className="text-slate-300">--</span>
+                      )}
+                    </td>
+                    <td className="px-7 py-3.5 text-sm text-slate-500">
+                      {formatDate(proc.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
