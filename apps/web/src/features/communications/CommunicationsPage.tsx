@@ -88,16 +88,20 @@ export function CommunicationsPage() {
   };
 
   const handleSend = async () => {
-    const draft = await api.post<Communication>('/api/communications', {
-      processId: composer.processId,
-      recipientName: composer.recipientName,
-      recipientEmail: composer.recipientEmail,
-      subject: composer.subject,
-      body: composer.body,
-    });
-    await api.post(`/api/communications/${draft.id}/send`);
-    queryClient.invalidateQueries({ queryKey: ['communications'] });
-    setComposer(emptyComposer);
+    try {
+      const draft = await api.post<Communication>('/api/communications', {
+        processId: composer.processId,
+        recipientName: composer.recipientName,
+        recipientEmail: composer.recipientEmail,
+        subject: composer.subject,
+        body: composer.body,
+      });
+      await api.post(`/api/communications/${draft.id}/send`);
+      queryClient.invalidateQueries({ queryKey: ['communications'] });
+      setComposer(emptyComposer);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar email');
+    }
   };
 
   const handleGenerateAi = async () => {
@@ -112,6 +116,8 @@ export function CommunicationsPage() {
         subject: draft.subject,
         body: draft.body,
       }));
+    } catch (err: any) {
+      alert(err.message || 'Erro ao gerar email com IA');
     } finally {
       setGeneratingAi(false);
     }

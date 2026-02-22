@@ -88,6 +88,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     try {
       await api.post(`/api/validation/${processId}/run`);
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao executar validacao');
     } finally {
       setRunning(false);
     }
@@ -98,14 +100,20 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     try {
       const data = await api.post<AnomalyDetectionResult>(`/api/validation/${processId}/anomalies`);
       setAnomalies(data.anomalies ?? []);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao detectar anomalias');
     } finally {
       setDetectingAnomalies(false);
     }
   };
 
   const resolveManually = async (resultId: string) => {
-    await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
-    queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+    try {
+      await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
+      queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao resolver manualmente');
+    }
   };
 
   if (isLoading) {

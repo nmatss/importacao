@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Bell, AlertTriangle, Info, CheckCircle2 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
+import { api } from '@/shared/lib/api-client';
 import { formatDate, cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -73,13 +74,13 @@ export function AlertsPage() {
     },
   );
 
-  const handleAcknowledge = (alertId: string) => {
-    // useApiMutation doesn't support dynamic URLs, so use api client directly
-    import('@/shared/lib/api-client').then(({ api }) => {
-      api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`).then(() => {
-        queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      });
-    });
+  const handleAcknowledge = async (alertId: string) => {
+    try {
+      await api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`);
+      queryClient.invalidateQueries({ queryKey: ['alerts'] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao reconhecer alerta');
+    }
   };
 
   return (

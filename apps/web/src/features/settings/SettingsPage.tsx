@@ -11,8 +11,10 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
+  ShieldAlert,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '@/shared/lib/api-client';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
@@ -46,7 +48,18 @@ const roleBadge: Record<string, string> = {
 };
 
 export function SettingsPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
+
+  if (user?.role !== 'admin') {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <ShieldAlert className="h-12 w-12 text-red-400 mb-4" />
+        <h2 className="text-xl font-semibold text-gray-900">Acesso negado</h2>
+        <p className="mt-2 text-sm text-gray-500">Somente administradores podem acessar as configuracoes.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -124,6 +137,8 @@ function GeneralTab() {
       await api.put('/api/settings/google_chat_webhook', { value: webhookUrl });
       setSavedWebhook(true);
       setTimeout(() => setSavedWebhook(false), 2000);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar webhook');
     } finally {
       setSavingWebhook(false);
     }
@@ -140,6 +155,8 @@ function GeneralTab() {
       });
       setSavedSmtp(true);
       setTimeout(() => setSavedSmtp(false), 2000);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar configuracoes SMTP');
     } finally {
       setSavingSmtp(false);
     }
@@ -273,6 +290,8 @@ function UsersTab() {
       }
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowModal(false);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar usuario');
     } finally {
       setSaving(false);
     }
@@ -280,14 +299,22 @@ function UsersTab() {
 
   const handleDeactivate = async () => {
     if (!deactivateId) return;
-    await api.delete(`/api/auth/users/${deactivateId}`);
-    queryClient.invalidateQueries({ queryKey: ['users'] });
-    setDeactivateId(null);
+    try {
+      await api.delete(`/api/auth/users/${deactivateId}`);
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setDeactivateId(null);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao desativar usuario');
+    }
   };
 
   const toggleActive = async (user: User) => {
-    await api.put(`/api/auth/users/${user.id}`, { active: !user.active });
-    queryClient.invalidateQueries({ queryKey: ['users'] });
+    try {
+      await api.put(`/api/auth/users/${user.id}`, { active: !user.active });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao alterar status do usuario');
+    }
   };
 
   if (isLoading) return <LoadingSpinner className="py-12" />;
@@ -522,6 +549,8 @@ function IntegrationsTab() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar integracoes');
     } finally {
       setSaving(false);
     }

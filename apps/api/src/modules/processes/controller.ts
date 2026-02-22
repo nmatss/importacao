@@ -34,7 +34,8 @@ export const processController = {
 
   async update(req: Request, res: Response) {
     try {
-      const process = await processService.update(Number(req.params.id), req.body);
+      const userId = req.user?.id ?? null;
+      const process = await processService.update(Number(req.params.id), req.body, userId);
       sendSuccess(res, process);
     } catch (error: any) {
       sendError(res, error.message);
@@ -43,8 +44,9 @@ export const processController = {
 
   async updateStatus(req: Request, res: Response) {
     try {
+      const userId = req.user?.id ?? null;
       const { status } = req.body;
-      const process = await processService.updateStatus(Number(req.params.id), status);
+      const process = await processService.updateStatus(Number(req.params.id), status, userId);
       sendSuccess(res, process);
     } catch (error: any) {
       sendError(res, error.message);
@@ -53,7 +55,8 @@ export const processController = {
 
   async delete(req: Request, res: Response) {
     try {
-      await processService.delete(Number(req.params.id));
+      const userId = req.user?.id ?? null;
+      await processService.delete(Number(req.params.id), userId);
       sendSuccess(res, { message: 'Processo cancelado' });
     } catch (error: any) {
       sendError(res, error.message);

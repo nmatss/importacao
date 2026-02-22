@@ -9,7 +9,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 
 export const validationService = {
-  async runAllChecks(processId: number): Promise<CheckResult[]> {
+  async runAllChecks(processId: number, userId: number | null = null): Promise<CheckResult[]> {
     if (!processId || isNaN(processId)) {
       throw new Error('ID do processo invalido');
     }
@@ -99,7 +99,7 @@ export const validationService = {
         .where(eq(importProcesses.id, processId));
     }
 
-    auditService.log(null, 'validation_run', 'process', processId, {
+    auditService.log(userId, 'validation_run', 'process', processId, {
       total: results.length,
       passed: results.filter((r) => r.status === 'passed').length,
       failed: results.filter((r) => r.status === 'failed').length,

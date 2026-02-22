@@ -78,9 +78,13 @@ export function CurrencyExchangePage() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await api.delete(`/api/currency-exchange/${deleteId}`);
-    queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
-    setDeleteId(null);
+    try {
+      await api.delete(`/api/currency-exchange/${deleteId}`);
+      queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
+      setDeleteId(null);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao excluir cambio');
+    }
   };
 
   const calculatedBrl =
@@ -90,11 +94,17 @@ export function CurrencyExchangePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const usd = parseFloat(form.amountUsd);
+    const rate = parseFloat(form.exchangeRate);
+    if (isNaN(usd) || isNaN(rate)) {
+      alert('Valor USD e Taxa de Cambio devem ser numeros validos');
+      return;
+    }
     createMutation.mutate({
       processId: selectedProcessId,
       type: form.type,
-      amountUsd: parseFloat(form.amountUsd),
-      exchangeRate: parseFloat(form.exchangeRate),
+      amountUsd: usd,
+      exchangeRate: rate,
       amountBrl: calculatedBrl,
       paymentDeadline: form.paymentDeadline,
       expirationDate: form.expirationDate,

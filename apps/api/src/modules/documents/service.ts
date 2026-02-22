@@ -11,7 +11,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 
 export const documentService = {
-  async upload(processId: number, type: string, file: Express.Multer.File) {
+  async upload(processId: number, type: string, file: Express.Multer.File, userId: number | null = null) {
     const [doc] = await db.insert(documents).values({
       processId,
       type: type as any,
@@ -51,7 +51,7 @@ export const documentService = {
       }).catch(err => logger.error({ err }, 'Failed to create documents-received alert'));
     }
 
-    auditService.log(null, 'upload', 'document', doc.id, { processId, type, filename: file.originalname }, null);
+    auditService.log(userId, 'upload', 'document', doc.id, { processId, type, filename: file.originalname }, null);
 
     // Trigger AI extraction in background
     this.processWithAI(doc.id, type).catch(err =>
@@ -182,7 +182,7 @@ export const documentService = {
     return { source: 'manual' as const };
   },
 
-  async reprocess(documentId: number) {
+  async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new Error('Documento não encontrado');
 
@@ -190,13 +190,13 @@ export const documentService = {
       .set({ isProcessed: false, aiParsedData: null, confidenceScore: null, updatedAt: new Date() })
       .where(eq(documents.id, documentId));
 
-    auditService.log(null, 'reprocess', 'document', documentId, { type: doc.type }, null);
+    auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 
     await this.processWithAI(documentId, doc.type);
     return this.getById(documentId);
   },
 
-  async delete(id: number) {
+  async delete(id: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new Error('Documento não encontrado');
 
@@ -208,7 +208,7 @@ export const documentService = {
     }
 
     await db.delete(documents).where(eq(documents.id, id));
-    auditService.log(null, 'delete', 'document', id, { processId: doc.processId, filename: doc.originalFilename }, null);
+    auditService.log(userId, 'delete', 'document', id, { processId: doc.processId, filename: doc.originalFilename }, null);
     return { id };
   },
 

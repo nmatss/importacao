@@ -81,31 +81,60 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   const generate = async () => {
     setGenerating(true);
     try {
-      await apiCall(`/api/espelhos/${processId}/generate`);
+      const res = await apiCall(`/api/espelhos/${processId}/generate`);
+      if (!res.ok) throw new Error('Falha ao gerar espelho');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao gerar espelho');
     } finally {
       setGenerating(false);
     }
   };
 
   const downloadXlsx = async () => {
-    const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '';
-    const res = await fetch(`${baseUrl}/api/espelhos/${processId}/download`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `espelho_${processId}.xlsx`;
-    a.click();
-    URL.revokeObjectURL(url);
+    try {
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${baseUrl}/api/espelhos/${processId}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Falha ao baixar espelho');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `espelho_${processId}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao baixar espelho');
+    }
   };
 
-  const sendToDrive = () => apiCall(`/api/espelhos/${processId}/send-drive`);
-  const sendToFenicia = () => apiCall(`/api/espelhos/${processId}/send-fenicia`);
-  const generatePartialLi = () => apiCall(`/api/espelhos/${processId}/generate-li`);
+  const sendToDrive = async () => {
+    try {
+      const res = await apiCall(`/api/espelhos/${processId}/send-drive`);
+      if (!res.ok) throw new Error('Falha ao enviar para Drive');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar para Drive');
+    }
+  };
+  const sendToFenicia = async () => {
+    try {
+      const res = await apiCall(`/api/espelhos/${processId}/send-fenicia`);
+      if (!res.ok) throw new Error('Falha ao enviar para Fenicia');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar para Fenicia');
+    }
+  };
+  const generatePartialLi = async () => {
+    try {
+      const res = await apiCall(`/api/espelhos/${processId}/generate-li`);
+      if (!res.ok) throw new Error('Falha ao gerar parcial LI');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao gerar parcial LI');
+    }
+  };
 
   const startEdit = (itemId: string, field: string, currentValue: string | number) => {
     setEditingCell({ itemId, field });
@@ -114,24 +143,34 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
   const saveEdit = async () => {
     if (!editingCell) return;
-    await apiCall(`/api/espelhos/${processId}/items/${editingCell.itemId}`, 'PATCH', {
-      [editingCell.field]: editValue,
-    });
-    setEditingCell(null);
-    queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
+    try {
+      const res = await apiCall(`/api/espelhos/${processId}/items/${editingCell.itemId}`, 'PATCH', {
+        [editingCell.field]: editValue,
+      });
+      if (!res.ok) throw new Error('Falha ao salvar edicao');
+      setEditingCell(null);
+      queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar edicao');
+    }
   };
 
   const addItem = async () => {
-    await apiCall(`/api/espelhos/${processId}/items`, 'POST', {
-      itemCode: '',
-      description: 'Novo Item',
-      color: '',
-      size: '',
-      ncm: '',
-      unitPrice: 0,
-      quantity: 0,
-    });
-    queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
+    try {
+      const res = await apiCall(`/api/espelhos/${processId}/items`, 'POST', {
+        itemCode: '',
+        description: 'Novo Item',
+        color: '',
+        size: '',
+        ncm: '',
+        unitPrice: 0,
+        quantity: 0,
+      });
+      if (!res.ok) throw new Error('Falha ao adicionar item');
+      queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao adicionar item');
+    }
   };
 
   const renderCell = (item: EspelhoItem, field: string, value: string | number) => {

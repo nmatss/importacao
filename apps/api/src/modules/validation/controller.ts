@@ -10,7 +10,8 @@ export const validationController = {
       if (isNaN(processId) || processId <= 0) {
         return sendError(res, 'ID do processo invalido', 400);
       }
-      const results = await validationService.runAllChecks(processId);
+      const userId = req.user?.id ?? null;
+      const results = await validationService.runAllChecks(processId, userId);
       sendSuccess(res, results);
     } catch (error: any) {
       sendError(res, error.message);

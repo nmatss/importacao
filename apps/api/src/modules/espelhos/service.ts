@@ -31,7 +31,7 @@ const LI_NCM_PREFIXES = [
 ];
 
 export const espelhoService = {
-  async generate(processId: number) {
+  async generate(processId: number, userId: number | null = null) {
     const [process] = await db
       .select()
       .from(importProcesses)
@@ -105,7 +105,7 @@ export const espelhoService = {
       .set({ espelhoGeneratedAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, processId));
 
-    auditService.log(null, 'generate', 'espelho', espelho.id, { processId, version: nextVersion, itemCount: items.length }, null);
+    auditService.log(userId, 'generate', 'espelho', espelho.id, { processId, version: nextVersion, itemCount: items.length }, null);
 
     logger.info(
       { processId, espelhoId: espelho.id, version: nextVersion },
@@ -337,7 +337,7 @@ export const espelhoService = {
     }
   },
 
-  async sendToDrive(processId: number) {
+  async sendToDrive(processId: number, userId: number | null = null) {
     const espelho = await this.getEspelho(processId);
     if (!espelho) throw new Error('Espelho nao encontrado para este processo');
 
@@ -371,13 +371,13 @@ export const espelhoService = {
       .where(eq(espelhos.id, espelho.id))
       .returning();
 
-    auditService.log(null, 'send_to_drive', 'espelho', espelho.id, { processId, driveFileId }, null);
+    auditService.log(userId, 'send_to_drive', 'espelho', espelho.id, { processId, driveFileId }, null);
     logger.info({ processId, espelhoId: espelho.id, driveFileId }, 'Espelho sent to Drive');
 
     return updated;
   },
 
-  async markSentToFenicia(espelhoId: number) {
+  async markSentToFenicia(espelhoId: number, userId: number | null = null) {
     const [updated] = await db
       .update(espelhos)
       .set({ sentToFenicia: true, sentAt: new Date() })
@@ -397,15 +397,15 @@ export const espelhoService = {
       .set({ sentToFeniciaAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, updated.processId));
 
-    auditService.log(null, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
+    auditService.log(userId, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
 
     return updated;
   },
 
-  async sendToFeniciaByProcess(processId: number) {
+  async sendToFeniciaByProcess(processId: number, userId: number | null = null) {
     const espelho = await this.getEspelho(processId);
     if (!espelho) throw new Error('Espelho nao encontrado para este processo');
-    return this.markSentToFenicia(espelho.id);
+    return this.markSentToFenicia(espelho.id, userId);
   },
 
   async generatePartial(processId: number) {

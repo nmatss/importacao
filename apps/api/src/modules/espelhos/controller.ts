@@ -5,7 +5,8 @@ import { sendSuccess, sendError } from '../../shared/utils/response.js';
 export const espelhoController = {
   async generate(req: Request, res: Response) {
     try {
-      const espelho = await espelhoService.generate(Number(req.params.processId));
+      const userId = req.user?.id ?? null;
+      const espelho = await espelhoService.generate(Number(req.params.processId), userId);
       sendSuccess(res, espelho, 201);
     } catch (error: any) {
       sendError(res, error.message);
@@ -78,7 +79,8 @@ export const espelhoController = {
 
   async markSentToFenicia(req: Request, res: Response) {
     try {
-      const espelho = await espelhoService.markSentToFenicia(Number(req.params.id));
+      const userId = req.user?.id ?? null;
+      const espelho = await espelhoService.markSentToFenicia(Number(req.params.id), userId);
       sendSuccess(res, espelho);
     } catch (error: any) {
       sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
@@ -87,7 +89,8 @@ export const espelhoController = {
 
   async sendToDrive(req: Request, res: Response) {
     try {
-      const espelho = await espelhoService.sendToDrive(Number(req.params.processId));
+      const userId = req.user?.id ?? null;
+      const espelho = await espelhoService.sendToDrive(Number(req.params.processId), userId);
       sendSuccess(res, espelho);
     } catch (error: any) {
       sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
@@ -96,7 +99,8 @@ export const espelhoController = {
 
   async sendToFenicia(req: Request, res: Response) {
     try {
-      const espelho = await espelhoService.sendToFeniciaByProcess(Number(req.params.processId));
+      const userId = req.user?.id ?? null;
+      const espelho = await espelhoService.sendToFeniciaByProcess(Number(req.params.processId), userId);
       sendSuccess(res, espelho);
     } catch (error: any) {
       sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);

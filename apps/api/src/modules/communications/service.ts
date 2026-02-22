@@ -5,6 +5,17 @@ import { communications } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { CreateCommunicationInput } from './schema.js';
 
+function sanitizeHtml(html: string): string {
+  // Remove script tags and their content
+  let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove event handler attributes (onclick, onerror, onload, etc.)
+  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  // Remove javascript: URLs
+  clean = clean.replace(/href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '');
+  clean = clean.replace(/src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '');
+  return clean;
+}
+
 function getSmtpTransport() {
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -36,7 +47,7 @@ export const communicationService = {
       recipient: input.recipient,
       recipientEmail: input.recipientEmail,
       subject: input.subject,
-      body: input.body,
+      body: sanitizeHtml(input.body),
       attachments: input.attachments,
       status: 'draft',
     }).returning();
@@ -59,7 +70,7 @@ export const communicationService = {
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
         to: communication.recipientEmail,
         subject: communication.subject,
-        html: communication.body,
+        html: sanitizeHtml(communication.body),
       });
 
       const [updated] = await db.update(communications)

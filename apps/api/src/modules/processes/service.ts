@@ -83,35 +83,36 @@ export const processService = {
     return process;
   },
 
-  async update(id: number, input: UpdateProcessInput) {
+  async update(id: number, input: UpdateProcessInput, userId: number | null = null) {
     const [process] = await db.update(importProcesses)
       .set({ ...input, updatedAt: new Date() } as any)
       .where(eq(importProcesses.id, id))
       .returning();
 
     if (!process) throw new Error('Processo não encontrado');
-    auditService.log(null, 'update', 'process', id, { fields: Object.keys(input) }, null);
+    auditService.log(userId, 'update', 'process', id, { fields: Object.keys(input) }, null);
     return process;
   },
 
-  async updateStatus(id: number, status: string) {
+  async updateStatus(id: number, status: string, userId: number | null = null) {
     const [process] = await db.update(importProcesses)
       .set({ status: status as any, updatedAt: new Date() })
       .where(eq(importProcesses.id, id))
       .returning();
 
     if (!process) throw new Error('Processo não encontrado');
+    auditService.log(userId, 'status_update', 'process', id, { status }, null);
     return process;
   },
 
-  async delete(id: number) {
+  async delete(id: number, userId: number | null = null) {
     const [process] = await db.update(importProcesses)
       .set({ status: 'cancelled', updatedAt: new Date() })
       .where(eq(importProcesses.id, id))
       .returning({ id: importProcesses.id });
 
     if (!process) throw new Error('Processo não encontrado');
-    auditService.log(null, 'delete', 'process', id, null, null);
+    auditService.log(userId, 'delete', 'process', id, null, null);
     return process;
   },
 

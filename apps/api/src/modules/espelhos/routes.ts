@@ -6,9 +6,16 @@ const router = Router();
 
 router.use(authMiddleware);
 
-// Process-scoped routes
+// Item-scoped routes (literal prefix, must come first)
+router.put('/items/:id', espelhoController.updateItem);
+router.delete('/items/:id', espelhoController.deleteItem);
+
+// Espelho-scoped routes with sub-path (must come before bare /:processId)
+router.get('/:id/download', espelhoController.download);
+router.patch('/:id/sent', espelhoController.markSentToFenicia);
+
+// Process-scoped routes with sub-paths
 router.post('/:processId/generate', espelhoController.generate);
-router.get('/:processId', espelhoController.getEspelho);
 router.get('/:processId/items', espelhoController.getItems);
 router.post('/:processId/items', espelhoController.addItem);
 router.post('/:processId/generate-partial', espelhoController.generatePartial);
@@ -17,12 +24,7 @@ router.post('/:processId/send-drive', espelhoController.sendToDrive);
 router.post('/:processId/send-fenicia', espelhoController.sendToFenicia);
 router.patch('/:processId/items/:id', espelhoController.updateItem);
 
-// Item-scoped routes
-router.put('/items/:id', espelhoController.updateItem);
-router.delete('/items/:id', espelhoController.deleteItem);
-
-// Espelho-scoped routes
-router.get('/:id/download', espelhoController.download);
-router.patch('/:id/sent', espelhoController.markSentToFenicia);
+// Bare param route (must be last to avoid matching other routes)
+router.get('/:processId', espelhoController.getEspelho);
 
 export { router as espelhoRoutes };

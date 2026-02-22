@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { documentService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
+import { uploadDocumentSchema } from './schema.js';
 
 export const documentController = {
   async upload(req: Request, res: Response) {
@@ -8,8 +9,17 @@ export const documentController = {
       if (!req.file) {
         return sendError(res, 'Nenhum arquivo enviado', 400);
       }
-      const { processId, type } = req.body;
-      const doc = await documentService.upload(Number(processId), type, req.file);
+      const parsed = uploadDocumentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return sendError(res, JSON.stringify(errors), 400);
+      }
+      const { processId, type } = parsed.data;
+      const userId = req.user?.id ?? null;
+      const doc = await documentService.upload(processId, type, req.file, userId);
       sendSuccess(res, doc, 201);
     } catch (error: any) {
       sendError(res, error.message);
@@ -45,7 +55,8 @@ export const documentController = {
 
   async reprocess(req: Request, res: Response) {
     try {
-      const doc = await documentService.reprocess(Number(req.params.id));
+      const userId = req.user?.id ?? null;
+      const doc = await documentService.reprocess(Number(req.params.id), userId);
       sendSuccess(res, doc);
     } catch (error: any) {
       sendError(res, error.message);
@@ -54,7 +65,8 @@ export const documentController = {
 
   async delete(req: Request, res: Response) {
     try {
-      await documentService.delete(Number(req.params.id));
+      const userId = req.user?.id ?? null;
+      await documentService.delete(Number(req.params.id), userId);
       sendSuccess(res, { message: 'Documento removido' });
     } catch (error: any) {
       sendError(res, error.message);

@@ -52,6 +52,13 @@ export const processFilterSchema = z.object({
   limit: z.coerce.number().default(20),
 });
 
+export const updateStatusSchema = z.object({
+  status: z.enum([
+    'draft', 'documents_received', 'validating', 'validated',
+    'espelho_generated', 'sent_to_fenicia', 'li_pending', 'completed', 'cancelled'
+  ]),
+});
+
 export type CreateProcessInput = z.infer<typeof createProcessSchema>;
 export type UpdateProcessInput = z.infer<typeof updateProcessSchema>;
 export type ProcessFilter = z.infer<typeof processFilterSchema>;

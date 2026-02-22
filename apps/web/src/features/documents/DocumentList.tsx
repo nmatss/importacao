@@ -120,8 +120,11 @@ export function DocumentList({ processId }: DocumentListProps) {
     fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then(() => {
+    }).then((res) => {
+      if (!res.ok) throw new Error('Falha ao reprocessar documento');
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+    }).catch((err: any) => {
+      alert(err.message || 'Erro ao reprocessar documento');
     });
   };
 
@@ -131,9 +134,12 @@ export function DocumentList({ processId }: DocumentListProps) {
     fetch(`${baseUrl}/api/documents/${doc.id}`, {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then(() => {
+    }).then((res) => {
+      if (!res.ok) throw new Error('Falha ao excluir documento');
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
       setDeleteTarget(null);
+    }).catch((err: any) => {
+      alert(err.message || 'Erro ao excluir documento');
     });
   };
 
