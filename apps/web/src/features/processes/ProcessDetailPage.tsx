@@ -11,6 +11,7 @@ import {
   MessageSquare,
   CheckCircle,
   ExternalLink,
+  XCircle,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
@@ -67,14 +68,21 @@ const TABS = [
 ] as const;
 
 function Stepper({ currentStatus }: { currentStatus: string }) {
+  const isCancelled = currentStatus === 'cancelled';
   const currentIndex = STEPS.findIndex((s) => s.key === currentStatus);
 
   return (
     <div className="overflow-x-auto">
+      {isCancelled && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+          <XCircle className="h-4 w-4" />
+          Processo Cancelado
+        </div>
+      )}
       <div className="flex min-w-[600px] items-center">
         {STEPS.map((step, i) => {
-          const isCompleted = i < currentIndex;
-          const isCurrent = i === currentIndex;
+          const isCompleted = !isCancelled && i < currentIndex;
+          const isCurrent = !isCancelled && i === currentIndex;
 
           return (
             <div key={step.key} className="flex flex-1 items-center">
@@ -82,11 +90,13 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                 <div
                   className={cn(
                     'flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition-colors',
-                    isCompleted
-                      ? 'bg-green-500 text-white'
-                      : isCurrent
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-200 text-gray-500',
+                    isCancelled
+                      ? 'bg-gray-200 text-gray-400'
+                      : isCompleted
+                        ? 'bg-green-500 text-white'
+                        : isCurrent
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-200 text-gray-500',
                   )}
                 >
                   {isCompleted ? (
@@ -98,7 +108,11 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                 <span
                   className={cn(
                     'mt-1 text-[10px] text-center leading-tight max-w-[80px]',
-                    isCurrent ? 'font-semibold text-blue-700' : 'text-gray-500',
+                    isCancelled
+                      ? 'text-gray-400'
+                      : isCurrent
+                        ? 'font-semibold text-blue-700'
+                        : 'text-gray-500',
                   )}
                 >
                   {step.label}
@@ -108,7 +122,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                 <div
                   className={cn(
                     'mx-1 h-0.5 flex-1',
-                    i < currentIndex ? 'bg-green-500' : 'bg-gray-200',
+                    !isCancelled && i < currentIndex ? 'bg-green-500' : 'bg-gray-200',
                   )}
                 />
               )}

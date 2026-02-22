@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, count } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { db } from '../../shared/database/connection.js';
 import { communications } from '../../shared/database/schema.js';
@@ -29,16 +29,23 @@ function getSmtpTransport() {
 }
 
 export const communicationService = {
-  async list(processId?: number) {
-    const query = db.select()
-      .from(communications)
-      .orderBy(desc(communications.createdAt));
+  async list(processId?: number, page = 1, limit = 20) {
+    const conditions = processId ? eq(communications.processId, processId) : undefined;
+    const offset = (page - 1) * limit;
 
-    if (processId) {
-      return query.where(eq(communications.processId, processId));
-    }
+    const [data, [{ total }]] = await Promise.all([
+      db.select()
+        .from(communications)
+        .where(conditions)
+        .orderBy(desc(communications.createdAt))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() })
+        .from(communications)
+        .where(conditions),
+    ]);
 
-    return query;
+    return { data, total, page, limit };
   },
 
   async create(input: CreateCommunicationInput) {

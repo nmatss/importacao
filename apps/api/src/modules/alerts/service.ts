@@ -1,4 +1,4 @@
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { alerts, systemSettings } from '../../shared/database/schema.js';
 import { sendToGoogleChat } from './google-chat.service.js';
@@ -6,14 +6,24 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 
 export const alertService = {
-  async list(filters?: { processId?: number; severity?: string; acknowledged?: boolean }) {
+  async list(filters?: { processId?: number; severity?: string; acknowledged?: boolean; page?: number; limit?: number }) {
+    const page = filters?.page ?? 1;
+    const limit = filters?.limit ?? 20;
+    const offset = (page - 1) * limit;
+
     const conditions = [];
     if (filters?.processId) conditions.push(eq(alerts.processId, filters.processId));
     if (filters?.severity) conditions.push(eq(alerts.severity, filters.severity as any));
     if (filters?.acknowledged !== undefined) conditions.push(eq(alerts.acknowledged, filters.acknowledged));
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
-    return db.select().from(alerts).where(where).orderBy(desc(alerts.createdAt)).limit(50);
+
+    const [data, [{ total }]] = await Promise.all([
+      db.select().from(alerts).where(where).orderBy(desc(alerts.createdAt)).limit(limit).offset(offset),
+      db.select({ total: count() }).from(alerts).where(where),
+    ]);
+
+    return { data, total, page, limit };
   },
 
   async create(data: {

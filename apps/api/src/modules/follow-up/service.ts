@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { followUpTracking, importProcesses } from '../../shared/database/schema.js';
 import type { FollowUpTracking } from '../../shared/database/schema.js';
@@ -27,28 +27,38 @@ function calculateProgress(tracking: Partial<FollowUpTracking>): number {
 }
 
 export const followUpService = {
-  async getAll() {
-    return db.select({
-      id: followUpTracking.id,
-      processId: followUpTracking.processId,
-      processCode: importProcesses.processCode,
-      brand: importProcesses.brand,
-      status: importProcesses.status,
-      documentsReceivedAt: followUpTracking.documentsReceivedAt,
-      preInspectionAt: followUpTracking.preInspectionAt,
-      ncmVerifiedAt: followUpTracking.ncmVerifiedAt,
-      espelhoGeneratedAt: followUpTracking.espelhoGeneratedAt,
-      sentToFeniciaAt: followUpTracking.sentToFeniciaAt,
-      liSubmittedAt: followUpTracking.liSubmittedAt,
-      liApprovedAt: followUpTracking.liApprovedAt,
-      liDeadline: followUpTracking.liDeadline,
-      overallProgress: followUpTracking.overallProgress,
-      notes: followUpTracking.notes,
-      createdAt: followUpTracking.createdAt,
-      updatedAt: followUpTracking.updatedAt,
-    })
-      .from(followUpTracking)
-      .innerJoin(importProcesses, eq(followUpTracking.processId, importProcesses.id));
+  async getAll(page = 1, limit = 20) {
+    const offset = (page - 1) * limit;
+
+    const [data, [{ total }]] = await Promise.all([
+      db.select({
+        id: followUpTracking.id,
+        processId: followUpTracking.processId,
+        processCode: importProcesses.processCode,
+        brand: importProcesses.brand,
+        status: importProcesses.status,
+        documentsReceivedAt: followUpTracking.documentsReceivedAt,
+        preInspectionAt: followUpTracking.preInspectionAt,
+        ncmVerifiedAt: followUpTracking.ncmVerifiedAt,
+        espelhoGeneratedAt: followUpTracking.espelhoGeneratedAt,
+        sentToFeniciaAt: followUpTracking.sentToFeniciaAt,
+        liSubmittedAt: followUpTracking.liSubmittedAt,
+        liApprovedAt: followUpTracking.liApprovedAt,
+        liDeadline: followUpTracking.liDeadline,
+        overallProgress: followUpTracking.overallProgress,
+        notes: followUpTracking.notes,
+        createdAt: followUpTracking.createdAt,
+        updatedAt: followUpTracking.updatedAt,
+      })
+        .from(followUpTracking)
+        .innerJoin(importProcesses, eq(followUpTracking.processId, importProcesses.id))
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() })
+        .from(followUpTracking),
+    ]);
+
+    return { data, total, page, limit };
   },
 
   async getByProcess(processId: number) {

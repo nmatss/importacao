@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -31,20 +31,26 @@ interface ProcessListResponse {
 export function ProcessListPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [brand, setBrand] = useState('');
   const [page, setPage] = useState(1);
   const limit = 20;
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   const params = new URLSearchParams();
-  if (search) params.set('search', search);
+  if (debouncedSearch) params.set('search', debouncedSearch);
   if (status) params.set('status', status);
   if (brand) params.set('brand', brand);
   params.set('page', String(page));
   params.set('limit', String(limit));
 
   const { data, isLoading } = useApiQuery<ProcessListResponse>(
-    ['processes', search, status, brand, String(page)],
+    ['processes', debouncedSearch, status, brand, String(page)],
     `/api/processes?${params.toString()}`,
   );
 
