@@ -150,6 +150,7 @@ export const processItems = pgTable('process_items', {
   requiresCertification: boolean('requires_certification').default(false),
   odooProductId: integer('odoo_product_id'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('process_items_process_id_idx').on(table.processId),
 ]);
@@ -186,6 +187,7 @@ export const currencyExchanges = pgTable('currency_exchanges', {
   expirationDate: date('expiration_date'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('currency_exchanges_process_id_idx').on(table.processId),
 ]);
@@ -255,6 +257,7 @@ export const alerts = pgTable('alerts', {
   acknowledgedBy: integer('acknowledged_by').references(() => users.id),
   acknowledgedAt: timestamp('acknowledged_at'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('alerts_process_id_idx').on(table.processId),
 ]);

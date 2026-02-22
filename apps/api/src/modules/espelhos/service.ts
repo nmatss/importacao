@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import fs from 'fs/promises';
 import path from 'node:path';
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   espelhos,
@@ -441,7 +441,13 @@ export const espelhoService = {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Espelho Parcial - LI');
 
-    const filename = `espelho_parcial_${process.processCode}.xlsx`;
+    // Determine next version for partial espelhos
+    const [latest] = await db.select({ maxVersion: sql<number>`coalesce(max(${espelhos.version}), 0)` })
+      .from(espelhos)
+      .where(and(eq(espelhos.processId, processId), eq(espelhos.isPartial, true)));
+    const nextPartialVersion = (latest?.maxVersion ?? 0) + 1;
+
+    const filename = `espelho_parcial_${process.processCode}_v${nextPartialVersion}.xlsx`;
     await fs.mkdir(UPLOAD_DIR, { recursive: true });
     const filePath = path.join(UPLOAD_DIR, filename);
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
@@ -452,7 +458,7 @@ export const espelhoService = {
       .values({
         processId,
         brand: process.brand,
-        version: 1,
+        version: nextPartialVersion,
         isPartial: true,
         generatedData: {
           filename,

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Shield, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -254,12 +255,12 @@ export function AuditLogPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
                       {log.entityId != null ? (
                         log.entityType === 'process' ? (
-                          <a
-                            href={`/importacao/processos/${log.entityId}`}
+                          <Link
+                            to={`/importacao/processos/${log.entityId}`}
                             className="text-blue-600 hover:underline"
                           >
                             #{log.entityId}
-                          </a>
+                          </Link>
                         ) : (
                           <span className="text-gray-600">#{log.entityId}</span>
                         )

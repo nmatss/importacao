@@ -11,6 +11,9 @@ const FILE_TYPES = [
   { value: 'invoice', label: 'Invoice' },
   { value: 'packing_list', label: 'Packing List' },
   { value: 'ohbl', label: 'BL' },
+  { value: 'espelho', label: 'Espelho' },
+  { value: 'li', label: 'LI' },
+  { value: 'other', label: 'Outro' },
 ] as const;
 
 const ACCEPT = '.pdf,.xlsx,.xls';

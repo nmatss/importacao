@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Edit,
@@ -148,8 +148,10 @@ export function ProcessDetailPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('documentos');
 
+  if (!id) return <Navigate to="/importacao/processos" replace />;
+
   const { data: process, isLoading } = useApiQuery<Process>(
-    ['process', id!],
+    ['process', id],
     `/api/processes/${id}`,
   );
 
@@ -301,12 +303,12 @@ export function ProcessDetailPage() {
             <h3 className="text-lg font-semibold text-gray-900">
               Upload de Documentos
             </h3>
-            <DocumentUpload processId={id!} />
+            <DocumentUpload processId={id} />
             <hr className="border-gray-200" />
             <h3 className="text-lg font-semibold text-gray-900">
               Documentos do Processo
             </h3>
-            <DocumentList processId={id!} />
+            <DocumentList processId={id} />
           </div>
         )}
 
@@ -315,7 +317,7 @@ export function ProcessDetailPage() {
             <h3 className="text-lg font-semibold text-gray-900">
               Checklist de Validação
             </h3>
-            <ValidationChecklist processId={id!} />
+            <ValidationChecklist processId={id} />
           </div>
         )}
 
@@ -324,20 +326,20 @@ export function ProcessDetailPage() {
             <h3 className="text-lg font-semibold text-gray-900">
               Espelho de Importação
             </h3>
-            <EspelhoPreview processId={id!} />
+            <EspelhoPreview processId={id} />
           </div>
         )}
 
         {activeTab === 'cambios' && (
-          <CambiosTab processId={id!} />
+          <CambiosTab processId={id} />
         )}
 
         {activeTab === 'followup' && (
-          <FollowUpTab processId={id!} />
+          <FollowUpTab processId={id} />
         )}
 
         {activeTab === 'comunicacoes' && (
-          <ComunicacoesTab processId={id!} />
+          <ComunicacoesTab processId={id} />
         )}
       </div>
     </div>

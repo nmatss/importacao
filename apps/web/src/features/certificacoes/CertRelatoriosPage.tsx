@@ -4,8 +4,14 @@ import { fetchCertReports, getCertReportDownloadUrl } from '@/shared/lib/cert-ap
 import { formatDateTime } from '@/shared/lib/utils';
 import { FileSpreadsheet, Download, Eye, Loader2 } from 'lucide-react';
 
+interface CertReportFile {
+  filename: string;
+  date?: string;
+  size_bytes?: number;
+}
+
 export default function CertRelatoriosPage() {
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<CertReportFile[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -36,7 +42,7 @@ export default function CertRelatoriosPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
-            {reports.map((report: any, i: number) => (
+            {reports.map((report, i) => (
               <div key={i} className="flex items-center justify-between p-4 hover:bg-slate-50 transition-colors">
                 <div className="flex items-center gap-3">
                   <FileSpreadsheet className="w-5 h-5 text-emerald-600" />

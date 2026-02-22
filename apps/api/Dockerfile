@@ -23,4 +23,4 @@ COPY --from=builder /app/drizzle ./drizzle
 RUN mkdir -p uploads
 
 EXPOSE 3001
-CMD ["node", "dist/server.js"]
+CMD ["sh", "-c", "node dist/shared/database/migrate.js && node dist/server.js"]

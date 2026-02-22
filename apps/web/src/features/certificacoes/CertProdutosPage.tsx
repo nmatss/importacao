@@ -34,11 +34,21 @@ const STATUSES = [
   { value: "NO_EXPECTED", label: "No Expected" },
 ]
 
+interface CertProduct {
+  sku: string;
+  name: string;
+  brand: string;
+  last_validation_status: string | null;
+  last_validation_score: number | null;
+  last_validation_url: string | null;
+  last_validation_date: string | null;
+}
+
 type SortField = "sku" | "name" | "brand" | "last_validation_status" | "last_validation_score"
 type SortDir = "asc" | "desc"
 
 export default function CertProdutosPage() {
-  const [products, setProducts] = useState<any[]>([])
+  const [products, setProducts] = useState<CertProduct[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)

@@ -5,10 +5,30 @@ import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusB
 import { fetchCertReportDetail, getCertReportDownloadUrl } from '@/shared/lib/cert-api-client';
 import { Download, Search, Loader2, ArrowLeft } from 'lucide-react';
 
+interface CertReportResult {
+  sku: string;
+  name: string;
+  brand: string;
+  status: string;
+  score: number | null;
+  url: string | null;
+}
+
+interface CertReportData {
+  results: CertReportResult[];
+  summary: {
+    total: number;
+    ok: number;
+    missing: number;
+    inconsistent: number;
+    not_found: number;
+  };
+}
+
 export default function CertRelatorioDetailPage() {
   const { id } = useParams();
   const filename = decodeURIComponent(id || '');
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CertReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -36,9 +56,9 @@ export default function CertRelatorioDetailPage() {
   }
 
   const results = data.results || [];
-  const summary = data.summary || {};
+  const summary = data.summary || { total: 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0 };
 
-  const filtered = results.filter((r: any) => {
+  const filtered = results.filter((r: CertReportResult) => {
     if (search) {
       const q = search.toLowerCase();
       if (!r.sku?.toLowerCase().includes(q) && !r.name?.toLowerCase().includes(q)) return false;
@@ -48,8 +68,8 @@ export default function CertRelatorioDetailPage() {
     return true;
   });
 
-  const statuses = [...new Set(results.map((r: any) => r.status))] as string[];
-  const brands = [...new Set(results.map((r: any) => r.brand))] as string[];
+  const statuses = [...new Set(results.map((r) => r.status))];
+  const brands = [...new Set(results.map((r) => r.brand))];
 
   return (
     <div className="space-y-6">
@@ -70,10 +90,10 @@ export default function CertRelatorioDetailPage() {
       <CertStatsCards
         data={{
           total: summary.total || results.length,
-          ok: summary.ok || results.filter((r: any) => r.status === 'OK').length,
-          missing: summary.missing || results.filter((r: any) => r.status === 'MISSING').length,
-          inconsistent: summary.inconsistent || results.filter((r: any) => r.status === 'INCONSISTENT').length,
-          not_found: summary.not_found || results.filter((r: any) => r.status === 'URL_NOT_FOUND').length,
+          ok: summary.ok || results.filter((r) => r.status === 'OK').length,
+          missing: summary.missing || results.filter((r) => r.status === 'MISSING').length,
+          inconsistent: summary.inconsistent || results.filter((r) => r.status === 'INCONSISTENT').length,
+          not_found: summary.not_found || results.filter((r) => r.status === 'URL_NOT_FOUND').length,
         }}
       />
 
@@ -126,7 +146,7 @@ export default function CertRelatorioDetailPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filtered.map((r: any, i: number) => (
+              {filtered.map((r, i) => (
                 <tr key={i} className="hover:bg-slate-50">
                   <td className="px-4 py-3 font-mono text-slate-900">{r.sku}</td>
                   <td className="px-4 py-3 text-slate-700 max-w-[200px] truncate">{r.name}</td>

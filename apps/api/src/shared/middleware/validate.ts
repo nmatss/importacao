@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { ZodSchema } from 'zod';
-import { sendError } from '../utils/response.js';
 
 export function validate(schema: ZodSchema) {
   return (req: Request, res: Response, next: NextFunction) => {
@@ -11,7 +10,11 @@ export function validate(schema: ZodSchema) {
         field: e.path.join('.'),
         message: e.message,
       }));
-      return sendError(res, JSON.stringify(errors), 400);
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: errors,
+      });
     }
 
     req.body = result.data;

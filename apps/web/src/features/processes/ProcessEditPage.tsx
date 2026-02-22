@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -44,8 +44,10 @@ export function ProcessEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
+  if (!id) return <Navigate to="/importacao/processos" replace />;
+
   const { data: process, isLoading } = useApiQuery<Process>(
-    ['process', id!],
+    ['process', id],
     `/api/processes/${id}`,
   );
 

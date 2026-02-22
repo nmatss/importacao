@@ -33,6 +33,21 @@ export const alertService = {
     message: string;
     processCode?: string;
   }) {
+    // Skip duplicate alerts (same processId + title within 24h)
+    const isDuplicate = await this.hasDuplicateRecent(data.processId, data.title);
+    if (isDuplicate) {
+      const [existing] = await db.select()
+        .from(alerts)
+        .where(and(
+          eq(alerts.processId, data.processId!),
+          eq(alerts.title, data.title),
+          sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
+        ))
+        .orderBy(desc(alerts.createdAt))
+        .limit(1);
+      return existing;
+    }
+
     const [alert] = await db.insert(alerts).values({
       processId: data.processId,
       severity: data.severity,
@@ -45,7 +60,7 @@ export const alertService = {
       const [setting] = await db.select().from(systemSettings)
         .where(eq(systemSettings.key, 'google_chat_webhook_url')).limit(1);
 
-      const webhookUrl = setting?.value as string;
+      const webhookUrl = (setting?.value as string) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
       if (webhookUrl) {
         const sent = await sendToGoogleChat(webhookUrl, { ...data, id: alert.id });
         if (sent) {

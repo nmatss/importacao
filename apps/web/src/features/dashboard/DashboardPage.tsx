@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   FileBox,
   AlertTriangle,
@@ -79,6 +79,7 @@ const severityLabels: Record<string, string> = {
 };
 
 export function DashboardPage() {
+  const navigate = useNavigate();
   const { data: overview, isLoading: loadingOverview } =
     useApiQuery<DashboardOverview>(['dashboard', 'overview'], '/api/dashboard/overview');
 
@@ -336,6 +337,7 @@ export function DashboardPage() {
                 <tr
                   key={proc.id}
                   className="hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                 >
                   <td className="px-5 py-3 text-sm">
                     <Link

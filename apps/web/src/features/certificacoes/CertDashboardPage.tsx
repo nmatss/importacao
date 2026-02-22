@@ -15,6 +15,38 @@ import {
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
 
+interface CertStats {
+  total_products: number;
+  last_run: {
+    date: string;
+    total: number;
+    ok: number;
+    missing: number;
+    inconsistent: number;
+    not_found: number;
+  } | null;
+  by_brand: Array<{
+    brand: string;
+    ok: number;
+    missing: number;
+    inconsistent: number;
+    not_found: number;
+  }>;
+}
+
+interface CertReportFile {
+  filename: string;
+  date?: string;
+  size_bytes?: number;
+}
+
+interface CertProblemProduct {
+  sku: string;
+  name: string;
+  status: string;
+  brand?: string;
+}
+
 const PIE_COLORS = {
   OK: "#10b981",
   MISSING: "#ef4444",
@@ -23,11 +55,11 @@ const PIE_COLORS = {
 }
 
 export default function CertDashboardPage() {
-  const [stats, setStats] = useState<any>(null)
-  const [reports, setReports] = useState<any[]>([])
+  const [stats, setStats] = useState<CertStats | null>(null)
+  const [reports, setReports] = useState<CertReportFile[]>([])
   const [loading, setLoading] = useState(true)
   const [apiOnline, setApiOnline] = useState(false)
-  const [problemProducts, setProblemProducts] = useState<any[]>([])
+  const [problemProducts, setProblemProducts] = useState<CertProblemProduct[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -37,17 +69,18 @@ export default function CertDashboardPage() {
     ]).then(([s, r, health]) => {
       setStats(s)
       setApiOnline(health.connected)
-      const reportList = Array.isArray(r) ? r : []
-      setReports(reportList.filter((f: any) => f.filename?.endsWith('.xlsx')).slice(0, 5))
+      const reportList: CertReportFile[] = Array.isArray(r) ? r : []
+      setReports(reportList.filter((f) => f.filename?.endsWith('.xlsx')).slice(0, 5))
 
       // Load problem products from the latest JSON report
-      const jsonReport = reportList.find((f: any) => f.filename?.endsWith('.json'))
+      const jsonReport = reportList.find((f) => f.filename?.endsWith('.json'))
       if (jsonReport?.filename) {
         fetchCertReportDetail(jsonReport.filename)
           .then((data) => {
-            const items = Array.isArray(data) ? data : data?.products || data?.results || []
+            const raw = data as Record<string, unknown>
+            const items: CertProblemProduct[] = Array.isArray(data) ? data : (raw?.products || raw?.results || []) as CertProblemProduct[]
             const problems = items
-              .filter((p: any) => p.status === "MISSING" || p.status === "INCONSISTENT")
+              .filter((p) => p.status === "MISSING" || p.status === "INCONSISTENT")
               .slice(0, 10)
             setProblemProducts(problems)
           })
@@ -240,7 +273,7 @@ export default function CertDashboardPage() {
               </p>
             ) : (
               <div className="space-y-1.5">
-                {problemProducts.map((p: any, i: number) => (
+                {problemProducts.map((p, i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between py-2 px-2 rounded-lg hover:bg-slate-50 transition-colors"
@@ -311,7 +344,7 @@ export default function CertDashboardPage() {
                 <p className="text-sm text-slate-400 py-4 text-center">Nenhuma validacao realizada</p>
               ) : (
                 <div className="space-y-2">
-                  {reports.map((r: any, i: number) => (
+                  {reports.map((r, i) => (
                     <div key={i} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
                       <div className="flex items-center gap-2">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />

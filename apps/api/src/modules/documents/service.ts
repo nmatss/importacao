@@ -12,14 +12,21 @@ import { auditService } from '../audit/service.js';
 
 export const documentService = {
   async upload(processId: number, type: string, file: Express.Multer.File, userId: number | null = null) {
-    const [doc] = await db.insert(documents).values({
-      processId,
-      type: type as any,
-      originalFilename: file.originalname,
-      storagePath: file.path,
-      mimeType: file.mimetype,
-      fileSize: file.size,
-    }).returning();
+    let doc;
+    try {
+      [doc] = await db.insert(documents).values({
+        processId,
+        type: type as any,
+        originalFilename: file.originalname,
+        storagePath: file.path,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      }).returning();
+    } catch (error) {
+      // Clean up the uploaded file if DB insert fails
+      await fs.unlink(file.path).catch(() => {});
+      throw error;
+    }
 
     // Check if all 3 main documents exist → update status
     const processDocs = await db.select()
