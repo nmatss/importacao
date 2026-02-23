@@ -66,6 +66,20 @@ services:
       postgres:
         condition: service_healthy
 
+  cert-api:
+    build:
+      context: ./apps/cert-api
+      dockerfile: Dockerfile
+    container_name: importacao-cert-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+    volumes:
+      - cert-reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   web:
     build:
       context: ./apps/web
@@ -79,7 +93,9 @@ services:
       - "8085:80"
     depends_on:
       - api
+      - cert-api
 
 volumes:
   pgdata:
   uploads:
+  cert-reports:

@@ -62,15 +62,19 @@ services:
       postgres:
         condition: service_healthy
 
-  # cert-api:
-  #   build: ./apps/cert-api
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     - DATABASE_URL=postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
+  cert-api:
+    build:
+      context: ./apps/cert-api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+    volumes:
+      - cert-reports:/app/reports
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   web:
     build:
@@ -83,7 +87,9 @@ services:
       - "8080:80"
     depends_on:
       - api
+      - cert-api
 
 volumes:
   pgdata:
   uploads:
+  cert-reports:
