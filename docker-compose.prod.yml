@@ -74,6 +74,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+      GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
+      GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE}
     volumes:
       - cert-reports:/app/reports
     depends_on:
