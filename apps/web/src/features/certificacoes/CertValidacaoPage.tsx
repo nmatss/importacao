@@ -41,12 +41,18 @@ export default function CertValidacaoPage() {
     fetchCertStats()
       .then((stats: any) => {
         const total = stats.total_products || 0
-        const byBrand = stats.brands || {}
+        // by_brand is an array: [{brand, ok, missing, inconsistent, not_found}, ...]
+        const byBrandArr: Array<{ brand: string; ok: number; missing: number; inconsistent: number; not_found: number }> = stats.by_brand || []
+        const brandCounts: Record<string, number> = {}
+        for (const b of byBrandArr) {
+          const key = (b.brand || "").toLowerCase().replace(/\s+/g, "_")
+          brandCounts[key] = (b.ok || 0) + (b.missing || 0) + (b.inconsistent || 0) + (b.not_found || 0)
+        }
         setBrands([
           { value: "", label: "Todas as Marcas", count: total },
-          { value: "imaginarium", label: "Imaginarium", count: byBrand.imaginarium || byBrand.Imaginarium || 0 },
-          { value: "puket", label: "Puket", count: byBrand.puket || byBrand.Puket || 0 },
-          { value: "puket_escolares", label: "Puket Escolares", count: byBrand.puket_escolares || byBrand["Puket Escolares"] || 0 },
+          { value: "imaginarium", label: "Imaginarium", count: brandCounts["imaginarium"] || 0 },
+          { value: "puket", label: "Puket", count: brandCounts["puket"] || 0 },
+          { value: "puket_escolares", label: "Puket Escolares", count: brandCounts["puket_escolares"] || 0 },
         ])
       })
       .catch(() => {

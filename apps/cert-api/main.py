@@ -25,6 +25,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 log = logging.getLogger("cert-api")
 logging.basicConfig(level=logging.INFO)
@@ -55,12 +57,13 @@ SHEETS_SPREADSHEET_ID = os.environ.get(
 )
 
 # VTEX config — brand → store domain mapping
+# Note: "puket escolares" must come before "puket" so exact match wins over substring
 VTEX_STORES: dict[str, dict] = {
-    "puket": {
+    "puket escolares": {
         "domain": os.environ.get("VTEX_PUKET_DOMAIN", "www.puket.com.br"),
         "site_url": "https://www.puket.com.br",
     },
-    "puket escolares": {
+    "puket": {
         "domain": os.environ.get("VTEX_PUKET_DOMAIN", "www.puket.com.br"),
         "site_url": "https://www.puket.com.br",
     },
@@ -255,8 +258,8 @@ def _read_products_from_sheets() -> list[dict]:
             sku_col = cfg["sku_col"]
             if sku_col >= len(row):
                 continue
-            sku = str(row[sku_col]).strip()
-            if not sku:
+            raw_sku = str(row[sku_col]).strip()
+            if not raw_sku:
                 continue
 
             name = str(row[cfg["name_col"]]).strip() if cfg["name_col"] < len(row) else ""
@@ -267,13 +270,19 @@ def _read_products_from_sheets() -> list[dict]:
             cert_type = str(row[cfg["cert_type_col"]]).strip() if cfg["cert_type_col"] < len(row) else ""
             sheet_status = str(row[cfg["status_col"]]).strip() if cfg["status_col"] < len(row) else ""
 
-            products.append({
-                "sku": sku,
-                "name": name,
-                "brand": brand,
-                "certification_type": cert_type,
-                "sheet_status": sheet_status,
-            })
+            # Handle cells with multiple SKUs separated by newlines
+            sku_parts = re.split(r'[\r\n]+', raw_sku)
+            for sku in sku_parts:
+                sku = sku.strip()
+                if not sku:
+                    continue
+                products.append({
+                    "sku": sku,
+                    "name": name,
+                    "brand": brand,
+                    "certification_type": cert_type,
+                    "sheet_status": sheet_status,
+                })
 
     log.info(f"Read {len(products)} products from Google Sheets")
     return products
@@ -338,8 +347,28 @@ def _strip_html(html_text: str, keep_newlines: bool = False) -> str:
     return text
 
 
-def _vtex_search_product(sku: str, brand: str) -> dict | None:
-    """Search for a product by SKU on VTEX using the Intelligent Search API."""
+def _vtex_match_product(products: list, sku: str, config: dict) -> dict | None:
+    """Match a product from VTEX results by SKU reference."""
+    sku_lower = sku.lower()
+    for p in products:
+        ref = (p.get("productReference") or "").lower()
+        if ref.startswith(sku_lower) or sku_lower in ref:
+            p["_vtex_config"] = config
+            p["_search_api"] = "intelligent"
+            return p
+        # Also check item-level refIds
+        for item in (p.get("items") or []):
+            item_ref = (item.get("referenceId") or [{}])[0].get("Value", "") if item.get("referenceId") else ""
+            item_name = (item.get("name") or "").lower()
+            if sku_lower in item_ref.lower() or sku_lower in item_name:
+                p["_vtex_config"] = config
+                p["_search_api"] = "intelligent"
+                return p
+    return None
+
+
+def _vtex_search_product(sku: str, brand: str, product_name: str = "") -> dict | None:
+    """Search for a product by SKU on VTEX using multiple strategies."""
     config = _get_vtex_config(brand)
     if not config:
         log.warning(f"No VTEX config for brand '{brand}'")
@@ -347,8 +376,9 @@ def _vtex_search_product(sku: str, brand: str) -> dict | None:
 
     domain = config["domain"]
     headers = {"Accept": "application/json", "User-Agent": "CertAPI/2.0"}
+    is_numeric = sku.isdigit()
 
-    # 1. Primary: Intelligent Search API (works with partial SKU/ref codes)
+    # 1. Primary: Intelligent Search API with SKU
     try:
         url = f"https://{domain}/api/io/_v/api/intelligent-search/product_search/"
         resp = requests.get(url, params={"query": sku, "count": 5}, headers=headers, timeout=15)
@@ -356,17 +386,14 @@ def _vtex_search_product(sku: str, brand: str) -> dict | None:
             data = resp.json()
             products = data.get("products", [])
             if products:
-                # Find best match: product whose reference starts with our SKU
-                for p in products:
-                    ref = (p.get("productReference") or "").lower()
-                    if ref.startswith(sku.lower()) or sku.lower() in ref:
-                        p["_vtex_config"] = config
-                        p["_search_api"] = "intelligent"
-                        return p
-                # If no ref match, return first result
-                products[0]["_vtex_config"] = config
-                products[0]["_search_api"] = "intelligent"
-                return products[0]
+                match = _vtex_match_product(products, sku, config)
+                if match:
+                    return match
+                # If no ref match but results exist, return first (only for non-numeric SKUs)
+                if not is_numeric:
+                    products[0]["_vtex_config"] = config
+                    products[0]["_search_api"] = "intelligent"
+                    return products[0]
     except requests.RequestException as e:
         log.warning(f"VTEX intelligent search ({sku}) failed: {e}")
 
@@ -382,6 +409,26 @@ def _vtex_search_product(sku: str, brand: str) -> dict | None:
                 return data[0]
     except requests.RequestException as e:
         log.warning(f"VTEX catalog search ({sku}) failed: {e}")
+
+    # 3. For numeric SKUs: try searching by product name as fallback
+    # Puket SKUs are 9 digits but VTEX productRef is 12 digits, so name search helps
+    if is_numeric and product_name:
+        try:
+            # Use first 3-4 meaningful words of the product name
+            name_words = [w for w in product_name.split() if len(w) > 2][:4]
+            name_query = " ".join(name_words)
+            if name_query:
+                url = f"https://{domain}/api/io/_v/api/intelligent-search/product_search/"
+                resp = requests.get(url, params={"query": name_query, "count": 10}, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    products = data.get("products", [])
+                    if products:
+                        match = _vtex_match_product(products, sku, config)
+                        if match:
+                            return match
+        except requests.RequestException as e:
+            log.warning(f"VTEX name search ({product_name}) failed: {e}")
 
     return None
 
@@ -618,7 +665,7 @@ def _compare_cert_texts(expected: str, actual: str) -> tuple[str, float]:
         return ("MISSING", score)
 
 
-def validate_single_product(sku: str, brand: str, expected_cert: str) -> dict:
+def validate_single_product(sku: str, brand: str, expected_cert: str, product_name: str = "") -> dict:
     """
     Validate a single product against VTEX.
     Returns dict with: status, score, url, actual_cert_text, error.
@@ -647,7 +694,7 @@ def validate_single_product(sku: str, brand: str, expected_cert: str) -> dict:
         return result
 
     try:
-        vtex_product = _vtex_search_product(sku, brand)
+        vtex_product = _vtex_search_product(sku, brand, product_name=product_name)
     except Exception as e:
         result["status"] = "API_ERROR"
         result["error"] = f"VTEX API error: {str(e)}"
@@ -682,6 +729,112 @@ def validate_single_product(sku: str, brand: str, expected_cert: str) -> dict:
 # Startup
 # ---------------------------------------------------------------------------
 
+scheduler = BackgroundScheduler(timezone="America/Sao_Paulo")
+
+
+def _execute_schedule(schedule_id: str, brand_filter: str | None):
+    """Execute a scheduled validation run."""
+    log.info(f"Scheduler executing schedule {schedule_id} (brand={brand_filter})")
+    try:
+        run_id = str(uuid.uuid4())
+        with db() as (conn, cur):
+            cur.execute(
+                "INSERT INTO cert_validation_runs (id, status, brand_filter) VALUES (%s, 'running', %s)",
+                [run_id, brand_filter],
+            )
+            now = datetime.now(timezone.utc)
+            cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
+            cur.execute(
+                "INSERT INTO cert_schedule_history (schedule_id, status) VALUES (%s, 'running')",
+                [schedule_id],
+            )
+
+        _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0}
+        # Run synchronously in the scheduler thread (APScheduler manages threading)
+        _run_validation(run_id, brand_filter, None)
+
+        # Update history to completed
+        with db() as (conn, cur):
+            state = _running_validations.get(run_id, {})
+            summary = {
+                "total": state.get("total", 0),
+                "ok": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "OK"),
+                "missing": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "MISSING"),
+                "inconsistent": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "INCONSISTENT"),
+                "not_found": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") not in ("OK", "MISSING", "INCONSISTENT")),
+            }
+            cur.execute(
+                """UPDATE cert_schedule_history SET status = 'completed', summary = %s
+                   WHERE schedule_id = %s AND status = 'running'
+                   ORDER BY run_date DESC LIMIT 1""",
+                [json.dumps(summary), schedule_id],
+            )
+        log.info(f"Schedule {schedule_id} completed: {summary}")
+    except Exception as e:
+        log.error(f"Schedule {schedule_id} failed: {e}")
+        try:
+            with db() as (conn, cur):
+                cur.execute(
+                    """UPDATE cert_schedule_history SET status = 'failed'
+                       WHERE schedule_id = %s AND status = 'running'""",
+                    [schedule_id],
+                )
+        except Exception:
+            pass
+
+
+def _load_schedules_into_scheduler():
+    """Load all enabled schedules from DB into APScheduler."""
+    if not DATABASE_URL:
+        return
+    try:
+        # Remove all existing schedule jobs
+        for job in scheduler.get_jobs():
+            if job.id.startswith("cert_schedule_"):
+                job.remove()
+
+        with db() as (conn, cur):
+            cur.execute("SELECT * FROM cert_schedules WHERE enabled = true")
+            schedules = [dict(r) for r in cur.fetchall()]
+
+        for s in schedules:
+            cron_expr = s["cron_expression"]
+            parts = cron_expr.split()
+            if len(parts) != 5:
+                log.warning(f"Invalid cron for schedule {s['id']}: {cron_expr}")
+                continue
+
+            try:
+                trigger = CronTrigger(
+                    minute=parts[0],
+                    hour=parts[1],
+                    day=parts[2],
+                    month=parts[3],
+                    day_of_week=parts[4],
+                    timezone="America/Sao_Paulo",
+                )
+                job_id = f"cert_schedule_{s['id']}"
+                scheduler.add_job(
+                    _execute_schedule,
+                    trigger=trigger,
+                    id=job_id,
+                    args=[str(s["id"]), s.get("brand_filter")],
+                    replace_existing=True,
+                    max_instances=1,
+                )
+                # Calculate and store next_run
+                next_run = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+                if next_run:
+                    with db() as (conn, cur):
+                        cur.execute("UPDATE cert_schedules SET next_run = %s WHERE id = %s", [next_run, s["id"]])
+                log.info(f"Loaded schedule '{s['name']}' ({cron_expr}) next_run={next_run}")
+            except Exception as e:
+                log.warning(f"Failed to load schedule {s['id']}: {e}")
+
+    except Exception as e:
+        log.error(f"Failed to load schedules: {e}")
+
+
 @app.on_event("startup")
 def startup():
     if DATABASE_URL:
@@ -696,6 +849,22 @@ def startup():
             log.info(f"Startup sheets sync: {result}")
         except Exception as e:
             log.warning(f"Startup sheets sync failed: {e}")
+
+    # Start the APScheduler and load cron schedules from DB
+    try:
+        scheduler.start()
+        _load_schedules_into_scheduler()
+        log.info("APScheduler started successfully")
+    except Exception as e:
+        log.warning(f"Failed to start scheduler: {e}")
+
+
+@app.on_event("shutdown")
+def shutdown():
+    try:
+        scheduler.shutdown(wait=False)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -890,20 +1059,22 @@ def verify_product(req: VerifyRequest):
     """Verify a single product against the VTEX e-commerce site in real time."""
     now = datetime.now(timezone.utc)
 
-    # Get expected cert text from DB
+    # Get expected cert text and product name from DB
     expected_cert = ""
+    product_name = ""
     if DATABASE_URL:
         try:
             with db() as (conn, cur):
-                cur.execute("SELECT certification_type, brand FROM cert_products WHERE sku = %s", [req.sku])
+                cur.execute("SELECT certification_type, brand, name FROM cert_products WHERE sku = %s", [req.sku])
                 row = cur.fetchone()
                 if row:
                     expected_cert = row.get("certification_type", "") or ""
+                    product_name = row.get("name", "") or ""
         except Exception:
             pass
 
     # Real VTEX validation
-    result = validate_single_product(req.sku, req.brand, expected_cert)
+    result = validate_single_product(req.sku, req.brand, expected_cert, product_name=product_name)
 
     # Save result to DB
     if DATABASE_URL:
@@ -999,7 +1170,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
             expected_cert = p.get("certification_type", "") or ""
 
             # Real VTEX validation
-            vresult = validate_single_product(sku, brand, expected_cert)
+            vresult = validate_single_product(sku, brand, expected_cert, product_name=p.get("name", ""))
 
             status = vresult["status"]
             score = vresult["score"]
@@ -1212,6 +1383,8 @@ def create_schedule(req: ScheduleCreate):
                 row[key] = row[key].isoformat()
         row["id"] = str(row["id"])
         row["cron_expression"] = row.pop("cron_expression", "")
+        # Reload schedules into APScheduler
+        _load_schedules_into_scheduler()
         return row
 
 
@@ -1252,6 +1425,8 @@ def update_schedule(schedule_id: str, req: ScheduleUpdate):
                 result[key] = result[key].isoformat()
         result["id"] = str(result["id"])
         result["cron_expression"] = result.pop("cron_expression", "")
+        # Reload schedules into APScheduler
+        _load_schedules_into_scheduler()
         return result
 
 
@@ -1263,6 +1438,8 @@ def delete_schedule(schedule_id: str):
         cur.execute("DELETE FROM cert_schedules WHERE id = %s", [schedule_id])
         if cur.rowcount == 0:
             raise HTTPException(404, "Schedule not found")
+        # Reload schedules into APScheduler
+        _load_schedules_into_scheduler()
         return {"ok": True}
 
 
