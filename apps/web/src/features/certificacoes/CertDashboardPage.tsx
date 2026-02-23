@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { CertStatsCards } from "@/features/certificacoes/components/CertStatsCards"
 import { CertBrandChart } from "@/features/certificacoes/components/CertBrandChart"
-import { fetchCertStats, fetchCertReports, fetchCertReportDetail, checkCertApiHealth } from "@/shared/lib/cert-api-client"
+import { fetchCertStats, fetchCertReports, fetchCertReportDetail, fetchCertProducts, checkCertApiHealth } from "@/shared/lib/cert-api-client"
 import { formatDateTime, relativeTime, cn, certStatusColor } from "@/shared/lib/utils"
 import {
   PlayCircle,
@@ -106,43 +106,62 @@ export default function CertDashboardPage() {
       fetchCertStats().catch(() => null),
       fetchCertReports().catch(() => []),
       checkCertApiHealth(),
-    ]).then(([s, r, health]) => {
+      // Load problem products directly from DB (MISSING + INCONSISTENT)
+      fetchCertProducts({ per_page: 10, status: "MISSING,INCONSISTENT" }).catch(() => ({ products: [] })),
+      // Also load URL_NOT_FOUND products
+      fetchCertProducts({ per_page: 10, status: "URL_NOT_FOUND" }).catch(() => ({ products: [] })),
+    ]).then(([s, r, health, missingData, notFoundData]) => {
       setStats(s)
       setApiOnline(health.connected)
       const reportList: CertReportFile[] = Array.isArray(r) ? r : []
-      setReports(reportList.filter((f) => f.filename?.endsWith('.xlsx')).slice(0, 5))
+      setReports(reportList.filter((f) => f.filename?.endsWith('.json')).slice(0, 5))
 
-      // Load problem products from the latest JSON report
-      const jsonReport = reportList.find((f) => f.filename?.endsWith('.json'))
-      if (jsonReport?.filename) {
-        fetchCertReportDetail(jsonReport.filename)
-          .then((data) => {
-            const raw = data as Record<string, unknown>
-            const items: CertProblemProduct[] = Array.isArray(data) ? data : (raw?.products || raw?.results || []) as CertProblemProduct[]
-            const problems = items
-              .filter((p) => p.status === "MISSING" || p.status === "INCONSISTENT")
-              .slice(0, 10)
-            setProblemProducts(problems)
-          })
-          .catch(() => {})
-      }
+      // Combine problem products from DB
+      const missingProds = (missingData?.products || []).map((p: any) => ({
+        sku: p.sku, name: p.name, status: p.last_validation_status || "MISSING", brand: p.brand,
+      }))
+      const notFoundProds = (notFoundData?.products || []).map((p: any) => ({
+        sku: p.sku, name: p.name, status: p.last_validation_status || "URL_NOT_FOUND", brand: p.brand,
+      }))
+      const allProblems = [...missingProds, ...notFoundProds].slice(0, 10)
+      setProblemProducts(allProblems)
 
       setLoading(false)
     })
   }, [])
 
+  // Calculate totals from by_brand (always up-to-date from DB) instead of last_run (may be stale)
+  const byBrand = stats?.by_brand || []
+  const brandTotals = byBrand.reduce(
+    (acc, b) => ({
+      ok: acc.ok + (b.ok || 0),
+      missing: acc.missing + (b.missing || 0),
+      inconsistent: acc.inconsistent + (b.inconsistent || 0),
+      not_found: acc.not_found + (b.not_found || 0),
+    }),
+    { ok: 0, missing: 0, inconsistent: 0, not_found: 0 }
+  )
+  const brandTotal = brandTotals.ok + brandTotals.missing + brandTotals.inconsistent + brandTotals.not_found
+  const hasBrandData = brandTotal > 0
+
   const lastRun = stats?.last_run
-  const okRate = lastRun && lastRun.total > 0
-    ? ((lastRun.ok / lastRun.total) * 100).toFixed(1)
+  const effectiveData = hasBrandData
+    ? { total: brandTotal, ...brandTotals }
+    : lastRun
+      ? { total: lastRun.total, ok: lastRun.ok, missing: lastRun.missing, inconsistent: lastRun.inconsistent, not_found: lastRun.not_found }
+      : null
+
+  const okRate = effectiveData && effectiveData.total > 0
+    ? ((effectiveData.ok / effectiveData.total) * 100).toFixed(1)
     : null
   const okRateNum = okRate ? parseFloat(okRate) : 0
 
-  const pieData = lastRun
+  const pieData = effectiveData
     ? [
-        { name: "OK", value: lastRun.ok || 0 },
-        { name: "Missing", value: lastRun.missing || 0 },
-        { name: "Inconsistente", value: lastRun.inconsistent || 0 },
-        { name: "Nao Encontrado", value: lastRun.not_found || 0 },
+        { name: "Conforme", value: effectiveData.ok || 0 },
+        { name: "Ausente", value: effectiveData.missing || 0 },
+        { name: "Inconsistente", value: effectiveData.inconsistent || 0 },
+        { name: "Não Encontrado", value: effectiveData.not_found || 0 },
       ].filter((d) => d.value > 0)
     : []
 
@@ -157,7 +176,7 @@ export default function CertDashboardPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
           <p className="mt-1 text-sm text-slate-500">
-            Visao geral das certificacoes de produtos
+            Visão geral das certificações de produtos
           </p>
         </div>
 
@@ -208,13 +227,13 @@ export default function CertDashboardPage() {
       <CertStatsCards
         loading={loading}
         data={
-          lastRun
+          effectiveData
             ? {
-                total: lastRun.total || 0,
-                ok: lastRun.ok || 0,
-                missing: lastRun.missing || 0,
-                inconsistent: lastRun.inconsistent || 0,
-                not_found: lastRun.not_found || 0,
+                total: effectiveData.total || 0,
+                ok: effectiveData.ok || 0,
+                missing: effectiveData.missing || 0,
+                inconsistent: effectiveData.inconsistent || 0,
+                not_found: effectiveData.not_found || 0,
               }
             : { total: stats?.total_products || 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0 }
         }
@@ -229,7 +248,7 @@ export default function CertDashboardPage() {
               <BarChart3 className="h-4 w-4" />
             </div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Distribuicao de Status
+              Distribuição de Status
             </h3>
           </div>
           {pieData.length > 0 ? (
@@ -251,8 +270,8 @@ export default function CertDashboardPage() {
                         <Cell
                           key={i}
                           fill={
-                            entry.name === "OK" ? PIE_COLORS.OK :
-                            entry.name === "Missing" ? PIE_COLORS.MISSING :
+                            entry.name === "Conforme" ? PIE_COLORS.OK :
+                            entry.name === "Ausente" ? PIE_COLORS.MISSING :
                             entry.name === "Inconsistente" ? PIE_COLORS.INCONSISTENT :
                             PIE_COLORS.NOT_FOUND
                           }
@@ -286,8 +305,8 @@ export default function CertDashboardPage() {
               </div>
               <div className="flex-1 space-y-3">
                 {pieData.map((d) => {
-                  const color = d.name === "OK" ? PIE_COLORS.OK :
-                    d.name === "Missing" ? PIE_COLORS.MISSING :
+                  const color = d.name === "Conforme" ? PIE_COLORS.OK :
+                    d.name === "Ausente" ? PIE_COLORS.MISSING :
                     d.name === "Inconsistente" ? PIE_COLORS.INCONSISTENT :
                     PIE_COLORS.NOT_FOUND
                   const total = pieData.reduce((acc, v) => acc + v.value, 0)
@@ -315,8 +334,8 @@ export default function CertDashboardPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                 <BarChart3 className="h-5 w-5 text-slate-300" />
               </div>
-              <p className="text-sm font-medium text-slate-400">Nenhum dado disponivel</p>
-              <p className="text-xs text-slate-300 mt-1">Execute uma validacao para ver os resultados</p>
+              <p className="text-sm font-medium text-slate-400">Nenhum dado disponível</p>
+              <p className="text-xs text-slate-300 mt-1">Execute uma validação para ver os resultados</p>
             </div>
           )}
         </div>
@@ -366,7 +385,7 @@ export default function CertDashboardPage() {
                 <p className="text-sm font-medium text-slate-400">
                   {loading ? "Carregando..." : "Nenhum problema encontrado"}
                 </p>
-                <p className="text-xs text-slate-300 mt-1">Todos os produtos estao em conformidade</p>
+                <p className="text-xs text-slate-300 mt-1">Todos os produtos estão em conformidade</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -380,7 +399,9 @@ export default function CertDashboardPage() {
                         "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
                         p.status === "MISSING"
                           ? "bg-red-50 text-red-500"
-                          : "bg-amber-50 text-amber-500"
+                          : p.status === "URL_NOT_FOUND"
+                            ? "bg-slate-100 text-slate-500"
+                            : "bg-amber-50 text-amber-500"
                       )}>
                         {p.status === "MISSING" ? (
                           <XCircle className="w-3.5 h-3.5" />
@@ -395,7 +416,7 @@ export default function CertDashboardPage() {
                       "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg shrink-0",
                       certStatusColor(p.status)
                     )}>
-                      {p.status}
+                      {p.status === 'MISSING' ? 'Ausente' : p.status === 'INCONSISTENT' ? 'Inconsistente' : p.status === 'URL_NOT_FOUND' ? 'Não Encontrado' : p.status === 'API_ERROR' ? 'Erro de API' : p.status}
                     </span>
                   </div>
                 ))}
@@ -409,7 +430,7 @@ export default function CertDashboardPage() {
           {/* Quick Actions */}
           <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
             <h3 className="text-base font-bold text-slate-900 tracking-tight mb-5">
-              Acoes Rapidas
+              Ações Rápidas
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <Link
@@ -420,7 +441,7 @@ export default function CertDashboardPage() {
                   <PlayCircle className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Nova Validacao</p>
+                  <p className="text-sm font-semibold text-slate-900">Nova Validação</p>
                   <p className="text-xs text-slate-500 mt-0.5">Verificar todos</p>
                 </div>
               </Link>
@@ -432,8 +453,8 @@ export default function CertDashboardPage() {
                   <FileBarChart className="w-5 h-5" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Relatorios</p>
-                  <p className="text-xs text-slate-500 mt-0.5">Historico completo</p>
+                  <p className="text-sm font-semibold text-slate-900">Relatórios</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Histórico completo</p>
                 </div>
               </Link>
             </div>
@@ -446,7 +467,7 @@ export default function CertDashboardPage() {
                 <Clock className="h-4 w-4" />
               </div>
               <h3 className="text-base font-bold text-slate-900 tracking-tight">
-                Ultimas Validacoes
+                Últimas Validações
               </h3>
             </div>
             <div className="px-7 py-5">
@@ -455,8 +476,8 @@ export default function CertDashboardPage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                     <Clock className="h-5 w-5 text-slate-300" />
                   </div>
-                  <p className="text-sm font-medium text-slate-400">Nenhuma validacao realizada</p>
-                  <p className="text-xs text-slate-300 mt-1">Resultados aparecerao aqui</p>
+                  <p className="text-sm font-medium text-slate-400">Nenhuma validação realizada</p>
+                  <p className="text-xs text-slate-300 mt-1">Resultados aparecerão aqui</p>
                 </div>
               ) : (
                 <div className="space-y-1">

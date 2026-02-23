@@ -27,12 +27,12 @@ const BRANDS = [
 
 const STATUSES = [
   { value: "", label: "Todos os Status" },
-  { value: "OK", label: "OK" },
-  { value: "MISSING", label: "Missing" },
-  { value: "INCONSISTENT", label: "Inconsistent" },
-  { value: "URL_NOT_FOUND", label: "Not Found" },
-  { value: "API_ERROR", label: "API Error" },
-  { value: "NO_EXPECTED", label: "No Expected" },
+  { value: "OK", label: "Conforme" },
+  { value: "MISSING", label: "Ausente" },
+  { value: "INCONSISTENT", label: "Inconsistente" },
+  { value: "URL_NOT_FOUND", label: "Não Encontrado" },
+  { value: "API_ERROR", label: "Erro de API" },
+  { value: "NO_EXPECTED", label: "Sem Certificação" },
 ]
 
 interface CertProduct {
@@ -212,7 +212,7 @@ export default function CertProdutosPage() {
             <span className="font-semibold text-slate-700">{total}</span> produto{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}
             {lastDate && (
               <span className="ml-3 text-slate-400">
-                Ultima validacao: {formatDateTime(lastDate)}
+                Última validação: {formatDateTime(lastDate)}
               </span>
             )}
           </p>
@@ -282,10 +282,10 @@ export default function CertProdutosPage() {
                   className="text-right px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
                   onClick={() => handleSort("last_validation_score")}
                 >
-                  <span className="flex items-center justify-end">Score <SortIcon field="last_validation_score" /></span>
+                  <span className="flex items-center justify-end">Pontuação <SortIcon field="last_validation_score" /></span>
                 </th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Acoes
+                  Ações
                 </th>
               </tr>
             </thead>
@@ -373,7 +373,7 @@ export default function CertProdutosPage() {
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100/80 bg-slate-50/40">
             <p className="text-sm text-slate-500">
-              Pagina <span className="font-semibold text-slate-700">{page}</span> de <span className="font-semibold text-slate-700">{totalPages}</span>
+              Página <span className="font-semibold text-slate-700">{page}</span> de <span className="font-semibold text-slate-700">{totalPages}</span>
             </p>
             <div className="flex items-center gap-1.5">
               <button

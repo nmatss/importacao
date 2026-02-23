@@ -507,6 +507,10 @@ def _extract_cert_body(text: str) -> set[str]:
     for body in ("inmetro", "anvisa", "anatel", "abnt"):
         if body in lower:
             bodies.add(body)
+    # OCP / BRICS are INMETRO-accredited certification bodies
+    # "Produto certificado por BRICS OCP 0098" → INMETRO
+    if "inmetro" not in bodies and ("ocp " in lower or "brics" in lower):
+        bodies.add("inmetro")
     return bodies
 
 
@@ -521,6 +525,7 @@ def _has_registration_number(text: str) -> bool:
         r'certificado\s+(?:n[°ºo]?\s*)?\.?\s*\d{3,}',  # Certificado Nº 12345
         r'homologa[çc][ãa]o[^:]*:\s*\d{3,}',   # homologação Anatel: 07388-24-15956
         r'\d{4,}-\d{2}-\d{4,}',                # 07388-24-15956 (Anatel code format)
+        r'ce-\w+[\s/]\w+\s+\d{3,}',            # CE-BRI/BRICS 01180-20 (certificate number)
     ]
     lower = text.lower()
     return any(re.search(p, lower) for p in patterns)
@@ -571,6 +576,11 @@ def _compare_cert_texts(expected: str, actual: str) -> tuple[str, float]:
     # If same cert body but no registration number → INCONSISTENT (cert mentioned but incomplete)
     if matching_bodies and not actual_has_reg:
         return ("INCONSISTENT", 0.6)
+
+    # If expected doesn't mention any cert body (just a product type like "ESTOJO")
+    # but actual has a cert body + registration number → product is certified
+    if not exp_bodies and act_bodies and actual_has_reg:
+        return ("OK", 0.9)
 
     # 3. Check for portaria numbers
     portaria_expected = re.findall(r'portaria\s*(?:n[°º.]?\s*)?(\d+)', exp_lower)

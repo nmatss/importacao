@@ -53,7 +53,7 @@ const BRAND_OPTIONS = [
 ];
 
 const FREQUENCY_PRESETS = [
-  { value: 'daily', label: 'Diario (06:00)', cron: '0 6 * * *' },
+  { value: 'daily', label: 'Diário (06:00)', cron: '0 6 * * *' },
   { value: 'weekly_mon', label: 'Semanal (Segunda)', cron: '0 6 * * 1' },
   { value: 'weekly_fri', label: 'Semanal (Sexta)', cron: '0 6 * * 5' },
   { value: 'monthly', label: 'Mensal (Dia 1)', cron: '0 6 1 * *' },
@@ -167,7 +167,7 @@ export default function CertAgendamentosPage() {
     setFormError('');
 
     if (!formName.trim()) {
-      setFormError('Nome e obrigatorio');
+      setFormError('Nome é obrigatório');
       return;
     }
 
@@ -177,7 +177,7 @@ export default function CertAgendamentosPage() {
         : buildCron(formPreset, formHour, formMinute);
 
     if (!cron.trim()) {
-      setFormError('Expressao cron e obrigatoria');
+      setFormError('Expressão cron é obrigatória');
       return;
     }
 
@@ -270,7 +270,7 @@ export default function CertAgendamentosPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Agendamentos</h1>
-            <p className="text-sm text-slate-500">Configure validacoes automaticas recorrentes</p>
+            <p className="text-sm text-slate-500">Configure validações automáticas recorrentes</p>
           </div>
         </div>
         <button
@@ -295,7 +295,7 @@ export default function CertAgendamentosPage() {
           </div>
           <p className="text-base font-semibold text-slate-900 mb-1">Nenhum agendamento configurado</p>
           <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
-            Crie um agendamento para executar validacoes de certificacoes automaticamente
+            Crie um agendamento para executar validações de certificações automaticamente
           </p>
           <button
             onClick={openCreateForm}
@@ -354,13 +354,13 @@ export default function CertAgendamentosPage() {
 
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-xs text-slate-400">
                       {schedule.last_run && (
-                        <span>Ultima execucao: <span className="text-slate-500">{formatDateTime(schedule.last_run)}</span></span>
+                        <span>Última execução: <span className="text-slate-500">{formatDateTime(schedule.last_run)}</span></span>
                       )}
                       {schedule.next_run && (
-                        <span>Proxima execucao: <span className="text-slate-500">{formatDateTime(schedule.next_run)}</span></span>
+                        <span>Próxima execução: <span className="text-slate-500">{formatDateTime(schedule.next_run)}</span></span>
                       )}
                       {!schedule.last_run && !schedule.next_run && (
-                        <span className="italic">Ainda nao executado</span>
+                        <span className="italic">Ainda não executado</span>
                       )}
                     </div>
                   </div>
@@ -423,7 +423,7 @@ export default function CertAgendamentosPage() {
                           ? 'bg-emerald-50 text-emerald-600'
                           : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'
                       }`}
-                      title="Historico"
+                      title="Histórico"
                     >
                       {expandedHistory === schedule.id ? (
                         <ChevronUp className="w-4 h-4" />
@@ -440,7 +440,7 @@ export default function CertAgendamentosPage() {
                 <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4 md:px-6">
                   <div className="flex items-center gap-2 mb-3">
                     <History className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Ultimas execucoes</span>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Últimas execuções</span>
                   </div>
                   {historyLoading === schedule.id ? (
                     <div className="flex items-center justify-center py-6">
@@ -448,7 +448,7 @@ export default function CertAgendamentosPage() {
                     </div>
                   ) : !historyData[schedule.id] || historyData[schedule.id].length === 0 ? (
                     <div className="flex flex-col items-center py-6">
-                      <p className="text-sm text-slate-400">Nenhuma execucao registrada</p>
+                      <p className="text-sm text-slate-400">Nenhuma execução registrada</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -506,7 +506,7 @@ export default function CertAgendamentosPage() {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-red-800">Excluir agendamento?</p>
-                        <p className="text-xs text-red-600/70">Esta acao nao pode ser desfeita</p>
+                        <p className="text-xs text-red-600/70">Esta ação não pode ser desfeita</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -566,7 +566,7 @@ export default function CertAgendamentosPage() {
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Validacao diaria Imaginarium"
+                  placeholder="Ex: Validação diária Imaginarium"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
                 />
               </div>
@@ -587,7 +587,7 @@ export default function CertAgendamentosPage() {
 
               {/* Frequency */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Frequencia</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Frequência</label>
                 <select
                   value={formPreset}
                   onChange={(e) => setFormPreset(e.target.value)}
@@ -631,7 +631,7 @@ export default function CertAgendamentosPage() {
               {formPreset === 'custom' && (
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-                    Expressao Cron
+                    Expressão Cron
                   </label>
                   <input
                     type="text"
@@ -641,7 +641,7 @@ export default function CertAgendamentosPage() {
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all font-mono"
                   />
                   <p className="text-xs text-slate-400 mt-1.5">
-                    Formato: minuto hora dia mes dia_semana -- Ex: 0 8 * * 1-5 = dias uteis as 08:00
+                    Formato: minuto hora dia mês dia_semana -- Ex: 0 8 * * 1-5 = dias úteis às 08:00
                   </p>
                 </div>
               )}
@@ -651,7 +651,7 @@ export default function CertAgendamentosPage() {
                 <div>
                   <span className="text-sm font-semibold text-slate-700">Status</span>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {formEnabled ? 'O agendamento sera executado automaticamente' : 'O agendamento esta pausado'}
+                    {formEnabled ? 'O agendamento será executado automaticamente' : 'O agendamento está pausado'}
                   </p>
                 </div>
                 <button
@@ -693,7 +693,7 @@ export default function CertAgendamentosPage() {
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-sm disabled:opacity-50 active:scale-[0.98] transition-all"
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingId ? 'Salvar Alteracoes' : 'Criar Agendamento'}
+                  {editingId ? 'Salvar Alterações' : 'Criar Agendamento'}
                 </button>
               </div>
             </form>

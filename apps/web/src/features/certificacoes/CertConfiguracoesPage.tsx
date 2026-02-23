@@ -56,7 +56,7 @@ export default function CertConfiguracoesPage() {
               </div>
               <div>
                 <h3 className="text-base font-semibold text-slate-900">Status do Sistema</h3>
-                <p className="text-xs text-slate-500">Monitoramento dos servicos</p>
+                <p className="text-xs text-slate-500">Monitoramento dos serviços</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -75,7 +75,7 @@ export default function CertConfiguracoesPage() {
                 ) : (
                   <Radio className="w-3.5 h-3.5" />
                 )}
-                Testar Conexao
+                Testar Conexão
               </button>
               {testResult && (
                 <span
@@ -187,8 +187,8 @@ export default function CertConfiguracoesPage() {
               <Zap className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Verificacao em Tempo Real</h3>
-              <p className="text-xs text-slate-500">Como funciona a validacao</p>
+              <h3 className="text-base font-semibold text-slate-900">Verificação em Tempo Real</h3>
+              <p className="text-xs text-slate-500">Como funciona a validação</p>
             </div>
           </div>
 
@@ -197,7 +197,7 @@ export default function CertConfiguracoesPage() {
               <p className="text-sm text-slate-700 leading-relaxed">
                 O sistema consulta os e-commerces Puket e Imaginarium em{' '}
                 <span className="font-semibold text-emerald-700">tempo real</span> usando
-                a API publica VTEX. Nenhum dado de produto e armazenado localmente.
+                a API publica VTEX. Nenhum dado de produto é armazenado localmente.
               </p>
             </div>
 
@@ -209,7 +209,7 @@ export default function CertConfiguracoesPage() {
                   </div>
                   <p className="font-semibold text-slate-800 text-sm">Leitura da Planilha</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">Produtos e certificacoes esperadas sao carregados do Google Sheets</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">Produtos e certificações esperadas são carregados do Google Sheets</p>
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
@@ -220,7 +220,7 @@ export default function CertConfiguracoesPage() {
                   </div>
                   <p className="font-semibold text-slate-800 text-sm">Consulta VTEX</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">Cada SKU e buscado na API VTEX para obter a descricao do produto</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">Cada SKU é buscado na API VTEX para obter a descrição do produto</p>
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
@@ -229,9 +229,9 @@ export default function CertConfiguracoesPage() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     3
                   </div>
-                  <p className="font-semibold text-slate-800 text-sm">Comparacao</p>
+                  <p className="font-semibold text-slate-800 text-sm">Comparação</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">O texto de certificacao encontrado e comparado com o valor esperado</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">O texto de certificação encontrado é comparado com o valor esperado</p>
               </div>
             </div>
 
@@ -251,8 +251,8 @@ export default function CertConfiguracoesPage() {
               <Info className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900">Informacoes</h3>
-              <p className="text-xs text-slate-500">Dados de configuracao</p>
+              <h3 className="text-base font-semibold text-slate-900">Informações</h3>
+              <p className="text-xs text-slate-500">Dados de configuração</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-5">
@@ -262,7 +262,7 @@ export default function CertConfiguracoesPage() {
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 p-4">
               <p className="text-xs text-slate-500 mb-1">Planilha</p>
-              <p className="text-lg font-bold text-slate-900">STATUS CERTIFICACAO</p>
+              <p className="text-lg font-bold text-slate-900">STATUS CERTIFICAÇÃO</p>
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 p-4">
               <p className="text-xs text-slate-500 mb-1">Marcas</p>

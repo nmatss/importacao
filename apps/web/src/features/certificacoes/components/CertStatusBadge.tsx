@@ -1,5 +1,14 @@
 import { cn, certStatusColor } from "@/shared/lib/utils"
 
+const STATUS_LABELS: Record<string, string> = {
+  OK: 'Conforme',
+  MISSING: 'Ausente',
+  INCONSISTENT: 'Inconsistente',
+  URL_NOT_FOUND: 'Não Encontrado',
+  API_ERROR: 'Erro de API',
+  NO_EXPECTED: 'Sem Certificação',
+}
+
 export function CertStatusBadge({ status }: { status: string }) {
   const dotColor = (() => {
     switch (status) {
@@ -19,7 +28,7 @@ export function CertStatusBadge({ status }: { status: string }) {
       certStatusColor(status)
     )}>
       <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", dotColor)} />
-      {status}
+      {STATUS_LABELS[status] || status}
     </span>
   )
 }

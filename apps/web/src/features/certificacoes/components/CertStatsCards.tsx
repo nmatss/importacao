@@ -18,14 +18,14 @@ const CARDS = [
   },
   {
     key: "ok",
-    label: "OK",
+    label: "Conforme",
     icon: CheckCircle2,
     iconBg: "from-emerald-500 to-emerald-700",
     shadowColor: "shadow-emerald-500/25",
   },
   {
     key: "missing",
-    label: "Missing",
+    label: "Ausente",
     icon: XCircle,
     iconBg: "from-red-500 to-red-700",
     shadowColor: "shadow-red-500/25",
@@ -39,7 +39,7 @@ const CARDS = [
   },
   {
     key: "not_found",
-    label: "Nao Encontrado",
+    label: "Não Encontrado",
     icon: Search,
     iconBg: "from-slate-400 to-slate-600",
     shadowColor: "shadow-slate-400/25",

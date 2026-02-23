@@ -29,8 +29,8 @@ export default function CertRelatoriosPage() {
           <FileSpreadsheet className="w-6 h-6" />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-slate-900">Historico de Validacoes</h1>
-          <p className="text-sm text-slate-500">Relatorios gerados pelas validacoes de certificacoes</p>
+          <h1 className="text-xl font-bold text-slate-900">Histórico de Validações</h1>
+          <p className="text-sm text-slate-500">Relatórios gerados pelas validações de certificações</p>
         </div>
       </div>
 
@@ -40,7 +40,7 @@ export default function CertRelatoriosPage() {
           <div className="flex items-center justify-center py-20">
             <div className="flex flex-col items-center gap-3">
               <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
-              <p className="text-sm text-slate-400">Carregando relatorios...</p>
+              <p className="text-sm text-slate-400">Carregando relatórios...</p>
             </div>
           </div>
         ) : reports.length === 0 ? (
@@ -48,9 +48,9 @@ export default function CertRelatoriosPage() {
             <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
               <FileText className="w-8 h-8 text-slate-300" />
             </div>
-            <p className="text-base font-semibold text-slate-900 mb-1">Nenhum relatorio encontrado</p>
+            <p className="text-base font-semibold text-slate-900 mb-1">Nenhum relatório encontrado</p>
             <p className="text-sm text-slate-400 text-center max-w-sm">
-              Execute uma validacao de certificacoes para gerar relatorios automaticamente
+              Execute uma validação de certificações para gerar relatórios automaticamente
             </p>
           </div>
         ) : (
@@ -59,7 +59,7 @@ export default function CertRelatoriosPage() {
             <div className="px-6 py-3.5 bg-slate-50/80 border-b border-slate-100">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  {reports.length} {reports.length === 1 ? 'relatorio' : 'relatorios'}
+                  {reports.length} {reports.length === 1 ? 'relatório' : 'relatórios'}
                 </span>
               </div>
             </div>

@@ -14,7 +14,7 @@ export function CertBrandChart({ data }: { data?: BrandData[] }) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-slate-400 gap-3">
         <BarChart3 className="w-10 h-10 text-slate-300" />
-        <span className="text-sm font-medium">Nenhum dado disponivel</span>
+        <span className="text-sm font-medium">Nenhum dado disponível</span>
       </div>
     )
   }
@@ -51,10 +51,10 @@ export function CertBrandChart({ data }: { data?: BrandData[] }) {
             iconType="circle"
             iconSize={8}
           />
-          <Bar dataKey="ok" name="OK" fill="#10b981" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="missing" name="Missing" fill="#ef4444" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="ok" name="Conforme" fill="#10b981" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="missing" name="Ausente" fill="#ef4444" radius={[4, 4, 0, 0]} />
           <Bar dataKey="inconsistent" name="Inconsistente" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="not_found" name="Nao Encontrado" fill="#94a3b8" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="not_found" name="Não Encontrado" fill="#94a3b8" radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </div>

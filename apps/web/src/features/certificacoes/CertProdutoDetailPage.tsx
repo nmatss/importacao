@@ -46,7 +46,7 @@ export default function CertProdutoDetailPage() {
       const result = await verifyCertProduct(sku, brandKey)
       setLiveResult(result)
     } catch (e: any) {
-      setLiveResult({ error: e.message || "Erro na verificacao" })
+      setLiveResult({ error: e.message || "Erro na verificação" })
     } finally {
       setVerifying(false)
     }
@@ -187,7 +187,7 @@ export default function CertProdutoDetailPage() {
                   </div>
                   <div>
                     <h3 className="text-sm font-bold text-slate-900">
-                      {liveResult ? "Resultado ao Vivo" : "Ultima Validacao"}
+                      {liveResult ? "Resultado em Tempo Real" : "Última Validação"}
                     </h3>
                     {(validation.date || validation.verified_at) && (
                       <div className="flex items-center gap-2 mt-0.5">
@@ -198,7 +198,7 @@ export default function CertProdutoDetailPage() {
                         {liveResult && (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
                             <CheckCircle2 className="w-2.5 h-2.5" />
-                            Live
+                            Ao Vivo
                           </span>
                         )}
                       </div>
@@ -255,7 +255,7 @@ export default function CertProdutoDetailPage() {
                     </p>
                   ) : (
                     <p className="text-sm text-slate-400 italic">
-                      Sem texto de certificacao esperado
+                      Sem texto de certificação esperado
                     </p>
                   )}
                 </div>
@@ -292,8 +292,8 @@ export default function CertProdutoDetailPage() {
                   ) : (
                     <p className="text-sm text-slate-400 italic">
                       {validation
-                        ? "Nenhum texto de certificacao encontrado no site"
-                        : "Execute uma verificacao para ver o texto"}
+                        ? "Nenhum texto de certificação encontrado no site"
+                        : "Execute uma verificação para ver o texto"}
                     </p>
                   )}
                 </div>
@@ -310,7 +310,7 @@ export default function CertProdutoDetailPage() {
                     <Sparkles className="w-3.5 h-3.5" />
                   </div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
-                    Avaliacao IA
+                    Avaliação IA
                   </h4>
                 </div>
               </div>

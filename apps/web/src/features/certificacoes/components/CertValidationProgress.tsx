@@ -64,8 +64,8 @@ export function CertValidationProgress({
 
   const statusLabel = {
     running: `Validando... ${progress.current}/${progress.total}`,
-    complete: "Validacao completa!",
-    error: "Erro na validacao",
+    complete: "Validação completa!",
+    error: "Erro na validação",
   }
 
   const progressBarColor = {

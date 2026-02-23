@@ -45,7 +45,7 @@ export default function CertRelatorioDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-7 h-7 animate-spin text-emerald-500" />
-        <p className="text-sm text-slate-400">Carregando relatorio...</p>
+        <p className="text-sm text-slate-400">Carregando relatório...</p>
       </div>
     );
   }
@@ -56,14 +56,14 @@ export default function CertRelatorioDetailPage() {
         <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
           <FileSpreadsheet className="w-8 h-8 text-slate-300" />
         </div>
-        <p className="text-base font-semibold text-slate-900 mb-1">Relatorio nao encontrado</p>
-        <p className="text-sm text-slate-400 mb-4">O arquivo solicitado nao existe ou foi removido</p>
+        <p className="text-base font-semibold text-slate-900 mb-1">Relatório não encontrado</p>
+        <p className="text-sm text-slate-400 mb-4">O arquivo solicitado não existe ou foi removido</p>
         <Link
           to="/certificacoes/relatorios"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Voltar aos relatorios
+          Voltar aos relatórios
         </Link>
       </div>
     );
@@ -99,7 +99,7 @@ export default function CertRelatorioDetailPage() {
           </Link>
           <div className="min-w-0">
             <h1 className="text-xl font-bold text-slate-900 truncate">{filename}</h1>
-            <p className="text-sm text-slate-400 mt-0.5">Detalhes do relatorio de validacao</p>
+            <p className="text-sm text-slate-400 mt-0.5">Detalhes do relatório de validação</p>
           </div>
         </div>
         <a
@@ -107,7 +107,7 @@ export default function CertRelatorioDetailPage() {
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all flex-shrink-0"
         >
           <Download className="w-4 h-4" />
-          Download Excel
+          Baixar Relatório
         </a>
       </div>
 

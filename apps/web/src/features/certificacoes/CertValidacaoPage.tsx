@@ -70,7 +70,7 @@ export default function CertValidacaoPage() {
       })
       setRunId(res.run_id)
     } catch (e: any) {
-      setError(e.message || "Erro ao iniciar validacao")
+      setError(e.message || "Erro ao iniciar validação")
       setRunning(false)
     }
   }
@@ -92,16 +92,16 @@ export default function CertValidacaoPage() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2.5 mb-1.5">
                 <h3 className="text-sm font-semibold text-emerald-900">
-                  Verificacao em Tempo Real
+                  Verificação em Tempo Real
                 </h3>
                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-[10px] px-2 py-0.5 rounded-lg font-semibold shadow-sm">
                   <Radio className="w-2.5 h-2.5 animate-pulse" />
-                  Live
+                  Ao Vivo
                 </span>
               </div>
               <p className="text-sm text-emerald-700/80 leading-relaxed">
-                A verificacao consulta os sites em TEMPO REAL via API VTEX. Cada produto e verificado
-                individualmente, comparando o texto de certificacao no site com o valor esperado na planilha.
+                A verificação consulta os sites em TEMPO REAL via API VTEX. Cada produto é verificado
+                individualmente, comparando o texto de certificação no site com o valor esperado na planilha.
               </p>
             </div>
           </div>
@@ -155,7 +155,7 @@ export default function CertValidacaoPage() {
                 ) : (
                   <>
                     <PlayCircle className="w-4 h-4" />
-                    Iniciar Validacao
+                    Iniciar Validação
                   </>
                 )}
               </button>
@@ -196,9 +196,9 @@ export default function CertValidacaoPage() {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900">
-                  Resultado da Validacao
+                  Resultado da Validação
                 </h2>
-                <p className="text-sm text-slate-500">Verificacao concluida com sucesso</p>
+                <p className="text-sm text-slate-500">Verificação concluída com sucesso</p>
               </div>
               <div className="ml-auto">
                 <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-semibold">
@@ -227,7 +227,7 @@ export default function CertValidacaoPage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-emerald-800">
-                    Relatorio gerado com sucesso
+                    Relatório gerado com sucesso
                   </p>
                   <p className="text-xs font-mono text-emerald-600/80 mt-0.5 truncate">
                     {summary.report_file}
