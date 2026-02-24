@@ -20,7 +20,7 @@ export function CertBrandChart({ data }: { data?: BrandData[] }) {
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-6">
+    <div>
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" strokeOpacity={0.7} vertical={false} />

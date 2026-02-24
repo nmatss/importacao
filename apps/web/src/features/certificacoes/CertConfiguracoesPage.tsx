@@ -91,7 +91,7 @@ export default function CertConfiguracoesPage() {
                     testResult.connected ? 'bg-emerald-500' : 'bg-red-500'
                   )} />
                   {testResult.connected
-                    ? `OK - ${testResult.latencyMs}ms`
+                    ? `Sucesso - ${testResult.latencyMs}ms`
                     : `Falha - ${testResult.latencyMs}ms`}
                 </span>
               )}
@@ -108,7 +108,7 @@ export default function CertConfiguracoesPage() {
               <div className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50/80 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                    <Cpu className="w-4.5 h-4.5" />
+                    <Cpu className="w-[18px] h-[18px]" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800">API Backend</p>
@@ -134,7 +134,7 @@ export default function CertConfiguracoesPage() {
               <div className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50/80 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                    <Database className="w-4.5 h-4.5" />
+                    <Database className="w-[18px] h-[18px]" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800">Google Sheets</p>
@@ -165,7 +165,7 @@ export default function CertConfiguracoesPage() {
               <div className="flex items-center justify-between p-4 rounded-xl hover:bg-slate-50/80 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
-                    <Globe className="w-4.5 h-4.5" />
+                    <Globe className="w-[18px] h-[18px]" />
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800">Sites Monitorados</p>
@@ -197,7 +197,7 @@ export default function CertConfiguracoesPage() {
               <p className="text-sm text-slate-700 leading-relaxed">
                 O sistema consulta os e-commerces Puket e Imaginarium em{' '}
                 <span className="font-semibold text-emerald-700">tempo real</span> usando
-                a API publica VTEX. Nenhum dado de produto é armazenado localmente.
+                a API pública VTEX. Nenhum dado de produto é armazenado localmente.
               </p>
             </div>
 
@@ -237,7 +237,7 @@ export default function CertConfiguracoesPage() {
 
             <div className="flex items-center gap-2.5 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
               <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>Delay entre requests: 1.5s por produto para evitar rate limiting da API VTEX</span>
+              <span>Intervalo entre requisições: 1.5s por produto para evitar bloqueio da API VTEX</span>
             </div>
           </div>
         </div>
@@ -269,7 +269,7 @@ export default function CertConfiguracoesPage() {
               <p className="text-lg font-bold text-slate-900">Imaginarium, Puket, Puket Escolares</p>
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 p-4">
-              <p className="text-xs text-slate-500 mb-1">Delay entre Requests</p>
+              <p className="text-xs text-slate-500 mb-1">Intervalo entre Requisições</p>
               <p className="text-lg font-bold text-slate-900">1.5s</p>
             </div>
           </div>

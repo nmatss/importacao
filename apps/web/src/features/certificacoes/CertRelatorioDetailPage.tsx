@@ -82,6 +82,14 @@ export default function CertRelatorioDetailPage() {
     return true;
   });
 
+  const STATUS_LABELS: Record<string, string> = {
+    OK: 'Conforme',
+    MISSING: 'Ausente',
+    INCONSISTENT: 'Inconsistente',
+    URL_NOT_FOUND: 'Não Encontrado',
+    API_ERROR: 'Erro de API',
+    NO_EXPECTED: 'Sem Certificação',
+  };
   const statuses = [...new Set(results.map((r) => r.status))];
   const brands = [...new Set(results.map((r) => r.brand))];
   const hasActiveFilters = search || statusFilter || brandFilter;
@@ -154,7 +162,7 @@ export default function CertRelatorioDetailPage() {
           >
             <option value="">Todos os status</option>
             {statuses.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
             ))}
           </select>
           <select
@@ -180,7 +188,7 @@ export default function CertRelatorioDetailPage() {
                 <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Nome</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Marca</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Score</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Pontuação</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">URL</th>
               </tr>
             </thead>

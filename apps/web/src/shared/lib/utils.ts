@@ -70,17 +70,17 @@ export function relativeTime(date: string | Date): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffMin < 1) return 'agora mesmo';
-  if (diffMin < 60) return `ha ${diffMin} min`;
-  if (diffHours < 24) return `ha ${diffHours}h`;
-  if (diffDays < 7) return `ha ${diffDays}d`;
+  if (diffMin < 60) return `há ${diffMin} min`;
+  if (diffHours < 24) return `há ${diffHours}h`;
+  if (diffDays < 7) return `há ${diffDays}d`;
   return formatDateTime(date);
 }
 
 export function cronToHuman(cron: string): string {
   const presets: Record<string, string> = {
-    daily: 'Diariamente as 06:00',
-    weekly: 'Toda segunda-feira as 06:00',
-    monthly: 'Todo dia 1 as 06:00',
+    daily: 'Diariamente às 06:00',
+    weekly: 'Toda segunda-feira às 06:00',
+    monthly: 'Todo dia 1 às 06:00',
   };
   if (presets[cron.toLowerCase()]) return presets[cron.toLowerCase()];
 
@@ -90,21 +90,21 @@ export function cronToHuman(cron: string): string {
   const [minute, hour, day, , dow] = parts;
 
   const dayOfWeekNames: Record<string, string> = {
-    '0': 'domingo', '1': 'segunda-feira', '2': 'terca-feira',
+    '0': 'domingo', '1': 'segunda-feira', '2': 'terça-feira',
     '3': 'quarta-feira', '4': 'quinta-feira', '5': 'sexta-feira',
-    '6': 'sabado', '7': 'domingo',
+    '6': 'sábado', '7': 'domingo',
   };
 
   const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
 
-  if (day !== '*' && dow === '*') return `Todo dia ${day} as ${time}`;
+  if (day !== '*' && dow === '*') return `Todo dia ${day} às ${time}`;
   if (dow !== '*' && day === '*') {
     if (dow.includes('-')) {
       const [start, end] = dow.split('-');
-      return `${dayOfWeekNames[start] || start} a ${dayOfWeekNames[end] || end} as ${time}`;
+      return `${dayOfWeekNames[start] || start} a ${dayOfWeekNames[end] || end} às ${time}`;
     }
-    return `Toda ${dayOfWeekNames[dow] || dow} as ${time}`;
+    return `Toda ${dayOfWeekNames[dow] || dow} às ${time}`;
   }
-  if (day === '*' && dow === '*') return `Diariamente as ${time}`;
+  if (day === '*' && dow === '*') return `Diariamente às ${time}`;
   return cron;
 }

@@ -765,8 +765,11 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None):
             }
             cur.execute(
                 """UPDATE cert_schedule_history SET status = 'completed', summary = %s
-                   WHERE schedule_id = %s AND status = 'running'
-                   ORDER BY run_date DESC LIMIT 1""",
+                   WHERE id = (
+                     SELECT id FROM cert_schedule_history
+                     WHERE schedule_id = %s AND status = 'running'
+                     ORDER BY run_date DESC LIMIT 1
+                   )""",
                 [json.dumps(summary), schedule_id],
             )
         log.info(f"Schedule {schedule_id} completed: {summary}")
@@ -776,7 +779,11 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None):
             with db() as (conn, cur):
                 cur.execute(
                     """UPDATE cert_schedule_history SET status = 'failed'
-                       WHERE schedule_id = %s AND status = 'running'""",
+                       WHERE id = (
+                         SELECT id FROM cert_schedule_history
+                         WHERE schedule_id = %s AND status = 'running'
+                         ORDER BY run_date DESC LIMIT 1
+                       )""",
                     [schedule_id],
                 )
         except Exception:

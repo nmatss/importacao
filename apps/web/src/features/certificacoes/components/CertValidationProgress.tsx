@@ -56,10 +56,19 @@ export function CertValidationProgress({
 
   const pct = progress.total > 0 ? (progress.current / progress.total) * 100 : 0
 
+  const STATUS_LABELS: Record<string, string> = {
+    OK: 'Conforme',
+    MISSING: 'Ausente',
+    INCONSISTENT: 'Inconsistente',
+    URL_NOT_FOUND: 'Não Encontrado',
+    API_ERROR: 'Erro de API',
+    NO_EXPECTED: 'Sem Certificação',
+  }
+
   const statusIcon = {
-    running: <Loader2 className="w-4.5 h-4.5 text-emerald-600 animate-spin" />,
-    complete: <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />,
-    error: <AlertCircle className="w-4.5 h-4.5 text-red-600" />,
+    running: <Loader2 className="w-[18px] h-[18px] text-emerald-600 animate-spin" />,
+    complete: <CheckCircle2 className="w-[18px] h-[18px] text-emerald-600" />,
+    error: <AlertCircle className="w-[18px] h-[18px] text-red-600" />,
   }
 
   const statusLabel = {
@@ -129,7 +138,7 @@ export function CertValidationProgress({
               <span className="text-slate-400 w-8 text-right tabular-nums font-medium">{e.current}</span>
               <span className={cn("w-1.5 h-1.5 rounded-full shrink-0", statusDotColor)} />
               <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-semibold min-w-[80px] text-center", certStatusColor(e.product?.status || ""))}>
-                {e.product?.status}
+                {STATUS_LABELS[e.product?.status || ""] || e.product?.status}
               </span>
               <span className="text-slate-700 font-medium shrink-0">{e.product?.sku}</span>
               <span className="text-slate-400 truncate">{e.product?.name}</span>

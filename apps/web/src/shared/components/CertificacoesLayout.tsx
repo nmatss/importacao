@@ -19,11 +19,11 @@ import { checkCertApiHealth } from '@/shared/lib/cert-api-client';
 
 const navItems = [
   { to: '/certificacoes', label: 'Dashboard', icon: LayoutDashboard, exact: true },
-  { to: '/certificacoes/validacao', label: 'Validacao', icon: PlayCircle },
+  { to: '/certificacoes/validacao', label: 'Validação', icon: PlayCircle },
   { to: '/certificacoes/produtos', label: 'Produtos', icon: Package },
-  { to: '/certificacoes/relatorios', label: 'Relatorios', icon: FileBarChart },
+  { to: '/certificacoes/relatorios', label: 'Relatórios', icon: FileBarChart },
   { to: '/certificacoes/agendamentos', label: 'Agendamentos', icon: CalendarClock },
-  { to: '/certificacoes/configuracoes', label: 'Configuracoes', icon: Settings },
+  { to: '/certificacoes/configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 function getInitials(name: string): string {
@@ -56,7 +56,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
         ? location.pathname === item.to
         : location.pathname.startsWith(item.to),
   );
-  const pageTitle = currentNav?.label || 'Certificacoes';
+  const pageTitle = currentNav?.label || 'Certificações';
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
@@ -97,7 +97,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
           {!collapsed && (
             <div className="overflow-hidden">
               <p className="truncate text-sm font-bold text-slate-900 tracking-tight">Uni.co</p>
-              <p className="truncate text-[11px] text-slate-400 font-medium">Certificacoes E-commerce</p>
+              <p className="truncate text-[11px] text-slate-400 font-medium">Certificações E-commerce</p>
             </div>
           )}
           <button

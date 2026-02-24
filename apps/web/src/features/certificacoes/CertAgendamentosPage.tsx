@@ -474,7 +474,7 @@ export default function CertAgendamentosPage() {
                               <span className="text-slate-500 font-medium">{entry.summary.total || 0} produtos</span>
                               {entry.summary.ok > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
-                                  {entry.summary.ok} OK
+                                  {entry.summary.ok} Conforme
                                 </span>
                               )}
                               {entry.summary.missing > 0 && (

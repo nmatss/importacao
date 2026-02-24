@@ -9,7 +9,7 @@ async function certFetch<T = any>(path: string, options?: RequestInit): Promise<
     },
   });
   if (!res.ok) {
-    throw new Error(`API error: ${res.status} ${res.statusText}`);
+    throw new Error(`Erro na API: ${res.status} ${res.statusText}`);
   }
   return res.json();
 }
@@ -152,9 +152,9 @@ export async function fetchCertReports() {
 }
 
 export async function fetchCertReportDetail(filename: string) {
-  return certFetch(`/api/reports/${filename}/data`);
+  return certFetch(`/api/reports/${encodeURIComponent(filename)}/data`);
 }
 
 export function getCertReportDownloadUrl(filename: string) {
-  return `${CERT_BASE}/api/reports/${filename}`;
+  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}`;
 }
