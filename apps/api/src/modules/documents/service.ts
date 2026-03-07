@@ -10,6 +10,31 @@ import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 
+function standardizeDocumentName(type: string, processCode: string, aiData: Record<string, any> | null): string | null {
+  if (type === 'invoice' && aiData) {
+    const dateStr = aiData.invoiceDate || aiData.invoice_date;
+    if (dateStr) {
+      const formatted = String(dateStr).replace(/-/g, '.');
+      return `${formatted} KIOM INV ${processCode}.pdf`;
+    }
+  }
+  if (type === 'packing_list' && aiData) {
+    const dateStr = aiData.invoiceDate || aiData.invoice_date;
+    if (dateStr) {
+      const formatted = String(dateStr).replace(/-/g, '.');
+      return `${formatted} KIOM PL ${processCode}.pdf`;
+    }
+  }
+  if (type === 'ohbl' && aiData) {
+    const dateStr = aiData.shipmentDate || aiData.etd;
+    if (dateStr) {
+      const formatted = String(dateStr).replace(/-/g, '.');
+      return `${formatted} KIOM BL ${processCode}.pdf`;
+    }
+  }
+  return null;
+}
+
 export const documentService = {
   async upload(processId: number, type: string, file: Express.Multer.File, userId: number | null = null) {
     let doc;
@@ -56,6 +81,13 @@ export const documentService = {
         message: `Todos os 3 documentos recebidos para processo ${proc?.processCode ?? processId}.`,
         processCode: proc?.processCode,
       }).catch(err => logger.error({ err }, 'Failed to create documents-received alert'));
+
+      // Sync milestone to Follow-Up sheet
+      if (proc?.processCode) {
+        import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
+          googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
+        }).catch(() => {});
+      }
     }
 
     auditService.log(userId, 'upload', 'document', doc.id, { processId, type, filename: file.originalname }, null);
@@ -65,10 +97,12 @@ export const documentService = {
       logger.error({ err, documentId: doc.id }, 'AI processing failed')
     );
 
-    // Upload to Google Drive in background (non-blocking)
-    this.uploadToDrive(doc.id, processId, type, file.path, file.originalname).catch(err =>
-      logger.error({ err, documentId: doc.id }, 'Google Drive upload failed')
-    );
+    // For invoices, defer Drive upload to after AI processing to get standardized name
+    if (type !== 'invoice') {
+      this.uploadToDrive(doc.id, processId, type, file.path, file.originalname).catch(err =>
+        logger.error({ err, documentId: doc.id }, 'Google Drive upload failed')
+      );
+    }
 
     return doc;
   },
@@ -120,6 +154,28 @@ export const documentService = {
       .where(eq(importProcesses.id, doc.processId));
 
     logger.info({ documentId, type, confidence: result.confidenceScore }, 'AI extraction completed');
+
+    // Auto-populate currency exchanges from invoice payment terms
+    if (type === 'invoice' && result.data) {
+      import('../currency-exchange/service.js').then(({ currencyExchangeService }) => {
+        currencyExchangeService.autoPopulate(doc.processId, result.data).catch(err =>
+          logger.error({ err, processId: doc.processId }, 'Currency exchange auto-populate failed')
+        );
+      }).catch(() => {});
+    }
+
+    // Upload to Drive with standardized name after AI extraction
+    if (type === 'invoice') {
+      const [proc] = await db.select({ processCode: importProcesses.processCode })
+        .from(importProcesses).where(eq(importProcesses.id, doc.processId)).limit(1);
+      if (proc) {
+        const standardName = standardizeDocumentName(type, proc.processCode, result.data);
+        const fileName = standardName || doc.originalFilename;
+        this.uploadToDrive(doc.id, doc.processId, type, doc.storagePath, fileName).catch(err =>
+          logger.error({ err, documentId: doc.id }, 'Google Drive upload failed')
+        );
+      }
+    }
 
     // Auto-trigger validation when all 3 doc types have AI data
     if (mergedAiData.invoice && mergedAiData.packing_list && mergedAiData.ohbl) {

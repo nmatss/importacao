@@ -30,7 +30,8 @@ Respond with strict JSON in this exact format:
   "totalGrossWeight": { "value": 0.0, "confidence": 0.0 },
   "totalCbm": { "value": 0.0, "confidence": 0.0 },
   "freightValue": { "value": 0.0, "confidence": 0.0 },
-  "freightCurrency": { "value": "", "confidence": 0.0 }
+  "freightCurrency": { "value": "", "confidence": 0.0 },
+  "cargoDescription": { "value": "", "confidence": 0.0 }
 }
 
 Rules:
@@ -43,6 +44,7 @@ Rules:
 - CBM values should be in cubic meters.
 - Container numbers follow the ISO 6346 format (e.g., ABCU1234567).
 - Do not invent or assume data that is not present in the document.
+- cargoDescription is the full text of the goods/cargo description section of the BL.
 - Respond ONLY with the JSON object, no additional text.`,
     },
     {

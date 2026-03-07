@@ -1,6 +1,7 @@
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { currencyExchanges } from '../../shared/database/schema.js';
+import { currencyExchanges, importProcesses } from '../../shared/database/schema.js';
+import { logger } from '../../shared/utils/logger.js';
 import type { CreateCurrencyExchangeInput, UpdateCurrencyExchangeInput } from './schema.js';
 
 function calculateBrl(amountUsd: string, exchangeRate?: string): string | undefined {
@@ -62,6 +63,73 @@ export const currencyExchangeService = {
 
     if (!exchange) throw new Error('Câmbio não encontrado');
     return exchange;
+  },
+
+  async autoPopulate(processId: number, invoiceData: Record<string, any>) {
+    // Skip if currency exchanges already exist for this process
+    const existing = await db.select()
+      .from(currencyExchanges)
+      .where(eq(currencyExchanges.processId, processId));
+
+    if (existing.length > 0) {
+      logger.debug({ processId }, 'Currency exchanges already exist, skipping auto-populate');
+      return existing;
+    }
+
+    const totalFob = Number(invoiceData.totalFobValue ?? 0);
+    if (!totalFob) {
+      logger.warn({ processId }, 'No totalFobValue found, cannot auto-populate currency exchanges');
+      return [];
+    }
+
+    const paymentTerms = invoiceData.paymentTerms;
+    const depositPercent = Number(paymentTerms?.depositPercent ?? 0);
+    const balancePercent = Number(paymentTerms?.balancePercent ?? 0);
+
+    const created: any[] = [];
+
+    if (depositPercent > 0) {
+      const depositAmount = (totalFob * depositPercent / 100).toFixed(2);
+      const deposit = await this.create({
+        processId,
+        type: 'deposit',
+        amountUsd: depositAmount,
+        notes: `Auto: ${depositPercent}% deposit${paymentTerms?.description ? ` - ${paymentTerms.description}` : ''}`,
+      });
+      created.push(deposit);
+    }
+
+    if (balancePercent > 0) {
+      const balanceAmount = (totalFob * balancePercent / 100).toFixed(2);
+      const balance = await this.create({
+        processId,
+        type: 'balance',
+        amountUsd: balanceAmount,
+        notes: `Auto: ${balancePercent}% balance${paymentTerms?.description ? ` - ${paymentTerms.description}` : ''}`,
+      });
+      created.push(balance);
+    }
+
+    // If no payment terms found, create a single balance for full amount
+    if (depositPercent === 0 && balancePercent === 0) {
+      const balance = await this.create({
+        processId,
+        type: 'balance',
+        amountUsd: totalFob.toFixed(2),
+        notes: 'Auto: termos de pagamento não identificados - valor total como balance',
+      });
+      created.push(balance);
+    }
+
+    // Save payment terms to process
+    if (paymentTerms) {
+      await db.update(importProcesses)
+        .set({ paymentTerms, updatedAt: new Date() })
+        .where(eq(importProcesses.id, processId));
+    }
+
+    logger.info({ processId, count: created.length, depositPercent, balancePercent }, 'Currency exchanges auto-populated');
+    return created;
   },
 
   async getByProcess(processId: number) {
