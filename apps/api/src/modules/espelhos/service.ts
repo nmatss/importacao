@@ -14,6 +14,7 @@ import { generatePuketSheet } from './templates/puket.template.js';
 import { generateImaginariumSheet } from './templates/imaginarium.template.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
+import { alertService } from '../alerts/service.js';
 
 const UPLOAD_DIR = 'uploads';
 
@@ -107,6 +108,11 @@ export const espelhoService = {
 
     auditService.log(userId, 'generate', 'espelho', espelho.id, { processId, version: nextVersion, itemCount: items.length }, null);
 
+    // Sync milestone to Follow-Up sheet
+    import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
+      googleSheetsService.syncMilestone(process.processCode, 'espelhoGeneratedAt', new Date());
+    }).catch(() => {});
+
     logger.info(
       { processId, espelhoId: espelho.id, version: nextVersion },
       'Espelho generated',
@@ -160,6 +166,8 @@ export const espelhoService = {
         boxQuantity: Number(raw.boxQuantity || raw.box_quantity || raw.boxes || 0) || null,
         netWeight: raw.netWeight || raw.net_weight || null,
         grossWeight: raw.grossWeight || raw.gross_weight || null,
+        manufacturer: raw.manufacturer || null,
+        unitType: raw.unitType || raw.unit_type || null,
         isFreeOfCharge: isFoc,
         requiresLi,
         requiresCertification: false,
@@ -190,6 +198,13 @@ export const espelhoService = {
       { processId, count: inserted.length },
       'Auto-populated process items from invoice AI data',
     );
+
+    // Trigger LI escalation if items require LI
+    if (hasLi) {
+      this.triggerLiEscalation(processId).catch(err =>
+        logger.error({ err, processId }, 'LI escalation failed')
+      );
+    }
 
     return inserted;
   },
@@ -399,6 +414,15 @@ export const espelhoService = {
 
     auditService.log(userId, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
 
+    // Sync milestone to Follow-Up sheet
+    const [proc] = await db.select({ processCode: importProcesses.processCode })
+      .from(importProcesses).where(eq(importProcesses.id, updated.processId)).limit(1);
+    if (proc?.processCode) {
+      import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
+        googleSheetsService.syncMilestone(proc.processCode, 'sentToFeniciaAt', new Date());
+      }).catch(() => {});
+    }
+
     return updated;
   },
 
@@ -476,5 +500,73 @@ export const espelhoService = {
     );
 
     return espelho;
+  },
+
+  async triggerLiEscalation(processId: number) {
+    const [proc] = await db.select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!proc || !proc.hasLiItems) return;
+
+    logger.info({ processId }, 'Triggering LI escalation');
+
+    // 1. Create critical alert
+    await alertService.create({
+      processId,
+      severity: 'critical',
+      title: 'Processo com Itens LI - Ação Urgente',
+      message: `Processo ${proc.processCode} contém itens que requerem Licença de Importação. Espelho parcial gerado automaticamente. Verifique prazos.`,
+      processCode: proc.processCode,
+    });
+
+    // 2. Auto-generate partial espelho
+    try {
+      await this.generatePartial(processId);
+    } catch (err) {
+      logger.error({ err, processId }, 'Failed to auto-generate partial espelho for LI');
+    }
+
+    // 3. Auto-draft ISA certification email
+    try {
+      const { isaCertificationTemplate } = await import('../communications/templates/isa-certification.js');
+      const { communicationService } = await import('../communications/service.js');
+
+      const { subject, body } = isaCertificationTemplate({
+        processCode: proc.processCode,
+        brand: proc.brand,
+        exporterName: proc.exporterName ?? undefined,
+        importerName: proc.importerName ?? undefined,
+        totalFobValue: proc.totalFobValue ?? undefined,
+        totalBoxes: proc.totalBoxes ?? undefined,
+        eta: proc.eta ?? undefined,
+      });
+
+      await communicationService.create({
+        processId,
+        recipient: 'ISA Certificação',
+        recipientEmail: globalThis.process.env.ISA_EMAIL || 'isa@placeholder.com',
+        subject,
+        body,
+      });
+    } catch (err) {
+      logger.error({ err, processId }, 'Failed to draft ISA certification email');
+    }
+
+    // 4. Calculate LI deadline (shipmentDate + 13 days)
+    const shipmentDate = proc.shipmentDate || proc.etd;
+    if (shipmentDate) {
+      const deadline = new Date(shipmentDate);
+      deadline.setDate(deadline.getDate() + 13);
+      await db.update(followUpTracking)
+        .set({
+          liDeadline: deadline.toISOString().split('T')[0],
+          updatedAt: new Date(),
+        })
+        .where(eq(followUpTracking.processId, processId));
+    }
+
+    logger.info({ processId, processCode: proc.processCode }, 'LI escalation completed');
   },
 };
