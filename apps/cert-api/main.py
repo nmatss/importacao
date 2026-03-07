@@ -130,6 +130,7 @@ def ensure_tables():
                 certification_type TEXT DEFAULT '',
                 sheet_status TEXT DEFAULT '',
                 expected_cert_text TEXT DEFAULT '',
+                ecommerce_description TEXT DEFAULT '',
                 actual_cert_text TEXT DEFAULT '',
                 last_validation_status TEXT,
                 last_validation_score DOUBLE PRECISION,
@@ -184,6 +185,7 @@ def ensure_tables():
         ("certification_type", "TEXT DEFAULT ''"),
         ("sheet_status", "TEXT DEFAULT ''"),
         ("expected_cert_text", "TEXT DEFAULT ''"),
+        ("ecommerce_description", "TEXT DEFAULT ''"),
         ("actual_cert_text", "TEXT DEFAULT ''"),
         ("last_validation_error", "TEXT"),
     ]:
@@ -212,6 +214,16 @@ def _get_sheets_client() -> gspread.Client | None:
     except Exception as e:
         log.error(f"Failed to create Sheets client: {e}")
         return None
+
+
+def _find_col_by_header(headers: list[str], *candidates: str) -> int | None:
+    """Find column index by matching header text (case-insensitive, accent-insensitive)."""
+    for i, h in enumerate(headers):
+        h_lower = h.lower().strip()
+        for c in candidates:
+            if c.lower() in h_lower:
+                return i
+    return None
 
 
 def _read_products_from_sheets() -> list[dict]:
@@ -254,6 +266,20 @@ def _read_products_from_sheets() -> list[dict]:
             log.warning(f"Could not read worksheet '{cfg['name']}': {e}")
             continue
 
+        if not rows:
+            continue
+
+        # Detect "Descrição E-commerce" column dynamically from header row
+        headers = rows[0]
+        desc_ecommerce_col = _find_col_by_header(
+            headers,
+            "descrição e-commerce", "descricao e-commerce",
+            "descrição ecommerce", "descricao ecommerce",
+            "desc e-commerce", "desc ecommerce",
+        )
+        if desc_ecommerce_col is not None:
+            log.info(f"Worksheet '{cfg['name']}': found 'Descrição E-commerce' at column {desc_ecommerce_col}")
+
         for row in rows[1:]:
             sku_col = cfg["sku_col"]
             if sku_col >= len(row):
@@ -270,6 +296,11 @@ def _read_products_from_sheets() -> list[dict]:
             cert_type = str(row[cfg["cert_type_col"]]).strip() if cfg["cert_type_col"] < len(row) else ""
             sheet_status = str(row[cfg["status_col"]]).strip() if cfg["status_col"] < len(row) else ""
 
+            # Read "Descrição E-commerce" — the exact text expected on the site
+            desc_ecommerce = ""
+            if desc_ecommerce_col is not None and desc_ecommerce_col < len(row):
+                desc_ecommerce = str(row[desc_ecommerce_col]).strip()
+
             # Handle cells with multiple SKUs separated by newlines
             sku_parts = re.split(r'[\r\n]+', raw_sku)
             for sku in sku_parts:
@@ -282,6 +313,7 @@ def _read_products_from_sheets() -> list[dict]:
                     "brand": brand,
                     "certification_type": cert_type,
                     "sheet_status": sheet_status,
+                    "ecommerce_description": desc_ecommerce,
                 })
 
     log.info(f"Read {len(products)} products from Google Sheets")
@@ -298,19 +330,26 @@ def sync_sheets_to_db() -> dict:
     try:
         with db() as (conn, cur):
             for p in products:
+                ecommerce_desc = p.get("ecommerce_description", "")
+                # Use ecommerce_description as expected_cert_text when available,
+                # otherwise fall back to certification_type
+                expected = ecommerce_desc if ecommerce_desc else p["certification_type"]
                 cur.execute(
                     """
-                    INSERT INTO cert_products (sku, name, brand, certification_type, expected_cert_text, sheet_status, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, NOW())
+                    INSERT INTO cert_products (sku, name, brand, certification_type, expected_cert_text,
+                                               ecommerce_description, sheet_status, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (sku) DO UPDATE SET
                         name = EXCLUDED.name,
                         brand = EXCLUDED.brand,
                         certification_type = EXCLUDED.certification_type,
                         expected_cert_text = EXCLUDED.expected_cert_text,
+                        ecommerce_description = EXCLUDED.ecommerce_description,
                         sheet_status = EXCLUDED.sheet_status,
                         updated_at = NOW()
                     """,
-                    [p["sku"], p["name"], p["brand"], p["certification_type"], p["certification_type"], p["sheet_status"]],
+                    [p["sku"], p["name"], p["brand"], p["certification_type"],
+                     expected, ecommerce_desc, p["sheet_status"]],
                 )
         return {"synced": len(products), "total_rows": len(products)}
     except Exception as e:
@@ -450,8 +489,24 @@ def _extract_cert_sentences(text: str) -> list[str]:
     return results
 
 
+# Spec field names that directly contain certification info (e.g. marketplace products)
+CERT_SPEC_NAMES = [
+    "certificação inmetro", "certificacao inmetro",
+    "certificação", "certificacao",
+    "registro inmetro", "selo inmetro",
+    "homologação anatel", "homologacao anatel",
+    "registro anvisa",
+]
+
+
 def _extract_cert_text_from_vtex(product_data: dict) -> str:
-    """Extract all certification-related text from VTEX product data."""
+    """Extract all certification-related text from VTEX product data.
+
+    Checks multiple locations where certification info can appear:
+    - Puket: typically in description (last sentence) and complementName
+    - Imaginarium own products: in description
+    - Imaginarium marketplace: in specificationGroups > "Certificação Inmetro"
+    """
     found_texts: list[str] = []
     api_type = product_data.get("_search_api", "intelligent")
 
@@ -467,21 +522,30 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
             if isinstance(prop, dict):
                 name = prop.get("name", "")
                 values = prop.get("values", [])
+                name_lower = name.lower().strip()
+                # Directly include values from known cert spec fields
+                is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                 for val in values:
                     val_str = _strip_html(str(val))
-                    if any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name.lower() for kw in CERT_KEYWORDS):
+                    if is_cert_field and val_str:
+                        found_texts.append(f"{name}: {val_str}")
+                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                         found_texts.append(f"{name}: {val_str}")
 
-        # 3. Check specificationGroups
+        # 3. Check specificationGroups (key for marketplace products in "Detalhes")
         for group in (product_data.get("specificationGroups") or []):
             if isinstance(group, dict):
                 for spec in (group.get("specifications") or []):
                     if isinstance(spec, dict):
                         name = spec.get("name", "")
                         values = spec.get("values", [])
+                        name_lower = name.lower().strip()
+                        is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                         for val in values:
                             val_str = _strip_html(str(val))
-                            if any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name.lower() for kw in CERT_KEYWORDS):
+                            if is_cert_field and val_str:
+                                found_texts.append(f"{name}: {val_str}")
+                            elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                                 found_texts.append(f"{name}: {val_str}")
 
         # 4. Check items (SKU-level) — complementName is key for certification text
@@ -504,10 +568,14 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
         all_specs = product_data.get("allSpecifications", [])
         for spec_name in all_specs:
             spec_values = product_data.get(spec_name, [])
+            name_lower = spec_name.lower().strip()
+            is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
             if isinstance(spec_values, list):
                 for val in spec_values:
                     val_str = _strip_html(str(val))
-                    if any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in spec_name.lower() for kw in CERT_KEYWORDS):
+                    if is_cert_field and val_str:
+                        found_texts.append(f"{spec_name}: {val_str}")
+                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                         found_texts.append(f"{spec_name}: {val_str}")
 
         for item in (product_data.get("items") or []):
@@ -578,26 +646,73 @@ def _has_registration_number(text: str) -> bool:
     return any(re.search(p, lower) for p in patterns)
 
 
-def _compare_cert_texts(expected: str, actual: str) -> tuple[str, float]:
+def _compare_ecommerce_description(ecommerce_desc: str, actual: str) -> tuple[str, float] | None:
     """
-    Compare expected certification type with actual text found on site.
+    Compare the exact e-commerce description (from the spreadsheet) against
+    the actual text found on the site. Returns (status, score) or None if
+    no e-commerce description is available.
 
-    Key insight: 'expected' is typically a cert TYPE from the spreadsheet
-    (e.g. "INMETRO BRINQUEDOS SISTEMA 5 (FÁBRICA) - PORTARIA 302")
-    while 'actual' is the cert text FROM THE SITE
-    (e.g. "Certificação INMETRO: Produto certificado por BRICS OCP 0098 Nº Registro 006083/2024").
+    The e-commerce description is the EXACT text that should appear on the
+    product page (e.g. "Registro Inmetro 010208/2024" or
+    "CE-BRI/ICEPEX-N 01264-25").
+    """
+    if not ecommerce_desc:
+        return None
+    if not actual:
+        return ("MISSING", 0.0)
 
-    These are different kinds of information, so we compare by:
-    1. Whether the same certification body is present (INMETRO, ANVISA, etc.)
-    2. Whether the site has a valid registration number
-    3. Whether specific portaria/regulation numbers match
+    desc_clean = ecommerce_desc.strip().lower()
+    actual_clean = actual.strip().lower()
+
+    # Exact substring match — the e-commerce description should appear in the site text
+    if desc_clean in actual_clean:
+        return ("OK", 1.0)
+
+    # Try matching key fragments (registration numbers, cert codes)
+    # Extract numbers/codes from the expected description
+    codes = re.findall(r'[\w-]{4,}/[\w-]+|[\w-]+-[\w-]+-[\w-]+|\d{5,}', ecommerce_desc)
+    if codes:
+        found = sum(1 for c in codes if c.lower() in actual_clean)
+        if found == len(codes):
+            return ("OK", 0.95)
+        if found > 0:
+            return ("INCONSISTENT", 0.5 + 0.3 * (found / len(codes)))
+
+    # Sequence similarity as last resort
+    seq_score = difflib.SequenceMatcher(None, desc_clean, actual_clean).ratio()
+    if seq_score >= 0.8:
+        return ("OK", seq_score)
+    if seq_score >= 0.4:
+        return ("INCONSISTENT", seq_score)
+
+    return ("MISSING", seq_score)
+
+
+def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") -> tuple[str, float]:
+    """
+    Compare expected certification info with actual text found on site.
+
+    When 'ecommerce_desc' (Descrição E-commerce from the spreadsheet) is available,
+    uses exact substring matching first — this is the most reliable comparison since
+    it's the exact text that should appear on the product page.
+
+    Falls back to cert body + registration number matching using 'expected'
+    (certification_type from the spreadsheet).
 
     Returns (status, score).
     """
-    if not expected:
+    if not expected and not ecommerce_desc:
         return ("NO_EXPECTED", 0.0)
     if not actual:
         return ("MISSING", 0.0)
+
+    # Priority 1: Compare against e-commerce description (exact text match)
+    ecom_result = _compare_ecommerce_description(ecommerce_desc, actual)
+    if ecom_result is not None:
+        return ecom_result
+
+    if not expected:
+        return ("NO_EXPECTED", 0.0)
 
     exp_lower = expected.lower().strip()
     act_lower = actual.lower().strip()
@@ -665,7 +780,10 @@ def _compare_cert_texts(expected: str, actual: str) -> tuple[str, float]:
         return ("MISSING", score)
 
 
-def validate_single_product(sku: str, brand: str, expected_cert: str, product_name: str = "") -> dict:
+def validate_single_product(
+    sku: str, brand: str, expected_cert: str,
+    product_name: str = "", ecommerce_description: str = "",
+) -> dict:
     """
     Validate a single product against VTEX.
     Returns dict with: status, score, url, actual_cert_text, error.
@@ -679,11 +797,12 @@ def validate_single_product(sku: str, brand: str, expected_cert: str, product_na
         "url": None,
         "actual_cert_text": None,
         "expected_cert_text": expected_cert or None,
+        "ecommerce_description": ecommerce_description or None,
         "error": None,
         "verified_at": now.isoformat(),
     }
 
-    if not expected_cert:
+    if not expected_cert and not ecommerce_description:
         result["status"] = "NO_EXPECTED"
         return result
 
@@ -713,7 +832,7 @@ def validate_single_product(sku: str, brand: str, expected_cert: str, product_na
     result["actual_cert_text"] = actual_cert if actual_cert else None
 
     # Compare expected vs actual
-    status, score = _compare_cert_texts(expected_cert, actual_cert)
+    status, score = _compare_cert_texts(expected_cert, actual_cert, ecommerce_description)
     result["status"] = status
     result["score"] = round(score, 3)
 
@@ -1066,22 +1185,30 @@ def verify_product(req: VerifyRequest):
     """Verify a single product against the VTEX e-commerce site in real time."""
     now = datetime.now(timezone.utc)
 
-    # Get expected cert text and product name from DB
+    # Get expected cert text, product name, and ecommerce description from DB
     expected_cert = ""
     product_name = ""
+    ecommerce_desc = ""
     if DATABASE_URL:
         try:
             with db() as (conn, cur):
-                cur.execute("SELECT certification_type, brand, name FROM cert_products WHERE sku = %s", [req.sku])
+                cur.execute(
+                    "SELECT certification_type, brand, name, ecommerce_description FROM cert_products WHERE sku = %s",
+                    [req.sku],
+                )
                 row = cur.fetchone()
                 if row:
                     expected_cert = row.get("certification_type", "") or ""
                     product_name = row.get("name", "") or ""
+                    ecommerce_desc = row.get("ecommerce_description", "") or ""
         except Exception:
             pass
 
     # Real VTEX validation
-    result = validate_single_product(req.sku, req.brand, expected_cert, product_name=product_name)
+    result = validate_single_product(
+        req.sku, req.brand, expected_cert,
+        product_name=product_name, ecommerce_description=ecommerce_desc,
+    )
 
     # Save result to DB
     if DATABASE_URL:
@@ -1160,7 +1287,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                     conditions.append("LOWER(brand) = LOWER(%s)")
                     params.append(brand_filter)
                 where = "WHERE " + " AND ".join(conditions) if conditions else ""
-                sql = f"SELECT sku, name, brand, certification_type FROM cert_products {where} ORDER BY sku"
+                sql = f"SELECT sku, name, brand, certification_type, ecommerce_description FROM cert_products {where} ORDER BY sku"
                 if limit:
                     sql += f" LIMIT {int(limit)}"
                 cur.execute(sql, params)
@@ -1177,7 +1304,11 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
             expected_cert = p.get("certification_type", "") or ""
 
             # Real VTEX validation
-            vresult = validate_single_product(sku, brand, expected_cert, product_name=p.get("name", ""))
+            ecommerce_desc = p.get("ecommerce_description", "") or ""
+            vresult = validate_single_product(
+                sku, brand, expected_cert,
+                product_name=p.get("name", ""), ecommerce_description=ecommerce_desc,
+            )
 
             status = vresult["status"]
             score = vresult["score"]

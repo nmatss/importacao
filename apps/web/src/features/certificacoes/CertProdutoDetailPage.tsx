@@ -242,22 +242,43 @@ export default function CertProdutoDetailPage() {
                   </h4>
                 </div>
               </div>
-              <div className="p-6">
-                <div className={cn(
-                  "p-4 rounded-xl min-h-[100px]",
-                  product.expected_cert_text
-                    ? "bg-blue-50/50 border border-blue-100/60"
-                    : "bg-slate-50 border border-slate-100"
-                )}>
-                  {product.expected_cert_text ? (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
-                      {product.expected_cert_text}
+              <div className="p-6 space-y-3">
+                {product.ecommerce_description && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500 mb-1.5">
+                      Descrição E-commerce
                     </p>
-                  ) : (
-                    <p className="text-sm text-slate-400 italic">
-                      Sem texto de certificação esperado
+                    <div className="p-4 rounded-xl bg-blue-50/50 border border-blue-100/60">
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                        {product.ecommerce_description}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  {product.ecommerce_description && product.certification_type && (
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                      Tipo de Certificação
                     </p>
                   )}
+                  <div className={cn(
+                    "p-4 rounded-xl min-h-[100px]",
+                    product.expected_cert_text || product.certification_type
+                      ? "bg-blue-50/50 border border-blue-100/60"
+                      : "bg-slate-50 border border-slate-100"
+                  )}>
+                    {(product.expected_cert_text || product.certification_type) ? (
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                        {product.ecommerce_description
+                          ? product.certification_type
+                          : product.expected_cert_text}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-slate-400 italic">
+                        Sem texto de certificação esperado
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

@@ -70,7 +70,8 @@ Microservico Python/FastAPI para validacao automatizada de certificacoes de prod
 
 ```
 Google Sheets ──> Sync ──> PostgreSQL (cert_products)
-                              │
+  (inclui coluna                │
+  "Descrição E-commerce")       │
                       POST /api/validate
                               │
                    ┌──────────┴──────────┐
@@ -79,12 +80,15 @@ Google Sheets ──> Sync ──> PostgreSQL (cert_products)
                    │     API VTEX         │
                    │  2. Extrai texto de  │
                    │     certificacao     │
+                   │     (description,    │
+                   │      specs, compl.)  │
                    │  3. Compara com      │
-                   │     valor esperado   │
+                   │     Desc. E-commerce │
+                   │     ou cert_type     │
                    │  4. Emite SSE event  │
                    └──────────┬──────────┘
                               │
-                    Gera relatorio CSV
+                    Gera relatorio JSON
                     Salva resultados no banco
 ```
 
@@ -92,9 +96,10 @@ Google Sheets ──> Sync ──> PostgreSQL (cert_products)
 
 | Marca | Store | Host | Campo |
 |-------|-------|------|-------|
-| Puket Escolares | `puket` | puket.com.br | `complementName` |
-| Puket | `puket` | puket.com.br | `complementName` |
-| Imaginarium | `lojaimaginarium` | loja.imaginarium.com.br | `description` |
+| Puket Escolares | `puket` | puket.com.br | `complementName` / `description` (ultima frase) |
+| Puket | `puket` | puket.com.br | `complementName` / `description` (ultima frase) |
+| Imaginarium (proprio) | `lojaimaginarium` | loja.imaginarium.com.br | `description` |
+| Imaginarium (marketplace) | `lojaimaginarium` | loja.imaginarium.com.br | `specificationGroups` > "Certificação Inmetro" |
 
 ## Orgaos Certificadores Reconhecidos
 
@@ -118,7 +123,7 @@ Google Sheets ──> Sync ──> PostgreSQL (cert_products)
 
 ```sql
 -- Produtos sincronizados do Sheets
-cert_products (sku, name, brand, expected_cert_text, last_validation_*)
+cert_products (sku, name, brand, expected_cert_text, ecommerce_description, last_validation_*)
 
 -- Execucoes de validacao
 cert_validation_runs (id, status, brand_filter, started_at, finished_at, summary)

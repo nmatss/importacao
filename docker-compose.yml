@@ -67,7 +67,7 @@ services:
       context: ./apps/cert-api
       dockerfile: Dockerfile
     ports:
-      - "8000:8000"
+      - "8002:8000"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
