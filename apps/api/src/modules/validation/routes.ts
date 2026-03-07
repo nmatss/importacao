@@ -8,6 +8,7 @@ router.use(authMiddleware);
 
 router.post('/:processId/run', validationController.runAllChecks);
 router.get('/:processId', validationController.getResults);
+router.get('/:processId/report', validationController.getReport);
 router.patch('/results/:id/resolve', validationController.resolveManually);
 router.post('/:processId/anomalies', validationController.runAnomalyDetection);
 

@@ -47,6 +47,7 @@ export function certStatusColor(status: string): string {
     case 'URL_NOT_FOUND': return 'bg-slate-100 text-slate-600';
     case 'API_ERROR': return 'bg-red-100 text-red-700';
     case 'NO_EXPECTED': return 'bg-slate-100 text-slate-500';
+    case 'EXPIRED': return 'bg-pink-100 text-pink-800';
     default: return 'bg-slate-100 text-slate-600';
   }
 }

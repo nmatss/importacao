@@ -147,6 +147,18 @@ export const emailProcessor = {
 
           const docType = classifyDocument(att.filename);
 
+          // Upload to Sistema Automatico INBOX
+          let sistemaFileId: string | undefined;
+          try {
+            const { googleDriveService } = await import('../integrations/google-drive.service.js');
+            const configured = await googleDriveService.isConfigured();
+            if (configured) {
+              sistemaFileId = await googleDriveService.uploadToSistemaInbox(filePath, att.filename);
+            }
+          } catch (driveErr) {
+            logger.warn({ err: driveErr, filename: att.filename }, 'Failed to upload to Sistema INBOX');
+          }
+
           if (processId) {
             const fakeFile = {
               originalname: att.filename,
@@ -156,6 +168,15 @@ export const emailProcessor = {
             } as Express.Multer.File;
 
             const doc = await documentService.upload(processId, docType, fakeFile);
+
+            // Move from INBOX to PROCESSADOS
+            if (sistemaFileId && processCode) {
+              import('../integrations/google-drive.service.js').then(({ googleDriveService }) => {
+                googleDriveService.moveFromInboxToProcessados(sistemaFileId!, processCode!, docType).catch(err =>
+                  logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS')
+                );
+              }).catch(() => {});
+            }
 
             processedAttachments.push({ filename: att.filename, type: docType, documentId: doc.id });
           } else {

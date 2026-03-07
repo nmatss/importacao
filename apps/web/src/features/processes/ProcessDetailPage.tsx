@@ -37,6 +37,7 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
 import { ValidationChecklist } from '@/features/validation/ValidationChecklist';
+import { FupComparisonPanel } from '@/features/validation/FupComparisonPanel';
 import { EspelhoPreview } from '@/features/espelhos/EspelhoPreview';
 
 interface Process {
@@ -57,6 +58,8 @@ interface Process {
   totalNetWeight: number | null;
   totalGrossWeight: number | null;
   totalCbm: number | null;
+  containerType: string | null;
+  sistemaDriveFolderId: string | null;
   shipmentDate: string | null;
   notes: string | null;
   driveFolderId: string | null;
@@ -277,6 +280,17 @@ export function ProcessDetailPage() {
               Abrir no Drive
             </a>
           )}
+          {process.sistemaDriveFolderId && (
+            <a
+              href={`https://drive.google.com/drive/folders/${process.sistemaDriveFolderId}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Sistema Automatico
+            </a>
+          )}
           <button
             onClick={() => navigate(`/importacao/processos/${id}/editar`)}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm"
@@ -340,6 +354,11 @@ export function ProcessDetailPage() {
               icon={Package}
               label="CBM"
               value={process.totalCbm != null ? `${process.totalCbm.toFixed(3)} m3` : null}
+            />
+            <InfoField
+              icon={Box}
+              label="Container"
+              value={process.containerType}
             />
             <InfoField
               icon={CalendarDays}
@@ -411,6 +430,13 @@ export function ProcessDetailPage() {
                 Checklist de Validacao
               </h3>
               <ValidationChecklist processId={id} />
+
+              <div className="border-t border-slate-200/80 pt-6 mt-6">
+                <h3 className="text-lg font-bold text-slate-800 mb-4">
+                  Comparativo de Documentos
+                </h3>
+                <FupComparisonPanel processId={id} />
+              </div>
             </div>
           )}
 

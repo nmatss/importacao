@@ -9,6 +9,8 @@ import {
   Bell,
   BarChart3,
   Clock,
+  Mail,
+  XCircle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -66,6 +68,21 @@ interface MonthlyTrend {
 interface FobByBrand {
   brand: string;
   totalFob: number;
+}
+
+interface EmailLog {
+  id: number;
+  fromAddress: string;
+  subject: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
+  processCode: string | null;
+  attachmentsCount: number;
+  createdAt: string;
+}
+
+interface EmailLogsResponse {
+  data: EmailLog[];
+  total: number;
 }
 
 const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444'];
@@ -186,6 +203,9 @@ export function DashboardPage() {
 
   const { data: fobByBrand } =
     useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
+
+  const { data: emailLogs, isLoading: loadingEmails } =
+    useApiQuery<EmailLogsResponse>(['email-ingestion', 'logs'], '/api/email-ingestion/logs?limit=5');
 
   const isLoading = loadingOverview || loadingStatus;
 
@@ -538,6 +558,78 @@ export function DashboardPage() {
             )}
           </div>
         </div>
+      </div>
+
+      {/* Recent Emails */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-md shadow-indigo-500/20">
+              <Mail className="h-4.5 w-4.5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">
+              Processos Recentes via Email
+            </h3>
+          </div>
+        </div>
+        {loadingEmails ? (
+          <div className="p-7 space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : !emailLogs || emailLogs.data.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
+              <Mail className="h-6 w-6 text-slate-300" />
+            </div>
+            <p className="text-sm font-medium text-slate-400">Nenhum email processado recentemente</p>
+            <p className="text-xs text-slate-300 mt-1">Emails recebidos aparecerao aqui</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {emailLogs.data.map((log) => {
+              const isCompleted = log.status === 'completed';
+              const isFailed = log.status === 'failed';
+              return (
+                <div
+                  key={log.id}
+                  className={cn(
+                    'flex items-center gap-4 px-7 py-3.5',
+                    isFailed && 'bg-red-50/40',
+                  )}
+                >
+                  <div className="shrink-0">
+                    {isCompleted ? (
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                    ) : isFailed ? (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    ) : (
+                      <Clock className="h-5 w-5 text-amber-500" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700 truncate">
+                      {log.subject}
+                    </p>
+                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
+                      <span>{log.fromAddress}</span>
+                      <span>{log.attachmentsCount} anexo(s)</span>
+                    </div>
+                  </div>
+                  {log.processCode && (
+                    <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                      {log.processCode}
+                    </span>
+                  )}
+                  <span className="shrink-0 text-[11px] text-slate-400 font-medium">
+                    {formatDate(log.createdAt)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Recent Processes */}

@@ -4,6 +4,8 @@ Validates certification info on VTEX e-commerce sites against Google Sheets data
 """
 
 import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 import re
 import uuid
 import json
@@ -20,6 +22,8 @@ import requests
 import psycopg2
 import psycopg2.extras
 import gspread
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from google.oauth2.service_account import Credentials
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse, FileResponse
@@ -45,12 +49,12 @@ app.add_middleware(
 )
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
-REPORTS_DIR = Path("/app/reports")
+REPORTS_DIR = Path(os.environ.get("REPORTS_DIR", Path(__file__).parent / "reports"))
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Google Sheets config
-SHEETS_CLIENT_EMAIL = os.environ.get("GOOGLE_SHEETS_CLIENT_EMAIL", "")
-SHEETS_PRIVATE_KEY = os.environ.get("GOOGLE_SHEETS_PRIVATE_KEY", "").replace("\\n", "\n")
+SHEETS_CLIENT_EMAIL = os.environ.get("GOOGLE_SHEETS_CLIENT_EMAIL", "") or os.environ.get("GOOGLE_DRIVE_CLIENT_EMAIL", "")
+SHEETS_PRIVATE_KEY = (os.environ.get("GOOGLE_SHEETS_PRIVATE_KEY", "") or os.environ.get("GOOGLE_DRIVE_PRIVATE_KEY", "")).replace("\\n", "\n")
 SHEETS_SPREADSHEET_ID = os.environ.get(
     "GOOGLE_SHEETS_SPREADSHEET_ID",
     "1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE",
@@ -188,6 +192,9 @@ def ensure_tables():
         ("ecommerce_description", "TEXT DEFAULT ''"),
         ("actual_cert_text", "TEXT DEFAULT ''"),
         ("last_validation_error", "TEXT"),
+        ("sale_deadline", "TEXT"),
+        ("sale_deadline_date", "DATE"),
+        ("is_expired", "BOOLEAN DEFAULT FALSE"),
     ]:
         _add_column_if_not_exists(col, coltype)
 
@@ -317,6 +324,76 @@ def _read_products_from_sheets() -> list[dict]:
                 })
 
     log.info(f"Read {len(products)} products from Google Sheets")
+
+    # Read "Encerramentos" tab for expired certifications
+    try:
+        ws_enc = spreadsheet.worksheet("Encerramentos")
+        enc_rows = ws_enc.get_all_values()
+        if enc_rows:
+            enc_headers = enc_rows[0]
+            prazo_col = _find_col_by_header(enc_headers, "prazo final venda", "prazo final", "prazo venda")
+            sku_col_enc = _find_col_by_header(enc_headers, "sku", "código", "codigo", "ref")
+            name_col_enc = _find_col_by_header(enc_headers, "nome", "produto", "descrição", "descricao")
+            brand_col_enc = _find_col_by_header(enc_headers, "marca", "brand")
+
+            if prazo_col is not None and sku_col_enc is not None:
+                log.info(f"Worksheet 'Encerramentos': found 'Prazo Final Venda' at column {prazo_col}, SKU at column {sku_col_enc}")
+                today = datetime.now().date()
+                expired_count = 0
+                for row in enc_rows[1:]:
+                    if sku_col_enc >= len(row):
+                        continue
+                    raw_sku = str(row[sku_col_enc]).strip()
+                    if not raw_sku:
+                        continue
+
+                    prazo_str = str(row[prazo_col]).strip() if prazo_col < len(row) else ""
+                    if not prazo_str:
+                        continue
+
+                    # Parse date — try common formats
+                    prazo_date = None
+                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+                        try:
+                            prazo_date = datetime.strptime(prazo_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+
+                    if prazo_date is None:
+                        continue
+
+                    is_expired = prazo_date < today
+                    name = str(row[name_col_enc]).strip() if name_col_enc is not None and name_col_enc < len(row) else ""
+                    brand = str(row[brand_col_enc]).strip() if brand_col_enc is not None and brand_col_enc < len(row) else ""
+
+                    sku_parts = re.split(r'[\r\n]+', raw_sku)
+                    for sku in sku_parts:
+                        sku = sku.strip()
+                        if not sku:
+                            continue
+                        products.append({
+                            "sku": sku,
+                            "name": name,
+                            "brand": brand,
+                            "certification_type": f"ENCERRAMENTO - Prazo: {prazo_str}",
+                            "sheet_status": "EXPIRED" if is_expired else "EXPIRING",
+                            "ecommerce_description": "",
+                            "sale_deadline": prazo_str,
+                            "sale_deadline_date": prazo_date.isoformat(),
+                            "is_expired": is_expired,
+                        })
+                        if is_expired:
+                            expired_count += 1
+
+                log.info(f"Encerramentos: found {expired_count} expired products out of {len(enc_rows) - 1} rows")
+            else:
+                log.warning(f"Worksheet 'Encerramentos': could not find required columns (prazo={prazo_col}, sku={sku_col_enc})")
+    except gspread.exceptions.WorksheetNotFound:
+        log.info("Worksheet 'Encerramentos' not found, skipping expiration check")
+    except Exception as e:
+        log.warning(f"Error reading 'Encerramentos' worksheet: {e}")
+
     return products
 
 
@@ -334,22 +411,34 @@ def sync_sheets_to_db() -> dict:
                 # Use ecommerce_description as expected_cert_text when available,
                 # otherwise fall back to certification_type
                 expected = ecommerce_desc if ecommerce_desc else p["certification_type"]
+                sale_deadline = p.get("sale_deadline")
+                sale_deadline_date = p.get("sale_deadline_date")
+                is_expired = p.get("is_expired", False)
                 cur.execute(
                     """
                     INSERT INTO cert_products (sku, name, brand, certification_type, expected_cert_text,
-                                               ecommerce_description, sheet_status, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                                               ecommerce_description, sheet_status, sale_deadline,
+                                               sale_deadline_date, is_expired, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
                     ON CONFLICT (sku) DO UPDATE SET
-                        name = EXCLUDED.name,
-                        brand = EXCLUDED.brand,
-                        certification_type = EXCLUDED.certification_type,
-                        expected_cert_text = EXCLUDED.expected_cert_text,
-                        ecommerce_description = EXCLUDED.ecommerce_description,
-                        sheet_status = EXCLUDED.sheet_status,
+                        name = COALESCE(NULLIF(EXCLUDED.name, ''), cert_products.name),
+                        brand = COALESCE(NULLIF(EXCLUDED.brand, ''), cert_products.brand),
+                        certification_type = CASE WHEN EXCLUDED.sale_deadline IS NOT NULL
+                            THEN EXCLUDED.certification_type
+                            ELSE COALESCE(NULLIF(EXCLUDED.certification_type, ''), cert_products.certification_type) END,
+                        expected_cert_text = COALESCE(NULLIF(EXCLUDED.expected_cert_text, ''), cert_products.expected_cert_text),
+                        ecommerce_description = COALESCE(NULLIF(EXCLUDED.ecommerce_description, ''), cert_products.ecommerce_description),
+                        sheet_status = CASE WHEN EXCLUDED.sale_deadline IS NOT NULL
+                            THEN EXCLUDED.sheet_status
+                            ELSE COALESCE(NULLIF(EXCLUDED.sheet_status, ''), cert_products.sheet_status) END,
+                        sale_deadline = COALESCE(EXCLUDED.sale_deadline, cert_products.sale_deadline),
+                        sale_deadline_date = COALESCE(EXCLUDED.sale_deadline_date, cert_products.sale_deadline_date),
+                        is_expired = EXCLUDED.is_expired OR cert_products.is_expired,
                         updated_at = NOW()
                     """,
                     [p["sku"], p["name"], p["brand"], p["certification_type"],
-                     expected, ecommerce_desc, p["sheet_status"]],
+                     expected, ecommerce_desc, p["sheet_status"],
+                     sale_deadline, sale_deadline_date, is_expired],
                 )
         return {"synced": len(products), "total_rows": len(products)}
     except Exception as e:
@@ -1063,7 +1152,8 @@ def get_stats():
                     COUNT(*) FILTER (WHERE last_validation_status = 'OK') as ok,
                     COUNT(*) FILTER (WHERE last_validation_status = 'MISSING') as missing,
                     COUNT(*) FILTER (WHERE last_validation_status = 'INCONSISTENT') as inconsistent,
-                    COUNT(*) FILTER (WHERE last_validation_status NOT IN ('OK','MISSING','INCONSISTENT') OR last_validation_status IS NULL) as not_found
+                    COUNT(*) FILTER (WHERE last_validation_status NOT IN ('OK','MISSING','INCONSISTENT') OR last_validation_status IS NULL) as not_found,
+                    COUNT(*) FILTER (WHERE is_expired = TRUE) as expired
                 FROM cert_products
                 WHERE brand != ''
                 GROUP BY brand
@@ -1071,8 +1161,13 @@ def get_stats():
             """)
             by_brand = [dict(r) for r in cur.fetchall()]
 
+            # Count total expired products
+            cur.execute("SELECT COUNT(*) as cnt FROM cert_products WHERE is_expired = TRUE")
+            total_expired = cur.fetchone()["cnt"]
+
             return {
                 "total_products": total,
+                "total_expired": total_expired,
                 "last_run": last_run,
                 "by_brand": by_brand,
             }
@@ -1081,7 +1176,54 @@ def get_stats():
 
 
 def _empty_stats():
-    return {"total_products": 0, "last_run": None, "by_brand": []}
+    return {"total_products": 0, "total_expired": 0, "last_run": None, "by_brand": []}
+
+
+# ---------------------------------------------------------------------------
+# Expired products (Encerramentos)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/expired")
+def list_expired_products(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    search: str = Query(""),
+    brand: str = Query(""),
+):
+    if not DATABASE_URL:
+        return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0}
+
+    with db() as (conn, cur):
+        conditions = ["is_expired = TRUE"]
+        params: list = []
+
+        if search:
+            conditions.append("(sku ILIKE %s OR name ILIKE %s)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        if brand:
+            conditions.append("LOWER(brand) = LOWER(%s)")
+            params.append(brand)
+
+        where = "WHERE " + " AND ".join(conditions)
+
+        cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+        total = cur.fetchone()["cnt"]
+
+        offset = (page - 1) * per_page
+        cur.execute(
+            f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST LIMIT %s OFFSET %s",
+            params + [per_page, offset],
+        )
+        rows = [_serialize_product(dict(r)) for r in cur.fetchall()]
+        total_pages = max(1, (total + per_page - 1) // per_page)
+
+        return {
+            "products": rows,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1089,9 +1231,9 @@ def _empty_stats():
 # ---------------------------------------------------------------------------
 
 def _serialize_product(r: dict) -> dict:
-    for dtfield in ("last_validation_date", "created_at", "updated_at"):
+    for dtfield in ("last_validation_date", "created_at", "updated_at", "sale_deadline_date"):
         if r.get(dtfield):
-            r[dtfield] = r[dtfield].isoformat()
+            r[dtfield] = r[dtfield].isoformat() if hasattr(r[dtfield], 'isoformat') else str(r[dtfield])
     return r
 
 
@@ -1118,7 +1260,14 @@ def list_products(
             params.append(brand)
         if status:
             statuses = [s.strip() for s in status.split(",") if s.strip()]
-            if statuses:
+            if "EXPIRED" in statuses:
+                statuses.remove("EXPIRED")
+                if statuses:
+                    conditions.append("(last_validation_status IN ({}) OR is_expired = TRUE)".format(",".join(["%s"] * len(statuses))))
+                    params.extend(statuses)
+                else:
+                    conditions.append("is_expired = TRUE")
+            elif statuses:
                 conditions.append("last_validation_status IN ({})".format(",".join(["%s"] * len(statuses))))
                 params.extend(statuses)
 
@@ -1645,6 +1794,140 @@ def get_schedule_history(schedule_id: str):
 # Reports
 # ---------------------------------------------------------------------------
 
+@app.post("/api/reports/export")
+def export_products_report(brand: str = Query(""), status: str = Query("")):
+    """Generate an Excel report from the current DB product data."""
+    if not DATABASE_URL:
+        raise HTTPException(500, "Database not configured")
+
+    with db() as (conn, cur):
+        conditions: list[str] = []
+        params: list = []
+        if brand:
+            conditions.append("LOWER(brand) = LOWER(%s)")
+            params.append(brand)
+        if status:
+            statuses = [s.strip() for s in status.split(",") if s.strip()]
+            if "EXPIRED" in statuses:
+                statuses.remove("EXPIRED")
+                if statuses:
+                    conditions.append("(last_validation_status IN ({}) OR is_expired = TRUE)".format(",".join(["%s"] * len(statuses))))
+                    params.extend(statuses)
+                else:
+                    conditions.append("is_expired = TRUE")
+            elif statuses:
+                conditions.append("last_validation_status IN ({})".format(",".join(["%s"] * len(statuses))))
+                params.extend(statuses)
+
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        cur.execute(f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    now = datetime.now(timezone.utc)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Produtos"
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="059669", end_color="059669", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin", color="D1D5DB"),
+        right=Side(style="thin", color="D1D5DB"),
+        top=Side(style="thin", color="D1D5DB"),
+        bottom=Side(style="thin", color="D1D5DB"),
+    )
+    status_fills = {
+        "OK": PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
+        "MISSING": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+        "INCONSISTENT": PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
+    }
+    expired_fill = PatternFill(start_color="FCE7F3", end_color="FCE7F3", fill_type="solid")
+    status_labels = {
+        "OK": "Conforme", "MISSING": "Ausente", "INCONSISTENT": "Inconsistente",
+        "URL_NOT_FOUND": "Nao Encontrado", "API_ERROR": "Erro de API",
+        "NO_EXPECTED": "Sem Certificacao", "EXPIRED": "Vencido",
+    }
+
+    # Title
+    ws.append(["Relatorio de Produtos - Certificacoes"])
+    ws.merge_cells("A1:J1")
+    ws["A1"].font = Font(bold=True, size=14, color="059669")
+    ws.append([f"Gerado em: {now.strftime('%d/%m/%Y %H:%M')}"])
+    ws.append([f"Total: {len(rows)} produtos"])
+    ws.append([])
+
+    # Count stats
+    ok_count = sum(1 for r in rows if r.get("last_validation_status") == "OK")
+    missing_count = sum(1 for r in rows if r.get("last_validation_status") == "MISSING")
+    inconsistent_count = sum(1 for r in rows if r.get("last_validation_status") == "INCONSISTENT")
+    expired_count = sum(1 for r in rows if r.get("is_expired"))
+    ws.append([f"Conforme: {ok_count} | Ausente: {missing_count} | Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"])
+    ws.append([])
+
+    # Headers
+    headers = ["SKU", "Nome", "Marca", "Status", "Pontuacao", "Tipo Certificacao",
+               "Texto Esperado", "Texto Encontrado", "URL", "Prazo Venda", "Vencido"]
+    ws.append(headers)
+    header_row = ws.max_row
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=header_row, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    # Data
+    for r in rows:
+        status_raw = r.get("last_validation_status") or ""
+        is_exp = r.get("is_expired", False)
+        if not status_raw and is_exp:
+            status_raw = "EXPIRED"
+        label = status_labels.get(status_raw, status_raw)
+        score = r.get("last_validation_score")
+        score_str = f"{score * 100:.0f}%" if score is not None else ""
+        row_data = [
+            r.get("sku", ""),
+            r.get("name", ""),
+            r.get("brand", ""),
+            label,
+            score_str,
+            r.get("certification_type", ""),
+            r.get("expected_cert_text", ""),
+            r.get("actual_cert_text", ""),
+            r.get("last_validation_url", ""),
+            r.get("sale_deadline", ""),
+            "Sim" if is_exp else "",
+        ]
+        ws.append(row_data)
+        row_idx = ws.max_row
+        for col_idx in range(1, len(row_data) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = thin_border
+        # Color status
+        status_cell = ws.cell(row=row_idx, column=4)
+        if is_exp:
+            status_cell.fill = expired_fill
+        elif status_raw in status_fills:
+            status_cell.fill = status_fills[status_raw]
+
+    # Column widths
+    col_widths = [15, 40, 18, 18, 12, 25, 40, 40, 50, 15, 10]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    ws.auto_filter.ref = f"A{header_row}:K{ws.max_row}"
+
+    filename = f"produtos_certificacoes_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filepath = REPORTS_DIR / filename
+    wb.save(str(filepath))
+
+    return FileResponse(
+        str(filepath),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=filename,
+    )
+
+
 @app.get("/api/reports")
 def list_reports():
     reports = []
@@ -1670,9 +1953,109 @@ def get_report_data(filename: str):
 
 
 @app.get("/api/reports/{filename}")
-def download_report(filename: str):
+def download_report(filename: str, format: str = Query("xlsx")):
     filepath = REPORTS_DIR / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(404, "Report not found")
-    media = "application/json" if filename.endswith(".json") else "application/octet-stream"
-    return FileResponse(filepath, media_type=media, filename=filename)
+
+    if format == "json":
+        return FileResponse(filepath, media_type="application/json", filename=filename)
+
+    # Generate Excel from JSON report
+    report_data = json.loads(filepath.read_text())
+    products = report_data.get("products", report_data.get("results", []))
+    summary = report_data.get("summary", {})
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Validação"
+
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="059669", end_color="059669", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin", color="D1D5DB"),
+        right=Side(style="thin", color="D1D5DB"),
+        top=Side(style="thin", color="D1D5DB"),
+        bottom=Side(style="thin", color="D1D5DB"),
+    )
+    status_fills = {
+        "OK": PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
+        "MISSING": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+        "INCONSISTENT": PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
+        "EXPIRED": PatternFill(start_color="FCE7F3", end_color="FCE7F3", fill_type="solid"),
+    }
+    status_labels = {
+        "OK": "Conforme",
+        "MISSING": "Ausente",
+        "INCONSISTENT": "Inconsistente",
+        "URL_NOT_FOUND": "Não Encontrado",
+        "API_ERROR": "Erro de API",
+        "NO_EXPECTED": "Sem Certificação",
+        "EXPIRED": "Certificação Vencida",
+    }
+
+    # Summary row
+    ws.append(["Relatório de Validação de Certificações"])
+    ws.merge_cells("A1:H1")
+    ws["A1"].font = Font(bold=True, size=14, color="059669")
+    ws.append([f"Data: {report_data.get('date', '')}"])
+    ws.append([f"Total: {summary.get('total', len(products))} | OK: {summary.get('ok', 0)} | Ausente: {summary.get('missing', 0)} | Inconsistente: {summary.get('inconsistent', 0)} | Não Encontrado: {summary.get('not_found', 0)}"])
+    ws.append([])
+
+    # Headers
+    headers = ["SKU", "Nome", "Marca", "Status", "Pontuação", "Texto Esperado", "Texto Encontrado", "URL", "Erro"]
+    ws.append(headers)
+    header_row = ws.max_row
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=header_row, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = thin_border
+
+    # Data rows
+    for p in products:
+        status_raw = p.get("status", "")
+        status_label = status_labels.get(status_raw, status_raw)
+        score = p.get("score")
+        score_str = f"{score * 100:.0f}%" if score is not None else ""
+        row = [
+            p.get("sku", ""),
+            p.get("name", ""),
+            p.get("brand", ""),
+            status_label,
+            score_str,
+            p.get("expected_cert_text", ""),
+            p.get("actual_cert_text", ""),
+            p.get("url", ""),
+            p.get("error", ""),
+        ]
+        ws.append(row)
+        row_idx = ws.max_row
+        for col_idx in range(1, len(row) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = thin_border
+        # Color status cell
+        status_cell = ws.cell(row=row_idx, column=4)
+        if status_raw in status_fills:
+            status_cell.fill = status_fills[status_raw]
+
+    # Column widths
+    col_widths = [15, 40, 18, 18, 12, 40, 40, 50, 40]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    # Auto-filter
+    ws.auto_filter.ref = f"A{header_row}:I{ws.max_row}"
+
+    # Save to temp file
+    excel_filename = filename.replace(".json", ".xlsx")
+    excel_path = REPORTS_DIR / excel_filename
+    wb.save(str(excel_path))
+
+    return FileResponse(
+        str(excel_path),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=excel_filename,
+    )

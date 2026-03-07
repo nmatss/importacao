@@ -10,7 +10,7 @@ export const validationController = {
       if (isNaN(processId) || processId <= 0) {
         return sendError(res, 'ID do processo invalido', 400);
       }
-      const userId = req.user?.id ?? null;
+      const userId = (req as AuthenticatedRequest).user?.id ?? null;
       const results = await validationService.runAllChecks(processId, userId);
       sendSuccess(res, results);
     } catch (error: any) {
@@ -40,6 +40,19 @@ export const validationController = {
       const userId = (req as AuthenticatedRequest).user.id;
       const result = await validationService.resolveManually(resultId, userId);
       sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
+
+  async getReport(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const report = await validationService.getReport(processId);
+      sendSuccess(res, report);
     } catch (error: any) {
       sendError(res, error.message);
     }

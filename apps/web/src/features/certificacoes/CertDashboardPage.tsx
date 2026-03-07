@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { CertStatsCards } from "@/features/certificacoes/components/CertStatsCards"
 import { CertBrandChart } from "@/features/certificacoes/components/CertBrandChart"
-import { fetchCertStats, fetchCertReports, fetchCertReportDetail, fetchCertProducts, checkCertApiHealth } from "@/shared/lib/cert-api-client"
+import { fetchCertStats, fetchCertReports, fetchCertReportDetail, fetchCertProducts, fetchCertExpired, checkCertApiHealth } from "@/shared/lib/cert-api-client"
 import { formatDateTime, relativeTime, cn, certStatusColor } from "@/shared/lib/utils"
 import {
   PlayCircle,
@@ -14,11 +14,13 @@ import {
   ArrowRight,
   BarChart3,
   Activity,
+  CalendarX2,
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
 
 interface CertStats {
   total_products: number;
+  total_expired: number;
   last_run: {
     date: string;
     total: number;
@@ -33,7 +35,16 @@ interface CertStats {
     missing: number;
     inconsistent: number;
     not_found: number;
+    expired: number;
   }>;
+}
+
+interface CertExpiredProduct {
+  sku: string;
+  name: string;
+  brand: string;
+  sale_deadline: string;
+  sale_deadline_date: string;
 }
 
 interface CertReportFile {
@@ -100,6 +111,7 @@ export default function CertDashboardPage() {
   const [loading, setLoading] = useState(true)
   const [apiOnline, setApiOnline] = useState(false)
   const [problemProducts, setProblemProducts] = useState<CertProblemProduct[]>([])
+  const [expiredProducts, setExpiredProducts] = useState<CertExpiredProduct[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -110,7 +122,9 @@ export default function CertDashboardPage() {
       fetchCertProducts({ per_page: 10, status: "MISSING,INCONSISTENT" }).catch(() => ({ products: [] })),
       // Also load URL_NOT_FOUND products
       fetchCertProducts({ per_page: 10, status: "URL_NOT_FOUND" }).catch(() => ({ products: [] })),
-    ]).then(([s, r, health, missingData, notFoundData]) => {
+      // Load expired products
+      fetchCertExpired({ per_page: 10 }).catch(() => ({ products: [] })),
+    ]).then(([s, r, health, missingData, notFoundData, expiredData]) => {
       setStats(s)
       setApiOnline(health.connected)
       const reportList: CertReportFile[] = Array.isArray(r) ? r : []
@@ -125,6 +139,12 @@ export default function CertDashboardPage() {
       }))
       const allProblems = [...missingProds, ...notFoundProds].slice(0, 10)
       setProblemProducts(allProblems)
+
+      // Expired products
+      setExpiredProducts((expiredData?.products || []).map((p: any) => ({
+        sku: p.sku, name: p.name, brand: p.brand,
+        sale_deadline: p.sale_deadline, sale_deadline_date: p.sale_deadline_date,
+      })))
 
       setLoading(false)
     })
@@ -353,6 +373,57 @@ export default function CertDashboardPage() {
           <CertBrandChart data={stats?.by_brand} />
         </div>
       </div>
+
+      {/* Expired Products Alert */}
+      {(stats?.total_expired ?? 0) > 0 && (
+        <div className="rounded-2xl border border-pink-200/80 bg-gradient-to-r from-pink-50 to-rose-50 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-7 py-5 border-b border-pink-100">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20">
+                <CalendarX2 className="h-4 w-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900 tracking-tight">
+                  Certificações Vencidas
+                </h3>
+                <p className="text-xs text-pink-600 font-medium mt-0.5">
+                  {stats?.total_expired} produto{(stats?.total_expired ?? 0) > 1 ? 's' : ''} com certificação expirada — não podem ser comercializados
+                </p>
+              </div>
+            </div>
+            <Link
+              to="/certificacoes/produtos?status=EXPIRED"
+              className="flex items-center gap-1.5 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors"
+            >
+              Ver todos <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          <div className="px-7 py-5">
+            <div className="space-y-1">
+              {expiredProducts.slice(0, 5).map((p, i) => (
+                <div
+                  key={i}
+                  className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-pink-100/50 transition-all duration-200 group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pink-100 text-pink-600">
+                      <CalendarX2 className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
+                    <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 transition-colors">{p.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-4">
+                    <span className="text-xs text-slate-500">{p.brand}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-pink-100 text-pink-700">
+                      Vencido {p.sale_deadline}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bottom Row */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">

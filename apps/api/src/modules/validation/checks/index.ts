@@ -15,6 +15,10 @@ import freightValueMatch from './freight-value-match.js';
 import unitTypeValidation from './unit-type-validation.js';
 import manufacturerCompleteness from './manufacturer-completeness.js';
 import ncmBlDescription from './ncm-bl-description.js';
+import invoiceValueVsFup from './invoice-value-vs-fup.js';
+import freightVsFup from './freight-vs-fup.js';
+import cbmVsFup from './cbm-vs-fup.js';
+import containerTypeVsFup from './container-type-vs-fup.js';
 
 export interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -53,4 +57,8 @@ export const allChecks: CheckFn[] = [
   unitTypeValidation,
   manufacturerCompleteness,
   ncmBlDescription,
+  invoiceValueVsFup,
+  freightVsFup,
+  cbmVsFup,
+  containerTypeVsFup,
 ];

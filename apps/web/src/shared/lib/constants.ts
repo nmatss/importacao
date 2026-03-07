@@ -39,4 +39,11 @@ export const VALIDATION_CHECK_NAMES = [
   { value: 'gross-weight-match', description: 'Peso Bruto' },
   { value: 'cbm-match', description: 'Cubagem (CBM)' },
   { value: 'freight-value-match', description: 'Valor do Frete' },
+  { value: 'unit-type-validation', description: 'Tipo de Unidade' },
+  { value: 'manufacturer-completeness', description: 'Completude do Fabricante' },
+  { value: 'ncm-bl-description', description: 'NCM vs Descricao BL' },
+  { value: 'invoice-value-vs-fup', description: 'Valor Invoice vs Sistema' },
+  { value: 'freight-vs-fup', description: 'Frete vs Sistema' },
+  { value: 'cbm-vs-fup', description: 'CBM vs Sistema' },
+  { value: 'container-type-vs-fup', description: 'Container vs Sistema' },
 ] as const;

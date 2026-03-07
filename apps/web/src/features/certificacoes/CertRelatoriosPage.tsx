@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchCertReports, getCertReportDownloadUrl } from '@/shared/lib/cert-api-client';
+import { fetchCertReports, getCertReportDownloadUrl, exportCertProductsExcel } from '@/shared/lib/cert-api-client';
 import { formatDateTime } from '@/shared/lib/utils';
-import { FileSpreadsheet, Download, Eye, Loader2, FileText } from 'lucide-react';
+import { FileSpreadsheet, Download, Eye, Loader2, FileText, FilePlus2 } from 'lucide-react';
 
 interface CertReportFile {
   filename: string;
@@ -13,6 +13,7 @@ interface CertReportFile {
 export default function CertRelatoriosPage() {
   const [reports, setReports] = useState<CertReportFile[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     fetchCertReports()
@@ -21,17 +22,57 @@ export default function CertRelatoriosPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const url = exportCertProductsExcel();
+      // POST via fetch to trigger generation, then download
+      const res = await fetch(url, { method: 'POST' });
+      if (!res.ok) throw new Error('Erro ao gerar relatório');
+      const blob = await res.blob();
+      const filename = res.headers.get('content-disposition')?.match(/filename="?(.+)"?/)?.[1]
+        || `produtos_certificacoes_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      // Refresh reports list
+      fetchCertReports()
+        .then((data) => setReports(Array.isArray(data) ? data : []))
+        .catch(() => {});
+    } catch {
+      // silently handle
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center gap-4">
-        <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
-          <FileSpreadsheet className="w-6 h-6" />
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+            <FileSpreadsheet className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">Relatórios</h1>
+            <p className="text-sm text-slate-500">Relatórios de validação e exportação de produtos</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">Histórico de Validações</h1>
-          <p className="text-sm text-slate-500">Relatórios gerados pelas validações de certificações</p>
-        </div>
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {exporting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <FilePlus2 className="w-4 h-4" />
+          )}
+          {exporting ? 'Gerando...' : 'Exportar Excel'}
+        </button>
       </div>
 
       {/* Reports Card */}

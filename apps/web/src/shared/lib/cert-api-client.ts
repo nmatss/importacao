@@ -145,6 +145,33 @@ export async function fetchCertScheduleHistory(id: string) {
   return certFetch(`/api/schedules/${id}/history`);
 }
 
+// ---------- Expired Products ----------
+
+export async function fetchCertExpired(params?: {
+  page?: number;
+  per_page?: number;
+  search?: string;
+  brand?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.per_page) query.set('per_page', String(params.per_page));
+  if (params?.search) query.set('search', params.search);
+  if (params?.brand) query.set('brand', params.brand);
+  const qs = query.toString();
+  return certFetch(`/api/expired${qs ? `?${qs}` : ''}`);
+}
+
+// ---------- Export ----------
+
+export function exportCertProductsExcel(params?: { brand?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.brand) query.set('brand', params.brand);
+  if (params?.status) query.set('status', params.status);
+  const qs = query.toString();
+  return `${CERT_BASE}/api/reports/export${qs ? `?${qs}` : ''}`;
+}
+
 // ---------- Reports ----------
 
 export async function fetchCertReports() {
@@ -156,5 +183,5 @@ export async function fetchCertReportDetail(filename: string) {
 }
 
 export function getCertReportDownloadUrl(filename: string) {
-  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}`;
+  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}?format=xlsx`;
 }

@@ -3,7 +3,7 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Ship, Building2, Warehouse, FileText } from 'lucide-react';
+import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 
@@ -20,6 +20,14 @@ const processSchema = z.object({
   importerName: z.string().optional(),
   importerAddress: z.string().optional(),
   notes: z.string().optional(),
+  containerType: z.string().optional(),
+  totalFobValue: z.string().optional(),
+  freightValue: z.string().optional(),
+  totalCbm: z.string().optional(),
+  totalBoxes: z.coerce.number().optional(),
+  totalNetWeight: z.string().optional(),
+  totalGrossWeight: z.string().optional(),
+  shipmentDate: z.string().optional(),
 });
 
 type ProcessFormData = z.infer<typeof processSchema>;
@@ -38,6 +46,14 @@ interface Process {
   importerName: string | null;
   importerAddress: string | null;
   notes: string | null;
+  containerType: string | null;
+  totalFobValue: string | null;
+  freightValue: string | null;
+  totalCbm: string | null;
+  totalBoxes: number | null;
+  totalNetWeight: string | null;
+  totalGrossWeight: string | null;
+  shipmentDate: string | null;
 }
 
 export function ProcessEditPage() {
@@ -75,6 +91,14 @@ export function ProcessEditPage() {
         importerName: process.importerName || '',
         importerAddress: process.importerAddress || '',
         notes: process.notes || '',
+        containerType: process.containerType || '',
+        totalFobValue: process.totalFobValue || '',
+        freightValue: process.freightValue || '',
+        totalCbm: process.totalCbm || '',
+        totalBoxes: process.totalBoxes ?? undefined,
+        totalNetWeight: process.totalNetWeight || '',
+        totalGrossWeight: process.totalGrossWeight || '',
+        shipmentDate: process.shipmentDate ? process.shipmentDate.slice(0, 10) : '',
       });
     }
   }, [process, reset]);
@@ -255,6 +279,90 @@ export function ProcessEditPage() {
                 placeholder="Endereco completo do importador"
                 className={inputClass}
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Financial & Cargo */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-600">
+              <DollarSign className="h-5 w-5" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">Dados Financeiros e Carga</h3>
+          </div>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>Valor FOB USD</label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('totalFobValue')}
+                placeholder="0.00"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Valor Frete USD</label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('freightValue')}
+                placeholder="0.00"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Tipo Container</label>
+              <input
+                {...register('containerType')}
+                placeholder="Ex: 40HC"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Quantidade Caixas</label>
+              <input
+                type="number"
+                step="1"
+                {...register('totalBoxes')}
+                placeholder="0"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Peso Liquido kg</label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('totalNetWeight')}
+                placeholder="0.00"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Peso Bruto kg</label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('totalGrossWeight')}
+                placeholder="0.00"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>CBM m3</label>
+              <input
+                type="number"
+                step="0.01"
+                {...register('totalCbm')}
+                placeholder="0.00"
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Data Embarque</label>
+              <input type="date" {...register('shipmentDate')} className={inputClass} />
             </div>
           </div>
         </div>

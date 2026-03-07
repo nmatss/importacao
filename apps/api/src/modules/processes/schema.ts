@@ -13,6 +13,14 @@ export const createProcessSchema = z.object({
   importerName: z.string().optional(),
   importerAddress: z.string().optional(),
   notes: z.string().optional(),
+  containerType: z.string().optional(),
+  totalFobValue: z.string().optional(),
+  freightValue: z.string().optional(),
+  totalCbm: z.string().optional(),
+  totalBoxes: z.coerce.number().optional(),
+  totalNetWeight: z.string().optional(),
+  totalGrossWeight: z.string().optional(),
+  shipmentDate: z.string().optional(),
 });
 
 export const updateProcessSchema = z.object({
@@ -42,6 +50,7 @@ export const updateProcessSchema = z.object({
   hasCertification: z.boolean().optional(),
   hasFreeOfCharge: z.boolean().optional(),
   notes: z.string().optional(),
+  containerType: z.string().optional(),
 });
 
 export const processFilterSchema = z.object({
