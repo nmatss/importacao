@@ -12,6 +12,9 @@ import netWeightMatch from './net-weight-match.js';
 import grossWeightMatch from './gross-weight-match.js';
 import cbmMatch from './cbm-match.js';
 import freightValueMatch from './freight-value-match.js';
+import unitTypeValidation from './unit-type-validation.js';
+import manufacturerCompleteness from './manufacturer-completeness.js';
+import ncmBlDescription from './ncm-bl-description.js';
 
 export interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -30,7 +33,9 @@ export interface CheckResult {
   message: string;
 }
 
-export const allChecks = [
+export type CheckFn = (input: CheckInput) => CheckResult | Promise<CheckResult>;
+
+export const allChecks: CheckFn[] = [
   exporterMatch,
   importerMatch,
   processReference,
@@ -45,4 +50,7 @@ export const allChecks = [
   grossWeightMatch,
   cbmMatch,
   freightValueMatch,
+  unitTypeValidation,
+  manufacturerCompleteness,
+  ncmBlDescription,
 ];

@@ -159,6 +159,71 @@ export const googleDriveService = {
     return driveFileId;
   },
 
+  async moveToCorrection(processCode: string, brand: string): Promise<void> {
+    const configured = await this.isConfigured();
+    if (!configured) return;
+
+    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    if (!rootFolderId) return;
+
+    const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+    const brandFolderId = await this.ensureFolder(rootFolderId, brandName);
+
+    // Find the process folder
+    const processFolderId = await this.findFolder(brandFolderId, processCode);
+    if (!processFolderId) {
+      logger.warn({ processCode }, 'Process folder not found for correction move');
+      return;
+    }
+
+    // Create/ensure correction folder under brand
+    const correctionFolderId = await this.ensureFolder(brandFolderId, 'PENDENTES DE CORREÇÃO');
+
+    // Move process folder: remove from brand, add to correction
+    const drive = getDriveClient();
+    await drive.files.update({
+      fileId: processFolderId,
+      addParents: correctionFolderId,
+      removeParents: brandFolderId,
+      fields: 'id, parents',
+    });
+
+    logger.info({ processCode, correctionFolderId }, 'Process moved to correction folder');
+  },
+
+  async moveFromCorrection(processCode: string, brand: string): Promise<void> {
+    const configured = await this.isConfigured();
+    if (!configured) return;
+
+    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    if (!rootFolderId) return;
+
+    const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+    const brandFolderId = await this.ensureFolder(rootFolderId, brandName);
+
+    // Find correction folder
+    const correctionFolderId = await this.findFolder(brandFolderId, 'PENDENTES DE CORREÇÃO');
+    if (!correctionFolderId) return;
+
+    // Find process folder inside correction
+    const processFolderId = await this.findFolder(correctionFolderId, processCode);
+    if (!processFolderId) {
+      logger.warn({ processCode }, 'Process folder not found in correction folder');
+      return;
+    }
+
+    // Move back: remove from correction, add to brand
+    const drive = getDriveClient();
+    await drive.files.update({
+      fileId: processFolderId,
+      addParents: brandFolderId,
+      removeParents: correctionFolderId,
+      fields: 'id, parents',
+    });
+
+    logger.info({ processCode }, 'Process moved from correction back to brand folder');
+  },
+
   async listProcessFiles(folderId: string): Promise<drive_v3.Schema$File[]> {
     const drive = getDriveClient();
     const allFiles: drive_v3.Schema$File[] = [];
