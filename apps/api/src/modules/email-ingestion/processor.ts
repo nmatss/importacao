@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { eq, desc, count, sql } from 'drizzle-orm';
+import { eq, desc, count, sql, ilike } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { emailIngestionLogs, importProcesses, followUpTracking } from '../../shared/database/schema.js';
 import { documentService } from '../documents/service.js';
@@ -8,10 +8,13 @@ import { gmailService } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
+import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 
 const UPLOAD_DIR = path.resolve('uploads');
 
-function extractProcessCode(subject: string): string | null {
+// ── Regex-based process code extraction (fast, first pass) ──────────────
+
+function extractProcessCode(text: string): string | null {
   const patterns = [
     /\b(IMP[-_]?\d{4}[-_]?\d{3,})\b/i,
     /\b(PU?K(?:ET)?[-_]?\d{3,})\b/i,
@@ -21,11 +24,13 @@ function extractProcessCode(subject: string): string | null {
   ];
 
   for (const pattern of patterns) {
-    const match = subject.match(pattern);
+    const match = text.match(pattern);
     if (match) return match[1].toUpperCase();
   }
   return null;
 }
+
+// ── Document classification (filename-based, fast) ──────────────────────
 
 function classifyDocument(filename: string): string {
   const lower = filename.toLowerCase();
@@ -37,24 +42,126 @@ function classifyDocument(filename: string): string {
   return 'other';
 }
 
+// ── AI-enhanced document classification using email body context ─────────
+
+function classifyDocumentWithContext(
+  filename: string,
+  aiAnalysis: EmailAnalysisResult | null,
+): string {
+  // First try filename-based classification
+  const filenameType = classifyDocument(filename);
+  if (filenameType !== 'other') return filenameType;
+
+  // If filename is generic (e.g. "document.pdf", "scan001.pdf"), use AI context
+  if (!aiAnalysis || aiAnalysis.documentTypes.length === 0) return filenameType;
+
+  // Map AI document type mentions to our classification types
+  const typeMapping: Record<string, string> = {
+    'invoice': 'invoice',
+    'fatura': 'invoice',
+    'commercial_invoice': 'invoice',
+    'packing_list': 'packing_list',
+    'packing': 'packing_list',
+    'romaneio': 'packing_list',
+    'ohbl': 'ohbl',
+    'bl': 'ohbl',
+    'bill_of_lading': 'ohbl',
+    'espelho': 'espelho',
+    'li': 'li',
+    'certificate': 'other',
+    'correction': 'other',
+    'draft': 'other',
+  };
+
+  // If AI detected exactly one document type, use it for generic filenames
+  if (aiAnalysis.documentTypes.length === 1) {
+    const aiType = aiAnalysis.documentTypes[0].toLowerCase().replace(/\s+/g, '_');
+    return typeMapping[aiType] || filenameType;
+  }
+
+  // If multiple types detected, try to match with filename hints
+  for (const dt of aiAnalysis.documentTypes) {
+    const aiType = dt.toLowerCase().replace(/\s+/g, '_');
+    const mapped = typeMapping[aiType];
+    if (mapped && mapped !== 'other') return mapped;
+  }
+
+  return filenameType;
+}
+
+// ── Brand detection ─────────────────────────────────────────────────────
+
 function detectBrand(subject: string, from: string): 'puket' | 'imaginarium' {
   const text = `${subject} ${from}`.toLowerCase();
   if (text.includes('imaginarium') || text.includes('imag')) return 'imaginarium';
   return 'puket';
 }
 
-// Allowed sender filter - only process emails from these domains/addresses
-// Configured via EMAIL_ALLOWED_SENDERS env var (comma-separated)
-// e.g. EMAIL_ALLOWED_SENDERS=kiom.com.br,@kiom.com,noreply@kiom.com.br
+// ── Allowed sender filter ───────────────────────────────────────────────
+
 function isAllowedSender(from: string): boolean {
   const allowedRaw = process.env.EMAIL_ALLOWED_SENDERS;
-  if (!allowedRaw) return true; // No filter = accept all
+  if (!allowedRaw) return true;
 
   const allowed = allowedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
   const fromLower = from.toLowerCase();
 
   return allowed.some(pattern => fromLower.includes(pattern));
 }
+
+// ── Fuzzy process code matching against DB ──────────────────────────────
+
+async function fuzzyMatchProcessCode(code: string): Promise<{ id: number; processCode: string } | null> {
+  // Try exact match first
+  const [exact] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+    .from(importProcesses)
+    .where(eq(importProcesses.processCode, code))
+    .limit(1);
+  if (exact) return exact;
+
+  // Try case-insensitive match
+  const [caseInsensitive] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+    .from(importProcesses)
+    .where(ilike(importProcesses.processCode, code))
+    .limit(1);
+  if (caseInsensitive) return caseInsensitive;
+
+  // Try partial match (code contained in process_code or vice versa)
+  const normalizedCode = code.replace(/[-_]/g, '').toUpperCase();
+  const [partial] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+    .from(importProcesses)
+    .where(ilike(importProcesses.processCode, `%${normalizedCode}%`))
+    .limit(1);
+  if (partial) return partial;
+
+  // Try matching with wildcards for separator variations (IMP2025001 matches IMP-2025-001)
+  const withWildcards = normalizedCode.replace(/(\d+)/g, '%$1%').replace(/%%/g, '%');
+  const [wildcardMatch] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+    .from(importProcesses)
+    .where(ilike(importProcesses.processCode, withWildcards))
+    .limit(1);
+  if (wildcardMatch) return wildcardMatch;
+
+  return null;
+}
+
+// ── AI email analysis (non-blocking) ────────────────────────────────────
+
+async function analyzeEmailWithAI(
+  subject: string,
+  body: string,
+  fromAddress: string,
+): Promise<EmailAnalysisResult | null> {
+  try {
+    const result = await aiService.analyzeEmail(subject, body, fromAddress);
+    return result;
+  } catch (err) {
+    logger.warn({ err }, 'AI email analysis failed, falling back to regex-only');
+    return null;
+  }
+}
+
+// ── Main processor ──────────────────────────────────────────────────────
 
 export const emailProcessor = {
   async processNewEmails(includeRead = false) {
@@ -111,18 +218,41 @@ export const emailProcessor = {
           continue;
         }
 
-        const processCode = extractProcessCode(email.subject);
+        // ── Step 1: Try regex on subject (fast) ──────────────────────
+        let processCode = extractProcessCode(email.subject);
+        let detectionMethod: 'regex_subject' | 'regex_body' | 'ai' | null = processCode ? 'regex_subject' : null;
+
+        // ── Step 2: Try regex on body if subject failed ──────────────
+        if (!processCode && email.body) {
+          processCode = extractProcessCode(email.body.substring(0, 3000));
+          if (processCode) detectionMethod = 'regex_body';
+        }
+
+        // ── Step 3: AI analysis (async, non-blocking on failure) ─────
+        let aiAnalysis: EmailAnalysisResult | null = null;
+        if (email.body || email.subject) {
+          aiAnalysis = await analyzeEmailWithAI(email.subject, email.body || '', email.from);
+        }
+
+        // ── Step 4: Use AI process code if regex failed ──────────────
+        if (!processCode && aiAnalysis?.processCode) {
+          processCode = aiAnalysis.processCode.toUpperCase();
+          detectionMethod = 'ai';
+          logger.info({ processCode, method: 'ai' }, 'Process code detected via AI');
+        }
+
+        // ── Step 5: Resolve process in DB (with fuzzy matching) ──────
         let processId: number | null = null;
 
         if (processCode) {
-          const [existingProcess] = await db.select()
-            .from(importProcesses)
-            .where(eq(importProcesses.processCode, processCode))
-            .limit(1);
+          const matched = await fuzzyMatchProcessCode(processCode);
 
-          if (existingProcess) {
-            processId = existingProcess.id;
+          if (matched) {
+            processId = matched.id;
+            // Update processCode to the canonical form from DB
+            processCode = matched.processCode;
           } else {
+            // Create new process
             const brand = detectBrand(email.subject, email.from);
             const [newProcess] = await db.insert(importProcesses).values({
               processCode,
@@ -137,7 +267,12 @@ export const emailProcessor = {
           }
         }
 
-        const processedAttachments: Array<{ filename: string; type: string; documentId?: number }> = [];
+        // ── Step 6: Process attachments ──────────────────────────────
+        const processedAttachments: Array<{
+          filename: string;
+          type: string;
+          documentId?: number;
+        }> = [];
 
         for (const att of email.attachments) {
           await fs.mkdir(UPLOAD_DIR, { recursive: true });
@@ -145,7 +280,8 @@ export const emailProcessor = {
           const filePath = path.join(UPLOAD_DIR, safeName);
           await fs.writeFile(filePath, att.content);
 
-          const docType = classifyDocument(att.filename);
+          // Use AI-enhanced classification (falls back to filename-only)
+          const docType = classifyDocumentWithContext(att.filename, aiAnalysis);
 
           // Upload to Sistema Automatico INBOX
           let sistemaFileId: string | undefined;
@@ -184,17 +320,51 @@ export const emailProcessor = {
           }
         }
 
+        // ── Step 7: Build enriched metadata for storage ──────────────
+        const enrichedData: Record<string, any> = {
+          attachments: processedAttachments,
+          detectionMethod,
+        };
+
+        if (aiAnalysis) {
+          enrichedData.aiAnalysis = {
+            emailCategory: aiAnalysis.emailCategory,
+            urgencyLevel: aiAnalysis.urgencyLevel,
+            documentTypes: aiAnalysis.documentTypes,
+            invoiceNumbers: aiAnalysis.invoiceNumbers,
+            keyDates: aiAnalysis.keyDates,
+            supplierName: aiAnalysis.supplierName,
+          };
+        }
+
+        // ── Step 8: Update log with results ──────────────────────────
         await db.update(emailIngestionLogs)
           .set({
             status: 'completed',
             processId,
             processCode,
-            processedAttachments,
+            processedAttachments: enrichedData,
           })
           .where(eq(emailIngestionLogs.id, logEntry.id));
 
-        auditService.log(null, 'email_processed', 'email', logEntry.id, { from: email.from, subject: email.subject, processCode, attachments: processedAttachments.length }, null);
-        logger.info({ messageId: email.messageId, processCode, attachments: processedAttachments.length }, 'Email processed successfully');
+        auditService.log(null, 'email_processed', 'email', logEntry.id, {
+          from: email.from,
+          subject: email.subject,
+          processCode,
+          detectionMethod,
+          emailCategory: aiAnalysis?.emailCategory,
+          urgencyLevel: aiAnalysis?.urgencyLevel,
+          attachments: processedAttachments.length,
+        }, null);
+
+        logger.info({
+          messageId: email.messageId,
+          processCode,
+          detectionMethod,
+          emailCategory: aiAnalysis?.emailCategory,
+          urgencyLevel: aiAnalysis?.urgencyLevel,
+          attachments: processedAttachments.length,
+        }, 'Email processed successfully');
       } catch (error: any) {
         await db.update(emailIngestionLogs)
           .set({ status: 'failed', errorMessage: error.message })
@@ -288,7 +458,12 @@ export const emailProcessor = {
 
       // Fallback: re-process from locally saved attachments if a process was created
       if (log.processId) {
-        const processedAttachments = log.processedAttachments as Array<{ filename: string; type: string; documentId?: number }> | null;
+        const rawAttachments = log.processedAttachments as Record<string, any> | null;
+        // Support both old format (array) and new enriched format (object with .attachments)
+        const processedAttachments = Array.isArray(rawAttachments)
+          ? rawAttachments
+          : (rawAttachments?.attachments as Array<{ filename: string; type: string; documentId?: number }> | undefined);
+
         if (processedAttachments && processedAttachments.length > 0) {
           for (const att of processedAttachments) {
             if (att.documentId) {

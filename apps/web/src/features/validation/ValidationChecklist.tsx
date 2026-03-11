@@ -7,6 +7,10 @@ import {
   Play,
   Brain,
   Wrench,
+  Mail,
+  Send,
+  X,
+  Sparkles,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -36,6 +40,16 @@ interface Anomaly {
   description: string;
   severity: 'high' | 'medium' | 'low';
   confidence: number;
+}
+
+interface CorrectionDraft {
+  id: number;
+  processId: number;
+  recipient: string;
+  recipientEmail: string;
+  subject: string;
+  body: string;
+  status: string;
 }
 
 interface ValidationChecklistProps {
@@ -77,6 +91,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const [running, setRunning] = useState(false);
   const [detectingAnomalies, setDetectingAnomalies] = useState(false);
   const [anomalies, setAnomalies] = useState<Anomaly[] | null>(null);
+  const [generatingDraft, setGeneratingDraft] = useState(false);
+  const [draft, setDraft] = useState<CorrectionDraft | null>(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [editRecipientEmail, setEditRecipientEmail] = useState('');
+  const [sending, setSending] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const { data: checks, isLoading } = useApiQuery<ValidationCheck[]>(
     ['validation', processId],
@@ -116,6 +138,66 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     }
   };
 
+  const generateCorrectionDraft = async (useAi = false) => {
+    setGeneratingDraft(true);
+    try {
+      const data = await api.post<CorrectionDraft>(
+        `/api/validation/${processId}/correction-draft`,
+        { useAi },
+      );
+      setDraft(data);
+      setEditSubject(data.subject);
+      setEditBody(data.body);
+      setEditRecipientEmail(data.recipientEmail);
+      setShowDraftModal(true);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao gerar rascunho de correcao');
+    } finally {
+      setGeneratingDraft(false);
+    }
+  };
+
+  const saveDraft = async () => {
+    if (!draft) return;
+    setSaving(true);
+    try {
+      const updated = await api.patch<CorrectionDraft>(`/api/communications/${draft.id}/draft`, {
+        subject: editSubject,
+        body: editBody,
+        recipientEmail: editRecipientEmail,
+      });
+      setDraft(updated);
+      alert('Rascunho salvo com sucesso');
+    } catch (err: any) {
+      alert(err.message || 'Erro ao salvar rascunho');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendEmail = async () => {
+    if (!draft) return;
+    if (!confirm('Deseja realmente enviar este e-mail de correcao?')) return;
+    setSending(true);
+    try {
+      // Save any edits first
+      await api.patch(`/api/communications/${draft.id}/draft`, {
+        subject: editSubject,
+        body: editBody,
+        recipientEmail: editRecipientEmail,
+      });
+      // Then send
+      await api.post(`/api/communications/${draft.id}/send`);
+      alert('E-mail enviado com sucesso');
+      setShowDraftModal(false);
+      setDraft(null);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar e-mail');
+    } finally {
+      setSending(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingSpinner className="py-8" />;
   }
@@ -152,6 +234,37 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           )}
           Detectar Anomalias (IA)
         </button>
+
+        {/* Generate Correction Email - only show when there are failures */}
+        {failedCount > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => generateCorrectionDraft(false)}
+              disabled={generatingDraft}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 transition-colors"
+            >
+              {generatingDraft ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                <Mail className="h-4 w-4" />
+              )}
+              Gerar E-mail Correcao
+            </button>
+            <button
+              onClick={() => generateCorrectionDraft(true)}
+              disabled={generatingDraft}
+              className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50 transition-colors"
+              title="Gerar com IA (texto mais elaborado)"
+            >
+              {generatingDraft ? (
+                <LoadingSpinner size="sm" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Gerar com IA
+            </button>
+          </div>
+        )}
 
         {/* Summary badges */}
         {checks && checks.length > 0 && (
@@ -291,6 +404,107 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           <p className="mt-1 text-sm text-green-700">
             Nenhuma anomalia detectada pela IA.
           </p>
+        </div>
+      )}
+
+      {/* Correction Draft Modal */}
+      {showDraftModal && draft && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl">
+            {/* Header */}
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 rounded-t-2xl">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100">
+                  <Mail className="h-4.5 w-4.5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">
+                    E-mail de Correcao
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Rascunho para {draft.recipient} - Revise antes de enviar
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Recipient Email */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Destinatario
+                </label>
+                <input
+                  type="email"
+                  value={editRecipientEmail}
+                  onChange={(e) => setEditRecipientEmail(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+
+              {/* Subject */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Assunto
+                </label>
+                <input
+                  type="text"
+                  value={editSubject}
+                  onChange={(e) => setEditSubject(e.target.value)}
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                />
+              </div>
+
+              {/* Body Preview / Edit */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Corpo do E-mail
+                </label>
+                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                  <div
+                    className="p-4 text-sm text-slate-700 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={(e) => setEditBody(e.currentTarget.innerHTML)}
+                    dangerouslySetInnerHTML={{ __html: editBody }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 rounded-b-2xl">
+              <button
+                onClick={() => setShowDraftModal(false)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveDraft}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+              >
+                {saving ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
+                Salvar Rascunho
+              </button>
+              <button
+                onClick={sendEmail}
+                disabled={sending}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {sending ? <LoadingSpinner size="sm" /> : <Send className="h-4 w-4" />}
+                Enviar E-mail
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

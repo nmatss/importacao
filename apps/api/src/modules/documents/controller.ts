@@ -72,4 +72,13 @@ export const documentController = {
       sendError(res, error.message);
     }
   },
+
+  async comparison(req: Request, res: Response) {
+    try {
+      const result = await documentService.getComparison(Number(req.params.processId));
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
 };

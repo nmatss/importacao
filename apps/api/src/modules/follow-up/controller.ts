@@ -40,4 +40,25 @@ export const followUpController = {
       sendError(res, error.message);
     }
   },
+
+  async compareWithSheet(req: Request, res: Response) {
+    try {
+      const { processCode } = req.params;
+      const result = await followUpService.compareWithSheet(processCode);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message, 404);
+    }
+  },
+
+  async syncFromSheet(req: Request, res: Response) {
+    try {
+      const { processCode } = req.params;
+      const mode = (req.body?.mode || 'conservative') as 'conservative' | 'industrial';
+      const result = await followUpService.syncFromSheet(processCode, mode);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
 };

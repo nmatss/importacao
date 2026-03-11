@@ -1,10 +1,14 @@
 import { eq, desc, count } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { db } from '../../shared/database/connection.js';
-import { communications, documents, importProcesses, espelhos } from '../../shared/database/schema.js';
+import { communications, documents, importProcesses, espelhos, validationResults } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { CreateCommunicationInput } from './schema.js';
 import { feniciaSubmissionTemplate } from './templates/fenicia-submission.js';
+import { aiService } from '../ai/service.js';
+import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
+
+const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
 function sanitizeHtml(html: string): string {
   // Remove script tags and their content
@@ -173,5 +177,134 @@ export const communicationService = {
       body,
       attachments,
     });
+  },
+
+  async generateCorrectionDraft(processId: number, useAi = false) {
+    // Get process data
+    const [proc] = await db.select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!proc) throw new Error('Processo nao encontrado');
+
+    // Get all failed validation results
+    const results = await db.select()
+      .from(validationResults)
+      .where(eq(validationResults.processId, processId));
+
+    const failedResults = results.filter(r => r.status === 'failed' && !r.resolvedManually);
+
+    if (failedResults.length === 0) {
+      throw new Error('Nenhuma divergencia encontrada para gerar e-mail de correcao');
+    }
+
+    // Categorize divergences
+    const categoryMap: Record<string, string> = {
+      'fob-value-match': 'value',
+      'total-value-match': 'value',
+      'freight-value-match': 'value',
+      'invoice-value-vs-fup': 'value',
+      'freight-vs-fup': 'value',
+      'net-weight-match': 'weight',
+      'gross-weight-match': 'weight',
+      'boxes-match': 'weight',
+      'cbm-vs-fup': 'weight',
+      'invoice-number-match': 'document',
+      'date-match': 'document',
+      'exporter-match': 'document',
+      'importer-match': 'document',
+      'incoterm-match': 'document',
+      'ports-match': 'logistics',
+      'container-type-vs-fup': 'logistics',
+      'bl-shipper-match': 'logistics',
+      'bl-consignee-match': 'logistics',
+      'bl-notify-match': 'logistics',
+    };
+
+    const divergences = failedResults.map(r => ({
+      checkName: r.checkName,
+      category: categoryMap[r.checkName] || 'other',
+      expectedValue: r.expectedValue ?? undefined,
+      actualValue: r.actualValue ?? undefined,
+      message: r.message ?? '',
+    }));
+
+    // Get invoice number from documents
+    const docs = await db.select()
+      .from(documents)
+      .where(eq(documents.processId, processId));
+
+    const invoiceDoc = docs.find(d => d.type === 'invoice');
+    const invoiceData = invoiceDoc?.aiParsedData as Record<string, any> | null;
+    const invoiceNumber = invoiceData?.invoiceNumber?.value || invoiceData?.invoice_number?.value || undefined;
+
+    let subject: string;
+    let body: string;
+
+    if (useAi) {
+      // Use AI to generate a polished correction email
+      const aiResult = await aiService.generateCorrectionEmail({
+        processCode: proc.processCode ?? String(processId),
+        brand: proc.brand,
+        invoiceNumber,
+        exporterName: proc.exporterName ?? undefined,
+        divergences,
+      });
+      subject = aiResult.subject;
+      body = aiResult.body;
+    } else {
+      // Use the existing template
+      const templateResult = kiomCorrectionTemplate({
+        processCode: proc.processCode ?? String(processId),
+        brand: proc.brand,
+        failedChecks: failedResults.map(c => ({
+          checkName: c.checkName,
+          expectedValue: c.expectedValue ?? undefined,
+          actualValue: c.actualValue ?? undefined,
+          message: c.message ?? '',
+        })),
+      });
+      subject = templateResult.subject;
+      body = templateResult.body;
+    }
+
+    // Create draft communication
+    const communication = await this.create({
+      processId,
+      recipient: 'KIOM',
+      recipientEmail: KIOM_EMAIL || 'kiom@placeholder.com',
+      subject,
+      body,
+    });
+
+    logger.info(
+      { processId, failedCount: failedResults.length, useAi, communicationId: communication.id },
+      'Correction draft generated',
+    );
+
+    return communication;
+  },
+
+  async updateDraft(id: number, data: { subject?: string; body?: string; recipientEmail?: string }) {
+    const [communication] = await db.select()
+      .from(communications)
+      .where(eq(communications.id, id))
+      .limit(1);
+
+    if (!communication) throw new Error('Comunicacao nao encontrada');
+    if (communication.status !== 'draft') throw new Error('Somente rascunhos podem ser editados');
+
+    const updateData: Record<string, any> = {};
+    if (data.subject) updateData.subject = data.subject;
+    if (data.body) updateData.body = sanitizeHtml(data.body);
+    if (data.recipientEmail) updateData.recipientEmail = data.recipientEmail;
+
+    const [updated] = await db.update(communications)
+      .set(updateData)
+      .where(eq(communications.id, id))
+      .returning();
+
+    return updated;
   },
 };

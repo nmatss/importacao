@@ -31,6 +31,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { SLADashboard } from './SLADashboard';
 
 interface DashboardOverview {
   activeProcesses: number;
@@ -720,6 +721,9 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* SLA / Pendencias Dashboard */}
+      <SLADashboard />
     </div>
   );
 }

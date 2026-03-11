@@ -8,6 +8,8 @@ router.use(authMiddleware);
 
 router.get('/', followUpController.getAll);
 router.get('/deadlines/li', followUpController.getLiDeadlines);
+router.get('/sheet-compare/:processCode', followUpController.compareWithSheet);
+router.post('/sync-from-sheet/:processCode', followUpController.syncFromSheet);
 router.get('/:processId', followUpController.getByProcess);
 router.put('/:processId', followUpController.update);
 

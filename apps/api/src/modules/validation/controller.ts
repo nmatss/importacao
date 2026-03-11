@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { validationService } from './service.js';
+import { communicationService } from '../communications/service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import type { AuthenticatedRequest } from '../../shared/types/index.js';
 
@@ -66,6 +67,20 @@ export const validationController = {
       }
       const anomalies = await validationService.runAnomalyDetection(processId);
       sendSuccess(res, anomalies);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
+
+  async generateCorrectionDraft(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const useAi = req.body?.useAi === true;
+      const draft = await communicationService.generateCorrectionDraft(processId, useAi);
+      sendSuccess(res, draft, 201);
     } catch (error: any) {
       sendError(res, error.message);
     }

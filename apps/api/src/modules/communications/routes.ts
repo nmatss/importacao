@@ -12,5 +12,6 @@ router.get('/', communicationController.list);
 router.get('/process/:processId', communicationController.listByProcess);
 router.post('/', validate(createCommunicationSchema), communicationController.create);
 router.post('/:id/send', communicationController.send);
+router.patch('/:id/draft', communicationController.updateDraft);
 
 export { router as communicationRoutes };

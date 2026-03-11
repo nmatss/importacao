@@ -6,6 +6,7 @@ interface FetchedEmail {
   messageId: string;
   from: string;
   subject: string;
+  body: string;
   date: Date;
   attachments: Array<{
     filename: string;
@@ -65,6 +66,7 @@ export const imapService = {
               messageId: parsed.messageId || `${Date.now()}-${Math.random()}`,
               from: parsed.from?.text || 'unknown',
               subject: parsed.subject || '(sem assunto)',
+              body: parsed.text || '',
               date: parsed.date || new Date(),
               attachments,
             });

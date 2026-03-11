@@ -29,6 +29,7 @@ import {
   Banknote,
   StickyNote,
   Truck,
+  GitCompareArrows,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
@@ -36,6 +37,7 @@ import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
+import { DocumentComparison } from '@/features/documents/DocumentComparison';
 import { ValidationChecklist } from '@/features/validation/ValidationChecklist';
 import { FupComparisonPanel } from '@/features/validation/FupComparisonPanel';
 import { EspelhoPreview } from '@/features/espelhos/EspelhoPreview';
@@ -80,6 +82,7 @@ const STEPS = [
 
 const TABS = [
   { key: 'documentos', label: 'Documentos', icon: FileText },
+  { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'validacao', label: 'Validacao', icon: ClipboardCheck },
   { key: 'espelho', label: 'Espelho', icon: FileSpreadsheet },
   { key: 'cambios', label: 'Cambios', icon: DollarSign },
@@ -421,6 +424,18 @@ export function ProcessDetailPage() {
                 Documentos do Processo
               </h3>
               <DocumentList processId={id} />
+            </div>
+          )}
+
+          {activeTab === 'comparativo' && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold text-slate-800">
+                Comparativo de Documentos
+              </h3>
+              <p className="text-sm text-slate-500">
+                Visualizacao lado a lado dos dados extraidos de Invoice, Packing List e BL.
+              </p>
+              <DocumentComparison processId={id} />
             </div>
           )}
 

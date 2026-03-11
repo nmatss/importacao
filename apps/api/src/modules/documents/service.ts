@@ -303,4 +303,114 @@ export const documentService = {
 
     logger.info({ documentId, driveFileId }, 'Document uploaded to Google Drive');
   },
+
+  async getComparison(processId: number) {
+    const docs = await db.select().from(documents).where(eq(documents.processId, processId));
+
+    const invoiceDoc = docs.find((d) => d.type === 'invoice');
+    const plDoc = docs.find((d) => d.type === 'packing_list');
+    const blDoc = docs.find((d) => d.type === 'ohbl');
+
+    const inv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
+    const pl = (plDoc?.aiParsedData as Record<string, any>) ?? null;
+    const bl = (blDoc?.aiParsedData as Record<string, any>) ?? null;
+
+    // Build aggregate field comparison
+    const aggregateFields = [
+      { label: 'Exportador / Shipper', inv: inv?.exporterName, pl: pl?.exporterName, bl: bl?.shipperName ?? bl?.shipper },
+      { label: 'Importador / Consignee', inv: inv?.importerName, pl: pl?.importerName, bl: bl?.consigneeName ?? bl?.consignee },
+      { label: 'Invoice Number', inv: inv?.invoiceNumber, pl: pl?.packingListNumber, bl: bl?.blNumber },
+      { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
+      { label: 'Moeda', inv: inv?.currency, pl: null, bl: bl?.freightCurrency },
+      { label: 'Porto Embarque', inv: inv?.portOfLoading, pl: null, bl: bl?.portOfLoading },
+      { label: 'Porto Destino', inv: inv?.portOfDischarge, pl: null, bl: bl?.portOfDischarge },
+      { label: 'Total FOB (USD)', inv: inv?.totalFobValue, pl: null, bl: null },
+      { label: 'Frete', inv: null, pl: null, bl: bl?.freightValue },
+      { label: 'Total Caixas', inv: inv?.totalBoxes, pl: pl?.totalBoxes, bl: bl?.totalBoxes },
+      { label: 'Peso Liquido (kg)', inv: inv?.totalNetWeight, pl: pl?.totalNetWeight, bl: null },
+      { label: 'Peso Bruto (kg)', inv: inv?.totalGrossWeight, pl: pl?.totalGrossWeight, bl: bl?.totalGrossWeight },
+      { label: 'CBM (m3)', inv: inv?.totalCbm, pl: pl?.totalCbm, bl: bl?.totalCbm },
+      { label: 'ETD / Shipped On Board', inv: null, pl: null, bl: bl?.shipmentDate ?? bl?.etd },
+      { label: 'ETA', inv: null, pl: null, bl: bl?.eta },
+      { label: 'Container', inv: null, pl: null, bl: bl?.containerNumber },
+      { label: 'Navio', inv: null, pl: null, bl: bl?.vesselName },
+    ];
+
+    // Compute match status for each field
+    const aggregateComparison = aggregateFields.map((f) => {
+      const values = [f.inv, f.pl, f.bl].filter((v) => v != null && v !== '');
+      const allSame = values.length <= 1 || values.every((v) => {
+        const s1 = String(values[0]).trim().toLowerCase();
+        const s2 = String(v).trim().toLowerCase();
+        if (s1 === s2) return true;
+        const n1 = parseFloat(s1), n2 = parseFloat(s2);
+        if (!isNaN(n1) && !isNaN(n2)) return Math.abs(n1 - n2) < 0.5;
+        return false;
+      });
+
+      return {
+        label: f.label,
+        invoice: f.inv != null ? String(f.inv) : null,
+        packingList: f.pl != null ? String(f.pl) : null,
+        bl: f.bl != null ? String(f.bl) : null,
+        status: values.length === 0 ? 'empty' : allSame ? 'match' : 'divergent',
+      };
+    });
+
+    // Build item-level comparison
+    const invItems = inv?.items ?? [];
+    const plItems = pl?.items ?? [];
+
+    const itemComparison = invItems.map((invItem: any) => {
+      const plMatch = plItems.find((plItem: any) =>
+        plItem.itemCode === invItem.itemCode ||
+        (plItem.description && invItem.description &&
+          plItem.description.toLowerCase().includes(invItem.description.toLowerCase().slice(0, 20)))
+      );
+
+      return {
+        itemCode: invItem.itemCode ?? invItem.codigo,
+        description: invItem.description ?? invItem.descricao,
+        ncm: invItem.ncmCode ?? invItem.ncm,
+        invoiceQty: invItem.quantity,
+        plQty: plMatch?.quantity ?? null,
+        invoiceUnitPrice: invItem.unitPrice,
+        invoiceTotal: invItem.totalPrice,
+        invoiceBoxes: invItem.boxQuantity ?? null,
+        plBoxes: plMatch?.boxQuantity ?? null,
+        invoiceNetWeight: invItem.netWeight ?? null,
+        plNetWeight: plMatch?.netWeight ?? null,
+        invoiceGrossWeight: invItem.grossWeight ?? null,
+        plGrossWeight: plMatch?.grossWeight ?? null,
+        qtyMatch: plMatch ? plMatch.quantity === invItem.quantity : null,
+        matched: !!plMatch,
+      };
+    });
+
+    // Find PL items not matched in invoice
+    const unmatchedPlItems = plItems.filter((plItem: any) =>
+      !invItems.some((invItem: any) =>
+        invItem.itemCode === plItem.itemCode ||
+        (invItem.description && plItem.description &&
+          invItem.description.toLowerCase().includes(plItem.description.toLowerCase().slice(0, 20)))
+      )
+    ).map((item: any) => ({
+      itemCode: item.itemCode ?? item.codigo,
+      description: item.description ?? item.descricao,
+      quantity: item.quantity,
+      source: 'packing_list',
+    }));
+
+    return {
+      hasInvoice: !!inv,
+      hasPackingList: !!pl,
+      hasBl: !!bl,
+      aggregateComparison,
+      itemComparison,
+      unmatchedPlItems,
+      invoiceConfidence: invoiceDoc?.confidenceScore,
+      plConfidence: plDoc?.confidenceScore,
+      blConfidence: blDoc?.confidenceScore,
+    };
+  },
 };

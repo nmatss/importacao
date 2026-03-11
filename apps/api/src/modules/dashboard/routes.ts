@@ -10,5 +10,6 @@ router.get('/overview', dashboardController.getOverview);
 router.get('/by-status', dashboardController.getByStatus);
 router.get('/by-month', dashboardController.getByMonth);
 router.get('/fob-by-brand', dashboardController.getFobByBrand);
+router.get('/sla', dashboardController.getSla);
 
 export { router as dashboardRoutes };

@@ -38,4 +38,13 @@ export const dashboardController = {
       sendError(res, error.message);
     }
   },
+
+  async getSla(_req: Request, res: Response) {
+    try {
+      const data = await dashboardService.getSla();
+      sendSuccess(res, data);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
 };

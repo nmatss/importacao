@@ -104,4 +104,103 @@ export const googleSheetsService = {
       logger.error({ err, processCode, field }, 'Failed to sync milestone to Sheets')
     );
   },
+
+  async readProcessRow(processCode: string): Promise<Record<string, string> | null> {
+    if (!this.isConfigured()) return null;
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
+    const sheets = getSheetsClient();
+
+    try {
+      const row = await this.findProcessRow(processCode);
+      if (!row) return null;
+
+      // Read the entire row (columns A through Z)
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `A${row}:Z${row}`,
+      });
+
+      const values = response.data.values?.[0];
+      if (!values) return null;
+
+      // Read header row to map column names
+      const headerResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'A1:Z1',
+      });
+
+      const headers = headerResponse.data.values?.[0] ?? [];
+      const result: Record<string, string> = {};
+
+      for (let i = 0; i < headers.length; i++) {
+        const key = String(headers[i]).trim();
+        if (key) {
+          result[key] = values[i] != null ? String(values[i]).trim() : '';
+        }
+      }
+
+      return result;
+    } catch (error) {
+      logger.error({ error, processCode }, 'Failed to read process row from Google Sheets');
+      return null;
+    }
+  },
+
+  async readAllProcessRows(): Promise<Record<string, string>[]> {
+    if (!this.isConfigured()) return [];
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
+    const sheets = getSheetsClient();
+
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'A:Z',
+      });
+
+      const rows = response.data.values;
+      if (!rows || rows.length < 2) return [];
+
+      const headers = rows[0].map((h: string) => String(h).trim());
+      const result: Record<string, string>[] = [];
+
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row[0]) continue; // skip empty rows
+
+        const obj: Record<string, string> = {};
+        for (let j = 0; j < headers.length; j++) {
+          if (headers[j]) {
+            obj[headers[j]] = row[j] != null ? String(row[j]).trim() : '';
+          }
+        }
+        result.push(obj);
+      }
+
+      return result;
+    } catch (error) {
+      logger.error({ error }, 'Failed to read all process rows from Google Sheets');
+      return [];
+    }
+  },
+
+  async getSheetHeaders(): Promise<string[]> {
+    if (!this.isConfigured()) return [];
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
+    const sheets = getSheetsClient();
+
+    try {
+      const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: 'A1:Z1',
+      });
+
+      return (response.data.values?.[0] ?? []).map((h: string) => String(h).trim()).filter(Boolean);
+    } catch (error) {
+      logger.error({ error }, 'Failed to read sheet headers');
+      return [];
+    }
+  },
 };

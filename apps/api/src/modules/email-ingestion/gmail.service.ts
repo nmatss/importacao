@@ -5,6 +5,7 @@ export interface FetchedEmail {
   messageId: string;
   from: string;
   subject: string;
+  body: string;
   date: Date;
   attachments: Array<{
     filename: string;
@@ -48,6 +49,41 @@ function decodeBase64Url(data: string): Buffer {
 
 function extractHeader(headers: gmail_v1.Schema$MessagePartHeader[], name: string): string {
   return headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+}
+
+function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): string {
+  if (!payload) return '';
+
+  // If the payload itself has body data (simple messages)
+  if (payload.mimeType === 'text/plain' && payload.body?.data) {
+    return decodeBase64Url(payload.body.data).toString('utf-8');
+  }
+
+  // For multipart messages, search parts recursively
+  if (payload.parts) {
+    // Prefer text/plain over text/html
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/plain' && part.body?.data) {
+        return decodeBase64Url(part.body.data).toString('utf-8');
+      }
+    }
+    // Fallback to text/html (strip tags roughly)
+    for (const part of payload.parts) {
+      if (part.mimeType === 'text/html' && part.body?.data) {
+        const html = decodeBase64Url(part.body.data).toString('utf-8');
+        return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      }
+    }
+    // Recurse into nested multipart
+    for (const part of payload.parts) {
+      if (part.parts) {
+        const text = extractBodyText(part);
+        if (text) return text;
+      }
+    }
+  }
+
+  return '';
 }
 
 function findAttachmentParts(
@@ -171,10 +207,13 @@ export const gmailService = {
             }
           }
 
+          const body = extractBodyText(fullMessage.data.payload);
+
           emails.push({
             messageId,
             from,
             subject,
+            body,
             date: dateStr ? new Date(dateStr) : new Date(),
             attachments,
           });

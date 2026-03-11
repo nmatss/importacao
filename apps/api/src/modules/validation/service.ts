@@ -147,14 +147,19 @@ export const validationService = {
       failed: results.filter((r) => r.status === 'failed').length,
     }, null);
 
-    // 8. Create alert if any checks failed
+    // 8. Create alert with severity based on failure count
     const failedChecks = results.filter((r) => r.status === 'failed');
     if (failedChecks.length > 0) {
+      const severity: 'warning' | 'critical' = failedChecks.length > 3 ? 'critical' : 'warning';
+      const criticalItems = failedChecks.filter(c =>
+        ['fob-value-match', 'total-value-match', 'net-weight-match', 'gross-weight-match'].includes(c.checkName)
+      );
+
       await alertService.create({
         processId,
-        severity: 'warning',
-        title: 'Falhas na Validacao',
-        message: `Processo ${process.processCode ?? processId}: ${failedChecks.length} verificacao(oes) falharam: ${failedChecks.map(c => c.checkName).join(', ')}.`,
+        severity,
+        title: `Falhas na Validacao${severity === 'critical' ? ' (Critico)' : ''}`,
+        message: `Processo ${process.processCode ?? processId}: ${failedChecks.length} verificacao(oes) falharam: ${failedChecks.map(c => c.checkName).join(', ')}.${criticalItems.length > 0 ? ` Itens criticos: ${criticalItems.map(c => c.checkName).join(', ')}.` : ''}`,
         processCode: process.processCode,
       });
 
@@ -187,6 +192,11 @@ export const validationService = {
           logger.error({ err: emailErr, processId }, 'Failed to draft KIOM correction email');
         }
       }
+
+      // Send validation failure summary to Google Chat
+      this.notifyGoogleChat(process.processCode ?? String(processId), failedChecks, severity).catch(err =>
+        logger.error({ err, processId }, 'Failed to send validation summary to Google Chat')
+      );
     }
 
     return results;
@@ -316,5 +326,43 @@ export const validationService = {
       crossDocumentChecks: results.filter(r => r.dataSource === 'cross_document'),
       systemChecks: results.filter(r => r.dataSource === 'system_vs_document'),
     };
+  },
+
+  async notifyGoogleChat(processCode: string, failedChecks: CheckResult[], severity: 'warning' | 'critical') {
+    try {
+      const { sendToGoogleChat } = await import('../alerts/google-chat.service.js');
+      const { systemSettings } = await import('../../shared/database/schema.js');
+      const { eq: eqOp } = await import('drizzle-orm');
+
+      const [setting] = await db.select().from(systemSettings)
+        .where(eqOp(systemSettings.key, 'google_chat_webhook_url')).limit(1);
+
+      const webhookUrl = (setting?.value as string) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
+      if (!webhookUrl) return;
+
+      const criticalItems = failedChecks.filter(c =>
+        ['fob-value-match', 'total-value-match', 'net-weight-match', 'gross-weight-match'].includes(c.checkName)
+      );
+
+      const message = [
+        `Validacao do processo ${processCode} concluida com ${failedChecks.length} falha(s).`,
+        criticalItems.length > 0
+          ? `Itens criticos: ${criticalItems.map(c => c.checkName).join(', ')}.`
+          : '',
+        `Verificacoes com falha: ${failedChecks.map(c => c.checkName).join(', ')}.`,
+        'Um rascunho de e-mail de correcao foi gerado automaticamente.',
+      ].filter(Boolean).join('\n');
+
+      await sendToGoogleChat(webhookUrl, {
+        severity,
+        title: `Validacao com Falhas - ${processCode}`,
+        message,
+        processCode,
+      });
+
+      logger.info({ processCode, failedCount: failedChecks.length }, 'Validation summary sent to Google Chat');
+    } catch (err) {
+      logger.error({ err, processCode }, 'Failed to send validation summary to Google Chat');
+    }
   },
 };

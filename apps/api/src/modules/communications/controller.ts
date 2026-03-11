@@ -43,4 +43,17 @@ export const communicationController = {
       sendError(res, error.message);
     }
   },
+
+  async updateDraft(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) {
+        return sendError(res, 'ID da comunicacao invalido', 400);
+      }
+      const communication = await communicationService.updateDraft(id, req.body);
+      sendSuccess(res, communication);
+    } catch (error: any) {
+      sendError(res, error.message);
+    }
+  },
 };

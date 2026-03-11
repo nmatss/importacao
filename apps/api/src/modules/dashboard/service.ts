@@ -1,6 +1,6 @@
-import { eq, sql, count, desc, and, gte, ne } from 'drizzle-orm';
+import { eq, sql, count, desc, and, gte, lte, ne, isNull } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { importProcesses, alerts, followUpTracking } from '../../shared/database/schema.js';
+import { importProcesses, alerts, followUpTracking, validationResults, espelhos, currencyExchanges, users } from '../../shared/database/schema.js';
 
 export const dashboardService = {
   async getOverview() {
@@ -77,5 +77,155 @@ export const dashboardService = {
     }).from(importProcesses)
       .where(ne(importProcesses.status, 'cancelled'))
       .groupBy(importProcesses.brand);
+  },
+
+  async getSla() {
+    // 1. docsOverdue: shipmentDate + 10 days < now AND status='draft'
+    const docsOverdue = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      shipmentDate: importProcesses.shipmentDate,
+      daysSinceShipment: sql<number>`EXTRACT(DAY FROM now() - ${importProcesses.shipmentDate}::timestamp)::int`,
+      assignedUser: users.name,
+    }).from(importProcesses)
+      .leftJoin(users, eq(importProcesses.createdBy, users.id))
+      .where(and(
+        eq(importProcesses.status, 'draft'),
+        sql`${importProcesses.shipmentDate} IS NOT NULL`,
+        sql`${importProcesses.shipmentDate}::date + interval '10 days' < now()`,
+      ))
+      .orderBy(sql`${importProcesses.shipmentDate} ASC`);
+
+    // 2. liUrgent: hasLiItems=true AND liDeadline is approaching or passed
+    const liUrgent = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      liDeadline: followUpTracking.liDeadline,
+      daysRemaining: sql<number>`EXTRACT(DAY FROM ${followUpTracking.liDeadline}::timestamp - now())::int`,
+      status: importProcesses.status,
+    }).from(importProcesses)
+      .innerJoin(followUpTracking, eq(importProcesses.id, followUpTracking.processId))
+      .where(and(
+        eq(importProcesses.hasLiItems, true),
+        ne(importProcesses.status, 'completed'),
+        ne(importProcesses.status, 'cancelled'),
+        sql`${followUpTracking.liDeadline} IS NOT NULL`,
+      ))
+      .orderBy(sql`${followUpTracking.liDeadline} ASC`);
+
+    // 3. withDivergences: processes with failed validations not resolved
+    const withDivergences = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      failedCheckCount: count(),
+      lastValidationDate: sql<string>`MAX(${validationResults.createdAt})`,
+    }).from(validationResults)
+      .innerJoin(importProcesses, eq(validationResults.processId, importProcesses.id))
+      .where(and(
+        eq(validationResults.status, 'failed'),
+        eq(validationResults.resolvedManually, false),
+        ne(importProcesses.status, 'completed'),
+        ne(importProcesses.status, 'cancelled'),
+      ))
+      .groupBy(importProcesses.id, importProcesses.processCode, importProcesses.brand)
+      .orderBy(desc(sql`MAX(${validationResults.createdAt})`));
+
+    // 4. pendingFenicia: status='espelho_generated' but not sent to Fenicia
+    const pendingFenicia = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      espelhoGeneratedDate: followUpTracking.espelhoGeneratedAt,
+      daysPending: sql<number>`EXTRACT(DAY FROM now() - COALESCE(${followUpTracking.espelhoGeneratedAt}, ${importProcesses.updatedAt}))::int`,
+    }).from(importProcesses)
+      .leftJoin(followUpTracking, eq(importProcesses.id, followUpTracking.processId))
+      .where(and(
+        eq(importProcesses.status, 'espelho_generated'),
+      ))
+      .orderBy(sql`COALESCE(${followUpTracking.espelhoGeneratedAt}, ${importProcesses.updatedAt}) ASC`);
+
+    // 5. noEspelho: status='validated' but no espelho generated
+    const noEspelho = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      validatedDate: importProcesses.updatedAt,
+      daysPending: sql<number>`EXTRACT(DAY FROM now() - ${importProcesses.updatedAt})::int`,
+    }).from(importProcesses)
+      .where(and(
+        eq(importProcesses.status, 'validated'),
+      ))
+      .orderBy(importProcesses.updatedAt);
+
+    // 6. noFollowUpUpdate: follow_up_tracking.updatedAt > 5 days AND process not completed
+    const noFollowUpUpdate = await db.select({
+      id: importProcesses.id,
+      processCode: importProcesses.processCode,
+      brand: importProcesses.brand,
+      lastUpdateDate: followUpTracking.updatedAt,
+      daysSinceUpdate: sql<number>`EXTRACT(DAY FROM now() - ${followUpTracking.updatedAt})::int`,
+    }).from(followUpTracking)
+      .innerJoin(importProcesses, eq(followUpTracking.processId, importProcesses.id))
+      .where(and(
+        ne(importProcesses.status, 'completed'),
+        ne(importProcesses.status, 'cancelled'),
+        sql`${followUpTracking.updatedAt} < now() - interval '5 days'`,
+      ))
+      .orderBy(followUpTracking.updatedAt);
+
+    // 7. agingByUser: count open pendencias grouped by user
+    const agingByUser = await db.select({
+      userName: sql<string>`COALESCE(${users.name}, 'Sem usuario')`,
+      pendingCount: count(),
+      oldestPendingDays: sql<number>`MAX(EXTRACT(DAY FROM now() - ${importProcesses.createdAt}))::int`,
+    }).from(importProcesses)
+      .leftJoin(users, eq(importProcesses.createdBy, users.id))
+      .where(and(
+        ne(importProcesses.status, 'completed'),
+        ne(importProcesses.status, 'cancelled'),
+      ))
+      .groupBy(users.name)
+      .orderBy(desc(count()));
+
+    // 8. upcomingPayments: currency exchanges with paymentDeadline within 7 days
+    const upcomingPayments = await db.select({
+      id: currencyExchanges.id,
+      processId: importProcesses.id,
+      processCode: importProcesses.processCode,
+      amountUsd: currencyExchanges.amountUsd,
+      paymentDeadline: currencyExchanges.paymentDeadline,
+      daysUntilDue: sql<number>`EXTRACT(DAY FROM ${currencyExchanges.paymentDeadline}::timestamp - now())::int`,
+    }).from(currencyExchanges)
+      .innerJoin(importProcesses, eq(currencyExchanges.processId, importProcesses.id))
+      .where(and(
+        sql`${currencyExchanges.paymentDeadline} IS NOT NULL`,
+        sql`${currencyExchanges.paymentDeadline}::date <= (now()::date + interval '7 days')`,
+        sql`${currencyExchanges.paymentDeadline}::date >= now()::date - interval '1 day'`,
+      ))
+      .orderBy(sql`${currencyExchanges.paymentDeadline} ASC`);
+
+    return {
+      docsOverdue,
+      liUrgent,
+      withDivergences,
+      pendingFenicia,
+      noEspelho,
+      noFollowUpUpdate,
+      agingByUser,
+      upcomingPayments,
+      summary: {
+        docsOverdue: docsOverdue.length,
+        liUrgent: liUrgent.length,
+        withDivergences: withDivergences.length,
+        pendingFenicia: pendingFenicia.length,
+        noEspelho: noEspelho.length,
+        noFollowUpUpdate: noFollowUpUpdate.length,
+        agingByUser: agingByUser.length,
+        upcomingPayments: upcomingPayments.length,
+      },
+    };
   },
 };

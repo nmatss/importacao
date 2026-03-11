@@ -19,6 +19,11 @@ import invoiceValueVsFup from './invoice-value-vs-fup.js';
 import freightVsFup from './freight-vs-fup.js';
 import cbmVsFup from './cbm-vs-fup.js';
 import containerTypeVsFup from './container-type-vs-fup.js';
+import itemLevelMatch from './item-level-match.js';
+import paymentTermsCheck from './payment-terms-check.js';
+import dateSequenceCheck from './date-sequence-check.js';
+import weightRatioCheck from './weight-ratio-check.js';
+import supplierAddressMatch from './supplier-address-match.js';
 
 export interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -61,4 +66,9 @@ export const allChecks: CheckFn[] = [
   freightVsFup,
   cbmVsFup,
   containerTypeVsFup,
+  itemLevelMatch,
+  paymentTermsCheck,
+  dateSequenceCheck,
+  weightRatioCheck,
+  supplierAddressMatch,
 ];
