@@ -356,3 +356,46 @@ export type NewSystemSetting = typeof systemSettings.$inferInsert;
 
 export type EmailIngestionLog = typeof emailIngestionLogs.$inferSelect;
 export type NewEmailIngestionLog = typeof emailIngestionLogs.$inferInsert;
+
+// ── LI Tracking ───────────────────────────────────────────────────────
+
+export const liStatusEnum = pgEnum('li_status', [
+  'pending',
+  'requested',
+  'submitted',
+  'deferred',
+  'expired',
+  'cancelled',
+]);
+
+export const liTracking = pgTable('li_tracking', {
+  id: serial('id').primaryKey(),
+  processId: integer('process_id').references(() => importProcesses.id),
+  processCode: varchar('process_code', { length: 50 }).notNull(),
+  orgao: varchar('orgao', { length: 100 }),
+  ncm: text('ncm'),
+  item: varchar('item', { length: 255 }),
+  description: text('description'),
+  supplier: varchar('supplier', { length: 500 }),
+  requestedByCompanyAt: date('requested_by_company_at'),
+  submittedToFeniciaAt: date('submitted_to_fenicia_at'),
+  deferredAt: date('deferred_at'),
+  expectedDeferralAt: date('expected_deferral_at'),
+  averageDays: integer('average_days'),
+  validUntil: date('valid_until'),
+  lpcoNumber: varchar('lpco_number', { length: 100 }),
+  etdOrigem: date('etd_origem'),
+  etaArmador: date('eta_armador'),
+  status: liStatusEnum('status').default('pending').notNull(),
+  itemStatus: varchar('item_status', { length: 100 }),
+  observations: text('observations'),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+}, (table) => [
+  index('li_tracking_process_id_idx').on(table.processId),
+  index('li_tracking_process_code_idx').on(table.processCode),
+  index('li_tracking_status_idx').on(table.status),
+]);
+
+export type LiTracking = typeof liTracking.$inferSelect;
+export type NewLiTracking = typeof liTracking.$inferInsert;

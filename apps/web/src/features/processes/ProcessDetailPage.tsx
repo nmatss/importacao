@@ -30,9 +30,19 @@ import {
   StickyNote,
   Truck,
   GitCompareArrows,
+  Mail,
+  AlertTriangle,
+  Info,
+  Paperclip,
+  Hash,
+  BadgeCheck,
+  CircleDot,
+  Timer,
+  BarChart3,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
-import { cn, formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
+import { cn, formatDate, formatCurrency, formatWeight, formatDateTime, relativeTime } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
@@ -42,32 +52,83 @@ import { ValidationChecklist } from '@/features/validation/ValidationChecklist';
 import { FupComparisonPanel } from '@/features/validation/FupComparisonPanel';
 import { EspelhoPreview } from '@/features/espelhos/EspelhoPreview';
 
+// ── Types ──────────────────────────────────────────────────────────────
+
+interface AiExtractedData {
+  blNumber?: string;
+  vessel?: string;
+  shipowner?: string;
+  freightAgent?: string;
+  originCountry?: string;
+  originCity?: string;
+  destinationPort?: string;
+  invoiceNumber?: string;
+  packingListNumber?: string;
+  consolidation?: string;
+  company?: string;
+  [key: string]: unknown;
+}
+
+interface FollowUp {
+  id: number;
+  processId: number;
+  documentsReceivedAt: string | null;
+  preInspectionAt: string | null;
+  ncmVerifiedAt: string | null;
+  espelhoGeneratedAt: string | null;
+  sentToFeniciaAt: string | null;
+  liSubmittedAt: string | null;
+  liApprovedAt: string | null;
+  liDeadline: string | null;
+  overallProgress: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface Process {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
   status: string;
-  incoterm: string;
+  incoterm: string | null;
   portOfLoading: string | null;
   portOfDischarge: string | null;
   etd: string | null;
   eta: string | null;
-  exporterName: string | null;
-  importerName: string | null;
-  totalFobValue: number | null;
-  freightValue: number | null;
-  totalBoxes: number | null;
-  totalNetWeight: number | null;
-  totalGrossWeight: number | null;
-  totalCbm: number | null;
-  containerType: string | null;
-  sistemaDriveFolderId: string | null;
   shipmentDate: string | null;
+  exporterName: string | null;
+  exporterAddress: string | null;
+  importerName: string | null;
+  importerAddress: string | null;
+  totalFobValue: string | null;
+  freightValue: string | null;
+  totalBoxes: number | null;
+  totalNetWeight: string | null;
+  totalGrossWeight: string | null;
+  totalCbm: string | null;
+  containerType: string | null;
+  hasLiItems: boolean;
+  hasCertification: boolean;
+  hasFreeOfCharge: boolean;
+  correctionStatus: string | null;
+  paymentTerms: Record<string, unknown> | null;
+  aiExtractedData: AiExtractedData | null;
   notes: string | null;
   driveFolderId: string | null;
+  sistemaDriveFolderId: string | null;
   createdAt: string;
   updatedAt: string;
+  documents: Array<{
+    id: number;
+    type: string;
+    originalFilename: string;
+    isProcessed: boolean;
+  }>;
+  followUp: FollowUp | null;
 }
+
+// ── Constants ──────────────────────────────────────────────────────────
 
 const STEPS = [
   { key: 'draft', label: 'Rascunho', icon: FileEdit },
@@ -88,7 +149,10 @@ const TABS = [
   { key: 'cambios', label: 'Cambios', icon: DollarSign },
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
   { key: 'comunicacoes', label: 'Comunicacoes', icon: MessageSquare },
+  { key: 'emails', label: 'Emails', icon: Mail },
 ] as const;
+
+// ── Stepper ────────────────────────────────────────────────────────────
 
 function Stepper({ currentStatus }: { currentStatus: string }) {
   const isCancelled = currentStatus === 'cancelled';
@@ -168,6 +232,8 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
   );
 }
 
+// ── Info Field ─────────────────────────────────────────────────────────
+
 function InfoField({
   label,
   value,
@@ -191,6 +257,86 @@ function InfoField({
     </div>
   );
 }
+
+// ── Process Flags ──────────────────────────────────────────────────────
+
+function ProcessFlags({ process }: { process: Process }) {
+  const flags = [
+    { active: process.hasLiItems, label: 'LI', color: 'bg-purple-100 text-purple-700 border-purple-200' },
+    { active: process.hasCertification, label: 'Certificacao', color: 'bg-orange-100 text-orange-700 border-orange-200' },
+    { active: process.hasFreeOfCharge, label: 'FOC', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
+  ].filter(f => f.active);
+
+  if (flags.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {flags.map((f) => (
+        <span key={f.label} className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold', f.color)}>
+          <BadgeCheck className="h-3.5 w-3.5" />
+          {f.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── AI Extracted Data Card ─────────────────────────────────────────────
+
+function AiDataSection({ data }: { data: AiExtractedData }) {
+  const fields: Array<{ key: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+    { key: 'blNumber', label: 'Numero BL', icon: Hash },
+    { key: 'invoiceNumber', label: 'Numero Invoice', icon: FileText },
+    { key: 'vessel', label: 'Navio', icon: Ship },
+    { key: 'shipowner', label: 'Armador', icon: Anchor },
+    { key: 'freightAgent', label: 'Agente de Carga', icon: Truck },
+    { key: 'originCountry', label: 'Pais Origem', icon: Globe },
+    { key: 'originCity', label: 'Cidade Origem', icon: Globe },
+    { key: 'consolidation', label: 'Consolidacao', icon: Package },
+    { key: 'company', label: 'Empresa', icon: Building },
+  ];
+
+  const populated = fields.filter(f => data[f.key]);
+  if (populated.length === 0) return null;
+
+  return (
+    <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Sparkles className="h-4 w-4 text-blue-500" />
+        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Dados Extraidos (IA / Planilha)</p>
+      </div>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+        {populated.map((f) => (
+          <InfoField key={f.key} icon={f.icon} label={f.label} value={String(data[f.key])} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Follow-Up Progress ─────────────────────────────────────────────────
+
+function FollowUpProgress({ followUp }: { followUp: FollowUp }) {
+  return (
+    <div className="mt-4 flex items-center gap-3">
+      <BarChart3 className="h-4 w-4 text-slate-400" />
+      <div className="flex-1">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-xs font-medium text-slate-500">Progresso Geral</span>
+          <span className="text-xs font-bold text-slate-700">{followUp.overallProgress}%</span>
+        </div>
+        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+            style={{ width: `${followUp.overallProgress}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────
 
 export function ProcessDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -233,6 +379,11 @@ export function ProcessDetailPage() {
     );
   }
 
+  const docCounts = {
+    total: process.documents?.length ?? 0,
+    processed: process.documents?.filter(d => d.isProcessed).length ?? 0,
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -253,6 +404,12 @@ export function ProcessDetailPage() {
                 {process.brand}
               </span>
               <StatusBadge status={process.status} />
+              {process.correctionStatus && (
+                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 border border-amber-200 px-2.5 py-1 text-xs font-semibold text-amber-700">
+                  <AlertTriangle className="h-3 w-3" />
+                  {process.correctionStatus}
+                </span>
+              )}
             </div>
             <div className="mt-1.5 flex items-center gap-3 text-sm text-slate-400">
               <span>Criado em {formatDate(process.createdAt)}</span>
@@ -268,6 +425,8 @@ export function ProcessDetailPage() {
                   <span>ETA: <span className="text-slate-600 font-medium">{formatDate(process.eta)}</span></span>
                 </>
               )}
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>{docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.processed} processado{docCounts.processed !== 1 ? 's' : ''})</span>
             </div>
           </div>
         </div>
@@ -304,9 +463,13 @@ export function ProcessDetailPage() {
         </div>
       </div>
 
+      {/* Flags */}
+      <ProcessFlags process={process} />
+
       {/* Stepper */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
         <Stepper currentStatus={process.status} />
+        {process.followUp && <FollowUpProgress followUp={process.followUp} />}
       </div>
 
       {/* Process Info Card */}
@@ -356,7 +519,7 @@ export function ProcessDetailPage() {
             <InfoField
               icon={Package}
               label="CBM"
-              value={process.totalCbm != null ? `${process.totalCbm.toFixed(3)} m3` : null}
+              value={process.totalCbm != null ? `${Number(process.totalCbm).toFixed(3)} m3` : null}
             />
             <InfoField
               icon={Box}
@@ -368,7 +531,28 @@ export function ProcessDetailPage() {
               label="Data Embarque"
               value={process.shipmentDate ? formatDate(process.shipmentDate) : null}
             />
+            {process.exporterAddress && (
+              <InfoField icon={Building} label="Endereco Exportador" value={process.exporterAddress} />
+            )}
+            {process.importerAddress && (
+              <InfoField icon={User} label="Endereco Importador" value={process.importerAddress} />
+            )}
           </div>
+
+          {/* Payment Terms */}
+          {process.paymentTerms && (
+            <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Banknote className="h-4 w-4 text-slate-400" />
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Termos de Pagamento</p>
+              </div>
+              <p className="text-sm text-slate-700">
+                {(process.paymentTerms as any).description || JSON.stringify(process.paymentTerms)}
+              </p>
+            </div>
+          )}
+
+          {/* Notes */}
           {process.notes && (
             <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
               <div className="flex items-center gap-2 mb-2">
@@ -378,6 +562,9 @@ export function ProcessDetailPage() {
               <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{process.notes}</p>
             </div>
           )}
+
+          {/* AI Extracted Data */}
+          {process.aiExtractedData && <AiDataSection data={process.aiExtractedData} />}
         </div>
       </div>
 
@@ -448,7 +635,7 @@ export function ProcessDetailPage() {
 
               <div className="border-t border-slate-200/80 pt-6 mt-6">
                 <h3 className="text-lg font-bold text-slate-800 mb-4">
-                  Comparativo de Documentos
+                  Comparativo Sistema vs Follow-Up
                 </h3>
                 <FupComparisonPanel processId={id} />
               </div>
@@ -475,38 +662,80 @@ export function ProcessDetailPage() {
           {activeTab === 'comunicacoes' && (
             <ComunicacoesTab processId={id} />
           )}
+
+          {activeTab === 'emails' && (
+            <EmailsTab processId={id} processCode={process.processCode} />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-/* ---- Inline tab components ---- */
+// ── CambiosTab ─────────────────────────────────────────────────────────
 
 function CambiosTab({ processId }: { processId: string }) {
-  interface ExchangeRate {
-    id: string;
-    date: string;
-    currencyFrom: string;
-    currencyTo: string;
-    rate: number;
-    amount: number;
-    convertedAmount: number;
+  interface CurrencyExchange {
+    id: number;
+    type: 'balance' | 'deposit';
+    amountUsd: string;
+    exchangeRate: string | null;
+    amountBrl: string | null;
+    paymentDeadline: string | null;
+    expirationDate: string | null;
+    notes: string | null;
+    createdAt: string;
   }
 
-  const { data, isLoading } = useApiQuery<ExchangeRate[]>(
+  interface CurrencyTotals {
+    totalBalanceUsd: string;
+    totalBalanceBrl: string;
+    totalDepositUsd: string;
+    totalDepositBrl: string;
+  }
+
+  const { data, isLoading } = useApiQuery<{ exchanges: CurrencyExchange[]; totals: CurrencyTotals }>(
     ['cambios', processId],
-    `/api/currency-exchange?processId=${processId}`,
+    `/api/currency-exchange/process/${processId}/totals`,
   );
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
 
+  const exchanges = data?.exchanges ?? [];
+  const totals = data?.totals;
+
+  const typeLabel = (t: string) => t === 'deposit' ? 'Deposito' : 'Saldo';
+  const typeColor = (t: string) => t === 'deposit'
+    ? 'bg-amber-100 text-amber-700'
+    : 'bg-blue-100 text-blue-700';
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800">
-        Cambios do Processo
-      </h3>
-      {!data || data.length === 0 ? (
+      <h3 className="text-lg font-bold text-slate-800">Cambios do Processo</h3>
+
+      {/* Totals summary */}
+      {totals && (Number(totals.totalBalanceUsd) > 0 || Number(totals.totalDepositUsd) > 0) && (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">Saldo USD</p>
+            <p className="mt-1 text-lg font-bold text-blue-800">{formatCurrency(totals.totalBalanceUsd)}</p>
+          </div>
+          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">Saldo BRL</p>
+            <p className="mt-1 text-lg font-bold text-blue-800">{formatCurrency(totals.totalBalanceBrl, 'BRL')}</p>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+            <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">Deposito USD</p>
+            <p className="mt-1 text-lg font-bold text-amber-800">{formatCurrency(totals.totalDepositUsd)}</p>
+          </div>
+          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+            <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">Deposito BRL</p>
+            <p className="mt-1 text-lg font-bold text-amber-800">{formatCurrency(totals.totalDepositBrl, 'BRL')}</p>
+          </div>
+        </div>
+      )}
+
+      {exchanges.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
             <DollarSign className="h-6 w-6 text-slate-300" />
@@ -520,27 +749,39 @@ function CambiosTab({ processId }: { processId: string }) {
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50/80">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Data</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">De</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Para</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tipo</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Valor USD</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Taxa</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Valor</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Convertido</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Valor BRL</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Vencimento</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Validade</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Obs.</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.map((ex) => (
+              {exchanges.map((ex) => (
                 <tr key={ex.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="px-4 py-3 text-slate-700">{formatDate(ex.date)}</td>
                   <td className="px-4 py-3">
-                    <span className="inline-flex rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{ex.currencyFrom}</span>
+                    <span className={cn('inline-flex rounded-lg px-2.5 py-0.5 text-xs font-semibold', typeColor(ex.type))}>
+                      {typeLabel(ex.type)}
+                    </span>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="inline-flex rounded-lg bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{ex.currencyTo}</span>
+                  <td className="px-4 py-3 text-right font-mono text-slate-700">{formatCurrency(ex.amountUsd)}</td>
+                  <td className="px-4 py-3 text-right font-mono text-slate-600">
+                    {ex.exchangeRate ? Number(ex.exchangeRate).toFixed(4) : '—'}
                   </td>
-                  <td className="px-4 py-3 text-right font-mono text-slate-600">{ex.rate.toFixed(4)}</td>
-                  <td className="px-4 py-3 text-right text-slate-700">{ex.amount.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-right font-semibold text-slate-900">{ex.convertedAmount.toFixed(2)}</td>
+                  <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                    {ex.amountBrl ? formatCurrency(ex.amountBrl, 'BRL') : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {ex.paymentDeadline ? formatDate(ex.paymentDeadline) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-600">
+                    {ex.expirationDate ? formatDate(ex.expirationDate) : '—'}
+                  </td>
+                  <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={ex.notes ?? ''}>
+                    {ex.notes || '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -551,110 +792,214 @@ function CambiosTab({ processId }: { processId: string }) {
   );
 }
 
+// ── FollowUpTab ────────────────────────────────────────────────────────
+
 function FollowUpTab({ processId }: { processId: string }) {
-  interface FollowUpEntry {
-    id: string;
-    eventType: string;
-    scheduledDate: string;
-    completedDate: string | null;
+  interface TrackingData {
+    id: number;
+    processId: number;
+    documentsReceivedAt: string | null;
+    preInspectionAt: string | null;
+    ncmVerifiedAt: string | null;
+    espelhoGeneratedAt: string | null;
+    sentToFeniciaAt: string | null;
+    liSubmittedAt: string | null;
+    liApprovedAt: string | null;
+    liDeadline: string | null;
+    overallProgress: number;
     notes: string | null;
+    createdAt: string;
+    updatedAt: string;
   }
 
-  const { data, isLoading } = useApiQuery<FollowUpEntry[]>(
+  const { data: tracking, isLoading } = useApiQuery<TrackingData>(
     ['followup', processId],
-    `/api/follow-up?processId=${processId}`,
+    `/api/follow-up/${processId}`,
   );
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
 
-  return (
-    <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800">Follow-Up</h3>
-      {!data || data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
-            <CalendarDays className="h-6 w-6 text-slate-300" />
-          </div>
-          <p className="text-sm text-slate-400 font-medium">
-            Nenhum follow-up registrado.
-          </p>
+  if (!tracking) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12 gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+          <CalendarDays className="h-6 w-6 text-slate-300" />
         </div>
-      ) : (
-        <div className="space-y-3">
-          {data.map((entry) => (
+        <p className="text-sm text-slate-400 font-medium">
+          Nenhum acompanhamento encontrado para este processo.
+        </p>
+      </div>
+    );
+  }
+
+  const steps = [
+    { key: 'documentsReceivedAt', label: 'Documentos Recebidos', icon: FileText },
+    { key: 'preInspectionAt', label: 'Pre-Inspecao', icon: ClipboardCheck },
+    { key: 'ncmVerifiedAt', label: 'NCM Verificado', icon: ShieldCheck },
+    { key: 'espelhoGeneratedAt', label: 'Espelho Gerado', icon: FileSpreadsheet },
+    { key: 'sentToFeniciaAt', label: 'Enviado a Fenicia', icon: Send },
+    { key: 'liSubmittedAt', label: 'LI Submetida', icon: FileEdit },
+    { key: 'liApprovedAt', label: 'LI Aprovada', icon: CheckCircle },
+  ] as const;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-bold text-slate-800">Acompanhamento (Follow-Up)</h3>
+        <span className="text-sm font-semibold text-slate-500">
+          Progresso: <span className="text-blue-700">{tracking.overallProgress}%</span>
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+          style={{ width: `${tracking.overallProgress}%` }}
+        />
+      </div>
+
+      {/* Steps timeline */}
+      <div className="space-y-3">
+        {steps.map(({ key, label, icon: StepIcon }) => {
+          const dateValue = tracking[key as keyof TrackingData] as string | null;
+          const isCompleted = !!dateValue;
+
+          return (
             <div
-              key={entry.id}
+              key={key}
               className={cn(
                 'flex items-center gap-4 rounded-xl border p-4 transition-colors',
-                entry.completedDate
+                isCompleted
                   ? 'border-emerald-200/80 bg-emerald-50/50'
-                  : 'border-slate-200/80 bg-white hover:bg-slate-50/50',
+                  : 'border-slate-200/80 bg-white',
               )}
             >
               <div
                 className={cn(
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all',
-                  entry.completedDate
+                  isCompleted
                     ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-200'
                     : 'bg-slate-100',
                 )}
               >
-                {entry.completedDate ? (
+                {isCompleted ? (
                   <CheckCircle className="h-5 w-5 text-white" />
                 ) : (
-                  <CalendarDays className="h-5 w-5 text-slate-400" />
+                  <StepIcon className="h-5 w-5 text-slate-400" />
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800">
-                  {entry.eventType}
+                <p className={cn('text-sm font-semibold', isCompleted ? 'text-emerald-800' : 'text-slate-500')}>
+                  {label}
                 </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-xs text-slate-400">
-                    Previsto: <span className="text-slate-600 font-medium">{formatDate(entry.scheduledDate)}</span>
+                {isCompleted && (
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                    {formatDateTime(dateValue!)}
                   </p>
-                  {entry.completedDate && (
-                    <>
-                      <span className="h-1 w-1 rounded-full bg-slate-300" />
-                      <p className="text-xs text-emerald-600 font-medium">
-                        Concluido: {formatDate(entry.completedDate)}
-                      </p>
-                    </>
-                  )}
-                </div>
-                {entry.notes && (
-                  <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{entry.notes}</p>
                 )}
               </div>
             </div>
-          ))}
+          );
+        })}
+      </div>
+
+      {/* LI Deadline */}
+      {tracking.liDeadline && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+          <div className="flex items-center gap-3">
+            <Timer className="h-5 w-5 text-amber-600" />
+            <div>
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Prazo LI</p>
+              <p className="text-sm font-bold text-amber-800 mt-0.5">{formatDate(tracking.liDeadline)}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      {tracking.notes && (
+        <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <StickyNote className="h-4 w-4 text-slate-400" />
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Observacoes</p>
+          </div>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{tracking.notes}</p>
         </div>
       )}
     </div>
   );
 }
 
+// ── ComunicacoesTab ────────────────────────────────────────────────────
+
 function ComunicacoesTab({ processId }: { processId: string }) {
+  const queryClient = useQueryClient();
+
   interface Communication {
-    id: string;
-    type: string;
+    id: number;
+    recipient: string;
+    recipientEmail: string;
     subject: string;
     body: string;
-    sentAt: string;
-    sender: string;
+    status: 'draft' | 'sent' | 'failed';
+    sentAt: string | null;
+    errorMessage: string | null;
+    attachments: Array<{ filename: string }> | null;
+    createdAt: string;
   }
 
-  const { data, isLoading } = useApiQuery<Communication[]>(
+  const { data: response, isLoading } = useApiQuery<{ data: Communication[]; pagination: unknown }>(
     ['communications', processId],
-    `/api/communications?processId=${processId}`,
+    `/api/communications/process/${processId}`,
   );
 
+  const [sending, setSending] = useState<number | null>(null);
+
+  const sendEmail = async (id: number) => {
+    setSending(id);
+    try {
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${baseUrl}/api/communications/${id}/send`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Falha ao enviar');
+      queryClient.invalidateQueries({ queryKey: ['communications', processId] });
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar comunicacao');
+    } finally {
+      setSending(null);
+    }
+  };
+
   if (isLoading) return <LoadingSpinner className="py-8" />;
+
+  const comms = response?.data ?? [];
+
+  const statusColor = (s: string) => {
+    switch (s) {
+      case 'sent': return 'bg-emerald-100 text-emerald-700';
+      case 'draft': return 'bg-slate-100 text-slate-600';
+      case 'failed': return 'bg-red-100 text-red-700';
+      default: return 'bg-slate-100 text-slate-600';
+    }
+  };
+
+  const statusLabel = (s: string) => {
+    switch (s) {
+      case 'sent': return 'Enviado';
+      case 'draft': return 'Rascunho';
+      case 'failed': return 'Falhou';
+      default: return s;
+    }
+  };
 
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-bold text-slate-800">Comunicacoes</h3>
-      {!data || data.length === 0 ? (
+      {comms.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
             <MessageSquare className="h-6 w-6 text-slate-300" />
@@ -665,31 +1010,164 @@ function ComunicacoesTab({ processId }: { processId: string }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {data.map((comm) => (
+          {comms.map((comm) => (
             <div
               key={comm.id}
               className="rounded-xl border border-slate-200/80 bg-white p-5 hover:bg-slate-50/30 transition-colors"
             >
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="shrink-0 inline-flex rounded-lg bg-blue-100/80 px-2.5 py-1 text-xs font-bold text-blue-700 uppercase tracking-wide">
-                    {comm.type}
+                  <span className={cn('shrink-0 inline-flex rounded-lg px-2.5 py-1 text-xs font-bold uppercase tracking-wide', statusColor(comm.status))}>
+                    {statusLabel(comm.status)}
                   </span>
                   <span className="text-sm font-semibold text-slate-800 truncate">
                     {comm.subject}
                   </span>
                 </div>
-                <span className="shrink-0 text-xs text-slate-400 font-medium">
-                  {formatDate(comm.sentAt)}
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  {comm.status === 'draft' && (
+                    <button
+                      onClick={() => sendEmail(comm.id)}
+                      disabled={sending === comm.id}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                    >
+                      {sending === comm.id ? <LoadingSpinner size="sm" /> : <Send className="h-3.5 w-3.5" />}
+                      Enviar
+                    </button>
+                  )}
+                  <span className="text-xs text-slate-400 font-medium">
+                    {formatDateTime(comm.sentAt || comm.createdAt)}
+                  </span>
+                </div>
               </div>
-              <p className="mt-3 text-sm text-slate-600 leading-relaxed">{comm.body}</p>
-              <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
+              <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
                 <User className="h-3.5 w-3.5" />
-                <span className="font-medium">{comm.sender}</span>
+                <span className="font-medium">{comm.recipient}</span>
+                <span className="text-slate-300">|</span>
+                <span>{comm.recipientEmail}</span>
               </div>
+              {comm.attachments && comm.attachments.length > 0 && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+                  <Paperclip className="h-3.5 w-3.5" />
+                  <span>{comm.attachments.length} anexo{comm.attachments.length !== 1 ? 's' : ''}</span>
+                </div>
+              )}
+              {comm.errorMessage && (
+                <div className="mt-2 flex items-center gap-2 text-xs text-red-500">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  <span>{comm.errorMessage}</span>
+                </div>
+              )}
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── EmailsTab ──────────────────────────────────────────────────────────
+
+function EmailsTab({ processId, processCode }: { processId: string; processCode: string }) {
+  interface EmailLog {
+    id: number;
+    messageId: string;
+    fromAddress: string;
+    subject: string;
+    receivedAt: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
+    attachmentsCount: number;
+    processedAttachments: Array<{ filename: string; documentId?: number }> | null;
+    processCode: string | null;
+    errorMessage: string | null;
+    createdAt: string;
+  }
+
+  const { data: response, isLoading } = useApiQuery<{ data: EmailLog[]; pagination: unknown }>(
+    ['email-logs', processId],
+    `/api/email-ingestion/logs?limit=50`,
+  );
+
+  if (isLoading) return <LoadingSpinner className="py-8" />;
+
+  // Filter logs related to this process
+  const allLogs = response?.data ?? [];
+  const logs = allLogs.filter(l => l.processCode === processCode || String(l.processCode) === processCode);
+
+  const statusConfig: Record<string, { color: string; label: string }> = {
+    completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluido' },
+    processing: { color: 'bg-blue-100 text-blue-700', label: 'Processando' },
+    pending: { color: 'bg-slate-100 text-slate-600', label: 'Pendente' },
+    failed: { color: 'bg-red-100 text-red-700', label: 'Falhou' },
+    ignored: { color: 'bg-slate-100 text-slate-400', label: 'Ignorado' },
+  };
+
+  return (
+    <div className="space-y-4">
+      <h3 className="text-lg font-bold text-slate-800">Emails Recebidos</h3>
+      <p className="text-sm text-slate-500">
+        Emails processados automaticamente que foram vinculados a este processo.
+      </p>
+      {logs.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+            <Mail className="h-6 w-6 text-slate-300" />
+          </div>
+          <p className="text-sm text-slate-400 font-medium">
+            Nenhum email vinculado a este processo.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {logs.map((log) => {
+            const cfg = statusConfig[log.status] ?? statusConfig.pending;
+            return (
+              <div
+                key={log.id}
+                className="rounded-xl border border-slate-200/80 bg-white p-4 hover:bg-slate-50/30 transition-colors"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={cn('shrink-0 inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold', cfg.color)}>
+                      {cfg.label}
+                    </span>
+                    <span className="text-sm font-semibold text-slate-800 truncate">{log.subject}</span>
+                  </div>
+                  <span className="shrink-0 text-xs text-slate-400 font-medium">
+                    {formatDateTime(log.receivedAt)}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
+                  <span className="font-medium">{log.fromAddress}</span>
+                  {log.attachmentsCount > 0 && (
+                    <>
+                      <span className="h-1 w-1 rounded-full bg-slate-300" />
+                      <span className="flex items-center gap-1">
+                        <Paperclip className="h-3 w-3" />
+                        {log.attachmentsCount} anexo{log.attachmentsCount !== 1 ? 's' : ''}
+                      </span>
+                    </>
+                  )}
+                </div>
+                {log.processedAttachments && log.processedAttachments.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {log.processedAttachments.map((att, i) => (
+                      <span key={i} className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        <FileText className="h-3 w-3" />
+                        {att.filename}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {log.errorMessage && (
+                  <div className="mt-2 text-xs text-red-500 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {log.errorMessage}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

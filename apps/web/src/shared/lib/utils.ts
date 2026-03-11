@@ -2,8 +2,8 @@ export function cn(...classes: (string | undefined | null | false)[]): string {
   return classes.filter(Boolean).join(' ').trim();
 }
 
-export function formatCurrency(value: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value);
+export function formatCurrency(value: number | string, currency = 'USD'): string {
+  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(Number(value));
 }
 
 export function formatDate(date: string): string {
@@ -11,8 +11,8 @@ export function formatDate(date: string): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-export function formatWeight(kg: number): string {
-  return `${kg.toFixed(3)} kg`;
+export function formatWeight(kg: number | string): string {
+  return `${Number(kg).toFixed(3)} kg`;
 }
 
 export const statusLabels: Record<string, string> = {

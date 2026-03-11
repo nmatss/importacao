@@ -375,7 +375,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
                     {renderCell(item, 'ncm', item.ncm)}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {renderCell(item, 'unitPrice', item.unitPrice.toFixed(2))}
+                    {renderCell(item, 'unitPrice', Number(item.unitPrice).toFixed(2))}
                   </td>
                   <td className="px-3 py-2 text-right">
                     {renderCell(item, 'quantity', item.quantity)}

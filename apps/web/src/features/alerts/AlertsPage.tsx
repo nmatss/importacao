@@ -84,10 +84,11 @@ export function AlertsPage() {
   if (ackFilter !== 'all') queryParams.set('acknowledged', ackFilter);
   const qs = queryParams.toString();
 
-  const { data: alerts, isLoading } = useApiQuery<Alert[]>(
+  const { data: alertsResponse, isLoading } = useApiQuery<{ data: Alert[]; pagination: unknown }>(
     ['alerts', severityFilter, ackFilter],
     `/api/alerts${qs ? `?${qs}` : ''}`,
   );
+  const alerts = alertsResponse?.data;
 
   const acknowledgeMutation = useApiMutation<AckResponse, void>(
     '',

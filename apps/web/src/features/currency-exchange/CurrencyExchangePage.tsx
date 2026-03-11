@@ -374,7 +374,7 @@ export function CurrencyExchangePage() {
                           {formatCurrency(ex.amountUsd)}
                         </td>
                         <td className="whitespace-nowrap px-5 py-3.5 text-sm font-mono text-slate-700">
-                          {ex.exchangeRate.toFixed(4)}
+                          {Number(ex.exchangeRate).toFixed(4)}
                         </td>
                         <td className="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-slate-900">
                           {formatCurrency(ex.amountBrl, 'BRL')}

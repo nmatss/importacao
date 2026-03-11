@@ -27,7 +27,27 @@ export const emailIngestionController = {
   async triggerCheck(req: Request, res: Response) {
     try {
       const includeRead = req.query.includeRead === 'true';
-      await emailProcessor.processNewEmails(includeRead);
+      const after = req.query.after as string | undefined; // e.g. 2025/02/01
+      const before = req.query.before as string | undefined; // e.g. 2025/03/12
+      const rawQuery = req.query.q as string | undefined; // raw Gmail query override
+      const skipSenderFilter = req.query.allSenders === 'true';
+      let gmailQuery: string | undefined;
+      if (rawQuery) {
+        gmailQuery = rawQuery;
+      } else if (after || before) {
+        const parts = ['has:attachment'];
+        if (after) parts.push(`after:${after}`);
+        if (before) parts.push(`before:${before}`);
+        if (!skipSenderFilter) {
+          const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
+            ?.split(',').map(s => s.trim()).filter(Boolean) || [];
+          if (allowedSenders.length > 0) {
+            parts.push(`{${allowedSenders.map(s => `from:${s}`).join(' ')}}`);
+          }
+        }
+        gmailQuery = parts.join(' ');
+      }
+      await emailProcessor.processNewEmails(includeRead, gmailQuery);
       sendSuccess(res, { message: 'Verificação de emails concluída' });
     } catch (error: any) {
       logger.error({ error }, 'Manual email check failed');

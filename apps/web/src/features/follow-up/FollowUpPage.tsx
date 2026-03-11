@@ -99,10 +99,11 @@ export function FollowUpPage() {
   const [showDeadlines, setShowDeadlines] = useState(true);
   const [expandedProcessId, setExpandedProcessId] = useState<string | null>(null);
 
-  const { data: followUpData, isLoading } = useApiQuery<FollowUpProcess[]>(
+  const { data: followUpResponse, isLoading } = useApiQuery<{ data: FollowUpProcess[]; pagination: unknown }>(
     ['follow-up'],
     '/api/follow-up',
   );
+  const followUpData = followUpResponse?.data;
 
   const { data: liDeadlines, isLoading: loadingDeadlines } = useApiQuery<LiDeadline[]>(
     ['follow-up-deadlines'],

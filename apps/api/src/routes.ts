@@ -13,6 +13,7 @@ import { settingsRoutes } from './modules/settings/routes.js';
 import { aiRoutes } from './modules/ai/routes.js';
 import { emailIngestionRoutes } from './modules/email-ingestion/routes.js';
 import { auditRoutes } from './modules/audit/routes.js';
+import { liTrackingRoutes } from './modules/li-tracking/routes.js';
 
 const apiRouter = Router();
 
@@ -35,5 +36,6 @@ apiRouter.use('/settings', settingsRoutes);
 apiRouter.use('/ai', aiRoutes);
 apiRouter.use('/email-ingestion', emailIngestionRoutes);
 apiRouter.use('/audit', auditRoutes);
+apiRouter.use('/li-tracking', liTrackingRoutes);
 
 export { apiRouter };

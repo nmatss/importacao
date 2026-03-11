@@ -15,6 +15,9 @@ import {
   X,
   ChevronLeft,
   ArrowLeft,
+  FileCheck,
+  Building2,
+  Wallet,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
@@ -23,6 +26,9 @@ const navItems = [
   { to: '/importacao/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/importacao/processos', label: 'Processos', icon: FileBox },
   { to: '/importacao/cambios', label: 'Cambios', icon: DollarSign },
+  { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },
+  { to: '/importacao/desembaraco', label: 'Desembaraco', icon: Building2 },
+  { to: '/importacao/numerario', label: 'Numerario', icon: Wallet },
   { to: '/importacao/follow-up', label: 'Follow-Up', icon: CalendarClock },
   { to: '/importacao/comunicacoes', label: 'Comunicacoes', icon: Mail },
   { to: '/importacao/alertas', label: 'Alertas', icon: Bell },
@@ -36,6 +42,9 @@ const pageTitles: Record<string, string> = {
   '/importacao/processos': 'Processos',
   '/importacao/processos/novo': 'Novo Processo',
   '/importacao/cambios': 'Cambios',
+  '/importacao/lis': 'LIs / LPCOs',
+  '/importacao/desembaraco': 'Desembaraco Aduaneiro',
+  '/importacao/numerario': 'Numerario',
   '/importacao/follow-up': 'Follow-Up',
   '/importacao/comunicacoes': 'Comunicacoes',
   '/importacao/alertas': 'Alertas',

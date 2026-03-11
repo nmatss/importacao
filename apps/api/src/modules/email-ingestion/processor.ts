@@ -164,12 +164,12 @@ async function analyzeEmailWithAI(
 // ── Main processor ──────────────────────────────────────────────────────
 
 export const emailProcessor = {
-  async processNewEmails(includeRead = false) {
+  async processNewEmails(includeRead = false, gmailQuery?: string) {
     // Prefer Gmail API (service account), fall back to IMAP
     let emails;
     if (gmailService.isConfigured()) {
-      logger.info({ includeRead }, 'Using Gmail API for email ingestion');
-      emails = await gmailService.fetchUnseenEmails(includeRead);
+      logger.info({ includeRead, gmailQuery }, 'Using Gmail API for email ingestion');
+      emails = await gmailService.fetchUnseenEmails(includeRead, gmailQuery);
     } else {
       logger.info('Gmail API not configured, falling back to IMAP');
       emails = await imapService.fetchUnseenEmails();
@@ -186,8 +186,8 @@ export const emailProcessor = {
         continue;
       }
 
-      // Filter by allowed senders (e.g. Kiom)
-      if (!isAllowedSender(email.from)) {
+      // Filter by allowed senders (skip if custom query was provided)
+      if (!gmailQuery && !isAllowedSender(email.from)) {
         logger.debug({ from: email.from }, 'Email from non-allowed sender, ignoring');
         await db.insert(emailIngestionLogs).values({
           messageId: email.messageId,

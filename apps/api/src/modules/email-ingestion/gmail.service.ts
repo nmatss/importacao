@@ -121,18 +121,23 @@ function findAttachmentParts(
 }
 
 export const gmailService = {
-  async fetchUnseenEmails(includeRead = false): Promise<FetchedEmail[]> {
+  async fetchUnseenEmails(includeRead = false, queryOverride?: string): Promise<FetchedEmail[]> {
     const gmail = getGmailClient();
     const emails: FetchedEmail[] = [];
 
-    // Build search query from EMAIL_ALLOWED_SENDERS
-    const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
-      ?.split(',').map(s => s.trim()).filter(Boolean) || [];
-    const fromFilter = allowedSenders.length > 0
-      ? `{${allowedSenders.map(s => `from:${s}`).join(' ')}}`
-      : '';
-    const unreadFilter = includeRead ? '' : 'is:unread';
-    const searchQuery = `${unreadFilter} has:attachment ${fromFilter}`.trim();
+    let searchQuery: string;
+    if (queryOverride) {
+      searchQuery = queryOverride;
+    } else {
+      // Build search query from EMAIL_ALLOWED_SENDERS
+      const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
+        ?.split(',').map(s => s.trim()).filter(Boolean) || [];
+      const fromFilter = allowedSenders.length > 0
+        ? `{${allowedSenders.map(s => `from:${s}`).join(' ')}}`
+        : '';
+      const unreadFilter = includeRead ? '' : 'is:unread';
+      searchQuery = `${unreadFilter} has:attachment ${fromFilter}`.trim();
+    }
 
     logger.info({ searchQuery }, 'Gmail search query');
 

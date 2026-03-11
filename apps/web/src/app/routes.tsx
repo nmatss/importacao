@@ -17,6 +17,9 @@ import { SettingsPage } from '@/features/settings/SettingsPage';
 import { AlertsPage } from '@/features/alerts/AlertsPage';
 import { EmailIngestionPage } from '@/features/email-ingestion/EmailIngestionPage';
 import { AuditLogPage } from '@/features/audit/AuditLogPage';
+import { LiTrackingPage } from '@/features/li-tracking/LiTrackingPage';
+import { DesembaracoPage } from '@/features/desembaraco/DesembaracoPage';
+import { NumerarioPage } from '@/features/numerario/NumerarioPage';
 
 // Lazy-loaded Certificacoes pages
 const CertDashboardPage = lazy(() => import('@/features/certificacoes/CertDashboardPage'));
@@ -72,6 +75,9 @@ export function AppRoutes() {
                 <Route path="/processos/:id" element={<ProcessDetailPage />} />
                 <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
                 <Route path="/cambios" element={<CurrencyExchangePage />} />
+                <Route path="/lis" element={<LiTrackingPage />} />
+                <Route path="/desembaraco" element={<DesembaracoPage />} />
+                <Route path="/numerario" element={<NumerarioPage />} />
                 <Route path="/follow-up" element={<FollowUpPage />} />
                 <Route path="/comunicacoes" element={<CommunicationsPage />} />
                 <Route path="/alertas" element={<AlertsPage />} />
