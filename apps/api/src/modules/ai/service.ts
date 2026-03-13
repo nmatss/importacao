@@ -1,4 +1,7 @@
 import { logger } from '../../shared/utils/logger.js';
+import { logAIRequest } from './governance.js';
+import { invoiceResponseSchema } from './schemas/invoice-response.js';
+import { emailAnalysisResponseSchema } from './schemas/email-analysis-response.js';
 import { buildInvoicePrompt } from './prompts/invoice.js';
 import { buildPackingListPrompt } from './prompts/packing-list.js';
 import { buildBLPrompt } from './prompts/bl.js';
@@ -6,6 +9,7 @@ import { buildAnomalyPrompt } from './prompts/anomaly.js';
 import { buildEmailPrompt } from './prompts/email.js';
 import { buildEmailAnalysisPrompt } from './prompts/email-analysis.js';
 import { buildCorrectionPrompt } from './prompts/correction.js';
+import type { ZodType } from 'zod';
 
 interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -28,6 +32,26 @@ interface ExtractionResult {
   fieldsWithLowConfidence: string[];
 }
 
+// ── Model fallback chains ────────────────────────────────────────────
+
+const MODEL_FALLBACKS: Record<string, string> = {
+  'google/gemini-2.0-flash-001': 'anthropic/claude-sonnet-4',
+  'anthropic/claude-sonnet-4': 'google/gemini-2.0-flash-001',
+};
+
+// ── Prompt versions (for governance tracking) ────────────────────────
+
+const PROMPT_VERSIONS: Record<string, string> = {
+  invoice_extraction: 'v1.0',
+  packing_list_extraction: 'v1.0',
+  bl_extraction: 'v1.0',
+  anomaly_detection: 'v1.0',
+  email_draft: 'v1.0',
+  email_analysis: 'v1.0',
+  ncm_validation: 'v1.0',
+  correction_email: 'v1.0',
+};
+
 class AIService {
   private baseUrl: string;
   private apiKey: string;
@@ -37,7 +61,88 @@ class AIService {
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
   }
 
-  private async chat(model: string, messages: OpenRouterMessage[], jsonMode = true): Promise<string> {
+  private async chat(
+    model: string,
+    messages: OpenRouterMessage[],
+    jsonMode = true,
+    context = 'unknown',
+  ): Promise<string> {
+    const startTime = Date.now();
+    const promptVersion = PROMPT_VERSIONS[context] || 'v1.0';
+
+    try {
+      const content = await this.callOpenRouter(model, messages, jsonMode);
+      const latencyMs = Date.now() - startTime;
+
+      logAIRequest({
+        model,
+        promptVersion,
+        latencyMs,
+        status: 'success',
+        context,
+      });
+
+      return content;
+    } catch (primaryError: any) {
+      const latencyMs = Date.now() - startTime;
+      logAIRequest({
+        model,
+        promptVersion,
+        latencyMs,
+        status: 'error',
+        errorMessage: primaryError.message,
+        context,
+      });
+
+      // ── Fallback to secondary model ──────────────────────────────
+      const fallbackModel = MODEL_FALLBACKS[model];
+      if (fallbackModel) {
+        logger.warn(
+          { primaryModel: model, fallbackModel, context, error: primaryError.message },
+          'Primary model failed, attempting fallback',
+        );
+
+        const fallbackStart = Date.now();
+        try {
+          const content = await this.callOpenRouter(fallbackModel, messages, jsonMode);
+          const fallbackLatency = Date.now() - fallbackStart;
+
+          logAIRequest({
+            model: fallbackModel,
+            promptVersion,
+            latencyMs: fallbackLatency,
+            status: 'success',
+            context: `${context}:fallback`,
+          });
+
+          return content;
+        } catch (fallbackError: any) {
+          const fallbackLatency = Date.now() - fallbackStart;
+          logAIRequest({
+            model: fallbackModel,
+            promptVersion,
+            latencyMs: fallbackLatency,
+            status: 'error',
+            errorMessage: fallbackError.message,
+            context: `${context}:fallback`,
+          });
+
+          logger.error(
+            { primaryModel: model, fallbackModel, context },
+            'Both primary and fallback models failed',
+          );
+        }
+      }
+
+      throw primaryError;
+    }
+  }
+
+  private async callOpenRouter(
+    model: string,
+    messages: OpenRouterMessage[],
+    jsonMode: boolean,
+  ): Promise<string> {
     const url = `${this.baseUrl}/chat/completions`;
 
     const body = {
@@ -66,6 +171,7 @@ class AIService {
 
     const result = await response.json() as {
       choices: Array<{ message: { content: string } }>;
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
 
     const content = result.choices?.[0]?.message?.content;
@@ -120,23 +226,41 @@ class AIService {
     }
   }
 
+  /**
+   * Parse JSON and validate with Zod schema.
+   * Falls back to raw parsed data if validation fails, logging a warning.
+   */
+  private zodParse<T>(response: string, context: string, schema: ZodType<T>): T {
+    const raw = this.safeJsonParse(response, context);
+    const result = schema.safeParse(raw);
+    if (result.success) {
+      return result.data;
+    }
+
+    logger.warn(
+      { context, errors: result.error.issues.slice(0, 5) },
+      'AI response Zod validation failed, using raw parsed data',
+    );
+    return raw as T;
+  }
+
   async extractInvoiceData(text: string): Promise<ExtractionResult> {
     const messages = buildInvoicePrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const data = this.safeJsonParse(response, 'invoice extraction');
-    const { score, lowConfidenceFields } = this.calculateConfidence(data);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'invoice_extraction');
+    const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
+    const { score, lowConfidenceFields } = this.calculateConfidence(data as Record<string, any>);
 
     logger.info(
       { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
       'Invoice data extracted',
     );
 
-    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    return { data: data as Record<string, any>, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
   async extractPackingListData(text: string): Promise<ExtractionResult> {
     const messages = buildPackingListPrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'packing_list_extraction');
     const data = this.safeJsonParse(response, 'packing list extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -150,7 +274,7 @@ class AIService {
 
   async extractBLData(text: string): Promise<ExtractionResult> {
     const messages = buildBLPrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'bl_extraction');
     const data = this.safeJsonParse(response, 'bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -168,7 +292,7 @@ class AIService {
     blData: Record<string, any>,
   ): Promise<{ anomalies: Array<{ field: string; description: string; severity: string }> }> {
     const messages = buildAnomalyPrompt(invoiceData, packingListData, blData);
-    const response = await this.chat('anthropic/claude-sonnet-4', messages);
+    const response = await this.chat('anthropic/claude-sonnet-4', messages, true, 'anomaly_detection');
     const result = this.safeJsonParse(response, 'anomaly detection');
 
     logger.info(
@@ -184,7 +308,7 @@ class AIService {
     recipientType: 'fenicia' | 'isa',
   ): Promise<{ subject: string; body: string }> {
     const messages = buildEmailPrompt(processData, recipientType);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'email_draft');
     const result = this.safeJsonParse(response, 'email draft generation');
 
     logger.info({ recipientType }, 'Email draft generated');
@@ -199,8 +323,8 @@ class AIService {
   ): Promise<EmailAnalysisResult> {
     const truncatedBody = body.substring(0, 2000);
     const messages = buildEmailAnalysisPrompt(subject, truncatedBody, fromAddress);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
-    const result = this.safeJsonParse(response, 'email analysis');
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'email_analysis');
+    const result = this.zodParse(response, 'email analysis', emailAnalysisResponseSchema);
 
     logger.info(
       {
@@ -254,7 +378,7 @@ Rules:
       },
     ];
 
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'ncm_validation');
     const result = this.safeJsonParse(response, 'NCM validation');
 
     logger.info({ ncmCode, isValid: result.isValid }, 'NCM validation completed');
@@ -280,7 +404,7 @@ Rules:
     }>;
   }): Promise<{ subject: string; body: string }> {
     const messages = buildCorrectionPrompt(context);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages);
+    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'correction_email');
     const result = this.safeJsonParse(response, 'correction email generation');
 
     logger.info(

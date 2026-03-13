@@ -18,12 +18,14 @@ import {
   FileCheck,
   Building2,
   Wallet,
+  BarChart3,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
 
 const navItems = [
   { to: '/importacao/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/importacao/executivo', label: 'Dashboard Executivo', icon: BarChart3 },
   { to: '/importacao/processos', label: 'Processos', icon: FileBox },
   { to: '/importacao/cambios', label: 'Cambios', icon: DollarSign },
   { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },
@@ -39,6 +41,7 @@ const navItems = [
 
 const pageTitles: Record<string, string> = {
   '/importacao/dashboard': 'Dashboard',
+  '/importacao/executivo': 'Dashboard Executivo',
   '/importacao/processos': 'Processos',
   '/importacao/processos/novo': 'Novo Processo',
   '/importacao/cambios': 'Cambios',

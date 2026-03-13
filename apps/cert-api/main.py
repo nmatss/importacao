@@ -25,9 +25,10 @@ import gspread
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from google.oauth2.service_account import Credentials
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Security, Depends, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -36,14 +37,42 @@ log = logging.getLogger("cert-api")
 logging.basicConfig(level=logging.INFO)
 
 # ---------------------------------------------------------------------------
+# API Key auth
+# ---------------------------------------------------------------------------
+
+API_KEY = os.environ.get("CERT_API_KEY", "")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(request: Request, api_key: str = Security(api_key_header)):
+    """Verify API key from X-API-Key header. Skips auth if CERT_API_KEY is not set."""
+    if request.url.path == "/api/health":
+        return
+    if not API_KEY:  # Skip auth if not configured (backward compat for dev)
+        return
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid API key")
+
+# ---------------------------------------------------------------------------
 # App setup
 # ---------------------------------------------------------------------------
 
-app = FastAPI(title="Cert-API", version="2.0.0")
+app = FastAPI(
+    title="Cert-API",
+    version="2.0.0",
+    dependencies=[Depends(verify_api_key)],
+)
+
+_cors_origins_env = os.environ.get("CORS_ORIGINS", "")
+_cors_origins = (
+    [o.strip() for o in _cors_origins_env.split(",") if o.strip()]
+    if _cors_origins_env
+    else ["http://localhost:5173", "http://localhost:8080"]
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

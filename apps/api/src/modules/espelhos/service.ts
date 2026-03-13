@@ -15,6 +15,9 @@ import { generateImaginariumSheet } from './templates/imaginarium.template.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
+import { assertTransition } from '../../shared/state-machine/process-states.js';
+import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
+import { NotFoundError } from '../../shared/errors/index.js';
 
 const UPLOAD_DIR = 'uploads';
 
@@ -39,7 +42,7 @@ export const espelhoService = {
       .where(eq(importProcesses.id, processId))
       .limit(1);
 
-    if (!process) throw new Error('Processo nao encontrado');
+    if (!process) throw new NotFoundError('Processo', processId);
 
     let items = await db
       .select()
@@ -96,6 +99,7 @@ export const espelhoService = {
       .returning();
 
     // Update process status and follow-up
+    assertTransition(process.status as ProcessStatus, 'espelho_generated');
     await db
       .update(importProcesses)
       .set({ status: 'espelho_generated', updatedAt: new Date() })
@@ -261,7 +265,7 @@ export const espelhoService = {
       .where(eq(processItems.id, itemId))
       .returning();
 
-    if (!updated) throw new Error('Item nao encontrado');
+    if (!updated) throw new NotFoundError('Item', itemId);
     return updated;
   },
 
@@ -299,7 +303,7 @@ export const espelhoService = {
       .where(eq(processItems.id, itemId))
       .returning({ id: processItems.id });
 
-    if (!deleted) throw new Error('Item nao encontrado');
+    if (!deleted) throw new NotFoundError('Item', itemId);
     return deleted;
   },
 
@@ -321,7 +325,7 @@ export const espelhoService = {
       .where(eq(espelhos.id, espelhoId))
       .limit(1);
 
-    if (!espelho) throw new Error('Espelho nao encontrado');
+    if (!espelho) throw new NotFoundError('Espelho', espelhoId);
 
     const data = espelho.generatedData as any;
     if (!data?.filePath) {
@@ -354,7 +358,7 @@ export const espelhoService = {
 
   async sendToDrive(processId: number, userId: number | null = null) {
     const espelho = await this.getEspelho(processId);
-    if (!espelho) throw new Error('Espelho nao encontrado para este processo');
+    if (!espelho) throw new NotFoundError('Espelho');
 
     const data = espelho.generatedData as any;
     if (!data?.filePath || !data?.filename) {
@@ -369,7 +373,7 @@ export const espelhoService = {
       .where(eq(importProcesses.id, processId))
       .limit(1);
 
-    if (!process) throw new Error('Processo nao encontrado');
+    if (!process) throw new NotFoundError('Processo', processId);
 
     const { googleDriveService } = await import('../integrations/google-drive.service.js');
     const driveFileId = await googleDriveService.uploadToProcessFolder(
@@ -399,7 +403,14 @@ export const espelhoService = {
       .where(eq(espelhos.id, espelhoId))
       .returning();
 
-    if (!updated) throw new Error('Espelho nao encontrado');
+    if (!updated) throw new NotFoundError('Espelho', espelhoId);
+
+    // Validate transition before updating status
+    const [currentProc] = await db.select({ status: importProcesses.status })
+      .from(importProcesses).where(eq(importProcesses.id, updated.processId)).limit(1);
+    if (currentProc) {
+      assertTransition(currentProc.status as ProcessStatus, 'sent_to_fenicia');
+    }
 
     // Update process status and follow-up
     await db
@@ -428,7 +439,7 @@ export const espelhoService = {
 
   async sendToFeniciaByProcess(processId: number, userId: number | null = null) {
     const espelho = await this.getEspelho(processId);
-    if (!espelho) throw new Error('Espelho nao encontrado para este processo');
+    if (!espelho) throw new NotFoundError('Espelho');
     return this.markSentToFenicia(espelho.id, userId);
   },
 
@@ -439,7 +450,7 @@ export const espelhoService = {
       .where(eq(importProcesses.id, processId))
       .limit(1);
 
-    if (!process) throw new Error('Processo nao encontrado');
+    if (!process) throw new NotFoundError('Processo', processId);
 
     let items = await db
       .select()

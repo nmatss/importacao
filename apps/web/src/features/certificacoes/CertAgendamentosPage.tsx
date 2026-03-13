@@ -25,25 +25,7 @@ import {
   Tag,
 } from 'lucide-react';
 
-interface Schedule {
-  id: string;
-  name: string;
-  brand_filter: string | null;
-  cron_expression: string;
-  enabled: boolean;
-  created_at: string;
-  last_run: string | null;
-  next_run: string | null;
-}
-
-interface HistoryEntry {
-  id: string;
-  schedule_id: string;
-  run_date: string;
-  status: string;
-  summary: any;
-  report_file: string | null;
-}
+import type { CertSchedule as Schedule, CertScheduleHistoryEntry as HistoryEntry } from '@/shared/lib/cert-api-client';
 
 const BRAND_OPTIONS = [
   { value: '', label: 'Todas as marcas' },
@@ -471,18 +453,18 @@ export default function CertAgendamentosPage() {
                           </div>
                           {entry.summary && typeof entry.summary === 'object' && (
                             <div className="flex items-center gap-3 text-xs">
-                              <span className="text-slate-500 font-medium">{entry.summary.total || 0} produtos</span>
-                              {entry.summary.ok > 0 && (
+                              <span className="text-slate-500 font-medium">{entry.summary.total ?? 0} produtos</span>
+                              {(entry.summary.ok ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
                                   {entry.summary.ok} Conforme
                                 </span>
                               )}
-                              {entry.summary.missing > 0 && (
+                              {(entry.summary.missing ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-red-700 font-semibold">
                                   {entry.summary.missing} ausentes
                                 </span>
                               )}
-                              {entry.summary.inconsistent > 0 && (
+                              {(entry.summary.inconsistent ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold">
                                   {entry.summary.inconsistent} inconsist.
                                 </span>

@@ -1,0 +1,224 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateImaginariumSheet > should calculate correct totals row > imaginarium-totals 1`] = `
+[
+  "",
+  "",
+  "",
+  "",
+  "TOTAL",
+  "",
+  1200,
+  5800,
+  28,
+  470,
+  555,
+  "",
+  "",
+  "",
+]
+`;
+
+exports[`generateImaginariumSheet > should generate correct headers > imaginarium-headers 1`] = `
+[
+  "Ref.",
+  "Descricao do Produto",
+  "Cor/Acabamento",
+  "Tam.",
+  "NCM",
+  "Vlr Unit. USD",
+  "Qtd.",
+  "Vlr Total USD",
+  "N Caixas",
+  "Peso Liq.",
+  "Peso Bruto",
+  "FOC",
+  "Req. LI",
+  "Req. Cert.",
+]
+`;
+
+exports[`generateImaginariumSheet > should generate correct item rows > imaginarium-item-rows 1`] = `
+[
+  [
+    "IMG-001",
+    "Luminaria Decorativa LED",
+    "Dourado",
+    "U",
+    "9405.40.90",
+    12.75,
+    200,
+    2550,
+    8,
+    120,
+    145,
+    "",
+    "",
+    "Sim",
+  ],
+  [
+    "IMG-002",
+    "Caneca Termica Personalizada",
+    "Branco",
+    "M",
+    "6912.00.00",
+    3.25,
+    1000,
+    3250,
+    20,
+    350,
+    410,
+    "Sim",
+    "Sim",
+    "",
+  ],
+]
+`;
+
+exports[`generateImaginariumSheet > should handle empty items > imaginarium-empty 1`] = `
+[
+  [
+    "Ref.",
+    "Descricao do Produto",
+    "Cor/Acabamento",
+    "Tam.",
+    "NCM",
+    "Vlr Unit. USD",
+    "Qtd.",
+    "Vlr Total USD",
+    "N Caixas",
+    "Peso Liq.",
+    "Peso Bruto",
+    "FOC",
+    "Req. LI",
+    "Req. Cert.",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "TOTAL",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+]
+`;
+
+exports[`generateImaginariumSheet > should handle null values in items > imaginarium-null-values 1`] = `
+[
+  [
+    "Ref.",
+    "Descricao do Produto",
+    "Cor/Acabamento",
+    "Tam.",
+    "NCM",
+    "Vlr Unit. USD",
+    "Qtd.",
+    "Vlr Total USD",
+    "N Caixas",
+    "Peso Liq.",
+    "Peso Bruto",
+    "FOC",
+    "Req. LI",
+    "Req. Cert.",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "TOTAL",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+]
+`;
+
+exports[`generateImaginariumSheet > should mark FOC and LI rows in formatting metadata > imaginarium-formatting 1`] = `
+{
+  "highlightRows": [
+    3,
+  ],
+  "priorityRows": [
+    3,
+  ],
+}
+`;
+
+exports[`generateImaginariumSheet > should set column widths > imaginarium-col-widths 1`] = `
+[
+  {
+    "wch": 15,
+  },
+  {
+    "wch": 40,
+  },
+  {
+    "wch": 18,
+  },
+  {
+    "wch": 8,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 14,
+  },
+  {
+    "wch": 8,
+  },
+  {
+    "wch": 14,
+  },
+  {
+    "wch": 10,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 6,
+  },
+  {
+    "wch": 8,
+  },
+  {
+    "wch": 9,
+  },
+]
+`;

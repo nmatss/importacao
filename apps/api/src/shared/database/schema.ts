@@ -11,6 +11,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 
 // ── Enums ──────────────────────────────────────────────────────────────
@@ -111,12 +112,14 @@ export const importProcesses = pgTable('import_processes', {
 }, (table) => [
   index('import_processes_status_idx').on(table.status),
   index('import_processes_brand_idx').on(table.brand),
+  index('import_processes_status_brand_idx').on(table.status, table.brand),
+  index('import_processes_status_updated_idx').on(table.status, table.updatedAt),
 ]);
 
 export const documents = pgTable('documents', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull(),
   type: documentTypeEnum('type').notNull(),
   originalFilename: varchar('original_filename', { length: 500 }).notNull(),
@@ -131,12 +134,13 @@ export const documents = pgTable('documents', {
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('documents_process_id_idx').on(table.processId),
+  index('documents_process_type_idx').on(table.processId, table.type),
 ]);
 
 export const processItems = pgTable('process_items', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull(),
   itemCode: varchar('item_code', { length: 100 }),
   description: text('description'),
@@ -164,7 +168,7 @@ export const processItems = pgTable('process_items', {
 export const validationResults = pgTable('validation_results', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull(),
   checkName: varchar('check_name', { length: 100 }).notNull(),
   status: validationStatusEnum('status').notNull(),
@@ -177,14 +181,16 @@ export const validationResults = pgTable('validation_results', {
   resolvedBy: integer('resolved_by').references(() => users.id),
   resolvedAt: timestamp('resolved_at'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('validation_results_process_id_idx').on(table.processId),
+  index('validation_results_process_status_resolved_idx').on(table.processId, table.status, table.resolvedManually),
 ]);
 
 export const currencyExchanges = pgTable('currency_exchanges', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull(),
   type: currencyTypeEnum('type').notNull(),
   amountUsd: numeric('amount_usd', { precision: 12, scale: 2 }).notNull(),
@@ -197,12 +203,13 @@ export const currencyExchanges = pgTable('currency_exchanges', {
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('currency_exchanges_process_id_idx').on(table.processId),
+  index('currency_exchanges_payment_deadline_idx').on(table.paymentDeadline),
 ]);
 
 export const followUpTracking = pgTable('follow_up_tracking', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull()
     .unique(),
   documentsReceivedAt: timestamp('documents_received_at'),
@@ -222,7 +229,7 @@ export const followUpTracking = pgTable('follow_up_tracking', {
 export const espelhos = pgTable('espelhos', {
   id: serial('id').primaryKey(),
   processId: integer('process_id')
-    .references(() => importProcesses.id)
+    .references(() => importProcesses.id, { onDelete: 'cascade' })
     .notNull(),
   brand: brandEnum('brand').notNull(),
   version: integer('version').default(1),
@@ -232,13 +239,15 @@ export const espelhos = pgTable('espelhos', {
   sentToFenicia: boolean('sent_to_fenicia').default(false),
   sentAt: timestamp('sent_at'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('espelhos_process_id_idx').on(table.processId),
+  uniqueIndex('espelhos_process_version_partial_uniq').on(table.processId, table.version, table.isPartial),
 ]);
 
 export const communications = pgTable('communications', {
   id: serial('id').primaryKey(),
-  processId: integer('process_id').references(() => importProcesses.id),
+  processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'set null' }),
   recipient: varchar('recipient', { length: 255 }).notNull(),
   recipientEmail: varchar('recipient_email', { length: 255 }).notNull(),
   subject: varchar('subject', { length: 500 }).notNull(),
@@ -248,13 +257,14 @@ export const communications = pgTable('communications', {
   sentAt: timestamp('sent_at'),
   errorMessage: text('error_message'),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('communications_process_id_idx').on(table.processId),
 ]);
 
 export const alerts = pgTable('alerts', {
   id: serial('id').primaryKey(),
-  processId: integer('process_id').references(() => importProcesses.id),
+  processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'set null' }),
   severity: alertSeverityEnum('severity').notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   message: text('message').notNull(),
@@ -267,11 +277,13 @@ export const alerts = pgTable('alerts', {
   updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('alerts_process_id_idx').on(table.processId),
+  index('alerts_severity_idx').on(table.severity),
+  index('alerts_acknowledged_idx').on(table.acknowledged),
 ]);
 
 export const auditLogs = pgTable('audit_logs', {
   id: serial('id').primaryKey(),
-  userId: integer('user_id').references(() => users.id),
+  userId: integer('user_id').references(() => users.id, { onDelete: 'set null' }),
   action: varchar('action', { length: 100 }).notNull(),
   entityType: varchar('entity_type', { length: 100 }),
   entityId: integer('entity_id'),
@@ -311,6 +323,7 @@ export const emailIngestionLogs = pgTable('email_ingestion_logs', {
   errorMessage: text('error_message'),
   processCode: varchar('process_code', { length: 50 }),
   createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
 }, (table) => [
   index('email_ingestion_logs_process_id_idx').on(table.processId),
   index('email_ingestion_logs_status_idx').on(table.status),
@@ -357,6 +370,46 @@ export type NewSystemSetting = typeof systemSettings.$inferInsert;
 export type EmailIngestionLog = typeof emailIngestionLogs.$inferSelect;
 export type NewEmailIngestionLog = typeof emailIngestionLogs.$inferInsert;
 
+// ── Validation Runs ───────────────────────────────────────────────────
+
+export const validationRuns = pgTable('validation_runs', {
+  id: serial('id').primaryKey(),
+  processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'cascade' }).notNull(),
+  triggeredBy: integer('triggered_by').references(() => users.id, { onDelete: 'set null' }),
+  triggerType: varchar('trigger_type', { length: 50 }).default('manual').notNull(),
+  totalChecks: integer('total_checks'),
+  passedChecks: integer('passed_checks'),
+  failedChecks: integer('failed_checks'),
+  warningChecks: integer('warning_checks'),
+  duration: integer('duration'),
+  createdAt: timestamp('created_at').defaultNow(),
+}, (table) => [
+  index('validation_runs_process_id_idx').on(table.processId),
+]);
+
+export type ValidationRun = typeof validationRuns.$inferSelect;
+export type NewValidationRun = typeof validationRuns.$inferInsert;
+
+// ── Job Runs ──────────────────────────────────────────────────────────
+
+export const jobRuns = pgTable('job_runs', {
+  id: serial('id').primaryKey(),
+  jobName: varchar('job_name', { length: 100 }).notNull(),
+  status: varchar('status', { length: 20 }).default('running').notNull(),
+  startedAt: timestamp('started_at').defaultNow(),
+  completedAt: timestamp('completed_at'),
+  duration: integer('duration'),
+  result: jsonb('result'),
+  errorMessage: text('error_message'),
+  metadata: jsonb('metadata'),
+}, (table) => [
+  index('job_runs_job_name_idx').on(table.jobName),
+  index('job_runs_status_idx').on(table.status),
+]);
+
+export type JobRun = typeof jobRuns.$inferSelect;
+export type NewJobRun = typeof jobRuns.$inferInsert;
+
 // ── LI Tracking ───────────────────────────────────────────────────────
 
 export const liStatusEnum = pgEnum('li_status', [
@@ -370,7 +423,7 @@ export const liStatusEnum = pgEnum('li_status', [
 
 export const liTracking = pgTable('li_tracking', {
   id: serial('id').primaryKey(),
-  processId: integer('process_id').references(() => importProcesses.id),
+  processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'set null' }),
   processCode: varchar('process_code', { length: 50 }).notNull(),
   orgao: varchar('orgao', { length: 100 }),
   ncm: text('ncm'),

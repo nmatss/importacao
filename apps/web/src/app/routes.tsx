@@ -5,21 +5,25 @@ import { ImportacaoLayout } from '@/shared/components/ImportacaoLayout';
 import { CertificacoesLayout } from '@/shared/components/CertificacoesLayout';
 import { LoginPage } from '@/features/auth/LoginPage';
 import { PortalPage } from '@/features/portal/PortalPage';
-import { DashboardPage } from '@/features/dashboard/DashboardPage';
-import { ProcessListPage } from '@/features/processes/ProcessListPage';
-import { ProcessDetailPage } from '@/features/processes/ProcessDetailPage';
-import { ProcessCreatePage } from '@/features/processes/ProcessCreatePage';
-import { ProcessEditPage } from '@/features/processes/ProcessEditPage';
-import { CurrencyExchangePage } from '@/features/currency-exchange/CurrencyExchangePage';
-import { FollowUpPage } from '@/features/follow-up/FollowUpPage';
-import { CommunicationsPage } from '@/features/communications/CommunicationsPage';
-import { SettingsPage } from '@/features/settings/SettingsPage';
-import { AlertsPage } from '@/features/alerts/AlertsPage';
-import { EmailIngestionPage } from '@/features/email-ingestion/EmailIngestionPage';
-import { AuditLogPage } from '@/features/audit/AuditLogPage';
-import { LiTrackingPage } from '@/features/li-tracking/LiTrackingPage';
-import { DesembaracoPage } from '@/features/desembaraco/DesembaracoPage';
-import { NumerarioPage } from '@/features/numerario/NumerarioPage';
+
+// Lazy-loaded Importacao pages
+const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
+const ProcessListPage = lazy(() => import('@/features/processes/ProcessListPage').then(m => ({ default: m.ProcessListPage })));
+const ProcessDetailPage = lazy(() => import('@/features/processes/ProcessDetailPage').then(m => ({ default: m.ProcessDetailPage })));
+const ProcessCreatePage = lazy(() => import('@/features/processes/ProcessCreatePage').then(m => ({ default: m.ProcessCreatePage })));
+const ProcessEditPage = lazy(() => import('@/features/processes/ProcessEditPage').then(m => ({ default: m.ProcessEditPage })));
+const CurrencyExchangePage = lazy(() => import('@/features/currency-exchange/CurrencyExchangePage').then(m => ({ default: m.CurrencyExchangePage })));
+const FollowUpPage = lazy(() => import('@/features/follow-up/FollowUpPage').then(m => ({ default: m.FollowUpPage })));
+const CommunicationsPage = lazy(() => import('@/features/communications/CommunicationsPage').then(m => ({ default: m.CommunicationsPage })));
+const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const AlertsPage = lazy(() => import('@/features/alerts/AlertsPage').then(m => ({ default: m.AlertsPage })));
+const EmailIngestionPage = lazy(() => import('@/features/email-ingestion/EmailIngestionPage').then(m => ({ default: m.EmailIngestionPage })));
+const AuditLogPage = lazy(() => import('@/features/audit/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
+const LiTrackingPage = lazy(() => import('@/features/li-tracking/LiTrackingPage').then(m => ({ default: m.LiTrackingPage })));
+const DesembaracoPage = lazy(() => import('@/features/desembaraco/DesembaracoPage').then(m => ({ default: m.DesembaracoPage })));
+const NumerarioPage = lazy(() => import('@/features/numerario/NumerarioPage').then(m => ({ default: m.NumerarioPage })));
+const MeuDiaPage = lazy(() => import('@/features/dashboard/MeuDiaPage').then(m => ({ default: m.MeuDiaPage })));
+const ExecutiveDashboardPage = lazy(() => import('@/features/dashboard/ExecutiveDashboardPage').then(m => ({ default: m.ExecutiveDashboardPage })));
 
 // Lazy-loaded Certificacoes pages
 const CertDashboardPage = lazy(() => import('@/features/certificacoes/CertDashboardPage'));
@@ -67,24 +71,28 @@ export function AppRoutes() {
         element={
           <ProtectedRoute>
             <ImportacaoLayout>
-              <Routes>
-                <Route path="/" element={<Navigate to="/importacao/dashboard" replace />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/processos" element={<ProcessListPage />} />
-                <Route path="/processos/novo" element={<ProcessCreatePage />} />
-                <Route path="/processos/:id" element={<ProcessDetailPage />} />
-                <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
-                <Route path="/cambios" element={<CurrencyExchangePage />} />
-                <Route path="/lis" element={<LiTrackingPage />} />
-                <Route path="/desembaraco" element={<DesembaracoPage />} />
-                <Route path="/numerario" element={<NumerarioPage />} />
-                <Route path="/follow-up" element={<FollowUpPage />} />
-                <Route path="/comunicacoes" element={<CommunicationsPage />} />
-                <Route path="/alertas" element={<AlertsPage />} />
-                <Route path="/email-ingestion" element={<EmailIngestionPage />} />
-                <Route path="/auditoria" element={<AuditLogPage />} />
-                <Route path="/configuracoes" element={<SettingsPage />} />
-              </Routes>
+              <Suspense fallback={<LazyFallback />}>
+                <Routes>
+                  <Route path="/" element={<Navigate to="/importacao/dashboard" replace />} />
+                  <Route path="/dashboard" element={<DashboardPage />} />
+                  <Route path="/meu-dia" element={<MeuDiaPage />} />
+                  <Route path="/executivo" element={<ExecutiveDashboardPage />} />
+                  <Route path="/processos" element={<ProcessListPage />} />
+                  <Route path="/processos/novo" element={<ProcessCreatePage />} />
+                  <Route path="/processos/:id" element={<ProcessDetailPage />} />
+                  <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
+                  <Route path="/cambios" element={<CurrencyExchangePage />} />
+                  <Route path="/lis" element={<LiTrackingPage />} />
+                  <Route path="/desembaraco" element={<DesembaracoPage />} />
+                  <Route path="/numerario" element={<NumerarioPage />} />
+                  <Route path="/follow-up" element={<FollowUpPage />} />
+                  <Route path="/comunicacoes" element={<CommunicationsPage />} />
+                  <Route path="/alertas" element={<AlertsPage />} />
+                  <Route path="/email-ingestion" element={<EmailIngestionPage />} />
+                  <Route path="/auditoria" element={<AuditLogPage />} />
+                  <Route path="/configuracoes" element={<SettingsPage />} />
+                </Routes>
+              </Suspense>
             </ImportacaoLayout>
           </ProtectedRoute>
         }

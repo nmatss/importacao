@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { DollarSign, Trash2, Plus, TrendingUp, ArrowDownUp, Wallet, Calculator, X, Search, ChevronDown } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
@@ -83,7 +84,7 @@ export function CurrencyExchangePage() {
       queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
       setDeleteId(null);
     } catch (err: any) {
-      alert(err.message || 'Erro ao excluir cambio');
+      toast.error(err.message || 'Erro ao excluir cambio');
     }
   };
 
@@ -97,7 +98,7 @@ export function CurrencyExchangePage() {
     const usd = parseFloat(form.amountUsd);
     const rate = parseFloat(form.exchangeRate);
     if (isNaN(usd) || isNaN(rate)) {
-      alert('Valor USD e Taxa de Cambio devem ser numeros validos');
+      toast.error('Valor USD e Taxa de Cambio devem ser numeros validos');
       return;
     }
     createMutation.mutate({

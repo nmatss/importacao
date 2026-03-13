@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Mail, Send, Save, Sparkles, ChevronDown, ChevronUp, FileText, Clock, User, AtSign } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
@@ -100,7 +101,7 @@ export function CommunicationsPage() {
       queryClient.invalidateQueries({ queryKey: ['communications'] });
       setComposer(emptyComposer);
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar email');
+      toast.error(err.message || 'Erro ao enviar email');
     }
   };
 
@@ -117,7 +118,7 @@ export function CommunicationsPage() {
         body: draft.body,
       }));
     } catch (err: any) {
-      alert(err.message || 'Erro ao gerar email com IA');
+      toast.error(err.message || 'Erro ao gerar email com IA');
     } finally {
       setGeneratingAi(false);
     }

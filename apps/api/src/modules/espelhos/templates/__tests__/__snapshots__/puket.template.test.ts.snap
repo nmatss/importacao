@@ -1,0 +1,224 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generatePuketSheet > should calculate correct totals row > puket-totals 1`] = `
+[
+  "",
+  "",
+  "",
+  "",
+  "TOTAL",
+  "",
+  600,
+  1550,
+  15,
+  40,
+  45.5,
+  "",
+  "",
+  "",
+]
+`;
+
+exports[`generatePuketSheet > should generate correct headers > puket-headers 1`] = `
+[
+  "Codigo",
+  "Descricao",
+  "Cor",
+  "Tamanho",
+  "NCM",
+  "Preco Unit. (USD)",
+  "Quantidade",
+  "Total (USD)",
+  "Caixas",
+  "Peso Liq. (kg)",
+  "Peso Bruto (kg)",
+  "FOC",
+  "LI",
+  "Cert.",
+]
+`;
+
+exports[`generatePuketSheet > should generate correct item rows > puket-item-rows 1`] = `
+[
+  [
+    "PK-001",
+    "Pijama Infantil Estampado",
+    "Azul",
+    "P",
+    "6108.31.00",
+    5.5,
+    100,
+    550,
+    5,
+    25,
+    28.5,
+    "",
+    "Sim",
+    "",
+  ],
+  [
+    "PK-002",
+    "Meia Soquete Listrada",
+    "Rosa",
+    "M",
+    "6115.95.00",
+    2,
+    500,
+    1000,
+    10,
+    15,
+    17,
+    "Sim",
+    "",
+    "Sim",
+  ],
+]
+`;
+
+exports[`generatePuketSheet > should handle empty items > puket-empty 1`] = `
+[
+  [
+    "Codigo",
+    "Descricao",
+    "Cor",
+    "Tamanho",
+    "NCM",
+    "Preco Unit. (USD)",
+    "Quantidade",
+    "Total (USD)",
+    "Caixas",
+    "Peso Liq. (kg)",
+    "Peso Bruto (kg)",
+    "FOC",
+    "LI",
+    "Cert.",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "TOTAL",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+]
+`;
+
+exports[`generatePuketSheet > should handle null values in items > puket-null-values 1`] = `
+[
+  [
+    "Codigo",
+    "Descricao",
+    "Cor",
+    "Tamanho",
+    "NCM",
+    "Preco Unit. (USD)",
+    "Quantidade",
+    "Total (USD)",
+    "Caixas",
+    "Peso Liq. (kg)",
+    "Peso Bruto (kg)",
+    "FOC",
+    "LI",
+    "Cert.",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+  [
+    "",
+    "",
+    "",
+    "",
+    "TOTAL",
+    "",
+    0,
+    0,
+    0,
+    0,
+    0,
+    "",
+    "",
+    "",
+  ],
+]
+`;
+
+exports[`generatePuketSheet > should mark FOC and LI rows in formatting metadata > puket-formatting 1`] = `
+{
+  "highlightRows": [
+    3,
+  ],
+  "priorityRows": [
+    2,
+  ],
+}
+`;
+
+exports[`generatePuketSheet > should set column widths > puket-col-widths 1`] = `
+[
+  {
+    "wch": 15,
+  },
+  {
+    "wch": 40,
+  },
+  {
+    "wch": 15,
+  },
+  {
+    "wch": 10,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 16,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 14,
+  },
+  {
+    "wch": 8,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 12,
+  },
+  {
+    "wch": 6,
+  },
+  {
+    "wch": 6,
+  },
+  {
+    "wch": 6,
+  },
+]
+`;

@@ -3,27 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import { fetchCertReportDetail, getCertReportDownloadUrl } from '@/shared/lib/cert-api-client';
+import type { CertReportResult, CertReportData } from '@/shared/lib/cert-api-client';
 import { Download, Search, Loader2, ArrowLeft, FileSpreadsheet, ExternalLink, Filter } from 'lucide-react';
-
-interface CertReportResult {
-  sku: string;
-  name: string;
-  brand: string;
-  status: string;
-  score: number | null;
-  url: string | null;
-}
-
-interface CertReportData {
-  results: CertReportResult[];
-  summary: {
-    total: number;
-    ok: number;
-    missing: number;
-    inconsistent: number;
-    not_found: number;
-  };
-}
 
 export default function CertRelatorioDetailPage() {
   const { id } = useParams();

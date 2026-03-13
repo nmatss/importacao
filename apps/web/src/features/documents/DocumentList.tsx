@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import {
   FileText,
   Trash2,
@@ -124,7 +125,7 @@ export function DocumentList({ processId }: DocumentListProps) {
       if (!res.ok) throw new Error('Falha ao reprocessar documento');
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
     }).catch((err: any) => {
-      alert(err.message || 'Erro ao reprocessar documento');
+      toast.error(err.message || 'Erro ao reprocessar documento');
     });
   };
 
@@ -139,7 +140,7 @@ export function DocumentList({ processId }: DocumentListProps) {
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
       setDeleteTarget(null);
     }).catch((err: any) => {
-      alert(err.message || 'Erro ao excluir documento');
+      toast.error(err.message || 'Erro ao excluir documento');
     });
   };
 

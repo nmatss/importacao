@@ -8,7 +8,7 @@ import { loginSchema, createUserSchema, updateUserSchema } from './schema.js';
 const router = Router();
 
 router.post('/login', createRateLimiter(5, 15 * 60 * 1000), validate(loginSchema), authController.login);
-router.post('/google', authController.loginWithGoogle);
+router.post('/google', createRateLimiter(10, 15 * 60 * 1000), authController.loginWithGoogle);
 router.get('/me', authMiddleware, authController.getMe);
 
 // User management (admin only)

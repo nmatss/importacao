@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { AppError, ValidationError } from '../errors/index.js';
 import { logger } from '../utils/logger.js';
 
 export function errorHandler(
@@ -17,17 +18,30 @@ export function errorHandler(
     }));
     return res.status(400).json({
       success: false,
-      error: 'Erro de validação',
+      error: 'Erro de validacao',
       details: errors,
     });
   }
 
-  const statusCode = 'statusCode' in err ? (err as any).statusCode : 500;
-  const message =
-    statusCode === 500 ? 'Erro interno do servidor' : err.message;
+  if (err instanceof ValidationError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: err.message,
+      code: err.code,
+      details: err.details,
+    });
+  }
 
-  return res.status(statusCode).json({
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: err.message,
+      code: err.code,
+    });
+  }
+
+  return res.status(500).json({
     success: false,
-    error: message,
+    error: 'Erro interno do servidor',
   });
 }

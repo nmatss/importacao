@@ -9,6 +9,9 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { communicationService } from '../communications/service.js';
 import { kiomCorrectionTemplate } from '../communications/templates/kiom-correction.js';
+import { assertTransition } from '../../shared/state-machine/process-states.js';
+import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
+import { NotFoundError } from '../../shared/errors/index.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
@@ -27,7 +30,7 @@ export const validationService = {
       .where(eq(importProcesses.id, processId));
 
     if (!process) {
-      throw new Error('Processo nao encontrado');
+      throw new NotFoundError('Processo', processId);
     }
 
     // 2. Get all documents for the process with aiParsedData
@@ -56,6 +59,7 @@ export const validationService = {
     };
 
     // 4. Update process status to 'validating'
+    assertTransition(process.status as ProcessStatus, 'validating');
     await db
       .update(importProcesses)
       .set({ status: 'validating', updatedAt: new Date() })
@@ -105,6 +109,7 @@ export const validationService = {
     if (!hasFailed) {
       // If was pending correction, clear it and move back from correction folder
       if (process.correctionStatus === 'pending_correction') {
+        assertTransition('validating' as ProcessStatus, 'validated');
         await db
           .update(importProcesses)
           .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
@@ -116,6 +121,7 @@ export const validationService = {
           );
         }).catch(() => {});
       } else {
+        assertTransition('validating' as ProcessStatus, 'validated');
         await db
           .update(importProcesses)
           .set({ status: 'validated', updatedAt: new Date() })
@@ -302,7 +308,7 @@ export const validationService = {
       .from(importProcesses)
       .where(eq(importProcesses.id, processId));
 
-    if (!process) throw new Error('Processo nao encontrado');
+    if (!process) throw new NotFoundError('Processo', processId);
 
     const results = await this.getResults(processId);
 

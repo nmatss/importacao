@@ -18,26 +18,7 @@ import {
 } from "lucide-react"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
 
-interface CertStats {
-  total_products: number;
-  total_expired: number;
-  last_run: {
-    date: string;
-    total: number;
-    ok: number;
-    missing: number;
-    inconsistent: number;
-    not_found: number;
-  } | null;
-  by_brand: Array<{
-    brand: string;
-    ok: number;
-    missing: number;
-    inconsistent: number;
-    not_found: number;
-    expired: number;
-  }>;
-}
+import type { CertStats } from '@/shared/lib/cert-api-client';
 
 interface CertExpiredProduct {
   sku: string;

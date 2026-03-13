@@ -10,3 +10,9 @@ export const createCommunicationSchema = z.object({
 });
 
 export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>;
+
+export const updateDraftSchema = z.object({
+  subject: z.string().min(1).optional(),
+  body: z.string().min(1).optional(),
+  recipientEmail: z.string().email().optional(),
+});

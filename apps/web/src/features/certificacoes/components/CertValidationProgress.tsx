@@ -1,16 +1,10 @@
 import { useEffect, useState, useRef } from "react"
 import { cn, certStatusColor } from "@/shared/lib/utils"
 import { streamCertValidation } from "@/shared/lib/cert-api-client"
+import type { CertValidationEvent } from "@/shared/lib/cert-api-client"
 import { CheckCircle2, XCircle, Loader2, AlertCircle } from "lucide-react"
 
-interface ProgressEvent {
-  type: "progress" | "complete" | "error"
-  current?: number
-  total?: number
-  product?: { sku: string; name: string; status: string; score: number }
-  summary?: any
-  error?: string
-}
+type ProgressEvent = CertValidationEvent;
 
 export function CertValidationProgress({
   runId,

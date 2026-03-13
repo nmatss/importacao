@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Bell, AlertTriangle, Info, CheckCircle2, Shield, Clock, ExternalLink } from 'lucide-react';
@@ -105,7 +106,7 @@ export function AlertsPage() {
       await api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`);
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao reconhecer alerta');
+      toast.error(err.message || 'Erro ao reconhecer alerta');
     }
   };
 

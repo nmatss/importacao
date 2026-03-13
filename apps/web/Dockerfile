@@ -13,6 +13,9 @@ RUN npm install
 COPY . .
 RUN npm run build
 
+# nginx:alpine already drops privileges internally after binding to port 80.
+# Using a separate USER directive is not recommended here as nginx needs root
+# to bind to privileged ports. Consider nginxinc/nginx-unprivileged if needed.
 FROM nginx:alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf

@@ -100,17 +100,7 @@ const BRAND_FILTERS = [
   { value: "puket_escolares", label: "Puket Escolares" },
 ]
 
-interface CertProduct {
-  sku: string
-  name: string
-  brand: string
-  last_validation_status: string | null
-  last_validation_score: number | null
-  last_validation_url: string | null
-  last_validation_date: string | null
-  is_expired?: boolean
-  sale_deadline?: string
-}
+import type { CertProduct } from '@/shared/lib/cert-api-client';
 
 interface StatusCounts {
   total: number

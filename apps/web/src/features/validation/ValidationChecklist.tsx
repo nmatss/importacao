@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useReducer } from 'react';
+import DOMPurify from 'dompurify';
+import { toast } from 'sonner';
 import {
   CheckCircle,
   XCircle,
@@ -56,6 +58,95 @@ interface ValidationChecklistProps {
   processId: string;
 }
 
+// --- useReducer state & actions ---
+
+interface ChecklistState {
+  running: boolean;
+  detectingAnomalies: boolean;
+  anomalies: Anomaly[] | null;
+  generatingDraft: boolean;
+  draft: CorrectionDraft | null;
+  showDraftModal: boolean;
+  editSubject: string;
+  editBody: string;
+  editRecipientEmail: string;
+  sending: boolean;
+  saving: boolean;
+}
+
+type ChecklistAction =
+  | { type: 'SET_RUNNING'; payload: boolean }
+  | { type: 'SET_DETECTING_ANOMALIES'; payload: boolean }
+  | { type: 'SET_ANOMALIES'; payload: Anomaly[] | null }
+  | { type: 'SET_GENERATING_DRAFT'; payload: boolean }
+  | { type: 'SET_DRAFT'; payload: CorrectionDraft | null }
+  | { type: 'OPEN_DRAFT_MODAL'; payload: { draft: CorrectionDraft } }
+  | { type: 'CLOSE_DRAFT_MODAL' }
+  | { type: 'SET_EDIT_SUBJECT'; payload: string }
+  | { type: 'SET_EDIT_BODY'; payload: string }
+  | { type: 'SET_EDIT_RECIPIENT_EMAIL'; payload: string }
+  | { type: 'SET_SENDING'; payload: boolean }
+  | { type: 'SET_SAVING'; payload: boolean }
+  | { type: 'UPDATE_DRAFT'; payload: CorrectionDraft };
+
+const initialState: ChecklistState = {
+  running: false,
+  detectingAnomalies: false,
+  anomalies: null,
+  generatingDraft: false,
+  draft: null,
+  showDraftModal: false,
+  editSubject: '',
+  editBody: '',
+  editRecipientEmail: '',
+  sending: false,
+  saving: false,
+};
+
+function checklistReducer(state: ChecklistState, action: ChecklistAction): ChecklistState {
+  switch (action.type) {
+    case 'SET_RUNNING':
+      return { ...state, running: action.payload };
+    case 'SET_DETECTING_ANOMALIES':
+      return { ...state, detectingAnomalies: action.payload };
+    case 'SET_ANOMALIES':
+      return { ...state, anomalies: action.payload };
+    case 'SET_GENERATING_DRAFT':
+      return { ...state, generatingDraft: action.payload };
+    case 'SET_DRAFT':
+      return { ...state, draft: action.payload };
+    case 'OPEN_DRAFT_MODAL': {
+      const { draft } = action.payload;
+      return {
+        ...state,
+        draft,
+        editSubject: draft.subject,
+        editBody: draft.body,
+        editRecipientEmail: draft.recipientEmail,
+        showDraftModal: true,
+      };
+    }
+    case 'CLOSE_DRAFT_MODAL':
+      return { ...state, showDraftModal: false, draft: null };
+    case 'SET_EDIT_SUBJECT':
+      return { ...state, editSubject: action.payload };
+    case 'SET_EDIT_BODY':
+      return { ...state, editBody: action.payload };
+    case 'SET_EDIT_RECIPIENT_EMAIL':
+      return { ...state, editRecipientEmail: action.payload };
+    case 'SET_SENDING':
+      return { ...state, sending: action.payload };
+    case 'SET_SAVING':
+      return { ...state, saving: action.payload };
+    case 'UPDATE_DRAFT':
+      return { ...state, draft: action.payload };
+    default:
+      return state;
+  }
+}
+
+// --- helpers ---
+
 const checkLabel = (name: string) =>
   VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
 
@@ -88,17 +179,21 @@ const statusConfig = {
 
 export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const queryClient = useQueryClient();
-  const [running, setRunning] = useState(false);
-  const [detectingAnomalies, setDetectingAnomalies] = useState(false);
-  const [anomalies, setAnomalies] = useState<Anomaly[] | null>(null);
-  const [generatingDraft, setGeneratingDraft] = useState(false);
-  const [draft, setDraft] = useState<CorrectionDraft | null>(null);
-  const [showDraftModal, setShowDraftModal] = useState(false);
-  const [editSubject, setEditSubject] = useState('');
-  const [editBody, setEditBody] = useState('');
-  const [editRecipientEmail, setEditRecipientEmail] = useState('');
-  const [sending, setSending] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [state, dispatch] = useReducer(checklistReducer, initialState);
+
+  const {
+    running,
+    detectingAnomalies,
+    anomalies,
+    generatingDraft,
+    draft,
+    showDraftModal,
+    editSubject,
+    editBody,
+    editRecipientEmail,
+    sending,
+    saving,
+  } = state;
 
   const { data: checks, isLoading } = useApiQuery<ValidationCheck[]>(
     ['validation', processId],
@@ -106,26 +201,26 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   );
 
   const runValidation = async () => {
-    setRunning(true);
+    dispatch({ type: 'SET_RUNNING', payload: true });
     try {
       await api.post(`/api/validation/${processId}/run`);
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao executar validacao');
+      toast.error(err.message || 'Erro ao executar validacao');
     } finally {
-      setRunning(false);
+      dispatch({ type: 'SET_RUNNING', payload: false });
     }
   };
 
   const detectAnomalies = async () => {
-    setDetectingAnomalies(true);
+    dispatch({ type: 'SET_DETECTING_ANOMALIES', payload: true });
     try {
       const data = await api.post<AnomalyDetectionResult>(`/api/validation/${processId}/anomalies`);
-      setAnomalies(data.anomalies ?? []);
+      dispatch({ type: 'SET_ANOMALIES', payload: data.anomalies ?? [] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao detectar anomalias');
+      toast.error(err.message || 'Erro ao detectar anomalias');
     } finally {
-      setDetectingAnomalies(false);
+      dispatch({ type: 'SET_DETECTING_ANOMALIES', payload: false });
     }
   };
 
@@ -134,51 +229,47 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao resolver manualmente');
+      toast.error(err.message || 'Erro ao resolver manualmente');
     }
   };
 
   const generateCorrectionDraft = async (useAi = false) => {
-    setGeneratingDraft(true);
+    dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
     try {
       const data = await api.post<CorrectionDraft>(
         `/api/validation/${processId}/correction-draft`,
         { useAi },
       );
-      setDraft(data);
-      setEditSubject(data.subject);
-      setEditBody(data.body);
-      setEditRecipientEmail(data.recipientEmail);
-      setShowDraftModal(true);
+      dispatch({ type: 'OPEN_DRAFT_MODAL', payload: { draft: data } });
     } catch (err: any) {
-      alert(err.message || 'Erro ao gerar rascunho de correcao');
+      toast.error(err.message || 'Erro ao gerar rascunho de correcao');
     } finally {
-      setGeneratingDraft(false);
+      dispatch({ type: 'SET_GENERATING_DRAFT', payload: false });
     }
   };
 
   const saveDraft = async () => {
     if (!draft) return;
-    setSaving(true);
+    dispatch({ type: 'SET_SAVING', payload: true });
     try {
       const updated = await api.patch<CorrectionDraft>(`/api/communications/${draft.id}/draft`, {
         subject: editSubject,
         body: editBody,
         recipientEmail: editRecipientEmail,
       });
-      setDraft(updated);
-      alert('Rascunho salvo com sucesso');
+      dispatch({ type: 'UPDATE_DRAFT', payload: updated });
+      toast.success('Rascunho salvo com sucesso');
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar rascunho');
+      toast.error(err.message || 'Erro ao salvar rascunho');
     } finally {
-      setSaving(false);
+      dispatch({ type: 'SET_SAVING', payload: false });
     }
   };
 
   const sendEmail = async () => {
     if (!draft) return;
     if (!confirm('Deseja realmente enviar este e-mail de correcao?')) return;
-    setSending(true);
+    dispatch({ type: 'SET_SENDING', payload: true });
     try {
       // Save any edits first
       await api.patch(`/api/communications/${draft.id}/draft`, {
@@ -188,13 +279,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       });
       // Then send
       await api.post(`/api/communications/${draft.id}/send`);
-      alert('E-mail enviado com sucesso');
-      setShowDraftModal(false);
-      setDraft(null);
+      toast.success('E-mail enviado com sucesso');
+      dispatch({ type: 'CLOSE_DRAFT_MODAL' });
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar e-mail');
+      toast.error(err.message || 'Erro ao enviar e-mail');
     } finally {
-      setSending(false);
+      dispatch({ type: 'SET_SENDING', payload: false });
     }
   };
 
@@ -427,7 +517,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 </div>
               </div>
               <button
-                onClick={() => setShowDraftModal(false)}
+                onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
               >
                 <X className="h-5 w-5" />
@@ -444,7 +534,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 <input
                   type="email"
                   value={editRecipientEmail}
-                  onChange={(e) => setEditRecipientEmail(e.target.value)}
+                  onChange={(e) => dispatch({ type: 'SET_EDIT_RECIPIENT_EMAIL', payload: e.target.value })}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
               </div>
@@ -457,7 +547,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 <input
                   type="text"
                   value={editSubject}
-                  onChange={(e) => setEditSubject(e.target.value)}
+                  onChange={(e) => dispatch({ type: 'SET_EDIT_SUBJECT', payload: e.target.value })}
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
                 />
               </div>
@@ -472,8 +562,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     className="p-4 text-sm text-slate-700 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
                     contentEditable
                     suppressContentEditableWarning
-                    onBlur={(e) => setEditBody(e.currentTarget.innerHTML)}
-                    dangerouslySetInnerHTML={{ __html: editBody }}
+                    onBlur={(e) => dispatch({ type: 'SET_EDIT_BODY', payload: e.currentTarget.innerHTML })}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(editBody) }}
                   />
                 </div>
               </div>
@@ -482,7 +572,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             {/* Footer */}
             <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 rounded-b-2xl">
               <button
-                onClick={() => setShowDraftModal(false)}
+                onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
                 className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
               >
                 Cancelar

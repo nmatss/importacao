@@ -13,12 +13,18 @@ function createClient(path: string) {
 }
 
 function callAsync(client: xmlrpc.Client, method: string, params: any[]): Promise<any> {
-  return new Promise((resolve, reject) => {
+  const call = new Promise((resolve, reject) => {
     client.methodCall(method, params, (err: any, result: any) => {
       if (err) reject(err);
       else resolve(result);
     });
   });
+
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error('Odoo XML-RPC timeout after 30s')), 30_000),
+  );
+
+  return Promise.race([call, timeout]);
 }
 
 export const odooService = {

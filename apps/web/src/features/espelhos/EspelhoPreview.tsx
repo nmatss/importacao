@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { toast } from 'sonner';
 import {
   Download,
   Upload,
@@ -85,7 +86,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       if (!res.ok) throw new Error('Falha ao gerar espelho');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao gerar espelho');
+      toast.error(err.message || 'Erro ao gerar espelho');
     } finally {
       setGenerating(false);
     }
@@ -107,7 +108,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(err.message || 'Erro ao baixar espelho');
+      toast.error(err.message || 'Erro ao baixar espelho');
     }
   };
 
@@ -116,7 +117,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       const res = await apiCall(`/api/espelhos/${processId}/send-drive`);
       if (!res.ok) throw new Error('Falha ao enviar para Drive');
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar para Drive');
+      toast.error(err.message || 'Erro ao enviar para Drive');
     }
   };
   const sendToFenicia = async () => {
@@ -124,7 +125,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       const res = await apiCall(`/api/espelhos/${processId}/send-fenicia`);
       if (!res.ok) throw new Error('Falha ao enviar para Fenicia');
     } catch (err: any) {
-      alert(err.message || 'Erro ao enviar para Fenicia');
+      toast.error(err.message || 'Erro ao enviar para Fenicia');
     }
   };
   const generatePartialLi = async () => {
@@ -132,7 +133,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       const res = await apiCall(`/api/espelhos/${processId}/generate-li`);
       if (!res.ok) throw new Error('Falha ao gerar parcial LI');
     } catch (err: any) {
-      alert(err.message || 'Erro ao gerar parcial LI');
+      toast.error(err.message || 'Erro ao gerar parcial LI');
     }
   };
 
@@ -151,7 +152,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       setEditingCell(null);
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar edicao');
+      toast.error(err.message || 'Erro ao salvar edicao');
     }
   };
 
@@ -169,7 +170,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       if (!res.ok) throw new Error('Falha ao adicionar item');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao adicionar item');
+      toast.error(err.message || 'Erro ao adicionar item');
     }
   };
 

@@ -9,6 +9,9 @@ import { alertService } from '../alerts/service.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
+import { assertTransition } from '../../shared/state-machine/process-states.js';
+import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
+import { NotFoundError } from '../../shared/errors/index.js';
 
 function standardizeDocumentName(type: string, processCode: string, aiData: Record<string, any> | null): string | null {
   if (type === 'invoice' && aiData) {
@@ -63,6 +66,11 @@ export const documentService = {
     const hasBL = processDocs.some(d => d.type === 'ohbl');
 
     if (hasInvoice && hasPL && hasBL) {
+      const [currentProc] = await db.select({ status: importProcesses.status })
+        .from(importProcesses).where(eq(importProcesses.id, processId)).limit(1);
+      if (currentProc) {
+        assertTransition(currentProc.status as ProcessStatus, 'documents_received');
+      }
       await db.update(importProcesses)
         .set({ status: 'documents_received', updatedAt: new Date() })
         .where(eq(importProcesses.id, processId));
@@ -216,13 +224,13 @@ export const documentService = {
 
   async getById(id: number) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
-    if (!doc) throw new Error('Documento não encontrado');
+    if (!doc) throw new NotFoundError('Documento', id);
     return doc;
   },
 
   async getSource(id: number) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
-    if (!doc) throw new Error('Documento não encontrado');
+    if (!doc) throw new NotFoundError('Documento', id);
 
     // Check if this document came from email ingestion
     const emailLogs = await db.select()
@@ -247,7 +255,7 @@ export const documentService = {
 
   async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
-    if (!doc) throw new Error('Documento não encontrado');
+    if (!doc) throw new NotFoundError('Documento', documentId);
 
     await db.update(documents)
       .set({ isProcessed: false, aiParsedData: null, confidenceScore: null, updatedAt: new Date() })
@@ -261,7 +269,7 @@ export const documentService = {
 
   async delete(id: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
-    if (!doc) throw new Error('Documento não encontrado');
+    if (!doc) throw new NotFoundError('Documento', id);
 
     // Remove file from disk
     try {

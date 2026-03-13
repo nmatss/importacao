@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   Settings,
@@ -220,7 +221,7 @@ function GeneralTab() {
       setSavedWebhook(true);
       setTimeout(() => setSavedWebhook(false), 2000);
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar webhook');
+      toast.error(err.message || 'Erro ao salvar webhook');
     } finally {
       setSavingWebhook(false);
     }
@@ -238,7 +239,7 @@ function GeneralTab() {
       setSavedSmtp(true);
       setTimeout(() => setSavedSmtp(false), 2000);
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar configuracoes SMTP');
+      toast.error(err.message || 'Erro ao salvar configuracoes SMTP');
     } finally {
       setSavingSmtp(false);
     }
@@ -349,7 +350,7 @@ function UsersTab() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setShowModal(false);
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar usuario');
+      toast.error(err.message || 'Erro ao salvar usuario');
     } finally {
       setSaving(false);
     }
@@ -362,7 +363,7 @@ function UsersTab() {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setDeactivateId(null);
     } catch (err: any) {
-      alert(err.message || 'Erro ao desativar usuario');
+      toast.error(err.message || 'Erro ao desativar usuario');
     }
   };
 
@@ -371,7 +372,7 @@ function UsersTab() {
       await api.put(`/api/auth/users/${user.id}`, { active: !user.active });
       queryClient.invalidateQueries({ queryKey: ['users'] });
     } catch (err: any) {
-      alert(err.message || 'Erro ao alterar status do usuario');
+      toast.error(err.message || 'Erro ao alterar status do usuario');
     }
   };
 
@@ -639,7 +640,7 @@ function IntegrationsTab() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err: any) {
-      alert(err.message || 'Erro ao salvar integracoes');
+      toast.error(err.message || 'Erro ao salvar integracoes');
     } finally {
       setSaving(false);
     }

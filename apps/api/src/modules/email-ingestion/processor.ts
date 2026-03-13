@@ -89,6 +89,69 @@ function classifyDocumentWithContext(
   return filenameType;
 }
 
+// ── Regex-based document type extraction from text ──────────────────────
+
+function extractDocumentTypesFromText(text: string): string[] {
+  const lower = text.toLowerCase();
+  const types: string[] = [];
+
+  if (/\b(invoice|fatura|commercial\s+invoice)\b/.test(lower)) types.push('invoice');
+  if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
+  if (/\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl|[^a-z]bl[^a-z])\b/.test(lower)) types.push('ohbl');
+  if (/\b(espelho)\b/.test(lower)) types.push('espelho');
+  if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o|[^a-z]li[^a-z])\b/.test(lower)) types.push('li');
+  if (/\b(certificado|certificate|cert\s+of\s+origin)\b/.test(lower)) types.push('certificate');
+
+  return [...new Set(types)];
+}
+
+// ── Regex-based email category detection ────────────────────────────────
+
+function detectEmailCategory(
+  subject: string,
+  body: string,
+): EmailAnalysisResult['emailCategory'] {
+  const text = `${subject} ${body.substring(0, 1000)}`.toLowerCase();
+
+  if (/\b(corre[çc][aã]o|revis[aã]o|retifica[çc][aã]o|amended|correction|revised)\b/.test(text)) return 'correction';
+  if (/\b(pagamento|payment|c[aâ]mbio|wire\s+transfer|remessa)\b/.test(text)) return 'payment';
+  if (/\b(follow[\s-]?up|acompanhamento|status|atualiza[çc][aã]o|update|pend[eê]ncia)\b/.test(text)) return 'follow_up';
+  if (/\b(novo\s+embarque|new\s+shipment|nova\s+importa[çc][aã]o|booking\s+confirm)\b/.test(text)) return 'new_shipment';
+  if (/\b(segue|anexo|attached|enclosed|documento|document)\b/.test(text)) return 'document_delivery';
+
+  return 'general';
+}
+
+// ── Regex-based urgency detection ───────────────────────────────────────
+
+function detectUrgency(subject: string, body: string): EmailAnalysisResult['urgencyLevel'] {
+  const text = `${subject} ${body.substring(0, 500)}`.toLowerCase();
+
+  if (/\b(urgent[eí]ssimo|asap|imediato|immediately|critical)\b/.test(text)) return 'critical';
+  if (/\b(urgente|urgent|prioridade|priority|prazo\s+curto|deadline)\b/.test(text)) return 'urgent';
+
+  return 'normal';
+}
+
+// ── Regex-based invoice number extraction ────────────────────────────────
+
+function extractInvoiceNumbers(text: string): string[] {
+  const patterns = [
+    /\b(?:INV|INVOICE|FATURA)[-\s#.:]*(\w{2,20}[-/]?\d{3,})\b/gi,
+    /\b(\d{2,4}[-/]\d{4,})\b/g,
+  ];
+
+  const numbers: string[] = [];
+  for (const pattern of patterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      numbers.push(match[1] || match[0]);
+    }
+  }
+
+  return [...new Set(numbers)].slice(0, 10);
+}
+
 // ── Brand detection ─────────────────────────────────────────────────────
 
 function detectBrand(subject: string, from: string): 'puket' | 'imaginarium' {
@@ -228,20 +291,49 @@ export const emailProcessor = {
           if (processCode) detectionMethod = 'regex_body';
         }
 
-        // ── Step 3: AI analysis (async, non-blocking on failure) ─────
+        // ── Step 3: Regex-based document type & category detection ────
+        const regexDocTypes = extractDocumentTypesFromText(
+          `${email.subject} ${(email.body || '').substring(0, 3000)}`,
+        );
+        const regexCategory = detectEmailCategory(email.subject, email.body || '');
+        const regexInvoiceNumbers = extractInvoiceNumbers(
+          `${email.subject} ${(email.body || '').substring(0, 3000)}`,
+        );
+
+        // ── Step 4: AI analysis - SKIP if regex resolved process code
+        //    and all attachments can be classified by filename ─────────
         let aiAnalysis: EmailAnalysisResult | null = null;
-        if (email.body || email.subject) {
+        const allAttachmentsClassified = email.attachments.every(
+          (att) => classifyDocument(att.filename) !== 'other',
+        );
+
+        if (processCode && allAttachmentsClassified) {
+          // Regex fully resolved - build a synthetic analysis from regex results
+          logger.info(
+            { processCode, detectionMethod, docTypes: regexDocTypes, category: regexCategory },
+            'Skipping AI analysis: regex fully resolved',
+          );
+          aiAnalysis = {
+            processCode,
+            documentTypes: regexDocTypes,
+            invoiceNumbers: regexInvoiceNumbers,
+            urgencyLevel: detectUrgency(email.subject, email.body || ''),
+            emailCategory: regexCategory,
+            keyDates: [],
+            supplierName: null,
+          };
+        } else if (email.body || email.subject) {
           aiAnalysis = await analyzeEmailWithAI(email.subject, email.body || '', email.from);
         }
 
-        // ── Step 4: Use AI process code if regex failed ──────────────
+        // ── Step 5: Use AI process code if regex failed ──────────────
         if (!processCode && aiAnalysis?.processCode) {
           processCode = aiAnalysis.processCode.toUpperCase();
           detectionMethod = 'ai';
           logger.info({ processCode, method: 'ai' }, 'Process code detected via AI');
         }
 
-        // ── Step 5: Resolve process in DB (with fuzzy matching) ──────
+        // ── Step 6: Resolve process in DB (with fuzzy matching) ──────
         let processId: number | null = null;
 
         if (processCode) {
@@ -267,7 +359,7 @@ export const emailProcessor = {
           }
         }
 
-        // ── Step 6: Process attachments ──────────────────────────────
+        // ── Step 7: Process attachments ──────────────────────────────
         const processedAttachments: Array<{
           filename: string;
           type: string;
@@ -320,7 +412,7 @@ export const emailProcessor = {
           }
         }
 
-        // ── Step 7: Build enriched metadata for storage ──────────────
+        // ── Step 8: Build enriched metadata for storage ──────────────
         const enrichedData: Record<string, any> = {
           attachments: processedAttachments,
           detectionMethod,
@@ -337,7 +429,7 @@ export const emailProcessor = {
           };
         }
 
-        // ── Step 8: Update log with results ──────────────────────────
+        // ── Step 9: Update log with results ──────────────────────────
         await db.update(emailIngestionLogs)
           .set({
             status: 'completed',

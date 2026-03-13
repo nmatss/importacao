@@ -1,4 +1,18 @@
 services:
+  redis:
+    image: redis:7-alpine
+    container_name: importacao-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   postgres:
     image: postgres:16-alpine
     container_name: importacao-postgres
@@ -60,10 +74,13 @@ services:
       ODOO_PASSWORD: ${ODOO_PASSWORD:-}
       GOOGLE_ADMIN_EMAIL: ${GOOGLE_ADMIN_EMAIL:-}
       GOOGLE_GROUP_ALLOWED: ${GOOGLE_GROUP_ALLOWED:-}
+      REDIS_URL: redis://redis:6379
     volumes:
       - uploads:/app/uploads
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   cert-api:
@@ -100,5 +117,6 @@ services:
 
 volumes:
   pgdata:
+  redisdata:
   uploads:
   cert-reports:

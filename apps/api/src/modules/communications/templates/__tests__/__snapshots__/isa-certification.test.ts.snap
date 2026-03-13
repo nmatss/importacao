@@ -1,0 +1,118 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`isaCertificationTemplate > should generate body with all fields > isa-body-full 1`] = `
+"<div style="font-family: Arial, sans-serif; color: #333;">
+  <h2>Solicitação de Certificação ISA</h2>
+  <p>Prezados,</p>
+  <p>Solicitamos a certificação dos produtos referentes ao processo de importação abaixo para atendimento às exigências regulatórias.</p>
+
+  <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Processo</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">IMP-2026-020</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Marca</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">puket</td>
+    </tr>
+    
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Exportador</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">Zhejiang Textiles Co.</td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Importador</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">Grupo Soma S.A.</td>
+    </tr>
+    
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Valor FOB</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">USD 32000.00</td>
+    </tr>
+    
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Total de Volumes</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">85</td>
+    </tr>
+    
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Previsão de Chegada</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">2026-05-10</td>
+    </tr>
+  </table>
+
+  <p>Os documentos técnicos e amostras seguem em anexo para análise e emissão dos certificados necessários.</p>
+  <p>Solicitamos prioridade no atendimento considerando os prazos de desembaraço.</p>
+
+  <p>Atenciosamente,<br/>Equipe de Importação</p>
+</div>"
+`;
+
+exports[`isaCertificationTemplate > should generate body with minimal fields > isa-body-minimal 1`] = `
+"<div style="font-family: Arial, sans-serif; color: #333;">
+  <h2>Solicitação de Certificação ISA</h2>
+  <p>Prezados,</p>
+  <p>Solicitamos a certificação dos produtos referentes ao processo de importação abaixo para atendimento às exigências regulatórias.</p>
+
+  <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Processo</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">IMP-2026-021</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Marca</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">imaginarium</td>
+    </tr>
+    
+    
+    
+    
+    
+  </table>
+
+  <p>Os documentos técnicos e amostras seguem em anexo para análise e emissão dos certificados necessários.</p>
+  <p>Solicitamos prioridade no atendimento considerando os prazos de desembaraço.</p>
+
+  <p>Atenciosamente,<br/>Equipe de Importação</p>
+</div>"
+`;
+
+exports[`isaCertificationTemplate > should generate body with partial fields > isa-body-partial 1`] = `
+"<div style="font-family: Arial, sans-serif; color: #333;">
+  <h2>Solicitação de Certificação ISA</h2>
+  <p>Prezados,</p>
+  <p>Solicitamos a certificação dos produtos referentes ao processo de importação abaixo para atendimento às exigências regulatórias.</p>
+
+  <table style="border-collapse: collapse; width: 100%; margin: 20px 0;">
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Processo</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">IMP-2026-022</td>
+    </tr>
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Marca</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">puket</td>
+    </tr>
+    
+    <tr style="background-color: #f5f5f5;">
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Exportador</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">Guangzhou Trading Ltd.</td>
+    </tr>
+    
+    
+    
+    <tr>
+      <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Total de Volumes</td>
+      <td style="padding: 8px; border: 1px solid #ddd;">50</td>
+    </tr>
+    
+  </table>
+
+  <p>Os documentos técnicos e amostras seguem em anexo para análise e emissão dos certificados necessários.</p>
+  <p>Solicitamos prioridade no atendimento considerando os prazos de desembaraço.</p>
+
+  <p>Atenciosamente,<br/>Equipe de Importação</p>
+</div>"
+`;
+
+exports[`isaCertificationTemplate > should generate correct subject > isa-subject 1`] = `"Certificação ISA - IMP-2026-020 - puket"`;
