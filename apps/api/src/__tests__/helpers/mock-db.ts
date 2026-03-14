@@ -10,10 +10,21 @@ function createChain() {
   const chain: Record<string, any> = {};
 
   const methods = [
-    'insert', 'update', 'delete', 'select',
-    'from', 'where', 'set', 'values',
-    'limit', 'offset', 'orderBy', 'groupBy',
-    'leftJoin', 'innerJoin', 'returning',
+    'insert',
+    'update',
+    'delete',
+    'select',
+    'from',
+    'where',
+    'set',
+    'values',
+    'limit',
+    'offset',
+    'orderBy',
+    'groupBy',
+    'leftJoin',
+    'innerJoin',
+    'returning',
   ];
 
   for (const method of methods) {
@@ -43,7 +54,7 @@ function createChain() {
  */
 export function createMockDb() {
   const queryQueue: any[] = [];
-  let fallbackChain = createChain();
+  const fallbackChain = createChain();
 
   function getNextChain() {
     if (queryQueue.length > 0) {
@@ -54,7 +65,7 @@ export function createMockDb() {
 
   const mockTx: Record<string, any> = {};
   const txQueue: any[] = [];
-  let txFallback = createChain();
+  const txFallback = createChain();
 
   function getNextTxChain() {
     if (txQueue.length > 0) {

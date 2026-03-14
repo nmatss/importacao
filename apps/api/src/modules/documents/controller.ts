@@ -22,7 +22,8 @@ export const documentController = {
       const doc = await documentService.upload(processId, type, req.file, userId);
       sendSuccess(res, doc, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -31,7 +32,8 @@ export const documentController = {
       const docs = await documentService.getByProcess(Number(req.params.processId));
       sendSuccess(res, docs);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -40,7 +42,8 @@ export const documentController = {
       const doc = await documentService.getById(Number(req.params.id));
       sendSuccess(res, doc);
     } catch (error: any) {
-      sendError(res, error.message, 404);
+      const status = error.statusCode || 404;
+      sendError(res, error.message, status);
     }
   },
 
@@ -49,7 +52,8 @@ export const documentController = {
       const source = await documentService.getSource(Number(req.params.id));
       sendSuccess(res, source);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('não encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -59,7 +63,8 @@ export const documentController = {
       const doc = await documentService.reprocess(Number(req.params.id), userId);
       sendSuccess(res, doc);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -69,7 +74,8 @@ export const documentController = {
       await documentService.delete(Number(req.params.id), userId);
       sendSuccess(res, { message: 'Documento removido' });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -78,7 +84,8 @@ export const documentController = {
       const result = await documentService.getComparison(Number(req.params.processId));
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

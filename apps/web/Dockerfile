@@ -17,6 +17,7 @@ RUN npm run build
 # Using a separate USER directive is not recommended here as nginx needs root
 # to bind to privileged ports. Consider nginxinc/nginx-unprivileged if needed.
 FROM nginx:alpine
+RUN apk add --no-cache curl
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

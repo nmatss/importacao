@@ -30,11 +30,9 @@ export const authService = {
       throw new Error('Credenciais inválidas');
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN as any }
-    );
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN as any,
+    });
 
     auditService.log(user.id, 'login', 'user', user.id, { email: user.email }, null);
 
@@ -69,23 +67,24 @@ export const authService = {
     if (!user) {
       const randomPassword = crypto.randomBytes(32).toString('hex');
       const passwordHash = await bcrypt.hash(randomPassword, 10);
-      [user] = await db.insert(users).values({
-        name: payload.name || payload.email.split('@')[0],
-        email: payload.email,
-        passwordHash,
-        role: 'analyst',
-      }).returning();
+      [user] = await db
+        .insert(users)
+        .values({
+          name: payload.name || payload.email.split('@')[0],
+          email: payload.email,
+          passwordHash,
+          role: 'analyst',
+        })
+        .returning();
     }
 
     if (!user.isActive) {
       throw new Error('Conta desativada');
     }
 
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN as any }
-    );
+    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN as any,
+    });
 
     auditService.log(user.id, 'login_google', 'user', user.id, { email: user.email }, null);
 
@@ -96,44 +95,55 @@ export const authService = {
   },
 
   async getMe(userId: number) {
-    const [user] = await db.select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      isActive: users.isActive,
-      createdAt: users.createdAt,
-    }).from(users).where(eq(users.id, userId)).limit(1);
+    const [user] = await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
 
     if (!user) throw new Error('Usuário não encontrado');
     return user;
   },
 
   async listUsers() {
-    return db.select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      isActive: users.isActive,
-      createdAt: users.createdAt,
-    }).from(users);
+    return db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        isActive: users.isActive,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .limit(100);
   },
 
   async createUser(input: CreateUserInput) {
     const passwordHash = await bcrypt.hash(input.password, 10);
-    const [user] = await db.insert(users).values({
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      role: input.role,
-    }).returning({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      role: users.role,
-      isActive: users.isActive,
-    });
+    const [user] = await db
+      .insert(users)
+      .values({
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        role: input.role,
+      })
+      .returning({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+        role: users.role,
+        isActive: users.isActive,
+      });
+    await auditService.log(null, 'user.created', 'user', user.id, { email: user.email }, null);
     return user;
   },
 
@@ -144,28 +154,28 @@ export const authService = {
       delete updates.password;
     }
 
-    const [user] = await db.update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning({
-        id: users.id,
-        name: users.name,
-        email: users.email,
-        role: users.role,
-        isActive: users.isActive,
-      });
+    const [user] = await db.update(users).set(updates).where(eq(users.id, id)).returning({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+      role: users.role,
+      isActive: users.isActive,
+    });
 
     if (!user) throw new Error('Usuário não encontrado');
+    await auditService.log(null, 'user.updated', 'user', user.id, { email: user.email }, null);
     return user;
   },
 
   async deleteUser(id: number) {
-    const [user] = await db.update(users)
+    const [user] = await db
+      .update(users)
       .set({ isActive: false, updatedAt: new Date() })
       .where(eq(users.id, id))
       .returning({ id: users.id });
 
     if (!user) throw new Error('Usuário não encontrado');
+    await auditService.log(null, 'user.deleted', 'user', user.id, null, null);
     return user;
   },
 };

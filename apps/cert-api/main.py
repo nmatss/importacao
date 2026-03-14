@@ -7,6 +7,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 import re
+import hmac
 import uuid
 import json
 import time
@@ -21,6 +22,7 @@ from contextlib import contextmanager
 import requests
 import psycopg2
 import psycopg2.extras
+from psycopg2 import pool as pg_pool
 import gspread
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -30,6 +32,8 @@ from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
@@ -48,9 +52,7 @@ async def verify_api_key(request: Request, api_key: str = Security(api_key_heade
     """Verify API key from X-API-Key header. Skips auth if CERT_API_KEY is not set."""
     if request.url.path == "/api/health":
         return
-    if not API_KEY:  # Skip auth if not configured (backward compat for dev)
-        return
-    if api_key != API_KEY:
+    if not API_KEY or not hmac.compare_digest(api_key or "", API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 # ---------------------------------------------------------------------------
@@ -62,6 +64,9 @@ app = FastAPI(
     version="2.0.0",
     dependencies=[Depends(verify_api_key)],
 )
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
 
 _cors_origins_env = os.environ.get("CORS_ORIGINS", "")
 _cors_origins = (
@@ -123,8 +128,18 @@ _running_validations: dict[str, dict] = {}
 # Database helpers
 # ---------------------------------------------------------------------------
 
+_pool: pg_pool.SimpleConnectionPool | None = None
+
+
+def _get_pool() -> pg_pool.SimpleConnectionPool:
+    global _pool
+    if _pool is None or _pool.closed:
+        _pool = pg_pool.SimpleConnectionPool(1, 10, DATABASE_URL)
+    return _pool
+
+
 def get_conn():
-    return psycopg2.connect(DATABASE_URL)
+    return _get_pool().getconn()
 
 
 @contextmanager
@@ -138,7 +153,7 @@ def db():
         conn.rollback()
         raise
     finally:
-        conn.close()
+        _get_pool().putconn(conn)
 
 
 def _add_column_if_not_exists(col: str, coltype: str):
@@ -147,7 +162,7 @@ def _add_column_if_not_exists(col: str, coltype: str):
         with c.cursor() as cur:
             cur.execute(f"ALTER TABLE cert_products ADD COLUMN IF NOT EXISTS {col} {coltype}")
         c.commit()
-        c.close()
+        _get_pool().putconn(c)
     except Exception:
         pass
 
@@ -1041,10 +1056,13 @@ def _load_schedules_into_scheduler():
             cur.execute("SELECT * FROM cert_schedules WHERE enabled = true")
             schedules = [dict(r) for r in cur.fetchall()]
 
+        def _validate_cron_part(part: str) -> bool:
+            return bool(re.match(r'^[\d,\-\*/]+$', part))
+
         for s in schedules:
             cron_expr = s["cron_expression"]
             parts = cron_expr.split()
-            if len(parts) != 5:
+            if len(parts) != 5 or not all(_validate_cron_part(p) for p in parts):
                 log.warning(f"Invalid cron for schedule {s['id']}: {cron_expr}")
                 continue
 
@@ -1109,6 +1127,8 @@ def shutdown():
         scheduler.shutdown(wait=False)
     except Exception:
         pass
+    if _pool and not _pool.closed:
+        _pool.closeall()
 
 
 # ---------------------------------------------------------------------------
@@ -1121,7 +1141,7 @@ def health():
     if DATABASE_URL:
         try:
             conn = get_conn()
-            conn.close()
+            _get_pool().putconn(conn)
             result["database"] = "connected"
         except Exception:
             result["database"] = "disconnected"
@@ -1135,7 +1155,8 @@ def health():
 # ---------------------------------------------------------------------------
 
 @app.post("/api/sync-sheets")
-def trigger_sync_sheets():
+@limiter.limit("5/minute")
+def trigger_sync_sheets(request: Request):
     if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
         raise HTTPException(400, "Google Sheets credentials not configured")
     result = sync_sheets_to_db()
@@ -1425,7 +1446,8 @@ class ValidateRequest(BaseModel):
 
 
 @app.post("/api/validate")
-def start_validation(req: ValidateRequest):
+@limiter.limit("5/minute")
+def start_validation(request: Request, req: ValidateRequest):
     run_id = str(uuid.uuid4())
 
     if DATABASE_URL:
@@ -1824,7 +1846,8 @@ def get_schedule_history(schedule_id: str):
 # ---------------------------------------------------------------------------
 
 @app.post("/api/reports/export")
-def export_products_report(brand: str = Query(""), status: str = Query("")):
+@limiter.limit("10/minute")
+def export_products_report(request: Request, brand: str = Query(""), status: str = Query("")):
     """Generate an Excel report from the current DB product data."""
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
@@ -1975,6 +1998,8 @@ def list_reports():
 
 @app.get("/api/reports/{filename}/data")
 def get_report_data(filename: str):
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     filepath = REPORTS_DIR / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(404, "Report not found")
@@ -1983,6 +2008,8 @@ def get_report_data(filename: str):
 
 @app.get("/api/reports/{filename}")
 def download_report(filename: str, format: str = Query("xlsx")):
+    if '..' in filename or '/' in filename or '\\' in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
     filepath = REPORTS_DIR / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(404, "Report not found")

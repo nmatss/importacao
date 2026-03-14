@@ -29,6 +29,13 @@
       "when": 1773100800000,
       "tag": "0003_sistema_automatico",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773187200000,
+      "tag": "0004_schema_improvements",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,42 @@
 -- 0004_schema_improvements.sql
 -- ON DELETE CASCADE/SET NULL, composite indices, updated_at columns, new tables
 
+-- ── Create li_tracking table (must exist before FK changes) ──────────────
+
+DO $$ BEGIN
+  CREATE TYPE "li_status" AS ENUM ('pending', 'requested', 'submitted', 'deferred', 'expired', 'cancelled');
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS "li_tracking" (
+  "id" SERIAL PRIMARY KEY,
+  "process_id" INTEGER REFERENCES "import_processes"("id") ON DELETE SET NULL,
+  "process_code" VARCHAR(50) NOT NULL,
+  "orgao" VARCHAR(100),
+  "ncm" TEXT,
+  "item" VARCHAR(255),
+  "description" TEXT,
+  "supplier" VARCHAR(500),
+  "requested_by_company_at" DATE,
+  "submitted_to_fenicia_at" DATE,
+  "deferred_at" DATE,
+  "expected_deferral_at" DATE,
+  "average_days" INTEGER,
+  "valid_until" DATE,
+  "lpco_number" VARCHAR(100),
+  "etd_origem" DATE,
+  "eta_armador" DATE,
+  "status" "li_status" NOT NULL DEFAULT 'pending',
+  "item_status" VARCHAR(100),
+  "observations" TEXT,
+  "created_at" TIMESTAMP DEFAULT NOW(),
+  "updated_at" TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS "li_tracking_process_id_idx" ON "li_tracking" ("process_id");
+CREATE INDEX IF NOT EXISTS "li_tracking_process_code_idx" ON "li_tracking" ("process_code");
+CREATE INDEX IF NOT EXISTS "li_tracking_status_idx" ON "li_tracking" ("status");
+
 -- ── ON DELETE behaviors ──────────────────────────────────────────────────
 
 ALTER TABLE "documents" DROP CONSTRAINT IF EXISTS "documents_process_id_import_processes_id_fk";

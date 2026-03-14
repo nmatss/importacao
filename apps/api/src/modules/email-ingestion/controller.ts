@@ -9,7 +9,8 @@ export const emailIngestionController = {
       const status = await emailProcessor.getStatus();
       sendSuccess(res, status);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -20,7 +21,8 @@ export const emailIngestionController = {
       const result = await emailProcessor.getLogs(page, limit);
       sendPaginated(res, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -39,10 +41,12 @@ export const emailIngestionController = {
         if (after) parts.push(`after:${after}`);
         if (before) parts.push(`before:${before}`);
         if (!skipSenderFilter) {
-          const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
-            ?.split(',').map(s => s.trim()).filter(Boolean) || [];
+          const allowedSenders =
+            process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+              .map((s) => s.trim())
+              .filter(Boolean) || [];
           if (allowedSenders.length > 0) {
-            parts.push(`{${allowedSenders.map(s => `from:${s}`).join(' ')}}`);
+            parts.push(`{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`);
           }
         }
         gmailQuery = parts.join(' ');
@@ -51,7 +55,8 @@ export const emailIngestionController = {
       sendSuccess(res, { message: 'Verificação de emails concluída' });
     } catch (error: any) {
       logger.error({ error }, 'Manual email check failed');
-      sendError(res, `Falha na verificação: ${error.message}`);
+      const status = error.statusCode || 400;
+      sendError(res, `Falha na verificação: ${error.message}`, status);
     }
   },
 
@@ -60,7 +65,8 @@ export const emailIngestionController = {
       const result = await emailProcessor.reprocess(Number(req.params.logId));
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

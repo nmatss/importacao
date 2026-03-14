@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { currencyExchanges, importProcesses } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -11,30 +11,37 @@ function calculateBrl(amountUsd: string, exchangeRate?: string): string | undefi
 
 export const currencyExchangeService = {
   async list(processId: number) {
-    return db.select()
+    return db
+      .select()
       .from(currencyExchanges)
-      .where(eq(currencyExchanges.processId, processId));
+      .where(eq(currencyExchanges.processId, processId))
+      .orderBy(desc(currencyExchanges.createdAt))
+      .limit(100);
   },
 
   async create(input: CreateCurrencyExchangeInput) {
     const amountBrl = input.amountBrl ?? calculateBrl(input.amountUsd, input.exchangeRate);
 
-    const [exchange] = await db.insert(currencyExchanges).values({
-      processId: input.processId,
-      type: input.type,
-      amountUsd: input.amountUsd,
-      exchangeRate: input.exchangeRate,
-      amountBrl,
-      paymentDeadline: input.paymentDeadline,
-      expirationDate: input.expirationDate,
-      notes: input.notes,
-    }).returning();
+    const [exchange] = await db
+      .insert(currencyExchanges)
+      .values({
+        processId: input.processId,
+        type: input.type,
+        amountUsd: input.amountUsd,
+        exchangeRate: input.exchangeRate,
+        amountBrl,
+        paymentDeadline: input.paymentDeadline,
+        expirationDate: input.expirationDate,
+        notes: input.notes,
+      })
+      .returning();
 
     return exchange;
   },
 
   async update(id: number, input: UpdateCurrencyExchangeInput) {
-    const [existing] = await db.select()
+    const [existing] = await db
+      .select()
       .from(currencyExchanges)
       .where(eq(currencyExchanges.id, id))
       .limit(1);
@@ -45,7 +52,8 @@ export const currencyExchangeService = {
     const exchangeRate = input.exchangeRate ?? existing.exchangeRate;
     const amountBrl = input.amountBrl ?? calculateBrl(amountUsd, exchangeRate ?? undefined);
 
-    const [exchange] = await db.update(currencyExchanges)
+    const [exchange] = await db
+      .update(currencyExchanges)
       .set({
         ...input,
         amountBrl,
@@ -57,7 +65,8 @@ export const currencyExchangeService = {
   },
 
   async delete(id: number) {
-    const [exchange] = await db.delete(currencyExchanges)
+    const [exchange] = await db
+      .delete(currencyExchanges)
       .where(eq(currencyExchanges.id, id))
       .returning({ id: currencyExchanges.id });
 
@@ -67,7 +76,8 @@ export const currencyExchangeService = {
 
   async autoPopulate(processId: number, invoiceData: Record<string, any>) {
     // Skip if currency exchanges already exist for this process
-    const existing = await db.select()
+    const existing = await db
+      .select()
       .from(currencyExchanges)
       .where(eq(currencyExchanges.processId, processId));
 
@@ -89,7 +99,7 @@ export const currencyExchangeService = {
     const created: any[] = [];
 
     if (depositPercent > 0) {
-      const depositAmount = (totalFob * depositPercent / 100).toFixed(2);
+      const depositAmount = ((totalFob * depositPercent) / 100).toFixed(2);
       const deposit = await this.create({
         processId,
         type: 'deposit',
@@ -100,7 +110,7 @@ export const currencyExchangeService = {
     }
 
     if (balancePercent > 0) {
-      const balanceAmount = (totalFob * balancePercent / 100).toFixed(2);
+      const balanceAmount = ((totalFob * balancePercent) / 100).toFixed(2);
       const balance = await this.create({
         processId,
         type: 'balance',
@@ -123,26 +133,32 @@ export const currencyExchangeService = {
 
     // Save payment terms to process
     if (paymentTerms) {
-      await db.update(importProcesses)
+      await db
+        .update(importProcesses)
         .set({ paymentTerms, updatedAt: new Date() })
         .where(eq(importProcesses.id, processId));
     }
 
-    logger.info({ processId, count: created.length, depositPercent, balancePercent }, 'Currency exchanges auto-populated');
+    logger.info(
+      { processId, count: created.length, depositPercent, balancePercent },
+      'Currency exchanges auto-populated',
+    );
     return created;
   },
 
   async getByProcess(processId: number) {
-    const exchanges = await db.select()
+    const exchanges = await db
+      .select()
       .from(currencyExchanges)
       .where(eq(currencyExchanges.processId, processId));
 
-    const [totals] = await db.select({
-      totalBalanceUsd: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'balance' THEN ${currencyExchanges.amountUsd} ELSE 0 END), 0)`,
-      totalBalanceBrl: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'balance' THEN ${currencyExchanges.amountBrl} ELSE 0 END), 0)`,
-      totalDepositUsd: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'deposit' THEN ${currencyExchanges.amountUsd} ELSE 0 END), 0)`,
-      totalDepositBrl: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'deposit' THEN ${currencyExchanges.amountBrl} ELSE 0 END), 0)`,
-    })
+    const [totals] = await db
+      .select({
+        totalBalanceUsd: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'balance' THEN ${currencyExchanges.amountUsd} ELSE 0 END), 0)`,
+        totalBalanceBrl: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'balance' THEN ${currencyExchanges.amountBrl} ELSE 0 END), 0)`,
+        totalDepositUsd: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'deposit' THEN ${currencyExchanges.amountUsd} ELSE 0 END), 0)`,
+        totalDepositBrl: sql<string>`COALESCE(SUM(CASE WHEN ${currencyExchanges.type} = 'deposit' THEN ${currencyExchanges.amountBrl} ELSE 0 END), 0)`,
+      })
       .from(currencyExchanges)
       .where(eq(currencyExchanges.processId, processId));
 

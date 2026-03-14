@@ -1,9 +1,14 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
 import { db } from '../../shared/database/connection.js';
-import { documents, importProcesses, followUpTracking, emailIngestionLogs } from '../../shared/database/schema.js';
+import {
+  documents,
+  importProcesses,
+  followUpTracking,
+  emailIngestionLogs,
+} from '../../shared/database/schema.js';
 import { aiService } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
@@ -13,7 +18,11 @@ import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 
-function standardizeDocumentName(type: string, processCode: string, aiData: Record<string, any> | null): string | null {
+function standardizeDocumentName(
+  type: string,
+  processCode: string,
+  aiData: Record<string, any> | null,
+): string | null {
   if (type === 'invoice' && aiData) {
     const dateStr = aiData.invoiceDate || aiData.invoice_date;
     if (dateStr) {
@@ -39,17 +48,25 @@ function standardizeDocumentName(type: string, processCode: string, aiData: Reco
 }
 
 export const documentService = {
-  async upload(processId: number, type: string, file: Express.Multer.File, userId: number | null = null) {
+  async upload(
+    processId: number,
+    type: string,
+    file: Express.Multer.File,
+    userId: number | null = null,
+  ) {
     let doc;
     try {
-      [doc] = await db.insert(documents).values({
-        processId,
-        type: type as any,
-        originalFilename: file.originalname,
-        storagePath: file.path,
-        mimeType: file.mimetype,
-        fileSize: file.size,
-      }).returning();
+      [doc] = await db
+        .insert(documents)
+        .values({
+          processId,
+          type: type as any,
+          originalFilename: file.originalname,
+          storagePath: file.path,
+          mimeType: file.mimetype,
+          fileSize: file.size,
+        })
+        .returning();
     } catch (error) {
       // Clean up the uploaded file if DB insert fails
       await fs.unlink(file.path).catch(() => {});
@@ -57,58 +74,75 @@ export const documentService = {
     }
 
     // Check if all 3 main documents exist → update status
-    const processDocs = await db.select()
-      .from(documents)
-      .where(eq(documents.processId, processId));
+    const processDocs = await db.select().from(documents).where(eq(documents.processId, processId));
 
-    const hasInvoice = processDocs.some(d => d.type === 'invoice');
-    const hasPL = processDocs.some(d => d.type === 'packing_list');
-    const hasBL = processDocs.some(d => d.type === 'ohbl');
+    const hasInvoice = processDocs.some((d) => d.type === 'invoice');
+    const hasPL = processDocs.some((d) => d.type === 'packing_list');
+    const hasBL = processDocs.some((d) => d.type === 'ohbl');
 
     if (hasInvoice && hasPL && hasBL) {
-      const [currentProc] = await db.select({ status: importProcesses.status })
-        .from(importProcesses).where(eq(importProcesses.id, processId)).limit(1);
+      const [currentProc] = await db
+        .select({ status: importProcesses.status })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, processId))
+        .limit(1);
       if (currentProc) {
         assertTransition(currentProc.status as ProcessStatus, 'documents_received');
       }
-      await db.update(importProcesses)
+      await db
+        .update(importProcesses)
         .set({ status: 'documents_received', updatedAt: new Date() })
         .where(eq(importProcesses.id, processId));
 
-      await db.update(followUpTracking)
+      await db
+        .update(followUpTracking)
         .set({ documentsReceivedAt: new Date(), updatedAt: new Date() })
         .where(eq(followUpTracking.processId, processId));
 
       // Alert: all 3 documents received
-      const [proc] = await db.select({ processCode: importProcesses.processCode })
-        .from(importProcesses).where(eq(importProcesses.id, processId)).limit(1);
-      alertService.create({
-        processId,
-        severity: 'info',
-        title: 'Documentos Completos',
-        message: `Todos os 3 documentos recebidos para processo ${proc?.processCode ?? processId}.`,
-        processCode: proc?.processCode,
-      }).catch(err => logger.error({ err }, 'Failed to create documents-received alert'));
+      const [proc] = await db
+        .select({ processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, processId))
+        .limit(1);
+      alertService
+        .create({
+          processId,
+          severity: 'info',
+          title: 'Documentos Completos',
+          message: `Todos os 3 documentos recebidos para processo ${proc?.processCode ?? processId}.`,
+          processCode: proc?.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create documents-received alert'));
 
       // Sync milestone to Follow-Up sheet
       if (proc?.processCode) {
-        import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
-          googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
-        }).catch(() => {});
+        import('../integrations/google-sheets.service.js')
+          .then(({ googleSheetsService }) => {
+            googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
+          })
+          .catch(() => {});
       }
     }
 
-    auditService.log(userId, 'upload', 'document', doc.id, { processId, type, filename: file.originalname }, null);
+    auditService.log(
+      userId,
+      'upload',
+      'document',
+      doc.id,
+      { processId, type, filename: file.originalname },
+      null,
+    );
 
     // Trigger AI extraction in background
-    this.processWithAI(doc.id, type).catch(err =>
-      logger.error({ err, documentId: doc.id }, 'AI processing failed')
+    this.processWithAI(doc.id, type).catch((err) =>
+      logger.error({ err, documentId: doc.id }, 'AI processing failed'),
     );
 
     // For invoices, defer Drive upload to after AI processing to get standardized name
     if (type !== 'invoice') {
-      this.uploadToDrive(doc.id, processId, type, file.path, file.originalname).catch(err =>
-        logger.error({ err, documentId: doc.id }, 'Google Drive upload failed')
+      this.uploadToDrive(doc.id, processId, type, file.path, file.originalname).catch((err) =>
+        logger.error({ err, documentId: doc.id }, 'Google Drive upload failed'),
       );
     }
 
@@ -136,7 +170,8 @@ export const documentService = {
         return;
     }
 
-    await db.update(documents)
+    await db
+      .update(documents)
       .set({
         aiParsedData: result.data,
         confidenceScore: String(result.confidenceScore),
@@ -146,7 +181,8 @@ export const documentService = {
       .where(eq(documents.id, documentId));
 
     // Merge AI extracted data with existing data (avoid overwriting other doc types)
-    const [currentProcess] = await db.select()
+    const [currentProcess] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, doc.processId))
       .limit(1);
@@ -154,33 +190,47 @@ export const documentService = {
     const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
     const mergedAiData = { ...existingAiData, [type]: result.data };
 
-    await db.update(importProcesses)
+    await db
+      .update(importProcesses)
       .set({
         aiExtractedData: mergedAiData,
         updatedAt: new Date(),
       })
       .where(eq(importProcesses.id, doc.processId));
 
-    logger.info({ documentId, type, confidence: result.confidenceScore }, 'AI extraction completed');
+    logger.info(
+      { documentId, type, confidence: result.confidenceScore },
+      'AI extraction completed',
+    );
 
     // Auto-populate currency exchanges from invoice payment terms
     if (type === 'invoice' && result.data) {
-      import('../currency-exchange/service.js').then(({ currencyExchangeService }) => {
-        currencyExchangeService.autoPopulate(doc.processId, result.data).catch(err =>
-          logger.error({ err, processId: doc.processId }, 'Currency exchange auto-populate failed')
-        );
-      }).catch(() => {});
+      import('../currency-exchange/service.js')
+        .then(({ currencyExchangeService }) => {
+          currencyExchangeService
+            .autoPopulate(doc.processId, result.data)
+            .catch((err) =>
+              logger.error(
+                { err, processId: doc.processId },
+                'Currency exchange auto-populate failed',
+              ),
+            );
+        })
+        .catch(() => {});
     }
 
     // Upload to Drive with standardized name after AI extraction
     if (type === 'invoice') {
-      const [proc] = await db.select({ processCode: importProcesses.processCode })
-        .from(importProcesses).where(eq(importProcesses.id, doc.processId)).limit(1);
+      const [proc] = await db
+        .select({ processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
       if (proc) {
         const standardName = standardizeDocumentName(type, proc.processCode, result.data);
         const fileName = standardName || doc.originalFilename;
-        this.uploadToDrive(doc.id, doc.processId, type, doc.storagePath, fileName).catch(err =>
-          logger.error({ err, documentId: doc.id }, 'Google Drive upload failed')
+        this.uploadToDrive(doc.id, doc.processId, type, doc.storagePath, fileName).catch((err) =>
+          logger.error({ err, documentId: doc.id }, 'Google Drive upload failed'),
         );
       }
     }
@@ -190,7 +240,10 @@ export const documentService = {
       try {
         const { validationService } = await import('../validation/service.js');
         await validationService.runAllChecks(doc.processId);
-        logger.info({ processId: doc.processId }, 'Auto-validation triggered after all 3 AI extractions completed');
+        logger.info(
+          { processId: doc.processId },
+          'Auto-validation triggered after all 3 AI extractions completed',
+        );
       } catch (valErr) {
         logger.error({ err: valErr, processId: doc.processId }, 'Auto-validation failed');
       }
@@ -205,7 +258,12 @@ export const documentService = {
       return data.text;
     }
 
-    if (mimeType?.includes('spreadsheet') || mimeType?.includes('excel') || filePath.endsWith('.xlsx') || filePath.endsWith('.xls')) {
+    if (
+      mimeType?.includes('spreadsheet') ||
+      mimeType?.includes('excel') ||
+      filePath.endsWith('.xlsx') ||
+      filePath.endsWith('.xls')
+    ) {
       const workbook = XLSX.read(buffer, { type: 'buffer' });
       let text = '';
       for (const sheetName of workbook.SheetNames) {
@@ -219,7 +277,11 @@ export const documentService = {
   },
 
   async getByProcess(processId: number) {
-    return db.select().from(documents).where(eq(documents.processId, processId));
+    return db
+      .select()
+      .from(documents)
+      .where(eq(documents.processId, processId))
+      .orderBy(desc(documents.createdAt));
   },
 
   async getById(id: number) {
@@ -233,7 +295,8 @@ export const documentService = {
     if (!doc) throw new NotFoundError('Documento', id);
 
     // Check if this document came from email ingestion
-    const emailLogs = await db.select()
+    const emailLogs = await db
+      .select()
       .from(emailIngestionLogs)
       .where(eq(emailIngestionLogs.processId, doc.processId))
       .limit(10);
@@ -241,8 +304,8 @@ export const documentService = {
     for (const log of emailLogs) {
       const attachments = log.processedAttachments as any[];
       if (Array.isArray(attachments)) {
-        const match = attachments.some((a: any) =>
-          a.filename === doc.originalFilename || a.documentId === doc.id
+        const match = attachments.some(
+          (a: any) => a.filename === doc.originalFilename || a.documentId === doc.id,
         );
         if (match) {
           return { source: 'email' as const, emailSubject: log.subject };
@@ -257,7 +320,8 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
 
-    await db.update(documents)
+    await db
+      .update(documents)
       .set({ isProcessed: false, aiParsedData: null, confidenceScore: null, updatedAt: new Date() })
       .where(eq(documents.id, documentId));
 
@@ -279,18 +343,32 @@ export const documentService = {
     }
 
     await db.delete(documents).where(eq(documents.id, id));
-    auditService.log(userId, 'delete', 'document', id, { processId: doc.processId, filename: doc.originalFilename }, null);
+    auditService.log(
+      userId,
+      'delete',
+      'document',
+      id,
+      { processId: doc.processId, filename: doc.originalFilename },
+      null,
+    );
     return { id };
   },
 
-  async uploadToDrive(documentId: number, processId: number, type: string, filePath: string, fileName: string) {
+  async uploadToDrive(
+    documentId: number,
+    processId: number,
+    type: string,
+    filePath: string,
+    fileName: string,
+  ) {
     const configured = await googleDriveService.isConfigured();
     if (!configured) return;
 
-    const [process] = await db.select({
-      processCode: importProcesses.processCode,
-      brand: importProcesses.brand,
-    })
+    const [process] = await db
+      .select({
+        processCode: importProcesses.processCode,
+        brand: importProcesses.brand,
+      })
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
@@ -305,7 +383,8 @@ export const documentService = {
       fileName,
     );
 
-    await db.update(documents)
+    await db
+      .update(documents)
       .set({ driveFileId, updatedAt: new Date() })
       .where(eq(documents.id, documentId));
 
@@ -325,9 +404,24 @@ export const documentService = {
 
     // Build aggregate field comparison
     const aggregateFields = [
-      { label: 'Exportador / Shipper', inv: inv?.exporterName, pl: pl?.exporterName, bl: bl?.shipperName ?? bl?.shipper },
-      { label: 'Importador / Consignee', inv: inv?.importerName, pl: pl?.importerName, bl: bl?.consigneeName ?? bl?.consignee },
-      { label: 'Invoice Number', inv: inv?.invoiceNumber, pl: pl?.packingListNumber, bl: bl?.blNumber },
+      {
+        label: 'Exportador / Shipper',
+        inv: inv?.exporterName,
+        pl: pl?.exporterName,
+        bl: bl?.shipperName ?? bl?.shipper,
+      },
+      {
+        label: 'Importador / Consignee',
+        inv: inv?.importerName,
+        pl: pl?.importerName,
+        bl: bl?.consigneeName ?? bl?.consignee,
+      },
+      {
+        label: 'Invoice Number',
+        inv: inv?.invoiceNumber,
+        pl: pl?.packingListNumber,
+        bl: bl?.blNumber,
+      },
       { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
       { label: 'Moeda', inv: inv?.currency, pl: null, bl: bl?.freightCurrency },
       { label: 'Porto Embarque', inv: inv?.portOfLoading, pl: null, bl: bl?.portOfLoading },
@@ -336,7 +430,12 @@ export const documentService = {
       { label: 'Frete', inv: null, pl: null, bl: bl?.freightValue },
       { label: 'Total Caixas', inv: inv?.totalBoxes, pl: pl?.totalBoxes, bl: bl?.totalBoxes },
       { label: 'Peso Liquido (kg)', inv: inv?.totalNetWeight, pl: pl?.totalNetWeight, bl: null },
-      { label: 'Peso Bruto (kg)', inv: inv?.totalGrossWeight, pl: pl?.totalGrossWeight, bl: bl?.totalGrossWeight },
+      {
+        label: 'Peso Bruto (kg)',
+        inv: inv?.totalGrossWeight,
+        pl: pl?.totalGrossWeight,
+        bl: bl?.totalGrossWeight,
+      },
       { label: 'CBM (m3)', inv: inv?.totalCbm, pl: pl?.totalCbm, bl: bl?.totalCbm },
       { label: 'ETD / Shipped On Board', inv: null, pl: null, bl: bl?.shipmentDate ?? bl?.etd },
       { label: 'ETA', inv: null, pl: null, bl: bl?.eta },
@@ -347,14 +446,17 @@ export const documentService = {
     // Compute match status for each field
     const aggregateComparison = aggregateFields.map((f) => {
       const values = [f.inv, f.pl, f.bl].filter((v) => v != null && v !== '');
-      const allSame = values.length <= 1 || values.every((v) => {
-        const s1 = String(values[0]).trim().toLowerCase();
-        const s2 = String(v).trim().toLowerCase();
-        if (s1 === s2) return true;
-        const n1 = parseFloat(s1), n2 = parseFloat(s2);
-        if (!isNaN(n1) && !isNaN(n2)) return Math.abs(n1 - n2) < 0.5;
-        return false;
-      });
+      const allSame =
+        values.length <= 1 ||
+        values.every((v) => {
+          const s1 = String(values[0]).trim().toLowerCase();
+          const s2 = String(v).trim().toLowerCase();
+          if (s1 === s2) return true;
+          const n1 = parseFloat(s1),
+            n2 = parseFloat(s2);
+          if (!isNaN(n1) && !isNaN(n2)) return Math.abs(n1 - n2) < 0.5;
+          return false;
+        });
 
       return {
         label: f.label,
@@ -370,10 +472,14 @@ export const documentService = {
     const plItems = pl?.items ?? [];
 
     const itemComparison = invItems.map((invItem: any) => {
-      const plMatch = plItems.find((plItem: any) =>
-        plItem.itemCode === invItem.itemCode ||
-        (plItem.description && invItem.description &&
-          plItem.description.toLowerCase().includes(invItem.description.toLowerCase().slice(0, 20)))
+      const plMatch = plItems.find(
+        (plItem: any) =>
+          plItem.itemCode === invItem.itemCode ||
+          (plItem.description &&
+            invItem.description &&
+            plItem.description
+              .toLowerCase()
+              .includes(invItem.description.toLowerCase().slice(0, 20))),
       );
 
       return {
@@ -396,18 +502,25 @@ export const documentService = {
     });
 
     // Find PL items not matched in invoice
-    const unmatchedPlItems = plItems.filter((plItem: any) =>
-      !invItems.some((invItem: any) =>
-        invItem.itemCode === plItem.itemCode ||
-        (invItem.description && plItem.description &&
-          invItem.description.toLowerCase().includes(plItem.description.toLowerCase().slice(0, 20)))
+    const unmatchedPlItems = plItems
+      .filter(
+        (plItem: any) =>
+          !invItems.some(
+            (invItem: any) =>
+              invItem.itemCode === plItem.itemCode ||
+              (invItem.description &&
+                plItem.description &&
+                invItem.description
+                  .toLowerCase()
+                  .includes(plItem.description.toLowerCase().slice(0, 20))),
+          ),
       )
-    ).map((item: any) => ({
-      itemCode: item.itemCode ?? item.codigo,
-      description: item.description ?? item.descricao,
-      quantity: item.quantity,
-      source: 'packing_list',
-    }));
+      .map((item: any) => ({
+        itemCode: item.itemCode ?? item.codigo,
+        description: item.description ?? item.descricao,
+        quantity: item.quantity,
+        source: 'packing_list',
+      }));
 
     return {
       hasInvoice: !!inv,

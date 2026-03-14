@@ -1,12 +1,19 @@
 import { eq, desc, count } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { db } from '../../shared/database/connection.js';
-import { communications, documents, importProcesses, espelhos, validationResults } from '../../shared/database/schema.js';
+import {
+  communications,
+  documents,
+  importProcesses,
+  espelhos,
+  validationResults,
+} from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { CreateCommunicationInput } from './schema.js';
 import { feniciaSubmissionTemplate } from './templates/fenicia-submission.js';
 import { aiService } from '../ai/service.js';
 import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
+import { auditService } from '../audit/service.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
@@ -39,36 +46,39 @@ export const communicationService = {
     const offset = (page - 1) * limit;
 
     const [data, [{ total }]] = await Promise.all([
-      db.select()
+      db
+        .select()
         .from(communications)
         .where(conditions)
         .orderBy(desc(communications.createdAt))
         .limit(limit)
         .offset(offset),
-      db.select({ total: count() })
-        .from(communications)
-        .where(conditions),
+      db.select({ total: count() }).from(communications).where(conditions),
     ]);
 
     return { data, total, page, limit };
   },
 
   async create(input: CreateCommunicationInput) {
-    const [communication] = await db.insert(communications).values({
-      processId: input.processId,
-      recipient: input.recipient,
-      recipientEmail: input.recipientEmail,
-      subject: input.subject,
-      body: sanitizeHtml(input.body),
-      attachments: input.attachments,
-      status: 'draft',
-    }).returning();
+    const [communication] = await db
+      .insert(communications)
+      .values({
+        processId: input.processId,
+        recipient: input.recipient,
+        recipientEmail: input.recipientEmail,
+        subject: input.subject,
+        body: sanitizeHtml(input.body),
+        attachments: input.attachments,
+        status: 'draft',
+      })
+      .returning();
 
     return communication;
   },
 
   async send(id: number) {
-    const [communication] = await db.select()
+    const [communication] = await db
+      .select()
       .from(communications)
       .where(eq(communications.id, id))
       .limit(1);
@@ -79,8 +89,11 @@ export const communicationService = {
 
     try {
       // Build attachments list from DB record
-      const dbAttachments = communication.attachments as Array<{ filename: string; path: string }> | null;
-      const mailAttachments = dbAttachments?.map(att => ({
+      const dbAttachments = communication.attachments as Array<{
+        filename: string;
+        path: string;
+      }> | null;
+      const mailAttachments = dbAttachments?.map((att) => ({
         filename: att.filename,
         path: att.path,
       }));
@@ -93,15 +106,25 @@ export const communicationService = {
         attachments: mailAttachments,
       });
 
-      const [updated] = await db.update(communications)
+      const [updated] = await db
+        .update(communications)
         .set({ status: 'sent', sentAt: new Date() })
         .where(eq(communications.id, id))
         .returning();
 
       logger.info({ id, to: communication.recipientEmail }, 'E-mail enviado com sucesso');
+      await auditService.log(
+        null,
+        'email.sent',
+        'communication',
+        updated.id,
+        { to: communication.recipientEmail, subject: communication.subject },
+        null,
+      );
       return updated;
     } catch (error: any) {
-      await db.update(communications)
+      await db
+        .update(communications)
         .set({ status: 'failed', errorMessage: error.message })
         .where(eq(communications.id, id));
 
@@ -112,7 +135,8 @@ export const communicationService = {
 
   async sendToFenicia(processId: number) {
     // Get process data
-    const [proc] = await db.select()
+    const [proc] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
@@ -120,23 +144,22 @@ export const communicationService = {
     if (!proc) throw new Error('Processo não encontrado');
 
     // Get documents for attachments
-    const docs = await db.select()
-      .from(documents)
-      .where(eq(documents.processId, processId));
+    const docs = await db.select().from(documents).where(eq(documents.processId, processId));
 
     // Get latest espelho
-    const [espelho] = await db.select()
+    const [espelho] = await db
+      .select()
       .from(espelhos)
       .where(eq(espelhos.processId, processId))
       .orderBy(desc(espelhos.createdAt))
       .limit(1);
 
     // Build attachments list
-    const attachments: Array<{ filename: string; path: string }> = [];
+    const attachments: Array<{ name: string; path: string }> = [];
     for (const doc of docs) {
       if (['invoice', 'packing_list', 'ohbl'].includes(doc.type)) {
         attachments.push({
-          filename: doc.originalFilename,
+          name: doc.originalFilename,
           path: doc.storagePath,
         });
       }
@@ -146,7 +169,7 @@ export const communicationService = {
       const espelhoData = espelho.generatedData as any;
       if (espelhoData?.filePath && espelhoData?.filename) {
         attachments.push({
-          filename: espelhoData.filename,
+          name: espelhoData.filename,
           path: espelhoData.filePath,
         });
       }
@@ -181,7 +204,8 @@ export const communicationService = {
 
   async generateCorrectionDraft(processId: number, useAi = false) {
     // Get process data
-    const [proc] = await db.select()
+    const [proc] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
@@ -189,11 +213,12 @@ export const communicationService = {
     if (!proc) throw new Error('Processo nao encontrado');
 
     // Get all failed validation results
-    const results = await db.select()
+    const results = await db
+      .select()
       .from(validationResults)
       .where(eq(validationResults.processId, processId));
 
-    const failedResults = results.filter(r => r.status === 'failed' && !r.resolvedManually);
+    const failedResults = results.filter((r) => r.status === 'failed' && !r.resolvedManually);
 
     if (failedResults.length === 0) {
       throw new Error('Nenhuma divergencia encontrada para gerar e-mail de correcao');
@@ -222,7 +247,7 @@ export const communicationService = {
       'bl-notify-match': 'logistics',
     };
 
-    const divergences = failedResults.map(r => ({
+    const divergences = failedResults.map((r) => ({
       checkName: r.checkName,
       category: categoryMap[r.checkName] || 'other',
       expectedValue: r.expectedValue ?? undefined,
@@ -231,13 +256,12 @@ export const communicationService = {
     }));
 
     // Get invoice number from documents
-    const docs = await db.select()
-      .from(documents)
-      .where(eq(documents.processId, processId));
+    const docs = await db.select().from(documents).where(eq(documents.processId, processId));
 
-    const invoiceDoc = docs.find(d => d.type === 'invoice');
+    const invoiceDoc = docs.find((d) => d.type === 'invoice');
     const invoiceData = invoiceDoc?.aiParsedData as Record<string, any> | null;
-    const invoiceNumber = invoiceData?.invoiceNumber?.value || invoiceData?.invoice_number?.value || undefined;
+    const invoiceNumber =
+      invoiceData?.invoiceNumber?.value || invoiceData?.invoice_number?.value || undefined;
 
     let subject: string;
     let body: string;
@@ -258,7 +282,7 @@ export const communicationService = {
       const templateResult = kiomCorrectionTemplate({
         processCode: proc.processCode ?? String(processId),
         brand: proc.brand,
-        failedChecks: failedResults.map(c => ({
+        failedChecks: failedResults.map((c) => ({
           checkName: c.checkName,
           expectedValue: c.expectedValue ?? undefined,
           actualValue: c.actualValue ?? undefined,
@@ -286,8 +310,12 @@ export const communicationService = {
     return communication;
   },
 
-  async updateDraft(id: number, data: { subject?: string; body?: string; recipientEmail?: string }) {
-    const [communication] = await db.select()
+  async updateDraft(
+    id: number,
+    data: { subject?: string; body?: string; recipientEmail?: string },
+  ) {
+    const [communication] = await db
+      .select()
       .from(communications)
       .where(eq(communications.id, id))
       .limit(1);
@@ -300,7 +328,8 @@ export const communicationService = {
     if (data.body) updateData.body = sanitizeHtml(data.body);
     if (data.recipientEmail) updateData.recipientEmail = data.recipientEmail;
 
-    const [updated] = await db.update(communications)
+    const [updated] = await db
+      .update(communications)
       .set(updateData)
       .where(eq(communications.id, id))
       .returning();

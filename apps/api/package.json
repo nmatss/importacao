@@ -12,7 +12,8 @@
     "db:seed": "node --env-file=../../.env --import tsx src/shared/database/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@googleapis/drive": "^8.0.0",

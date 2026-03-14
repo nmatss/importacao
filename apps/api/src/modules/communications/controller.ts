@@ -11,7 +11,8 @@ export const communicationController = {
       const { data, total } = await communicationService.list(processId, page, limit);
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -19,10 +20,15 @@ export const communicationController = {
     try {
       const page = Number(req.query.page) || 1;
       const limit = Math.min(Number(req.query.limit) || 20, 100);
-      const { data, total } = await communicationService.list(Number(req.params.processId), page, limit);
+      const { data, total } = await communicationService.list(
+        Number(req.params.processId),
+        page,
+        limit,
+      );
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -31,7 +37,8 @@ export const communicationController = {
       const communication = await communicationService.create(req.body);
       sendSuccess(res, communication, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -40,7 +47,8 @@ export const communicationController = {
       const communication = await communicationService.send(Number(req.params.id));
       sendSuccess(res, communication);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -53,7 +61,8 @@ export const communicationController = {
       const communication = await communicationService.updateDraft(id, req.body);
       sendSuccess(res, communication);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

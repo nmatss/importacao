@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { Breadcrumbs } from '@/shared/components/Breadcrumbs';
 import type { ImportProcess } from '@/shared/types';
 
 import { ProcessHeader } from './components/ProcessHeader';
@@ -81,12 +82,13 @@ export function ProcessDetailPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<string>('documentos');
 
-  if (!id) return <Navigate to="/importacao/processos" replace />;
-
   const { data: process, isLoading } = useApiQuery<ImportProcess>(
-    ['process', id],
+    ['process', id!],
     `/api/processes/${id}`,
+    { enabled: !!id },
   );
+
+  if (!id) return <Navigate to="/importacao/processos" replace />;
 
   if (isLoading) {
     return (
@@ -119,6 +121,13 @@ export function ProcessDetailPage() {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs
+        items={[
+          { label: 'Processos', href: '/importacao/processos' },
+          { label: process.processCode || 'Detalhe' },
+        ]}
+      />
+
       <ProcessHeader
         process={process}
         processId={id}

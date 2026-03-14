@@ -18,7 +18,8 @@ export const alertController = {
       });
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -27,7 +28,8 @@ export const alertController = {
       const alert = await alertService.create(req.body);
       sendSuccess(res, alert, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -37,7 +39,8 @@ export const alertController = {
       const alert = await alertService.acknowledge(Number(req.params.id), userId);
       sendSuccess(res, alert);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

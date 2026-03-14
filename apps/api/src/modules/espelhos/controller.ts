@@ -9,7 +9,8 @@ export const espelhoController = {
       const espelho = await espelhoService.generate(Number(req.params.processId), userId);
       sendSuccess(res, espelho, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -21,7 +22,8 @@ export const espelhoController = {
       }
       sendSuccess(res, espelho);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -30,7 +32,8 @@ export const espelhoController = {
       const items = await espelhoService.getItems(Number(req.params.processId));
       sendSuccess(res, items);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -39,7 +42,8 @@ export const espelhoController = {
       const item = await espelhoService.updateItem(Number(req.params.id), req.body);
       sendSuccess(res, item);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -48,7 +52,8 @@ export const espelhoController = {
       const item = await espelhoService.addItem(Number(req.params.processId), req.body);
       sendSuccess(res, item, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -57,7 +62,8 @@ export const espelhoController = {
       await espelhoService.deleteItem(Number(req.params.id));
       sendSuccess(res, { message: 'Item removido' });
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -73,7 +79,8 @@ export const espelhoController = {
       res.setHeader('Content-Disposition', `attachment; filename="espelho_${espelhoId}.xlsx"`);
       res.send(buffer);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -83,7 +90,8 @@ export const espelhoController = {
       const espelho = await espelhoService.markSentToFenicia(Number(req.params.id), userId);
       sendSuccess(res, espelho);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -93,17 +101,22 @@ export const espelhoController = {
       const espelho = await espelhoService.sendToDrive(Number(req.params.processId), userId);
       sendSuccess(res, espelho);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
   async sendToFenicia(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
-      const espelho = await espelhoService.sendToFeniciaByProcess(Number(req.params.processId), userId);
+      const espelho = await espelhoService.sendToFeniciaByProcess(
+        Number(req.params.processId),
+        userId,
+      );
       sendSuccess(res, espelho);
     } catch (error: any) {
-      sendError(res, error.message, error.message.includes('nao encontrado') ? 404 : 400);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -112,7 +125,8 @@ export const espelhoController = {
       const espelho = await espelhoService.generatePartial(Number(req.params.processId));
       sendSuccess(res, espelho, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

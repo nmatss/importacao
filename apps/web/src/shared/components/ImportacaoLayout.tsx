@@ -109,20 +109,20 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col bg-white border-r border-slate-200/80 transition-all duration-300 ease-in-out lg:relative',
           collapsed ? 'w-[68px]' : 'w-64',
-          mobileOpen ? 'translate-x-0 shadow-2xl shadow-slate-900/20' : '-translate-x-full lg:translate-x-0',
+          mobileOpen
+            ? 'translate-x-0 shadow-2xl shadow-slate-900/20'
+            : '-translate-x-full lg:translate-x-0',
         )}
       >
         {/* Logo area */}
-        <div className={cn(
-          'flex h-16 items-center gap-3 px-4 shrink-0',
-          collapsed ? 'justify-center' : '',
-        )}>
+        <div
+          className={cn(
+            'flex h-16 items-center gap-3 px-4 shrink-0',
+            collapsed ? 'justify-center' : '',
+          )}
+        >
           <div className="relative flex-shrink-0">
-            <img
-              src="/logo-unico.png"
-              alt="Uni.co"
-              className="h-9 w-9 rounded-xl object-cover"
-            />
+            <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-xl object-cover" />
             <span
               className={cn(
                 'absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-white transition-colors',
@@ -166,10 +166,12 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
             >
               {({ isActive }) => (
                 <>
-                  <item.icon className={cn(
-                    'h-[18px] w-[18px] shrink-0 transition-colors duration-200',
-                    isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600',
-                  )} />
+                  <item.icon
+                    className={cn(
+                      'h-[18px] w-[18px] shrink-0 transition-colors duration-200',
+                      isActive ? 'text-blue-600' : 'text-slate-400 group-hover:text-slate-600',
+                    )}
+                  />
                   {!collapsed && <span className="truncate">{item.label}</span>}
                 </>
               )}
@@ -210,11 +212,14 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
               className={cn(
                 'flex h-9 w-full items-center justify-center rounded-xl text-slate-300 hover:bg-slate-50 hover:text-slate-500 transition-all duration-200',
               )}
+              aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
             >
-              <ChevronLeft className={cn(
-                'h-4 w-4 transition-transform duration-300',
-                collapsed && 'rotate-180',
-              )} />
+              <ChevronLeft
+                className={cn(
+                  'h-4 w-4 transition-transform duration-300',
+                  collapsed && 'rotate-180',
+                )}
+              />
             </button>
           </div>
         </div>
@@ -228,6 +233,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setMobileOpen(true)}
               className="rounded-xl p-2 hover:bg-slate-100 lg:hidden transition-colors"
+              aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5 text-slate-500" />
             </button>

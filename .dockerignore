@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+*.md
+.env
+.env.*
+.vscode
+coverage
+.nyc_output
+*.log
+apps/web/dist
+apps/api/dist
+apps/cert-api/__pycache__
+apps/cert-api/.pytest_cache
+scripts/
+docs/

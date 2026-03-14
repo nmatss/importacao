@@ -12,7 +12,13 @@ const SMTP_ENV: Record<string, string> = {
   smtp_from: 'SMTP_FROM',
 };
 
-const INTEGRATION_KEYS = ['drive_client_email', 'drive_root_folder_id', 'odoo_url', 'odoo_db', 'odoo_user'] as const;
+const INTEGRATION_KEYS = [
+  'drive_client_email',
+  'drive_root_folder_id',
+  'odoo_url',
+  'odoo_db',
+  'odoo_user',
+] as const;
 const INTEGRATION_ENV: Record<string, string> = {
   drive_client_email: 'GOOGLE_DRIVE_CLIENT_EMAIL',
   drive_root_folder_id: 'GOOGLE_DRIVE_ROOT_FOLDER_ID',
@@ -45,7 +51,8 @@ export const settingsController = {
       const settings = await settingsService.getAll();
       sendSuccess(res, settings);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -55,7 +62,8 @@ export const settingsController = {
       if (!setting) return sendError(res, 'Configuração não encontrada', 404);
       sendSuccess(res, setting);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -65,7 +73,8 @@ export const settingsController = {
       const setting = await settingsService.set(req.params.key, value, description);
       sendSuccess(res, setting);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -74,7 +83,8 @@ export const settingsController = {
       const settings = await getGroupSettings(SMTP_KEYS, SMTP_ENV);
       sendSuccess(res, settings);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -83,7 +93,8 @@ export const settingsController = {
       await saveGroupSettings(req.body, SMTP_KEYS);
       sendSuccess(res, { saved: true });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -92,7 +103,8 @@ export const settingsController = {
       const settings = await getGroupSettings(INTEGRATION_KEYS, INTEGRATION_ENV);
       sendSuccess(res, settings);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -101,7 +113,8 @@ export const settingsController = {
       await saveGroupSettings(req.body, INTEGRATION_KEYS);
       sendSuccess(res, { saved: true });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -116,7 +129,8 @@ export const settingsController = {
       await googleDriveService.listProcessFiles(rootFolderId);
       sendSuccess(res, { connected: true });
     } catch (error: any) {
-      sendError(res, error.message || 'Falha na conexão com Google Drive');
+      const status = error.statusCode || 400;
+      sendError(res, error.message || 'Falha na conexão com Google Drive', status);
     }
   },
 
@@ -128,7 +142,8 @@ export const settingsController = {
       const uid = await odooService.authenticate();
       sendSuccess(res, { connected: true, uid });
     } catch (error: any) {
-      sendError(res, error.message || 'Falha na conexão com Odoo');
+      const status = error.statusCode || 400;
+      sendError(res, error.message || 'Falha na conexão com Odoo', status);
     }
   },
 };

@@ -5,7 +5,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { PROCESS_STATUSES, BRANDS } from '@/shared/lib/constants';
 import { StatusBadge } from '@/shared/components/StatusBadge';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { PageSkeleton } from '@/shared/components/Skeleton';
 import { EmptyState } from '@/shared/components/EmptyState';
 
 interface Process {
@@ -66,9 +66,7 @@ export function ProcessListPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Processos</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Gerencie seus processos de importacao
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Gerencie seus processos de importacao</p>
         </div>
         <Link
           to="/importacao/processos/novo"
@@ -148,7 +146,7 @@ export function ProcessListPage() {
 
       {/* Table */}
       {isLoading ? (
-        <LoadingSpinner size="lg" className="py-24" />
+        <PageSkeleton />
       ) : processes.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <EmptyState
@@ -158,7 +156,10 @@ export function ProcessListPage() {
                 ? 'Tente ajustar os filtros para encontrar o que procura.'
                 : 'Comece criando seu primeiro processo de importacao.'
             }
-            action={{ label: 'Novo Processo', onClick: () => navigate('/importacao/processos/novo') }}
+            action={{
+              label: 'Novo Processo',
+              onClick: () => navigate('/importacao/processos/novo'),
+            }}
           />
         </div>
       ) : (
@@ -204,16 +205,16 @@ export function ProcessListPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 capitalize">
-                      {proc.brand}
-                    </td>
+                    <td className="px-6 py-4 text-sm text-slate-600 capitalize">{proc.brand}</td>
                     <td className="px-6 py-4 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
                     <td className="px-6 py-4 text-sm font-medium text-slate-700">
-                      {proc.totalFobValue != null
-                        ? formatCurrency(proc.totalFobValue)
-                        : <span className="text-slate-300">--</span>}
+                      {proc.totalFobValue != null ? (
+                        formatCurrency(proc.totalFobValue)
+                      ) : (
+                        <span className="text-slate-300">--</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}

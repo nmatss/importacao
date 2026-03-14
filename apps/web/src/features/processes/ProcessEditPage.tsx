@@ -60,11 +60,10 @@ export function ProcessEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  if (!id) return <Navigate to="/importacao/processos" replace />;
-
   const { data: process, isLoading } = useApiQuery<Process>(
-    ['process', id],
+    ['process', id!],
     `/api/processes/${id}`,
+    { enabled: !!id },
   );
 
   const {
@@ -103,15 +102,13 @@ export function ProcessEditPage() {
     }
   }, [process, reset]);
 
-  const mutation = useApiMutation<Process, ProcessFormData>(
-    `/api/processes/${id}`,
-    'put',
-    {
-      onSuccess: () => {
-        navigate(`/importacao/processos/${id}`);
-      },
+  const mutation = useApiMutation<Process, ProcessFormData>(`/api/processes/${id}`, 'put', {
+    onSuccess: () => {
+      navigate(`/importacao/processos/${id}`);
     },
-  );
+  });
+
+  if (!id) return <Navigate to="/importacao/processos" replace />;
 
   const onSubmit = (data: ProcessFormData) => {
     mutation.mutate(data);
@@ -151,9 +148,7 @@ export function ProcessEditPage() {
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
-            Editar Processo
-          </h2>
+          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Editar Processo</h2>
           <p className="text-sm text-slate-500">{process.processCode}</p>
         </div>
       </div>
@@ -177,9 +172,7 @@ export function ProcessEditPage() {
                 placeholder="Ex: IMP-2024-001"
                 className={inputClass}
               />
-              {errors.processCode && (
-                <p className={errorClass}>{errors.processCode.message}</p>
-              )}
+              {errors.processCode && <p className={errorClass}>{errors.processCode.message}</p>}
             </div>
             <div>
               <label className={labelClass}>
@@ -190,9 +183,7 @@ export function ProcessEditPage() {
                 <option value="puket">Puket</option>
                 <option value="imaginarium">Imaginarium</option>
               </select>
-              {errors.brand && (
-                <p className={errorClass}>{errors.brand.message}</p>
-              )}
+              {errors.brand && <p className={errorClass}>{errors.brand.message}</p>}
             </div>
             <div>
               <label className={labelClass}>Incoterm</label>
@@ -314,11 +305,7 @@ export function ProcessEditPage() {
             </div>
             <div>
               <label className={labelClass}>Tipo Container</label>
-              <input
-                {...register('containerType')}
-                placeholder="Ex: 40HC"
-                className={inputClass}
-              />
+              <input {...register('containerType')} placeholder="Ex: 40HC" className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>Quantidade Caixas</label>

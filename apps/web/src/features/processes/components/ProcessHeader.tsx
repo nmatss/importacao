@@ -1,10 +1,4 @@
-import {
-  ArrowLeft,
-  Edit,
-  ExternalLink,
-  AlertTriangle,
-  BadgeCheck,
-} from 'lucide-react';
+import { ArrowLeft, Edit, ExternalLink, AlertTriangle, BadgeCheck } from 'lucide-react';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import type { ImportProcess } from '@/shared/types';
@@ -18,17 +12,35 @@ export interface ProcessHeaderProps {
 
 function ProcessFlags({ process }: { process: ImportProcess }) {
   const flags = [
-    { active: process.hasLiItems, label: 'LI', color: 'bg-purple-100 text-purple-700 border-purple-200' },
-    { active: process.hasCertification, label: 'Certificacao', color: 'bg-orange-100 text-orange-700 border-orange-200' },
-    { active: process.hasFreeOfCharge, label: 'FOC', color: 'bg-yellow-100 text-yellow-700 border-yellow-200' },
-  ].filter(f => f.active);
+    {
+      active: process.hasLiItems,
+      label: 'LI',
+      color: 'bg-purple-100 text-purple-700 border-purple-200',
+    },
+    {
+      active: process.hasCertification,
+      label: 'Certificacao',
+      color: 'bg-orange-100 text-orange-700 border-orange-200',
+    },
+    {
+      active: process.hasFreeOfCharge,
+      label: 'FOC',
+      color: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+    },
+  ].filter((f) => f.active);
 
   if (flags.length === 0) return null;
 
   return (
     <div className="flex flex-wrap gap-2">
       {flags.map((f) => (
-        <span key={f.label} className={cn('inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold', f.color)}>
+        <span
+          key={f.label}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold',
+            f.color,
+          )}
+        >
           <BadgeCheck className="h-3.5 w-3.5" />
           {f.label}
         </span>
@@ -40,7 +52,7 @@ function ProcessFlags({ process }: { process: ImportProcess }) {
 export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHeaderProps) {
   const docCounts = {
     total: process.documents?.length ?? 0,
-    processed: process.documents?.filter(d => d.isProcessed).length ?? 0,
+    processed: process.documents?.filter((d) => d.isProcessed).length ?? 0,
   };
 
   return (
@@ -51,6 +63,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
           <button
             onClick={onBack}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-700 hover:border-slate-300 transition-all shadow-sm"
+            aria-label="Voltar para lista de processos"
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
@@ -75,17 +88,26 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               {process.etd && (
                 <>
                   <span className="h-1 w-1 rounded-full bg-slate-300" />
-                  <span>ETD: <span className="text-slate-600 font-medium">{formatDate(process.etd)}</span></span>
+                  <span>
+                    ETD:{' '}
+                    <span className="text-slate-600 font-medium">{formatDate(process.etd)}</span>
+                  </span>
                 </>
               )}
               {process.eta && (
                 <>
                   <span className="h-1 w-1 rounded-full bg-slate-300" />
-                  <span>ETA: <span className="text-slate-600 font-medium">{formatDate(process.eta)}</span></span>
+                  <span>
+                    ETA:{' '}
+                    <span className="text-slate-600 font-medium">{formatDate(process.eta)}</span>
+                  </span>
                 </>
               )}
               <span className="h-1 w-1 rounded-full bg-slate-300" />
-              <span>{docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.processed} processado{docCounts.processed !== 1 ? 's' : ''})</span>
+              <span>
+                {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.processed}{' '}
+                processado{docCounts.processed !== 1 ? 's' : ''})
+              </span>
             </div>
           </div>
         </div>

@@ -9,7 +9,8 @@ export const processController = {
       const { data, total, page, limit } = await processService.list(req.query as any);
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -18,7 +19,8 @@ export const processController = {
       const process = await processService.getById(Number(req.params.id));
       sendSuccess(res, process);
     } catch (error: any) {
-      sendError(res, error.message, 404);
+      const status = error.statusCode || 404;
+      sendError(res, error.message, status);
     }
   },
 
@@ -28,7 +30,8 @@ export const processController = {
       const process = await processService.create(req.body, userId);
       sendSuccess(res, process, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -38,7 +41,8 @@ export const processController = {
       const process = await processService.update(Number(req.params.id), req.body, userId);
       sendSuccess(res, process);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -49,7 +53,8 @@ export const processController = {
       const process = await processService.updateStatus(Number(req.params.id), status, userId);
       sendSuccess(res, process);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -59,7 +64,8 @@ export const processController = {
       await processService.delete(Number(req.params.id), userId);
       sendSuccess(res, { message: 'Processo cancelado' });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -68,7 +74,8 @@ export const processController = {
       const stats = await processService.getStats();
       sendSuccess(res, stats);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

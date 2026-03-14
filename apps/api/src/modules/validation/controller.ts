@@ -15,7 +15,8 @@ export const validationController = {
       const results = await validationService.runAllChecks(processId, userId);
       sendSuccess(res, results);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -28,7 +29,8 @@ export const validationController = {
       const results = await validationService.getResults(processId);
       sendSuccess(res, results);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -42,7 +44,8 @@ export const validationController = {
       const result = await validationService.resolveManually(resultId, userId);
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -55,7 +58,8 @@ export const validationController = {
       const report = await validationService.getReport(processId);
       sendSuccess(res, report);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -68,7 +72,8 @@ export const validationController = {
       const anomalies = await validationService.runAnomalyDetection(processId);
       sendSuccess(res, anomalies);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -82,7 +87,8 @@ export const validationController = {
       const draft = await communicationService.generateCorrectionDraft(processId, useAi);
       sendSuccess(res, draft, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

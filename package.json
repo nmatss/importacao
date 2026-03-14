@@ -2,6 +2,7 @@
   "name": "importacao",
   "version": "1.0.0",
   "private": true,
+  "type": "module",
   "workspaces": [
     "apps/api",
     "apps/web"
@@ -16,6 +17,30 @@
     "db:seed": "npm run db:seed -w apps/api",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
-    "docker:build": "docker compose build"
+    "docker:build": "docker compose build",
+    "lint": "eslint apps/api/src apps/web/src",
+    "lint:fix": "eslint apps/api/src apps/web/src --fix",
+    "format": "prettier --write \"apps/**/*.{ts,tsx,js,json,css}\"",
+    "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,json,css}\"",
+    "typecheck": "npm run -w apps/api typecheck && npm run -w apps/web typecheck",
+    "test:watch": "npm test -w apps/api -- --watch",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --max-warnings 50"
+    ],
+    "*.{ts,tsx,js,json,css,md}": [
+      "prettier --write"
+    ]
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.57.0"
   }
 }

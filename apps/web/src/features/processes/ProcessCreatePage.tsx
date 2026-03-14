@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
+import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign, Loader2 } from 'lucide-react';
 import { useApiMutation } from '@/shared/hooks/useApi';
 
 const processSchema = z.object({
@@ -44,15 +44,11 @@ export function ProcessCreatePage() {
     },
   });
 
-  const mutation = useApiMutation<{ id: string }, ProcessFormData>(
-    '/api/processes',
-    'post',
-    {
-      onSuccess: (data) => {
-        navigate(`/importacao/processos/${data.id}`);
-      },
+  const mutation = useApiMutation<{ id: string }, ProcessFormData>('/api/processes', 'post', {
+    onSuccess: (data) => {
+      navigate(`/importacao/processos/${data.id}`);
     },
-  );
+  });
 
   const onSubmit = (data: ProcessFormData) => {
     mutation.mutate(data);
@@ -75,7 +71,9 @@ export function ProcessCreatePage() {
         </button>
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Novo Processo</h2>
-          <p className="text-sm text-slate-500">Preencha os dados para criar um novo processo de importacao</p>
+          <p className="text-sm text-slate-500">
+            Preencha os dados para criar um novo processo de importacao
+          </p>
         </div>
       </div>
 
@@ -99,9 +97,7 @@ export function ProcessCreatePage() {
                 placeholder="Ex: IMP-2024-001"
                 className={inputClass}
               />
-              {errors.processCode && (
-                <p className={errorClass}>{errors.processCode.message}</p>
-              )}
+              {errors.processCode && <p className={errorClass}>{errors.processCode.message}</p>}
             </div>
 
             <div>
@@ -113,9 +109,7 @@ export function ProcessCreatePage() {
                 <option value="puket">Puket</option>
                 <option value="imaginarium">Imaginarium</option>
               </select>
-              {errors.brand && (
-                <p className={errorClass}>{errors.brand.message}</p>
-              )}
+              {errors.brand && <p className={errorClass}>{errors.brand.message}</p>}
             </div>
 
             <div>
@@ -242,11 +236,7 @@ export function ProcessCreatePage() {
             </div>
             <div>
               <label className={labelClass}>Tipo Container</label>
-              <input
-                {...register('containerType')}
-                placeholder="Ex: 40HC"
-                className={inputClass}
-              />
+              <input {...register('containerType')} placeholder="Ex: 40HC" className={inputClass} />
             </div>
             <div>
               <label className={labelClass}>Quantidade Caixas</label>
@@ -332,7 +322,14 @@ export function ProcessCreatePage() {
             disabled={isSubmitting || mutation.isPending}
             className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all"
           >
-            {mutation.isPending ? 'Criando...' : 'Criar Processo'}
+            {mutation.isPending ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Salvando...
+              </span>
+            ) : (
+              'Criar Processo'
+            )}
           </button>
         </div>
       </form>

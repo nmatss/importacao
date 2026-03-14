@@ -10,7 +10,8 @@ export const followUpController = {
       const { data, total } = await followUpService.getAll(page, limit);
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -19,7 +20,8 @@ export const followUpController = {
       const tracking = await followUpService.getByProcess(Number(req.params.processId));
       sendSuccess(res, tracking);
     } catch (error: any) {
-      sendError(res, error.message, 404);
+      const status = error.statusCode || 404;
+      sendError(res, error.message, status);
     }
   },
 
@@ -28,7 +30,8 @@ export const followUpController = {
       const tracking = await followUpService.update(Number(req.params.processId), req.body);
       sendSuccess(res, tracking);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -37,7 +40,8 @@ export const followUpController = {
       const deadlines = await followUpService.getLiDeadlines();
       sendSuccess(res, deadlines);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -47,7 +51,8 @@ export const followUpController = {
       const result = await followUpService.compareWithSheet(processCode);
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message, 404);
+      const status = error.statusCode || 404;
+      sendError(res, error.message, status);
     }
   },
 
@@ -58,7 +63,8 @@ export const followUpController = {
       const result = await followUpService.syncFromSheet(processCode, mode);
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

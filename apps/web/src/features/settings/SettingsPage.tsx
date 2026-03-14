@@ -22,7 +22,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '@/shared/lib/api-client';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { PageSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { cn } from '@/shared/lib/utils';
 
@@ -48,15 +48,16 @@ const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
 ];
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
-  admin:    { bg: 'bg-red-50',    text: 'text-red-700' },
-  manager:  { bg: 'bg-blue-50',   text: 'text-blue-700' },
+  admin: { bg: 'bg-red-50', text: 'text-red-700' },
+  manager: { bg: 'bg-blue-50', text: 'text-blue-700' },
   operator: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  viewer:   { bg: 'bg-slate-100', text: 'text-slate-600' },
+  viewer: { bg: 'bg-slate-100', text: 'text-slate-600' },
 };
 
 const defaultRoleBadge = { bg: 'bg-slate-100', text: 'text-slate-600' };
 
-const inputClasses = 'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
+const inputClasses =
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
 const labelClasses = 'block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider';
 
 export function SettingsPage() {
@@ -70,7 +71,9 @@ export function SettingsPage() {
           <ShieldAlert className="h-8 w-8 text-red-400" />
         </div>
         <h2 className="text-xl font-bold text-slate-900">Acesso negado</h2>
-        <p className="mt-2 text-sm text-slate-500 max-w-sm">Somente administradores podem acessar as configuracoes do sistema.</p>
+        <p className="mt-2 text-sm text-slate-500 max-w-sm">
+          Somente administradores podem acessar as configuracoes do sistema.
+        </p>
       </div>
     );
   }
@@ -247,7 +250,11 @@ function GeneralTab() {
 
   return (
     <div className="space-y-6">
-      <SectionCard icon={MessageSquare} title="Google Chat Webhook" description="Notificacoes via Google Chat">
+      <SectionCard
+        icon={MessageSquare}
+        title="Google Chat Webhook"
+        description="Notificacoes via Google Chat"
+      >
         <div className="space-y-4">
           <div>
             <label className={labelClasses}>Webhook URL</label>
@@ -263,7 +270,11 @@ function GeneralTab() {
         </div>
       </SectionCard>
 
-      <SectionCard icon={Mail} title="Configuracoes SMTP" description="Servidor de envio de e-mails">
+      <SectionCard
+        icon={Mail}
+        title="Configuracoes SMTP"
+        description="Servidor de envio de e-mails"
+      >
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -322,6 +333,14 @@ function UsersTab() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operator' });
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowModal(false);
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
   const { data: users, isLoading } = useApiQuery<User[]>(['users'], '/api/auth/users');
 
   const openCreate = () => {
@@ -341,7 +360,11 @@ function UsersTab() {
     setSaving(true);
     try {
       if (editUser) {
-        const payload: Record<string, string> = { name: form.name, email: form.email, role: form.role };
+        const payload: Record<string, string> = {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+        };
         if (form.password) payload.password = form.password;
         await api.put(`/api/auth/users/${editUser.id}`, payload);
       } else {
@@ -376,14 +399,15 @@ function UsersTab() {
     }
   };
 
-  if (isLoading) return <LoadingSpinner className="py-16" />;
+  if (isLoading) return <PageSkeleton />;
 
   return (
     <div className="space-y-5">
       {/* Action bar */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500">
-          <span className="font-semibold text-slate-700">{users?.length ?? 0}</span> usuarios cadastrados
+          <span className="font-semibold text-slate-700">{users?.length ?? 0}</span> usuarios
+          cadastrados
         </p>
         <button
           onClick={openCreate}
@@ -399,11 +423,21 @@ function UsersTab() {
         <table className="min-w-full">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/80">
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Usuario</th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Email</th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Perfil</th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Acoes</th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Usuario
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Email
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Perfil
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                Acoes
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -419,18 +453,27 @@ function UsersTab() {
                 >
                   <td className="whitespace-nowrap px-6 py-3.5">
                     <div className="flex items-center gap-3">
-                      <div className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
-                        user.active
-                          ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-400',
-                      )}>
-                        {user.name.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase()}
+                      <div
+                        className={cn(
+                          'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
+                          user.active
+                            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
+                            : 'bg-slate-100 text-slate-400',
+                        )}
+                      >
+                        {user.name
+                          .split(' ')
+                          .map((w) => w[0])
+                          .slice(0, 2)
+                          .join('')
+                          .toUpperCase()}
                       </div>
                       <span className="text-sm font-semibold text-slate-800">{user.name}</span>
                     </div>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-3.5 text-sm text-slate-500">{user.email}</td>
+                  <td className="whitespace-nowrap px-6 py-3.5 text-sm text-slate-500">
+                    {user.email}
+                  </td>
                   <td className="whitespace-nowrap px-6 py-3.5">
                     <span
                       className={cn(
@@ -485,9 +528,9 @@ function UsersTab() {
 
       {/* User modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
             <h2 className="text-lg font-bold text-slate-900 mb-5">
               {editUser ? 'Editar Usuario' : 'Novo Usuario'}
             </h2>
@@ -677,10 +720,7 @@ function IntegrationsTab() {
               />
             </div>
           </div>
-          <TestConnectionButton
-            testing={testingDrive}
-            onClick={testDrive}
-          />
+          <TestConnectionButton testing={testingDrive} onClick={testDrive} />
         </div>
       </SectionCard>
 
@@ -723,10 +763,7 @@ function IntegrationsTab() {
               />
             </div>
           </div>
-          <TestConnectionButton
-            testing={testingOdoo}
-            onClick={testOdoo}
-          />
+          <TestConnectionButton testing={testingOdoo} onClick={testOdoo} />
         </div>
       </SectionCard>
 
@@ -742,7 +779,11 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
       disabled={testing}
       className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
     >
-      {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4 text-amber-500" />}
+      {testing ? (
+        <Loader2 className="h-4 w-4 animate-spin" />
+      ) : (
+        <Zap className="h-4 w-4 text-amber-500" />
+      )}
       Testar Conexao
     </button>
   );

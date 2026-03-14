@@ -9,7 +9,8 @@ export const currencyExchangeController = {
       const data = await currencyExchangeService.list(processId);
       sendSuccess(res, data);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -19,7 +20,8 @@ export const currencyExchangeController = {
       const data = await currencyExchangeService.getByProcess(processId);
       sendSuccess(res, data);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -28,7 +30,8 @@ export const currencyExchangeController = {
       const exchange = await currencyExchangeService.create(req.body);
       sendSuccess(res, exchange, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -37,7 +40,8 @@ export const currencyExchangeController = {
       const exchange = await currencyExchangeService.update(Number(req.params.id), req.body);
       sendSuccess(res, exchange);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -46,7 +50,8 @@ export const currencyExchangeController = {
       await currencyExchangeService.delete(Number(req.params.id));
       sendSuccess(res, { message: 'Câmbio removido' });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

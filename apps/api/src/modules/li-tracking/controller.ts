@@ -15,7 +15,8 @@ export const liTrackingController = {
       const { data, total } = await liTrackingService.getAll(page, limit, filters);
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -24,7 +25,8 @@ export const liTrackingController = {
       const stats = await liTrackingService.getStats();
       sendSuccess(res, stats);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -34,7 +36,8 @@ export const liTrackingController = {
       const data = await liTrackingService.getByProcess(processCode);
       sendSuccess(res, data);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -43,7 +46,8 @@ export const liTrackingController = {
       const entry = await liTrackingService.create(req.body);
       sendSuccess(res, entry, 201);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -52,7 +56,8 @@ export const liTrackingController = {
       const entry = await liTrackingService.update(Number(req.params.id), req.body);
       sendSuccess(res, entry);
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 
@@ -61,7 +66,8 @@ export const liTrackingController = {
       await liTrackingService.delete(Number(req.params.id));
       sendSuccess(res, { message: 'LI tracking entry removed' });
     } catch (error: any) {
-      sendError(res, error.message);
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
     }
   },
 };

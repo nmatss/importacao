@@ -1,10 +1,12 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { sql } from 'drizzle-orm';
 import { errorHandler } from './shared/middleware/error-handler.js';
 import { logger } from './shared/utils/logger.js';
 import { correlationId } from './shared/middleware/correlation-id.js';
 import { apiRouter } from './routes.js';
+import { db } from './shared/database/connection.js';
 
 const app = express();
 
@@ -12,10 +14,15 @@ const app = express();
 app.use(helmet());
 
 // CORS
-app.use(cors({
-  origin: process.env.CORS_ORIGIN?.split(',') || ['http://localhost:5173', 'http://localhost:8080'],
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN?.split(',') || [
+      'http://localhost:5173',
+      'http://localhost:8080',
+    ],
+    credentials: true,
+  }),
+);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -33,8 +40,15 @@ app.use((req, _res, next) => {
 app.use('/api', apiRouter);
 
 // Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+  try {
+    await db.execute(sql`SELECT 1`);
+    res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'connected' });
+  } catch {
+    res
+      .status(503)
+      .json({ status: 'degraded', timestamp: new Date().toISOString(), db: 'disconnected' });
+  }
 });
 
 // Error handler
