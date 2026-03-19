@@ -1,7 +1,18 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { DollarSign, Trash2, Plus, TrendingUp, ArrowDownUp, Wallet, Calculator, X, Search, ChevronDown } from 'lucide-react';
+import {
+  DollarSign,
+  Trash2,
+  Plus,
+  TrendingUp,
+  ArrowDownUp,
+  Wallet,
+  Calculator,
+  X,
+  Search,
+  ChevronDown,
+} from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
@@ -10,13 +21,13 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 
 interface Process {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
 }
 
 interface CurrencyExchange {
-  id: string;
+  id: number;
   processId: string;
   type: 'balance' | 'deposit';
   amountUsd: number;
@@ -51,12 +62,12 @@ export function CurrencyExchangePage() {
   const [selectedProcessId, setSelectedProcessId] = useState('');
   const [form, setForm] = useState<ExchangeForm>(emptyForm);
   const [showForm, setShowForm] = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: processResponse, isLoading: loadingProcesses } = useApiQuery<{ data: Process[]; pagination: unknown }>(
-    ['processes'],
-    '/api/processes',
-  );
+  const { data: processResponse, isLoading: loadingProcesses } = useApiQuery<{
+    data: Process[];
+    pagination: unknown;
+  }>(['processes'], '/api/processes');
   const processes = processResponse?.data;
 
   const { data: exchanges, isLoading: loadingExchanges } = useApiQuery<CurrencyExchange[]>(
@@ -65,17 +76,16 @@ export function CurrencyExchangePage() {
     { enabled: !!selectedProcessId },
   );
 
-  const createMutation = useApiMutation<CurrencyExchange, Omit<CurrencyExchange, 'id' | 'createdAt'>>(
-    '/api/currency-exchange',
-    'post',
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
-        setForm(emptyForm);
-        setShowForm(false);
-      },
+  const createMutation = useApiMutation<
+    CurrencyExchange,
+    Omit<CurrencyExchange, 'id' | 'createdAt'>
+  >('/api/currency-exchange', 'post', {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
+      setForm(emptyForm);
+      setShowForm(false);
     },
-  );
+  });
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -113,13 +123,11 @@ export function CurrencyExchangePage() {
     });
   };
 
-  const totalBalanceUsd = exchanges
-    ?.filter((e) => e.type === 'balance')
-    .reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+  const totalBalanceUsd =
+    exchanges?.filter((e) => e.type === 'balance').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
 
-  const totalDepositUsd = exchanges
-    ?.filter((e) => e.type === 'deposit')
-    .reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+  const totalDepositUsd =
+    exchanges?.filter((e) => e.type === 'deposit').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
 
   const saldoUsd = totalBalanceUsd - totalDepositUsd;
 
@@ -175,10 +183,16 @@ export function CurrencyExchangePage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex-1 max-w-md">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Processo</label>
+            <label
+              htmlFor="exchange-process"
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+            >
+              Processo
+            </label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <select
+                id="exchange-process"
                 value={selectedProcessId}
                 onChange={(e) => setSelectedProcessId(e.target.value)}
                 className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-10 pr-10 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
@@ -213,8 +227,12 @@ export function CurrencyExchangePage() {
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
             <h3 className="text-base font-semibold text-slate-900">Novo Cambio</h3>
             <button
-              onClick={() => { setShowForm(false); setForm(emptyForm); }}
+              onClick={() => {
+                setShowForm(false);
+                setForm(emptyForm);
+              }}
               className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              aria-label="Fechar formulario"
             >
               <X className="h-4 w-4" />
             </button>
@@ -222,10 +240,18 @@ export function CurrencyExchangePage() {
           <form onSubmit={handleSubmit} className="p-6">
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Tipo</label>
+                <label
+                  htmlFor="exchange-type"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Tipo
+                </label>
                 <select
+                  id="exchange-type"
                   value={form.type}
-                  onChange={(e) => setForm({ ...form, type: e.target.value as 'balance' | 'deposit' })}
+                  onChange={(e) =>
+                    setForm({ ...form, type: e.target.value as 'balance' | 'deposit' })
+                  }
                   className="w-full appearance-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                 >
                   <option value="balance">Balance</option>
@@ -233,8 +259,14 @@ export function CurrencyExchangePage() {
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Valor USD</label>
+                <label
+                  htmlFor="exchange-amount-usd"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Valor USD
+                </label>
                 <input
+                  id="exchange-amount-usd"
                   type="number"
                   step="0.01"
                   value={form.amountUsd}
@@ -245,8 +277,14 @@ export function CurrencyExchangePage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Taxa de Cambio</label>
+                <label
+                  htmlFor="exchange-rate"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Taxa de Cambio
+                </label>
                 <input
+                  id="exchange-rate"
                   type="number"
                   step="0.0001"
                   value={form.exchangeRate}
@@ -257,14 +295,26 @@ export function CurrencyExchangePage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Valor BRL (calculado)</label>
+                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                  Valor BRL (calculado)
+                </label>
                 <div className="flex h-[42px] items-center rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 text-sm font-medium text-slate-600">
-                  {calculatedBrl ? formatCurrency(calculatedBrl, 'BRL') : <span className="text-slate-400">--</span>}
+                  {calculatedBrl ? (
+                    formatCurrency(calculatedBrl, 'BRL')
+                  ) : (
+                    <span className="text-slate-400">--</span>
+                  )}
                 </div>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Vencimento Pagamento</label>
+                <label
+                  htmlFor="exchange-payment-deadline"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Vencimento Pagamento
+                </label>
                 <input
+                  id="exchange-payment-deadline"
                   type="date"
                   value={form.paymentDeadline}
                   onChange={(e) => setForm({ ...form, paymentDeadline: e.target.value })}
@@ -273,8 +323,14 @@ export function CurrencyExchangePage() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Data de Expiracao</label>
+                <label
+                  htmlFor="exchange-expiration"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Data de Expiracao
+                </label>
                 <input
+                  id="exchange-expiration"
                   type="date"
                   value={form.expirationDate}
                   onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
@@ -283,8 +339,14 @@ export function CurrencyExchangePage() {
                 />
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Notas</label>
+                <label
+                  htmlFor="exchange-notes"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Notas
+                </label>
                 <textarea
+                  id="exchange-notes"
                   value={form.notes}
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
@@ -296,7 +358,10 @@ export function CurrencyExchangePage() {
             <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-5">
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setForm(emptyForm); }}
+                onClick={() => {
+                  setShowForm(false);
+                  setForm(emptyForm);
+                }}
                 className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               >
                 Cancelar
@@ -318,9 +383,14 @@ export function CurrencyExchangePage() {
         <>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {kpiCards.map((kpi) => (
-              <div key={kpi.label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+              <div
+                key={kpi.label}
+                className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+              >
                 <div className="flex items-center gap-3.5">
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${kpi.gradient} shadow-sm`}>
+                  <div
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${kpi.gradient} shadow-sm`}
+                  >
                     <kpi.icon className="h-5 w-5 text-white" />
                   </div>
                   <div>
@@ -347,14 +417,30 @@ export function CurrencyExchangePage() {
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead>
                     <tr className="bg-slate-50/80">
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Tipo</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Valor USD</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Taxa</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Valor BRL</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Vencimento</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Expiracao</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Notas</th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Acoes</th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Tipo
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Valor USD
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Taxa
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Valor BRL
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Vencimento
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Expiracao
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Notas
+                      </th>
+                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                        Acoes
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -394,6 +480,7 @@ export function CurrencyExchangePage() {
                             onClick={() => setDeleteId(ex.id)}
                             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
                             title="Excluir"
+                            aria-label="Excluir cambio"
                           >
                             <Trash2 className="h-4 w-4" />
                           </button>

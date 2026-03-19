@@ -11,6 +11,7 @@ import {
   Clock,
   Mail,
   XCircle,
+  RefreshCw,
 } from 'lucide-react';
 import {
   BarChart,
@@ -32,6 +33,7 @@ import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { SLADashboard } from './SLADashboard';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 interface DashboardOverview {
   activeProcesses: number;
@@ -39,13 +41,13 @@ interface DashboardOverview {
   completedThisMonth: number;
   totalFobValue: number;
   recentAlerts: Array<{
-    id: string;
+    id: number;
     message: string;
     severity: 'critical' | 'warning' | 'info';
     createdAt: string;
   }>;
   recentProcesses: Array<{
-    id: string;
+    id: number;
     processCode: string;
     brand: string;
     status: string;
@@ -59,6 +61,18 @@ interface StatusCount {
   label: string;
   count: number;
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  draft: 'Rascunho',
+  documents_received: 'Docs Recebidos',
+  validating: 'Validando',
+  validated: 'Validado',
+  espelho_generated: 'Espelho Gerado',
+  sent_to_fenicia: 'Enviado Fenicia',
+  li_pending: 'LI Pendente',
+  completed: 'Concluido',
+  cancelled: 'Cancelado',
+};
 
 interface MonthlyTrend {
   month: string;
@@ -75,7 +89,7 @@ interface EmailLog {
   id: number;
   fromAddress: string;
   subject: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored' | 'reprocessed';
   processCode: string | null;
   attachmentsCount: number;
   createdAt: string;
@@ -193,22 +207,38 @@ const kpiConfig = [
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const { data: overview, isLoading: loadingOverview } =
-    useApiQuery<DashboardOverview>(['dashboard', 'overview'], '/api/dashboard/overview');
+  const {
+    data: overview,
+    isLoading: loadingOverview,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useApiQuery<DashboardOverview>(['dashboard', 'overview'], '/api/dashboard/overview');
 
-  const { data: byStatus, isLoading: loadingStatus } =
-    useApiQuery<StatusCount[]>(['dashboard', 'by-status'], '/api/dashboard/by-status');
+  const { data: rawByStatus, isLoading: loadingStatus } = useApiQuery<
+    Array<{ status: string; count: number }>
+  >(['dashboard', 'by-status'], '/api/dashboard/by-status');
+  const byStatus = rawByStatus?.map((s) => ({ ...s, label: STATUS_LABELS[s.status] || s.status }));
 
-  const { data: byMonth } =
-    useApiQuery<MonthlyTrend[]>(['dashboard', 'by-month'], '/api/dashboard/by-month');
+  const { data: byMonth } = useApiQuery<MonthlyTrend[]>(
+    ['dashboard', 'by-month'],
+    '/api/dashboard/by-month',
+  );
 
-  const { data: fobByBrand } =
-    useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
+  const { data: fobByBrand } = useApiQuery<FobByBrand[]>(
+    ['dashboard', 'fob-by-brand'],
+    '/api/dashboard/fob-by-brand',
+  );
 
-  const { data: emailLogs, isLoading: loadingEmails } =
-    useApiQuery<EmailLogsResponse>(['email-ingestion', 'logs'], '/api/email-ingestion/logs?limit=5');
+  const { data: emailLogs, isLoading: loadingEmails } = useApiQuery<EmailLogsResponse>(
+    ['email-ingestion', 'logs'],
+    '/api/email-ingestion/logs?limit=5',
+  );
 
   const isLoading = loadingOverview || loadingStatus;
+
+  if (overviewError) {
+    return <ErrorState message="Erro ao carregar dashboard." onRetry={() => refetchOverview()} />;
+  }
 
   if (isLoading) {
     return (
@@ -251,9 +281,7 @@ export function DashboardPage() {
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Visao geral dos processos de importacao
-        </p>
+        <p className="mt-1 text-sm text-slate-500">Visao geral dos processos de importacao</p>
       </div>
 
       {/* KPI Cards */}
@@ -261,7 +289,7 @@ export function DashboardPage() {
         {kpiConfig.map((card) => {
           const Icon = card.icon;
           const value = kpiValues[card.key];
-          const isZero = value === 0;
+          const isZero = value === 0 || value === '0' || value === '$0.00';
 
           return (
             <div
@@ -343,12 +371,7 @@ export function DashboardPage() {
                     fontSize: '13px',
                   }}
                 />
-                <Bar
-                  dataKey="count"
-                  fill="#3b82f6"
-                  radius={[6, 6, 0, 0]}
-                  name="Processos"
-                />
+                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Processos" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -360,9 +383,7 @@ export function DashboardPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
               <Bell className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Alertas Recentes
-            </h3>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">Alertas Recentes</h3>
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts ?? []).length === 0 ? (
@@ -385,12 +406,7 @@ export function DashboardPage() {
                     )}
                   >
                     <div className="flex items-start gap-3">
-                      <span
-                        className={cn(
-                          'mt-1.5 h-2 w-2 shrink-0 rounded-full',
-                          config.dot,
-                        )}
-                      />
+                      <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', config.dot)} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span
@@ -402,9 +418,7 @@ export function DashboardPage() {
                             {config.label}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-700 leading-relaxed">
-                          {alert.message}
-                        </p>
+                        <p className="text-sm text-slate-700 leading-relaxed">{alert.message}</p>
                         <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
                           {formatDate(alert.createdAt)}
                         </p>
@@ -426,9 +440,7 @@ export function DashboardPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
               <TrendingUp className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Tendencia Mensal
-            </h3>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">Tendencia Mensal</h3>
           </div>
           <div className="h-72">
             {byMonth && byMonth.length > 0 ? (
@@ -465,10 +477,7 @@ export function DashboardPage() {
                       fontSize: '13px',
                     }}
                   />
-                  <Legend
-                    iconType="circle"
-                    wrapperStyle={{ fontSize: '12px', color: '#64748b' }}
-                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#64748b' }} />
                   <Line
                     yAxisId="left"
                     type="monotone"
@@ -508,9 +517,7 @@ export function DashboardPage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
               <DollarSign className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              FOB por Marca
-            </h3>
+            <h3 className="text-base font-bold text-slate-900 tracking-tight">FOB por Marca</h3>
           </div>
           <div className="h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
@@ -526,15 +533,10 @@ export function DashboardPage() {
                     innerRadius={40}
                     strokeWidth={2}
                     stroke="#fff"
-                    label={({ brand, percent }) =>
-                      `${brand} (${(percent * 100).toFixed(0)}%)`
-                    }
+                    label={({ brand, percent }) => `${brand} (${(percent * 100).toFixed(0)}%)`}
                   >
                     {fobByBrand.map((_entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={PIE_COLORS[index % PIE_COLORS.length]}
-                      />
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -584,7 +586,9 @@ export function DashboardPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
               <Mail className="h-6 w-6 text-slate-300" />
             </div>
-            <p className="text-sm font-medium text-slate-400">Nenhum email processado recentemente</p>
+            <p className="text-sm font-medium text-slate-400">
+              Nenhum email processado recentemente
+            </p>
             <p className="text-xs text-slate-300 mt-1">Emails recebidos aparecerao aqui</p>
           </div>
         ) : (
@@ -592,12 +596,14 @@ export function DashboardPage() {
             {emailLogs.data.map((log) => {
               const isCompleted = log.status === 'completed';
               const isFailed = log.status === 'failed';
+              const isReprocessed = log.status === 'reprocessed';
               return (
                 <div
                   key={log.id}
                   className={cn(
                     'flex items-center gap-4 px-7 py-3.5',
                     isFailed && 'bg-red-50/40',
+                    isReprocessed && 'bg-purple-50/40',
                   )}
                 >
                   <div className="shrink-0">
@@ -605,14 +611,14 @@ export function DashboardPage() {
                       <CheckCircle className="h-5 w-5 text-green-500" />
                     ) : isFailed ? (
                       <XCircle className="h-5 w-5 text-red-500" />
+                    ) : isReprocessed ? (
+                      <RefreshCw className="h-5 w-5 text-purple-500" />
                     ) : (
                       <Clock className="h-5 w-5 text-amber-500" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-700 truncate">
-                      {log.subject}
-                    </p>
+                    <p className="text-sm font-medium text-slate-700 truncate">{log.subject}</p>
                     <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
                       <span>{log.fromAddress}</span>
                       <span>{log.attachmentsCount} anexo(s)</span>
@@ -707,9 +713,7 @@ export function DashboardPage() {
                       <StatusBadge status={proc.status} />
                     </td>
                     <td className="px-7 py-3.5 text-sm text-slate-500">
-                      {proc.etd ? formatDate(proc.etd) : (
-                        <span className="text-slate-300">--</span>
-                      )}
+                      {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
                     <td className="px-7 py-3.5 text-sm text-slate-500">
                       {formatDate(proc.createdAt)}

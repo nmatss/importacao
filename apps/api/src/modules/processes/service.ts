@@ -1,4 +1,4 @@
-import { eq, desc, ilike, and, sql, count } from 'drizzle-orm';
+import { eq, desc, ilike, and, sql, count, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { importProcesses, documents, followUpTracking } from '../../shared/database/schema.js';
 import type { CreateProcessInput, UpdateProcessInput, ProcessFilter } from './schema.js';
@@ -12,84 +12,112 @@ export const processService = {
     const conditions = [];
 
     if (filter.status) {
-      conditions.push(eq(importProcesses.status, filter.status as any));
+      conditions.push(
+        eq(
+          importProcesses.status,
+          filter.status as (typeof importProcesses.status.enumValues)[number],
+        ),
+      );
     }
     if (filter.brand) {
-      conditions.push(eq(importProcesses.brand, filter.brand as any));
+      conditions.push(
+        eq(
+          importProcesses.brand,
+          filter.brand as (typeof importProcesses.brand.enumValues)[number],
+        ),
+      );
     }
     if (filter.search) {
       conditions.push(ilike(importProcesses.processCode, `%${filter.search}%`));
+    }
+    if (filter.startDate) {
+      conditions.push(gte(importProcesses.createdAt, new Date(filter.startDate)));
+    }
+    if (filter.endDate) {
+      const endDate = new Date(filter.endDate);
+      endDate.setDate(endDate.getDate() + 1);
+      conditions.push(sql`${importProcesses.createdAt} < ${endDate.toISOString()}`);
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const offset = (filter.page - 1) * filter.limit;
 
     const [data, [{ total }]] = await Promise.all([
-      db.select()
+      db
+        .select()
         .from(importProcesses)
         .where(where)
         .orderBy(desc(importProcesses.createdAt))
         .limit(filter.limit)
         .offset(offset),
-      db.select({ total: count() })
-        .from(importProcesses)
-        .where(where),
+      db.select({ total: count() }).from(importProcesses).where(where),
     ]);
 
     return { data, total, page: filter.page, limit: filter.limit };
   },
 
   async getById(id: number) {
-    const [process] = await db.select()
+    const [process] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, id))
       .limit(1);
 
     if (!process) throw new NotFoundError('Processo', id);
 
-    const processDocs = await db.select()
-      .from(documents)
-      .where(eq(documents.processId, id));
-
-    const [followUp] = await db.select()
-      .from(followUpTracking)
-      .where(eq(followUpTracking.processId, id))
-      .limit(1);
+    const [processDocs, [followUp]] = await Promise.all([
+      db.select().from(documents).where(eq(documents.processId, id)),
+      db.select().from(followUpTracking).where(eq(followUpTracking.processId, id)).limit(1),
+    ]);
 
     return { ...process, documents: processDocs, followUp };
   },
 
   async create(input: CreateProcessInput, userId: number) {
     return db.transaction(async (tx) => {
-      const [process] = await tx.insert(importProcesses).values({
-        processCode: input.processCode,
-        brand: input.brand,
-        incoterm: input.incoterm,
-        portOfLoading: input.portOfLoading,
-        portOfDischarge: input.portOfDischarge,
-        etd: input.etd,
-        eta: input.eta,
-        exporterName: input.exporterName,
-        exporterAddress: input.exporterAddress,
-        importerName: input.importerName,
-        importerAddress: input.importerAddress,
-        notes: input.notes,
-        createdBy: userId,
-      }).returning();
+      const [process] = await tx
+        .insert(importProcesses)
+        .values({
+          processCode: input.processCode,
+          brand: input.brand,
+          incoterm: input.incoterm,
+          portOfLoading: input.portOfLoading,
+          portOfDischarge: input.portOfDischarge,
+          etd: input.etd,
+          eta: input.eta,
+          exporterName: input.exporterName,
+          exporterAddress: input.exporterAddress,
+          importerName: input.importerName,
+          importerAddress: input.importerAddress,
+          notes: input.notes,
+          createdBy: userId,
+        })
+        .returning();
 
       await tx.insert(followUpTracking).values({
         processId: process.id,
       });
 
-      auditService.log(userId, 'create', 'process', process.id, { processCode: input.processCode }, null);
+      auditService.log(
+        userId,
+        'create',
+        'process',
+        process.id,
+        { processCode: input.processCode },
+        null,
+      );
 
       return process;
     });
   },
 
   async update(id: number, input: UpdateProcessInput, userId: number | null = null) {
-    const [process] = await db.update(importProcesses)
-      .set({ ...input, updatedAt: new Date() } as any)
+    const [process] = await db
+      .update(importProcesses)
+      .set({
+        ...input,
+        updatedAt: new Date(),
+      } as Partial<typeof importProcesses.$inferInsert>)
       .where(eq(importProcesses.id, id))
       .returning();
 
@@ -99,7 +127,8 @@ export const processService = {
   },
 
   async updateStatus(id: number, status: string, userId: number | null = null) {
-    const [current] = await db.select()
+    const [current] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, id))
       .limit(1);
@@ -108,8 +137,12 @@ export const processService = {
 
     assertTransition(current.status as ProcessStatus, status as ProcessStatus);
 
-    const [process] = await db.update(importProcesses)
-      .set({ status: status as any, updatedAt: new Date() })
+    const [process] = await db
+      .update(importProcesses)
+      .set({
+        status: status as (typeof importProcesses.status.enumValues)[number],
+        updatedAt: new Date(),
+      })
       .where(eq(importProcesses.id, id))
       .returning();
 
@@ -118,7 +151,8 @@ export const processService = {
   },
 
   async delete(id: number, userId: number | null = null) {
-    const [current] = await db.select()
+    const [current] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, id))
       .limit(1);
@@ -127,7 +161,8 @@ export const processService = {
 
     assertTransition(current.status as ProcessStatus, 'cancelled');
 
-    const [process] = await db.update(importProcesses)
+    const [process] = await db
+      .update(importProcesses)
       .set({ status: 'cancelled', updatedAt: new Date() })
       .where(eq(importProcesses.id, id))
       .returning({ id: importProcesses.id });
@@ -136,11 +171,12 @@ export const processService = {
   },
 
   async getStats() {
-    const result = await db.select({
-      status: importProcesses.status,
-      count: count(),
-      totalFob: sql<string>`COALESCE(SUM(${importProcesses.totalFobValue}), 0)`,
-    })
+    const result = await db
+      .select({
+        status: importProcesses.status,
+        count: count(),
+        totalFob: sql<string>`COALESCE(SUM(${importProcesses.totalFobValue}), 0)`,
+      })
       .from(importProcesses)
       .groupBy(importProcesses.status);
 

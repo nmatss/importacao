@@ -88,6 +88,7 @@ export const dashboardService = {
       .select({
         month: sql<string>`TO_CHAR(${importProcesses.createdAt}, 'YYYY-MM')`,
         count: count(),
+        fobValue: sql<string>`COALESCE(SUM(${importProcesses.totalFobValue}), 0)`,
       })
       .from(importProcesses)
       .where(gte(importProcesses.createdAt, sql`NOW() - INTERVAL '6 months'`))

@@ -9,6 +9,8 @@ import { buildAnomalyPrompt } from './prompts/anomaly.js';
 import { buildEmailPrompt } from './prompts/email.js';
 import { buildEmailAnalysisPrompt } from './prompts/email-analysis.js';
 import { buildCorrectionPrompt } from './prompts/correction.js';
+import { buildCertificatePrompt } from './prompts/certificate.js';
+import { certificateResponseSchema } from './schemas/certificate-response.js';
 import type { ZodType } from 'zod';
 
 interface OpenRouterMessage {
@@ -21,7 +23,15 @@ export interface EmailAnalysisResult {
   documentTypes: string[];
   invoiceNumbers: string[];
   urgencyLevel: 'normal' | 'urgent' | 'critical';
-  emailCategory: 'new_shipment' | 'document_delivery' | 'correction' | 'follow_up' | 'payment' | 'general';
+  emailCategory:
+    | 'new_shipment'
+    | 'document_delivery'
+    | 'correction'
+    | 'follow_up'
+    | 'payment'
+    | 'general'
+    | 'pre_confirmation'
+    | 'tracking_sent';
   keyDates: Array<{ type: string; date: string; description: string }>;
   supplierName: string | null;
 }
@@ -50,6 +60,7 @@ const PROMPT_VERSIONS: Record<string, string> = {
   email_analysis: 'v1.0',
   ncm_validation: 'v1.0',
   correction_email: 'v1.0',
+  certificate_extraction: 'v1.0',
 };
 
 class AIService {
@@ -156,7 +167,7 @@ class AIService {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${this.apiKey}`,
+        Authorization: `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': 'importacao-system',
       },
@@ -169,7 +180,7 @@ class AIService {
       throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
     }
 
-    const result = await response.json() as {
+    const result = (await response.json()) as {
       choices: Array<{ message: { content: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
@@ -184,7 +195,10 @@ class AIService {
     return content;
   }
 
-  private calculateConfidence(data: Record<string, any>): { score: number; lowConfidenceFields: string[] } {
+  private calculateConfidence(data: Record<string, any>): {
+    score: number;
+    lowConfidenceFields: string[];
+  } {
     const lowConfidenceFields: string[] = [];
     let totalConfidence = 0;
     let fieldCount = 0;
@@ -221,7 +235,10 @@ class AIService {
     try {
       return JSON.parse(response);
     } catch (err) {
-      logger.error({ err, context, rawResponse: response.substring(0, 500) }, 'Failed to parse AI JSON response');
+      logger.error(
+        { err, context, rawResponse: response.substring(0, 500) },
+        'Failed to parse AI JSON response',
+      );
       throw new Error(`Failed to parse AI response for ${context}: invalid JSON`);
     }
   }
@@ -238,15 +255,20 @@ class AIService {
     }
 
     logger.warn(
-      { context, errors: result.error.issues.slice(0, 5) },
-      'AI response Zod validation failed, using raw parsed data',
+      { context, errors: result.error.issues.slice(0, 5), rawKeys: Object.keys(raw) },
+      'AI response Zod validation failed, using raw parsed data — downstream may see unexpected shapes',
     );
     return raw as T;
   }
 
   async extractInvoiceData(text: string): Promise<ExtractionResult> {
     const messages = buildInvoicePrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'invoice_extraction');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'invoice_extraction',
+    );
     const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data as Record<string, any>);
 
@@ -255,12 +277,21 @@ class AIService {
       'Invoice data extracted',
     );
 
-    return { data: data as Record<string, any>, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    return {
+      data: data as Record<string, any>,
+      confidenceScore: score,
+      fieldsWithLowConfidence: lowConfidenceFields,
+    };
   }
 
   async extractPackingListData(text: string): Promise<ExtractionResult> {
     const messages = buildPackingListPrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'packing_list_extraction');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'packing_list_extraction',
+    );
     const data = this.safeJsonParse(response, 'packing list extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -274,7 +305,12 @@ class AIService {
 
   async extractBLData(text: string): Promise<ExtractionResult> {
     const messages = buildBLPrompt(text);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'bl_extraction');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'bl_extraction',
+    );
     const data = this.safeJsonParse(response, 'bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -286,19 +322,40 @@ class AIService {
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
+  async extractCertificateData(text: string): Promise<ExtractionResult> {
+    const messages = buildCertificatePrompt(text);
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'certificate_extraction',
+    );
+    const data = this.zodParse(response, 'certificate extraction', certificateResponseSchema);
+    const { score, lowConfidenceFields } = this.calculateConfidence(data);
+
+    logger.info(
+      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      'Certificate data extracted',
+    );
+
+    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+  }
+
   async detectAnomalies(
     invoiceData: Record<string, any>,
     packingListData: Record<string, any>,
     blData: Record<string, any>,
   ): Promise<{ anomalies: Array<{ field: string; description: string; severity: string }> }> {
     const messages = buildAnomalyPrompt(invoiceData, packingListData, blData);
-    const response = await this.chat('anthropic/claude-sonnet-4', messages, true, 'anomaly_detection');
+    const response = await this.chat(
+      'anthropic/claude-sonnet-4',
+      messages,
+      true,
+      'anomaly_detection',
+    );
     const result = this.safeJsonParse(response, 'anomaly detection');
 
-    logger.info(
-      { anomalyCount: result.anomalies?.length ?? 0 },
-      'Anomaly detection completed',
-    );
+    logger.info({ anomalyCount: result.anomalies?.length ?? 0 }, 'Anomaly detection completed');
 
     return result;
   }
@@ -323,7 +380,12 @@ class AIService {
   ): Promise<EmailAnalysisResult> {
     const truncatedBody = body.substring(0, 2000);
     const messages = buildEmailAnalysisPrompt(subject, truncatedBody, fromAddress);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'email_analysis');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'email_analysis',
+    );
     const result = this.zodParse(response, 'email analysis', emailAnalysisResponseSchema);
 
     logger.info(
@@ -378,7 +440,12 @@ Rules:
       },
     ];
 
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'ncm_validation');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'ncm_validation',
+    );
     const result = this.safeJsonParse(response, 'NCM validation');
 
     logger.info({ ncmCode, isValid: result.isValid }, 'NCM validation completed');
@@ -404,7 +471,12 @@ Rules:
     }>;
   }): Promise<{ subject: string; body: string }> {
     const messages = buildCorrectionPrompt(context);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'correction_email');
+    const response = await this.chat(
+      'google/gemini-2.0-flash-001',
+      messages,
+      true,
+      'correction_email',
+    );
     const result = this.safeJsonParse(response, 'correction email generation');
 
     logger.info(

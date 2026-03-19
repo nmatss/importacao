@@ -1,19 +1,27 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ClipboardList, Clock, AlertTriangle, CheckCircle, Calendar, ChevronDown, LayoutGrid } from 'lucide-react';
+import {
+  ClipboardList,
+  Clock,
+  AlertTriangle,
+  CheckCircle,
+  Calendar,
+  ChevronDown,
+  LayoutGrid,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { formatDate } from '@/shared/lib/utils';
 
-interface FollowUpProcess {
-  id: string;
+interface RawFollowUpProcess {
+  id: number;
+  processId: number;
   processCode: string;
   brand: string;
-  currentStage: string;
-  lastUpdateDate: string;
-  daysSinceUpdate: number;
-  status: 'on_track' | 'approaching' | 'overdue';
+  status: string;
   documentsReceivedAt: string | null;
   preInspectionAt: string | null;
   ncmVerifiedAt: string | null;
@@ -21,14 +29,61 @@ interface FollowUpProcess {
   sentToFeniciaAt: string | null;
   liSubmittedAt: string | null;
   liApprovedAt: string | null;
+  overallProgress: number;
+  updatedAt: string;
+  createdAt: string;
+}
+
+interface FollowUpProcess extends RawFollowUpProcess {
+  currentStage: string;
+  daysSinceUpdate: number;
+  followUpStatus: 'on_track' | 'approaching' | 'overdue';
 }
 
 interface LiDeadline {
-  id: string;
+  processId: number;
   processCode: string;
   brand: string;
   liDeadline: string;
   daysRemaining: number;
+}
+
+// Compute currentStage from the latest completed tracking date
+const STAGE_DATE_FIELDS: { key: string; field: keyof RawFollowUpProcess }[] = [
+  { key: 'li_approved', field: 'liApprovedAt' },
+  { key: 'li_submitted', field: 'liSubmittedAt' },
+  { key: 'sent_fenicia', field: 'sentToFeniciaAt' },
+  { key: 'espelho_generated', field: 'espelhoGeneratedAt' },
+  { key: 'ncm_verification', field: 'ncmVerifiedAt' },
+  { key: 'pre_inspection', field: 'preInspectionAt' },
+  { key: 'docs_received', field: 'documentsReceivedAt' },
+];
+
+function enrichFollowUpData(raw: RawFollowUpProcess[]): FollowUpProcess[] {
+  return raw.map((proc) => {
+    // Find the most advanced completed stage
+    let currentStage = 'docs_received';
+    for (const stage of STAGE_DATE_FIELDS) {
+      if (proc[stage.field]) {
+        currentStage = stage.key;
+        break;
+      }
+    }
+
+    // Compute days since last update
+    const lastUpdate = proc.updatedAt || proc.createdAt;
+    const daysSinceUpdate = Math.max(
+      0,
+      Math.floor((Date.now() - new Date(lastUpdate).getTime()) / 86400000),
+    );
+
+    // Determine follow-up status
+    let followUpStatus: 'on_track' | 'approaching' | 'overdue' = 'on_track';
+    if (daysSinceUpdate > 7) followUpStatus = 'overdue';
+    else if (daysSinceUpdate > 3) followUpStatus = 'approaching';
+
+    return { ...proc, currentStage, daysSinceUpdate, followUpStatus };
+  });
 }
 
 const STAGES = [
@@ -97,13 +152,28 @@ const STAGE_DATE_LABELS: { key: keyof FollowUpProcess; label: string }[] = [
 export function FollowUpPage() {
   const navigate = useNavigate();
   const [showDeadlines, setShowDeadlines] = useState(true);
-  const [expandedProcessId, setExpandedProcessId] = useState<string | null>(null);
+  const [expandedProcessId, setExpandedProcessId] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  const { data: followUpResponse, isLoading } = useApiQuery<{ data: FollowUpProcess[]; pagination: unknown }>(
-    ['follow-up'],
-    '/api/follow-up',
+  const followUpParams = new URLSearchParams();
+  followUpParams.set('limit', '200');
+  if (startDate) followUpParams.set('startDate', startDate);
+  if (endDate) followUpParams.set('endDate', endDate);
+  const followUpQs = followUpParams.toString();
+
+  const {
+    data: followUpResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{ data: RawFollowUpProcess[]; pagination: unknown }>(
+    ['follow-up', startDate, endDate],
+    `/api/follow-up${followUpQs ? `?${followUpQs}` : ''}`,
   );
-  const followUpData = followUpResponse?.data;
+  const followUpData = followUpResponse?.data
+    ? enrichFollowUpData(followUpResponse.data)
+    : undefined;
 
   const { data: liDeadlines, isLoading: loadingDeadlines } = useApiQuery<LiDeadline[]>(
     ['follow-up-deadlines'],
@@ -113,13 +183,18 @@ export function FollowUpPage() {
   const getProcessesForStage = (stageKey: string) =>
     followUpData?.filter((p) => p.currentStage === stageKey) ?? [];
 
+  if (error) {
+    return <ErrorState message="Erro ao carregar follow-up." onRetry={() => refetch()} />;
+  }
+
   if (isLoading) {
     return <LoadingSpinner className="py-24" size="lg" />;
   }
 
   const totalProcesses = followUpData?.length ?? 0;
-  const overdueCount = followUpData?.filter((p) => p.status === 'overdue').length ?? 0;
-  const approachingCount = followUpData?.filter((p) => p.status === 'approaching').length ?? 0;
+  const overdueCount = followUpData?.filter((p) => p.followUpStatus === 'overdue').length ?? 0;
+  const approachingCount =
+    followUpData?.filter((p) => p.followUpStatus === 'approaching').length ?? 0;
 
   return (
     <div className="space-y-6">
@@ -145,15 +220,29 @@ export function FollowUpPage() {
         </button>
       </div>
 
-      {/* Status Legend */}
+      {/* Status Legend & Date Filter */}
       <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-sm">
+        <DateRangeFilter
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+        />
+        <div className="hidden h-8 w-px bg-slate-200 sm:block" />
         {Object.entries(statusConfig).map(([key, config]) => {
-          const count = key === 'overdue' ? overdueCount : key === 'approaching' ? approachingCount : totalProcesses - overdueCount - approachingCount;
+          const count =
+            key === 'overdue'
+              ? overdueCount
+              : key === 'approaching'
+                ? approachingCount
+                : totalProcesses - overdueCount - approachingCount;
           return (
             <div key={key} className="flex items-center gap-2 text-sm">
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${config.accent}`} />
               <span className="text-slate-600">{config.label}</span>
-              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${config.bg} ${config.text}`}>
+              <span
+                className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${config.bg} ${config.text}`}
+              >
                 {count}
               </span>
             </div>
@@ -190,7 +279,7 @@ export function FollowUpPage() {
                       </div>
                     ) : (
                       processes.map((proc) => {
-                        const status = statusConfig[proc.status];
+                        const status = statusConfig[proc.followUpStatus];
                         const brand = brandColors[proc.brand] ?? defaultBrandColor;
                         const isExpanded = expandedProcessId === proc.id;
 
@@ -207,13 +296,23 @@ export function FollowUpPage() {
                               className="w-full px-3.5 pt-2.5 pb-2 text-left"
                             >
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-slate-900">{proc.processCode}</span>
-                                <span className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${status.bg} ${status.text}`}>
-                                  {proc.status === 'overdue' ? 'Atrasado' : proc.status === 'approaching' ? 'Atencao' : 'OK'}
+                                <span className="text-sm font-semibold text-slate-900">
+                                  {proc.processCode}
+                                </span>
+                                <span
+                                  className={`inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${status.bg} ${status.text}`}
+                                >
+                                  {proc.followUpStatus === 'overdue'
+                                    ? 'Atrasado'
+                                    : proc.followUpStatus === 'approaching'
+                                      ? 'Atencao'
+                                      : 'OK'}
                                 </span>
                               </div>
                               <div className="mt-1.5 flex items-center gap-1.5">
-                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`} />
+                                <span
+                                  className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`}
+                                />
                                 <span className={`text-xs font-medium ${brand.text}`}>
                                   {proc.brand}
                                 </span>
@@ -221,7 +320,8 @@ export function FollowUpPage() {
                               <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
                                 <Clock className="h-3 w-3" />
                                 <span>
-                                  {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''} sem atualizacao
+                                  {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''}{' '}
+                                  sem atualizacao
                                 </span>
                               </div>
                             </button>
@@ -234,7 +334,9 @@ export function FollowUpPage() {
                               }}
                               className="flex w-full items-center justify-center border-t border-slate-100 py-1.5 text-xs text-slate-300 hover:text-slate-500 transition-colors"
                             >
-                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                              <ChevronDown
+                                className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
+                              />
                             </button>
 
                             {/* Expanded timeline */}
@@ -243,9 +345,16 @@ export function FollowUpPage() {
                                 {STAGE_DATE_LABELS.map((s) => {
                                   const val = proc[s.key] as string | null;
                                   return (
-                                    <div key={s.key} className="flex items-center justify-between text-[11px]">
+                                    <div
+                                      key={s.key}
+                                      className="flex items-center justify-between text-[11px]"
+                                    >
                                       <span className="text-slate-400">{s.label}</span>
-                                      <span className={val ? 'font-medium text-slate-700' : 'text-slate-300'}>
+                                      <span
+                                        className={
+                                          val ? 'font-medium text-slate-700' : 'text-slate-300'
+                                        }
+                                      >
                                         {formatStageDate(val)}
                                       </span>
                                     </div>
@@ -265,9 +374,7 @@ export function FollowUpPage() {
         </div>
 
         {/* LI Deadlines Sidebar */}
-        <div
-          className={`w-80 shrink-0 ${showDeadlines ? 'block' : 'hidden'} lg:block`}
-        >
+        <div className={`w-80 shrink-0 ${showDeadlines ? 'block' : 'hidden'} lg:block`}>
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
             <div className="border-b border-slate-100 px-5 py-4">
               <div className="flex items-center gap-2.5">
@@ -277,7 +384,8 @@ export function FollowUpPage() {
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Prazos LI</h3>
                   <p className="text-xs text-slate-400">
-                    {liDeadlines?.length ?? 0} prazo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''} ativo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}
+                    {liDeadlines?.length ?? 0} prazo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}{' '}
+                    ativo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}
                   </p>
                 </div>
               </div>
@@ -310,12 +418,19 @@ export function FollowUpPage() {
                     }
 
                     return (
-                      <li key={item.id} className="px-5 py-3.5 transition-colors hover:bg-slate-50/50">
+                      <li
+                        key={item.processId}
+                        className="px-5 py-3.5 transition-colors hover:bg-slate-50/50"
+                      >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">{item.processCode}</p>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {item.processCode}
+                            </p>
                             <div className="mt-1 flex items-center gap-1.5">
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`} />
+                              <span
+                                className={`inline-block h-1.5 w-1.5 rounded-full ${brand.dot}`}
+                              />
                               <span className={`text-xs font-medium ${brand.text}`}>
                                 {item.brand}
                               </span>
@@ -326,9 +441,7 @@ export function FollowUpPage() {
                             <span
                               className={`mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${urgencyBg} ${urgencyText}`}
                             >
-                              {item.daysRemaining <= 0
-                                ? 'Vencido'
-                                : `${item.daysRemaining}d`}
+                              {item.daysRemaining <= 0 ? 'Vencido' : `${item.daysRemaining}d`}
                             </span>
                           </div>
                         </div>
@@ -341,14 +454,6 @@ export function FollowUpPage() {
           </div>
         </div>
       </div>
-
-      {!followUpData?.length && !isLoading && (
-        <EmptyState
-          icon={ClipboardList}
-          title="Nenhum processo no follow-up"
-          description="Os processos ativos aparecerao automaticamente no kanban."
-        />
-      )}
     </div>
   );
 }

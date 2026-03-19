@@ -2,11 +2,14 @@ import type { Request, Response } from 'express';
 import { processService } from './service.js';
 import { sendSuccess, sendError, sendPaginated } from '../../shared/utils/response.js';
 import type { AuthenticatedRequest } from '../../shared/types/index.js';
+import type { ProcessFilter } from './schema.js';
 
 export const processController = {
   async list(req: Request, res: Response) {
     try {
-      const { data, total, page, limit } = await processService.list(req.query as any);
+      const { data, total, page, limit } = await processService.list(
+        req.query as unknown as ProcessFilter,
+      );
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
       const status = error.statusCode || 400;

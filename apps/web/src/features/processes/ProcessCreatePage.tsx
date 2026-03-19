@@ -66,6 +66,7 @@ export function ProcessCreatePage() {
         <button
           onClick={() => navigate('/importacao/processos')}
           className="rounded-xl p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+          aria-label="Voltar para lista de processos"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -303,7 +304,10 @@ export function ProcessCreatePage() {
 
         {/* Error message */}
         {mutation.error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700">
+          <div
+            role="alert"
+            className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700"
+          >
             {mutation.error.message}
           </div>
         )}

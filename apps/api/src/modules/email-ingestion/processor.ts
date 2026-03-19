@@ -1,8 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { eq, desc, count, sql, ilike } from 'drizzle-orm';
+import { eq, desc, count, sql, ilike, and, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { emailIngestionLogs, importProcesses, followUpTracking } from '../../shared/database/schema.js';
+import {
+  emailIngestionLogs,
+  importProcesses,
+  followUpTracking,
+} from '../../shared/database/schema.js';
 import { documentService } from '../documents/service.js';
 import { gmailService } from './gmail.service.js';
 import { imapService } from './imap.service.js';
@@ -34,11 +38,35 @@ function extractProcessCode(text: string): string | null {
 
 function classifyDocument(filename: string): string {
   const lower = filename.toLowerCase();
-  if (lower.includes('invoice') || lower.includes('fatura') || lower.includes('commercial') || lower.includes('inv')) return 'invoice';
-  if (lower.includes('packing') || lower.includes('pl') || lower.includes('pack')) return 'packing_list';
-  if (lower.includes('bl') || lower.includes('bill') || lower.includes('lading') || lower.includes('conhecimento') || lower.includes('ohbl')) return 'ohbl';
+  // Split filename into tokens by common separators (strip extension first)
+  const tokens = lower.replace(/\.[^.]+$/, '').split(/[-_.\s]+/);
+
+  if (
+    lower.includes('invoice') ||
+    lower.includes('fatura') ||
+    lower.includes('commercial') ||
+    tokens.includes('inv')
+  )
+    return 'invoice';
+  if (lower.includes('packing') || tokens.includes('pl') || lower.includes('pack'))
+    return 'packing_list';
+  if (
+    tokens.includes('bl') ||
+    lower.includes('bill') ||
+    lower.includes('lading') ||
+    lower.includes('conhecimento') ||
+    lower.includes('ohbl')
+  )
+    return 'ohbl';
   if (lower.includes('espelho')) return 'espelho';
-  if (lower.includes('li') || lower.includes('licen')) return 'li';
+  if (tokens.includes('li') || lower.includes('licen')) return 'li';
+  if (
+    lower.includes('certificado') ||
+    lower.includes('certificate') ||
+    tokens.includes('cert') ||
+    lower.includes('inmetro')
+  )
+    return 'certificate';
   return 'other';
 }
 
@@ -57,20 +85,29 @@ function classifyDocumentWithContext(
 
   // Map AI document type mentions to our classification types
   const typeMapping: Record<string, string> = {
-    'invoice': 'invoice',
-    'fatura': 'invoice',
-    'commercial_invoice': 'invoice',
-    'packing_list': 'packing_list',
-    'packing': 'packing_list',
-    'romaneio': 'packing_list',
-    'ohbl': 'ohbl',
-    'bl': 'ohbl',
-    'bill_of_lading': 'ohbl',
-    'espelho': 'espelho',
-    'li': 'li',
-    'certificate': 'other',
-    'correction': 'other',
-    'draft': 'other',
+    invoice: 'invoice',
+    fatura: 'invoice',
+    commercial_invoice: 'invoice',
+    packing_list: 'packing_list',
+    packing: 'packing_list',
+    romaneio: 'packing_list',
+    ohbl: 'ohbl',
+    bl: 'ohbl',
+    bill_of_lading: 'ohbl',
+    espelho: 'espelho',
+    li: 'li',
+    licenca: 'li',
+    licenca_de_importacao: 'li',
+    certificate: 'certificate',
+    certificado: 'certificate',
+    cert_of_origin: 'certificate',
+    certificate_of_origin: 'certificate',
+    quality_certificate: 'certificate',
+    phytosanitary_certificate: 'certificate',
+    fumigation_certificate: 'certificate',
+    inmetro: 'certificate',
+    correction: 'other',
+    draft: 'other',
   };
 
   // If AI detected exactly one document type, use it for generic filenames
@@ -97,9 +134,15 @@ function extractDocumentTypesFromText(text: string): string[] {
 
   if (/\b(invoice|fatura|commercial\s+invoice)\b/.test(lower)) types.push('invoice');
   if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
-  if (/\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl|[^a-z]bl[^a-z])\b/.test(lower)) types.push('ohbl');
+  if (
+    /\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl)\b|(?:^|[^a-z])bl(?:$|[^a-z])/.test(
+      lower,
+    )
+  )
+    types.push('ohbl');
   if (/\b(espelho)\b/.test(lower)) types.push('espelho');
-  if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o|[^a-z]li[^a-z])\b/.test(lower)) types.push('li');
+  if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o)\b|(?:^|[^a-z])li(?:$|[^a-z])/.test(lower))
+    types.push('li');
   if (/\b(certificado|certificate|cert\s+of\s+origin)\b/.test(lower)) types.push('certificate');
 
   return [...new Set(types)];
@@ -107,17 +150,22 @@ function extractDocumentTypesFromText(text: string): string[] {
 
 // ── Regex-based email category detection ────────────────────────────────
 
-function detectEmailCategory(
-  subject: string,
-  body: string,
-): EmailAnalysisResult['emailCategory'] {
+function detectEmailCategory(subject: string, body: string): EmailAnalysisResult['emailCategory'] {
+  // KIOM system emails — detect before generic checks
+  if (/\[KIOM\]\s*PreConf\b/i.test(subject)) return 'pre_confirmation';
+  if (/\[KIOM\]\s*TSent\b/i.test(subject)) return 'tracking_sent';
+
   const text = `${subject} ${body.substring(0, 1000)}`.toLowerCase();
 
-  if (/\b(corre[çc][aã]o|revis[aã]o|retifica[çc][aã]o|amended|correction|revised)\b/.test(text)) return 'correction';
+  if (/\b(corre[çc][aã]o|revis[aã]o|retifica[çc][aã]o|amended|correction|revised)\b/.test(text))
+    return 'correction';
   if (/\b(pagamento|payment|c[aâ]mbio|wire\s+transfer|remessa)\b/.test(text)) return 'payment';
-  if (/\b(follow[\s-]?up|acompanhamento|status|atualiza[çc][aã]o|update|pend[eê]ncia)\b/.test(text)) return 'follow_up';
-  if (/\b(novo\s+embarque|new\s+shipment|nova\s+importa[çc][aã]o|booking\s+confirm)\b/.test(text)) return 'new_shipment';
-  if (/\b(segue|anexo|attached|enclosed|documento|document)\b/.test(text)) return 'document_delivery';
+  if (/\b(follow[\s-]?up|acompanhamento|status|atualiza[çc][aã]o|update|pend[eê]ncia)\b/.test(text))
+    return 'follow_up';
+  if (/\b(novo\s+embarque|new\s+shipment|nova\s+importa[çc][aã]o|booking\s+confirm)\b/.test(text))
+    return 'new_shipment';
+  if (/\b(segue|anexo|attached|enclosed|documento|document)\b/.test(text))
+    return 'document_delivery';
 
   return 'general';
 }
@@ -166,40 +214,54 @@ function isAllowedSender(from: string): boolean {
   const allowedRaw = process.env.EMAIL_ALLOWED_SENDERS;
   if (!allowedRaw) return true;
 
-  const allowed = allowedRaw.split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+  const allowed = allowedRaw
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
   const fromLower = from.toLowerCase();
 
-  return allowed.some(pattern => fromLower.includes(pattern));
+  return allowed.some((pattern) => fromLower.includes(pattern));
 }
 
 // ── Fuzzy process code matching against DB ──────────────────────────────
 
-async function fuzzyMatchProcessCode(code: string): Promise<{ id: number; processCode: string } | null> {
+function escapeLikePattern(str: string): string {
+  return str.replace(/[%_\\]/g, '\\$&');
+}
+
+async function fuzzyMatchProcessCode(
+  code: string,
+): Promise<{ id: number; processCode: string } | null> {
   // Try exact match first
-  const [exact] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+  const [exact] = await db
+    .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
     .where(eq(importProcesses.processCode, code))
     .limit(1);
   if (exact) return exact;
 
   // Try case-insensitive match
-  const [caseInsensitive] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+  const [caseInsensitive] = await db
+    .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
-    .where(ilike(importProcesses.processCode, code))
+    .where(ilike(importProcesses.processCode, escapeLikePattern(code)))
     .limit(1);
   if (caseInsensitive) return caseInsensitive;
 
   // Try partial match (code contained in process_code or vice versa)
   const normalizedCode = code.replace(/[-_]/g, '').toUpperCase();
-  const [partial] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+  const escaped = escapeLikePattern(normalizedCode);
+  const [partial] = await db
+    .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
-    .where(ilike(importProcesses.processCode, `%${normalizedCode}%`))
+    .where(ilike(importProcesses.processCode, `%${escaped}%`))
     .limit(1);
   if (partial) return partial;
 
   // Try matching with wildcards for separator variations (IMP2025001 matches IMP-2025-001)
-  const withWildcards = normalizedCode.replace(/(\d+)/g, '%$1%').replace(/%%/g, '%');
-  const [wildcardMatch] = await db.select({ id: importProcesses.id, processCode: importProcesses.processCode })
+  const withWildcards = escaped.replace(/(\d+)/g, '%$1%').replace(/%%/g, '%');
+  const [wildcardMatch] = await db
+    .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
     .where(ilike(importProcesses.processCode, withWildcards))
     .limit(1);
@@ -239,7 +301,8 @@ export const emailProcessor = {
     }
 
     for (const email of emails) {
-      const [existing] = await db.select()
+      const [existing] = await db
+        .select()
         .from(emailIngestionLogs)
         .where(eq(emailIngestionLogs.messageId, email.messageId))
         .limit(1);
@@ -264,18 +327,27 @@ export const emailProcessor = {
         continue;
       }
 
-      const [logEntry] = await db.insert(emailIngestionLogs).values({
-        messageId: email.messageId,
-        fromAddress: email.from,
-        subject: email.subject,
-        receivedAt: email.date,
-        attachmentsCount: email.attachments.length,
-        status: 'processing',
-      }).returning();
+      const [logEntry] = await db
+        .insert(emailIngestionLogs)
+        .values({
+          messageId: email.messageId,
+          fromAddress: email.from,
+          subject: email.subject,
+          receivedAt: email.date,
+          attachmentsCount: email.attachments.length,
+          status: 'processing',
+        })
+        .returning();
 
       try {
-        if (email.attachments.length === 0) {
-          await db.update(emailIngestionLogs)
+        // Detect email category early for KIOM handling
+        const earlyCategory = detectEmailCategory(email.subject, email.body || '');
+        const isKiomEmail =
+          earlyCategory === 'pre_confirmation' || earlyCategory === 'tracking_sent';
+
+        if (email.attachments.length === 0 && !isKiomEmail) {
+          await db
+            .update(emailIngestionLogs)
             .set({ status: 'ignored', errorMessage: 'Sem anexos relevantes' })
             .where(eq(emailIngestionLogs.id, logEntry.id));
           continue;
@@ -283,7 +355,9 @@ export const emailProcessor = {
 
         // ── Step 1: Try regex on subject (fast) ──────────────────────
         let processCode = extractProcessCode(email.subject);
-        let detectionMethod: 'regex_subject' | 'regex_body' | 'ai' | null = processCode ? 'regex_subject' : null;
+        let detectionMethod: 'regex_subject' | 'regex_body' | 'ai' | null = processCode
+          ? 'regex_subject'
+          : null;
 
         // ── Step 2: Try regex on body if subject failed ──────────────
         if (!processCode && email.body) {
@@ -346,27 +420,120 @@ export const emailProcessor = {
           } else {
             // Create new process
             const brand = detectBrand(email.subject, email.from);
-            const [newProcess] = await db.insert(importProcesses).values({
-              processCode,
-              brand,
-              status: 'draft',
-              notes: `Processo criado automaticamente a partir do email: ${email.subject}`,
-            }).returning();
+            const [newProcess] = await db
+              .insert(importProcesses)
+              .values({
+                processCode,
+                brand,
+                status: 'draft',
+                notes: `Processo criado automaticamente a partir do email: ${email.subject}`,
+              })
+              .returning();
             processId = newProcess.id;
 
             await db.insert(followUpTracking).values({ processId: newProcess.id });
-            logger.info({ processCode, processId: newProcess.id }, 'New process created from email');
+            logger.info(
+              { processCode, processId: newProcess.id },
+              'New process created from email',
+            );
           }
+        }
+
+        // ── Step 6.5: KIOM email handling (PreConf / TSent) ──────────
+        if (isKiomEmail && processId) {
+          const kiomNote =
+            earlyCategory === 'pre_confirmation'
+              ? `Pré-confirmação KIOM recebida via email: ${email.subject}`
+              : `Tracking KIOM enviado via email: ${email.subject}`;
+
+          if (earlyCategory === 'tracking_sent') {
+            // Set shipmentDate to email date
+            await db
+              .update(importProcesses)
+              .set({
+                ...(email.date
+                  ? { shipmentDate: new Date(email.date).toISOString().split('T')[0] }
+                  : {}),
+                notes: sql`COALESCE(${importProcesses.notes}, '') || ${'\n' + kiomNote}`,
+              })
+              .where(eq(importProcesses.id, processId));
+          } else {
+            // PreConf — just add a note
+            await db
+              .update(importProcesses)
+              .set({
+                notes: sql`COALESCE(${importProcesses.notes}, '') || ${'\n' + kiomNote}`,
+              })
+              .where(eq(importProcesses.id, processId));
+          }
+
+          logger.info({ processId, category: earlyCategory }, 'KIOM email processed');
+        }
+
+        // If KIOM email with no attachments, mark as completed and continue
+        if (isKiomEmail && email.attachments.length === 0) {
+          await db
+            .update(emailIngestionLogs)
+            .set({
+              status: 'completed',
+              processId,
+              processCode,
+              processedAttachments: {
+                attachments: [],
+                detectionMethod,
+                kiomCategory: earlyCategory,
+              },
+            })
+            .where(eq(emailIngestionLogs.id, logEntry.id));
+
+          logger.info(
+            {
+              messageId: email.messageId,
+              processCode,
+              category: earlyCategory,
+            },
+            'KIOM email processed (no attachments)',
+          );
+          continue;
         }
 
         // ── Step 7: Process attachments ──────────────────────────────
         const processedAttachments: Array<{
           filename: string;
           type: string;
+          status?: 'processed' | 'skipped';
+          skipReason?: string;
           documentId?: number;
         }> = [];
 
+        const supportedMimes = [
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel',
+        ];
+
         for (const att of email.attachments) {
+          // Skip unsupported file types (images, docs, etc.)
+          const isSupported =
+            supportedMimes.some((m) => att.contentType?.includes(m)) ||
+            att.filename.endsWith('.pdf') ||
+            att.filename.endsWith('.xlsx') ||
+            att.filename.endsWith('.xls');
+
+          if (!isSupported) {
+            logger.info(
+              { filename: att.filename, contentType: att.contentType },
+              'Attachment skipped: unsupported file type',
+            );
+            processedAttachments.push({
+              filename: att.filename,
+              type: 'unsupported',
+              status: 'skipped',
+              skipReason: `Tipo de arquivo não suportado: ${att.contentType}`,
+            });
+            continue;
+          }
+
           await fs.mkdir(UPLOAD_DIR, { recursive: true });
           const safeName = `${Date.now()}-${att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
           const filePath = path.join(UPLOAD_DIR, safeName);
@@ -384,7 +551,10 @@ export const emailProcessor = {
               sistemaFileId = await googleDriveService.uploadToSistemaInbox(filePath, att.filename);
             }
           } catch (driveErr) {
-            logger.warn({ err: driveErr, filename: att.filename }, 'Failed to upload to Sistema INBOX');
+            logger.warn(
+              { err: driveErr, filename: att.filename },
+              'Failed to upload to Sistema INBOX',
+            );
           }
 
           if (processId) {
@@ -399,16 +569,29 @@ export const emailProcessor = {
 
             // Move from INBOX to PROCESSADOS
             if (sistemaFileId && processCode) {
-              import('../integrations/google-drive.service.js').then(({ googleDriveService }) => {
-                googleDriveService.moveFromInboxToProcessados(sistemaFileId!, processCode!, docType).catch(err =>
-                  logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS')
-                );
-              }).catch(() => {});
+              import('../integrations/google-drive.service.js')
+                .then(({ googleDriveService }) => {
+                  googleDriveService
+                    .moveFromInboxToProcessados(sistemaFileId!, processCode!, docType)
+                    .catch((err) =>
+                      logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS'),
+                    );
+                })
+                .catch(() => {});
             }
 
-            processedAttachments.push({ filename: att.filename, type: docType, documentId: doc.id });
+            processedAttachments.push({
+              filename: att.filename,
+              type: docType,
+              status: 'processed',
+              documentId: doc.id,
+            });
           } else {
-            processedAttachments.push({ filename: att.filename, type: docType });
+            processedAttachments.push({
+              filename: att.filename,
+              type: docType,
+              status: 'processed',
+            });
           }
         }
 
@@ -430,35 +613,59 @@ export const emailProcessor = {
         }
 
         // ── Step 9: Update log with results ──────────────────────────
-        await db.update(emailIngestionLogs)
+        const actuallyProcessed = processedAttachments.filter((a) => a.status !== 'skipped');
+        const linkedToProcess = actuallyProcessed.some((a) => a.documentId != null);
+        const finalStatus = actuallyProcessed.length === 0 ? 'ignored' : 'completed';
+
+        await db
+          .update(emailIngestionLogs)
           .set({
-            status: 'completed',
+            status: finalStatus,
             processId,
             processCode,
             processedAttachments: enrichedData,
+            ...(finalStatus === 'ignored'
+              ? { errorMessage: 'Todos os anexos possuem tipo não suportado' }
+              : !linkedToProcess && actuallyProcessed.length > 0
+                ? {
+                    errorMessage:
+                      'Anexos processados mas nenhum processo identificado — arquivos salvos localmente',
+                  }
+                : {}),
           })
           .where(eq(emailIngestionLogs.id, logEntry.id));
 
-        auditService.log(null, 'email_processed', 'email', logEntry.id, {
-          from: email.from,
-          subject: email.subject,
-          processCode,
-          detectionMethod,
-          emailCategory: aiAnalysis?.emailCategory,
-          urgencyLevel: aiAnalysis?.urgencyLevel,
-          attachments: processedAttachments.length,
-        }, null);
+        auditService.log(
+          null,
+          'email_processed',
+          'email',
+          logEntry.id,
+          {
+            from: email.from,
+            subject: email.subject,
+            processCode,
+            detectionMethod,
+            emailCategory: aiAnalysis?.emailCategory,
+            urgencyLevel: aiAnalysis?.urgencyLevel,
+            attachments: processedAttachments.length,
+          },
+          null,
+        );
 
-        logger.info({
-          messageId: email.messageId,
-          processCode,
-          detectionMethod,
-          emailCategory: aiAnalysis?.emailCategory,
-          urgencyLevel: aiAnalysis?.urgencyLevel,
-          attachments: processedAttachments.length,
-        }, 'Email processed successfully');
+        logger.info(
+          {
+            messageId: email.messageId,
+            processCode,
+            detectionMethod,
+            emailCategory: aiAnalysis?.emailCategory,
+            urgencyLevel: aiAnalysis?.urgencyLevel,
+            attachments: processedAttachments.length,
+          },
+          'Email processed successfully',
+        );
       } catch (error: any) {
-        await db.update(emailIngestionLogs)
+        await db
+          .update(emailIngestionLogs)
           .set({ status: 'failed', errorMessage: error.message })
           .where(eq(emailIngestionLogs.id, logEntry.id));
         logger.error({ err: error, messageId: email.messageId }, 'Failed to process email');
@@ -471,7 +678,8 @@ export const emailProcessor = {
     const gmailConfigured = gmailService.isConfigured();
     const imapConfigured = !!(process.env.IMAP_USER && process.env.IMAP_PASS);
 
-    const [lastLog] = await db.select()
+    const [lastLog] = await db
+      .select()
       .from(emailIngestionLogs)
       .orderBy(desc(emailIngestionLogs.createdAt))
       .limit(1);
@@ -480,10 +688,11 @@ export const emailProcessor = {
     today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString();
 
-    const stats = await db.select({
-      status: emailIngestionLogs.status,
-      count: count(),
-    })
+    const stats = await db
+      .select({
+        status: emailIngestionLogs.status,
+        count: count(),
+      })
       .from(emailIngestionLogs)
       .where(sql`${emailIngestionLogs.createdAt} >= ${todayStr}`)
       .groupBy(emailIngestionLogs.status);
@@ -500,23 +709,70 @@ export const emailProcessor = {
     };
   },
 
-  async getLogs(page = 1, limit = 20) {
+  async getLogs(page = 1, limit = 20, startDate?: string, endDate?: string) {
     const offset = (page - 1) * limit;
+    const conditions = [];
 
-    const [data, [{ total }]] = await Promise.all([
-      db.select()
+    if (startDate) {
+      conditions.push(gte(emailIngestionLogs.receivedAt, new Date(startDate)));
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${emailIngestionLogs.receivedAt} < ${end.toISOString()}`);
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+    const [rawData, [{ total }]] = await Promise.all([
+      db
+        .select()
         .from(emailIngestionLogs)
+        .where(where)
         .orderBy(desc(emailIngestionLogs.createdAt))
         .limit(limit)
         .offset(offset),
-      db.select({ total: count() }).from(emailIngestionLogs),
+      db.select({ total: count() }).from(emailIngestionLogs).where(where),
     ]);
+
+    // Transform jsonb processedAttachments into frontend-friendly shape
+    const data = rawData.map((row) => {
+      type AttachmentEntry = {
+        filename: string;
+        type: string;
+        status?: string;
+        documentId?: number | null;
+      };
+      const raw = row.processedAttachments as
+        | AttachmentEntry[]
+        | { attachments?: AttachmentEntry[] }
+        | null;
+      const attachments: AttachmentEntry[] | undefined = Array.isArray(raw)
+        ? raw
+        : (raw?.attachments ?? undefined);
+      const processedCount = attachments?.filter((a) => a.status !== 'skipped').length ?? 0;
+      const details =
+        attachments
+          ?.filter((a) => a.status !== 'skipped')
+          .map((a) => ({
+            filename: a.filename,
+            type: a.type,
+            documentId: a.documentId ?? null,
+          })) ?? [];
+
+      return {
+        ...row,
+        processedAttachments: processedCount,
+        processedAttachmentDetails: details.length > 0 ? details : undefined,
+      };
+    });
 
     return { data, total, page, limit };
   },
 
   async reprocess(logId: number) {
-    const [log] = await db.select()
+    const [log] = await db
+      .select()
       .from(emailIngestionLogs)
       .where(eq(emailIngestionLogs.id, logId))
       .limit(1);
@@ -524,26 +780,31 @@ export const emailProcessor = {
     if (!log) throw new Error('Log não encontrado');
     if (log.status !== 'failed') throw new Error('Apenas emails com falha podem ser reprocessados');
 
-    await db.update(emailIngestionLogs)
-      .set({ status: 'processing', errorMessage: null })
-      .where(eq(emailIngestionLogs.id, logId));
-
     try {
       // Try to re-fetch from Gmail if configured
       if (gmailService.isConfigured() && log.messageId) {
-        const gmail = await import('@googleapis/gmail');
-        // Re-process using processNewEmails flow but for single message
-        // Reset the log so processNewEmails won't skip it
-        await db.update(emailIngestionLogs)
-          .set({ status: 'pending', errorMessage: null })
+        // Preserve original log: rename messageId so processNewEmails won't skip it
+        await db
+          .update(emailIngestionLogs)
+          .set({
+            messageId: `${log.messageId}_reprocessed_${Date.now()}`,
+            status: 'reprocessed',
+            errorMessage: `Reprocessado em ${new Date().toISOString()}. Log original preservado.`,
+          })
           .where(eq(emailIngestionLogs.id, logId));
 
-        // Delete old log so processNewEmails re-processes the messageId
-        await db.delete(emailIngestionLogs)
-          .where(eq(emailIngestionLogs.id, logId));
+        // Build targeted Gmail query to fetch only the specific email
+        // Use rfc822msgid if available, otherwise search by subject+from
+        const targetQuery =
+          log.fromAddress && log.subject
+            ? `from:${log.fromAddress} subject:"${log.subject.replace(/"/g, '')}"`
+            : undefined;
 
-        // Trigger a new email check which will pick up the message again
-        await this.processNewEmails();
+        try {
+          await this.processNewEmails(true, targetQuery);
+        } catch (reprocessErr: any) {
+          logger.error({ err: reprocessErr, logId }, 'processNewEmails failed during reprocess');
+        }
 
         return { message: 'Email reprocessado via Gmail API' };
       }
@@ -554,7 +815,9 @@ export const emailProcessor = {
         // Support both old format (array) and new enriched format (object with .attachments)
         const processedAttachments = Array.isArray(rawAttachments)
           ? rawAttachments
-          : (rawAttachments?.attachments as Array<{ filename: string; type: string; documentId?: number }> | undefined);
+          : (rawAttachments?.attachments as
+              | Array<{ filename: string; type: string; documentId?: number }>
+              | undefined);
 
         if (processedAttachments && processedAttachments.length > 0) {
           for (const att of processedAttachments) {
@@ -563,7 +826,8 @@ export const emailProcessor = {
             }
           }
 
-          await db.update(emailIngestionLogs)
+          await db
+            .update(emailIngestionLogs)
             .set({ status: 'completed', errorMessage: null })
             .where(eq(emailIngestionLogs.id, logId));
 
@@ -571,13 +835,15 @@ export const emailProcessor = {
         }
       }
 
-      await db.update(emailIngestionLogs)
+      await db
+        .update(emailIngestionLogs)
         .set({ status: 'failed', errorMessage: 'Nenhum método de reprocessamento disponível' })
         .where(eq(emailIngestionLogs.id, logId));
 
       return { message: 'Nenhum método de reprocessamento disponível' };
     } catch (error: any) {
-      await db.update(emailIngestionLogs)
+      await db
+        .update(emailIngestionLogs)
         .set({ status: 'failed', errorMessage: error.message })
         .where(eq(emailIngestionLogs.id, logId));
       throw error;

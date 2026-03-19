@@ -1,10 +1,20 @@
-import { eq, sql, count, and, ilike, type SQL } from 'drizzle-orm';
+import { eq, sql, count, and, ilike, gte, type SQL } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { liTracking, importProcesses } from '../../shared/database/schema.js';
 import type { CreateLiTrackingInput, UpdateLiTrackingInput } from './schema.js';
 
 export const liTrackingService = {
-  async getAll(page = 1, limit = 20, filters: { processCode?: string; status?: string; orgao?: string } = {}) {
+  async getAll(
+    page = 1,
+    limit = 20,
+    filters: {
+      processCode?: string;
+      status?: string;
+      orgao?: string;
+      startDate?: string;
+      endDate?: string;
+    } = {},
+  ) {
     const offset = (page - 1) * limit;
     const conditions: SQL[] = [];
 
@@ -12,16 +22,66 @@ export const liTrackingService = {
       conditions.push(ilike(liTracking.processCode, `%${filters.processCode}%`));
     }
     if (filters.status) {
-      conditions.push(eq(liTracking.status, filters.status as any));
+      conditions.push(
+        eq(liTracking.status, filters.status as (typeof liTracking.status.enumValues)[number]),
+      );
     }
     if (filters.orgao) {
       conditions.push(ilike(liTracking.orgao, `%${filters.orgao}%`));
+    }
+    if (filters.startDate) {
+      conditions.push(gte(liTracking.createdAt, new Date(filters.startDate)));
+    }
+    if (filters.endDate) {
+      const end = new Date(filters.endDate);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${liTracking.createdAt} < ${end.toISOString()}`);
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
-      db.select({
+      db
+        .select({
+          id: liTracking.id,
+          processId: liTracking.processId,
+          processCode: liTracking.processCode,
+          brand: importProcesses.brand,
+          orgao: liTracking.orgao,
+          ncm: liTracking.ncm,
+          item: liTracking.item,
+          description: liTracking.description,
+          supplier: liTracking.supplier,
+          requestedByCompanyAt: liTracking.requestedByCompanyAt,
+          submittedToFeniciaAt: liTracking.submittedToFeniciaAt,
+          deferredAt: liTracking.deferredAt,
+          expectedDeferralAt: liTracking.expectedDeferralAt,
+          averageDays: liTracking.averageDays,
+          validUntil: liTracking.validUntil,
+          lpcoNumber: liTracking.lpcoNumber,
+          etdOrigem: liTracking.etdOrigem,
+          etaArmador: liTracking.etaArmador,
+          status: liTracking.status,
+          itemStatus: liTracking.itemStatus,
+          observations: liTracking.observations,
+          createdAt: liTracking.createdAt,
+          updatedAt: liTracking.updatedAt,
+        })
+        .from(liTracking)
+        .leftJoin(importProcesses, eq(liTracking.processId, importProcesses.id))
+        .where(whereClause)
+        .orderBy(liTracking.createdAt)
+        .limit(limit)
+        .offset(offset),
+      db.select({ total: count() }).from(liTracking).where(whereClause),
+    ]);
+
+    return { data, total, page, limit };
+  },
+
+  async getByProcess(processCode: string) {
+    const data = await db
+      .select({
         id: liTracking.id,
         processId: liTracking.processId,
         processCode: liTracking.processCode,
@@ -46,46 +106,6 @@ export const liTrackingService = {
         createdAt: liTracking.createdAt,
         updatedAt: liTracking.updatedAt,
       })
-        .from(liTracking)
-        .leftJoin(importProcesses, eq(liTracking.processId, importProcesses.id))
-        .where(whereClause)
-        .orderBy(liTracking.createdAt)
-        .limit(limit)
-        .offset(offset),
-      db.select({ total: count() })
-        .from(liTracking)
-        .where(whereClause),
-    ]);
-
-    return { data, total, page, limit };
-  },
-
-  async getByProcess(processCode: string) {
-    const data = await db.select({
-      id: liTracking.id,
-      processId: liTracking.processId,
-      processCode: liTracking.processCode,
-      brand: importProcesses.brand,
-      orgao: liTracking.orgao,
-      ncm: liTracking.ncm,
-      item: liTracking.item,
-      description: liTracking.description,
-      supplier: liTracking.supplier,
-      requestedByCompanyAt: liTracking.requestedByCompanyAt,
-      submittedToFeniciaAt: liTracking.submittedToFeniciaAt,
-      deferredAt: liTracking.deferredAt,
-      expectedDeferralAt: liTracking.expectedDeferralAt,
-      averageDays: liTracking.averageDays,
-      validUntil: liTracking.validUntil,
-      lpcoNumber: liTracking.lpcoNumber,
-      etdOrigem: liTracking.etdOrigem,
-      etaArmador: liTracking.etaArmador,
-      status: liTracking.status,
-      itemStatus: liTracking.itemStatus,
-      observations: liTracking.observations,
-      createdAt: liTracking.createdAt,
-      updatedAt: liTracking.updatedAt,
-    })
       .from(liTracking)
       .leftJoin(importProcesses, eq(liTracking.processId, importProcesses.id))
       .where(eq(liTracking.processCode, processCode));
@@ -95,16 +115,18 @@ export const liTrackingService = {
 
   async getStats() {
     const [statusRows, orgaoRows] = await Promise.all([
-      db.select({
-        status: liTracking.status,
-        count: count(),
-      })
+      db
+        .select({
+          status: liTracking.status,
+          count: count(),
+        })
         .from(liTracking)
         .groupBy(liTracking.status),
-      db.select({
-        orgao: liTracking.orgao,
-        count: count(),
-      })
+      db
+        .select({
+          orgao: liTracking.orgao,
+          count: count(),
+        })
         .from(liTracking)
         .groupBy(liTracking.orgao),
     ]);
@@ -119,50 +141,57 @@ export const liTrackingService = {
   },
 
   async create(input: CreateLiTrackingInput) {
-    const [entry] = await db.insert(liTracking).values({
-      processId: input.processId,
-      processCode: input.processCode,
-      orgao: input.orgao,
-      ncm: input.ncm,
-      item: input.item,
-      description: input.description,
-      supplier: input.supplier,
-      requestedByCompanyAt: input.requestedByCompanyAt,
-      submittedToFeniciaAt: input.submittedToFeniciaAt,
-      deferredAt: input.deferredAt,
-      expectedDeferralAt: input.expectedDeferralAt,
-      averageDays: input.averageDays,
-      validUntil: input.validUntil,
-      lpcoNumber: input.lpcoNumber,
-      etdOrigem: input.etdOrigem,
-      etaArmador: input.etaArmador,
-      status: input.status ?? 'pending',
-      itemStatus: input.itemStatus,
-      observations: input.observations,
-    }).returning();
+    const [entry] = await db
+      .insert(liTracking)
+      .values({
+        processId: input.processId,
+        processCode: input.processCode,
+        orgao: input.orgao,
+        ncm: input.ncm,
+        item: input.item,
+        description: input.description,
+        supplier: input.supplier,
+        requestedByCompanyAt: input.requestedByCompanyAt,
+        submittedToFeniciaAt: input.submittedToFeniciaAt,
+        deferredAt: input.deferredAt,
+        expectedDeferralAt: input.expectedDeferralAt,
+        averageDays: input.averageDays,
+        validUntil: input.validUntil,
+        lpcoNumber: input.lpcoNumber,
+        etdOrigem: input.etdOrigem,
+        etaArmador: input.etaArmador,
+        status: input.status ?? 'pending',
+        itemStatus: input.itemStatus,
+        observations: input.observations,
+      })
+      .returning();
 
     return entry;
   },
 
   async update(id: number, input: UpdateLiTrackingInput) {
-    const [entry] = await db.update(liTracking)
+    // Explicitly pick allowed fields to prevent mass assignment
+    const { processId: _pid, processCode: _pc, ...safeInput } = input;
+    const [entry] = await db
+      .update(liTracking)
       .set({
-        ...input,
+        ...safeInput,
         updatedAt: new Date(),
       })
       .where(eq(liTracking.id, id))
       .returning();
 
-    if (!entry) throw new Error('LI tracking entry not found');
+    if (!entry) throw new Error('Registro de LI não encontrado');
     return entry;
   },
 
   async delete(id: number) {
-    const [entry] = await db.delete(liTracking)
+    const [entry] = await db
+      .delete(liTracking)
       .where(eq(liTracking.id, id))
       .returning({ id: liTracking.id });
 
-    if (!entry) throw new Error('LI tracking entry not found');
+    if (!entry) throw new Error('Registro de LI não encontrado');
     return entry;
   },
 };

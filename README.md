@@ -21,13 +21,13 @@ importacao/
 
 ### Stack Tecnologica
 
-| Servico | Tecnologia | Porta Dev | Porta Prod |
-|---------|-----------|-----------|------------|
-| **Web** | React 18, Vite 6, Tailwind CSS 4 | 8080 | 8085 |
-| **API** | Node.js, Express, Drizzle ORM | 3001 | 3050 |
-| **Cert API** | Python 3.12, FastAPI, APScheduler | 8000 | (interno) |
-| **Banco** | PostgreSQL 16 Alpine | 5432 | 5450 |
-| **Redis** | Redis 7 Alpine | 6379 | 6379 |
+| Servico      | Tecnologia                        | Porta Dev | Porta Prod |
+| ------------ | --------------------------------- | --------- | ---------- |
+| **Web**      | React 18, Vite 6, Tailwind CSS 4  | 8080      | 8085       |
+| **API**      | Node.js, Express, Drizzle ORM     | 3001      | 3050       |
+| **Cert API** | Python 3.12, FastAPI, APScheduler | 8000      | (interno)  |
+| **Banco**    | PostgreSQL 16 Alpine              | 5432      | 5450       |
+| **Redis**    | Redis 7 Alpine                    | 6379      | 6379       |
 
 ### Diagrama de Comunicacao
 
@@ -88,44 +88,44 @@ Acesse: `http://localhost:8085`
 
 ### Gestao de Importacoes (API + Web)
 
-| Modulo | Descricao |
-|--------|-----------|
-| **Dashboard Operacional** | Visao geral de processos, metricas, SLA e alertas |
-| **Dashboard Executivo** | KPIs estrategicos, graficos por marca, timeline de volume |
-| **Meu Dia** | Cockpit pessoal com tarefas pendentes, alertas e LIs urgentes |
-| **Processos** | CRUD completo com workflow de status (state machine) |
-| **Documentos** | Upload com validacao magic-byte, gestao e comparacao side-by-side |
-| **Validacao** | 26 checks automatizados com IA (OpenRouter) e governance |
-| **Espelhos** | Geracao de espelhos com templates por marca |
-| **LI Tracking** | Rastreamento de Licencas de Importacao |
-| **Desembaraco** | Acompanhamento de desembaraco aduaneiro |
-| **Numerario** | Controle de numerario |
-| **Cambio** | Controle de taxas de cambio e prazos |
-| **Comunicacoes** | Emails via SMTP/Gmail API com drafts e auto-correcao |
-| **Follow-up** | Rastreamento com sync bidirecional Google Sheets |
-| **Alertas** | Sistema de alertas (info, warning, critical) |
-| **Email Ingestion** | Importacao automatica via IMAP com classificacao AI |
-| **Auditoria** | Log completo de acoes dos usuarios |
-| **Configuracoes** | Parametros gerais, SMTP, integracoes |
+| Modulo                    | Descricao                                                         |
+| ------------------------- | ----------------------------------------------------------------- |
+| **Dashboard Operacional** | Visao geral de processos, metricas, SLA e alertas                 |
+| **Dashboard Executivo**   | KPIs estrategicos, graficos por marca, timeline de volume         |
+| **Meu Dia**               | Cockpit pessoal com tarefas pendentes, alertas e LIs urgentes     |
+| **Processos**             | CRUD completo com workflow de status (state machine)              |
+| **Documentos**            | Upload com validacao magic-byte, gestao e comparacao side-by-side |
+| **Validacao**             | 27 checks automatizados com IA (OpenRouter) e governance          |
+| **Espelhos**              | Geracao de espelhos com templates por marca                       |
+| **LI Tracking**           | Rastreamento de Licencas de Importacao                            |
+| **Desembaraco**           | Acompanhamento de desembaraco aduaneiro                           |
+| **Numerario**             | Controle de numerario                                             |
+| **Cambio**                | Controle de taxas de cambio e prazos                              |
+| **Comunicacoes**          | Emails via SMTP/Gmail API com drafts e auto-correcao              |
+| **Follow-up**             | Rastreamento com sync bidirecional Google Sheets                  |
+| **Alertas**               | Sistema de alertas (info, warning, critical)                      |
+| **Email Ingestion**       | Importacao automatica via IMAP com classificacao AI               |
+| **Auditoria**             | Log completo de acoes dos usuarios                                |
+| **Configuracoes**         | Parametros gerais, SMTP, integracoes                              |
 
 ### Validacao de Certificacoes (Cert API + Web)
 
-| Pagina | Descricao |
-|--------|-----------|
-| **Dashboard** | Estatisticas gerais, grafico por marca, produtos com problemas |
-| **Validacao** | Execucao de validacao em tempo real com progresso via SSE |
-| **Produtos** | Listagem completa com filtros, busca e verificacao individual |
-| **Relatorios** | Historico de relatorios gerados com download CSV |
-| **Agendamentos** | Configuracao de cron jobs com APScheduler |
-| **Configuracoes** | Status do sistema, teste de conexao, informacoes |
+| Pagina            | Descricao                                                      |
+| ----------------- | -------------------------------------------------------------- |
+| **Dashboard**     | Estatisticas gerais, grafico por marca, produtos com problemas |
+| **Validacao**     | Execucao de validacao em tempo real com progresso via SSE      |
+| **Produtos**      | Listagem completa com filtros, busca e verificacao individual  |
+| **Relatorios**    | Historico de relatorios gerados com download CSV               |
+| **Agendamentos**  | Configuracao de cron jobs com APScheduler                      |
+| **Configuracoes** | Status do sistema, teste de conexao, informacoes               |
 
 #### Marcas e Lojas Monitoradas
 
-| Marca | Loja VTEX | Campo de Certificacao |
-|-------|-----------|----------------------|
-| Puket | puket.com.br | `complementName` |
-| Puket Escolares | puket.com.br | `complementName` |
-| Imaginarium | loja.imaginarium.com.br | `description` |
+| Marca           | Loja VTEX               | Campo de Certificacao |
+| --------------- | ----------------------- | --------------------- |
+| Puket           | puket.com.br            | `complementName`      |
+| Puket Escolares | puket.com.br            | `complementName`      |
+| Imaginarium     | loja.imaginarium.com.br | `description`         |
 
 ## Infraestrutura Tecnica
 
@@ -133,7 +133,7 @@ Acesse: `http://localhost:8085`
 
 - **Helmet.js** — headers de seguranca HTTP
 - **Rate limiting** — protecao contra abuso em rotas de autenticacao
-- **DOMPurify** — sanitizacao de HTML no frontend
+- **HTML sanitization** — sanitizacao reforçada no backend (script, style, svg, iframe, object, embed, form, data/vbscript URLs)
 - **Magic-byte validation** — verificacao real do tipo de arquivo em uploads
 - **API Key auth** — autenticacao por chave no cert-api
 - **Non-root containers** — USER node/appuser nos Dockerfiles
@@ -142,6 +142,7 @@ Acesse: `http://localhost:8085`
 ### State Machine
 
 Transicoes de status de processo sao validadas por uma state machine com guards:
+
 - `canTransition(from, to)` — verifica se a transicao e permitida
 - `assertTransition(from, to)` — lanca `InvalidTransitionError` se invalida
 - Guards previnem estados inconsistentes (ex: nao pode pular etapas)
@@ -149,6 +150,7 @@ Transicoes de status de processo sao validadas por uma state machine com guards:
 ### Job Queue (pg-boss)
 
 Processamento assincrono via PostgreSQL-backed job queue:
+
 - `email-send` — envio de emails via fila
 - `drive-sync` — sincronizacao com Google Drive
 - `sheets-sync` — sync bidirecional com Google Sheets
@@ -157,6 +159,7 @@ Processamento assincrono via PostgreSQL-backed job queue:
 ### Event System
 
 Event emitter tipado com 6 tipos de eventos:
+
 - `process.created`, `process.status_changed`
 - `document.uploaded`, `validation.completed`
 - `email.received`, `alert.created`
@@ -169,44 +172,52 @@ Event emitter tipado com 6 tipos de eventos:
 
 ### AI Governance
 
-- Logging de todas as requisicoes AI (latencia, modelo, status)
+- Logging de todas as requisicoes AI (latencia, modelo, status) com flag `aiGovernance` no Pino
 - Schemas Zod para validacao de respostas AI
 - Fallback chain entre modelos (gemini-flash <-> claude-sonnet)
 - Regex-first em email ingestion (skip AI quando regex resolve)
 - Prompt versioning para rastreabilidade
 
+### Observabilidade
+
+- **Prometheus metrics** — endpoint `/metrics` com metricas HTTP (requests, latencia), Node.js (memoria, CPU, event loop) e queue
+- **Swagger/OpenAPI** — documentacao interativa em `/api/docs` com spec JSON em `/api/docs/openapi.json`
+- **Queue monitoring** — endpoint admin `/api/admin/queue-stats` com status de todas as filas pg-boss
+- **Cron job alerts** — falhas em cron jobs geram alertas criticos automaticos no sistema
+
 ### Custom Error Classes
 
 Hierarquia de erros tipados com dispatch automatico no error handler:
+
 - `AppError` (base) → `NotFoundError`, `ValidationError`, `ConflictError`, `IntegrationError`, `InvalidTransitionError`
 
 ## Integracoes
 
-| Servico | Uso |
-|---------|-----|
-| **Google OAuth** | Autenticacao de usuarios (restrito por dominio/grupo) |
-| **Google Drive** | Armazenamento de documentos |
-| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync |
-| **Gmail API** | Ingestao automatica de emails |
-| **VTEX API** | Verificacao de certificacoes em tempo real |
-| **Odoo** | Integracao ERP via XML-RPC (com timeout 30s) |
-| **OpenRouter** | Analise de documentos com IA (Gemini Flash + Claude Sonnet) |
-| **Redis** | Cache e rate limiting |
+| Servico           | Uso                                                         |
+| ----------------- | ----------------------------------------------------------- |
+| **Google OAuth**  | Autenticacao de usuarios (restrito por dominio/grupo)       |
+| **Google Drive**  | Armazenamento de documentos                                 |
+| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync            |
+| **Gmail API**     | Ingestao automatica de emails                               |
+| **VTEX API**      | Verificacao de certificacoes em tempo real                  |
+| **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                |
+| **OpenRouter**    | Analise de documentos com IA (Gemini Flash + Claude Sonnet) |
+| **Redis**         | Cache e rate limiting                                       |
 
 ## Variaveis de Ambiente
 
 Copie `.env.example` para `.env` e configure:
 
-| Categoria | Variaveis |
-|-----------|-----------|
-| **Banco** | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
-| **Auth** | `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ALLOWED_DOMAIN` |
-| **Google** | `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_ADMIN_EMAIL` |
-| **Email** | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` |
-| **VTEX/Sheets** | `GOOGLE_SHEETS_SPREADSHEET_ID` |
-| **IA** | `OPENROUTER_API_KEY` |
-| **Odoo** | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD` |
-| **Redis** | `REDIS_URL` |
+| Categoria       | Variaveis                                                                     |
+| --------------- | ----------------------------------------------------------------------------- |
+| **Banco**       | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`           |
+| **Auth**        | `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ALLOWED_DOMAIN`          |
+| **Google**      | `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_ADMIN_EMAIL` |
+| **Email**       | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`                            |
+| **VTEX/Sheets** | `GOOGLE_SHEETS_SPREADSHEET_ID`                                                |
+| **IA**          | `OPENROUTER_API_KEY`                                                          |
+| **Odoo**        | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD`                           |
+| **Redis**       | `REDIS_URL`                                                                   |
 
 Em producao, secrets sao gerenciados via **HashiCorp Vault** (`secret/importacao`).
 
@@ -250,7 +261,8 @@ npm run test:watch -w apps/api
 npm run test:coverage -w apps/api
 ```
 
-**119 testes** em 17 arquivos:
+**171 testes** em 23 arquivos:
+
 - **Unitarios**: state machine, validation checks, AI service, date utils
 - **Integracao**: process, validation, document, espelho, dashboard services
 - **Snapshot**: templates Excel (Puket/Imaginarium), templates email (3 tipos)
@@ -258,6 +270,7 @@ npm run test:coverage -w apps/api
 ## CI/CD
 
 GitHub Actions pipeline (`.github/workflows/ci.yml`):
+
 1. **lint-and-typecheck** — `tsc --noEmit` para API e Web
 2. **test** — Vitest com PostgreSQL 16 service container
 3. **build** — Build de producao de API e Web (apos testes passarem)
@@ -271,6 +284,7 @@ bash scripts/deploy.sh [server-ip]
 ```
 
 O script:
+
 1. Verifica compilacao TypeScript (API + Web)
 2. Sincroniza codigo via rsync
 3. Gera `.env` a partir do HashiCorp Vault
@@ -280,13 +294,13 @@ O script:
 
 ### Portas Producao
 
-| Servico | Porta Externa | Porta Interna |
-|---------|--------------|---------------|
-| Web (Nginx) | 8085 | 80 |
-| API Node | 3050 | 3001 |
-| Cert API | -- | 8000 |
-| PostgreSQL | 5450 | 5432 |
-| Redis | 6379 | 6379 |
+| Servico     | Porta Externa | Porta Interna |
+| ----------- | ------------- | ------------- |
+| Web (Nginx) | 8085          | 80            |
+| API Node    | 3050          | 3001          |
+| Cert API    | --            | 8000          |
+| PostgreSQL  | 5450          | 5432          |
+| Redis       | 6379          | 6379          |
 
 ### Volumes Persistentes
 
@@ -327,7 +341,7 @@ apps/api/src/
 │   ├── documents/      # Upload e gestao de documentos
 │   ├── ai/             # OpenRouter + governance + schemas
 │   ├── dashboard/      # Operacional + executivo
-│   ├── validation/     # 26 checks + engine
+│   ├── validation/     # 27 checks + engine
 │   │   └── checks/     # Checks individuais em arquivos separados
 │   └── ...
 ├── shared/
@@ -335,10 +349,11 @@ apps/api/src/
 │   ├── database/       # Schema Drizzle, conexao, migracoes
 │   ├── errors/         # Custom error classes
 │   ├── events/         # Event emitter tipado
+│   ├── metrics/        # Prometheus (prom-client) middleware + registry
 │   ├── middleware/     # Auth, CORS, upload, correlation-id, error-handler
 │   ├── queue/          # pg-boss workers
 │   ├── state-machine/  # Process status transitions
-│   └── utils/          # Date utils, helpers
+│   └── utils/          # Logger, helpers
 ├── app.ts              # Configuracao Express (helmet, CORS, middleware)
 ├── routes.ts           # Rotas centralizadas
 └── server.ts           # Entry point
@@ -355,7 +370,30 @@ npm test -w apps/api  # Testes unitarios + integracao
 npm run docker:up     # Docker Compose up
 npm run docker:down   # Docker Compose down
 npm run docker:build  # Docker Compose build
+bash scripts/backup-db.sh  # Backup PostgreSQL (retenção 7 dias)
 ```
+
+### Endpoints de Operacao
+
+| Endpoint                     | Acesso  | Descricao                            |
+| ---------------------------- | ------- | ------------------------------------ |
+| `GET /health`                | Publico | Healthcheck da API                   |
+| `GET /metrics`               | Publico | Metricas Prometheus                  |
+| `GET /api/docs`              | Publico | Swagger UI (documentacao interativa) |
+| `GET /api/docs/openapi.json` | Publico | Spec OpenAPI 3.0 JSON                |
+| `GET /api/admin/queue-stats` | Admin   | Status das filas pg-boss             |
+
+### Backup do Banco
+
+```bash
+# Backup manual
+bash scripts/backup-db.sh
+
+# Crontab recomendado (2h da manhã, diário)
+0 2 * * * /home/nicolas/importacao/scripts/backup-db.sh >> /var/log/importacao-backup.log 2>&1
+```
+
+Backups salvos em `/backups/importacao/` com retenção de 7 dias.
 
 ## Licenca
 

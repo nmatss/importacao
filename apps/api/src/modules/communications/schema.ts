@@ -6,7 +6,9 @@ export const createCommunicationSchema = z.object({
   recipientEmail: z.string().email('E-mail inválido').max(500),
   subject: z.string().min(1, 'Assunto obrigatório').max(500),
   body: z.string().min(1, 'Corpo do e-mail obrigatório').max(100000),
-  attachments: z.array(z.object({ name: z.string(), path: z.string() }).passthrough()).optional(),
+  attachments: z
+    .array(z.object({ filename: z.string(), path: z.string() }).passthrough())
+    .optional(),
 });
 
 export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>;

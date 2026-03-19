@@ -1,4 +1,4 @@
-import { eq, desc, count } from 'drizzle-orm';
+import { eq, desc, count, and, sql, gte } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
 import { db } from '../../shared/database/connection.js';
 import {
@@ -20,11 +20,17 @@ const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 function sanitizeHtml(html: string): string {
   // Remove script tags and their content
   let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  // Remove event handler attributes (onclick, onerror, onload, etc.)
+  // Remove style tags and their content (can contain expressions)
+  clean = clean.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  // Remove all event handler attributes (onclick, onerror, onload, etc.)
   clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  // Remove javascript: URLs
-  clean = clean.replace(/href\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '');
-  clean = clean.replace(/src\s*=\s*(?:"javascript:[^"]*"|'javascript:[^']*')/gi, '');
+  // Remove javascript:, vbscript:, data: URLs from href/src/action attributes
+  clean = clean.replace(
+    /(href|src|action)\s*=\s*(?:"(?:javascript|vbscript|data):[^"]*"|'(?:javascript|vbscript|data):[^']*')/gi,
+    '',
+  );
+  // Remove dangerous tags: svg, math, iframe, object, embed, form, base
+  clean = clean.replace(/<\/?(svg|math|iframe|object|embed|form|base|link|meta)\b[^>]*>/gi, '');
   return clean;
 }
 
@@ -41,19 +47,29 @@ function getSmtpTransport() {
 }
 
 export const communicationService = {
-  async list(processId?: number, page = 1, limit = 20) {
-    const conditions = processId ? eq(communications.processId, processId) : undefined;
+  async list(processId?: number, page = 1, limit = 20, startDate?: string, endDate?: string) {
+    const conditions = [];
+    if (processId) conditions.push(eq(communications.processId, processId));
+    if (startDate) {
+      conditions.push(gte(communications.createdAt, new Date(startDate)));
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${communications.createdAt} < ${end.toISOString()}`);
+    }
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
     const offset = (page - 1) * limit;
 
     const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(communications)
-        .where(conditions)
+        .where(where)
         .orderBy(desc(communications.createdAt))
         .limit(limit)
         .offset(offset),
-      db.select({ total: count() }).from(communications).where(conditions),
+      db.select({ total: count() }).from(communications).where(where),
     ]);
 
     return { data, total, page, limit };
@@ -155,21 +171,21 @@ export const communicationService = {
       .limit(1);
 
     // Build attachments list
-    const attachments: Array<{ name: string; path: string }> = [];
+    const attachments: Array<{ filename: string; path: string }> = [];
     for (const doc of docs) {
       if (['invoice', 'packing_list', 'ohbl'].includes(doc.type)) {
         attachments.push({
-          name: doc.originalFilename,
+          filename: doc.originalFilename,
           path: doc.storagePath,
         });
       }
     }
 
     if (espelho) {
-      const espelhoData = espelho.generatedData as any;
+      const espelhoData = espelho.generatedData as Record<string, string> | null;
       if (espelhoData?.filePath && espelhoData?.filename) {
         attachments.push({
-          name: espelhoData.filename,
+          filename: espelhoData.filename,
           path: espelhoData.filePath,
         });
       }
@@ -324,9 +340,9 @@ export const communicationService = {
     if (communication.status !== 'draft') throw new Error('Somente rascunhos podem ser editados');
 
     const updateData: Record<string, any> = {};
-    if (data.subject) updateData.subject = data.subject;
-    if (data.body) updateData.body = sanitizeHtml(data.body);
-    if (data.recipientEmail) updateData.recipientEmail = data.recipientEmail;
+    if (data.subject !== undefined) updateData.subject = data.subject;
+    if (data.body !== undefined) updateData.body = sanitizeHtml(data.body);
+    if (data.recipientEmail !== undefined) updateData.recipientEmail = data.recipientEmail;
 
     const [updated] = await db
       .update(communications)

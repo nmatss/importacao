@@ -31,7 +31,7 @@ export const authService = {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN as any,
+      expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
     });
 
     auditService.log(user.id, 'login', 'user', user.id, { email: user.email }, null);
@@ -83,7 +83,7 @@ export const authService = {
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {
-      expiresIn: JWT_EXPIRES_IN as any,
+      expiresIn: JWT_EXPIRES_IN as jwt.SignOptions['expiresIn'],
     });
 
     auditService.log(user.id, 'login_google', 'user', user.id, { email: user.email }, null);

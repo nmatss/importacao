@@ -2,7 +2,15 @@ import { z } from 'zod';
 
 export const uploadDocumentSchema = z.object({
   processId: z.coerce.number(),
-  type: z.enum(['invoice', 'packing_list', 'ohbl', 'espelho', 'li', 'other']),
+  documentType: z.enum([
+    'invoice',
+    'packing_list',
+    'ohbl',
+    'espelho',
+    'li',
+    'certificate',
+    'other',
+  ]),
 });
 
 export const reprocessDocumentSchema = z.object({

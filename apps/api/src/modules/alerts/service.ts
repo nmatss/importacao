@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, count } from 'drizzle-orm';
+import { eq, desc, and, sql, count, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { alerts, systemSettings } from '../../shared/database/schema.js';
 import { sendToGoogleChat } from './google-chat.service.js';
@@ -11,6 +11,8 @@ export const alertService = {
     processId?: number;
     severity?: string;
     acknowledged?: boolean;
+    startDate?: string;
+    endDate?: string;
     page?: number;
     limit?: number;
   }) {
@@ -20,9 +22,20 @@ export const alertService = {
 
     const conditions = [];
     if (filters?.processId) conditions.push(eq(alerts.processId, filters.processId));
-    if (filters?.severity) conditions.push(eq(alerts.severity, filters.severity as any));
+    if (filters?.severity)
+      conditions.push(
+        eq(alerts.severity, filters.severity as (typeof alerts.severity.enumValues)[number]),
+      );
     if (filters?.acknowledged !== undefined)
       conditions.push(eq(alerts.acknowledged, filters.acknowledged));
+    if (filters?.startDate) {
+      conditions.push(gte(alerts.createdAt, new Date(filters.startDate)));
+    }
+    if (filters?.endDate) {
+      const end = new Date(filters.endDate);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${alerts.createdAt} < ${end.toISOString()}`);
+    }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -83,7 +96,13 @@ export const alertService = {
         .where(eq(systemSettings.key, 'google_chat_webhook_url'))
         .limit(1);
 
-      const webhookUrl = (setting?.value as string) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
+      const rawValue = setting?.value;
+      const webhookUrl =
+        (typeof rawValue === 'string'
+          ? rawValue
+          : typeof rawValue === 'object' && rawValue !== null && 'url' in rawValue
+            ? (rawValue as { url: string }).url
+            : null) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
       if (webhookUrl) {
         const sent = await sendToGoogleChat(webhookUrl, { ...data, id: alert.id });
         if (sent) {

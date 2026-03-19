@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   fetchCertSchedules,
   createCertSchedule,
@@ -6,8 +6,10 @@ import {
   deleteCertSchedule,
   runCertScheduleNow,
   fetchCertScheduleHistory,
+  fetchCertValidationStatus,
 } from '@/shared/lib/cert-api-client';
 import { cronToHuman, formatDateTime } from '@/shared/lib/utils';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import {
   CalendarClock,
   Plus,
@@ -25,7 +27,10 @@ import {
   Tag,
 } from 'lucide-react';
 
-import type { CertSchedule as Schedule, CertScheduleHistoryEntry as HistoryEntry } from '@/shared/lib/cert-api-client';
+import type {
+  CertSchedule as Schedule,
+  CertScheduleHistoryEntry as HistoryEntry,
+} from '@/shared/lib/cert-api-client';
 
 const BRAND_OPTIONS = [
   { value: '', label: 'Todas as marcas' },
@@ -83,7 +88,21 @@ export default function CertAgendamentosPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [triggerResult, setTriggerResult] = useState<{
+    scheduleId: string;
+    status: string;
+    total?: number;
+    ok?: number;
+    missing?: number;
+    inconsistent?: number;
+    processed?: number;
+  } | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Date filter state
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -97,14 +116,17 @@ export default function CertAgendamentosPage() {
 
   const loadSchedules = useCallback(async () => {
     try {
-      const data = await fetchCertSchedules();
+      const params: { start_date?: string; end_date?: string } = {};
+      if (startDate) params.start_date = startDate;
+      if (endDate) params.end_date = endDate;
+      const data = await fetchCertSchedules(Object.keys(params).length > 0 ? params : undefined);
       setSchedules(Array.isArray(data) ? data : []);
     } catch {
       setSchedules([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [startDate, endDate]);
 
   useEffect(() => {
     loadSchedules();
@@ -154,9 +176,7 @@ export default function CertAgendamentosPage() {
     }
 
     const cron =
-      formPreset === 'custom'
-        ? formCustomCron
-        : buildCron(formPreset, formHour, formMinute);
+      formPreset === 'custom' ? formCustomCron : buildCron(formPreset, formHour, formMinute);
 
     if (!cron.trim()) {
       setFormError('Expressão cron é obrigatória');
@@ -200,14 +220,55 @@ export default function CertAgendamentosPage() {
     }
   }
 
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   async function handleTrigger(id: string) {
     setTriggeringId(id);
+    setTriggerResult({ scheduleId: id, status: 'running', processed: 0 });
     try {
-      await runCertScheduleNow(id);
+      const result = await runCertScheduleNow(id);
+      const runId = result.run_id;
+
+      // Poll for completion every 3s
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await fetchCertValidationStatus(runId);
+          setTriggerResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  status: status.status,
+                  processed:
+                    (status.processed as number | undefined) ??
+                    (status.total as number | undefined) ??
+                    0,
+                  total: status.total as number | undefined,
+                }
+              : null,
+          );
+
+          if (status.status === 'completed' || status.status === 'error') {
+            if (pollRef.current) clearInterval(pollRef.current);
+            pollRef.current = null;
+            setTriggeringId(null);
+            // Refresh schedules and clear history cache
+            await loadSchedules();
+            setHistoryData({});
+          }
+        } catch {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          setTriggeringId(null);
+        }
+      }, 3000);
     } catch {
-      // silently fail
-    } finally {
-      setTimeout(() => setTriggeringId(null), 2000);
+      setTriggeringId(null);
+      setTriggerResult(null);
     }
   }
 
@@ -264,6 +325,17 @@ export default function CertAgendamentosPage() {
         </button>
       </div>
 
+      {/* Date Filter */}
+      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
+        <DateRangeFilter
+          startDate={startDate}
+          endDate={endDate}
+          onStartDateChange={setStartDate}
+          onEndDateChange={setEndDate}
+          label="Execucao"
+        />
+      </div>
+
       {/* Schedule list */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
@@ -275,7 +347,9 @@ export default function CertAgendamentosPage() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
             <CalendarClock className="w-8 h-8 text-slate-300" />
           </div>
-          <p className="text-base font-semibold text-slate-900 mb-1">Nenhum agendamento configurado</p>
+          <p className="text-base font-semibold text-slate-900 mb-1">
+            Nenhum agendamento configurado
+          </p>
           <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
             Crie um agendamento para executar validações de certificações automaticamente
           </p>
@@ -293,19 +367,21 @@ export default function CertAgendamentosPage() {
             <div
               key={schedule.id}
               className={`rounded-2xl border shadow-sm bg-white overflow-hidden transition-colors ${
-                schedule.enabled
-                  ? 'border-slate-200/80'
-                  : 'border-slate-200/60 bg-slate-50/50'
+                schedule.enabled ? 'border-slate-200/80' : 'border-slate-200/60 bg-slate-50/50'
               }`}
             >
               {/* Status accent bar */}
-              <div className={`h-1 ${schedule.enabled ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : 'bg-slate-200'}`} />
+              <div
+                className={`h-1 ${schedule.enabled ? 'bg-gradient-to-r from-emerald-500 to-emerald-600' : 'bg-slate-200'}`}
+              />
 
               <div className="p-5 md:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className={`text-base font-semibold truncate ${schedule.enabled ? 'text-slate-900' : 'text-slate-500'}`}>
+                      <h3
+                        className={`text-base font-semibold truncate ${schedule.enabled ? 'text-slate-900' : 'text-slate-500'}`}
+                      >
                         {schedule.name}
                       </h3>
                       <span
@@ -336,15 +412,51 @@ export default function CertAgendamentosPage() {
 
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1 mt-3 text-xs text-slate-400">
                       {schedule.last_run && (
-                        <span>Última execução: <span className="text-slate-500">{formatDateTime(schedule.last_run)}</span></span>
+                        <span>
+                          Última execução:{' '}
+                          <span className="text-slate-500">
+                            {formatDateTime(schedule.last_run)}
+                          </span>
+                        </span>
                       )}
                       {schedule.next_run && (
-                        <span>Próxima execução: <span className="text-slate-500">{formatDateTime(schedule.next_run)}</span></span>
+                        <span>
+                          Próxima execução:{' '}
+                          <span className="text-slate-500">
+                            {formatDateTime(schedule.next_run)}
+                          </span>
+                        </span>
                       )}
                       {!schedule.last_run && !schedule.next_run && (
                         <span className="italic">Ainda não executado</span>
                       )}
                     </div>
+
+                    {/* Running validation indicator */}
+                    {triggerResult &&
+                      triggerResult.scheduleId === schedule.id &&
+                      triggerResult.status === 'running' && (
+                        <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                          <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                          <span className="text-xs font-medium text-emerald-700">
+                            Validando... {triggerResult.processed ?? 0}
+                            {triggerResult.total ? `/${triggerResult.total}` : ''} produtos
+                          </span>
+                        </div>
+                      )}
+                    {triggerResult &&
+                      triggerResult.scheduleId === schedule.id &&
+                      triggerResult.status === 'completed' && (
+                        <div className="flex items-center gap-3 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                          <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-xs font-medium text-emerald-700">Concluido!</span>
+                          {triggerResult.total != null && (
+                            <span className="text-xs text-slate-500">
+                              {triggerResult.total} produtos validados
+                            </span>
+                          )}
+                        </div>
+                      )}
                   </div>
 
                   {/* Actions */}
@@ -386,6 +498,7 @@ export default function CertAgendamentosPage() {
                       onClick={() => openEditForm(schedule)}
                       className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
                       title="Editar"
+                      aria-label="Editar agendamento"
                     >
                       <Pencil className="w-4 h-4" />
                     </button>
@@ -394,6 +507,7 @@ export default function CertAgendamentosPage() {
                       onClick={() => setDeleteConfirm(schedule.id)}
                       className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
                       title="Excluir"
+                      aria-label="Excluir agendamento"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -422,7 +536,9 @@ export default function CertAgendamentosPage() {
                 <div className="border-t border-slate-100 bg-slate-50/80 px-5 py-4 md:px-6">
                   <div className="flex items-center gap-2 mb-3">
                     <History className="w-3.5 h-3.5 text-slate-400" />
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Últimas execuções</span>
+                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Últimas execuções
+                    </span>
                   </div>
                   {historyLoading === schedule.id ? (
                     <div className="flex items-center justify-center py-6">
@@ -453,7 +569,9 @@ export default function CertAgendamentosPage() {
                           </div>
                           {entry.summary && typeof entry.summary === 'object' && (
                             <div className="flex items-center gap-3 text-xs">
-                              <span className="text-slate-500 font-medium">{entry.summary.total ?? 0} produtos</span>
+                              <span className="text-slate-500 font-medium">
+                                {entry.summary.total ?? 0} produtos
+                              </span>
                               {(entry.summary.ok ?? 0) > 0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
                                   {entry.summary.ok} Conforme
@@ -518,7 +636,10 @@ export default function CertAgendamentosPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => { setShowForm(false); resetForm(); }}
+            onClick={() => {
+              setShowForm(false);
+              resetForm();
+            }}
           />
           <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-md">
             {/* Modal Header */}
@@ -532,7 +653,10 @@ export default function CertAgendamentosPage() {
                 </h3>
               </div>
               <button
-                onClick={() => { setShowForm(false); resetForm(); }}
+                onClick={() => {
+                  setShowForm(false);
+                  resetForm();
+                }}
                 className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
               >
                 <X className="w-4 h-4" />
@@ -543,8 +667,14 @@ export default function CertAgendamentosPage() {
             <form onSubmit={handleSubmit} className="p-6 space-y-5">
               {/* Name */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Nome</label>
+                <label
+                  htmlFor="schedule-name"
+                  className="block text-sm font-semibold text-slate-700 mb-1.5"
+                >
+                  Nome
+                </label>
                 <input
+                  id="schedule-name"
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
@@ -555,28 +685,44 @@ export default function CertAgendamentosPage() {
 
               {/* Brand */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Marca</label>
+                <label
+                  htmlFor="schedule-brand"
+                  className="block text-sm font-semibold text-slate-700 mb-1.5"
+                >
+                  Marca
+                </label>
                 <select
+                  id="schedule-brand"
                   value={formBrand}
                   onChange={(e) => setFormBrand(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
                 >
                   {BRAND_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </div>
 
               {/* Frequency */}
               <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Frequência</label>
+                <label
+                  htmlFor="schedule-frequency"
+                  className="block text-sm font-semibold text-slate-700 mb-1.5"
+                >
+                  Frequência
+                </label>
                 <select
+                  id="schedule-frequency"
                   value={formPreset}
                   onChange={(e) => setFormPreset(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
                 >
                   {FREQUENCY_PRESETS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -585,8 +731,14 @@ export default function CertAgendamentosPage() {
               {formPreset !== 'custom' && (
                 <div className="flex gap-3">
                   <div className="flex-1">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Hora</label>
+                    <label
+                      htmlFor="schedule-hour"
+                      className="block text-sm font-semibold text-slate-700 mb-1.5"
+                    >
+                      Hora
+                    </label>
                     <input
+                      id="schedule-hour"
                       type="number"
                       min={0}
                       max={23}
@@ -596,8 +748,14 @@ export default function CertAgendamentosPage() {
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block text-sm font-semibold text-slate-700 mb-1.5">Minuto</label>
+                    <label
+                      htmlFor="schedule-minute"
+                      className="block text-sm font-semibold text-slate-700 mb-1.5"
+                    >
+                      Minuto
+                    </label>
                     <input
+                      id="schedule-minute"
                       type="number"
                       min={0}
                       max={59}
@@ -612,10 +770,14 @@ export default function CertAgendamentosPage() {
               {/* Custom cron */}
               {formPreset === 'custom' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                  <label
+                    htmlFor="schedule-cron"
+                    className="block text-sm font-semibold text-slate-700 mb-1.5"
+                  >
                     Expressão Cron
                   </label>
                   <input
+                    id="schedule-cron"
                     type="text"
                     value={formCustomCron}
                     onChange={(e) => setFormCustomCron(e.target.value)}
@@ -633,7 +795,9 @@ export default function CertAgendamentosPage() {
                 <div>
                   <span className="text-sm font-semibold text-slate-700">Status</span>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {formEnabled ? 'O agendamento será executado automaticamente' : 'O agendamento está pausado'}
+                    {formEnabled
+                      ? 'O agendamento será executado automaticamente'
+                      : 'O agendamento está pausado'}
                   </p>
                 </div>
                 <button
@@ -664,7 +828,10 @@ export default function CertAgendamentosPage() {
               <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => { setShowForm(false); resetForm(); }}
+                  onClick={() => {
+                    setShowForm(false);
+                    resetForm();
+                  }}
                   className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors"
                 >
                   Cancelar

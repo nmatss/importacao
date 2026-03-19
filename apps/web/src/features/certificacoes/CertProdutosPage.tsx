@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from "react"
-import { Link, useSearchParams } from "react-router-dom"
-import { CertStatusBadge } from "@/features/certificacoes/components/CertStatusBadge"
-import { fetchCertProducts, fetchCertStats, verifyCertProduct } from "@/shared/lib/cert-api-client"
-import { cn, formatDateTime } from "@/shared/lib/utils"
+import { useEffect, useState, useCallback } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
+import { fetchCertProducts, fetchCertStats, verifyCertProduct } from '@/shared/lib/cert-api-client';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
+import { cn, formatDateTime } from '@/shared/lib/utils';
 import {
   Search,
   ChevronLeft,
@@ -23,143 +24,164 @@ import {
   CalendarX2,
   LayoutGrid,
   X,
-} from "lucide-react"
+} from 'lucide-react';
 
 // ── Filter config ──────────────────────────────────────────────────────
 
 const STATUS_FILTERS = [
   {
-    value: "",
-    label: "Todos",
+    value: '',
+    label: 'Todos',
     icon: LayoutGrid,
-    color: "text-slate-600",
-    activeBg: "bg-slate-900 text-white shadow-lg shadow-slate-900/25",
-    dotColor: "bg-slate-400",
-    countKey: "total" as const,
+    color: 'text-slate-600',
+    activeBg: 'bg-slate-900 text-white shadow-lg shadow-slate-900/25',
+    dotColor: 'bg-slate-400',
+    countKey: 'total' as const,
   },
   {
-    value: "OK",
-    label: "Conforme",
+    value: 'OK',
+    label: 'Conforme',
     icon: CheckCircle2,
-    color: "text-emerald-700",
-    activeBg: "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30",
-    dotColor: "bg-emerald-500",
-    countKey: "ok" as const,
+    color: 'text-emerald-700',
+    activeBg: 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30',
+    dotColor: 'bg-emerald-500',
+    countKey: 'ok' as const,
   },
   {
-    value: "MISSING",
-    label: "Ausente",
+    value: 'MISSING',
+    label: 'Ausente',
     icon: XCircle,
-    color: "text-red-700",
-    activeBg: "bg-red-600 text-white shadow-lg shadow-red-600/30",
-    dotColor: "bg-red-500",
-    countKey: "missing" as const,
+    color: 'text-red-700',
+    activeBg: 'bg-red-600 text-white shadow-lg shadow-red-600/30',
+    dotColor: 'bg-red-500',
+    countKey: 'missing' as const,
   },
   {
-    value: "INCONSISTENT",
-    label: "Inconsistente",
+    value: 'INCONSISTENT',
+    label: 'Inconsistente',
     icon: AlertTriangle,
-    color: "text-amber-700",
-    activeBg: "bg-amber-500 text-white shadow-lg shadow-amber-500/30",
-    dotColor: "bg-amber-500",
-    countKey: "inconsistent" as const,
+    color: 'text-amber-700',
+    activeBg: 'bg-amber-500 text-white shadow-lg shadow-amber-500/30',
+    dotColor: 'bg-amber-500',
+    countKey: 'inconsistent' as const,
   },
   {
-    value: "URL_NOT_FOUND",
-    label: "Nao Encontrado",
+    value: 'URL_NOT_FOUND',
+    label: 'Nao Encontrado',
     icon: SearchX,
-    color: "text-slate-600",
-    activeBg: "bg-slate-600 text-white shadow-lg shadow-slate-600/25",
-    dotColor: "bg-slate-400",
-    countKey: "not_found" as const,
+    color: 'text-slate-600',
+    activeBg: 'bg-slate-600 text-white shadow-lg shadow-slate-600/25',
+    dotColor: 'bg-slate-400',
+    countKey: 'not_found' as const,
   },
   {
-    value: "EXPIRED",
-    label: "Vencido",
+    value: 'EXPIRED',
+    label: 'Vencido',
     icon: CalendarX2,
-    color: "text-pink-700",
-    activeBg: "bg-pink-600 text-white shadow-lg shadow-pink-600/30",
-    dotColor: "bg-pink-500",
-    countKey: "expired" as const,
+    color: 'text-pink-700',
+    activeBg: 'bg-pink-600 text-white shadow-lg shadow-pink-600/30',
+    dotColor: 'bg-pink-500',
+    countKey: 'expired' as const,
   },
   {
-    value: "NO_EXPECTED",
-    label: "Sem Cert.",
+    value: 'NO_EXPECTED',
+    label: 'Sem Cert.',
     icon: Ban,
-    color: "text-slate-500",
-    activeBg: "bg-slate-500 text-white shadow-lg shadow-slate-500/25",
-    dotColor: "bg-slate-300",
-    countKey: "no_expected" as const,
+    color: 'text-slate-500',
+    activeBg: 'bg-slate-500 text-white shadow-lg shadow-slate-500/25',
+    dotColor: 'bg-slate-300',
+    countKey: 'no_expected' as const,
   },
-]
+];
 
 const BRAND_FILTERS = [
-  { value: "", label: "Todas" },
-  { value: "imaginarium", label: "Imaginarium" },
-  { value: "puket", label: "Puket" },
-  { value: "puket_escolares", label: "Puket Escolares" },
-]
+  { value: '', label: 'Todas' },
+  { value: 'imaginarium', label: 'Imaginarium' },
+  { value: 'puket', label: 'Puket' },
+  { value: 'puket_escolares', label: 'Puket Escolares' },
+];
 
 import type { CertProduct } from '@/shared/lib/cert-api-client';
 
 interface StatusCounts {
-  total: number
-  ok: number
-  missing: number
-  inconsistent: number
-  not_found: number
-  expired: number
-  no_expected: number
+  total: number;
+  ok: number;
+  missing: number;
+  inconsistent: number;
+  not_found: number;
+  expired: number;
+  no_expected: number;
 }
 
-type SortField = "sku" | "name" | "brand" | "last_validation_status" | "last_validation_score"
-type SortDir = "asc" | "desc"
+type SortField = 'sku' | 'name' | 'brand' | 'last_validation_status' | 'last_validation_score';
+type SortDir = 'asc' | 'desc';
 
 export default function CertProdutosPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [products, setProducts] = useState<CertProduct[]>([])
-  const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(1)
-  const [totalPages, setTotalPages] = useState(1)
-  const [total, setTotal] = useState(0)
-  const [perPage] = useState(25)
-  const [search, setSearch] = useState("")
-  const [searchInput, setSearchInput] = useState("")
-  const [brand, setBrand] = useState("")
-  const [status, setStatus] = useState(() => searchParams.get("status") || "")
-  const [lastDate, setLastDate] = useState<string | null>(null)
-  const [verifying, setVerifying] = useState<string | null>(null)
-  const [sortField, setSortField] = useState<SortField>("sku")
-  const [sortDir, setSortDir] = useState<SortDir>("asc")
+  const [products, setProducts] = useState<CertProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [perPage] = useState(25);
+  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [brand, setBrand] = useState('');
+  const [status, setStatus] = useState(() => searchParams.get('status') || '');
+  const [lastDate, setLastDate] = useState<string | null>(null);
+  const [verifying, setVerifying] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [sortField, setSortField] = useState<SortField>('sku');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [counts, setCounts] = useState<StatusCounts>({
-    total: 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0, expired: 0, no_expected: 0,
-  })
+    total: 0,
+    ok: 0,
+    missing: 0,
+    inconsistent: 0,
+    not_found: 0,
+    expired: 0,
+    no_expected: 0,
+  });
 
   // Load stats for counts
   useEffect(() => {
     fetchCertStats()
       .then((stats: any) => {
-        const byBrand = stats?.by_brand || []
+        const byBrand = stats?.by_brand || [];
         const totals = byBrand.reduce(
           (acc: StatusCounts, b: any) => ({
-            total: acc.total + (b.ok || 0) + (b.missing || 0) + (b.inconsistent || 0) + (b.not_found || 0),
+            total:
+              acc.total +
+              (b.ok || 0) +
+              (b.missing || 0) +
+              (b.inconsistent || 0) +
+              (b.not_found || 0),
             ok: acc.ok + (b.ok || 0),
             missing: acc.missing + (b.missing || 0),
             inconsistent: acc.inconsistent + (b.inconsistent || 0),
             not_found: acc.not_found + (b.not_found || 0),
             expired: acc.expired + (b.expired || 0),
-            no_expected: acc.no_expected,
+            no_expected: acc.no_expected + (b.no_expected || 0),
           }),
-          { total: stats?.total_products || 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0, expired: stats?.total_expired || 0, no_expected: 0 },
-        )
-        setCounts(totals)
+          {
+            total: 0,
+            ok: 0,
+            missing: 0,
+            inconsistent: 0,
+            not_found: 0,
+            expired: 0,
+            no_expected: 0,
+          },
+        );
+        setCounts(totals);
       })
-      .catch(() => {})
-  }, [])
+      .catch(() => {});
+  }, []);
 
   const loadProducts = useCallback(async () => {
-    setLoading(true)
+    setLoading(true);
     try {
       const data = await fetchCertProducts({
         page,
@@ -167,76 +189,80 @@ export default function CertProdutosPage() {
         search: search || undefined,
         brand: brand || undefined,
         status: status || undefined,
-      })
-      setProducts(data.products || [])
-      setTotalPages(data.total_pages || 1)
-      setTotal(data.total || 0)
-      setLastDate(data.last_validation_date || null)
+        start_date: startDate || undefined,
+        end_date: endDate || undefined,
+      });
+      setProducts(data.products || []);
+      setTotalPages(data.total_pages || 1);
+      setTotal(data.total || 0);
+      setLastDate(data.last_validation_date || null);
     } catch {
-      setProducts([])
+      setProducts([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [page, perPage, search, brand, status])
+  }, [page, perPage, search, brand, status, startDate, endDate]);
 
   useEffect(() => {
-    loadProducts()
-  }, [loadProducts])
+    loadProducts();
+  }, [loadProducts]);
 
   function handleStatusChange(newStatus: string) {
-    setStatus(newStatus)
-    setPage(1)
+    setStatus(newStatus);
+    setPage(1);
     if (newStatus) {
-      setSearchParams({ status: newStatus })
+      setSearchParams({ status: newStatus });
     } else {
-      setSearchParams({})
+      setSearchParams({});
     }
   }
 
   function handleBrandChange(newBrand: string) {
-    setBrand(newBrand)
-    setPage(1)
+    setBrand(newBrand);
+    setPage(1);
   }
 
   function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    setPage(1)
-    setSearch(searchInput)
+    e.preventDefault();
+    setPage(1);
+    setSearch(searchInput);
   }
 
   function clearFilters() {
-    setStatus("")
-    setBrand("")
-    setSearch("")
-    setSearchInput("")
-    setPage(1)
-    setSearchParams({})
+    setStatus('');
+    setBrand('');
+    setSearch('');
+    setSearchInput('');
+    setStartDate('');
+    setEndDate('');
+    setPage(1);
+    setSearchParams({});
   }
 
   function handleSort(field: SortField) {
     if (sortField === field) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc")
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
     } else {
-      setSortField(field)
-      setSortDir("asc")
+      setSortField(field);
+      setSortDir('asc');
     }
   }
 
   const sortedProducts = [...products].sort((a, b) => {
-    const aVal = a[sortField] ?? ""
-    const bVal = b[sortField] ?? ""
-    if (typeof aVal === "number" && typeof bVal === "number") {
-      return sortDir === "asc" ? aVal - bVal : bVal - aVal
+    const aVal = a[sortField] ?? '';
+    const bVal = b[sortField] ?? '';
+    if (typeof aVal === 'number' && typeof bVal === 'number') {
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal;
     }
-    const cmp = String(aVal).localeCompare(String(bVal), "pt-BR", { sensitivity: "base" })
-    return sortDir === "asc" ? cmp : -cmp
-  })
+    const cmp = String(aVal).localeCompare(String(bVal), 'pt-BR', { sensitivity: 'base' });
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
 
   async function handleVerify(sku: string, productBrand: string) {
-    setVerifying(sku)
+    setVerifying(sku);
     try {
-      const brandKey = productBrand.toLowerCase().replaceAll(" ", "_")
-      const result = await verifyCertProduct(sku, brandKey)
+      const brandKey = productBrand.toLowerCase().replaceAll(' ', '_');
+      const result = await verifyCertProduct(sku, brandKey);
       setProducts((prev) =>
         prev.map((p) =>
           p.sku === sku
@@ -247,37 +273,41 @@ export default function CertProdutosPage() {
                 last_validation_url: result.url,
                 last_validation_date: result.verified_at,
               }
-            : p
-        )
-      )
+            : p,
+        ),
+      );
     } catch {
       // Silently handle
     } finally {
-      setVerifying(null)
+      setVerifying(null);
     }
   }
 
   function SortIcon({ field }: { field: SortField }) {
-    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />
-    return sortDir === "asc"
-      ? <ArrowUp className="w-3 h-3 ml-1 text-emerald-600" />
-      : <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />
+    if (sortField !== field) return <ArrowUpDown className="w-3 h-3 ml-1 opacity-30" />;
+    return sortDir === 'asc' ? (
+      <ArrowUp className="w-3 h-3 ml-1 text-emerald-600" />
+    ) : (
+      <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />
+    );
   }
 
   function scoreColor(score: number): string {
-    if (score >= 0.9) return "text-emerald-700 bg-emerald-50"
-    if (score >= 0.6) return "text-amber-700 bg-amber-50"
-    return "text-red-700 bg-red-50"
+    if (score >= 0.9) return 'text-emerald-700 bg-emerald-50';
+    if (score >= 0.6) return 'text-amber-700 bg-amber-50';
+    return 'text-red-700 bg-red-50';
   }
 
-  const hasActiveFilters = status || brand || search
+  const hasActiveFilters = status || brand || search || startDate || endDate;
 
   return (
     <div className="space-y-5">
       {/* ── Status Filter Tabs ── */}
       <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Status</span>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Status
+          </span>
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
@@ -289,33 +319,35 @@ export default function CertProdutosPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           {STATUS_FILTERS.map((f) => {
-            const isActive = status === f.value
-            const count = counts[f.countKey]
+            const isActive = status === f.value;
+            const count = counts[f.countKey];
             return (
               <button
                 key={f.value}
                 onClick={() => handleStatusChange(f.value)}
                 className={cn(
-                  "group relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200",
+                  'group relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200',
                   isActive
                     ? f.activeBg
-                    : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60"
+                    : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60',
                 )}
               >
-                <f.icon className={cn("w-3.5 h-3.5", isActive ? "text-white/90" : f.color)} />
+                <f.icon className={cn('w-3.5 h-3.5', isActive ? 'text-white/90' : f.color)} />
                 <span>{f.label}</span>
                 {count > 0 && (
-                  <span className={cn(
-                    "min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none px-1.5",
-                    isActive
-                      ? "bg-white/20 text-white"
-                      : "bg-white text-slate-500 shadow-sm border border-slate-200/60"
-                  )}>
+                  <span
+                    className={cn(
+                      'min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none px-1.5',
+                      isActive
+                        ? 'bg-white/20 text-white'
+                        : 'bg-white text-slate-500 shadow-sm border border-slate-200/60',
+                    )}
+                  >
                     {count > 999 ? `${(count / 1000).toFixed(0)}k` : count}
                   </span>
                 )}
               </button>
-            )
+            );
           })}
         </div>
       </div>
@@ -343,25 +375,41 @@ export default function CertProdutosPage() {
             </button>
           </form>
 
+          {/* Date Range Filter */}
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={(v) => {
+              setStartDate(v);
+              setPage(1);
+            }}
+            onEndDateChange={(v) => {
+              setEndDate(v);
+              setPage(1);
+            }}
+          />
+
           {/* Brand Filter Pills */}
           <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1.5 hidden lg:block">Marca</span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1.5 hidden lg:block">
+              Marca
+            </span>
             {BRAND_FILTERS.map((b) => {
-              const isActive = brand === b.value
+              const isActive = brand === b.value;
               return (
                 <button
                   key={b.value}
                   onClick={() => handleBrandChange(b.value)}
                   className={cn(
-                    "px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200",
+                    'px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200',
                     isActive
-                      ? "bg-violet-600 text-white shadow-md shadow-violet-600/25"
-                      : "bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60"
+                      ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60',
                   )}
                 >
                   {b.label}
                 </button>
-              )
+              );
             })}
           </div>
         </div>
@@ -369,7 +417,8 @@ export default function CertProdutosPage() {
         {/* Summary line */}
         <div className="flex items-center justify-between mt-4 pt-3.5 border-t border-slate-100">
           <p className="text-sm text-slate-500">
-            <span className="font-semibold text-slate-700">{total}</span> produto{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}
+            <span className="font-semibold text-slate-700">{total}</span> produto
+            {total !== 1 ? 's' : ''} encontrado{total !== 1 ? 's' : ''}
             {lastDate && (
               <span className="ml-3 text-slate-400">
                 Ultima validacao: {formatDateTime(lastDate)}
@@ -381,7 +430,7 @@ export default function CertProdutosPage() {
             disabled={loading}
             className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 border border-slate-200 bg-white hover:bg-slate-50 active:scale-[0.98] transition-all"
           >
-            <RefreshCw className={cn("w-3.5 h-3.5", loading && "animate-spin")} />
+            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             Atualizar
           </button>
         </div>
@@ -416,33 +465,43 @@ export default function CertProdutosPage() {
               <tr className="bg-slate-50/80 border-b border-slate-200/60">
                 <th
                   className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort("sku")}
+                  onClick={() => handleSort('sku')}
                 >
-                  <span className="flex items-center">SKU <SortIcon field="sku" /></span>
+                  <span className="flex items-center">
+                    SKU <SortIcon field="sku" />
+                  </span>
                 </th>
                 <th
                   className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort("name")}
+                  onClick={() => handleSort('name')}
                 >
-                  <span className="flex items-center">Nome <SortIcon field="name" /></span>
+                  <span className="flex items-center">
+                    Nome <SortIcon field="name" />
+                  </span>
                 </th>
                 <th
                   className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort("brand")}
+                  onClick={() => handleSort('brand')}
                 >
-                  <span className="flex items-center">Marca <SortIcon field="brand" /></span>
+                  <span className="flex items-center">
+                    Marca <SortIcon field="brand" />
+                  </span>
                 </th>
                 <th
                   className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort("last_validation_status")}
+                  onClick={() => handleSort('last_validation_status')}
                 >
-                  <span className="flex items-center">Status <SortIcon field="last_validation_status" /></span>
+                  <span className="flex items-center">
+                    Status <SortIcon field="last_validation_status" />
+                  </span>
                 </th>
                 <th
                   className="text-right px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort("last_validation_score")}
+                  onClick={() => handleSort('last_validation_score')}
                 >
-                  <span className="flex items-center justify-end">Pontuacao <SortIcon field="last_validation_score" /></span>
+                  <span className="flex items-center justify-end">
+                    Pontuacao <SortIcon field="last_validation_score" />
+                  </span>
                 </th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Acoes
@@ -451,10 +510,13 @@ export default function CertProdutosPage() {
             </thead>
             <tbody className="divide-y divide-slate-100/80">
               {sortedProducts.map((p) => (
-                <tr key={p.sku} className={cn(
-                  "group transition-colors",
-                  p.is_expired ? "bg-pink-50/40 hover:bg-pink-50/70" : "hover:bg-slate-50/60"
-                )}>
+                <tr
+                  key={p.sku}
+                  className={cn(
+                    'group transition-colors',
+                    p.is_expired ? 'bg-pink-50/40 hover:bg-pink-50/70' : 'hover:bg-slate-50/60',
+                  )}
+                >
                   <td className="px-5 py-3.5 font-mono text-xs font-semibold text-slate-700">
                     <Link
                       to={`/certificacoes/produtos/${encodeURIComponent(p.sku)}`}
@@ -494,10 +556,12 @@ export default function CertProdutosPage() {
                   </td>
                   <td className="px-5 py-3.5 text-right">
                     {p.last_validation_score != null ? (
-                      <span className={cn(
-                        "text-xs font-mono font-semibold px-2.5 py-1 rounded-lg",
-                        scoreColor(p.last_validation_score)
-                      )}>
+                      <span
+                        className={cn(
+                          'text-xs font-mono font-semibold px-2.5 py-1 rounded-lg',
+                          scoreColor(p.last_validation_score),
+                        )}
+                      >
                         {(p.last_validation_score * 100).toFixed(0)}%
                       </span>
                     ) : (
@@ -510,10 +574,10 @@ export default function CertProdutosPage() {
                         onClick={() => handleVerify(p.sku, p.brand)}
                         disabled={verifying === p.sku}
                         className={cn(
-                          "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all",
+                          'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all',
                           verifying === p.sku
-                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
-                            : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-[0.97]"
+                            ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 active:scale-[0.97]',
                         )}
                       >
                         {verifying === p.sku ? (
@@ -545,7 +609,8 @@ export default function CertProdutosPage() {
         {!loading && totalPages > 1 && (
           <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100/80 bg-slate-50/40">
             <p className="text-sm text-slate-500">
-              Pagina <span className="font-semibold text-slate-700">{page}</span> de <span className="font-semibold text-slate-700">{totalPages}</span>
+              Pagina <span className="font-semibold text-slate-700">{page}</span> de{' '}
+              <span className="font-semibold text-slate-700">{totalPages}</span>
             </p>
             <div className="flex items-center gap-1.5">
               <button
@@ -556,30 +621,30 @@ export default function CertProdutosPage() {
                 <ChevronLeft className="w-4 h-4" />
               </button>
               {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                let pageNum: number
+                let pageNum: number;
                 if (totalPages <= 7) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (page <= 4) {
-                  pageNum = i + 1
+                  pageNum = i + 1;
                 } else if (page >= totalPages - 3) {
-                  pageNum = totalPages - 6 + i
+                  pageNum = totalPages - 6 + i;
                 } else {
-                  pageNum = page - 3 + i
+                  pageNum = page - 3 + i;
                 }
                 return (
                   <button
                     key={pageNum}
                     onClick={() => setPage(pageNum)}
                     className={cn(
-                      "w-9 h-9 rounded-xl text-xs font-semibold transition-all",
+                      'w-9 h-9 rounded-xl text-xs font-semibold transition-all',
                       page === pageNum
-                        ? "bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm shadow-emerald-600/20"
-                        : "text-slate-600 bg-white border border-slate-200 hover:bg-slate-50"
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm shadow-emerald-600/20'
+                        : 'text-slate-600 bg-white border border-slate-200 hover:bg-slate-50',
                     )}
                   >
                     {pageNum}
                   </button>
-                )
+                );
               })}
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
@@ -593,5 +658,5 @@ export default function CertProdutosPage() {
         )}
       </div>
     </div>
-  )
+  );
 }

@@ -1,12 +1,15 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import swaggerUi from 'swagger-ui-express';
 import { sql } from 'drizzle-orm';
 import { errorHandler } from './shared/middleware/error-handler.js';
 import { logger } from './shared/utils/logger.js';
 import { correlationId } from './shared/middleware/correlation-id.js';
 import { apiRouter } from './routes.js';
 import { db } from './shared/database/connection.js';
+import { metricsMiddleware, register } from './shared/metrics/index.js';
+import { openapiSpec } from './docs/openapi.js';
 
 const app = express();
 
@@ -26,6 +29,9 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Prometheus metrics (before request logging so all requests are captured)
+app.use(metricsMiddleware);
+
 // Correlation ID (before request logging)
 app.use(correlationId);
 
@@ -35,6 +41,22 @@ app.use((req, _res, next) => {
   log.info({ method: req.method, url: req.url }, 'incoming request');
   next();
 });
+
+// Prometheus metrics endpoint
+app.get('/metrics', async (_req, res) => {
+  try {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  } catch (err) {
+    res.status(500).end(String(err));
+  }
+});
+
+// OpenAPI / Swagger docs
+app.get('/api/docs/openapi.json', (_req, res) => {
+  res.json(openapiSpec);
+});
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
 
 // API routes
 app.use('/api', apiRouter);

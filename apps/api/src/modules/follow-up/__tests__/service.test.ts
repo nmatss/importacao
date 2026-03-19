@@ -81,6 +81,17 @@ describe('followUpService', () => {
 
   describe('update()', () => {
     it('should update tracking record and recalculate progress', async () => {
+      const existingTracking = {
+        id: 1,
+        processId: 1,
+        documentsReceivedAt: null,
+        preInspectionAt: null,
+        ncmVerifiedAt: null,
+        espelhoGeneratedAt: null,
+        sentToFeniciaAt: null,
+        liSubmittedAt: null,
+        liApprovedAt: null,
+      };
       const mockTracking = {
         id: 1,
         processId: 1,
@@ -88,6 +99,8 @@ describe('followUpService', () => {
         overallProgress: 14,
       };
 
+      // select existing tracking
+      queryQueue.push(createResolvedChain([existingTracking]));
       // update returning
       queryQueue.push(createResolvedChain([mockTracking]));
 
@@ -100,6 +113,9 @@ describe('followUpService', () => {
     });
 
     it('should throw NotFoundError if tracking not found', async () => {
+      // select existing (found)
+      queryQueue.push(createResolvedChain([{ id: 1, processId: 999 }]));
+      // update returning (empty = not found)
       queryQueue.push(createResolvedChain([]));
 
       await expect(followUpService.update(999, { notes: 'test' })).rejects.toThrow(
@@ -109,6 +125,9 @@ describe('followUpService', () => {
 
     it('should filter out non-allowed fields', async () => {
       const mockTracking = { id: 1, processId: 1, overallProgress: 0 };
+      // select existing
+      queryQueue.push(createResolvedChain([{ id: 1, processId: 1 }]));
+      // update returning
       queryQueue.push(createResolvedChain([mockTracking]));
 
       const result = await followUpService.update(1, {

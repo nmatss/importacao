@@ -18,7 +18,7 @@ import { cn, formatDateTime, relativeTime } from '@/shared/lib/utils';
 // ── Types ────────────────────────────────────────────────────────────────
 
 export interface TimelineEvent {
-  id: string;
+  id: number | string;
   type:
     | 'status_change'
     | 'document_upload'
@@ -109,7 +109,12 @@ export function UnifiedTimeline({ events, maxItems, className }: UnifiedTimeline
 
   if (displayEvents.length === 0) {
     return (
-      <div className={cn('rounded-xl border border-dashed border-slate-300 p-8 text-center', className)}>
+      <div
+        className={cn(
+          'rounded-xl border border-dashed border-slate-300 p-8 text-center',
+          className,
+        )}
+      >
         <Clock className="h-8 w-8 text-slate-300 mx-auto mb-2" />
         <p className="text-sm text-slate-400">Nenhum evento registrado</p>
       </div>
@@ -147,9 +152,7 @@ export function UnifiedTimeline({ events, maxItems, className }: UnifiedTimeline
                 <p className="text-sm text-slate-500 mt-0.5">{event.description}</p>
               )}
 
-              {event.user && (
-                <p className="text-xs text-slate-400 mt-1">por {event.user}</p>
-              )}
+              {event.user && <p className="text-xs text-slate-400 mt-1">por {event.user}</p>}
             </div>
           </div>
         ))}

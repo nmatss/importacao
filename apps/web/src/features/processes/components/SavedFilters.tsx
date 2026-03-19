@@ -54,7 +54,9 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
     setPresets(loadPresets());
   }, []);
 
-  const hasActiveFilters = Boolean(currentFilters.status || currentFilters.brand || currentFilters.search);
+  const hasActiveFilters = Boolean(
+    currentFilters.status || currentFilters.brand || currentFilters.search,
+  );
 
   const handleSave = useCallback(() => {
     if (!newName.trim() || !hasActiveFilters) return;
@@ -202,6 +204,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
                       handleDelete(preset.id);
                     }}
                     className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    aria-label={`Excluir filtro ${preset.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>

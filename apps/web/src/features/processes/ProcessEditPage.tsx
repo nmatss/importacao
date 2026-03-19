@@ -33,7 +33,7 @@ const processSchema = z.object({
 type ProcessFormData = z.infer<typeof processSchema>;
 
 interface Process {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
   incoterm: string;
@@ -144,6 +144,7 @@ export function ProcessEditPage() {
         <button
           onClick={() => navigate(`/importacao/processos/${id}`)}
           className="rounded-xl p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+          aria-label="Voltar para detalhes do processo"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
@@ -372,7 +373,10 @@ export function ProcessEditPage() {
 
         {/* Error message */}
         {mutation.error && (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700">
+          <div
+            role="alert"
+            className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700"
+          >
             {mutation.error.message}
           </div>
         )}

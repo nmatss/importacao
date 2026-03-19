@@ -1,23 +1,36 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
-import { Mail, Send, Save, Sparkles, ChevronDown, ChevronUp, FileText, Clock, User, AtSign } from 'lucide-react';
+import {
+  Mail,
+  Send,
+  Save,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  FileText,
+  Clock,
+  User,
+  AtSign,
+} from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 
 interface Process {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
 }
 
 interface Communication {
-  id: string;
-  processId: string;
-  recipientName: string;
+  id: number;
+  processId: number;
+  recipient: string;
   recipientEmail: string;
   subject: string;
   body: string;
@@ -33,7 +46,7 @@ interface EmailDraft {
 
 interface ComposerForm {
   processId: string;
-  recipientName: string;
+  recipient: string;
   recipientEmail: string;
   subject: string;
   body: string;
@@ -41,7 +54,7 @@ interface ComposerForm {
 
 const emptyComposer: ComposerForm = {
   processId: '',
-  recipientName: '',
+  recipient: '',
   recipientEmail: '',
   subject: '',
   body: '',
@@ -56,32 +69,48 @@ const statusConfig: Record<string, { label: string; dot: string; bg: string; tex
 export function CommunicationsPage() {
   const queryClient = useQueryClient();
   const [composer, setComposer] = useState<ComposerForm>(emptyComposer);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
-  const { data: processResponse } = useApiQuery<{ data: Process[]; pagination: unknown }>(['processes'], '/api/processes');
+  const { data: processResponse } = useApiQuery<{ data: Process[]; pagination: unknown }>(
+    ['processes'],
+    '/api/processes?limit=500',
+  );
   const processes = processResponse?.data;
 
-  const { data: communications, isLoading: loadingComms } = useApiQuery<Communication[]>(
-    ['communications'],
-    '/api/communications',
-  );
+  const commParams = new URLSearchParams();
+  commParams.set('limit', '100');
+  if (startDate) commParams.set('startDate', startDate);
+  if (endDate) commParams.set('endDate', endDate);
+  const commQs = commParams.toString();
 
-  const saveDraftMutation = useApiMutation<Communication, Omit<Communication, 'id' | 'status' | 'createdAt' | 'sentAt'>>(
-    '/api/communications',
-    'post',
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['communications'] });
-        setComposer(emptyComposer);
-      },
-    },
+  const {
+    data: commsResponse,
+    isLoading: loadingComms,
+    error: commsError,
+    refetch: refetchComms,
+  } = useApiQuery<{ data: Communication[]; pagination: unknown }>(
+    ['communications', startDate, endDate],
+    `/api/communications${commQs ? `?${commQs}` : ''}`,
   );
+  const communications = commsResponse?.data;
+
+  const saveDraftMutation = useApiMutation<
+    Communication,
+    Omit<Communication, 'id' | 'status' | 'createdAt' | 'sentAt'>
+  >('/api/communications', 'post', {
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['communications'] });
+      setComposer(emptyComposer);
+    },
+  });
 
   const handleSaveDraft = () => {
     saveDraftMutation.mutate({
-      processId: composer.processId,
-      recipientName: composer.recipientName,
+      processId: Number(composer.processId),
+      recipient: composer.recipient,
       recipientEmail: composer.recipientEmail,
       subject: composer.subject,
       body: composer.body,
@@ -91,8 +120,8 @@ export function CommunicationsPage() {
   const handleSend = async () => {
     try {
       const draft = await api.post<Communication>('/api/communications', {
-        processId: composer.processId,
-        recipientName: composer.recipientName,
+        processId: Number(composer.processId),
+        recipient: composer.recipient,
         recipientEmail: composer.recipientEmail,
         subject: composer.subject,
         body: composer.body,
@@ -141,7 +170,7 @@ export function CommunicationsPage() {
 
   const isFormValid =
     composer.processId &&
-    composer.recipientName &&
+    composer.recipient &&
     composer.recipientEmail &&
     composer.subject &&
     composer.body;
@@ -151,7 +180,9 @@ export function CommunicationsPage() {
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Comunicacoes</h2>
-        <p className="mt-1 text-sm text-slate-500">Compose e gerencie emails para processos de importacao</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Compose e gerencie emails para processos de importacao
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-5">
@@ -171,8 +202,14 @@ export function CommunicationsPage() {
             <div className="space-y-5 p-6">
               {/* Process select */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Processo</label>
+                <label
+                  htmlFor="comm-process"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Processo
+                </label>
                 <select
+                  id="comm-process"
                   value={composer.processId}
                   onChange={(e) => setComposer({ ...composer, processId: e.target.value })}
                   className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
@@ -189,24 +226,32 @@ export function CommunicationsPage() {
               {/* Recipient fields */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                  <label
+                    htmlFor="comm-recipient"
+                    className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"
+                  >
                     <User className="h-3.5 w-3.5 text-slate-400" />
                     Destinatario
                   </label>
                   <input
+                    id="comm-recipient"
                     type="text"
-                    value={composer.recipientName}
-                    onChange={(e) => setComposer({ ...composer, recipientName: e.target.value })}
+                    value={composer.recipient}
+                    onChange={(e) => setComposer({ ...composer, recipient: e.target.value })}
                     placeholder="Nome do destinatario"
                     className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+                  <label
+                    htmlFor="comm-recipient-email"
+                    className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700"
+                  >
                     <AtSign className="h-3.5 w-3.5 text-slate-400" />
                     Email
                   </label>
                   <input
+                    id="comm-recipient-email"
                     type="email"
                     value={composer.recipientEmail}
                     onChange={(e) => setComposer({ ...composer, recipientEmail: e.target.value })}
@@ -218,8 +263,14 @@ export function CommunicationsPage() {
 
               {/* Subject */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Assunto</label>
+                <label
+                  htmlFor="comm-subject"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Assunto
+                </label>
                 <input
+                  id="comm-subject"
                   type="text"
                   value={composer.subject}
                   onChange={(e) => setComposer({ ...composer, subject: e.target.value })}
@@ -230,8 +281,14 @@ export function CommunicationsPage() {
 
               {/* Body */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">Corpo do Email</label>
+                <label
+                  htmlFor="comm-body"
+                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                >
+                  Corpo do Email
+                </label>
                 <textarea
+                  id="comm-body"
                   value={composer.body}
                   onChange={(e) => setComposer({ ...composer, body: e.target.value })}
                   rows={8}
@@ -243,7 +300,9 @@ export function CommunicationsPage() {
 
               {/* Templates & AI */}
               <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">Templates e IA</p>
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Templates e IA
+                </p>
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={handleGenerateAi}
@@ -311,10 +370,23 @@ export function CommunicationsPage() {
                   </span>
                 ) : null}
               </div>
+              <div className="mt-3">
+                <DateRangeFilter
+                  startDate={startDate}
+                  endDate={endDate}
+                  onStartDateChange={setStartDate}
+                  onEndDateChange={setEndDate}
+                />
+              </div>
             </div>
 
             <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
-              {loadingComms ? (
+              {commsError ? (
+                <ErrorState
+                  message="Erro ao carregar comunicacoes."
+                  onRetry={() => refetchComms()}
+                />
+              ) : loadingComms ? (
                 <LoadingSpinner className="py-12" />
               ) : !communications?.length ? (
                 <EmptyState
@@ -337,7 +409,7 @@ export function CommunicationsPage() {
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-2">
                                 <p className="truncate text-sm font-semibold text-slate-900">
-                                  {comm.recipientName}
+                                  {comm.recipient}
                                 </p>
                                 <span
                                   className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${config.bg} ${config.text}`}
@@ -364,10 +436,14 @@ export function CommunicationsPage() {
                           <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-4">
                             <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
                               <AtSign className="h-3 w-3" />
-                              {comm.recipientName} &lt;{comm.recipientEmail}&gt;
+                              {comm.recipient} &lt;{comm.recipientEmail}&gt;
                             </div>
-                            <p className="mb-2 text-sm font-medium text-slate-700">{comm.subject}</p>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">{comm.body}</p>
+                            <p className="mb-2 text-sm font-medium text-slate-700">
+                              {comm.subject}
+                            </p>
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600">
+                              {comm.body}
+                            </p>
                           </div>
                         )}
                       </div>

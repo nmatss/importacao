@@ -254,7 +254,7 @@ export const validationService = {
       .returning();
 
     if (!updated) {
-      throw new Error('Validation result not found');
+      throw new Error('Resultado de validação não encontrado');
     }
 
     auditService.log(userId, 'manual_resolution', 'validation', resultId, null, null);

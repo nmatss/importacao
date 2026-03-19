@@ -80,14 +80,14 @@ export interface ImportProcess {
 
 /** Lightweight process reference used in list/select contexts. */
 export interface ProcessSummary {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
 }
 
 /** Document attached to a process. */
 export interface Document {
-  id: string;
+  id: number;
   fileName: string;
   documentType: string;
   uploadedAt: string;
@@ -99,7 +99,7 @@ export interface Document {
 
 /** Single espelho line item. */
 export interface EspelhoItem {
-  id: string;
+  id: number;
   itemCode: string;
   description: string;
   color: string;
@@ -118,7 +118,7 @@ export interface EspelhoItem {
 
 /** Espelho (mirror) for a process. */
 export interface Espelho {
-  id: string;
+  id: number;
   status: string;
   items: EspelhoItem[];
   totalFobValue: number;
@@ -174,7 +174,7 @@ export interface EmailLog {
   fromAddress: string;
   subject: string;
   receivedAt: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored' | 'reprocessed';
   attachmentsCount: number;
   processedAttachments: Array<{ filename: string; documentId?: number }> | null;
   processCode: string | null;
@@ -184,8 +184,8 @@ export interface EmailLog {
 
 /** System alert / notification. */
 export interface Alert {
-  id: string;
-  processId: string | null;
+  id: number;
+  processId: number | null;
   processCode: string | null;
   severity: 'info' | 'warning' | 'critical';
   title: string;
@@ -200,7 +200,7 @@ export interface Alert {
 
 /** Application user. */
 export interface User {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role: string;
@@ -209,7 +209,7 @@ export interface User {
 
 /** Validation check result (individual check). */
 export interface ValidationResult {
-  id: string;
+  id: number;
   checkName: string;
   status: 'pass' | 'fail' | 'warning' | 'skipped';
   message: string;

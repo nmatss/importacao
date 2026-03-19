@@ -11,6 +11,8 @@ export const liTrackingController = {
         processCode: req.query.processCode as string | undefined,
         status: req.query.status as string | undefined,
         orgao: req.query.orgao as string | undefined,
+        startDate: req.query.startDate as string | undefined,
+        endDate: req.query.endDate as string | undefined,
       };
       const { data, total } = await liTrackingService.getAll(page, limit, filters);
       sendPaginated(res, data, total, page, limit);

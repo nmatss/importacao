@@ -24,6 +24,7 @@ import paymentTermsCheck from './payment-terms-check.js';
 import dateSequenceCheck from './date-sequence-check.js';
 import weightRatioCheck from './weight-ratio-check.js';
 import supplierAddressMatch from './supplier-address-match.js';
+import certificateCompleteness from './certificate-completeness.js';
 
 export interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -71,4 +72,5 @@ export const allChecks: CheckFn[] = [
   dateSequenceCheck,
   weightRatioCheck,
   supplierAddressMatch,
+  certificateCompleteness,
 ];

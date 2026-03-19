@@ -1,4 +1,4 @@
-import { eq, sql, count } from 'drizzle-orm';
+import { eq, sql, count, and, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { followUpTracking, importProcesses } from '../../shared/database/schema.js';
 import type { FollowUpTracking } from '../../shared/database/schema.js';
@@ -30,8 +30,20 @@ function calculateProgress(tracking: Partial<FollowUpTracking>): number {
 }
 
 export const followUpService = {
-  async getAll(page = 1, limit = 20) {
+  async getAll(page = 1, limit = 20, startDate?: string, endDate?: string) {
     const offset = (page - 1) * limit;
+    const conditions = [];
+
+    if (startDate) {
+      conditions.push(gte(followUpTracking.updatedAt, new Date(startDate)));
+    }
+    if (endDate) {
+      const end = new Date(endDate);
+      end.setDate(end.getDate() + 1);
+      conditions.push(sql`${followUpTracking.updatedAt} < ${end.toISOString()}`);
+    }
+
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -56,9 +68,10 @@ export const followUpService = {
         })
         .from(followUpTracking)
         .innerJoin(importProcesses, eq(followUpTracking.processId, importProcesses.id))
+        .where(where)
         .limit(limit)
         .offset(offset),
-      db.select({ total: count() }).from(followUpTracking),
+      db.select({ total: count() }).from(followUpTracking).where(where),
     ]);
 
     return { data, total, page, limit };
@@ -92,7 +105,15 @@ export const followUpService = {
       if (field in data) safeData[field] = data[field];
     }
 
-    const overallProgress = calculateProgress(safeData);
+    // Merge existing tracking data with incoming changes to calculate correct progress
+    const [existing] = await db
+      .select()
+      .from(followUpTracking)
+      .where(eq(followUpTracking.processId, processId))
+      .limit(1);
+
+    const merged = { ...(existing ?? {}), ...safeData };
+    const overallProgress = calculateProgress(merged);
 
     const [tracking] = await db
       .update(followUpTracking)
@@ -296,7 +317,9 @@ export const followUpService = {
       })
       .from(importProcesses)
       .innerJoin(followUpTracking, eq(followUpTracking.processId, importProcesses.id))
-      .where(eq(importProcesses.hasLiItems, true));
+      .where(
+        and(eq(importProcesses.hasLiItems, true), sql`${importProcesses.shipmentDate} IS NOT NULL`),
+      );
 
     return results;
   },

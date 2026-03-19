@@ -27,7 +27,7 @@ import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { cn } from '@/shared/lib/utils';
 
 interface User {
-  id: string;
+  id: number;
   name: string;
   email: string;
   role: string;
@@ -257,8 +257,11 @@ function GeneralTab() {
       >
         <div className="space-y-4">
           <div>
-            <label className={labelClasses}>Webhook URL</label>
+            <label htmlFor="webhook-url" className={labelClasses}>
+              Webhook URL
+            </label>
             <input
+              id="webhook-url"
               type="url"
               value={webhookUrl}
               onChange={(e) => setWebhookUrl(e.target.value)}
@@ -278,8 +281,11 @@ function GeneralTab() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={labelClasses}>Host</label>
+              <label htmlFor="smtp-host" className={labelClasses}>
+                Host
+              </label>
               <input
+                id="smtp-host"
                 type="text"
                 value={smtpHost}
                 onChange={(e) => setSmtpHost(e.target.value)}
@@ -288,8 +294,11 @@ function GeneralTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Porta</label>
+              <label htmlFor="smtp-port" className={labelClasses}>
+                Porta
+              </label>
               <input
+                id="smtp-port"
                 type="text"
                 value={smtpPort}
                 onChange={(e) => setSmtpPort(e.target.value)}
@@ -298,8 +307,11 @@ function GeneralTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Usuario</label>
+              <label htmlFor="smtp-user" className={labelClasses}>
+                Usuario
+              </label>
               <input
+                id="smtp-user"
                 type="text"
                 value={smtpUser}
                 onChange={(e) => setSmtpUser(e.target.value)}
@@ -308,8 +320,11 @@ function GeneralTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Remetente (From)</label>
+              <label htmlFor="smtp-from" className={labelClasses}>
+                Remetente (From)
+              </label>
               <input
+                id="smtp-from"
                 type="email"
                 value={smtpFrom}
                 onChange={(e) => setSmtpFrom(e.target.value)}
@@ -329,7 +344,7 @@ function UsersTab() {
   const queryClient = useQueryClient();
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
-  const [deactivateId, setDeactivateId] = useState<string | null>(null);
+  const [deactivateId, setDeactivateId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operator' });
   const [saving, setSaving] = useState(false);
 
@@ -488,6 +503,7 @@ function UsersTab() {
                   <td className="whitespace-nowrap px-6 py-3.5">
                     <button
                       onClick={() => toggleActive(user)}
+                      aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
                       className={cn(
                         'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
                         user.active ? 'bg-blue-600' : 'bg-slate-200',
@@ -507,6 +523,7 @@ function UsersTab() {
                         onClick={() => openEdit(user)}
                         className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
                         title="Editar"
+                        aria-label={`Editar usuario ${user.name}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
@@ -514,6 +531,7 @@ function UsersTab() {
                         onClick={() => setDeactivateId(user.id)}
                         className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
                         title="Desativar"
+                        aria-label={`Desativar usuario ${user.name}`}
                       >
                         <UserX className="h-4 w-4" />
                       </button>
@@ -536,8 +554,11 @@ function UsersTab() {
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
               <div>
-                <label className={labelClasses}>Nome</label>
+                <label htmlFor="user-name" className={labelClasses}>
+                  Nome
+                </label>
                 <input
+                  id="user-name"
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -546,8 +567,11 @@ function UsersTab() {
                 />
               </div>
               <div>
-                <label className={labelClasses}>Email</label>
+                <label htmlFor="user-email" className={labelClasses}>
+                  Email
+                </label>
                 <input
+                  id="user-email"
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -556,10 +580,11 @@ function UsersTab() {
                 />
               </div>
               <div>
-                <label className={labelClasses}>
+                <label htmlFor="user-password" className={labelClasses}>
                   Senha{editUser ? ' (deixe vazio para manter)' : ''}
                 </label>
                 <input
+                  id="user-password"
                   type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -568,8 +593,11 @@ function UsersTab() {
                 />
               </div>
               <div>
-                <label className={labelClasses}>Perfil</label>
+                <label htmlFor="user-role" className={labelClasses}>
+                  Perfil
+                </label>
                 <select
+                  id="user-role"
                   value={form.role}
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className={inputClasses}
@@ -700,8 +728,11 @@ function IntegrationsTab() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
-              <label className={labelClasses}>Client Email</label>
+              <label htmlFor="drive-email" className={labelClasses}>
+                Client Email
+              </label>
               <input
+                id="drive-email"
                 type="email"
                 value={driveEmail}
                 onChange={(e) => setDriveEmail(e.target.value)}
@@ -710,8 +741,11 @@ function IntegrationsTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Root Folder ID</label>
+              <label htmlFor="drive-folder-id" className={labelClasses}>
+                Root Folder ID
+              </label>
               <input
+                id="drive-folder-id"
                 type="text"
                 value={driveFolderId}
                 onChange={(e) => setDriveFolderId(e.target.value)}
@@ -733,8 +767,11 @@ function IntegrationsTab() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
-              <label className={labelClasses}>URL</label>
+              <label htmlFor="odoo-url" className={labelClasses}>
+                URL
+              </label>
               <input
+                id="odoo-url"
                 type="url"
                 value={odooUrl}
                 onChange={(e) => setOdooUrl(e.target.value)}
@@ -743,8 +780,11 @@ function IntegrationsTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Database</label>
+              <label htmlFor="odoo-db" className={labelClasses}>
+                Database
+              </label>
               <input
+                id="odoo-db"
                 type="text"
                 value={odooDb}
                 onChange={(e) => setOdooDb(e.target.value)}
@@ -753,8 +793,11 @@ function IntegrationsTab() {
               />
             </div>
             <div>
-              <label className={labelClasses}>Usuario</label>
+              <label htmlFor="odoo-user" className={labelClasses}>
+                Usuario
+              </label>
               <input
+                id="odoo-user"
                 type="text"
                 value={odooUser}
                 onChange={(e) => setOdooUser(e.target.value)}

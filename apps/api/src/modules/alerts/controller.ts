@@ -6,13 +6,23 @@ import type { AuthenticatedRequest } from '../../shared/types/index.js';
 export const alertController = {
   async list(req: Request, res: Response) {
     try {
-      const { processId, severity, acknowledged, page: pageParam, limit: limitParam } = req.query;
+      const {
+        processId,
+        severity,
+        acknowledged,
+        page: pageParam,
+        limit: limitParam,
+        startDate,
+        endDate,
+      } = req.query;
       const page = Number(pageParam) || 1;
       const limit = Math.min(Number(limitParam) || 20, 100);
       const { data, total } = await alertService.list({
         processId: processId ? Number(processId) : undefined,
         severity: severity as string,
         acknowledged: acknowledged !== undefined ? acknowledged === 'true' : undefined,
+        startDate: startDate as string | undefined,
+        endDate: endDate as string | undefined,
         page,
         limit,
       });

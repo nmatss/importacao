@@ -7,9 +7,11 @@ import { PROCESS_STATUSES, BRANDS } from '@/shared/lib/constants';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { PageSkeleton } from '@/shared/components/Skeleton';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 
 interface Process {
-  id: string;
+  id: number;
   processCode: string;
   brand: string;
   status: string;
@@ -34,6 +36,8 @@ export function ProcessListPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState('');
   const [brand, setBrand] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const limit = 20;
 
@@ -46,11 +50,13 @@ export function ProcessListPage() {
   if (debouncedSearch) params.set('search', debouncedSearch);
   if (status) params.set('status', status);
   if (brand) params.set('brand', brand);
+  if (startDate) params.set('startDate', startDate);
+  if (endDate) params.set('endDate', endDate);
   params.set('page', String(page));
   params.set('limit', String(limit));
 
-  const { data, isLoading } = useApiQuery<ProcessListResponse>(
-    ['processes', debouncedSearch, status, brand, String(page)],
+  const { data, isLoading, error, refetch } = useApiQuery<ProcessListResponse>(
+    ['processes', debouncedSearch, status, brand, startDate, endDate, String(page)],
     `/api/processes?${params.toString()}`,
   );
 
@@ -58,7 +64,7 @@ export function ProcessListPage() {
   const totalPages = data?.pagination?.pages ?? 1;
   const totalResults = data?.pagination?.total ?? 0;
 
-  const hasActiveFilters = debouncedSearch || status || brand;
+  const hasActiveFilters = debouncedSearch || status || brand || startDate || endDate;
 
   return (
     <div className="space-y-6">
@@ -127,6 +133,18 @@ export function ProcessListPage() {
                 </option>
               ))}
             </select>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={(v) => {
+                setStartDate(v);
+                setPage(1);
+              }}
+              onEndDateChange={(v) => {
+                setEndDate(v);
+                setPage(1);
+              }}
+            />
           </div>
           {hasActiveFilters && (
             <button
@@ -134,6 +152,8 @@ export function ProcessListPage() {
                 setSearch('');
                 setStatus('');
                 setBrand('');
+                setStartDate('');
+                setEndDate('');
                 setPage(1);
               }}
               className="rounded-xl px-3 py-2.5 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
@@ -145,7 +165,9 @@ export function ProcessListPage() {
       </div>
 
       {/* Table */}
-      {isLoading ? (
+      {error ? (
+        <ErrorState message="Erro ao carregar processos." onRetry={() => refetch()} />
+      ) : isLoading ? (
         <PageSkeleton />
       ) : processes.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">

@@ -6,7 +6,16 @@ export const emailAnalysisResponseSchema = z.object({
   invoiceNumbers: z.array(z.string()).default([]),
   urgencyLevel: z.enum(['normal', 'urgent', 'critical']).default('normal'),
   emailCategory: z
-    .enum(['new_shipment', 'document_delivery', 'correction', 'follow_up', 'payment', 'general'])
+    .enum([
+      'new_shipment',
+      'document_delivery',
+      'correction',
+      'follow_up',
+      'payment',
+      'general',
+      'pre_confirmation',
+      'tracking_sent',
+    ])
     .default('general'),
   keyDates: z
     .array(

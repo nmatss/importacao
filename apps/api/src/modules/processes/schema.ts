@@ -66,8 +66,10 @@ export const processFilterSchema = z.object({
   status: z.string().max(50).optional(),
   brand: z.string().max(50).optional(),
   search: z.string().max(200).optional(),
-  page: z.coerce.number().min(0).default(1),
-  limit: z.coerce.number().min(0).default(20),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).default(20),
 });
 
 export const updateStatusSchema = z.object({

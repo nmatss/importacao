@@ -17,9 +17,9 @@ export const documentController = {
         }));
         return sendError(res, JSON.stringify(errors), 400);
       }
-      const { processId, type } = parsed.data;
+      const { processId, documentType } = parsed.data;
       const userId = req.user?.id ?? null;
-      const doc = await documentService.upload(processId, type, req.file, userId);
+      const doc = await documentService.upload(processId, documentType, req.file, userId);
       sendSuccess(res, doc, 201);
     } catch (error: any) {
       const status = error.statusCode || 400;

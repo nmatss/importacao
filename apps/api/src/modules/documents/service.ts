@@ -44,6 +44,19 @@ function standardizeDocumentName(
       return `${formatted} KIOM BL ${processCode}.pdf`;
     }
   }
+  if (type === 'certificate' && aiData) {
+    const rawCertType =
+      typeof aiData.certificateType === 'object'
+        ? aiData.certificateType?.value
+        : aiData.certificateType;
+    const rawCertNumber =
+      typeof aiData.certificateNumber === 'object'
+        ? aiData.certificateNumber?.value
+        : aiData.certificateNumber;
+    const certType = rawCertType || 'CERT';
+    const certNumber = rawCertNumber || '';
+    return `CERT ${String(certType).toUpperCase()} ${certNumber ? certNumber + ' ' : ''}${processCode}.pdf`;
+  }
   return null;
 }
 
@@ -60,7 +73,7 @@ export const documentService = {
         .insert(documents)
         .values({
           processId,
-          type: type as any,
+          type: type as (typeof documents.type.enumValues)[number],
           originalFilename: file.originalname,
           storagePath: file.path,
           mimeType: file.mimetype,
@@ -71,6 +84,14 @@ export const documentService = {
       // Clean up the uploaded file if DB insert fails
       await fs.unlink(file.path).catch(() => {});
       throw error;
+    }
+
+    // Auto-set hasCertification when a certificate is uploaded
+    if (type === 'certificate') {
+      await db
+        .update(importProcesses)
+        .set({ hasCertification: true, updatedAt: new Date() })
+        .where(eq(importProcesses.id, processId));
     }
 
     // Check if all 3 main documents exist → update status
@@ -86,13 +107,25 @@ export const documentService = {
         .from(importProcesses)
         .where(eq(importProcesses.id, processId))
         .limit(1);
+      let canTransition = false;
       if (currentProc) {
-        assertTransition(currentProc.status as ProcessStatus, 'documents_received');
+        try {
+          assertTransition(currentProc.status as ProcessStatus, 'documents_received');
+          canTransition = true;
+        } catch {
+          // Process already past draft — skip status transition but continue upload
+          logger.info(
+            { processId, currentStatus: currentProc.status },
+            'Skipping status transition: process already advanced past draft',
+          );
+        }
       }
-      await db
-        .update(importProcesses)
-        .set({ status: 'documents_received', updatedAt: new Date() })
-        .where(eq(importProcesses.id, processId));
+      if (canTransition) {
+        await db
+          .update(importProcesses)
+          .set({ status: 'documents_received', updatedAt: new Date() })
+          .where(eq(importProcesses.id, processId));
+      }
 
       await db
         .update(followUpTracking)
@@ -139,8 +172,8 @@ export const documentService = {
       logger.error({ err, documentId: doc.id }, 'AI processing failed'),
     );
 
-    // For invoices, defer Drive upload to after AI processing to get standardized name
-    if (type !== 'invoice') {
+    // For invoices and certificates, defer Drive upload to after AI processing to get standardized name
+    if (type !== 'invoice' && type !== 'certificate') {
       this.uploadToDrive(doc.id, processId, type, file.path, file.originalname).catch((err) =>
         logger.error({ err, documentId: doc.id }, 'Google Drive upload failed'),
       );
@@ -165,6 +198,9 @@ export const documentService = {
         break;
       case 'ohbl':
         result = await aiService.extractBLData(text);
+        break;
+      case 'certificate':
+        result = await aiService.extractCertificateData(text);
         break;
       default:
         return;
@@ -203,6 +239,60 @@ export const documentService = {
       'AI extraction completed',
     );
 
+    // Confidence score gate: alert on low-confidence extractions
+    if (result.confidenceScore < 0.6) {
+      const [proc] = await db
+        .select({ processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
+
+      const severity = result.confidenceScore < 0.4 ? 'critical' : 'warning';
+      const title =
+        result.confidenceScore < 0.4
+          ? 'Extração IA com Confiança Muito Baixa'
+          : 'Extração IA com Confiança Baixa';
+
+      alertService
+        .create({
+          processId: doc.processId,
+          severity,
+          title,
+          message: `Documento ${type} do processo ${proc?.processCode ?? doc.processId} teve confiança de extração de ${(result.confidenceScore * 100).toFixed(0)}%. ${
+            result.confidenceScore < 0.4
+              ? 'Recomenda-se upload manual ou re-request ao fornecedor. Validação automática será suspensa.'
+              : 'Recomenda-se revisão manual dos dados extraídos.'
+          } Campos com baixa confiança: ${result.fieldsWithLowConfidence.join(', ') || 'N/A'}.`,
+          processCode: proc?.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create low-confidence alert'));
+
+      // Score < 0.4: still upload to Drive but skip validation and downstream processing
+      if (result.confidenceScore < 0.4) {
+        logger.warn(
+          { documentId, type, confidence: result.confidenceScore },
+          'Very low confidence - skipping auto-validation trigger',
+        );
+
+        // Upload to Drive with original name (can't trust AI data for standardization)
+        if (type === 'invoice' || type === 'certificate') {
+          this.uploadToDrive(
+            doc.id,
+            doc.processId,
+            type,
+            doc.storagePath,
+            doc.originalFilename,
+          ).catch((err) =>
+            logger.error(
+              { err, documentId: doc.id },
+              'Google Drive upload failed (low confidence doc)',
+            ),
+          );
+        }
+        return;
+      }
+    }
+
     // Auto-populate currency exchanges from invoice payment terms
     if (type === 'invoice' && result.data) {
       import('../currency-exchange/service.js')
@@ -220,7 +310,7 @@ export const documentService = {
     }
 
     // Upload to Drive with standardized name after AI extraction
-    if (type === 'invoice') {
+    if (type === 'invoice' || type === 'certificate') {
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
         .from(importProcesses)
@@ -302,10 +392,18 @@ export const documentService = {
       .limit(10);
 
     for (const log of emailLogs) {
-      const attachments = log.processedAttachments as any[];
+      type AttachmentEntry = { filename?: string; documentId?: number | null };
+      const raw = log.processedAttachments as
+        | AttachmentEntry[]
+        | { attachments?: AttachmentEntry[] }
+        | null;
+      // Support both old format (direct array) and enriched format (object with .attachments)
+      const attachments: AttachmentEntry[] | undefined = Array.isArray(raw)
+        ? raw
+        : (raw?.attachments ?? undefined);
       if (Array.isArray(attachments)) {
         const match = attachments.some(
-          (a: any) => a.filename === doc.originalFilename || a.documentId === doc.id,
+          (a) => a.filename === doc.originalFilename || a.documentId === doc.id,
         );
         if (match) {
           return { source: 'email' as const, emailSubject: log.subject };

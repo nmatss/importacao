@@ -52,7 +52,7 @@ async def verify_api_key(request: Request, api_key: str = Security(api_key_heade
     """Verify API key from X-API-Key header. Skips auth if CERT_API_KEY is not set."""
     if request.url.path == "/api/health":
         return
-    if not API_KEY or not hmac.compare_digest(api_key or "", API_KEY):
+    if API_KEY and not hmac.compare_digest(api_key or "", API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 # ---------------------------------------------------------------------------
@@ -124,17 +124,33 @@ CERT_KEYWORDS = [
 # In-memory store for running validations
 _running_validations: dict[str, dict] = {}
 
+def _cleanup_old_validations(max_age_seconds: int = 3600, stuck_timeout: int = 7200):
+    """Remove completed/error entries older than max_age_seconds, and stuck 'running' entries older than stuck_timeout."""
+    now = time.time()
+    to_remove = [
+        rid for rid, state in _running_validations.items()
+        if (state.get("status") in ("completed", "error")
+            and now - state.get("_finished_at", now) > max_age_seconds)
+        or (state.get("status") == "running"
+            and now - state.get("_started_at", now) > stuck_timeout)
+    ]
+    for rid in to_remove:
+        del _running_validations[rid]
+
 # ---------------------------------------------------------------------------
 # Database helpers
 # ---------------------------------------------------------------------------
 
-_pool: pg_pool.SimpleConnectionPool | None = None
+_pool: pg_pool.ThreadedConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
-def _get_pool() -> pg_pool.SimpleConnectionPool:
+def _get_pool() -> pg_pool.ThreadedConnectionPool:
     global _pool
     if _pool is None or _pool.closed:
-        _pool = pg_pool.SimpleConnectionPool(1, 10, DATABASE_URL)
+        with _pool_lock:
+            if _pool is None or _pool.closed:
+                _pool = pg_pool.ThreadedConnectionPool(1, 10, DATABASE_URL)
     return _pool
 
 
@@ -157,14 +173,24 @@ def db():
 
 
 def _add_column_if_not_exists(col: str, coltype: str):
+    c = None
     try:
         c = get_conn()
         with c.cursor() as cur:
             cur.execute(f"ALTER TABLE cert_products ADD COLUMN IF NOT EXISTS {col} {coltype}")
         c.commit()
-        _get_pool().putconn(c)
     except Exception:
-        pass
+        if c:
+            try:
+                c.rollback()
+            except Exception:
+                pass
+    finally:
+        if c:
+            try:
+                _get_pool().putconn(c)
+            except Exception:
+                pass
 
 
 def ensure_tables():
@@ -732,6 +758,14 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
     return " | ".join(unique) if unique else ""
 
 
+def _normalize_reg_number(num: str) -> str:
+    """Normalize registration numbers by stripping leading zeros.
+    '006083/2024' -> '6083/2024', '0098' -> '98'
+    """
+    parts = num.split('/')
+    return '/'.join(p.lstrip('0') or '0' for p in parts)
+
+
 def _build_product_url(product_data: dict) -> str:
     """Build the product page URL from VTEX data."""
     config = product_data.get("_vtex_config", {})
@@ -805,7 +839,12 @@ def _compare_ecommerce_description(ecommerce_desc: str, actual: str) -> tuple[st
     # Extract numbers/codes from the expected description
     codes = re.findall(r'[\w-]{4,}/[\w-]+|[\w-]+-[\w-]+-[\w-]+|\d{5,}', ecommerce_desc)
     if codes:
-        found = sum(1 for c in codes if c.lower() in actual_clean)
+        # Normalize codes (strip leading zeros) before comparing
+        normalized_codes = [_normalize_reg_number(c) for c in codes]
+        found = sum(
+            1 for nc in normalized_codes
+            if nc.lower() in actual_clean or any(_normalize_reg_number(a) == nc.lower() for a in re.findall(r'[\w-]{4,}/[\w-]+|[\w-]+-[\w-]+-[\w-]+|\d{5,}', actual))
+        )
         if found == len(codes):
             return ("OK", 0.95)
         if found > 0:
@@ -853,7 +892,10 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
     # 1. Check if expected has specific registration numbers that should appear on site
     exp_reg_numbers = re.findall(r'\d{4,}/\d{4}', expected)
     if exp_reg_numbers:
-        found_count = sum(1 for num in exp_reg_numbers if num in actual)
+        # Also extract reg numbers from actual and normalize both sides
+        act_reg_numbers = re.findall(r'\d{4,}/\d{4}', actual)
+        norm_act = {_normalize_reg_number(n) for n in act_reg_numbers}
+        found_count = sum(1 for num in exp_reg_numbers if num in actual or _normalize_reg_number(num) in norm_act)
         if found_count == len(exp_reg_numbers):
             return ("OK", 1.0)
 
@@ -916,6 +958,7 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
 def validate_single_product(
     sku: str, brand: str, expected_cert: str,
     product_name: str = "", ecommerce_description: str = "",
+    sheet_status: str = "", is_expired: bool = False, sale_deadline_date: str = "",
 ) -> dict:
     """
     Validate a single product against VTEX.
@@ -934,6 +977,12 @@ def validate_single_product(
         "error": None,
         "verified_at": now.isoformat(),
     }
+
+    # Early-exit for expired products — no need to hit VTEX
+    if is_expired and sale_deadline_date:
+        result["status"] = "EXPIRED"
+        result["error"] = f"Certificado vencido - prazo final venda: {sale_deadline_date}"
+        return result
 
     if not expected_cert and not ecommerce_description:
         result["status"] = "NO_EXPECTED"
@@ -1001,9 +1050,9 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None):
                 [schedule_id],
             )
 
-        _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0}
+        _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0, "_started_at": time.time()}
         # Run synchronously in the scheduler thread (APScheduler manages threading)
-        _run_validation(run_id, brand_filter, None)
+        _run_validation(run_id, brand_filter, None, "sheets")
 
         # Update history to completed
         with db() as (conn, cur):
@@ -1111,6 +1160,11 @@ def startup():
             log.info(f"Startup sheets sync: {result}")
         except Exception as e:
             log.warning(f"Startup sheets sync failed: {e}")
+        try:
+            li_result = sync_licenciados_to_db()
+            log.info(f"Startup licenciados sync: {li_result}")
+        except Exception as e:
+            log.warning(f"Startup licenciados sync failed: {e}")
 
     # Start the APScheduler and load cron schedules from DB
     try:
@@ -1140,8 +1194,8 @@ def health():
     result = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
     if DATABASE_URL:
         try:
-            conn = get_conn()
-            _get_pool().putconn(conn)
+            with db() as (conn, cur):
+                cur.execute("SELECT 1")
             result["database"] = "connected"
         except Exception:
             result["database"] = "disconnected"
@@ -1294,6 +1348,8 @@ def list_products(
     search: str = Query(""),
     brand: str = Query(""),
     status: str = Query(""),
+    start_date: str = Query(""),
+    end_date: str = Query(""),
 ):
     if not DATABASE_URL:
         return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0, "last_validation_date": None}
@@ -1320,6 +1376,13 @@ def list_products(
             elif statuses:
                 conditions.append("last_validation_status IN ({})".format(",".join(["%s"] * len(statuses))))
                 params.extend(statuses)
+
+        if start_date:
+            conditions.append("last_validation_date >= %s::date")
+            params.append(start_date)
+        if end_date:
+            conditions.append("last_validation_date < (%s::date + interval '1 day')")
+            params.append(end_date)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
@@ -1388,11 +1451,14 @@ def verify_product(req: VerifyRequest):
     expected_cert = ""
     product_name = ""
     ecommerce_desc = ""
+    sheet_status = ""
+    is_expired = False
+    sale_deadline_date_str = ""
     if DATABASE_URL:
         try:
             with db() as (conn, cur):
                 cur.execute(
-                    "SELECT certification_type, brand, name, ecommerce_description FROM cert_products WHERE sku = %s",
+                    "SELECT certification_type, brand, name, ecommerce_description, sheet_status, is_expired, sale_deadline_date FROM cert_products WHERE sku = %s",
                     [req.sku],
                 )
                 row = cur.fetchone()
@@ -1400,6 +1466,9 @@ def verify_product(req: VerifyRequest):
                     expected_cert = row.get("certification_type", "") or ""
                     product_name = row.get("name", "") or ""
                     ecommerce_desc = row.get("ecommerce_description", "") or ""
+                    sheet_status = row.get("sheet_status", "") or ""
+                    is_expired = bool(row.get("is_expired", False))
+                    sale_deadline_date_str = str(row["sale_deadline_date"]) if row.get("sale_deadline_date") else ""
         except Exception:
             pass
 
@@ -1407,6 +1476,7 @@ def verify_product(req: VerifyRequest):
     result = validate_single_product(
         req.sku, req.brand, expected_cert,
         product_name=product_name, ecommerce_description=ecommerce_desc,
+        sheet_status=sheet_status, is_expired=is_expired, sale_deadline_date=sale_deadline_date_str,
     )
 
     # Save result to DB
@@ -1457,7 +1527,8 @@ def start_validation(request: Request, req: ValidateRequest):
                 [run_id, req.brand],
             )
 
-    _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0}
+    _cleanup_old_validations()
+    _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0, "_started_at": time.time()}
     thread = threading.Thread(
         target=_run_validation, args=(run_id, req.brand, req.limit, req.source), daemon=True
     )
@@ -1487,7 +1558,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                     conditions.append("LOWER(brand) = LOWER(%s)")
                     params.append(brand_filter)
                 where = "WHERE " + " AND ".join(conditions) if conditions else ""
-                sql = f"SELECT sku, name, brand, certification_type, ecommerce_description FROM cert_products {where} ORDER BY sku"
+                sql = f"SELECT sku, name, brand, certification_type, ecommerce_description, sheet_status, is_expired, sale_deadline_date FROM cert_products {where} ORDER BY sku"
                 if limit:
                     sql += f" LIMIT {int(limit)}"
                 cur.execute(sql, params)
@@ -1505,9 +1576,13 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
 
             # Real VTEX validation
             ecommerce_desc = p.get("ecommerce_description", "") or ""
+            p_is_expired = bool(p.get("is_expired", False))
+            p_sale_deadline = str(p["sale_deadline_date"]) if p.get("sale_deadline_date") else ""
             vresult = validate_single_product(
                 sku, brand, expected_cert,
                 product_name=p.get("name", ""), ecommerce_description=ecommerce_desc,
+                sheet_status=p.get("sheet_status", "") or "",
+                is_expired=p_is_expired, sale_deadline_date=p_sale_deadline,
             )
 
             status = vresult["status"]
@@ -1607,11 +1682,13 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                 pass
 
         state["status"] = "completed"
+        state["_finished_at"] = time.time()
         state["events"].append({"type": "complete", "summary": summary})
 
     except Exception as e:
         log.error(f"Validation run {run_id} failed: {e}", exc_info=True)
         state["status"] = "error"
+        state["_finished_at"] = time.time()
         state["events"].append({"type": "error", "error": str(e)})
 
 
@@ -1684,11 +1761,23 @@ class ScheduleUpdate(BaseModel):
 
 
 @app.get("/api/schedules")
-def list_schedules():
+def list_schedules(
+    start_date: str = Query(""),
+    end_date: str = Query(""),
+):
     if not DATABASE_URL:
         return []
     with db() as (conn, cur):
-        cur.execute("SELECT * FROM cert_schedules ORDER BY created_at DESC")
+        conditions: list[str] = []
+        params: list = []
+        if start_date:
+            conditions.append("last_run >= %s::date")
+            params.append(start_date)
+        if end_date:
+            conditions.append("last_run < (%s::date + interval '1 day')")
+            params.append(end_date)
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+        cur.execute(f"SELECT * FROM cert_schedules {where} ORDER BY created_at DESC", params)
         rows = []
         for r in cur.fetchall():
             row = dict(r)
@@ -1800,8 +1889,9 @@ def run_schedule_now(schedule_id: str):
         now = datetime.now(timezone.utc)
         cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
 
-    _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0}
-    thread = threading.Thread(target=_run_validation, args=(run_id, brand, None), daemon=True)
+    _cleanup_old_validations()
+    _running_validations[run_id] = {"status": "running", "events": [], "processed": 0, "total": 0, "_started_at": time.time()}
+    thread = threading.Thread(target=_run_validation, args=(run_id, brand, None, "sheets"), daemon=True)
     thread.start()
 
     try:
@@ -2115,3 +2205,264 @@ def download_report(filename: str, format: str = Query("xlsx")):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=excel_filename,
     )
+
+
+# ---------------------------------------------------------------------------
+# Licenciados (LI Tracking from Google Sheets)
+# ---------------------------------------------------------------------------
+
+def _ensure_li_tracking_table():
+    """Create li_tracking table if it doesn't exist."""
+    with db() as (conn, cur):
+        # Create table without FK to import_processes to avoid startup ordering issues.
+        # The process_id column is nullable and looked up at sync time.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS li_tracking (
+                id SERIAL PRIMARY KEY,
+                process_id INTEGER,
+                process_code TEXT,
+                ncm TEXT,
+                orgao TEXT,
+                supplier TEXT,
+                item TEXT,
+                description TEXT,
+                status TEXT DEFAULT 'pending',
+                lpco_number TEXT,
+                valid_until DATE,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+
+
+def _read_licenciados_from_sheets() -> list[dict]:
+    """Read 'Licenciados' worksheet from the shared spreadsheet."""
+    client = _get_sheets_client()
+    if not client:
+        return []
+    try:
+        spreadsheet = client.open_by_key(SHEETS_SPREADSHEET_ID)
+    except Exception as e:
+        log.error(f"Failed to open spreadsheet for Licenciados: {e}")
+        return []
+
+    try:
+        ws = spreadsheet.worksheet("Licenciados")
+        rows = ws.get_all_values()
+    except gspread.exceptions.WorksheetNotFound:
+        log.info("Worksheet 'Licenciados' not found")
+        return []
+    except Exception as e:
+        log.warning(f"Could not read worksheet 'Licenciados': {e}")
+        return []
+
+    if not rows or len(rows) < 2:
+        return []
+
+    headers = rows[0]
+    ncm_col = _find_col_by_header(headers, "ncm")
+    process_col = _find_col_by_header(headers, "processo", "process")
+    orgao_col = _find_col_by_header(headers, "orgão", "orgao", "órgão")
+    supplier_col = _find_col_by_header(headers, "fornecedor", "supplier")
+    item_col = _find_col_by_header(headers, "item")
+    desc_col = _find_col_by_header(headers, "descrição", "descricao", "description")
+    status_col = _find_col_by_header(headers, "status")
+    lpco_col = _find_col_by_header(headers, "lpco", "número lpco", "numero lpco")
+    valid_col = _find_col_by_header(headers, "validade", "valid_until", "vencimento")
+
+    items: list[dict] = []
+    for row in rows[1:]:
+        def get_val(col_idx: int | None) -> str:
+            if col_idx is None or col_idx >= len(row):
+                return ""
+            return str(row[col_idx]).strip()
+
+        process_code = get_val(process_col)
+        if not process_code:
+            continue
+
+        valid_str = get_val(valid_col)
+        valid_date = None
+        if valid_str:
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+                try:
+                    valid_date = datetime.strptime(valid_str, fmt).date()
+                    break
+                except ValueError:
+                    continue
+
+        items.append({
+            "process_code": process_code,
+            "ncm": get_val(ncm_col),
+            "orgao": get_val(orgao_col),
+            "supplier": get_val(supplier_col),
+            "item": get_val(item_col),
+            "description": get_val(desc_col),
+            "status": get_val(status_col) or "pending",
+            "lpco_number": get_val(lpco_col),
+            "valid_until": valid_date,
+        })
+
+    log.info(f"Read {len(items)} licenciados from Google Sheets")
+    return items
+
+
+def sync_licenciados_to_db() -> dict:
+    """Sync Licenciados from Google Sheets into li_tracking table."""
+    items = _read_licenciados_from_sheets()
+    if not items:
+        return {"synced": 0, "error": "No licenciados found or Sheets not configured"}
+    if not DATABASE_URL:
+        return {"synced": 0, "error": "Database not configured"}
+
+    _ensure_li_tracking_table()
+
+    try:
+        with db() as (conn, cur):
+            # Build process_code -> process_id lookup
+            cur.execute("SELECT id, process_code FROM import_processes")
+            process_map = {r["process_code"]: r["id"] for r in cur.fetchall()}
+
+            synced = 0
+            for item in items:
+                process_id = process_map.get(item["process_code"])
+
+                cur.execute(
+                    """
+                    INSERT INTO li_tracking (process_id, process_code, ncm, orgao, supplier, item,
+                                             description, status, lpco_number, valid_until, updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT ON CONSTRAINT li_tracking_process_code_ncm_item_key
+                    DO UPDATE SET
+                        process_id = COALESCE(EXCLUDED.process_id, li_tracking.process_id),
+                        orgao = COALESCE(NULLIF(EXCLUDED.orgao, ''), li_tracking.orgao),
+                        supplier = COALESCE(NULLIF(EXCLUDED.supplier, ''), li_tracking.supplier),
+                        description = COALESCE(NULLIF(EXCLUDED.description, ''), li_tracking.description),
+                        status = COALESCE(NULLIF(EXCLUDED.status, ''), li_tracking.status),
+                        lpco_number = COALESCE(NULLIF(EXCLUDED.lpco_number, ''), li_tracking.lpco_number),
+                        valid_until = COALESCE(EXCLUDED.valid_until, li_tracking.valid_until),
+                        updated_at = NOW()
+                    """,
+                    [process_id, item["process_code"], item["ncm"], item["orgao"],
+                     item["supplier"], item["item"], item["description"],
+                     item["status"], item["lpco_number"], item["valid_until"]],
+                )
+                synced += 1
+
+        return {"synced": synced, "total_rows": len(items)}
+    except Exception as e:
+        log.error(f"Failed to sync licenciados to DB: {e}")
+        # If unique constraint doesn't exist, create it and retry (once only)
+        if "li_tracking_process_code_ncm_item_key" in str(e):
+            try:
+                with db() as (conn, cur):
+                    cur.execute("""
+                        ALTER TABLE li_tracking
+                        ADD CONSTRAINT li_tracking_process_code_ncm_item_key
+                        UNIQUE (process_code, ncm, item)
+                    """)
+                # Retry the sync inline (no recursion)
+                with db() as (conn, cur):
+                    cur.execute("SELECT id, process_code FROM import_processes")
+                    process_map = {r["process_code"]: r["id"] for r in cur.fetchall()}
+                    synced = 0
+                    for item in items:
+                        process_id = process_map.get(item["process_code"])
+                        cur.execute(
+                            """
+                            INSERT INTO li_tracking (process_id, process_code, ncm, orgao, supplier, item,
+                                                     description, status, lpco_number, valid_until, updated_at)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+                            ON CONFLICT ON CONSTRAINT li_tracking_process_code_ncm_item_key
+                            DO UPDATE SET
+                                process_id = COALESCE(EXCLUDED.process_id, li_tracking.process_id),
+                                orgao = COALESCE(NULLIF(EXCLUDED.orgao, ''), li_tracking.orgao),
+                                supplier = COALESCE(NULLIF(EXCLUDED.supplier, ''), li_tracking.supplier),
+                                description = COALESCE(NULLIF(EXCLUDED.description, ''), li_tracking.description),
+                                status = COALESCE(NULLIF(EXCLUDED.status, ''), li_tracking.status),
+                                lpco_number = COALESCE(NULLIF(EXCLUDED.lpco_number, ''), li_tracking.lpco_number),
+                                valid_until = COALESCE(EXCLUDED.valid_until, li_tracking.valid_until),
+                                updated_at = NOW()
+                            """,
+                            [process_id, item["process_code"], item["ncm"], item["orgao"],
+                             item["supplier"], item["item"], item["description"],
+                             item["status"], item["lpco_number"], item["valid_until"]],
+                        )
+                        synced += 1
+                return {"synced": synced, "total_rows": len(items), "note": "constraint created and retried"}
+            except Exception as retry_err:
+                log.error(f"Retry after constraint creation failed: {retry_err}")
+        return {"synced": 0, "error": str(e)}
+
+
+@app.post("/api/sync-licenciados")
+@limiter.limit("5/minute")
+def trigger_sync_licenciados(request: Request):
+    if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
+        raise HTTPException(400, "Google Sheets credentials not configured")
+    result = sync_licenciados_to_db()
+    if result.get("error"):
+        raise HTTPException(500, result["error"])
+    return result
+
+
+@app.get("/api/licenciados")
+def list_licenciados(
+    page: int = Query(1, ge=1),
+    per_page: int = Query(25, ge=1, le=100),
+    search: str = Query(""),
+    status: str = Query(""),
+    start_date: str = Query(""),
+    end_date: str = Query(""),
+):
+    if not DATABASE_URL:
+        return {"items": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0}
+
+    _ensure_li_tracking_table()
+
+    with db() as (conn, cur):
+        conditions: list[str] = []
+        params: list = []
+
+        if search:
+            conditions.append("(process_code ILIKE %s OR ncm ILIKE %s OR description ILIKE %s)")
+            params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
+        if status:
+            conditions.append("status = %s")
+            params.append(status)
+        if start_date:
+            conditions.append("created_at >= %s::date")
+            params.append(start_date)
+        if end_date:
+            conditions.append("created_at < (%s::date + interval '1 day')")
+            params.append(end_date)
+
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        cur.execute(f"SELECT COUNT(*) as cnt FROM li_tracking {where}", params)
+        total = cur.fetchone()["cnt"]
+
+        offset = (page - 1) * per_page
+        cur.execute(
+            f"""SELECT * FROM li_tracking {where}
+                ORDER BY updated_at DESC NULLS LAST
+                LIMIT %s OFFSET %s""",
+            params + [per_page, offset],
+        )
+        rows = []
+        for r in cur.fetchall():
+            row = dict(r)
+            for dtfield in ("created_at", "updated_at", "valid_until"):
+                if row.get(dtfield):
+                    row[dtfield] = row[dtfield].isoformat() if hasattr(row[dtfield], 'isoformat') else str(row[dtfield])
+            rows.append(row)
+
+        total_pages = max(1, (total + per_page - 1) // per_page)
+
+        return {
+            "items": rows,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": total_pages,
+        }

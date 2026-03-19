@@ -18,7 +18,9 @@ export const emailIngestionController = {
     try {
       const page = Number(req.query.page) || 1;
       const limit = Number(req.query.limit) || 20;
-      const result = await emailProcessor.getLogs(page, limit);
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const result = await emailProcessor.getLogs(page, limit, startDate, endDate);
       sendPaginated(res, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
       const status = error.statusCode || 400;

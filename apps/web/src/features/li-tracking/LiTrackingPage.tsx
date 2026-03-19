@@ -14,10 +14,12 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { PageSkeleton } from '@/shared/components/Skeleton';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { formatDate, cn } from '@/shared/lib/utils';
 
 interface LiItem {
   id: number;
+  processId: number | null;
   processCode: string;
   orgao: string | null;
   ncm: string | null;
@@ -92,6 +94,8 @@ export function LiTrackingPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [orgaoFilter, setOrgaoFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const limit = 25;
 
@@ -100,13 +104,15 @@ export function LiTrackingPage() {
   queryParams.set('limit', String(limit));
   if (statusFilter) queryParams.set('status', statusFilter);
   if (orgaoFilter) queryParams.set('orgao', orgaoFilter);
-  if (search) queryParams.set('search', search);
+  if (search) queryParams.set('processCode', search);
+  if (startDate) queryParams.set('startDate', startDate);
+  if (endDate) queryParams.set('endDate', endDate);
 
   const { data: liResponse, isLoading } = useApiQuery<{
     data: LiItem[];
-    pagination: { page: number; totalPages: number; total: number };
+    pagination: { page: number; pages: number; total: number };
   }>(
-    ['li-tracking', String(page), statusFilter, orgaoFilter, search],
+    ['li-tracking', String(page), statusFilter, orgaoFilter, search, startDate, endDate],
     `/api/li-tracking?${queryParams.toString()}`,
   );
   const liData = liResponse?.data;
@@ -183,10 +189,13 @@ export function LiTrackingPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Search */}
           <div className="flex-1 max-w-xs">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Processo</label>
+            <label htmlFor="li-search" className="mb-1.5 block text-sm font-medium text-slate-700">
+              Processo
+            </label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                id="li-search"
                 type="text"
                 value={search}
                 onChange={(e) => {
@@ -201,9 +210,12 @@ export function LiTrackingPage() {
 
           {/* Status Filter */}
           <div className="max-w-[200px]">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Status</label>
+            <label htmlFor="li-status" className="mb-1.5 block text-sm font-medium text-slate-700">
+              Status
+            </label>
             <div className="relative">
               <select
+                id="li-status"
                 value={statusFilter}
                 onChange={(e) => {
                   setStatusFilter(e.target.value);
@@ -223,9 +235,12 @@ export function LiTrackingPage() {
 
           {/* Orgao Filter */}
           <div className="max-w-[200px]">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Orgao</label>
+            <label htmlFor="li-orgao" className="mb-1.5 block text-sm font-medium text-slate-700">
+              Orgao
+            </label>
             <div className="relative">
               <select
+                id="li-orgao"
                 value={orgaoFilter}
                 onChange={(e) => {
                   setOrgaoFilter(e.target.value);
@@ -242,6 +257,24 @@ export function LiTrackingPage() {
               </select>
               <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             </div>
+          </div>
+
+          {/* Date Range Filter */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">Periodo</label>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={(v) => {
+                setStartDate(v);
+                setPage(1);
+              }}
+              onEndDateChange={(v) => {
+                setEndDate(v);
+                setPage(1);
+              }}
+              label=""
+            />
           </div>
         </div>
       </div>
@@ -289,8 +322,13 @@ export function LiTrackingPage() {
                 {liData.map((li) => (
                   <tr
                     key={li.id}
-                    onClick={() => navigate(`/importacao/processos/${li.id}`)}
-                    className="cursor-pointer transition-colors hover:bg-slate-50"
+                    onClick={() =>
+                      li.processId ? navigate(`/importacao/processos/${li.processId}`) : undefined
+                    }
+                    className={cn(
+                      'transition-colors hover:bg-slate-50',
+                      li.processId != null && 'cursor-pointer',
+                    )}
                   >
                     <td className="whitespace-nowrap px-5 py-3.5 text-sm font-semibold text-slate-900">
                       {li.processCode}
@@ -337,10 +375,10 @@ export function LiTrackingPage() {
           </div>
 
           {/* Pagination */}
-          {pagination && pagination.totalPages > 1 && (
+          {pagination && pagination.pages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3.5">
               <p className="text-sm text-slate-500">
-                Pagina {pagination.page} de {pagination.totalPages} ({pagination.total} registros)
+                Pagina {pagination.page} de {pagination.pages} ({pagination.total} registros)
               </p>
               <div className="flex items-center gap-2">
                 <button
@@ -352,8 +390,8 @@ export function LiTrackingPage() {
                   Anterior
                 </button>
                 <button
-                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                  disabled={pagination.page >= pagination.totalPages}
+                  onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
+                  disabled={pagination.page >= pagination.pages}
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Proximo

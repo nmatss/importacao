@@ -16,6 +16,7 @@ export const DOCUMENT_TYPES = [
   { value: 'ohbl', label: 'Conhecimento de Embarque (BL)' },
   { value: 'espelho', label: 'Espelho' },
   { value: 'li', label: 'Licença de Importação (LI)' },
+  { value: 'certificate', label: 'Certificado' },
   { value: 'other', label: 'Outro' },
 ] as const;
 
@@ -46,4 +47,10 @@ export const VALIDATION_CHECK_NAMES = [
   { value: 'freight-vs-fup', description: 'Frete vs Sistema' },
   { value: 'cbm-vs-fup', description: 'CBM vs Sistema' },
   { value: 'container-type-vs-fup', description: 'Container vs Sistema' },
+  { value: 'item-level-match', description: 'Correspondência de Itens (INV vs PL)' },
+  { value: 'payment-terms-check', description: 'Condições de Pagamento' },
+  { value: 'date-sequence-check', description: 'Sequência de Datas' },
+  { value: 'weight-ratio-check', description: 'Proporção Peso Bruto/Líquido' },
+  { value: 'supplier-address-match', description: 'Endereço do Fornecedor' },
+  { value: 'certificate-completeness', description: 'Completude do Certificado' },
 ] as const;

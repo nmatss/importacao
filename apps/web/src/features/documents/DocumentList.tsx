@@ -19,7 +19,7 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 
 interface Document {
-  id: string;
+  id: number;
   fileName: string;
   documentType: string;
   uploadedAt: string;
@@ -38,8 +38,7 @@ interface DocumentListProps {
   processId: string;
 }
 
-const typeLabel = (type: string) =>
-  DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
+const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
 
 function ConfidenceIndicator({ value }: { value: number }) {
   const color =
@@ -72,7 +71,7 @@ function AiStatusIndicator({ status }: { status: Document['aiProcessingStatus'] 
 
 export function DocumentList({ processId }: DocumentListProps) {
   const queryClient = useQueryClient();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
 
@@ -81,7 +80,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     `/api/documents/process/${processId}`,
   );
 
-  const fetchSource = async (docId: string) => {
+  const fetchSource = async (docId: number) => {
     if (sources[docId]) return;
     try {
       const token = localStorage.getItem('importacao_token');
@@ -114,19 +113,21 @@ export function DocumentList({ processId }: DocumentListProps) {
     },
   );
 
-  const handleReprocess = (docId: string) => {
+  const handleReprocess = (docId: number) => {
     // Use fetch directly since URL varies per document
     const token = localStorage.getItem('importacao_token');
     const baseUrl = import.meta.env.VITE_API_URL || '';
     fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then((res) => {
-      if (!res.ok) throw new Error('Falha ao reprocessar documento');
-      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
-    }).catch((err: any) => {
-      toast.error(err.message || 'Erro ao reprocessar documento');
-    });
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao reprocessar documento');
+        queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      })
+      .catch((err: any) => {
+        toast.error(err.message || 'Erro ao reprocessar documento');
+      });
   };
 
   const handleDelete = (doc: Document) => {
@@ -135,13 +136,15 @@ export function DocumentList({ processId }: DocumentListProps) {
     fetch(`${baseUrl}/api/documents/${doc.id}`, {
       method: 'DELETE',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
-    }).then((res) => {
-      if (!res.ok) throw new Error('Falha ao excluir documento');
-      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
-      setDeleteTarget(null);
-    }).catch((err: any) => {
-      toast.error(err.message || 'Erro ao excluir documento');
-    });
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error('Falha ao excluir documento');
+        queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+        setDeleteTarget(null);
+      })
+      .catch((err: any) => {
+        toast.error(err.message || 'Erro ao excluir documento');
+      });
   };
 
   if (isLoading) {
@@ -149,11 +152,7 @@ export function DocumentList({ processId }: DocumentListProps) {
   }
 
   if (!documents || documents.length === 0) {
-    return (
-      <p className="py-6 text-center text-sm text-gray-500">
-        Nenhum documento enviado.
-      </p>
-    );
+    return <p className="py-6 text-center text-sm text-gray-500">Nenhum documento enviado.</p>;
   }
 
   return (
@@ -167,9 +166,7 @@ export function DocumentList({ processId }: DocumentListProps) {
               <div className="flex items-center gap-3 px-4 py-3">
                 <FileText className="h-5 w-5 shrink-0 text-gray-400" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">
-                    {doc.fileName}
-                  </p>
+                  <p className="truncate text-sm font-medium text-gray-900">{doc.fileName}</p>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
                     <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
                       {typeLabel(doc.documentType)}
@@ -184,13 +181,15 @@ export function DocumentList({ processId }: DocumentListProps) {
                     onClick={() => fetchSource(doc.id)}
                     className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                     title="Ver origem"
+                    aria-label="Ver origem do documento"
                   >
                     {sources[doc.id] ? (
                       sources[doc.id].source === 'email' ? (
                         <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
                           <Mail className="h-3 w-3" />
                           {sources[doc.id].emailSubject
-                            ? sources[doc.id].emailSubject!.slice(0, 20) + (sources[doc.id].emailSubject!.length > 20 ? '...' : '')
+                            ? sources[doc.id].emailSubject!.slice(0, 20) +
+                              (sources[doc.id].emailSubject!.length > 20 ? '...' : '')
                             : 'Email'}
                         </span>
                       ) : (
@@ -218,6 +217,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                       rel="noopener noreferrer"
                       className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-green-600 transition-colors"
                       title="Abrir no Drive"
+                      aria-label="Abrir documento no Google Drive"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </a>
@@ -228,6 +228,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                       onClick={() => setExpandedId(expanded ? null : doc.id)}
                       className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
                       title="Ver dados extraídos"
+                      aria-label={expanded ? 'Ocultar dados extraidos' : 'Ver dados extraidos'}
                     >
                       {expanded ? (
                         <ChevronDown className="h-4 w-4" />
@@ -241,6 +242,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                     onClick={() => handleReprocess(doc.id)}
                     className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600 transition-colors"
                     title="Reprocessar IA"
+                    aria-label="Reprocessar documento com IA"
                   >
                     <RefreshCw className="h-4 w-4" />
                   </button>
@@ -249,6 +251,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                     onClick={() => setDeleteTarget(doc)}
                     className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
                     title="Excluir"
+                    aria-label={`Excluir documento ${doc.fileName}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>

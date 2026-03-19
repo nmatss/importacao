@@ -13,6 +13,7 @@ const FILE_TYPES = [
   { value: 'ohbl', label: 'BL' },
   { value: 'espelho', label: 'Espelho' },
   { value: 'li', label: 'LI' },
+  { value: 'certificate', label: 'Certificado' },
   { value: 'other', label: 'Outro' },
 ] as const;
 
@@ -58,6 +59,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           xhr.onload = () => {
             if (xhr.status >= 200 && xhr.status < 300) {
               setUploadedFile(file.name);
+              if (fileInputRef.current) fileInputRef.current.value = '';
               queryClient.invalidateQueries({ queryKey: ['documents', processId] });
               resolve();
             } else {
@@ -125,9 +127,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
         onClick={() => fileInputRef.current?.click()}
         className={cn(
           'cursor-pointer rounded-lg border-2 border-dashed p-8 text-center transition-colors',
-          dragOver
-            ? 'border-blue-500 bg-blue-50'
-            : 'border-gray-300 hover:border-gray-400',
+          dragOver ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400',
         )}
       >
         <input
@@ -153,23 +153,21 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           <div className="flex flex-col items-center gap-2">
             <CheckCircle className="h-8 w-8 text-green-500" />
             <p className="text-sm font-medium text-green-700">{uploadedFile}</p>
-            <p className="text-xs text-gray-500">
-              Clique para enviar outro arquivo
-            </p>
+            <p className="text-xs text-gray-500">Clique para enviar outro arquivo</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
             <Upload className="h-8 w-8 text-gray-400" />
-            <p className="text-sm text-gray-600">
-              Arraste um arquivo ou clique para selecionar
-            </p>
+            <p className="text-sm text-gray-600">Arraste um arquivo ou clique para selecionar</p>
             <p className="text-xs text-gray-400">PDF, XLSX, XLS</p>
           </div>
         )}
       </div>
 
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p role="alert" className="text-sm text-red-600">
+          {error}
+        </p>
       )}
     </div>
   );

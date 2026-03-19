@@ -3,6 +3,7 @@ import { logger } from '../../shared/utils/logger.js';
 
 export interface FetchedEmail {
   messageId: string;
+  gmailId: string;
   from: string;
   subject: string;
   body: string;
@@ -25,7 +26,9 @@ function getGmailClient(): gmail_v1.Gmail {
   const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX;
 
   if (!clientEmail || !privateKey) {
-    throw new Error('Google service account credentials not configured (GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY)');
+    throw new Error(
+      'Google service account credentials not configured (GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY)',
+    );
   }
 
   if (!sharedMailbox) {
@@ -48,7 +51,7 @@ function decodeBase64Url(data: string): Buffer {
 }
 
 function extractHeader(headers: gmail_v1.Schema$MessagePartHeader[], name: string): string {
-  return headers?.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
+  return headers?.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value || '';
 }
 
 function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): string {
@@ -71,7 +74,10 @@ function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): stri
     for (const part of payload.parts) {
       if (part.mimeType === 'text/html' && part.body?.data) {
         const html = decodeBase64Url(part.body.data).toString('utf-8');
-        return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        return html
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
       }
     }
     // Recurse into nested multipart
@@ -88,8 +94,20 @@ function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): stri
 
 function findAttachmentParts(
   parts: gmail_v1.Schema$MessagePart[] | undefined,
-): Array<{ partId: string; filename: string; mimeType: string; bodyAttachmentId: string; size: number }> {
-  const attachments: Array<{ partId: string; filename: string; mimeType: string; bodyAttachmentId: string; size: number }> = [];
+): Array<{
+  partId: string;
+  filename: string;
+  mimeType: string;
+  bodyAttachmentId: string;
+  size: number;
+}> {
+  const attachments: Array<{
+    partId: string;
+    filename: string;
+    mimeType: string;
+    bodyAttachmentId: string;
+    size: number;
+  }> = [];
 
   if (!parts) return attachments;
 
@@ -99,8 +117,14 @@ function findAttachmentParts(
       const fname = part.filename.toLowerCase();
 
       // Only process PDF and Excel files
-      if (mime.includes('pdf') || mime.includes('excel') || mime.includes('spreadsheet')
-        || fname.endsWith('.pdf') || fname.endsWith('.xlsx') || fname.endsWith('.xls')) {
+      if (
+        mime.includes('pdf') ||
+        mime.includes('excel') ||
+        mime.includes('spreadsheet') ||
+        fname.endsWith('.pdf') ||
+        fname.endsWith('.xlsx') ||
+        fname.endsWith('.xls')
+      ) {
         attachments.push({
           partId: part.partId || '',
           filename: part.filename,
@@ -130,13 +154,18 @@ export const gmailService = {
       searchQuery = queryOverride;
     } else {
       // Build search query from EMAIL_ALLOWED_SENDERS
-      const allowedSenders = process.env.EMAIL_ALLOWED_SENDERS
-        ?.split(',').map(s => s.trim()).filter(Boolean) || [];
-      const fromFilter = allowedSenders.length > 0
-        ? `{${allowedSenders.map(s => `from:${s}`).join(' ')}}`
-        : '';
+      const allowedSenders =
+        process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+          .map((s) => s.trim())
+          .filter(Boolean) || [];
+      const fromFilter =
+        allowedSenders.length > 0 ? `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}` : '';
       const unreadFilter = includeRead ? '' : 'is:unread';
-      searchQuery = `${unreadFilter} has:attachment ${fromFilter}`.trim();
+      // Default date limit: only fetch emails from last 30 days to prevent fetching entire mailbox
+      const dateLimit = includeRead ? 'newer_than:30d' : '';
+      searchQuery = `${unreadFilter} ${dateLimit} has:attachment ${fromFilter}`
+        .replace(/\s+/g, ' ')
+        .trim();
     }
 
     logger.info({ searchQuery }, 'Gmail search query');
@@ -185,7 +214,8 @@ export const gmailService = {
 
           // Find attachment parts
           const attachmentParts = findAttachmentParts(
-            fullMessage.data.payload?.parts || (fullMessage.data.payload ? [fullMessage.data.payload] : []),
+            fullMessage.data.payload?.parts ||
+              (fullMessage.data.payload ? [fullMessage.data.payload] : []),
           );
 
           // Download attachments
@@ -208,7 +238,10 @@ export const gmailService = {
                 });
               }
             } catch (attErr) {
-              logger.error({ err: attErr, filename: att.filename }, 'Failed to download attachment');
+              logger.error(
+                { err: attErr, filename: att.filename },
+                'Failed to download attachment',
+              );
             }
           }
 
@@ -216,6 +249,7 @@ export const gmailService = {
 
           emails.push({
             messageId,
+            gmailId: msg.id!,
             from,
             subject,
             body,
@@ -223,7 +257,7 @@ export const gmailService = {
             attachments,
           });
 
-          // Mark as read
+          // Mark as read immediately (prevents re-fetching on next run)
           await gmail.users.messages.modify({
             userId: 'me',
             id: msg.id!,
@@ -260,9 +294,9 @@ export const gmailService = {
 
   isConfigured(): boolean {
     return !!(
-      process.env.GOOGLE_DRIVE_CLIENT_EMAIL
-      && process.env.GOOGLE_DRIVE_PRIVATE_KEY
-      && process.env.GMAIL_SHARED_MAILBOX
+      process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
+      process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
+      process.env.GMAIL_SHARED_MAILBOX
     );
   },
 };

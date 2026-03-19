@@ -15,7 +15,7 @@ import { cn, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 
 interface EspelhoItem {
-  id: string;
+  id: number;
   itemCode: string;
   description: string;
   color: string;
@@ -33,7 +33,7 @@ interface EspelhoItem {
 }
 
 interface Espelho {
-  id: string;
+  id: number;
   status: string;
   items: EspelhoItem[];
   totalFobValue: number;
@@ -55,7 +55,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
   const [editingCell, setEditingCell] = useState<{
-    itemId: string;
+    itemId: number;
     field: string;
   } | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -137,7 +137,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     }
   };
 
-  const startEdit = (itemId: string, field: string, currentValue: string | number) => {
+  const startEdit = (itemId: number, field: string, currentValue: string | number) => {
     setEditingCell({ itemId, field });
     setEditValue(String(currentValue));
   };
@@ -175,8 +175,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   };
 
   const renderCell = (item: EspelhoItem, field: string, value: string | number) => {
-    const isEditing =
-      editingCell?.itemId === item.id && editingCell?.field === field;
+    const isEditing = editingCell?.itemId === item.id && editingCell?.field === field;
 
     if (isEditing) {
       return (
@@ -225,11 +224,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           disabled={generating}
           className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {generating ? (
-            <LoadingSpinner size="sm" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
+          {generating ? <LoadingSpinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
           Gerar Espelho
         </button>
 
@@ -291,9 +286,13 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               Enviado ao Drive
               {espelho.driveSentAt && (
                 <span className="text-xs text-green-600">
-                  em {new Date(espelho.driveSentAt).toLocaleDateString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
+                  em{' '}
+                  {new Date(espelho.driveSentAt).toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
                   })}
                 </span>
               )}
@@ -305,9 +304,13 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               Enviado a Fenicia
               {espelho.sentToFeniciaAt && (
                 <span className="text-xs text-orange-600">
-                  em {new Date(espelho.sentToFeniciaAt).toLocaleDateString('pt-BR', {
-                    day: '2-digit', month: '2-digit', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit',
+                  em{' '}
+                  {new Date(espelho.sentToFeniciaAt).toLocaleDateString('pt-BR', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
                   })}
                 </span>
               )}
@@ -360,21 +363,13 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
             <tbody className="divide-y divide-gray-200 bg-white">
               {espelho.items.map((item) => (
                 <tr key={item.id} className={cn('transition-colors', rowBg(item))}>
-                  <td className="px-3 py-2">
-                    {renderCell(item, 'itemCode', item.itemCode)}
-                  </td>
+                  <td className="px-3 py-2">{renderCell(item, 'itemCode', item.itemCode)}</td>
                   <td className="px-3 py-2 max-w-[200px]">
                     {renderCell(item, 'description', item.description)}
                   </td>
-                  <td className="px-3 py-2">
-                    {renderCell(item, 'color', item.color)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {renderCell(item, 'size', item.size)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {renderCell(item, 'ncm', item.ncm)}
-                  </td>
+                  <td className="px-3 py-2">{renderCell(item, 'color', item.color)}</td>
+                  <td className="px-3 py-2">{renderCell(item, 'size', item.size)}</td>
+                  <td className="px-3 py-2">{renderCell(item, 'ncm', item.ncm)}</td>
                   <td className="px-3 py-2 text-right">
                     {renderCell(item, 'unitPrice', Number(item.unitPrice).toFixed(2))}
                   </td>
@@ -384,15 +379,9 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
                   <td className="px-3 py-2 text-right font-medium">
                     {formatCurrency(item.totalPrice)}
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    {renderCell(item, 'boxes', item.boxes)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {formatWeight(item.netWeight)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {formatWeight(item.grossWeight)}
-                  </td>
+                  <td className="px-3 py-2 text-right">{renderCell(item, 'boxes', item.boxes)}</td>
+                  <td className="px-3 py-2 text-right">{formatWeight(item.netWeight)}</td>
+                  <td className="px-3 py-2 text-right">{formatWeight(item.grossWeight)}</td>
                 </tr>
               ))}
 
@@ -402,15 +391,11 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
                   Totais
                 </td>
                 <td className="px-3 py-2 text-right" />
-                <td className="px-3 py-2 text-right text-gray-900">
-                  {espelho.totalQuantity}
-                </td>
+                <td className="px-3 py-2 text-right text-gray-900">{espelho.totalQuantity}</td>
                 <td className="px-3 py-2 text-right text-gray-900">
                   {formatCurrency(espelho.totalFobValue)}
                 </td>
-                <td className="px-3 py-2 text-right text-gray-900">
-                  {espelho.totalBoxes}
-                </td>
+                <td className="px-3 py-2 text-right text-gray-900">{espelho.totalBoxes}</td>
                 <td className="px-3 py-2 text-right text-gray-900">
                   {formatWeight(espelho.totalNetWeight)}
                 </td>

@@ -61,5 +61,38 @@ echo "[6/6] Verifying deployment..."
 sleep 5
 ssh "${USER}@${SERVER}" "docker ps --filter name=importacao --format 'table {{.Names}}\t{{.Status}}'"
 
+# ---------------------------------------------------------------------------
+# MANUAL MIGRATION: 0005_certificate_and_reprocessed.sql
+# ---------------------------------------------------------------------------
+# This migration CANNOT be applied automatically by Drizzle because it uses
+# ALTER TYPE ... ADD VALUE, which PostgreSQL forbids inside a transaction block.
+# Drizzle wraps migrations in a transaction, so the statement would fail with:
+#   ERROR: ALTER TYPE ... ADD VALUE cannot run inside a transaction block
+#
+# After deploying, apply it manually with these commands:
+#
+#   # 1. Copy the migration file into the postgres container
+#   docker cp apps/api/drizzle/0005_certificate_and_reprocessed.sql \
+#     importacao-postgres:/tmp/0005_certificate_and_reprocessed.sql
+#
+#   # 2. Execute the migration
+#   docker exec importacao-postgres \
+#     psql -U importacao -d importacao -f /tmp/0005_certificate_and_reprocessed.sql
+#
+#   # 3. Verify the new enum values were added
+#   docker exec importacao-postgres \
+#     psql -U importacao -d importacao -c "SELECT enum_range(NULL::document_type);"
+#   docker exec importacao-postgres \
+#     psql -U importacao -d importacao -c "SELECT enum_range(NULL::email_ingestion_status);"
+#
+# The migration adds:
+#   - 'certificate' value to the document_type enum
+#   - 'reprocessed' value to the email_ingestion_status enum
+# ---------------------------------------------------------------------------
+
 echo ""
 echo "=== Deployment complete ==="
+echo ""
+echo "NOTE: If this is the first deploy with migration 0005, apply it manually:"
+echo "  docker cp apps/api/drizzle/0005_certificate_and_reprocessed.sql importacao-postgres:/tmp/"
+echo "  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0005_certificate_and_reprocessed.sql"

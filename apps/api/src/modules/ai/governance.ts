@@ -21,8 +21,10 @@ export function logAIRequest(log: AIRequestLog): void {
   }
   aiRequestLogs.push(log);
 
+  // Persist via structured logging (Pino) so logs survive restarts
   logger.info(
     {
+      aiGovernance: true,
       model: log.model,
       promptVersion: log.promptVersion,
       inputTokens: log.inputTokens,
@@ -30,6 +32,7 @@ export function logAIRequest(log: AIRequestLog): void {
       latencyMs: log.latencyMs,
       status: log.status,
       context: log.context,
+      ...(log.errorMessage ? { errorMessage: log.errorMessage } : {}),
     },
     'AI request logged',
   );
@@ -69,7 +72,10 @@ export function getAIRequestStats(): {
 
   const formatGroup = (group: Record<string, { count: number; totalLatency: number }>) =>
     Object.fromEntries(
-      Object.entries(group).map(([k, v]) => [k, { count: v.count, avgLatencyMs: Math.round(v.totalLatency / v.count) }]),
+      Object.entries(group).map(([k, v]) => [
+        k,
+        { count: v.count, avgLatencyMs: Math.round(v.totalLatency / v.count) },
+      ]),
     );
 
   return {

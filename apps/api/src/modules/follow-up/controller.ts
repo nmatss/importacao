@@ -7,7 +7,9 @@ export const followUpController = {
     try {
       const page = Number(req.query.page) || 1;
       const limit = Math.min(Number(req.query.limit) || 20, 100);
-      const { data, total } = await followUpService.getAll(page, limit);
+      const startDate = req.query.startDate as string | undefined;
+      const endDate = req.query.endDate as string | undefined;
+      const { data, total } = await followUpService.getAll(page, limit, startDate, endDate);
       sendPaginated(res, data, total, page, limit);
     } catch (error: any) {
       const status = error.statusCode || 400;

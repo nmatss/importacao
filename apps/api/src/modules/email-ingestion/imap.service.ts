@@ -4,6 +4,7 @@ import { logger } from '../../shared/utils/logger.js';
 
 interface FetchedEmail {
   messageId: string;
+  gmailId: string;
   from: string;
   subject: string;
   body: string;
@@ -39,7 +40,10 @@ export const imapService = {
       const lock = await client.getMailboxLock('INBOX');
 
       try {
-        for await (const message of client.fetch({ seen: false }, { source: true, envelope: true, uid: true })) {
+        for await (const message of client.fetch(
+          { seen: false },
+          { source: true, envelope: true, uid: true },
+        )) {
           try {
             if (!message.source) {
               logger.warn({ uid: message.uid }, 'Email has no source, skipping');
@@ -52,8 +56,14 @@ export const imapService = {
               .filter((att: any) => {
                 const ct = (att.contentType as string)?.toLowerCase() || '';
                 const fn = (att.filename as string)?.toLowerCase() || '';
-                return ct.includes('pdf') || ct.includes('excel') || ct.includes('spreadsheet')
-                  || fn.endsWith('.pdf') || fn.endsWith('.xlsx') || fn.endsWith('.xls');
+                return (
+                  ct.includes('pdf') ||
+                  ct.includes('excel') ||
+                  ct.includes('spreadsheet') ||
+                  fn.endsWith('.pdf') ||
+                  fn.endsWith('.xlsx') ||
+                  fn.endsWith('.xls')
+                );
               })
               .map((att: any) => ({
                 filename: (att.filename as string) || 'attachment',
@@ -62,8 +72,10 @@ export const imapService = {
                 size: att.size as number,
               }));
 
+            const msgId = parsed.messageId || `${Date.now()}-${Math.random()}`;
             emails.push({
-              messageId: parsed.messageId || `${Date.now()}-${Math.random()}`,
+              messageId: msgId,
+              gmailId: msgId,
               from: parsed.from?.text || 'unknown',
               subject: parsed.subject || '(sem assunto)',
               body: parsed.text || '',
@@ -84,7 +96,11 @@ export const imapService = {
       await client.logout();
     } catch (err) {
       logger.error({ err }, 'IMAP connection failed');
-      try { await client.logout(); } catch { /* ignore */ }
+      try {
+        await client.logout();
+      } catch {
+        /* ignore */
+      }
       throw err;
     }
 

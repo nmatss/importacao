@@ -74,7 +74,7 @@ interface OverviewData {
   completedThisMonth: number;
   totalFobValue: number;
   recentAlerts: Array<{
-    id: string;
+    id: number;
     message: string;
     severity: 'critical' | 'warning' | 'info';
     createdAt: string;
@@ -82,7 +82,7 @@ interface OverviewData {
 }
 
 interface AlertData {
-  id: string;
+  id: number;
   message: string;
   severity: 'critical' | 'warning' | 'info';
   processCode?: string;
@@ -343,7 +343,7 @@ export function MeuDiaPage() {
           </h3>
 
           <div className="rounded-xl border border-slate-200 bg-white divide-y divide-slate-100">
-            {(!alerts || alerts.length === 0) ? (
+            {!alerts || alerts.length === 0 ? (
               <div className="p-6 text-center">
                 <Bell className="h-6 w-6 text-slate-300 mx-auto mb-2" />
                 <p className="text-sm text-slate-400">Nenhum alerta recente</p>

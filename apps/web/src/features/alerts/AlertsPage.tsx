@@ -3,15 +3,17 @@ import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Bell, AlertTriangle, Info, CheckCircle2, Shield, Clock, ExternalLink } from 'lucide-react';
-import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
+import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatDate, cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 
 interface Alert {
-  id: string;
-  processId: string | null;
+  id: number;
+  processId: number | null;
   processCode: string | null;
   severity: 'info' | 'warning' | 'critical';
   title: string;
@@ -79,29 +81,29 @@ export function AlertsPage() {
   const queryClient = useQueryClient();
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
   const [ackFilter, setAckFilter] = useState<AckFilter>('all');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   const queryParams = new URLSearchParams();
+  queryParams.set('limit', '100');
   if (severityFilter !== 'all') queryParams.set('severity', severityFilter);
   if (ackFilter !== 'all') queryParams.set('acknowledged', ackFilter);
+  if (startDate) queryParams.set('startDate', startDate);
+  if (endDate) queryParams.set('endDate', endDate);
   const qs = queryParams.toString();
 
-  const { data: alertsResponse, isLoading } = useApiQuery<{ data: Alert[]; pagination: unknown }>(
-    ['alerts', severityFilter, ackFilter],
+  const {
+    data: alertsResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{ data: Alert[]; pagination: unknown }>(
+    ['alerts', severityFilter, ackFilter, startDate, endDate],
     `/api/alerts${qs ? `?${qs}` : ''}`,
   );
   const alerts = alertsResponse?.data;
 
-  const acknowledgeMutation = useApiMutation<AckResponse, void>(
-    '',
-    'patch',
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['alerts'] });
-      },
-    },
-  );
-
-  const handleAcknowledge = async (alertId: string) => {
+  const handleAcknowledge = async (alertId: number) => {
     try {
       await api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`);
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
@@ -126,7 +128,9 @@ export function AlertsPage() {
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
             </span>
-            <span className="text-sm font-semibold text-amber-700">{pendingCount} pendente{pendingCount !== 1 ? 's' : ''}</span>
+            <span className="text-sm font-semibold text-amber-700">
+              {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
+            </span>
           </div>
         )}
       </div>
@@ -136,7 +140,9 @@ export function AlertsPage() {
         <div className="flex flex-wrap items-center gap-6">
           {/* Severity Filter */}
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">Severidade</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+              Severidade
+            </p>
             <div className="flex items-center gap-1.5">
               {severityOptions.map((opt) => (
                 <button
@@ -158,9 +164,28 @@ export function AlertsPage() {
           {/* Divider */}
           <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
+          {/* Date Range Filter */}
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+              Periodo
+            </p>
+            <DateRangeFilter
+              startDate={startDate}
+              endDate={endDate}
+              onStartDateChange={setStartDate}
+              onEndDateChange={setEndDate}
+              label=""
+            />
+          </div>
+
+          {/* Divider */}
+          <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+
           {/* Ack Filter */}
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">Status</p>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+              Status
+            </p>
             <div className="flex items-center gap-1.5">
               {ackOptions.map((opt) => (
                 <button
@@ -199,7 +224,9 @@ export function AlertsPage() {
           </div>
         </div>
 
-        {isLoading ? (
+        {error ? (
+          <ErrorState message="Erro ao carregar alertas." onRetry={() => refetch()} />
+        ) : isLoading ? (
           <LoadingSpinner className="py-12" />
         ) : !alerts?.length ? (
           <EmptyState
@@ -238,9 +265,7 @@ export function AlertsPage() {
                     {/* Content */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900">
-                          {alert.title}
-                        </span>
+                        <span className="text-sm font-semibold text-slate-900">{alert.title}</span>
                         <span
                           className={cn(
                             'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
@@ -259,7 +284,9 @@ export function AlertsPage() {
                         )}
                       </div>
 
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{alert.message}</p>
+                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                        {alert.message}
+                      </p>
 
                       {alert.processId && (
                         <Link

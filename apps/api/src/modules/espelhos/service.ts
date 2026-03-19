@@ -44,10 +44,7 @@ export const espelhoService = {
 
     if (!process) throw new NotFoundError('Processo', processId);
 
-    let items = await db
-      .select()
-      .from(processItems)
-      .where(eq(processItems.processId, processId));
+    let items = await db.select().from(processItems).where(eq(processItems.processId, processId));
 
     if (items.length === 0) {
       items = await this.autoPopulateItems(processId);
@@ -58,9 +55,7 @@ export const espelhoService = {
     }
 
     const ws =
-      process.brand === 'puket'
-        ? generatePuketSheet(items)
-        : generateImaginariumSheet(items);
+      process.brand === 'puket' ? generatePuketSheet(items) : generateImaginariumSheet(items);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Espelho');
@@ -69,9 +64,7 @@ export const espelhoService = {
     const existing = await db
       .select()
       .from(espelhos)
-      .where(
-        and(eq(espelhos.processId, processId), eq(espelhos.isPartial, false)),
-      )
+      .where(and(eq(espelhos.processId, processId), eq(espelhos.isPartial, false)))
       .orderBy(desc(espelhos.version));
 
     const nextVersion = existing.length > 0 ? (existing[0].version ?? 0) + 1 : 1;
@@ -110,17 +103,23 @@ export const espelhoService = {
       .set({ espelhoGeneratedAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, processId));
 
-    auditService.log(userId, 'generate', 'espelho', espelho.id, { processId, version: nextVersion, itemCount: items.length }, null);
+    auditService.log(
+      userId,
+      'generate',
+      'espelho',
+      espelho.id,
+      { processId, version: nextVersion, itemCount: items.length },
+      null,
+    );
 
     // Sync milestone to Follow-Up sheet
-    import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
-      googleSheetsService.syncMilestone(process.processCode, 'espelhoGeneratedAt', new Date());
-    }).catch(() => {});
+    import('../integrations/google-sheets.service.js')
+      .then(({ googleSheetsService }) => {
+        googleSheetsService.syncMilestone(process.processCode, 'espelhoGeneratedAt', new Date());
+      })
+      .catch(() => {});
 
-    logger.info(
-      { processId, espelhoId: espelho.id, version: nextVersion },
-      'Espelho generated',
-    );
+    logger.info({ processId, espelhoId: espelho.id, version: nextVersion }, 'Espelho generated');
 
     return espelho;
   },
@@ -140,7 +139,7 @@ export const espelhoService = {
     if (invoiceDocs.length === 0) return [];
 
     const doc = invoiceDocs[0];
-    const parsed = doc.aiParsedData as any;
+    const parsed = doc.aiParsedData as Record<string, unknown> | null;
     if (!parsed?.items || !Array.isArray(parsed.items)) return [];
 
     const itemsToInsert = parsed.items.map((raw: any) => {
@@ -149,9 +148,7 @@ export const espelhoService = {
       const desc = String(raw.description || '');
 
       const isFoc =
-        unitPrice === 0 ||
-        /\bfoc\b/i.test(desc) ||
-        /\bfree\s*(of\s*charge)?\b/i.test(desc);
+        unitPrice === 0 || /\bfoc\b/i.test(desc) || /\bfree\s*(of\s*charge)?\b/i.test(desc);
 
       const ncm = String(raw.ncmCode || raw.ncm_code || raw.ncm || '');
       const ncmPrefix = ncm.replace(/\D/g, '').substring(0, 2);
@@ -180,10 +177,7 @@ export const espelhoService = {
 
     if (itemsToInsert.length === 0) return [];
 
-    const inserted = await db
-      .insert(processItems)
-      .values(itemsToInsert)
-      .returning();
+    const inserted = await db.insert(processItems).values(itemsToInsert).returning();
 
     // Update process flags
     const hasLi = inserted.some((i) => i.requiresLi);
@@ -205,8 +199,8 @@ export const espelhoService = {
 
     // Trigger LI escalation if items require LI
     if (hasLi) {
-      this.triggerLiEscalation(processId).catch(err =>
-        logger.error({ err, processId }, 'LI escalation failed')
+      this.triggerLiEscalation(processId).catch((err) =>
+        logger.error({ err, processId }, 'LI escalation failed'),
       );
     }
 
@@ -214,10 +208,7 @@ export const espelhoService = {
   },
 
   async getItems(processId: number) {
-    return db
-      .select()
-      .from(processItems)
-      .where(eq(processItems.processId, processId));
+    return db.select().from(processItems).where(eq(processItems.processId, processId));
   },
 
   async updateItem(itemId: number, data: any) {
@@ -319,15 +310,11 @@ export const espelhoService = {
   },
 
   async downloadXlsx(espelhoId: number): Promise<Buffer> {
-    const [espelho] = await db
-      .select()
-      .from(espelhos)
-      .where(eq(espelhos.id, espelhoId))
-      .limit(1);
+    const [espelho] = await db.select().from(espelhos).where(eq(espelhos.id, espelhoId)).limit(1);
 
     if (!espelho) throw new NotFoundError('Espelho', espelhoId);
 
-    const data = espelho.generatedData as any;
+    const data = espelho.generatedData as Record<string, string> | null;
     if (!data?.filePath) {
       throw new Error('Arquivo do espelho nao disponivel');
     }
@@ -343,16 +330,12 @@ export const espelhoService = {
         .where(eq(processItems.processId, espelho.processId));
 
       const ws =
-        espelho.brand === 'puket'
-          ? generatePuketSheet(items)
-          : generateImaginariumSheet(items);
+        espelho.brand === 'puket' ? generatePuketSheet(items) : generateImaginariumSheet(items);
 
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Espelho');
 
-      return Buffer.from(
-        XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }),
-      );
+      return Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }));
     }
   },
 
@@ -360,15 +343,16 @@ export const espelhoService = {
     const espelho = await this.getEspelho(processId);
     if (!espelho) throw new NotFoundError('Espelho');
 
-    const data = espelho.generatedData as any;
+    const data = espelho.generatedData as Record<string, string> | null;
     if (!data?.filePath || !data?.filename) {
       throw new Error('Arquivo do espelho nao disponivel');
     }
 
-    const [process] = await db.select({
-      processCode: importProcesses.processCode,
-      brand: importProcesses.brand,
-    })
+    const [process] = await db
+      .select({
+        processCode: importProcesses.processCode,
+        brand: importProcesses.brand,
+      })
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
@@ -390,7 +374,14 @@ export const espelhoService = {
       .where(eq(espelhos.id, espelho.id))
       .returning();
 
-    auditService.log(userId, 'send_to_drive', 'espelho', espelho.id, { processId, driveFileId }, null);
+    auditService.log(
+      userId,
+      'send_to_drive',
+      'espelho',
+      espelho.id,
+      { processId, driveFileId },
+      null,
+    );
     logger.info({ processId, espelhoId: espelho.id, driveFileId }, 'Espelho sent to Drive');
 
     return updated;
@@ -406,8 +397,11 @@ export const espelhoService = {
     if (!updated) throw new NotFoundError('Espelho', espelhoId);
 
     // Validate transition before updating status
-    const [currentProc] = await db.select({ status: importProcesses.status })
-      .from(importProcesses).where(eq(importProcesses.id, updated.processId)).limit(1);
+    const [currentProc] = await db
+      .select({ status: importProcesses.status })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, updated.processId))
+      .limit(1);
     if (currentProc) {
       assertTransition(currentProc.status as ProcessStatus, 'sent_to_fenicia');
     }
@@ -423,15 +417,27 @@ export const espelhoService = {
       .set({ sentToFeniciaAt: new Date(), updatedAt: new Date() })
       .where(eq(followUpTracking.processId, updated.processId));
 
-    auditService.log(userId, 'sent_to_fenicia', 'espelho', espelhoId, { processId: updated.processId }, null);
+    auditService.log(
+      userId,
+      'sent_to_fenicia',
+      'espelho',
+      espelhoId,
+      { processId: updated.processId },
+      null,
+    );
 
     // Sync milestone to Follow-Up sheet
-    const [proc] = await db.select({ processCode: importProcesses.processCode })
-      .from(importProcesses).where(eq(importProcesses.id, updated.processId)).limit(1);
+    const [proc] = await db
+      .select({ processCode: importProcesses.processCode })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, updated.processId))
+      .limit(1);
     if (proc?.processCode) {
-      import('../integrations/google-sheets.service.js').then(({ googleSheetsService }) => {
-        googleSheetsService.syncMilestone(proc.processCode, 'sentToFeniciaAt', new Date());
-      }).catch(() => {});
+      import('../integrations/google-sheets.service.js')
+        .then(({ googleSheetsService }) => {
+          googleSheetsService.syncMilestone(proc.processCode, 'sentToFeniciaAt', new Date());
+        })
+        .catch(() => {});
     }
 
     return updated;
@@ -452,10 +458,7 @@ export const espelhoService = {
 
     if (!process) throw new NotFoundError('Processo', processId);
 
-    let items = await db
-      .select()
-      .from(processItems)
-      .where(eq(processItems.processId, processId));
+    let items = await db.select().from(processItems).where(eq(processItems.processId, processId));
 
     if (items.length === 0) {
       items = await this.autoPopulateItems(processId);
@@ -469,15 +472,14 @@ export const espelhoService = {
     }
 
     const ws =
-      process.brand === 'puket'
-        ? generatePuketSheet(liItems)
-        : generateImaginariumSheet(liItems);
+      process.brand === 'puket' ? generatePuketSheet(liItems) : generateImaginariumSheet(liItems);
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Espelho Parcial - LI');
 
     // Determine next version for partial espelhos
-    const [latest] = await db.select({ maxVersion: sql<number>`coalesce(max(${espelhos.version}), 0)` })
+    const [latest] = await db
+      .select({ maxVersion: sql<number>`coalesce(max(${espelhos.version}), 0)` })
       .from(espelhos)
       .where(and(eq(espelhos.processId, processId), eq(espelhos.isPartial, true)));
     const nextPartialVersion = (latest?.maxVersion ?? 0) + 1;
@@ -514,7 +516,8 @@ export const espelhoService = {
   },
 
   async triggerLiEscalation(processId: number) {
-    const [proc] = await db.select()
+    const [proc] = await db
+      .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
@@ -541,7 +544,8 @@ export const espelhoService = {
 
     // 3. Auto-draft ISA certification email
     try {
-      const { isaCertificationTemplate } = await import('../communications/templates/isa-certification.js');
+      const { isaCertificationTemplate } =
+        await import('../communications/templates/isa-certification.js');
       const { communicationService } = await import('../communications/service.js');
 
       const { subject, body } = isaCertificationTemplate({
@@ -570,7 +574,8 @@ export const espelhoService = {
     if (shipmentDate) {
       const deadline = new Date(shipmentDate);
       deadline.setDate(deadline.getDate() + 13);
-      await db.update(followUpTracking)
+      await db
+        .update(followUpTracking)
         .set({
           liDeadline: deadline.toISOString().split('T')[0],
           updatedAt: new Date(),

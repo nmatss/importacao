@@ -7,7 +7,18 @@ import { logger } from '../../shared/utils/logger.js';
 let driveClient: drive_v3.Drive | null = null;
 
 // Cache folder IDs to avoid duplicate creation: "parentId/folderName" -> folderId
+// LRU-like cache with max size to prevent unbounded memory growth
+const FOLDER_CACHE_MAX = 1000;
 const folderCache = new Map<string, string>();
+
+function folderCacheSet(key: string, value: string): void {
+  if (folderCache.size >= FOLDER_CACHE_MAX) {
+    // Delete oldest entry (first key in Map iteration order)
+    const firstKey = folderCache.keys().next().value;
+    if (firstKey !== undefined) folderCache.delete(firstKey);
+  }
+  folderCache.set(key, value);
+}
 
 const SUBFOLDER_NAMES = ['Invoice', 'Packing List', 'BL', 'Espelho', 'Outros'] as const;
 
@@ -105,16 +116,19 @@ export const googleDriveService = {
 
     const existing = await this.findFolder(parentId, folderName);
     if (existing) {
-      folderCache.set(cacheKey, existing);
+      folderCacheSet(cacheKey, existing);
       return existing;
     }
 
     const folderId = await this.createFolder(folderName, parentId);
-    folderCache.set(cacheKey, folderId);
+    folderCacheSet(cacheKey, folderId);
     return folderId;
   },
 
-  async ensureProcessFolder(processCode: string, brand: string): Promise<{ processFolderId: string; subfolders: Record<string, string> }> {
+  async ensureProcessFolder(
+    processCode: string,
+    brand: string,
+  ): Promise<{ processFolderId: string; subfolders: Record<string, string> }> {
     const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
 
@@ -144,18 +158,23 @@ export const googleDriveService = {
     const driveFileId = await this.uploadFile(filePath, fileName, targetFolderId);
 
     // Update process driveFolderId if not set yet
-    const [process] = await db.select({ driveFolderId: importProcesses.driveFolderId })
+    const [process] = await db
+      .select({ driveFolderId: importProcesses.driveFolderId })
       .from(importProcesses)
       .where(eq(importProcesses.processCode, processCode))
       .limit(1);
 
     if (process && !process.driveFolderId) {
-      await db.update(importProcesses)
+      await db
+        .update(importProcesses)
         .set({ driveFolderId: processFolderId, updatedAt: new Date() })
         .where(eq(importProcesses.processCode, processCode));
     }
 
-    logger.info({ processCode, documentType, driveFileId, subfolderName }, 'File uploaded to process folder');
+    logger.info(
+      { processCode, documentType, driveFileId, subfolderName },
+      'File uploaded to process folder',
+    );
     return driveFileId;
   },
 
@@ -244,7 +263,8 @@ export const googleDriveService = {
 
     // Store sistemaDriveFolderId back to importProcesses
     try {
-      await db.update(importProcesses)
+      await db
+        .update(importProcesses)
         .set({ sistemaDriveFolderId: processFolderId, updatedAt: new Date() })
         .where(eq(importProcesses.processCode, processCode));
     } catch (err) {
@@ -265,7 +285,11 @@ export const googleDriveService = {
     return this.uploadFile(filePath, fileName, inboxId);
   },
 
-  async moveFromInboxToProcessados(fileId: string, processCode: string, docType: string): Promise<void> {
+  async moveFromInboxToProcessados(
+    fileId: string,
+    processCode: string,
+    docType: string,
+  ): Promise<void> {
     const configured = await this.isConfigured();
     if (!configured) return;
 
@@ -298,7 +322,10 @@ export const googleDriveService = {
     }
   },
 
-  async uploadValidationReport(processCode: string, reportData: Record<string, any>): Promise<string> {
+  async uploadValidationReport(
+    processCode: string,
+    reportData: Record<string, any>,
+  ): Promise<string> {
     const configured = await this.isConfigured();
     if (!configured) throw new Error('Google Drive not configured');
 

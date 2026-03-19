@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -22,6 +22,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { api } from '@/shared/lib/api-client';
 
 interface AttachmentDetail {
@@ -31,13 +32,13 @@ interface AttachmentDetail {
 }
 
 interface EmailLog {
-  id: string;
+  id: number;
   messageId: string;
   fromAddress: string;
   subject: string;
   receivedAt: string;
   processId: string | null;
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored' | 'reprocessed';
   attachmentsCount: number;
   processedAttachments: number;
   processedAttachmentDetails?: AttachmentDetail[];
@@ -63,6 +64,7 @@ interface LogsResponse {
     page: number;
     limit: number;
     total: number;
+    pages: number;
   };
 }
 
@@ -71,13 +73,30 @@ interface TriggerResponse {
   data: { message: string };
 }
 
-const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
-  completed: { dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700', label: 'Concluido' },
-  failed: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Falha' },
-  processing: { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', label: 'Processando' },
-  ignored: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', label: 'Ignorado' },
-  pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
-};
+const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string; label: string }> =
+  {
+    completed: {
+      dot: 'bg-emerald-500',
+      bg: 'bg-emerald-50',
+      text: 'text-emerald-700',
+      label: 'Concluido',
+    },
+    failed: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Falha' },
+    processing: {
+      dot: 'bg-blue-500',
+      bg: 'bg-blue-50',
+      text: 'text-blue-700',
+      label: 'Processando',
+    },
+    ignored: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', label: 'Ignorado' },
+    pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
+    reprocessed: {
+      dot: 'bg-purple-500',
+      bg: 'bg-purple-50',
+      text: 'text-purple-700',
+      label: 'Reprocessado',
+    },
+  };
 
 function formatDateTime(date: string): string {
   const d = new Date(date);
@@ -94,8 +113,10 @@ export function EmailIngestionPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [triggering, setTriggering] = useState(false);
-  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<number | null>(null);
+  const [expandedLogId, setExpandedLogId] = useState<number | null>(null);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const limit = 20;
 
   const { data: status, isLoading: statusLoading } = useApiQuery<EmailStatus>(
@@ -103,15 +124,21 @@ export function EmailIngestionPage() {
     '/api/email-ingestion/status',
   );
 
+  const logsParams = new URLSearchParams();
+  logsParams.set('page', String(page));
+  logsParams.set('limit', String(limit));
+  if (startDate) logsParams.set('startDate', startDate);
+  if (endDate) logsParams.set('endDate', endDate);
+
   const { data: logsResponse, isLoading: logsLoading } = useApiQuery<LogsResponse>(
-    ['email-ingestion-logs', String(page)],
-    `/api/email-ingestion/logs?page=${page}&limit=${limit}`,
+    ['email-ingestion-logs', String(page), startDate, endDate],
+    `/api/email-ingestion/logs?${logsParams.toString()}`,
   );
 
   const logs = logsResponse?.data;
   const pagination = logsResponse?.pagination;
 
-  const totalPages = pagination ? Math.ceil(pagination.total / pagination.limit) : 1;
+  const totalPages = pagination?.pages ?? 1;
 
   const getStat = (key: string): number => {
     if (!status?.todayStats) return 0;
@@ -133,7 +160,7 @@ export function EmailIngestionPage() {
     }
   };
 
-  const handleReprocess = async (logId: string) => {
+  const handleReprocess = async (logId: number) => {
     setReprocessingId(logId);
     try {
       await api.post<TriggerResponse>(`/api/email-ingestion/reprocess/${logId}`);
@@ -145,9 +172,24 @@ export function EmailIngestionPage() {
 
   const statsCards = [
     { label: 'Total Hoje', value: totalToday, icon: Mail, gradient: 'from-slate-500 to-slate-600' },
-    { label: 'Sucesso', value: getStat('completed'), icon: CheckCircle2, gradient: 'from-emerald-500 to-emerald-600' },
-    { label: 'Falhas', value: getStat('failed'), icon: XCircle, gradient: 'from-red-500 to-red-600' },
-    { label: 'Ignorados', value: getStat('ignored'), icon: Clock, gradient: 'from-amber-500 to-amber-600' },
+    {
+      label: 'Sucesso',
+      value: getStat('completed'),
+      icon: CheckCircle2,
+      gradient: 'from-emerald-500 to-emerald-600',
+    },
+    {
+      label: 'Falhas',
+      value: getStat('failed'),
+      icon: XCircle,
+      gradient: 'from-red-500 to-red-600',
+    },
+    {
+      label: 'Ignorados',
+      value: getStat('ignored'),
+      icon: Clock,
+      gradient: 'from-amber-500 to-amber-600',
+    },
   ];
 
   return (
@@ -155,16 +197,22 @@ export function EmailIngestionPage() {
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Ingestao de E-mail</h2>
-        <p className="mt-1 text-sm text-slate-500">Monitore e gerencie a ingestao automatica de emails</p>
+        <p className="mt-1 text-sm text-slate-500">
+          Monitore e gerencie a ingestao automatica de emails
+        </p>
       </div>
 
       {/* Status Card */}
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
         {/* Gradient top bar */}
-        <div className={cn(
-          'h-1',
-          status?.enabled ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-red-400 to-red-500',
-        )} />
+        <div
+          className={cn(
+            'h-1',
+            status?.enabled
+              ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
+              : 'bg-gradient-to-r from-red-400 to-red-500',
+          )}
+        />
 
         {statusLoading ? (
           <LoadingSpinner className="py-8" />
@@ -173,10 +221,14 @@ export function EmailIngestionPage() {
             <div className="flex flex-wrap items-center justify-between gap-6">
               <div className="flex flex-wrap items-center gap-6">
                 {/* Live indicator */}
-                <div className={cn(
-                  'flex items-center gap-2.5 rounded-xl px-4 py-2',
-                  status?.enabled ? 'bg-emerald-50 border border-emerald-200' : 'bg-red-50 border border-red-200',
-                )}>
+                <div
+                  className={cn(
+                    'flex items-center gap-2.5 rounded-xl px-4 py-2',
+                    status?.enabled
+                      ? 'bg-emerald-50 border border-emerald-200'
+                      : 'bg-red-50 border border-red-200',
+                  )}
+                >
                   {status?.enabled ? (
                     <>
                       <span className="relative flex h-2.5 w-2.5">
@@ -200,7 +252,9 @@ export function EmailIngestionPage() {
                   <div className="flex items-center gap-1.5 text-slate-600">
                     <span className="font-medium text-slate-400">Metodo:</span>
                     {status?.method === 'gmail_api' ? (
-                      <span className="font-medium text-emerald-600">Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}</span>
+                      <span className="font-medium text-emerald-600">
+                        Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}
+                      </span>
                     ) : status?.method === 'imap' ? (
                       <span className="font-medium text-emerald-600">IMAP</span>
                     ) : (
@@ -258,13 +312,48 @@ export function EmailIngestionPage() {
                   <p className="text-2xl font-bold text-slate-900">{card.value}</p>
                   <p className="mt-0.5 text-sm text-slate-500">{card.label}</p>
                 </div>
-                <div className={cn('flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br', card.gradient)}>
+                <div
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br',
+                    card.gradient,
+                  )}
+                >
                   <Icon className="h-5 w-5 text-white" />
                 </div>
               </div>
             </div>
           );
         })}
+      </div>
+
+      {/* Date Filter */}
+      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+        <div className="flex items-center gap-4">
+          <DateRangeFilter
+            startDate={startDate}
+            endDate={endDate}
+            onStartDateChange={(v) => {
+              setStartDate(v);
+              setPage(1);
+            }}
+            onEndDateChange={(v) => {
+              setEndDate(v);
+              setPage(1);
+            }}
+          />
+          {(startDate || endDate) && (
+            <button
+              onClick={() => {
+                setStartDate('');
+                setEndDate('');
+                setPage(1);
+              }}
+              className="rounded-xl px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+            >
+              Limpar datas
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Logs Table */}
@@ -299,39 +388,65 @@ export function EmailIngestionPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left">
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Data/Hora</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">De</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Assunto</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Processo</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Anexos</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Acoes</th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Data/Hora
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      De
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Assunto
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Processo
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Anexos
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Status
+                    </th>
+                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      Acoes
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {logs.map((log) => {
                     const badge = statusBadgeConfig[log.status] ?? statusBadgeConfig.pending;
                     const isExpanded = expandedLogId === log.id;
-                    const hasDetails = (log.status === 'failed' && log.errorMessage)
-                      || (log.status === 'completed' && log.processedAttachmentDetails?.length);
+                    const hasDetails =
+                      (log.status === 'failed' && log.errorMessage) ||
+                      (log.status === 'completed' && log.processedAttachmentDetails?.length);
                     return (
-                      <>
-                        <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                      <Fragment key={log.id}>
+                        <tr className="hover:bg-slate-50 transition-colors">
                           <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
                             {formatDateTime(log.receivedAt)}
                           </td>
-                          <td className="max-w-[180px] truncate px-5 py-3.5 text-slate-900 font-medium" title={log.fromAddress}>
+                          <td
+                            className="max-w-[180px] truncate px-5 py-3.5 text-slate-900 font-medium"
+                            title={log.fromAddress}
+                          >
                             {log.fromAddress}
                           </td>
                           <td className="max-w-[250px] px-5 py-3.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="truncate text-slate-900" title={log.subject}>{log.subject}</span>
+                              <span className="truncate text-slate-900" title={log.subject}>
+                                {log.subject}
+                              </span>
                               {hasDetails && (
                                 <button
                                   onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
                                   className="shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                                  aria-label={isExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}
                                 >
-                                  <ChevronDown className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-180')} />
+                                  <ChevronDown
+                                    className={cn(
+                                      'h-3.5 w-3.5 transition-transform',
+                                      isExpanded && 'rotate-180',
+                                    )}
+                                  />
                                 </button>
                               )}
                             </div>
@@ -374,7 +489,12 @@ export function EmailIngestionPage() {
                                 disabled={reprocessingId === log.id}
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all"
                               >
-                                <RotateCcw className={cn('h-3 w-3', reprocessingId === log.id && 'animate-spin')} />
+                                <RotateCcw
+                                  className={cn(
+                                    'h-3 w-3',
+                                    reprocessingId === log.id && 'animate-spin',
+                                  )}
+                                />
                                 {reprocessingId === log.id ? 'Reprocessando...' : 'Reprocessar'}
                               </button>
                             )}
@@ -393,11 +513,18 @@ export function EmailIngestionPage() {
                                 )}
                                 {log.status === 'completed' && log.processedAttachmentDetails && (
                                   <div className="space-y-1.5">
-                                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">Anexos processados</p>
+                                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">
+                                      Anexos processados
+                                    </p>
                                     {log.processedAttachmentDetails.map((att, i) => (
-                                      <div key={i} className="flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm">
+                                      <div
+                                        key={i}
+                                        className="flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm"
+                                      >
                                         <Paperclip className="h-3.5 w-3.5 text-emerald-500" />
-                                        <span className="font-medium text-emerald-800">{att.filename}</span>
+                                        <span className="font-medium text-emerald-800">
+                                          {att.filename}
+                                        </span>
                                         <span className="text-emerald-500">({att.type})</span>
                                       </div>
                                     ))}
@@ -407,7 +534,7 @@ export function EmailIngestionPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

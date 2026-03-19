@@ -7,7 +7,7 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { formatDate, cn } from '@/shared/lib/utils';
 
 interface ProcessItem {
-  id: string;
+  id: number;
   processCode: string;
   status: string;
   aiExtractedData: Record<string, unknown> | null;
@@ -53,10 +53,10 @@ export function DesembaracoPage() {
   const [filter, setFilter] = useState<ClearanceFilter>('all');
   const [search, setSearch] = useState('');
 
-  const { data: processResponse, isLoading } = useApiQuery<{ data: ProcessItem[]; pagination: unknown }>(
-    ['processes-desembaraco'],
-    '/api/processes?limit=100',
-  );
+  const { data: processResponse, isLoading } = useApiQuery<{
+    data: ProcessItem[];
+    pagination: unknown;
+  }>(['processes-desembaraco'], '/api/processes?limit=100');
   const allProcesses = processResponse?.data;
 
   // Filter only processes that have aiExtractedData with customs-related fields
@@ -66,9 +66,16 @@ export function DesembaracoPage() {
       const data = p.aiExtractedData;
       if (!data) return false;
       // Has at least one customs field
-      return data.numeroDI != null || data.dataRegistroDI != null || data.canal != null ||
-        data.desembaraco != null || data.recinto != null || data.freeTime != null ||
-        data.alertaDemurrage != null || data.chegadaCD != null;
+      return (
+        data.numeroDI != null ||
+        data.dataRegistroDI != null ||
+        data.canal != null ||
+        data.desembaraco != null ||
+        data.recinto != null ||
+        data.freeTime != null ||
+        data.alertaDemurrage != null ||
+        data.chegadaCD != null
+      );
     });
   }, [allProcesses]);
 
@@ -82,7 +89,9 @@ export function DesembaracoPage() {
   }, [customsProcesses, filter, search]);
 
   // Stats
-  const totalInClearance = customsProcesses.filter((p) => !getField(p.aiExtractedData, 'desembaraco')).length;
+  const totalInClearance = customsProcesses.filter(
+    (p) => !getField(p.aiExtractedData, 'desembaraco'),
+  ).length;
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -98,14 +107,30 @@ export function DesembaracoPage() {
       return ft ? parseFloat(ft) : NaN;
     })
     .filter((v) => !isNaN(v));
-  const avgFreeTime = freeTimeValues.length > 0
-    ? Math.round(freeTimeValues.reduce((a, b) => a + b, 0) / freeTimeValues.length)
-    : 0;
+  const avgFreeTime =
+    freeTimeValues.length > 0
+      ? Math.round(freeTimeValues.reduce((a, b) => a + b, 0) / freeTimeValues.length)
+      : 0;
 
   const kpiCards = [
-    { label: 'Em Desembaraco', value: totalInClearance, icon: Clock, gradient: 'from-amber-500 to-amber-600' },
-    { label: 'Desembaracados (Mes)', value: clearedThisMonth, icon: CheckCircle2, gradient: 'from-emerald-500 to-emerald-600' },
-    { label: 'Free Time Medio (dias)', value: avgFreeTime, icon: AlertTriangle, gradient: 'from-blue-500 to-blue-600' },
+    {
+      label: 'Em Desembaraco',
+      value: totalInClearance,
+      icon: Clock,
+      gradient: 'from-amber-500 to-amber-600',
+    },
+    {
+      label: 'Desembaracados (Mes)',
+      value: clearedThisMonth,
+      icon: CheckCircle2,
+      gradient: 'from-emerald-500 to-emerald-600',
+    },
+    {
+      label: 'Free Time Medio (dias)',
+      value: avgFreeTime,
+      icon: AlertTriangle,
+      gradient: 'from-blue-500 to-blue-600',
+    },
   ];
 
   if (isLoading) {
@@ -122,7 +147,8 @@ export function DesembaracoPage() {
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Desembaraco Aduaneiro</h2>
           <p className="text-sm text-slate-500">
-            {customsProcesses.length} processo{customsProcesses.length !== 1 ? 's' : ''} com dados aduaneiros
+            {customsProcesses.length} processo{customsProcesses.length !== 1 ? 's' : ''} com dados
+            aduaneiros
           </p>
         </div>
       </div>
@@ -130,9 +156,17 @@ export function DesembaracoPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {kpiCards.map((kpi) => (
-          <div key={kpi.label} className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+          <div
+            key={kpi.label}
+            className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+          >
             <div className="flex items-center gap-3.5">
-              <div className={cn('flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br shadow-sm', kpi.gradient)}>
+              <div
+                className={cn(
+                  'flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br shadow-sm',
+                  kpi.gradient,
+                )}
+              >
                 <kpi.icon className="h-5 w-5 text-white" />
               </div>
               <div>
@@ -149,10 +183,16 @@ export function DesembaracoPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Search */}
           <div className="flex-1 max-w-xs">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Processo</label>
+            <label
+              htmlFor="desembaraco-search"
+              className="mb-1.5 block text-sm font-medium text-slate-700"
+            >
+              Processo
+            </label>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
+                id="desembaraco-search"
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -198,22 +238,42 @@ export function DesembaracoPage() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
                 <tr className="bg-slate-50/80">
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Processo</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">DI</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Data DI</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Canal</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Desembaraco</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Recinto</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Free Time</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Demurrage</th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Chegada CD</th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Processo
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    DI
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Data DI
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Canal
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Desembaraco
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Recinto
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Free Time
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Demurrage
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Chegada CD
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((proc) => {
                   const data = proc.aiExtractedData;
                   const canal = getField(data, 'canal');
-                  const canalStyle = canal ? (canalColors[canal] ?? { bg: 'bg-slate-100', text: 'text-slate-700' }) : null;
+                  const canalStyle = canal
+                    ? (canalColors[canal] ?? { bg: 'bg-slate-100', text: 'text-slate-700' })
+                    : null;
                   const demurrage = getField(data, 'alertaDemurrage');
 
                   return (
@@ -229,41 +289,71 @@ export function DesembaracoPage() {
                         {getField(data, 'numeroDI') || <span className="text-slate-300">--</span>}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
-                        {getField(data, 'dataRegistroDI') ? formatDate(getField(data, 'dataRegistroDI')!) : <span className="text-slate-300">--</span>}
+                        {getField(data, 'dataRegistroDI') ? (
+                          formatDate(getField(data, 'dataRegistroDI')!)
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5">
                         {canal && canalStyle ? (
-                          <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold', canalStyle.bg, canalStyle.text)}>
+                          <span
+                            className={cn(
+                              'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                              canalStyle.bg,
+                              canalStyle.text,
+                            )}
+                          >
                             {canal}
                           </span>
-                        ) : <span className="text-sm text-slate-300">--</span>}
+                        ) : (
+                          <span className="text-sm text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
-                        {getField(data, 'desembaraco') ? formatDate(getField(data, 'desembaraco')!) : <span className="text-slate-300">--</span>}
+                        {getField(data, 'desembaraco') ? (
+                          formatDate(getField(data, 'desembaraco')!)
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
                         {getField(data, 'recinto') || <span className="text-slate-300">--</span>}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
-                        {getField(data, 'freeTime') ? `${getField(data, 'freeTime')} dias` : <span className="text-slate-300">--</span>}
+                        {getField(data, 'freeTime') ? (
+                          `${getField(data, 'freeTime')} dias`
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5">
                         {demurrage ? (
-                          <span className={cn(
-                            'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold',
-                            demurrage.toLowerCase().includes('sim') || demurrage.toLowerCase().includes('yes')
-                              ? 'bg-red-50 text-red-700'
-                              : 'bg-emerald-50 text-emerald-700',
-                          )}>
-                            {demurrage.toLowerCase().includes('sim') || demurrage.toLowerCase().includes('yes') ? (
+                          <span
+                            className={cn(
+                              'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold',
+                              demurrage.toLowerCase().includes('sim') ||
+                                demurrage.toLowerCase().includes('yes')
+                                ? 'bg-red-50 text-red-700'
+                                : 'bg-emerald-50 text-emerald-700',
+                            )}
+                          >
+                            {demurrage.toLowerCase().includes('sim') ||
+                            demurrage.toLowerCase().includes('yes') ? (
                               <AlertTriangle className="h-3 w-3" />
                             ) : null}
                             {demurrage}
                           </span>
-                        ) : <span className="text-sm text-slate-300">--</span>}
+                        ) : (
+                          <span className="text-sm text-slate-300">--</span>
+                        )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
-                        {getField(data, 'chegadaCD') ? formatDate(getField(data, 'chegadaCD')!) : <span className="text-slate-300">--</span>}
+                        {getField(data, 'chegadaCD') ? (
+                          formatDate(getField(data, 'chegadaCD')!)
+                        ) : (
+                          <span className="text-slate-300">--</span>
+                        )}
                       </td>
                     </tr>
                   );

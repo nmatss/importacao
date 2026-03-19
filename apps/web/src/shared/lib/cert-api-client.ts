@@ -207,6 +207,8 @@ export async function fetchCertProducts(params?: {
   search?: string;
   brand?: string;
   status?: string;
+  start_date?: string;
+  end_date?: string;
 }): Promise<CertProductsResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
@@ -214,6 +216,8 @@ export async function fetchCertProducts(params?: {
   if (params?.search) query.set('search', params.search);
   if (params?.brand) query.set('brand', params.brand);
   if (params?.status) query.set('status', params.status);
+  if (params?.start_date) query.set('start_date', params.start_date);
+  if (params?.end_date) query.set('end_date', params.end_date);
   const qs = query.toString();
   return certFetch<CertProductsResponse>(`/api/products${qs ? `?${qs}` : ''}`);
 }
@@ -244,7 +248,10 @@ export async function fetchCertValidationStatus(runId: string): Promise<CertVali
   return certFetch<CertValidationRun>(`/api/validate/${runId}`);
 }
 
-export function streamCertValidation(runId: string, onEvent: (data: CertValidationEvent) => void): EventSource {
+export function streamCertValidation(
+  runId: string,
+  onEvent: (data: CertValidationEvent) => void,
+): EventSource {
   const eventSource = new EventSource(`${CERT_BASE}/api/validate/${runId}/stream`);
 
   eventSource.onmessage = (event) => {
@@ -278,8 +285,15 @@ export async function checkCertApiHealth(): Promise<{ connected: boolean; latenc
 
 // ---------- Schedules ----------
 
-export async function fetchCertSchedules(): Promise<CertSchedule[]> {
-  return certFetch<CertSchedule[]>('/api/schedules');
+export async function fetchCertSchedules(params?: {
+  start_date?: string;
+  end_date?: string;
+}): Promise<CertSchedule[]> {
+  const query = new URLSearchParams();
+  if (params?.start_date) query.set('start_date', params.start_date);
+  if (params?.end_date) query.set('end_date', params.end_date);
+  const qs = query.toString();
+  return certFetch<CertSchedule[]>(`/api/schedules${qs ? `?${qs}` : ''}`);
 }
 
 export async function createCertSchedule(data: {
@@ -288,7 +302,11 @@ export async function createCertSchedule(data: {
   brand?: string;
   enabled?: boolean;
 }): Promise<CertSchedule> {
-  const payload: Record<string, unknown> = { name: data.name, cron: data.cron, enabled: data.enabled };
+  const payload: Record<string, unknown> = {
+    name: data.name,
+    cron: data.cron,
+    enabled: data.enabled,
+  };
   if (data.brand) payload.brand_filter = data.brand;
   return certFetch<CertSchedule>('/api/schedules', {
     method: 'POST',
