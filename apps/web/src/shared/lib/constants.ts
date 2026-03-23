@@ -181,13 +181,15 @@ export const CORRECTION_ERROR_TYPES = [
 ] as const;
 
 export const LOGISTIC_STAGES = [
-  { key: 'production', label: 'Producao', icon: 'Factory' },
-  { key: 'consolidation', label: 'Consolidacao', icon: 'Package' },
-  { key: 'waiting_shipment', label: 'Ag. Embarque', icon: 'Clock' },
-  { key: 'shipped', label: 'Embarcado', icon: 'Ship' },
-  { key: 'transshipment', label: 'Transbordo', icon: 'ArrowRightLeft' },
-  { key: 'port_arrival', label: 'No Porto', icon: 'Anchor' },
-  { key: 'customs', label: 'Desembaraco', icon: 'FileCheck' },
-  { key: 'inland_transport', label: 'Transporte', icon: 'Truck' },
-  { key: 'delivered', label: 'Entregue CD', icon: 'Warehouse' },
+  { key: 'consolidation', label: 'Em Consolidacao', icon: 'Package', subInfo: null },
+  { key: 'waiting_shipment', label: 'Ag. Embarque', icon: 'Clock', subInfo: 'etd' },
+  { key: 'in_transit', label: 'Em Transito', icon: 'Ship', subInfo: null },
+  { key: 'berthing', label: 'Em Atracacao', icon: 'Anchor', subInfo: 'port_eta' },
+  { key: 'registered', label: 'Registrado', icon: 'FileCheck', subInfo: 'duimp_channel' },
+  { key: 'customs_inspection', label: 'Conf. Aduaneira', icon: 'Search', subInfo: 'organ' },
+  { key: 'port_release', label: 'Lib. Portuaria', icon: 'ShieldCheck', subInfo: null },
+  { key: 'waiting_loading', label: 'Ag. Carregamento', icon: 'Clock', subInfo: null },
+  { key: 'traveling_cd', label: 'Em Viagem CD', icon: 'Truck', subInfo: null },
+  { key: 'waiting_entry', label: 'Ag. Entrada', icon: 'Warehouse', subInfo: 'date' },
+  { key: 'internalized', label: 'Internalizado', icon: 'CheckCircle', subInfo: null },
 ] as const;

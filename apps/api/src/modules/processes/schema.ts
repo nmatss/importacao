@@ -86,6 +86,24 @@ export const updateStatusSchema = z.object({
   ]),
 });
 
+export const VALID_LOGISTIC_STATUSES = [
+  'consolidation',
+  'waiting_shipment',
+  'in_transit',
+  'berthing',
+  'registered',
+  'customs_inspection',
+  'port_release',
+  'waiting_loading',
+  'traveling_cd',
+  'waiting_entry',
+  'internalized',
+] as const;
+
+export const updateLogisticStatusSchema = z.object({
+  logisticStatus: z.enum(VALID_LOGISTIC_STATUSES),
+});
+
 export type CreateProcessInput = z.infer<typeof createProcessSchema>;
 export type UpdateProcessInput = z.infer<typeof updateProcessSchema>;
 export type ProcessFilter = z.infer<typeof processFilterSchema>;

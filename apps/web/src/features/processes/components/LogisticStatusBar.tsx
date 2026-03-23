@@ -1,40 +1,49 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
-  Factory,
   Package,
   Clock,
   Ship,
-  ArrowRightLeft,
   Anchor,
   FileCheck,
+  Search,
+  ShieldCheck,
   Truck,
   Warehouse,
+  CheckCircle,
   Check,
   ChevronLeft,
   ChevronRight,
+  Pencil,
+  X,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/lib/utils';
 import { LOGISTIC_STAGES } from '@/shared/lib/constants';
+import { api } from '@/shared/lib/api-client';
 import type { ImportProcess } from '@/shared/types';
 
 // ── Icon map ─────────────────────────────────────────────────────────────
 
 const ICON_MAP = {
-  Factory,
   Package,
   Clock,
   Ship,
-  ArrowRightLeft,
   Anchor,
   FileCheck,
+  Search,
+  ShieldCheck,
   Truck,
   Warehouse,
+  CheckCircle,
 } as const;
 
 // ── Props ────────────────────────────────────────────────────────────────
 
 export interface LogisticStatusBarProps {
+  processId: number;
   currentStatus: string;
+  logisticStatus?: string | null;
   etd?: string | null;
   eta?: string | null;
   etaActual?: string | null;
@@ -42,6 +51,10 @@ export interface LogisticStatusBarProps {
   cdArrivalAt?: string | null;
   shipmentDate?: string | null;
   customsChannel?: string | null;
+  diNumber?: string | null;
+  inspectionType?: string | null;
+  portOfDischarge?: string | null;
+  notes?: string | null;
   hasDocuments?: boolean;
 }
 
@@ -65,58 +78,219 @@ function formatDate(dateStr: string | null | undefined): string | null {
 }
 
 /**
+ * Map stage keys to indices for quick lookup.
+ */
+const STAGE_INDEX_MAP = Object.fromEntries(LOGISTIC_STAGES.map((s, i) => [s.key, i])) as Record<
+  string,
+  number
+>;
+
+/**
  * Derive the current logistic step index (0-based) from process fields.
+ * Manual override via logisticStatus takes priority.
  */
 export function deriveLogisticStep(props: LogisticStatusBarProps): number {
+  // Manual override takes priority
+  if (props.logisticStatus && STAGE_INDEX_MAP[props.logisticStatus] !== undefined) {
+    return STAGE_INDEX_MAP[props.logisticStatus];
+  }
+
   const {
     cdArrivalAt,
     customsClearanceAt,
     customsChannel,
+    diNumber,
+    inspectionType,
     etaActual,
+    eta,
     shipmentDate,
     etd,
-    hasDocuments,
+    notes,
   } = props;
 
-  if (cdArrivalAt) return 8; // Entregue no CD
-  if (customsClearanceAt) return 7; // Transporte Interno
-  if (customsChannel) return 6; // Desembaraco
-  if (etaActual) return 5; // Chegada no Porto
-
-  if (shipmentDate) {
-    // If there's a shipment date, check if it could be in transshipment
-    // For now, mark as shipped (index 3). Transshipment (4) would need explicit data.
-    return 3;
+  // 10: Internalizado — cdArrivalAt + notes contain "NF" or "internalizado"
+  if (cdArrivalAt && notes && (/\bNF\b/i.test(notes) || /internalizado/i.test(notes))) {
+    return 10;
   }
 
-  if (etd) {
-    if (isPastDate(etd)) return 3; // Embarcado (ETD passed)
-    return 2; // Aguardando Embarque
-  }
+  // 9: Ag. Entrada — cdArrivalAt exists
+  if (cdArrivalAt) return 9;
 
-  if (hasDocuments) return 1; // Consolidacao
+  // 8: Em Viagem CD — customsClearanceAt exists and no cdArrivalAt
+  // 7: Ag. Carregamento — customsClearanceAt exists (same, manual override differentiates)
+  // 6: Lib. Portuaria — customsClearanceAt exists
+  if (customsClearanceAt) return 8;
 
-  return 0; // Em Producao
+  // 5: Conf. Aduaneira — customsChannel + inspectionType
+  if (customsChannel && inspectionType) return 5;
+
+  // 4: Registrado — diNumber or customsChannel exists
+  if (diNumber || customsChannel) return 4;
+
+  // 3: Em Atracacao — etaActual or (eta is past)
+  if (etaActual || (eta && isPastDate(eta))) return 3;
+
+  // 2: Em Transito — shipmentDate or (etd is past)
+  if (shipmentDate || (etd && isPastDate(etd))) return 2;
+
+  // 1: Ag. Embarque — etd exists and is future
+  if (etd && !isPastDate(etd)) return 1;
+
+  // 0: Em Consolidacao — default
+  return 0;
 }
 
 /**
- * Get a date label for a given stage index, if available.
+ * Get sub-info elements for a given stage index.
  */
-function getStageDate(index: number, props: LogisticStatusBarProps): string | null {
+function getStageSubInfo(
+  index: number,
+  props: LogisticStatusBarProps,
+): { text: string; badge?: { label: string; color: string } } | null {
   switch (index) {
-    case 2:
-      return formatDate(props.etd); // Ag. Embarque → ETD
-    case 3:
-      return formatDate(props.shipmentDate ?? props.etd);
-    case 5:
-      return formatDate(props.etaActual ?? props.eta);
-    case 6:
-      return formatDate(props.customsClearanceAt);
-    case 8:
-      return formatDate(props.cdArrivalAt);
+    case 1: {
+      // Ag. Embarque → ETD
+      const d = formatDate(props.etd);
+      return d ? { text: `ETD: ${d}` } : null;
+    }
+    case 3: {
+      // Em Atracacao → Porto + ETA
+      const parts: string[] = [];
+      if (props.portOfDischarge) parts.push(props.portOfDischarge);
+      const d = formatDate(props.etaActual ?? props.eta);
+      if (d) parts.push(`ETA: ${d}`);
+      return parts.length > 0 ? { text: parts.join(' | ') } : null;
+    }
+    case 4: {
+      // Registrado → DUIMP + Canal badge
+      const parts: string[] = [];
+      if (props.diNumber) parts.push(props.diNumber);
+      const channel = props.customsChannel?.toLowerCase();
+      let badge: { label: string; color: string } | undefined;
+      if (channel === 'verde') badge = { label: 'Verde', color: 'bg-green-100 text-green-700' };
+      else if (channel === 'amarelo')
+        badge = { label: 'Amarelo', color: 'bg-yellow-100 text-yellow-700' };
+      else if (channel === 'vermelho')
+        badge = { label: 'Vermelho', color: 'bg-red-100 text-red-700' };
+      else if (channel)
+        badge = { label: props.customsChannel!, color: 'bg-slate-100 text-slate-600' };
+      return parts.length > 0 || badge ? { text: parts.join(''), badge } : null;
+    }
+    case 5: {
+      // Conf. Aduaneira → Orgao
+      if (props.inspectionType) return { text: props.inspectionType };
+      return null;
+    }
+    case 9: {
+      // Ag. Entrada → date
+      const d = formatDate(props.cdArrivalAt);
+      return d ? { text: d } : null;
+    }
     default:
       return null;
   }
+}
+
+// ── Edit Dropdown ────────────────────────────────────────────────────────
+
+function StatusDropdown({
+  processId,
+  currentStepKey,
+  onClose,
+}: {
+  processId: number;
+  currentStepKey: string;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  const handleSelect = async (key: string) => {
+    if (key === currentStepKey) {
+      onClose();
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.patch(`/api/processes/${processId}`, { logisticStatus: key });
+      toast.success('Status logistico atualizado');
+      queryClient.invalidateQueries({ queryKey: ['process', String(processId)] });
+      onClose();
+    } catch {
+      toast.error('Erro ao atualizar status');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      ref={dropdownRef}
+      className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg py-1 max-h-72 overflow-y-auto"
+    >
+      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+        <span>Alterar Status</span>
+        <button onClick={onClose} className="p-0.5 hover:bg-slate-100 rounded">
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      {LOGISTIC_STAGES.map((stage) => (
+        <button
+          key={stage.key}
+          onClick={() => handleSelect(stage.key)}
+          disabled={saving}
+          className={cn(
+            'w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2',
+            stage.key === currentStepKey && 'bg-blue-50 text-blue-700 font-semibold',
+            saving && 'opacity-50 cursor-wait',
+          )}
+        >
+          {(() => {
+            const Icon = ICON_MAP[stage.icon as keyof typeof ICON_MAP];
+            return Icon ? <Icon className="h-3.5 w-3.5 shrink-0" /> : null;
+          })()}
+          <span>{stage.label}</span>
+          {stage.key === currentStepKey && <Check className="h-3 w-3 ml-auto" />}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Sub Info Renderer ────────────────────────────────────────────────────
+
+function SubInfoDisplay({
+  info,
+}: {
+  info: { text: string; badge?: { label: string; color: string } } | null;
+}) {
+  if (!info) return null;
+  return (
+    <div className="flex items-center gap-1 flex-wrap justify-center">
+      {info.text && <span className="text-[9px] tabular-nums leading-tight">{info.text}</span>}
+      {info.badge && (
+        <span
+          className={cn(
+            'text-[8px] font-bold px-1.5 py-0.5 rounded-full leading-none',
+            info.badge.color,
+          )}
+        >
+          {info.badge.label}
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ── Component ────────────────────────────────────────────────────────────
@@ -124,14 +298,34 @@ function getStageDate(index: number, props: LogisticStatusBarProps): string | nu
 export function LogisticStatusBar(props: LogisticStatusBarProps) {
   const currentStep = deriveLogisticStep(props);
   const [mobileIndex, setMobileIndex] = useState(currentStep);
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const currentStepKey = LOGISTIC_STAGES[currentStep].key;
 
   return (
     <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-      <div className="px-4 pt-2.5 pb-0">
+      <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
           Ciclo de Transporte
         </p>
+        <div className="relative">
+          <button
+            onClick={() => setShowDropdown(!showDropdown)}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+          >
+            <Pencil className="h-3 w-3" />
+            editar
+          </button>
+          {showDropdown && (
+            <StatusDropdown
+              processId={props.processId}
+              currentStepKey={currentStepKey}
+              onClose={() => setShowDropdown(false)}
+            />
+          )}
+        </div>
       </div>
+
       {/* Desktop / Tablet view */}
       <div className="hidden md:block px-4 py-3">
         <div className="flex items-center">
@@ -140,7 +334,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
             const isCompleted = idx < currentStep;
             const isActive = idx === currentStep;
             const isFuture = idx > currentStep;
-            const date = getStageDate(idx, props);
+            const subInfo = isCompleted || isActive ? getStageSubInfo(idx, props) : null;
 
             return (
               <div key={stage.key} className="flex items-center flex-1 min-w-0">
@@ -155,7 +349,13 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                       isFuture && 'bg-slate-100 text-slate-400',
                     )}
                   >
-                    {isCompleted ? <Check className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                    {isCompleted ? (
+                      <Check className="h-4 w-4" />
+                    ) : Icon ? (
+                      <Icon className="h-4 w-4" />
+                    ) : (
+                      <Package className="h-4 w-4" />
+                    )}
                   </div>
                   <span
                     className={cn(
@@ -167,10 +367,9 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                   >
                     {stage.label}
                   </span>
-                  {date && (
-                    <span
+                  {subInfo && (
+                    <div
                       className={cn(
-                        'text-[9px] tabular-nums',
                         isCompleted
                           ? 'text-emerald-500'
                           : isActive
@@ -178,8 +377,8 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                             : 'text-slate-300',
                       )}
                     >
-                      {date}
-                    </span>
+                      <SubInfoDisplay info={subInfo} />
+                    </div>
                   )}
                 </div>
 
@@ -230,7 +429,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
             const Icon = ICON_MAP[stage.icon as keyof typeof ICON_MAP];
             const isCompleted = mobileIndex < currentStep;
             const isActive = mobileIndex === currentStep;
-            const date = getStageDate(mobileIndex, props);
+            const subInfo = isCompleted || isActive ? getStageSubInfo(mobileIndex, props) : null;
 
             return (
               <>
@@ -242,7 +441,13 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                     !isCompleted && !isActive && 'bg-slate-100 text-slate-400',
                   )}
                 >
-                  {isCompleted ? <Check className="h-5 w-5" /> : <Icon className="h-5 w-5" />}
+                  {isCompleted ? (
+                    <Check className="h-5 w-5" />
+                  ) : Icon ? (
+                    <Icon className="h-5 w-5" />
+                  ) : (
+                    <Package className="h-5 w-5" />
+                  )}
                 </div>
                 <span
                   className={cn(
@@ -256,7 +461,11 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                 >
                   {stage.label}
                 </span>
-                {date && <span className="text-[10px] text-slate-400 tabular-nums">{date}</span>}
+                {subInfo && (
+                  <div className="text-[10px] text-slate-500">
+                    <SubInfoDisplay info={subInfo} />
+                  </div>
+                )}
               </>
             );
           })()}
@@ -277,23 +486,20 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
 /** Build LogisticStatusBar props from an ImportProcess object. */
 export function buildLogisticProps(process: ImportProcess): LogisticStatusBarProps {
   return {
+    processId: process.id,
     currentStatus: process.status,
+    logisticStatus: process.logisticStatus,
     etd: process.etd,
     eta: process.eta,
-    etaActual: (process as unknown as Record<string, unknown>).etaActual as
-      | string
-      | null
-      | undefined,
-    customsClearanceAt: (process as unknown as Record<string, unknown>).customsClearanceAt as
-      | string
-      | null
-      | undefined,
-    cdArrivalAt: (process as unknown as Record<string, unknown>).cdArrivalAt as
-      | string
-      | null
-      | undefined,
+    etaActual: process.etaActual,
+    customsClearanceAt: process.customsClearanceAt,
+    cdArrivalAt: process.cdArrivalAt,
     shipmentDate: process.shipmentDate,
     customsChannel: process.customsChannel,
+    diNumber: process.diNumber,
+    inspectionType: process.inspectionType,
+    portOfDischarge: process.portOfDischarge,
+    notes: process.notes,
     hasDocuments: (process.documents ?? []).length > 0,
   };
 }

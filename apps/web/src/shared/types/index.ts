@@ -41,12 +41,16 @@ export interface ImportProcess {
   processCode: string;
   brand: string;
   status: string;
+  logisticStatus: string | null;
   incoterm: string | null;
   portOfLoading: string | null;
   portOfDischarge: string | null;
   etd: string | null;
   eta: string | null;
   shipmentDate: string | null;
+  etaActual: string | null;
+  customsClearanceAt: string | null;
+  cdArrivalAt: string | null;
   exporterName: string | null;
   exporterAddress: string | null;
   importerName: string | null;

@@ -61,6 +61,22 @@ export const processController = {
     }
   },
 
+  async updateLogisticStatus(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id ?? null;
+      const { logisticStatus } = req.body;
+      const process = await processService.updateLogisticStatus(
+        Number(req.params.id),
+        logisticStatus,
+        userId,
+      );
+      sendSuccess(res, process);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async delete(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;

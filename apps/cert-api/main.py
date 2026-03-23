@@ -412,9 +412,14 @@ def _read_products_from_sheets() -> list[dict]:
                     "ecommerce_description": desc_ecommerce,
                 })
 
-    log.info(f"Read {len(products)} products from Google Sheets")
+    # Mark all active-sheet products with _source so upsert ordering works
+    for p in products:
+        p["_source"] = "ativos"
+
+    log.info(f"Read {len(products)} active products from Google Sheets")
 
     # Read "Encerramentos" tab for expired certifications
+    enc_products: list[dict] = []
     try:
         ws_enc = spreadsheet.worksheet("Encerramentos")
         enc_rows = ws_enc.get_all_values()
@@ -424,11 +429,13 @@ def _read_products_from_sheets() -> list[dict]:
             sku_col_enc = _find_col_by_header(enc_headers, "sku", "código", "codigo", "ref")
             name_col_enc = _find_col_by_header(enc_headers, "nome", "produto", "descrição", "descricao")
             brand_col_enc = _find_col_by_header(enc_headers, "marca", "brand")
+            status_col_enc = _find_col_by_header(enc_headers, "status", "situação", "situacao")
 
             if prazo_col is not None and sku_col_enc is not None:
                 log.info(f"Worksheet 'Encerramentos': found 'Prazo Final Venda' at column {prazo_col}, SKU at column {sku_col_enc}")
                 today = datetime.now().date()
                 expired_count = 0
+                venda_fim_lote_count = 0
                 for row in enc_rows[1:]:
                     if sku_col_enc >= len(row):
                         continue
@@ -440,6 +447,20 @@ def _read_products_from_sheets() -> list[dict]:
                     if not prazo_str:
                         continue
 
+                    # Read status column if available
+                    enc_status_str = str(row[status_col_enc]).strip() if status_col_enc is not None and status_col_enc < len(row) else ""
+
+                    # Check for "Venda até fim do lote" in prazo cell or status cell
+                    # These products should NOT be marked as expired
+                    combined_text = f"{prazo_str} {enc_status_str}".lower()
+                    is_venda_fim_lote = (
+                        "venda até fim do lote" in combined_text
+                        or "venda ate fim do lote" in combined_text
+                    )
+
+                    # Check for explicit "Vencido" status
+                    is_vencido = "vencido" in combined_text
+
                     # Parse date — try common formats
                     prazo_date = None
                     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
@@ -449,10 +470,24 @@ def _read_products_from_sheets() -> list[dict]:
                         except ValueError:
                             continue
 
-                    if prazo_date is None:
+                    # Determine expiration status
+                    if is_venda_fim_lote:
+                        # "Venda até fim do lote" — NOT expired regardless of date
+                        is_expired = False
+                        venda_fim_lote_count += 1
+                        sheet_status_val = "VENDA_FIM_LOTE"
+                    elif is_vencido:
+                        # Explicitly marked as "Vencido"
+                        is_expired = True
+                        sheet_status_val = "EXPIRED"
+                    elif prazo_date is not None:
+                        # Date-based expiration check
+                        is_expired = prazo_date < today
+                        sheet_status_val = "EXPIRED" if is_expired else "EXPIRING"
+                    else:
+                        # No date parsed and no explicit status — skip
                         continue
 
-                    is_expired = prazo_date < today
                     name = str(row[name_col_enc]).strip() if name_col_enc is not None and name_col_enc < len(row) else ""
                     brand = str(row[brand_col_enc]).strip() if brand_col_enc is not None and brand_col_enc < len(row) else ""
 
@@ -461,21 +496,22 @@ def _read_products_from_sheets() -> list[dict]:
                         sku = sku.strip()
                         if not sku:
                             continue
-                        products.append({
+                        enc_products.append({
                             "sku": sku,
                             "name": name,
                             "brand": brand,
                             "certification_type": f"ENCERRAMENTO - Prazo: {prazo_str}",
-                            "sheet_status": "EXPIRED" if is_expired else "EXPIRING",
+                            "sheet_status": sheet_status_val,
                             "ecommerce_description": "",
                             "sale_deadline": prazo_str,
-                            "sale_deadline_date": prazo_date.isoformat(),
+                            "sale_deadline_date": prazo_date.isoformat() if prazo_date else None,
                             "is_expired": is_expired,
+                            "_source": "encerramentos",
                         })
                         if is_expired:
                             expired_count += 1
 
-                log.info(f"Encerramentos: found {expired_count} expired products out of {len(enc_rows) - 1} rows")
+                log.info(f"Encerramentos: found {expired_count} expired, {venda_fim_lote_count} 'venda fim lote' out of {len(enc_rows) - 1} rows")
             else:
                 log.warning(f"Worksheet 'Encerramentos': could not find required columns (prazo={prazo_col}, sku={sku_col_enc})")
     except gspread.exceptions.WorksheetNotFound:
@@ -483,7 +519,10 @@ def _read_products_from_sheets() -> list[dict]:
     except Exception as e:
         log.warning(f"Error reading 'Encerramentos' worksheet: {e}")
 
-    return products
+    # Return Encerramentos FIRST, then Ativos SECOND.
+    # This way, when upserting, Ativos data overwrites Encerramentos for SKUs
+    # that appear in both (active cert takes priority over expired).
+    return enc_products + products
 
 
 def sync_sheets_to_db() -> dict:
@@ -502,7 +541,14 @@ def sync_sheets_to_db() -> dict:
                 expected = ecommerce_desc if ecommerce_desc else p["certification_type"]
                 sale_deadline = p.get("sale_deadline")
                 sale_deadline_date = p.get("sale_deadline_date")
-                is_expired = p.get("is_expired", False)
+                source = p.get("_source", "ativos")
+
+                # Ativos products are always NOT expired (active cert takes priority)
+                if source == "ativos":
+                    is_expired = False
+                else:
+                    is_expired = p.get("is_expired", False)
+
                 cur.execute(
                     """
                     INSERT INTO cert_products (sku, name, brand, certification_type, expected_cert_text,
@@ -522,7 +568,7 @@ def sync_sheets_to_db() -> dict:
                             ELSE COALESCE(NULLIF(EXCLUDED.sheet_status, ''), cert_products.sheet_status) END,
                         sale_deadline = COALESCE(EXCLUDED.sale_deadline, cert_products.sale_deadline),
                         sale_deadline_date = COALESCE(EXCLUDED.sale_deadline_date, cert_products.sale_deadline_date),
-                        is_expired = EXCLUDED.is_expired OR cert_products.is_expired,
+                        is_expired = EXCLUDED.is_expired,
                         updated_at = NOW()
                     """,
                     [p["sku"], p["name"], p["brand"], p["certification_type"],
@@ -2700,6 +2746,28 @@ def list_licenciados(
             "per_page": per_page,
             "total_pages": total_pages,
         }
+
+
+@app.get("/api/licenciados/{process_code}")
+def get_licenciado_detail(process_code: str):
+    """Get all licenciado entries for a specific process code."""
+    if not DATABASE_URL:
+        raise HTTPException(404, "Not found")
+
+    _ensure_li_tracking_table()
+
+    with db() as (conn, cur):
+        cur.execute("SELECT * FROM li_tracking WHERE process_code = %s ORDER BY ncm", [process_code])
+        rows = []
+        for r in cur.fetchall():
+            row = dict(r)
+            for dtfield in ("created_at", "updated_at", "valid_until"):
+                if row.get(dtfield):
+                    row[dtfield] = row[dtfield].isoformat() if hasattr(row[dtfield], 'isoformat') else str(row[dtfield])
+            rows.append(row)
+        if not rows:
+            raise HTTPException(404, f"No licenciado entries found for process '{process_code}'")
+        return {"process_code": process_code, "items": rows, "total": len(rows)}
 
 
 # ---------------------------------------------------------------------------

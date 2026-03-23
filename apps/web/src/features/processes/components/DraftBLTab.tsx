@@ -16,6 +16,9 @@ import {
   FileSearch,
   Loader2,
   Info,
+  GitCompareArrows,
+  Check,
+  X,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
@@ -548,6 +551,199 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
   );
 }
 
+// ── Section D: Documento Revisado ──────────────────────────────────────
+
+const COMPARISON_FIELDS: { key: string; label: string }[] = [
+  { key: 'shipper', label: 'Shipper' },
+  { key: 'consignee', label: 'Consignee' },
+  { key: 'portOfLoading', label: 'Porto Embarque' },
+  { key: 'portOfDischarge', label: 'Porto Destino' },
+  { key: 'vesselName', label: 'Navio' },
+  { key: 'containerNumber', label: 'Container' },
+  { key: 'totalGrossWeight', label: 'Peso Bruto' },
+  { key: 'totalCbm', label: 'CBM' },
+  { key: 'freightValue', label: 'Frete Valor' },
+  { key: 'freightCurrency', label: 'Frete Moeda' },
+  { key: 'freeTime', label: 'Free Time' },
+  { key: 'woodDeclaration', label: 'Declaracao Madeira' },
+  { key: 'totalBoxes', label: 'Total Caixas' },
+  { key: 'cargoDescription', label: 'Descricao Carga' },
+];
+
+function computeDifferences(
+  draftData: Record<string, any> | undefined,
+  revisadoData: Record<string, any> | undefined,
+): { key: string; label: string; draftValue: string; revisadoValue: string; changed: boolean }[] {
+  return COMPARISON_FIELDS.map((field) => {
+    const draftVal = getFieldValue(draftData, field.key);
+    const revisadoVal = getFieldValue(revisadoData, field.key);
+    const draftStr = draftVal != null && draftVal !== '' ? String(draftVal) : '--';
+    const revisadoStr = revisadoVal != null && revisadoVal !== '' ? String(revisadoVal) : '--';
+    return {
+      key: field.key,
+      label: field.label,
+      draftValue: draftStr,
+      revisadoValue: revisadoStr,
+      changed: draftStr !== revisadoStr,
+    };
+  });
+}
+
+function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; processId: string }) {
+  const [showUpload, setShowUpload] = useState(false);
+
+  const originalDoc = draftDocs.length >= 2 ? draftDocs[0] : null;
+  const revisadoDoc = draftDocs.length >= 2 ? draftDocs[draftDocs.length - 1] : null;
+  const hasRevisado = originalDoc !== null && revisadoDoc !== null;
+
+  const differences =
+    hasRevisado &&
+    originalDoc.aiProcessingStatus === 'completed' &&
+    revisadoDoc.aiProcessingStatus === 'completed' &&
+    originalDoc.aiParsedData &&
+    revisadoDoc.aiParsedData
+      ? computeDifferences(originalDoc.aiParsedData, revisadoDoc.aiParsedData)
+      : null;
+
+  const changedCount = differences?.filter((d) => d.changed).length ?? 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+          <GitCompareArrows className="h-4 w-4 text-violet-500" />
+          Documento Revisado
+        </h3>
+        <button
+          onClick={() => setShowUpload(!showUpload)}
+          className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+        >
+          <Upload className="h-3 w-3" />
+          {showUpload ? 'Ocultar upload' : 'Enviar Documento Revisado'}
+          <ChevronDown className={cn('h-3 w-3 transition-transform', showUpload && 'rotate-180')} />
+        </button>
+      </div>
+
+      {hasRevisado ? (
+        <div className="space-y-3">
+          {/* Revisado document info */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-700">
+                REVISADO
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-slate-800">
+                  {revisadoDoc.fileName}
+                </p>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                  <span>{new Date(revisadoDoc.uploadedAt).toLocaleDateString('pt-BR')}</span>
+                  {revisadoDoc.aiProcessingStatus === 'processing' && (
+                    <span className="inline-flex items-center gap-1 text-blue-500">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Processando IA...
+                    </span>
+                  )}
+                  {revisadoDoc.aiProcessingStatus === 'completed' && (
+                    <span className="inline-flex items-center gap-1 text-green-600">
+                      <CheckCircle2 className="h-3 w-3" /> Dados extraidos
+                    </span>
+                  )}
+                  {revisadoDoc.aiProcessingStatus === 'failed' && (
+                    <span className="inline-flex items-center gap-1 text-red-500">
+                      <AlertTriangle className="h-3 w-3" /> Erro na extracao
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Comparison table */}
+          {differences && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <span className="font-medium">Comparativo Draft vs Revisado</span>
+                {changedCount > 0 ? (
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                    {changedCount} {changedCount === 1 ? 'alteracao' : 'alteracoes'}
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                    Sem alteracoes
+                  </span>
+                )}
+              </div>
+
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 text-left">
+                      <th className="px-3 py-2 font-semibold text-slate-500">Campo</th>
+                      <th className="px-3 py-2 font-semibold text-slate-500">Draft</th>
+                      <th className="px-3 py-2 font-semibold text-slate-500">Revisado</th>
+                      <th className="px-3 py-2 font-semibold text-slate-500 text-center w-20">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {differences.map((diff) => (
+                      <tr
+                        key={diff.key}
+                        className={cn(diff.changed ? 'bg-amber-50/50' : 'bg-white')}
+                      >
+                        <td className="px-3 py-2 font-medium text-slate-700">{diff.label}</td>
+                        <td className="px-3 py-2 text-slate-600 max-w-[150px] truncate">
+                          {diff.draftValue}
+                        </td>
+                        <td
+                          className={cn(
+                            'px-3 py-2 max-w-[150px] truncate',
+                            diff.changed ? 'text-amber-700 font-medium' : 'text-slate-600',
+                          )}
+                        >
+                          {diff.revisadoValue}
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          {diff.changed ? (
+                            <span className="inline-flex items-center gap-1 text-amber-600">
+                              <X className="h-3 w-3" />
+                              Alterado
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 text-green-600">
+                              <Check className="h-3 w-3" />
+                              OK
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/30 px-4 py-6 text-center">
+          <GitCompareArrows className="mx-auto h-8 w-8 text-slate-300" />
+          <p className="mt-2 text-sm text-slate-500">Nenhum documento revisado</p>
+          <p className="text-xs text-slate-400">
+            Envie a versao revisada do Draft BL apos a conferencia
+          </p>
+        </div>
+      )}
+
+      {showUpload && (
+        <div className="mt-2">
+          <DocumentUpload processId={processId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────
 
 export function DraftBLTab({ processId }: DraftBLTabProps) {
@@ -572,7 +768,13 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
     return <LoadingSpinner className="py-8" />;
   }
 
-  const draftDoc = documents?.find((d) => d.documentType === 'draft_bl') ?? null;
+  // All draft_bl documents sorted by upload date (oldest first)
+  const allDraftDocs = (documents ?? [])
+    .filter((d) => d.documentType === 'draft_bl')
+    .sort((a, b) => new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime());
+
+  // First draft_bl is the original, shown in sections A and C
+  const draftDoc = allDraftDocs.length > 0 ? allDraftDocs[0] : null;
 
   return (
     <div className="space-y-6">
@@ -590,6 +792,12 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
 
       {/* Section C: AI Extracted Data */}
       <AIExtractedData draftDoc={draftDoc} />
+
+      {/* Divider */}
+      <div className="border-t border-slate-100" />
+
+      {/* Section D: Documento Revisado */}
+      <RevisadoSection draftDocs={allDraftDocs} processId={processId} />
     </div>
   );
 }

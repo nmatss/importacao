@@ -170,6 +170,38 @@ export const processService = {
     return process;
   },
 
+  async updateLogisticStatus(id: number, logisticStatus: string, userId: number | null = null) {
+    const [current] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, id))
+      .limit(1);
+
+    if (!current) throw new NotFoundError('Processo', id);
+
+    const previousStatus = current.logisticStatus;
+
+    const [process] = await db
+      .update(importProcesses)
+      .set({
+        logisticStatus,
+        updatedAt: new Date(),
+      })
+      .where(eq(importProcesses.id, id))
+      .returning();
+
+    auditService.log(
+      userId,
+      'logistic_status_update',
+      'process',
+      id,
+      { logisticStatus, previousStatus },
+      null,
+    );
+
+    return process;
+  },
+
   async getStats() {
     const result = await db
       .select({

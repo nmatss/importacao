@@ -30,7 +30,7 @@ interface EmailStatus {
 export function DocumentsTab({ processId }: DocumentsTabProps) {
   const queryClient = useQueryClient();
   const [syncing, setSyncing] = useState(false);
-  const [showManualUpload, setShowManualUpload] = useState(false);
+  const [showManualUpload, setShowManualUpload] = useState(true);
   const [countdown, setCountdown] = useState(300);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -158,15 +158,15 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
       {/* Document list — main content */}
       <DocumentList processId={processId} />
 
-      {/* Manual upload — collapsible fallback */}
+      {/* Manual upload — collapsible, open by default */}
       <div className="border-t border-slate-100 pt-3">
         <button
           type="button"
           onClick={() => setShowManualUpload(!showManualUpload)}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
         >
-          <Upload className="h-3.5 w-3.5" />
-          <span>Upload manual (fallback)</span>
+          <Upload className="h-4 w-4" />
+          <span>Enviar Documento</span>
           <ChevronDown
             className={cn(
               'ml-auto h-3.5 w-3.5 transition-transform',
