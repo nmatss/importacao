@@ -1,11 +1,18 @@
 import { eq, desc, ilike, and, sql, count, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { importProcesses, documents, followUpTracking } from '../../shared/database/schema.js';
+import {
+  importProcesses,
+  documents,
+  followUpTracking,
+  processEvents,
+  users,
+} from '../../shared/database/schema.js';
 import type { CreateProcessInput, UpdateProcessInput, ProcessFilter } from './schema.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 export const processService = {
   async list(filter: ProcessFilter) {
@@ -147,6 +154,17 @@ export const processService = {
       .returning();
 
     auditService.log(userId, 'status_update', 'process', id, { status }, null);
+
+    recordProcessEvent(
+      id,
+      {
+        eventType: 'status_changed',
+        title: `Status alterado para ${status}`,
+        metadata: { previousStatus: current.status, newStatus: status },
+      },
+      userId,
+    );
+
     return process;
   },
 
@@ -199,7 +217,39 @@ export const processService = {
       null,
     );
 
+    recordProcessEvent(
+      id,
+      {
+        eventType: 'logistic_status_changed',
+        title: `Status logistico: ${logisticStatus}`,
+        metadata: { previousStatus, newStatus: logisticStatus },
+      },
+      userId,
+    );
+
     return process;
+  },
+
+  async getEvents(processId: number, limit = 50) {
+    const rows = await db
+      .select({
+        id: processEvents.id,
+        processId: processEvents.processId,
+        eventType: processEvents.eventType,
+        title: processEvents.title,
+        description: processEvents.description,
+        metadata: processEvents.metadata,
+        createdBy: processEvents.createdBy,
+        createdAt: processEvents.createdAt,
+        userName: users.name,
+      })
+      .from(processEvents)
+      .leftJoin(users, eq(processEvents.createdBy, users.id))
+      .where(eq(processEvents.processId, processId))
+      .orderBy(desc(processEvents.createdAt))
+      .limit(limit);
+
+    return rows;
   },
 
   async getStats() {

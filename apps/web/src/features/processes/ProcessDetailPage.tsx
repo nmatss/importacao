@@ -13,6 +13,7 @@ import {
   ListChecks,
   Check,
   FileSearch,
+  History,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
@@ -34,6 +35,7 @@ import { ComunicacoesTab } from './components/ComunicacoesTab';
 import { EmailsTab } from './components/EmailsTab';
 import { DocumentChecklistTab } from './components/DocumentChecklistTab';
 import { DraftBLTab } from './components/DraftBLTab';
+import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ const CORE_TABS = [
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
   { key: 'comunicacoes', label: 'Comunicacoes', icon: MessageSquare },
   { key: 'emails', label: 'Emails', icon: Mail },
+  { key: 'historico', label: 'Historico', icon: History },
 ] as const;
 
 /** Tabs shown conditionally based on process status. */
@@ -159,6 +162,8 @@ function TabContent({
       return <ComunicacoesTab processId={processId} />;
     case 'emails':
       return <EmailsTab processId={processId} processCode={processCode} />;
+    case 'historico':
+      return <ProcessTimelineEvents processId={processId} />;
     default:
       return null;
   }

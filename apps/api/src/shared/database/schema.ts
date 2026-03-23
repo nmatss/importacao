@@ -581,3 +581,28 @@ export const emailSignatures = pgTable(
 
 export type EmailSignature = typeof emailSignatures.$inferSelect;
 export type NewEmailSignature = typeof emailSignatures.$inferInsert;
+
+// ── Process Events (Timeline) ────────────────────────────────────────
+
+export const processEvents = pgTable(
+  'process_events',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    eventType: varchar('event_type', { length: 50 }).notNull(),
+    title: varchar('title', { length: 255 }).notNull(),
+    description: text('description'),
+    metadata: jsonb('metadata'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  (table) => [
+    index('process_events_process_id_idx').on(table.processId),
+    index('process_events_created_at_idx').on(table.processId, table.createdAt),
+  ],
+);
+
+export type ProcessEvent = typeof processEvents.$inferSelect;
+export type NewProcessEvent = typeof processEvents.$inferInsert;

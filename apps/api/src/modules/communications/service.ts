@@ -15,6 +15,7 @@ import { feniciaSubmissionTemplate } from './templates/fenicia-submission.js';
 import { aiService } from '../ai/service.js';
 import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
 import { auditService } from '../audit/service.js';
+import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
@@ -156,6 +157,20 @@ export const communicationService = {
         { to: communication.recipientEmail, subject: communication.subject },
         null,
       );
+
+      // Record timeline event
+      if (communication.processId) {
+        recordProcessEvent(
+          communication.processId,
+          {
+            eventType: 'email_sent',
+            title: `Email enviado para ${communication.recipientEmail}`,
+            metadata: { subject: communication.subject, communicationId: updated.id },
+          },
+          null,
+        );
+      }
+
       return updated;
     } catch (error: any) {
       await db

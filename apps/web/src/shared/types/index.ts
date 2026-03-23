@@ -218,6 +218,19 @@ export interface User {
   active?: boolean;
 }
 
+/** Process event (timeline entry). */
+export interface ProcessEvent {
+  id: number;
+  processId: number;
+  eventType: string;
+  title: string;
+  description: string | null;
+  metadata: Record<string, unknown> | null;
+  createdBy: number | null;
+  createdAt: string;
+  userName: string | null;
+}
+
 /** Validation check result (individual check). */
 export interface ValidationResult {
   id: number;

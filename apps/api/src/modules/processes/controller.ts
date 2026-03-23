@@ -88,6 +88,17 @@ export const processController = {
     }
   },
 
+  async getEvents(req: Request, res: Response) {
+    try {
+      const limit = Number(req.query.limit) || 50;
+      const events = await processService.getEvents(Number(req.params.id), limit);
+      sendSuccess(res, events);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async getStats(_req: Request, res: Response) {
     try {
       const stats = await processService.getStats();

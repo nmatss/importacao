@@ -17,6 +17,7 @@ import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 function standardizeDocumentName(
   type: string,
@@ -173,6 +174,17 @@ export const documentService = {
       doc.id,
       { processId, type, filename: file.originalname },
       null,
+    );
+
+    // Record timeline event
+    recordProcessEvent(
+      processId,
+      {
+        eventType: 'document_uploaded',
+        title: `Documento enviado: ${file.originalname}`,
+        metadata: { type, documentId: doc.id, filename: file.originalname },
+      },
+      userId,
     );
 
     // Trigger AI extraction in background

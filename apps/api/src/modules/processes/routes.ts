@@ -16,6 +16,7 @@ router.use(authMiddleware);
 router.get('/', processController.list);
 router.get('/stats', processController.getStats);
 router.get('/:id', processController.getById);
+router.get('/:id/events', processController.getEvents);
 router.post('/', validate(createProcessSchema), processController.create);
 router.put('/:id', validate(updateProcessSchema), processController.update);
 router.patch('/:id/status', validate(updateStatusSchema), processController.updateStatus);
