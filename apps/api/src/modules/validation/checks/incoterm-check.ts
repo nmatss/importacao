@@ -17,7 +17,9 @@ interface CheckResult {
 
 export default function incotermCheck(input: CheckInput): CheckResult {
   const checkName = 'incoterm-check';
-  const incoterm = String(input.invoiceData?.incoterm ?? '').trim().toUpperCase();
+  const incoterm = String(input.invoiceData?.incoterm ?? '')
+    .trim()
+    .toUpperCase();
 
   if (!incoterm) {
     return {
@@ -25,7 +27,7 @@ export default function incotermCheck(input: CheckInput): CheckResult {
       status: 'warning',
       expectedValue: 'FOB',
       documentsCompared: 'INV',
-      message: 'Incoterm not found in invoice data.',
+      message: 'Incoterm nao encontrado nos dados da invoice.',
     };
   }
 
@@ -36,7 +38,7 @@ export default function incotermCheck(input: CheckInput): CheckResult {
       expectedValue: 'FOB',
       actualValue: incoterm,
       documentsCompared: 'INV',
-      message: 'Incoterm is FOB as expected.',
+      message: 'Incoterm e FOB conforme esperado.',
     };
   }
 
@@ -46,6 +48,6 @@ export default function incotermCheck(input: CheckInput): CheckResult {
     expectedValue: 'FOB',
     actualValue: incoterm,
     documentsCompared: 'INV',
-    message: `Incoterm is ${incoterm}, expected FOB.`,
+    message: `Incoterm e ${incoterm}, esperado FOB.`,
   };
 }

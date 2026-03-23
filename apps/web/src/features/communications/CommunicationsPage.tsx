@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -12,14 +12,22 @@ import {
   Clock,
   User,
   AtSign,
+  PenTool,
 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
-import { formatDate } from '@/shared/lib/utils';
+import { cn, formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
+
+interface EmailSignatureOption {
+  id: number;
+  name: string;
+  signatureHtml: string;
+  isDefault: boolean;
+}
 
 interface Process {
   id: number;
@@ -71,8 +79,24 @@ export function CommunicationsPage() {
   const [composer, setComposer] = useState<ComposerForm>(emptyComposer);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [aiRecipientType, setAiRecipientType] = useState<'fenicia' | 'isa'>('fenicia');
+  const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+
+  // Fetch signatures
+  const { data: signatures } = useApiQuery<EmailSignatureOption[]>(
+    ['email-signatures'],
+    '/api/settings/email-signatures',
+  );
+
+  // Auto-select default signature
+  useEffect(() => {
+    if (signatures?.length && !selectedSignatureId) {
+      const def = signatures.find((s) => s.isDefault);
+      setSelectedSignatureId(def?.id ?? signatures[0]?.id ?? null);
+    }
+  }, [signatures, selectedSignatureId]);
 
   const { data: processResponse } = useApiQuery<{ data: Process[]; pagination: unknown }>(
     ['processes'],
@@ -126,7 +150,10 @@ export function CommunicationsPage() {
         subject: composer.subject,
         body: composer.body,
       });
-      await api.post(`/api/communications/${draft.id}/send`);
+      await api.post(`/api/communications/${draft.id}/send`, {
+        signatureId: selectedSignatureId,
+      });
+      toast.success('Email enviado com sucesso');
       queryClient.invalidateQueries({ queryKey: ['communications'] });
       setComposer(emptyComposer);
     } catch (err: any) {
@@ -139,7 +166,8 @@ export function CommunicationsPage() {
     setGeneratingAi(true);
     try {
       const draft = await api.post<EmailDraft>('/api/ai/email-draft', {
-        processId: composer.processId,
+        processId: Number(composer.processId),
+        recipientType: aiRecipientType,
       });
       setComposer((prev) => ({
         ...prev,
@@ -303,15 +331,26 @@ export function CommunicationsPage() {
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
                   Templates e IA
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={handleGenerateAi}
-                    disabled={!composer.processId || generatingAi}
-                    className="inline-flex items-center gap-2 rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 px-4 py-2 text-sm font-semibold text-purple-700 hover:from-purple-100 hover:to-violet-100 disabled:opacity-50 transition-all"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                    {generatingAi ? 'Gerando...' : 'Gerar com IA'}
-                  </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* AI with recipient selector */}
+                  <div className="inline-flex items-center rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 overflow-hidden">
+                    <select
+                      value={aiRecipientType}
+                      onChange={(e) => setAiRecipientType(e.target.value as 'fenicia' | 'isa')}
+                      className="bg-transparent border-none text-xs font-medium text-purple-600 pl-3 pr-1 py-2 focus:ring-0"
+                    >
+                      <option value="fenicia">Fenicia</option>
+                      <option value="isa">Isa</option>
+                    </select>
+                    <button
+                      onClick={handleGenerateAi}
+                      disabled={!composer.processId || generatingAi}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100/50 disabled:opacity-50 transition-all"
+                    >
+                      <Sparkles className="h-4 w-4" />
+                      {generatingAi ? 'Gerando...' : 'Gerar com IA'}
+                    </button>
+                  </div>
                   <button
                     onClick={() => applyTemplate('fenicia')}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all"
@@ -328,6 +367,50 @@ export function CommunicationsPage() {
                   </button>
                 </div>
               </div>
+
+              {/* Signature selector */}
+              {signatures && signatures.length > 0 && (
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                    Assinatura
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {signatures.map((sig) => (
+                      <button
+                        key={sig.id}
+                        onClick={() => setSelectedSignatureId(sig.id)}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-all',
+                          selectedSignatureId === sig.id
+                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+                        )}
+                      >
+                        <PenTool className="h-3 w-3" />
+                        {sig.name}
+                        {sig.isDefault && (
+                          <span className="text-[10px] text-blue-400">(padrao)</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedSignatureId && (
+                    <div className="mt-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
+                        Preview
+                      </p>
+                      <div
+                        className="text-xs text-slate-600"
+                        dangerouslySetInnerHTML={{
+                          __html:
+                            signatures.find((s) => s.id === selectedSignatureId)?.signatureHtml ||
+                            '',
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">

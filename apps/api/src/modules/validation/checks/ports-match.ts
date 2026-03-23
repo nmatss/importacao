@@ -16,7 +16,9 @@ interface CheckResult {
 }
 
 function normalize(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 export default function portsMatch(input: CheckInput): CheckResult {
@@ -32,18 +34,18 @@ export default function portsMatch(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV vs BL',
-      message: 'Port of loading not found in either document.',
+      message: 'Porto de embarque nao encontrado em nenhum documento.',
     };
   }
 
   const issues: string[] = [];
 
   if (invPortOfLoading && blPortOfLoading && invPortOfLoading !== blPortOfLoading) {
-    issues.push(`Port of loading: INV="${invPortOfLoading}" vs BL="${blPortOfLoading}"`);
+    issues.push(`Porto de embarque: INV="${invPortOfLoading}" vs BL="${blPortOfLoading}"`);
   }
 
   if (invPortOfDischarge && blPortOfDischarge && invPortOfDischarge !== blPortOfDischarge) {
-    issues.push(`Port of discharge: INV="${invPortOfDischarge}" vs BL="${blPortOfDischarge}"`);
+    issues.push(`Porto de descarga: INV="${invPortOfDischarge}" vs BL="${blPortOfDischarge}"`);
   }
 
   if (issues.length > 0) {
@@ -53,7 +55,7 @@ export default function portsMatch(input: CheckInput): CheckResult {
       expectedValue: `Loading: ${invPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || blPortOfDischarge}`,
       actualValue: issues.join('; '),
       documentsCompared: 'INV vs BL',
-      message: `Port mismatch: ${issues.join('; ')}`,
+      message: `Divergencia nos portos: ${issues.join('; ')}`,
     };
   }
 
@@ -63,6 +65,6 @@ export default function portsMatch(input: CheckInput): CheckResult {
     expectedValue: `Loading: ${invPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || blPortOfDischarge}`,
     actualValue: `Loading: ${blPortOfLoading || invPortOfLoading}, Discharge: ${blPortOfDischarge || invPortOfDischarge}`,
     documentsCompared: 'INV vs BL',
-    message: 'Ports match between invoice and bill of lading.',
+    message: 'Portos conferem entre a invoice e o conhecimento de embarque.',
   };
 }

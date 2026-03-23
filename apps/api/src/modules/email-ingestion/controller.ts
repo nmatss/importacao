@@ -62,6 +62,41 @@ export const emailIngestionController = {
     }
   },
 
+  async historyScan(req: Request, res: Response) {
+    try {
+      const months = Math.min(Number(req.query.months) || 6, 12);
+      const daysBack = months * 30;
+
+      logger.info({ months, daysBack }, 'Starting historical email scan');
+
+      const parts = ['has:attachment', `newer_than:${daysBack}d`];
+
+      const skipSenderFilter = req.query.allSenders === 'true';
+      if (!skipSenderFilter) {
+        const allowedSenders =
+          process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+            .map((s: string) => s.trim())
+            .filter(Boolean) || [];
+        if (allowedSenders.length > 0) {
+          parts.push(`{${allowedSenders.map((s: string) => `from:${s}`).join(' ')}}`);
+        }
+      }
+
+      const gmailQuery = parts.join(' ');
+
+      // Process with includeRead=true to catch all historical emails
+      await emailProcessor.processNewEmails(true, gmailQuery);
+      sendSuccess(res, {
+        message: `Varredura histórica de ${months} meses concluída`,
+        query: gmailQuery,
+      });
+    } catch (error: any) {
+      logger.error({ error }, 'Historical email scan failed');
+      const status = error.statusCode || 400;
+      sendError(res, `Falha na varredura histórica: ${error.message}`, status);
+    }
+  },
+
   async reprocess(req: Request, res: Response) {
     try {
       const result = await emailProcessor.reprocess(Number(req.params.logId));

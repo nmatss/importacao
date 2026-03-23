@@ -18,17 +18,20 @@ interface CheckResult {
 export default function freightVsFup(input: CheckInput): CheckResult {
   const checkName = 'freight-vs-fup';
 
-  const blFreightRaw = input.blData?.freightValue != null ? Number(input.blData.freightValue) : null;
-  const processFreightRaw = input.processData?.freightValue != null ? Number(input.processData.freightValue) : null;
+  const blFreightRaw =
+    input.blData?.freightValue != null ? Number(input.blData.freightValue) : null;
+  const processFreightRaw =
+    input.processData?.freightValue != null ? Number(input.processData.freightValue) : null;
   const blFreight = blFreightRaw != null && !isNaN(blFreightRaw) ? blFreightRaw : null;
-  const processFreight = processFreightRaw != null && !isNaN(processFreightRaw) ? processFreightRaw : null;
+  const processFreight =
+    processFreightRaw != null && !isNaN(processFreightRaw) ? processFreightRaw : null;
 
   if (processFreight == null) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'BL vs Sistema',
-      message: 'Skipped: Valor do frete nao cadastrado no processo.',
+      message: 'Ignorado: Valor do frete nao cadastrado no processo.',
     };
   }
 

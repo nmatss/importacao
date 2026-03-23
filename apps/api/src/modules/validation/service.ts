@@ -5,6 +5,7 @@ import {
   documents,
   importProcesses,
   followUpTracking,
+  documentCorrections,
 } from '../../shared/database/schema.js';
 import { allChecks } from './checks/index.js';
 import type { CheckInput, CheckResult } from './checks/index.js';
@@ -17,6 +18,7 @@ import { kiomCorrectionTemplate } from '../communications/templates/kiom-correct
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { getErrorTypesFromChecks } from './error-type-mapping.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
@@ -235,7 +237,60 @@ export const validationService = {
       );
     }
 
+    // 9. Auto-populate document_corrections with error summary
+    const failedCheckNames = results.filter((r) => r.status === 'failed').map((r) => r.checkName);
+    const errorTypes = getErrorTypesFromChecks(failedCheckNames);
+
+    try {
+      // Upsert: delete old + insert new correction record for this process
+      await db.delete(documentCorrections).where(eq(documentCorrections.processId, processId));
+
+      await db.insert(documentCorrections).values({
+        processId,
+        correctionNeeded: failedCheckNames.length > 0,
+        errorCount: failedCheckNames.length,
+        errorTypes: errorTypes,
+        correctionRequestedAt: failedCheckNames.length > 0 ? new Date() : null,
+      });
+
+      logger.info(
+        {
+          processId,
+          correctionNeeded: failedCheckNames.length > 0,
+          errorCount: failedCheckNames.length,
+          errorTypes,
+        },
+        'Document corrections record updated',
+      );
+    } catch (corrErr) {
+      logger.error({ err: corrErr, processId }, 'Failed to update document corrections');
+    }
+
     return results;
+  },
+
+  async getCorrections(processId: number) {
+    const [correction] = await db
+      .select()
+      .from(documentCorrections)
+      .where(eq(documentCorrections.processId, processId))
+      .limit(1);
+    return correction ?? null;
+  },
+
+  async updateCorrection(
+    processId: number,
+    data: {
+      correctionReceivedAt?: Date | null;
+      notes?: string | null;
+    },
+  ) {
+    const [updated] = await db
+      .update(documentCorrections)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(documentCorrections.processId, processId))
+      .returning();
+    return updated;
   },
 
   async getResults(processId: number) {

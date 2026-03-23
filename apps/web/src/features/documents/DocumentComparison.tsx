@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertTriangle, Minus, FileText, Package, Ship } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Minus, FileText, Package } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -48,23 +48,37 @@ interface ComparisonData {
   blConfidence: number | null;
 }
 
-function DocBadge({ label, available, confidence }: { label: string; available: boolean; confidence: number | null }) {
+function DocBadge({
+  label,
+  available,
+  confidence,
+}: {
+  label: string;
+  available: boolean;
+  confidence: number | null;
+}) {
   return (
-    <div className={cn(
-      'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border',
-      available
-        ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-        : 'bg-slate-50 border-slate-200 text-slate-400',
-    )}>
+    <div
+      className={cn(
+        'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border',
+        available
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          : 'bg-slate-50 border-slate-200 text-slate-400',
+      )}
+    >
       {available ? <CheckCircle className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
       {label}
       {confidence != null && (
-        <span className={cn(
-          'ml-1 text-xs font-mono rounded-md px-1.5 py-0.5',
-          confidence >= 0.8 ? 'bg-emerald-100 text-emerald-700' :
-          confidence >= 0.6 ? 'bg-amber-100 text-amber-700' :
-          'bg-red-100 text-red-700',
-        )}>
+        <span
+          className={cn(
+            'ml-1 text-xs font-mono rounded-md px-1.5 py-0.5',
+            confidence >= 0.8
+              ? 'bg-emerald-100 text-emerald-700'
+              : confidence >= 0.6
+                ? 'bg-amber-100 text-amber-700'
+                : 'bg-red-100 text-red-700',
+          )}
+        >
           {(confidence * 100).toFixed(0)}%
         </span>
       )}
@@ -72,13 +86,21 @@ function DocBadge({ label, available, confidence }: { label: string; available: 
   );
 }
 
-function StatusCell({ value, status }: { value: string | null; status?: 'match' | 'divergent' | 'empty' }) {
+function StatusCell({
+  value,
+  status,
+}: {
+  value: string | null;
+  status?: 'match' | 'divergent' | 'empty';
+}) {
   if (!value) return <td className="px-3 py-2.5 text-sm text-slate-300 font-mono">-</td>;
   return (
-    <td className={cn(
-      'px-3 py-2.5 text-sm font-mono',
-      status === 'divergent' ? 'text-red-700 font-semibold bg-red-50/50' : 'text-slate-700',
-    )}>
+    <td
+      className={cn(
+        'px-3 py-2.5 text-sm font-mono',
+        status === 'divergent' ? 'text-red-700 font-semibold bg-red-50/50' : 'text-slate-700',
+      )}
+    >
       {value}
     </td>
   );
@@ -101,15 +123,19 @@ export function DocumentComparison({ processId }: { processId: string }) {
     );
   }
 
-  const divergentCount = data.aggregateComparison.filter(f => f.status === 'divergent').length;
-  const matchCount = data.aggregateComparison.filter(f => f.status === 'match').length;
+  const divergentCount = data.aggregateComparison.filter((f) => f.status === 'divergent').length;
+  const matchCount = data.aggregateComparison.filter((f) => f.status === 'match').length;
 
   return (
     <div className="space-y-6">
       {/* Document availability */}
       <div className="flex flex-wrap gap-3">
         <DocBadge label="Invoice" available={data.hasInvoice} confidence={data.invoiceConfidence} />
-        <DocBadge label="Packing List" available={data.hasPackingList} confidence={data.plConfidence} />
+        <DocBadge
+          label="Packing List"
+          available={data.hasPackingList}
+          confidence={data.plConfidence}
+        />
         <DocBadge label="Bill of Lading" available={data.hasBl} confidence={data.blConfidence} />
       </div>
 
@@ -133,33 +159,50 @@ export function DocumentComparison({ processId }: { processId: string }) {
             Comparativo Geral - Invoice vs Packing List vs BL
           </h4>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-slate-50/50">
+              <tr className="bg-slate-50/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Campo</th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-500">Invoice</th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-purple-500">Packing List</th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">BL</th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Campo
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                  Invoice
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-purple-500">
+                  Packing List
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+                  BL
+                </th>
               </tr>
             </thead>
             <tbody>
-              {data.aggregateComparison.filter(f => f.status !== 'empty').map((field, i) => (
-                <tr key={i} className={cn(
-                  'border-b last:border-b-0',
-                  field.status === 'divergent' ? 'bg-red-50/30' : '',
-                )}>
-                  <td className="px-3 py-2.5">
-                    {field.status === 'match' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                    {field.status === 'divergent' && <XCircle className="h-4 w-4 text-red-500" />}
-                  </td>
-                  <td className="px-3 py-2.5 text-sm font-medium text-slate-800">{field.label}</td>
-                  <StatusCell value={field.invoice} status={field.status} />
-                  <StatusCell value={field.packingList} status={field.status} />
-                  <StatusCell value={field.bl} status={field.status} />
-                </tr>
-              ))}
+              {data.aggregateComparison
+                .filter((f) => f.status !== 'empty')
+                .map((field, i) => (
+                  <tr
+                    key={i}
+                    className={cn(
+                      'border-b last:border-b-0',
+                      field.status === 'divergent' ? 'bg-red-50/30' : '',
+                    )}
+                  >
+                    <td className="px-3 py-2.5">
+                      {field.status === 'match' && (
+                        <CheckCircle className="h-4 w-4 text-green-500" />
+                      )}
+                      {field.status === 'divergent' && <XCircle className="h-4 w-4 text-red-500" />}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm font-medium text-slate-800">
+                      {field.label}
+                    </td>
+                    <StatusCell value={field.invoice} status={field.status} />
+                    <StatusCell value={field.packingList} status={field.status} />
+                    <StatusCell value={field.bl} status={field.status} />
+                  </tr>
+                ))}
             </tbody>
           </table>
         </div>
@@ -174,29 +217,51 @@ export function DocumentComparison({ processId }: { processId: string }) {
               Comparativo por Item - Invoice vs Packing List
             </h4>
             <p className="text-xs text-slate-500 mt-0.5">
-              {data.itemComparison.filter(i => i.matched).length} de {data.itemComparison.length} itens encontrados no Packing List
+              {data.itemComparison.filter((i) => i.matched).length} de {data.itemComparison.length}{' '}
+              itens encontrados no Packing List
             </p>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-slate-50/50">
+                <tr className="bg-slate-50/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Codigo</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Descricao</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">NCM</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-blue-500">Qtd INV</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-purple-500">Qtd PL</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Unit Price</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">Total</th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Codigo
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Descricao
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    NCM
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                    Qtd INV
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-purple-500">
+                    Qtd PL
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Unit Price
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Total
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {data.itemComparison.map((item, i) => (
-                  <tr key={i} className={cn(
-                    'border-b last:border-b-0',
-                    !item.matched ? 'bg-amber-50/50' : item.qtyMatch === false ? 'bg-red-50/30' : '',
-                  )}>
+                  <tr
+                    key={i}
+                    className={cn(
+                      'border-b last:border-b-0',
+                      !item.matched
+                        ? 'bg-amber-50/50'
+                        : item.qtyMatch === false
+                          ? 'bg-red-50/30'
+                          : '',
+                    )}
+                  >
                     <td className="px-3 py-2">
                       {!item.matched ? (
                         <AlertTriangle className="h-4 w-4 text-amber-500" />
@@ -207,17 +272,25 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{item.itemCode || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate">{item.description || '-'}</td>
+                    <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate">
+                      {item.description || '-'}
+                    </td>
                     <td className="px-3 py-2 font-mono text-slate-600">{item.ncm || '-'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-blue-700">{item.invoiceQty ?? '-'}</td>
-                    <td className={cn(
-                      'px-3 py-2 text-right font-mono',
-                      item.qtyMatch === false ? 'text-red-700 font-semibold' : 'text-purple-700',
-                    )}>
+                    <td className="px-3 py-2 text-right font-mono text-blue-700">
+                      {item.invoiceQty ?? '-'}
+                    </td>
+                    <td
+                      className={cn(
+                        'px-3 py-2 text-right font-mono',
+                        item.qtyMatch === false ? 'text-red-700 font-semibold' : 'text-purple-700',
+                      )}
+                    >
                       {item.plQty ?? '-'}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-600">
-                      {item.invoiceUnitPrice != null ? `$${Number(item.invoiceUnitPrice).toFixed(2)}` : '-'}
+                      {item.invoiceUnitPrice != null
+                        ? `$${Number(item.invoiceUnitPrice).toFixed(2)}`
+                        : '-'}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-800 font-medium">
                       {item.invoiceTotal != null ? `$${Number(item.invoiceTotal).toFixed(2)}` : '-'}
@@ -239,13 +312,19 @@ export function DocumentComparison({ processId }: { processId: string }) {
               Itens no Packing List sem correspondencia na Invoice ({data.unmatchedPlItems.length})
             </h4>
           </div>
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-amber-50/50">
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">Codigo</th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">Descricao</th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600">Quantidade</th>
+                <tr className="bg-amber-50/50 sticky top-0 z-10 bg-amber-50 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                    Codigo
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                    Descricao
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                    Quantidade
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -253,7 +332,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   <tr key={i} className="border-b last:border-b-0">
                     <td className="px-3 py-2 font-mono text-amber-800">{item.itemCode || '-'}</td>
                     <td className="px-3 py-2 text-amber-800">{item.description || '-'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-800">{item.quantity}</td>
+                    <td className="px-3 py-2 text-right font-mono text-amber-800">
+                      {item.quantity}
+                    </td>
                   </tr>
                 ))}
               </tbody>

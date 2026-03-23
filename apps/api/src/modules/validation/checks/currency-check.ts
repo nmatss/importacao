@@ -17,7 +17,9 @@ interface CheckResult {
 
 export default function currencyCheck(input: CheckInput): CheckResult {
   const checkName = 'currency-check';
-  const currency = String(input.invoiceData?.currency ?? '').trim().toUpperCase();
+  const currency = String(input.invoiceData?.currency ?? '')
+    .trim()
+    .toUpperCase();
 
   if (!currency) {
     return {
@@ -25,7 +27,7 @@ export default function currencyCheck(input: CheckInput): CheckResult {
       status: 'warning',
       expectedValue: 'USD',
       documentsCompared: 'INV',
-      message: 'Currency not found in invoice data.',
+      message: 'Moeda nao encontrada nos dados da invoice.',
     };
   }
 
@@ -36,7 +38,7 @@ export default function currencyCheck(input: CheckInput): CheckResult {
       expectedValue: 'USD',
       actualValue: currency,
       documentsCompared: 'INV',
-      message: 'Invoice currency is USD as expected.',
+      message: 'Moeda da invoice e USD conforme esperado.',
     };
   }
 
@@ -46,6 +48,6 @@ export default function currencyCheck(input: CheckInput): CheckResult {
     expectedValue: 'USD',
     actualValue: currency,
     documentsCompared: 'INV',
-    message: `Invoice currency is ${currency}, expected USD.`,
+    message: `Moeda da invoice e ${currency}, esperado USD.`,
   };
 }

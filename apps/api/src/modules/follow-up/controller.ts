@@ -58,6 +58,22 @@ export const followUpController = {
     }
   },
 
+  async updateStep(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      const { step, completedAt } = req.body;
+      if (!step) {
+        return sendError(res, 'Campo "step" e obrigatorio', 400);
+      }
+      const value = completedAt === null ? null : completedAt ? new Date(completedAt) : new Date();
+      const tracking = await followUpService.updateStep(processId, step, value);
+      sendSuccess(res, tracking);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async syncFromSheet(req: Request, res: Response) {
     try {
       const { processCode } = req.params;

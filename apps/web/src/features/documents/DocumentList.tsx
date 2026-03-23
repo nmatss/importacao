@@ -10,9 +10,11 @@ import {
   ExternalLink,
   Mail,
   Upload,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
+import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -25,7 +27,7 @@ interface Document {
   uploadedAt: string;
   aiProcessingStatus: 'pending' | 'processing' | 'completed' | 'failed';
   aiParsedData?: Record<string, unknown>;
-  aiConfidence?: number;
+  aiConfidence?: number | null;
   driveFileId?: string | null;
 }
 
@@ -40,30 +42,62 @@ interface DocumentListProps {
 
 const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
 
-function ConfidenceIndicator({ value }: { value: number }) {
+const TYPE_COLORS: Record<string, string> = {
+  invoice: 'bg-blue-50 text-blue-700 border-blue-200',
+  packing_list: 'bg-amber-50 text-amber-700 border-amber-200',
+  ohbl: 'bg-purple-50 text-purple-700 border-purple-200',
+  draft_bl: 'bg-violet-50 text-violet-700 border-violet-200',
+  espelho: 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  li: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  certificate: 'bg-pink-50 text-pink-700 border-pink-200',
+  other: 'bg-slate-50 text-slate-600 border-slate-200',
+};
+
+function ConfidenceBadge({ value }: { value: number }) {
+  const pct = Math.round(value * 100);
   const color =
-    value > 0.8
-      ? 'text-green-600 bg-green-100'
-      : value >= 0.5
-        ? 'text-yellow-600 bg-yellow-100'
-        : 'text-red-600 bg-red-100';
+    pct >= 80
+      ? 'text-green-700 bg-green-50'
+      : pct >= 50
+        ? 'text-yellow-700 bg-yellow-50'
+        : 'text-red-700 bg-red-50';
 
   return (
-    <span className={cn('inline-flex rounded-full px-2 py-0.5 text-xs font-medium', color)}>
-      {(value * 100).toFixed(0)}%
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+        color,
+      )}
+    >
+      {pct}%
     </span>
   );
 }
 
-function AiStatusIndicator({ status }: { status: Document['aiProcessingStatus'] }) {
+function AiStatus({ status }: { status: Document['aiProcessingStatus'] }) {
   switch (status) {
     case 'processing':
     case 'pending':
-      return <LoadingSpinner size="sm" />;
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-blue-500">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Processando
+        </span>
+      );
     case 'completed':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-green-600">
+          <CheckCircle className="h-3 w-3" />
+          Extraído
+        </span>
+      );
     case 'failed':
-      return <span className="text-xs text-red-500">Erro</span>;
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-red-500">
+          <AlertTriangle className="h-3 w-3" />
+          Erro
+        </span>
+      );
     default:
       return null;
   }
@@ -75,9 +109,20 @@ export function DocumentList({ processId }: DocumentListProps) {
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
 
+  // Auto-refresh every 5s while any doc is still processing
   const { data: documents, isLoading } = useApiQuery<Document[]>(
     ['documents', processId],
     `/api/documents/process/${processId}`,
+    {
+      refetchInterval: (query) => {
+        const docs = query.state.data;
+        if (!docs) return false;
+        const hasProcessing = docs.some(
+          (d) => d.aiProcessingStatus === 'processing' || d.aiProcessingStatus === 'pending',
+        );
+        return hasProcessing ? 5000 : false;
+      },
+    },
   );
 
   const fetchSource = async (docId: number) => {
@@ -89,7 +134,8 @@ export function DocumentList({ processId }: DocumentListProps) {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (res.ok) {
-        const data = await res.json();
+        const json = await res.json();
+        const data = json.data ?? json;
         setSources((prev) => ({ ...prev, [docId]: data }));
       }
     } catch {
@@ -97,24 +143,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     }
   };
 
-  const reprocessMutation = useApiMutation<void, void>(
-    '', // overridden per call
-    'post',
-  );
-
-  const deleteMutation = useApiMutation<void, void>(
-    '', // overridden per call
-    'delete',
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['documents', processId] });
-        setDeleteTarget(null);
-      },
-    },
-  );
-
   const handleReprocess = (docId: number) => {
-    // Use fetch directly since URL varies per document
     const token = localStorage.getItem('importacao_token');
     const baseUrl = import.meta.env.VITE_API_URL || '';
     fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
@@ -123,6 +152,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     })
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao reprocessar documento');
+        toast.success('Reprocessamento iniciado');
         queryClient.invalidateQueries({ queryKey: ['documents', processId] });
       })
       .catch((err: any) => {
@@ -139,6 +169,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     })
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao excluir documento');
+        toast.success('Documento excluído');
         queryClient.invalidateQueries({ queryKey: ['documents', processId] });
         setDeleteTarget(null);
       })
@@ -152,133 +183,243 @@ export function DocumentList({ processId }: DocumentListProps) {
   }
 
   if (!documents || documents.length === 0) {
-    return <p className="py-6 text-center text-sm text-gray-500">Nenhum documento enviado.</p>;
+    return (
+      <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
+        <FileText className="h-8 w-8" />
+        <p className="text-sm">Nenhum documento enviado ainda</p>
+      </div>
+    );
   }
+
+  // Group by document type
+  const grouped = documents.reduce(
+    (acc, doc) => {
+      const key = doc.documentType || 'other';
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(doc);
+      return acc;
+    },
+    {} as Record<string, Document[]>,
+  );
+
+  // Order groups: invoice, packing_list, ohbl first, then rest
+  const typeOrder = [
+    'invoice',
+    'packing_list',
+    'ohbl',
+    'draft_bl',
+    'espelho',
+    'li',
+    'certificate',
+    'other',
+  ];
+  const sortedGroups = Object.entries(grouped).sort(
+    ([a], [b]) =>
+      (typeOrder.indexOf(a) === -1 ? 99 : typeOrder.indexOf(a)) -
+      (typeOrder.indexOf(b) === -1 ? 99 : typeOrder.indexOf(b)),
+  );
+
+  // Status summary
+  const totalDocs = documents.length;
+  const completedDocs = documents.filter((d) => d.aiProcessingStatus === 'completed').length;
+  const hasAll3 = !!grouped['invoice'] && !!grouped['packing_list'] && !!grouped['ohbl'];
 
   return (
     <>
-      <div className="divide-y divide-gray-200 rounded-lg border border-gray-200">
-        {documents.map((doc) => {
-          const expanded = expandedId === doc.id;
+      {/* Summary bar */}
+      <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-4 py-2">
+        <span className="text-xs font-medium text-slate-500">
+          {totalDocs} documento{totalDocs !== 1 ? 's' : ''}
+        </span>
+        <span className="text-slate-300">|</span>
+        <span className="text-xs text-slate-500">
+          IA: {completedDocs}/{totalDocs} extraídos
+        </span>
+        {hasAll3 && (
+          <>
+            <span className="text-slate-300">|</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+              <CheckCircle className="h-3 w-3" />
+              INV + PL + BL completos
+            </span>
+          </>
+        )}
+      </div>
 
-          return (
-            <div key={doc.id} className="bg-white">
-              <div className="flex items-center gap-3 px-4 py-3">
-                <FileText className="h-5 w-5 shrink-0 text-gray-400" />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-gray-900">{doc.fileName}</p>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
-                    <span className="inline-flex rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
-                      {typeLabel(doc.documentType)}
-                    </span>
-                    <span>{formatDate(doc.uploadedAt)}</span>
-                  </div>
-                </div>
+      {/* Document cards */}
+      <div className="space-y-2">
+        {sortedGroups.map(([type, docs]) => (
+          <div key={type}>
+            {sortedGroups.length > 1 && (
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                {typeLabel(type)}
+              </p>
+            )}
+            <div className="space-y-1.5">
+              {docs.map((doc) => {
+                const expanded = expandedId === doc.id;
+                const source = sources[doc.id];
 
-                <div className="flex items-center gap-2">
-                  {/* Source tag (Gap 11) */}
-                  <button
-                    onClick={() => fetchSource(doc.id)}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                    title="Ver origem"
-                    aria-label="Ver origem do documento"
+                return (
+                  <div
+                    key={doc.id}
+                    className="group rounded-lg border border-slate-150 bg-white transition-shadow hover:shadow-sm"
                   >
-                    {sources[doc.id] ? (
-                      sources[doc.id].source === 'email' ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-blue-50 px-1.5 py-0.5 text-xs text-blue-600">
-                          <Mail className="h-3 w-3" />
-                          {sources[doc.id].emailSubject
-                            ? sources[doc.id].emailSubject!.slice(0, 20) +
-                              (sources[doc.id].emailSubject!.length > 20 ? '...' : '')
-                            : 'Email'}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-600">
-                          <Upload className="h-3 w-3" />
-                          Manual
-                        </span>
-                      )
-                    ) : (
-                      <Mail className="h-3.5 w-3.5" />
-                    )}
-                  </button>
+                    <div className="flex items-center gap-3 px-3 py-2.5">
+                      {/* Type badge */}
+                      <span
+                        className={cn(
+                          'inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase',
+                          TYPE_COLORS[doc.documentType] || TYPE_COLORS.other,
+                        )}
+                      >
+                        {doc.documentType === 'packing_list'
+                          ? 'PL'
+                          : doc.documentType === 'invoice'
+                            ? 'INV'
+                            : doc.documentType === 'ohbl'
+                              ? 'BL'
+                              : doc.documentType === 'draft_bl'
+                                ? 'DRAFT'
+                                : doc.documentType === 'certificate'
+                                  ? 'CERT'
+                                  : (typeLabel(doc.documentType) || doc.documentType)
+                                      .slice(0, 4)
+                                      .toUpperCase()}
+                      </span>
 
-                  <AiStatusIndicator status={doc.aiProcessingStatus} />
-
-                  {doc.aiParsedData && doc.aiConfidence != null && (
-                    <ConfidenceIndicator value={doc.aiConfidence} />
-                  )}
-
-                  {/* Drive link (Gap 1) */}
-                  {doc.driveFileId && (
-                    <a
-                      href={`https://drive.google.com/file/d/${doc.driveFileId}/view`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-green-600 transition-colors"
-                      title="Abrir no Drive"
-                      aria-label="Abrir documento no Google Drive"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </a>
-                  )}
-
-                  {doc.aiParsedData && (
-                    <button
-                      onClick={() => setExpandedId(expanded ? null : doc.id)}
-                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
-                      title="Ver dados extraídos"
-                      aria-label={expanded ? 'Ocultar dados extraidos' : 'Ver dados extraidos'}
-                    >
-                      {expanded ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => handleReprocess(doc.id)}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-blue-600 transition-colors"
-                    title="Reprocessar IA"
-                    aria-label="Reprocessar documento com IA"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </button>
-
-                  <button
-                    onClick={() => setDeleteTarget(doc)}
-                    className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 transition-colors"
-                    title="Excluir"
-                    aria-label={`Excluir documento ${doc.fileName}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Expanded AI data */}
-              {expanded && doc.aiParsedData && (
-                <div className="border-t border-gray-100 bg-gray-50 px-4 py-3">
-                  <h4 className="mb-2 text-xs font-semibold uppercase text-gray-500">
-                    Dados Extraídos pela IA
-                  </h4>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    {Object.entries(doc.aiParsedData).map(([key, val]) => (
-                      <div key={key}>
-                        <span className="text-gray-500">{key}: </span>
-                        <span className="font-medium text-gray-900">
-                          {typeof val === 'object' ? JSON.stringify(val) : String(val)}
-                        </span>
+                      {/* File info */}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-800">
+                          {doc.fileName}
+                        </p>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <span className="text-[11px] text-slate-400">
+                            {formatDate(doc.uploadedAt)}
+                          </span>
+                          <AiStatus status={doc.aiProcessingStatus} />
+                          {doc.aiConfidence != null && <ConfidenceBadge value={doc.aiConfidence} />}
+                        </div>
                       </div>
-                    ))}
+
+                      {/* Actions - appear on hover */}
+                      <div className="flex items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                        {/* Source */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            fetchSource(doc.id);
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                          title="Ver origem"
+                        >
+                          {source ? (
+                            source.source === 'email' ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-blue-600">
+                                <Mail className="h-3 w-3" />
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                                <Upload className="h-3 w-3" />
+                              </span>
+                            )
+                          ) : (
+                            <Mail className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+
+                        {/* Drive link */}
+                        {doc.driveFileId && (
+                          <a
+                            href={`https://drive.google.com/file/d/${doc.driveFileId}/view`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-green-50 hover:text-green-600"
+                            title="Abrir no Drive"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+
+                        {/* Expand AI data */}
+                        {doc.aiParsedData && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedId(expanded ? null : doc.id);
+                            }}
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                            title="Ver dados extraídos"
+                          >
+                            {expanded ? (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
+
+                        {/* Reprocess */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReprocess(doc.id);
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                          title="Reprocessar IA"
+                        >
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Delete */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteTarget(doc);
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Expanded AI data */}
+                    {expanded && doc.aiParsedData && (
+                      <div className="border-t border-slate-100 bg-slate-50/50 px-3 py-2.5">
+                        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          Dados extraídos pela IA
+                        </p>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          {Object.entries(doc.aiParsedData)
+                            .filter(([key]) => key !== 'items')
+                            .map(([key, val]) => (
+                              <div key={key} className="flex items-baseline gap-1">
+                                <span className="text-slate-400">{key}:</span>
+                                <span className="font-medium text-slate-700 truncate">
+                                  {typeof val === 'object'
+                                    ? JSON.stringify(val)
+                                    : String(val ?? '')}
+                                </span>
+                              </div>
+                            ))}
+                        </div>
+                        {/* Items count if present */}
+                        {Array.isArray(doc.aiParsedData.items) && (
+                          <p className="mt-1.5 text-[11px] text-slate-400">
+                            {String((doc.aiParsedData.items as unknown[]).length)} itens extraídos
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })}
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
       <ConfirmDialog

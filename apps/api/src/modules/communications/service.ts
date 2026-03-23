@@ -7,6 +7,7 @@ import {
   importProcesses,
   espelhos,
   validationResults,
+  emailSignatures,
 } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { CreateCommunicationInput } from './schema.js';
@@ -35,14 +36,19 @@ function sanitizeHtml(html: string): string {
 }
 
 function getSmtpTransport() {
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const secure = process.env.SMTP_SECURE === 'true';
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const hasAuth = user && pass && user !== 'noreply@grupounico.com'; // Skip auth for internal relay
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    port,
+    secure,
+    ...(hasAuth ? { auth: { user, pass } } : {}),
+    tls: { rejectUnauthorized: false },
+    ignoreTLS: !secure,
   });
 }
 
@@ -92,7 +98,7 @@ export const communicationService = {
     return communication;
   },
 
-  async send(id: number) {
+  async send(id: number, signatureId?: number) {
     const [communication] = await db
       .select()
       .from(communications)
@@ -114,11 +120,24 @@ export const communicationService = {
         path: att.path,
       }));
 
+      // Append signature if provided
+      let htmlBody = communication.body;
+      if (signatureId) {
+        const [signature] = await db
+          .select()
+          .from(emailSignatures)
+          .where(eq(emailSignatures.id, signatureId))
+          .limit(1);
+        if (signature) {
+          htmlBody = `${htmlBody}<br/><br/>${signature.signatureHtml}`;
+        }
+      }
+
       await transport.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
         to: communication.recipientEmail,
         subject: communication.subject,
-        html: sanitizeHtml(communication.body),
+        html: sanitizeHtml(htmlBody),
         attachments: mailAttachments,
       });
 

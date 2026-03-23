@@ -24,17 +24,23 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
   const checkName = 'weight-ratio-check';
 
   // Use packing list items first, fall back to invoice items
-  const items = (input.packingListData?.items ?? input.invoiceData?.items) as Array<Record<string, any>> | undefined;
+  const items = (input.packingListData?.items ?? input.invoiceData?.items) as
+    | Array<Record<string, any>>
+    | undefined;
 
-  const totalGross = Number(input.packingListData?.totalGrossWeight ?? input.invoiceData?.totalGrossWeight ?? 0);
-  const totalNet = Number(input.packingListData?.totalNetWeight ?? input.invoiceData?.totalNetWeight ?? 0);
+  const totalGross = Number(
+    input.packingListData?.totalGrossWeight ?? input.invoiceData?.totalGrossWeight ?? 0,
+  );
+  const totalNet = Number(
+    input.packingListData?.totalNetWeight ?? input.invoiceData?.totalNetWeight ?? 0,
+  );
 
   if ((!items || items.length === 0) && (!totalGross || !totalNet)) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'INV / PL',
-      message: 'No weight data found to validate ratios.',
+      message: 'Nenhum dado de peso encontrado para validar as proporcoes.',
     };
   }
 
@@ -69,26 +75,32 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
     }
 
     if (equalWeightCount > 0) {
-      warnings.push(`${equalWeightCount} item(s) have gross weight equal to net weight`);
+      warnings.push(`${equalWeightCount} item(ns) com peso bruto igual ao peso liquido`);
     }
 
     if (impossibleCount > 0) {
-      issues.push(`${impossibleCount} item(s) have gross weight less than net weight`);
+      issues.push(`${impossibleCount} item(ns) com peso bruto menor que o peso liquido`);
     }
 
     if (suspiciousCount > 0) {
-      warnings.push(`${suspiciousCount} item(s) have unusual gross/net ratio (outside ${MIN_ITEM_RATIO}-${MAX_ITEM_RATIO})`);
+      warnings.push(
+        `${suspiciousCount} item(ns) com proporcao bruto/liquido incomum (fora de ${MIN_ITEM_RATIO}-${MAX_ITEM_RATIO})`,
+      );
     }
   }
 
   // Check aggregate ratio
   if (totalGross > 0 && totalNet > 0) {
     if (totalGross < totalNet) {
-      issues.push(`Total gross (${totalGross.toFixed(3)} kg) < total net (${totalNet.toFixed(3)} kg)`);
+      issues.push(
+        `Total gross (${totalGross.toFixed(3)} kg) < total net (${totalNet.toFixed(3)} kg)`,
+      );
     } else {
       const totalRatio = totalGross / totalNet;
       if (totalRatio < MIN_TOTAL_RATIO || totalRatio > MAX_TOTAL_RATIO) {
-        warnings.push(`Total gross/net ratio = ${totalRatio.toFixed(2)} (expected ${MIN_TOTAL_RATIO}-${MAX_TOTAL_RATIO})`);
+        warnings.push(
+          `Total gross/net ratio = ${totalRatio.toFixed(2)} (expected ${MIN_TOTAL_RATIO}-${MAX_TOTAL_RATIO})`,
+        );
       }
     }
   }
@@ -122,6 +134,6 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
     expectedValue: `Ratio ${MIN_TOTAL_RATIO}-${MAX_TOTAL_RATIO}`,
     actualValue: `Total ratio: ${totalRatio}`,
     documentsCompared: 'INV / PL',
-    message: 'All weight ratios are within acceptable range.',
+    message: 'Todas as proporcoes de peso estao dentro da faixa aceitavel.',
   };
 }

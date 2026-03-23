@@ -17,7 +17,6 @@ import {
   ArrowDown,
   ShieldCheck,
   CheckCircle2,
-  XCircle,
   AlertTriangle,
   SearchX,
   Ban,
@@ -46,15 +45,6 @@ const STATUS_FILTERS = [
     activeBg: 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30',
     dotColor: 'bg-emerald-500',
     countKey: 'ok' as const,
-  },
-  {
-    value: 'MISSING',
-    label: 'Ausente',
-    icon: XCircle,
-    color: 'text-red-700',
-    activeBg: 'bg-red-600 text-white shadow-lg shadow-red-600/30',
-    dotColor: 'bg-red-500',
-    countKey: 'missing' as const,
   },
   {
     value: 'INCONSISTENT',
@@ -106,7 +96,6 @@ import type { CertProduct } from '@/shared/lib/cert-api-client';
 interface StatusCounts {
   total: number;
   ok: number;
-  missing: number;
   inconsistent: number;
   not_found: number;
   expired: number;
@@ -138,7 +127,6 @@ export default function CertProdutosPage() {
   const [counts, setCounts] = useState<StatusCounts>({
     total: 0,
     ok: 0,
-    missing: 0,
     inconsistent: 0,
     not_found: 0,
     expired: 0,
@@ -159,16 +147,14 @@ export default function CertProdutosPage() {
               (b.inconsistent || 0) +
               (b.not_found || 0),
             ok: acc.ok + (b.ok || 0),
-            missing: acc.missing + (b.missing || 0),
             inconsistent: acc.inconsistent + (b.inconsistent || 0),
-            not_found: acc.not_found + (b.not_found || 0),
+            not_found: acc.not_found + (b.not_found || 0) + (b.missing || 0),
             expired: acc.expired + (b.expired || 0),
             no_expected: acc.no_expected + (b.no_expected || 0),
           }),
           {
             total: 0,
             ok: 0,
-            missing: 0,
             inconsistent: 0,
             not_found: 0,
             expired: 0,
@@ -290,12 +276,6 @@ export default function CertProdutosPage() {
     ) : (
       <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />
     );
-  }
-
-  function scoreColor(score: number): string {
-    if (score >= 0.9) return 'text-emerald-700 bg-emerald-50';
-    if (score >= 0.6) return 'text-amber-700 bg-amber-50';
-    return 'text-red-700 bg-red-50';
   }
 
   const hasActiveFilters = status || brand || search || startDate || endDate;
@@ -495,13 +475,17 @@ export default function CertProdutosPage() {
                     Status <SortIcon field="last_validation_status" />
                   </span>
                 </th>
-                <th
-                  className="text-right px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
-                  onClick={() => handleSort('last_validation_score')}
-                >
-                  <span className="flex items-center justify-end">
-                    Pontuacao <SortIcon field="last_validation_score" />
-                  </span>
+                <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Prazo de Venda
+                </th>
+                <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  CD
+                </th>
+                <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  E-com
+                </th>
+                <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Total
                 </th>
                 <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   Acoes
@@ -539,34 +523,93 @@ export default function CertProdutosPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="flex items-center gap-1.5">
-                      {p.last_validation_status ? (
-                        <CertStatusBadge status={p.last_validation_status} />
-                      ) : p.is_expired ? (
-                        <CertStatusBadge status="EXPIRED" />
-                      ) : (
-                        <span className="text-xs text-slate-300 font-medium">--</span>
-                      )}
-                      {p.is_expired && p.sale_deadline && (
-                        <span className="text-[10px] text-pink-500 font-medium whitespace-nowrap">
-                          {p.sale_deadline}
-                        </span>
-                      )}
-                    </div>
+                    {p.last_validation_status ? (
+                      <CertStatusBadge status={p.last_validation_status} />
+                    ) : p.is_expired ? (
+                      <CertStatusBadge status="EXPIRED" />
+                    ) : (
+                      <span className="text-xs text-slate-300 font-medium">--</span>
+                    )}
                   </td>
-                  <td className="px-5 py-3.5 text-right">
-                    {p.last_validation_score != null ? (
+                  <td className="px-5 py-3.5">
+                    {p.sale_deadline ? (
                       <span
                         className={cn(
-                          'text-xs font-mono font-semibold px-2.5 py-1 rounded-lg',
-                          scoreColor(p.last_validation_score),
+                          'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
+                          p.is_expired ? 'text-pink-700 bg-pink-50' : 'text-slate-600 bg-slate-50',
                         )}
                       >
-                        {(p.last_validation_score * 100).toFixed(0)}%
+                        {p.sale_deadline}
                       </span>
                     ) : (
                       <span className="text-xs text-slate-300 font-medium">--</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    {(p.stock_cd ?? 0) > 0 ? (
+                      <div className="group/cd relative inline-block">
+                        <button className="text-xs font-mono font-semibold tabular-nums text-slate-700 underline decoration-dotted underline-offset-2 hover:text-blue-600 cursor-pointer">
+                          {(p.stock_cd ?? 0).toLocaleString('pt-BR')}
+                        </button>
+                        <div className="absolute z-50 bottom-full right-0 mb-2 hidden group-hover/cd:block">
+                          <div className="bg-slate-800 text-white text-[11px] rounded-xl shadow-xl px-3 py-2.5 whitespace-nowrap min-w-[220px]">
+                            <p className="font-bold text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
+                              CD Biguacu - Localizacao
+                            </p>
+                            {(p.stock_detail ?? [])
+                              .filter(
+                                (d: any) =>
+                                  d.source === 'wms_biguacu' && (d.available > 0 || d.quantity > 0),
+                              )
+                              .sort(
+                                (a: any, b: any) =>
+                                  (b.available ?? b.quantity ?? 0) -
+                                  (a.available ?? a.quantity ?? 0),
+                              )
+                              .map((d: any, i: number) => (
+                                <div key={i} className="flex justify-between gap-4 py-0.5">
+                                  <span className="text-slate-300">
+                                    {(d.warehouse || '').replace('CD ', '')}
+                                  </span>
+                                  <span className="font-mono font-bold">
+                                    {(d.available ?? d.quantity ?? 0).toLocaleString('pt-BR')}
+                                  </span>
+                                </div>
+                              ))}
+                            {(p.stock_detail ?? []).filter(
+                              (d: any) =>
+                                d.source === 'wms_biguacu' && (d.available > 0 || d.quantity > 0),
+                            ).length === 0 && <p className="text-slate-400">Sem detalhe</p>}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-xs font-mono tabular-nums text-slate-300">0</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    <span
+                      className={cn(
+                        'text-xs font-mono tabular-nums',
+                        (p.stock_ecommerce ?? 0) > 0
+                          ? 'text-slate-700 font-semibold'
+                          : 'text-slate-300',
+                      )}
+                    >
+                      {(p.stock_ecommerce ?? 0).toLocaleString('pt-BR')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3.5 text-right">
+                    <span
+                      className={cn(
+                        'text-xs font-mono font-bold tabular-nums px-2 py-0.5 rounded',
+                        (p.stock_total ?? 0) > 0
+                          ? 'text-emerald-700 bg-emerald-50'
+                          : 'text-red-600 bg-red-50',
+                      )}
+                    >
+                      {(p.stock_total ?? 0).toLocaleString('pt-BR')}
+                    </span>
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">

@@ -92,9 +92,7 @@ function extractBodyText(payload: gmail_v1.Schema$MessagePart | undefined): stri
   return '';
 }
 
-function findAttachmentParts(
-  parts: gmail_v1.Schema$MessagePart[] | undefined,
-): Array<{
+function findAttachmentParts(parts: gmail_v1.Schema$MessagePart[] | undefined): Array<{
   partId: string;
   filename: string;
   mimeType: string;
@@ -161,8 +159,8 @@ export const gmailService = {
       const fromFilter =
         allowedSenders.length > 0 ? `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}` : '';
       const unreadFilter = includeRead ? '' : 'is:unread';
-      // Default date limit: only fetch emails from last 30 days to prevent fetching entire mailbox
-      const dateLimit = includeRead ? 'newer_than:30d' : '';
+      // Default date limit: fetch emails from last 180 days (6 months) for complete history
+      const dateLimit = includeRead ? 'newer_than:180d' : '';
       searchQuery = `${unreadFilter} ${dateLimit} has:attachment ${fromFilter}`
         .replace(/\s+/g, ' ')
         .trim();

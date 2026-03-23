@@ -25,7 +25,7 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV',
-      message: 'No payment terms found in invoice.',
+      message: 'Nenhuma condicao de pagamento encontrada na invoice.',
     };
   }
 
@@ -38,14 +38,16 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
   if (depositPercent > 0 || balancePercent > 0) {
     const total = depositPercent + balancePercent;
     if (Math.abs(total - 100) > 0.01) {
-      issues.push(`Deposit (${depositPercent}%) + Balance (${balancePercent}%) = ${total}%, expected 100%`);
+      issues.push(
+        `Deposito (${depositPercent}%) + Saldo (${balancePercent}%) = ${total}%, esperado 100%`,
+      );
     }
   }
 
   // Check paymentDays > 0
   const paymentDays = Number(invPaymentTerms.paymentDays ?? invPaymentTerms.days ?? 0);
   if (paymentDays <= 0 && (invPaymentTerms.paymentDays != null || invPaymentTerms.days != null)) {
-    issues.push(`Payment days is ${paymentDays}, expected > 0`);
+    issues.push(`Dias de pagamento e ${paymentDays}, esperado > 0`);
   }
 
   // Compare with process DB payment terms if available
@@ -72,7 +74,7 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'failed',
-      expectedValue: 'Deposit + Balance = 100%, days > 0',
+      expectedValue: 'Deposito + Saldo = 100%, dias > 0',
       actualValue: `Deposit=${depositPercent}%, Balance=${balancePercent}%, Days=${paymentDays}`,
       documentsCompared: dbPaymentTerms ? 'INV vs Sistema' : 'INV',
       message: issues.join('. ') + '.',
@@ -83,10 +85,10 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: 'Terms matching DB records',
+      expectedValue: 'Condicoes conforme registros do sistema',
       actualValue: termsWarnings.join('; '),
       documentsCompared: 'INV vs Sistema',
-      message: `Payment terms differ from system: ${termsWarnings.join('; ')}.`,
+      message: `Condicoes de pagamento divergem do sistema: ${termsWarnings.join('; ')}.`,
     };
   }
 
@@ -96,6 +98,6 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
     expectedValue: '100%',
     actualValue: `Deposit=${depositPercent}%, Balance=${balancePercent}%, Days=${paymentDays}`,
     documentsCompared: dbPaymentTerms ? 'INV vs Sistema' : 'INV',
-    message: 'Payment terms are valid.',
+    message: 'Condicoes de pagamento validas.',
   };
 }

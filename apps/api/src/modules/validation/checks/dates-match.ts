@@ -29,7 +29,9 @@ function normalizeDate(value: string): string {
   // Try DD/MM/YYYY format common in Brazilian documents
   const brMatch = value.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
   if (brMatch) {
-    const d = new Date(`${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`);
+    const d = new Date(
+      `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`,
+    );
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
   return value;
@@ -48,7 +50,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV vs BL',
-      message: 'No ETD or shipped on board date found in either document.',
+      message: 'Nenhuma data de ETD ou embarque encontrada nos documentos.',
     };
   }
 
@@ -59,7 +61,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
       expectedValue: invEtd || undefined,
       actualValue: blShippedOnBoard || undefined,
       documentsCompared: 'INV vs BL',
-      message: 'Date found in only one document, unable to compare.',
+      message: 'Data encontrada em apenas um documento, impossivel comparar.',
     };
   }
 
@@ -70,7 +72,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
       expectedValue: invEtd,
       actualValue: blShippedOnBoard,
       documentsCompared: 'INV vs BL',
-      message: 'ETD / shipped on board date matches between invoice and BL.',
+      message: 'Data de ETD / embarque confere entre a invoice e o BL.',
     };
   }
 
@@ -80,6 +82,6 @@ export default function datesMatch(input: CheckInput): CheckResult {
     expectedValue: invEtd,
     actualValue: blShippedOnBoard,
     documentsCompared: 'INV vs BL',
-    message: `Date mismatch: INV="${invEtd}" vs BL="${blShippedOnBoard}".`,
+    message: `Divergencia de datas: INV="${invEtd}" vs BL="${blShippedOnBoard}".`,
   };
 }

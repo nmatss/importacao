@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
@@ -43,6 +43,14 @@ function standardizeDocumentName(
       const formatted = String(dateStr).replace(/-/g, '.');
       return `${formatted} KIOM BL ${processCode}.pdf`;
     }
+  }
+  if (type === 'draft_bl' && aiData) {
+    const dateStr = aiData.shipmentDate || aiData.etd;
+    if (dateStr) {
+      const formatted = String(dateStr).replace(/-/g, '.');
+      return `${formatted} KIOM DRAFT BL ${processCode}.pdf`;
+    }
+    return `DRAFT BL ${processCode}.pdf`;
   }
   if (type === 'certificate' && aiData) {
     const rawCertType =
@@ -179,7 +187,18 @@ export const documentService = {
       );
     }
 
-    return doc;
+    // Return mapped response matching frontend interface
+    return {
+      id: doc.id,
+      processId: doc.processId,
+      fileName: doc.originalFilename,
+      documentType: doc.type,
+      uploadedAt: doc.createdAt?.toISOString() ?? null,
+      aiProcessingStatus: 'processing' as const,
+      aiParsedData: null,
+      aiConfidence: null,
+      driveFileId: null,
+    };
   },
 
   async processWithAI(documentId: number, type: string) {
@@ -198,6 +217,9 @@ export const documentService = {
         break;
       case 'ohbl':
         result = await aiService.extractBLData(text);
+        break;
+      case 'draft_bl':
+        result = await aiService.extractDraftBLData(text);
         break;
       case 'certificate':
         result = await aiService.extractCertificateData(text);
@@ -367,11 +389,30 @@ export const documentService = {
   },
 
   async getByProcess(processId: number) {
-    return db
+    const rows = await db
       .select()
       .from(documents)
       .where(eq(documents.processId, processId))
       .orderBy(desc(documents.createdAt));
+
+    return rows.map((row) => ({
+      id: row.id,
+      processId: row.processId,
+      fileName: row.originalFilename,
+      documentType: row.type,
+      uploadedAt: row.createdAt?.toISOString() ?? null,
+      aiProcessingStatus: row.isProcessed
+        ? row.aiParsedData
+          ? 'completed'
+          : 'failed'
+        : 'processing',
+      aiParsedData: row.aiParsedData,
+      aiConfidence: row.confidenceScore != null ? Number(row.confidenceScore) : null,
+      driveFileId: row.driveFileId,
+      storagePath: row.storagePath,
+      mimeType: row.mimeType,
+      fileSize: row.fileSize,
+    }));
   },
 
   async getById(id: number) {

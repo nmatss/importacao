@@ -22,15 +22,19 @@ function normalizeContainerType(value: string): string {
 export default function containerTypeVsFup(input: CheckInput): CheckResult {
   const checkName = 'container-type-vs-fup';
 
-  const blContainer = input.blData?.containerType ? String(input.blData.containerType).trim() : null;
-  const processContainer = input.processData?.containerType ? String(input.processData.containerType).trim() : null;
+  const blContainer = input.blData?.containerType
+    ? String(input.blData.containerType).trim()
+    : null;
+  const processContainer = input.processData?.containerType
+    ? String(input.processData.containerType).trim()
+    : null;
 
   if (processContainer == null || processContainer === '') {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'BL vs Sistema',
-      message: 'Skipped: Tipo de container nao cadastrado no processo.',
+      message: 'Ignorado: Tipo de container nao cadastrado no processo.',
     };
   }
 

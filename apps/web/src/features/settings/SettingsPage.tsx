@@ -18,6 +18,10 @@ import {
   HardDrive,
   Database,
   Zap,
+  FileSignature,
+  Trash2,
+  Star,
+  Eye,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
@@ -39,12 +43,20 @@ interface SettingValue {
   value: string;
 }
 
-type TabKey = 'general' | 'users' | 'integrations';
+interface EmailSignatureData {
+  id: number;
+  name: string;
+  signatureHtml: string;
+  isDefault: boolean;
+}
+
+type TabKey = 'general' | 'users' | 'integrations' | 'signatures';
 
 const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'general', label: 'Geral', icon: Settings },
   { key: 'users', label: 'Usuarios', icon: Users },
   { key: 'integrations', label: 'Integracoes', icon: Link2 },
+  { key: 'signatures', label: 'Assinaturas', icon: FileSignature },
 ];
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
@@ -64,7 +76,13 @@ export function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('general');
 
-  if (user?.role !== 'admin') {
+  // Non-admins can only access the signatures tab
+  const isNonAdmin = user?.role !== 'admin';
+  const visibleTabs = isNonAdmin ? tabs.filter((t) => t.key === 'signatures') : tabs;
+  const effectiveTab =
+    isNonAdmin && activeTab !== ('signatures' as TabKey) ? ('signatures' as TabKey) : activeTab;
+
+  if (isNonAdmin && effectiveTab !== 'signatures') {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5">
@@ -88,9 +106,9 @@ export function SettingsPage() {
 
       {/* Pill tabs */}
       <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-100/80 p-1">
-        {tabs.map((tab) => {
+        {visibleTabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.key;
+          const isActive = effectiveTab === tab.key;
           return (
             <button
               key={tab.key}
@@ -109,9 +127,10 @@ export function SettingsPage() {
         })}
       </div>
 
-      {activeTab === 'general' && <GeneralTab />}
-      {activeTab === 'users' && <UsersTab />}
-      {activeTab === 'integrations' && <IntegrationsTab />}
+      {effectiveTab === 'general' && <GeneralTab />}
+      {effectiveTab === 'users' && <UsersTab />}
+      {effectiveTab === 'integrations' && <IntegrationsTab />}
+      {effectiveTab === 'signatures' && <SignaturesTab />}
     </div>
   );
 }
@@ -829,6 +848,271 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
       )}
       Testar Conexao
     </button>
+  );
+}
+
+function SignaturesTab() {
+  const queryClient = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [editSig, setEditSig] = useState<EmailSignatureData | null>(null);
+  const [form, setForm] = useState({ name: '', signatureHtml: '', isDefault: false });
+  const [saving, setSaving] = useState(false);
+  const [previewId, setPreviewId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const { data: signatures, isLoading } = useApiQuery<EmailSignatureData[]>(
+    ['email-signatures'],
+    '/api/settings/email-signatures',
+  );
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowModal(false);
+        setPreviewId(null);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  const openCreate = () => {
+    setEditSig(null);
+    setForm({ name: '', signatureHtml: '', isDefault: false });
+    setShowModal(true);
+  };
+
+  const openEdit = (sig: EmailSignatureData) => {
+    setEditSig(sig);
+    setForm({ name: sig.name, signatureHtml: sig.signatureHtml, isDefault: sig.isDefault });
+    setShowModal(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      if (editSig) {
+        await api.put(`/api/settings/email-signatures/${editSig.id}`, form);
+      } else {
+        await api.post('/api/settings/email-signatures', form);
+      }
+      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
+      setShowModal(false);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao salvar assinatura');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingId) return;
+    try {
+      await api.delete(`/api/settings/email-signatures/${deletingId}`);
+      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
+      setDeletingId(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao excluir assinatura');
+    }
+  };
+
+  const handleSetDefault = async (sig: EmailSignatureData) => {
+    try {
+      await api.put(`/api/settings/email-signatures/${sig.id}`, { isDefault: true });
+      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao definir padrao');
+    }
+  };
+
+  if (isLoading) return <PageSkeleton />;
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        icon={FileSignature}
+        title="Assinaturas de E-mail"
+        description="Gerencie suas assinaturas para uso nos e-mails enviados (max. 4)"
+        actions={
+          (signatures?.length ?? 0) < 4 ? (
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Assinatura
+            </button>
+          ) : undefined
+        }
+      >
+        {!signatures || signatures.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+              <FileSignature className="h-6 w-6 text-slate-300" />
+            </div>
+            <p className="text-sm text-slate-400 font-medium">Nenhuma assinatura cadastrada.</p>
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Criar primeira assinatura
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {signatures.map((sig) => (
+              <div
+                key={sig.id}
+                className={cn(
+                  'rounded-xl border p-4 transition-colors',
+                  sig.isDefault ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-white',
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-semibold text-slate-800">{sig.name}</span>
+                    {sig.isDefault && (
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                        <Star className="h-3 w-3" />
+                        Padrao
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {!sig.isDefault && (
+                      <button
+                        onClick={() => handleSetDefault(sig)}
+                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                        title="Definir como padrao"
+                      >
+                        <Star className="h-4 w-4" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setPreviewId(previewId === sig.id ? null : sig.id)}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all duration-200"
+                      title="Visualizar"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => openEdit(sig)}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                      title="Editar"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeletingId(sig.id)}
+                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                      title="Excluir"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+                {previewId === sig.id && (
+                  <div
+                    className="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: sig.signatureHtml }}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* Create/Edit Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
+            <h2 className="text-lg font-bold text-slate-900 mb-5">
+              {editSig ? 'Editar Assinatura' : 'Nova Assinatura'}
+            </h2>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div>
+                <label htmlFor="sig-name" className={labelClasses}>
+                  Nome
+                </label>
+                <input
+                  id="sig-name"
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Ex: Assinatura Comercial"
+                  className={inputClasses}
+                  required
+                  maxLength={100}
+                />
+              </div>
+              <div>
+                <label htmlFor="sig-html" className={labelClasses}>
+                  Conteudo HTML da Assinatura
+                </label>
+                <textarea
+                  id="sig-html"
+                  value={form.signatureHtml}
+                  onChange={(e) => setForm({ ...form, signatureHtml: e.target.value })}
+                  placeholder="<p>Atenciosamente,<br/>Seu Nome<br/>Cargo | Empresa</p>"
+                  className={cn(inputClasses, 'min-h-[150px] font-mono text-xs')}
+                  required
+                />
+              </div>
+              {form.signatureHtml && (
+                <div>
+                  <label className={labelClasses}>Pre-visualizacao</label>
+                  <div
+                    className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 prose prose-sm max-w-none"
+                    dangerouslySetInnerHTML={{ __html: form.signatureHtml }}
+                  />
+                </div>
+              )}
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.isDefault}
+                    onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-slate-600">Definir como assinatura padrao</span>
+                </label>
+              </div>
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!deletingId}
+        title="Excluir Assinatura"
+        message="Tem certeza que deseja excluir esta assinatura? Esta acao nao pode ser desfeita."
+        confirmLabel="Excluir"
+        onConfirm={handleDelete}
+        onCancel={() => setDeletingId(null)}
+      />
+    </div>
   );
 }
 

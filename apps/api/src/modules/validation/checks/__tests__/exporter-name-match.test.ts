@@ -26,7 +26,7 @@ describe('exporter-match check', () => {
       packingListData: { exporterName: 'Different Company Ltd' },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('does not match');
+    expect(result.message).toContain('nao confere');
   });
 
   it('should warn on minor punctuation differences', () => {
@@ -35,7 +35,7 @@ describe('exporter-match check', () => {
       packingListData: { exporterName: 'ACME Corp' },
     });
     expect(result.status).toBe('warning');
-    expect(result.message).toContain('punctuation');
+    expect(result.message).toContain('pontuacao');
   });
 
   it('should warn when less than 2 documents have exporter name', () => {
@@ -43,7 +43,7 @@ describe('exporter-match check', () => {
       invoiceData: { exporterName: 'ACME Corp' },
     });
     expect(result.status).toBe('warning');
-    expect(result.message).toContain('Not enough documents');
+    expect(result.message).toContain('insuficientes');
   });
 
   it('should warn with no input data', () => {

@@ -26,7 +26,7 @@ describe('gross-weight-match check', () => {
       packingListData: { totalGrossWeight: 210 },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('mismatch');
+    expect(result.message).toContain('Divergencia');
   });
 
   it('should fail when gross weight is less than net weight', () => {
@@ -35,7 +35,7 @@ describe('gross-weight-match check', () => {
       packingListData: { totalGrossWeight: 100 },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('not greater than net weight');
+    expect(result.message).toContain('nao e maior que o peso liquido');
   });
 
   it('should warn when less than 2 documents have gross weight', () => {
@@ -43,7 +43,7 @@ describe('gross-weight-match check', () => {
       invoiceData: { totalGrossWeight: 200 },
     });
     expect(result.status).toBe('warning');
-    expect(result.message).toContain('Not enough documents');
+    expect(result.message).toContain('insuficientes');
   });
 
   it('should warn when no data provided', () => {

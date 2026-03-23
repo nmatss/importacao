@@ -36,6 +36,7 @@ export const documentTypeEnum = pgEnum('document_type', [
   'invoice',
   'packing_list',
   'ohbl',
+  'draft_bl',
   'espelho',
   'li',
   'certificate',
@@ -99,6 +100,28 @@ export const importProcesses = pgTable(
     containerType: varchar('container_type', { length: 50 }),
     driveFolderId: varchar('drive_folder_id', { length: 255 }),
     sistemaDriveFolderId: varchar('sistema_drive_folder_id', { length: 255 }),
+    // Campos promovidos da planilha (antes em aiExtractedData jsonb)
+    purchaseRef: varchar('purchase_ref', { length: 100 }),
+    vesselName: varchar('vessel_name', { length: 255 }),
+    blNumber: varchar('bl_number', { length: 100 }),
+    shippingLine: varchar('shipping_line', { length: 255 }),
+    insuranceValue: numeric('insurance_value', { precision: 12, scale: 2 }),
+    consolidationRef: varchar('consolidation_ref', { length: 255 }),
+    etaCarrier: date('eta_carrier'),
+    etaActual: date('eta_actual'),
+    containerCount: integer('container_count'),
+    freightAgent: varchar('freight_agent', { length: 255 }),
+    originCity: varchar('origin_city', { length: 100 }),
+    inspectionType: varchar('inspection_type', { length: 50 }),
+    diNumber: varchar('di_number', { length: 100 }),
+    customsChannel: varchar('customs_channel', { length: 20 }),
+    customsClearanceAt: timestamp('customs_clearance_at'),
+    cdArrivalAt: timestamp('cd_arrival_at'),
+    freeTimeDays: integer('free_time_days'),
+    numerarioValue: numeric('numerario_value', { precision: 12, scale: 2 }),
+    numerarioPct: numeric('numerario_pct', { precision: 5, scale: 4 }),
+    logisticStatus: varchar('logistic_status', { length: 50 }),
+    documentStage: varchar('document_stage', { length: 30 }).default('pre_con'),
     aiExtractedData: jsonb('ai_extracted_data'),
     notes: text('notes'),
     createdBy: integer('created_by').references(() => users.id),
@@ -235,6 +258,15 @@ export const followUpTracking = pgTable('follow_up_tracking', {
   liSubmittedAt: timestamp('li_submitted_at'),
   liApprovedAt: timestamp('li_approved_at'),
   liDeadline: date('li_deadline'),
+  // Passos adicionais do checklist (Manual 4.1)
+  savedToFolderAt: timestamp('saved_to_folder_at'),
+  ncmBlCheckedAt: timestamp('ncm_bl_checked_at'),
+  freightBlCheckedAt: timestamp('freight_bl_checked_at'),
+  espelhoBuiltAt: timestamp('espelho_built_at'),
+  invoiceSentFeniciaAt: timestamp('invoice_sent_fenicia_at'),
+  signaturesCollectedAt: timestamp('signatures_collected_at'),
+  signedDocsSentAt: timestamp('signed_docs_sent_at'),
+  diDraftAt: timestamp('di_draft_at'),
   overallProgress: integer('overall_progress').default(0),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow(),
@@ -364,6 +396,34 @@ export const emailIngestionLogs = pgTable(
     index('email_ingestion_logs_status_idx').on(table.status),
   ],
 );
+
+// ── Document Corrections ─────────────────────────────────────────────
+
+export const documentCorrections = pgTable(
+  'document_corrections',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    validationRunId: integer('validation_run_id').references(() => validationRuns.id, {
+      onDelete: 'set null',
+    }),
+    correctionNeeded: boolean('correction_needed').default(false).notNull(),
+    errorCount: integer('error_count').default(0),
+    errorTypes: jsonb('error_types'), // string[] dos tipos de erro
+    correctionRequestedAt: timestamp('correction_requested_at'),
+    correctionReceivedAt: timestamp('correction_received_at'),
+    reValidated: boolean('re_validated').default(false),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [index('document_corrections_process_id_idx').on(table.processId)],
+);
+
+export type DocumentCorrection = typeof documentCorrections.$inferSelect;
+export type NewDocumentCorrection = typeof documentCorrections.$inferInsert;
 
 // ── TypeScript Types ───────────────────────────────────────────────────
 
@@ -500,3 +560,24 @@ export const liTracking = pgTable(
 
 export type LiTracking = typeof liTracking.$inferSelect;
 export type NewLiTracking = typeof liTracking.$inferInsert;
+
+// ── Email Signatures ──────────────────────────────────────────────────
+
+export const emailSignatures = pgTable(
+  'email_signatures',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    name: varchar('name', { length: 100 }).notNull(),
+    signatureHtml: text('signature_html').notNull(),
+    isDefault: boolean('is_default').default(false),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [index('email_signatures_user_id_idx').on(table.userId)],
+);
+
+export type EmailSignature = typeof emailSignatures.$inferSelect;
+export type NewEmailSignature = typeof emailSignatures.$inferInsert;

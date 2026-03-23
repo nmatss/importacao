@@ -18,14 +18,15 @@ interface CheckResult {
 export default function ncmBlDescription(input: CheckInput): CheckResult {
   const checkName = 'ncm-bl-description';
   const items = input.invoiceData?.items as Array<Record<string, any>> | undefined;
-  const cargoDescription = input.blData?.cargoDescription?.value ?? input.blData?.cargoDescription ?? '';
+  const cargoDescription =
+    input.blData?.cargoDescription?.value ?? input.blData?.cargoDescription ?? '';
 
   if (!items || items.length === 0) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'INV x BL',
-      message: 'No invoice items found to extract NCM codes.',
+      message: 'Nenhum item encontrado na invoice para extrair codigos NCM.',
     };
   }
 
@@ -34,7 +35,7 @@ export default function ncmBlDescription(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV x BL',
-      message: 'No cargo description found in BL data.',
+      message: 'Nenhuma descricao de carga encontrada nos dados do BL.',
     };
   }
 
@@ -51,7 +52,7 @@ export default function ncmBlDescription(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV x BL',
-      message: 'No valid NCM codes found in invoice items.',
+      message: 'Nenhum codigo NCM valido encontrado nos itens da invoice.',
     };
   }
 
@@ -69,9 +70,9 @@ export default function ncmBlDescription(input: CheckInput): CheckResult {
       checkName,
       status: 'passed',
       expectedValue: [...ncmPrefixes].join(', '),
-      actualValue: 'All found in BL',
+      actualValue: 'Todos encontrados no BL',
       documentsCompared: 'INV x BL',
-      message: 'All NCM prefixes found in BL cargo description.',
+      message: 'Todos os prefixos NCM encontrados na descricao de carga do BL.',
     };
   }
 
@@ -79,8 +80,8 @@ export default function ncmBlDescription(input: CheckInput): CheckResult {
     checkName,
     status: 'failed',
     expectedValue: [...ncmPrefixes].join(', '),
-    actualValue: `Missing: ${missingPrefixes.join(', ')}`,
+    actualValue: `Ausentes: ${missingPrefixes.join(', ')}`,
     documentsCompared: 'INV x BL',
-    message: `NCM prefixes not found in BL description: ${missingPrefixes.join(', ')}.`,
+    message: `Prefixos NCM nao encontrados na descricao do BL: ${missingPrefixes.join(', ')}.`,
   };
 }

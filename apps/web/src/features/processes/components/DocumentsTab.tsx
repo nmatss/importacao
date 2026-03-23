@@ -1,22 +1,186 @@
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { toast } from 'sonner';
+import {
+  RefreshCw,
+  CheckCircle,
+  Clock,
+  ChevronDown,
+  Upload,
+  Inbox,
+  Loader2,
+  AlertCircle,
+} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useApiQuery } from '@/shared/hooks/useApi';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
+import { cn } from '@/shared/lib/utils';
 
 export interface DocumentsTabProps {
   processId: string;
 }
 
+interface EmailStatus {
+  enabled: boolean;
+  method: string;
+  lastRun?: string;
+  gmailConfigured?: boolean;
+}
+
 export function DocumentsTab({ processId }: DocumentsTabProps) {
+  const queryClient = useQueryClient();
+  const [syncing, setSyncing] = useState(false);
+  const [showManualUpload, setShowManualUpload] = useState(false);
+  const [countdown, setCountdown] = useState(300);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const resetCountdown = useCallback(() => {
+    setCountdown(300);
+  }, []);
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+          return 300;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [queryClient, processId]);
+
+  const { data: emailStatus } = useApiQuery<EmailStatus>(
+    ['email-status'],
+    '/api/email-ingestion/status',
+    { staleTime: 30000 },
+  );
+
+  const triggerEmailSync = async () => {
+    setSyncing(true);
+    try {
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${baseUrl}/api/email-ingestion/trigger?includeRead=true`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Falha ao buscar emails');
+      toast.success('Emails verificados — documentos atualizados');
+      // Refresh document list + reset countdown
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      resetCountdown();
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao sincronizar emails');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const lastCheckTime = emailStatus?.lastRun
+    ? new Date(emailStatus.lastRun).toLocaleString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        day: '2-digit',
+        month: '2-digit',
+      })
+    : null;
+
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-bold text-slate-800">
-        Upload de Documentos
-      </h3>
-      <DocumentUpload processId={processId} />
-      <div className="border-t border-slate-100" />
-      <h3 className="text-lg font-bold text-slate-800">
-        Documentos do Processo
-      </h3>
+    <div className="space-y-4">
+      {/* Email sync header — primary action */}
+      <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100">
+          <Inbox className="h-5 w-5 text-blue-600" />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-slate-700">
+            Documentos chegam automaticamente via email
+          </p>
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+            {emailStatus?.enabled ? (
+              <>
+                <span className="inline-flex items-center gap-1 text-green-600">
+                  <CheckCircle className="h-3 w-3" />
+                  {emailStatus.method === 'gmail_api'
+                    ? 'Gmail API'
+                    : emailStatus.method === 'imap'
+                      ? 'IMAP'
+                      : 'Email'}{' '}
+                  ativo
+                </span>
+                {lastCheckTime && (
+                  <>
+                    <span className="text-slate-300">|</span>
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Ultima busca: {lastCheckTime}
+                    </span>
+                  </>
+                )}
+              </>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-amber-600">
+                <AlertCircle className="h-3 w-3" />
+                Email nao configurado — use upload manual
+              </span>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={triggerEmailSync}
+          disabled={syncing}
+          className={cn(
+            'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+            syncing
+              ? 'bg-blue-100 text-blue-400 cursor-wait'
+              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
+          )}
+        >
+          {syncing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          {syncing ? 'Buscando...' : 'Buscar Emails Agora'}
+        </button>
+        <span className="text-xs text-slate-400 font-mono tabular-nums">
+          Proxima busca em {Math.floor(countdown / 60)}m {String(countdown % 60).padStart(2, '0')}s
+        </span>
+      </div>
+
+      {/* Document list — main content */}
       <DocumentList processId={processId} />
+
+      {/* Manual upload — collapsible fallback */}
+      <div className="border-t border-slate-100 pt-3">
+        <button
+          type="button"
+          onClick={() => setShowManualUpload(!showManualUpload)}
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs text-slate-400 transition-colors hover:bg-slate-50 hover:text-slate-600"
+        >
+          <Upload className="h-3.5 w-3.5" />
+          <span>Upload manual (fallback)</span>
+          <ChevronDown
+            className={cn(
+              'ml-auto h-3.5 w-3.5 transition-transform',
+              showManualUpload && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {showManualUpload && (
+          <div className="mt-2">
+            <DocumentUpload processId={processId} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

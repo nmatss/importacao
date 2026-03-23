@@ -16,14 +16,29 @@ interface CheckResult {
 }
 
 const UNIT_TYPE_KEYWORDS: Record<string, string[]> = {
-  PAR: ['meia', 'meias', 'sock', 'socks', 'par', 'pair', 'luva', 'luvas', 'glove', 'gloves', 'sapato', 'sapatos', 'shoe', 'shoes'],
+  PAR: [
+    'meia',
+    'meias',
+    'sock',
+    'socks',
+    'par',
+    'pair',
+    'luva',
+    'luvas',
+    'glove',
+    'gloves',
+    'sapato',
+    'sapatos',
+    'shoe',
+    'shoes',
+  ],
   SET: ['kit', 'kits', 'set', 'sets', 'conjunto', 'conjuntos'],
 };
 
 function detectUnitType(description: string): string {
   const lower = description.toLowerCase();
   for (const [unitType, keywords] of Object.entries(UNIT_TYPE_KEYWORDS)) {
-    if (keywords.some(kw => lower.includes(kw))) return unitType;
+    if (keywords.some((kw) => lower.includes(kw))) return unitType;
   }
   return 'UN';
 }
@@ -37,7 +52,7 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV',
-      message: 'No invoice items found to validate unit types.',
+      message: 'Nenhum item encontrado na invoice para validar tipos de unidade.',
     };
   }
 
@@ -52,7 +67,7 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
     const declaredUnit = (item.unitType ?? item.unit ?? '').toUpperCase();
 
     if (declaredUnit && declaredUnit !== expectedUnit) {
-      mismatches.push(`"${description}": expected ${expectedUnit}, found ${declaredUnit}`);
+      mismatches.push(`"${description}": esperado ${expectedUnit}, encontrado ${declaredUnit}`);
     }
   }
 
@@ -65,7 +80,9 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
       const declaredUnit = (plItem.unitType ?? plItem.unit ?? '').toUpperCase();
 
       if (declaredUnit && declaredUnit !== expectedUnit) {
-        mismatches.push(`PL "${description}": expected ${expectedUnit}, found ${declaredUnit}`);
+        mismatches.push(
+          `PL "${description}": esperado ${expectedUnit}, encontrado ${declaredUnit}`,
+        );
       }
     }
   }
@@ -74,10 +91,10 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'failed',
-      expectedValue: 'Consistent unit types',
-      actualValue: `${mismatches.length} mismatch(es)`,
+      expectedValue: 'Tipos de unidade consistentes',
+      actualValue: `${mismatches.length} divergencia(s)`,
       documentsCompared: plItems ? 'INV x PL' : 'INV',
-      message: `Unit type mismatches found: ${mismatches.join('; ')}.`,
+      message: `Divergencias de tipo de unidade encontradas: ${mismatches.join('; ')}.`,
     };
   }
 
@@ -85,6 +102,6 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
     checkName,
     status: 'passed',
     documentsCompared: plItems ? 'INV x PL' : 'INV',
-    message: 'Unit types are consistent with product descriptions.',
+    message: 'Tipos de unidade consistentes com as descricoes dos produtos.',
   };
 }

@@ -19,7 +19,6 @@ import {
   Loader2,
   Clock,
   History,
-  ChevronDown,
   ChevronUp,
   X,
   Power,
@@ -577,9 +576,11 @@ export default function CertAgendamentosPage() {
                                   {entry.summary.ok} Conforme
                                 </span>
                               )}
-                              {(entry.summary.missing ?? 0) > 0 && (
+                              {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0) >
+                                0 && (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-red-700 font-semibold">
-                                  {entry.summary.missing} ausentes
+                                  {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0)}{' '}
+                                  nao encontrados
                                 </span>
                               )}
                               {(entry.summary.inconsistent ?? 0) > 0 && (

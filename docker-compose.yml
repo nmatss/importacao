@@ -94,6 +94,17 @@ services:
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
       GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE}
+      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:-192.168.168.10}
+      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:-1521}
+      WMS_ORACLE_SID: ${WMS_ORACLE_SID:-WMS}
+      WMS_ORACLE_USER: ${WMS_ORACLE_USER:-wisweb}
+      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:-wisweb}
+      ERP_PUKET_HOST: ${ERP_PUKET_HOST:-db01.grupounico.com}
+      ERP_PUKET_DB: ${ERP_PUKET_DB:-DB_puket}
+      ERP_IMG_HOST: ${ERP_IMG_HOST:-db02.grupounico.com}
+      ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
+      ERP_MSSQL_USER: ${ERP_MSSQL_USER:-nicolas.matsuda}
+      ERP_MSSQL_PASS: "${ERP_MSSQL_PASS:-}"
     volumes:
       - cert-reports:/app/reports
     depends_on:

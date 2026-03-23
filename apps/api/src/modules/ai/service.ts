@@ -10,6 +10,7 @@ import { buildEmailPrompt } from './prompts/email.js';
 import { buildEmailAnalysisPrompt } from './prompts/email-analysis.js';
 import { buildCorrectionPrompt } from './prompts/correction.js';
 import { buildCertificatePrompt } from './prompts/certificate.js';
+import { buildDraftBLPrompt } from './prompts/draft-bl.js';
 import { certificateResponseSchema } from './schemas/certificate-response.js';
 import type { ZodType } from 'zod';
 
@@ -45,8 +46,8 @@ interface ExtractionResult {
 // ── Model fallback chains ────────────────────────────────────────────
 
 const MODEL_FALLBACKS: Record<string, string> = {
-  'google/gemini-2.0-flash-001': 'anthropic/claude-sonnet-4',
-  'anthropic/claude-sonnet-4': 'google/gemini-2.0-flash-001',
+  'gemini-2.5-flash': 'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-lite': 'gemini-2.5-flash',
 };
 
 // ── Prompt versions (for governance tracking) ────────────────────────
@@ -61,6 +62,7 @@ const PROMPT_VERSIONS: Record<string, string> = {
   ncm_validation: 'v1.0',
   correction_email: 'v1.0',
   certificate_extraction: 'v1.0',
+  draft_bl_extraction: 'v1.0',
 };
 
 class AIService {
@@ -159,6 +161,7 @@ class AIService {
     const body = {
       model,
       messages,
+      temperature: 0,
       response_format: { type: jsonMode ? 'json_object' : 'text' },
     };
 
@@ -263,12 +266,7 @@ class AIService {
 
   async extractInvoiceData(text: string): Promise<ExtractionResult> {
     const messages = buildInvoicePrompt(text);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'invoice_extraction',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'invoice_extraction');
     const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data as Record<string, any>);
 
@@ -286,12 +284,7 @@ class AIService {
 
   async extractPackingListData(text: string): Promise<ExtractionResult> {
     const messages = buildPackingListPrompt(text);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'packing_list_extraction',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'packing_list_extraction');
     const data = this.safeJsonParse(response, 'packing list extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -305,12 +298,7 @@ class AIService {
 
   async extractBLData(text: string): Promise<ExtractionResult> {
     const messages = buildBLPrompt(text);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'bl_extraction',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'bl_extraction');
     const data = this.safeJsonParse(response, 'bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -322,14 +310,23 @@ class AIService {
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
+  async extractDraftBLData(text: string): Promise<ExtractionResult> {
+    const messages = buildDraftBLPrompt(text);
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'draft_bl_extraction');
+    const data = this.safeJsonParse(response, 'draft bill of lading extraction');
+    const { score, lowConfidenceFields } = this.calculateConfidence(data);
+
+    logger.info(
+      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      'Draft BL data extracted',
+    );
+
+    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+  }
+
   async extractCertificateData(text: string): Promise<ExtractionResult> {
     const messages = buildCertificatePrompt(text);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'certificate_extraction',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'certificate_extraction');
     const data = this.zodParse(response, 'certificate extraction', certificateResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -347,12 +344,7 @@ class AIService {
     blData: Record<string, any>,
   ): Promise<{ anomalies: Array<{ field: string; description: string; severity: string }> }> {
     const messages = buildAnomalyPrompt(invoiceData, packingListData, blData);
-    const response = await this.chat(
-      'anthropic/claude-sonnet-4',
-      messages,
-      true,
-      'anomaly_detection',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'anomaly_detection');
     const result = this.safeJsonParse(response, 'anomaly detection');
 
     logger.info({ anomalyCount: result.anomalies?.length ?? 0 }, 'Anomaly detection completed');
@@ -365,7 +357,7 @@ class AIService {
     recipientType: 'fenicia' | 'isa',
   ): Promise<{ subject: string; body: string }> {
     const messages = buildEmailPrompt(processData, recipientType);
-    const response = await this.chat('google/gemini-2.0-flash-001', messages, true, 'email_draft');
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'email_draft');
     const result = this.safeJsonParse(response, 'email draft generation');
 
     logger.info({ recipientType }, 'Email draft generated');
@@ -380,12 +372,7 @@ class AIService {
   ): Promise<EmailAnalysisResult> {
     const truncatedBody = body.substring(0, 2000);
     const messages = buildEmailAnalysisPrompt(subject, truncatedBody, fromAddress);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'email_analysis',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'email_analysis');
     const result = this.zodParse(response, 'email analysis', emailAnalysisResponseSchema);
 
     logger.info(
@@ -440,12 +427,7 @@ Rules:
       },
     ];
 
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'ncm_validation',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'ncm_validation');
     const result = this.safeJsonParse(response, 'NCM validation');
 
     logger.info({ ncmCode, isValid: result.isValid }, 'NCM validation completed');
@@ -471,12 +453,7 @@ Rules:
     }>;
   }): Promise<{ subject: string; body: string }> {
     const messages = buildCorrectionPrompt(context);
-    const response = await this.chat(
-      'google/gemini-2.0-flash-001',
-      messages,
-      true,
-      'correction_email',
-    );
+    const response = await this.chat('gemini-2.5-flash', messages, true, 'correction_email');
     const result = this.safeJsonParse(response, 'correction email generation');
 
     logger.info(

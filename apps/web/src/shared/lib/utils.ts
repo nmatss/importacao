@@ -41,14 +41,20 @@ export const statusColors: Record<string, string> = {
 
 export function certStatusColor(status: string): string {
   switch (status) {
-    case 'OK': return 'bg-emerald-100 text-emerald-800';
-    case 'MISSING': return 'bg-red-100 text-red-800';
-    case 'INCONSISTENT': return 'bg-amber-100 text-amber-800';
-    case 'URL_NOT_FOUND': return 'bg-slate-100 text-slate-600';
-    case 'API_ERROR': return 'bg-red-100 text-red-700';
-    case 'NO_EXPECTED': return 'bg-slate-100 text-slate-500';
-    case 'EXPIRED': return 'bg-pink-100 text-pink-800';
-    default: return 'bg-slate-100 text-slate-600';
+    case 'OK':
+      return 'bg-emerald-100 text-emerald-800';
+    case 'INCONSISTENT':
+      return 'bg-amber-100 text-amber-800';
+    case 'URL_NOT_FOUND':
+      return 'bg-slate-100 text-slate-600';
+    case 'API_ERROR':
+      return 'bg-red-100 text-red-700';
+    case 'NO_EXPECTED':
+      return 'bg-slate-100 text-slate-500';
+    case 'EXPIRED':
+      return 'bg-pink-100 text-pink-800';
+    default:
+      return 'bg-slate-100 text-slate-600';
   }
 }
 
@@ -91,9 +97,14 @@ export function cronToHuman(cron: string): string {
   const [minute, hour, day, , dow] = parts;
 
   const dayOfWeekNames: Record<string, string> = {
-    '0': 'domingo', '1': 'segunda-feira', '2': 'terça-feira',
-    '3': 'quarta-feira', '4': 'quinta-feira', '5': 'sexta-feira',
-    '6': 'sábado', '7': 'domingo',
+    '0': 'domingo',
+    '1': 'segunda-feira',
+    '2': 'terça-feira',
+    '3': 'quarta-feira',
+    '4': 'quinta-feira',
+    '5': 'sexta-feira',
+    '6': 'sábado',
+    '7': 'domingo',
   };
 
   const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;

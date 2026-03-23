@@ -19,14 +19,15 @@ export default function freightValueMatch(input: CheckInput): CheckResult {
   const checkName = 'freight-value-match';
 
   const blFreight = input.blData?.freightValue != null ? Number(input.blData.freightValue) : null;
-  const followUpFreight = input.followUpData?.freightValue != null ? Number(input.followUpData.freightValue) : null;
+  const followUpFreight =
+    input.followUpData?.freightValue != null ? Number(input.followUpData.freightValue) : null;
 
   if (followUpFreight == null) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'BL vs Follow-up',
-      message: 'Skipped: No freight value available in follow-up data.',
+      message: 'Ignorado: Nenhum valor de frete disponivel nos dados do follow-up.',
     };
   }
 
@@ -36,7 +37,7 @@ export default function freightValueMatch(input: CheckInput): CheckResult {
       status: 'warning',
       expectedValue: followUpFreight.toFixed(2),
       documentsCompared: 'BL vs Follow-up',
-      message: 'Freight value not found in BL.',
+      message: 'Valor do frete nao encontrado no BL.',
     };
   }
 
@@ -49,7 +50,7 @@ export default function freightValueMatch(input: CheckInput): CheckResult {
       expectedValue: followUpFreight.toFixed(2),
       actualValue: blFreight.toFixed(2),
       documentsCompared: 'BL vs Follow-up',
-      message: 'Freight value matches between BL and follow-up data.',
+      message: 'Valor do frete confere entre o BL e os dados do follow-up.',
     };
   }
 
@@ -59,6 +60,6 @@ export default function freightValueMatch(input: CheckInput): CheckResult {
     expectedValue: followUpFreight.toFixed(2),
     actualValue: blFreight.toFixed(2),
     documentsCompared: 'BL vs Follow-up',
-    message: `Freight value mismatch: BL=${blFreight.toFixed(2)} vs Follow-up=${followUpFreight.toFixed(2)} (diff: ${difference.toFixed(2)}).`,
+    message: `Divergencia no valor do frete: BL=${blFreight.toFixed(2)} vs Follow-up=${followUpFreight.toFixed(2)} (dif: ${difference.toFixed(2)}).`,
   };
 }

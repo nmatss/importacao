@@ -18,24 +18,35 @@ interface CheckResult {
 export default function boxQuantityMatch(input: CheckInput): CheckResult {
   const checkName = 'box-quantity-match';
 
-  const invBoxes = input.invoiceData?.totalBoxes != null ? Number(input.invoiceData.totalBoxes) : null;
-  const plBoxes = input.packingListData?.totalBoxes != null ? Number(input.packingListData.totalBoxes) : null;
+  const invBoxes =
+    input.invoiceData?.totalBoxes != null ? Number(input.invoiceData.totalBoxes) : null;
+  const plBoxes =
+    input.packingListData?.totalBoxes != null ? Number(input.packingListData.totalBoxes) : null;
   const blRaw = input.blData?.totalBoxes ?? input.blData?.totalPackages;
   const blBoxes = blRaw != null ? Number(blRaw) : null;
 
   const sources: string[] = [];
   const values: number[] = [];
 
-  if (invBoxes != null && !isNaN(invBoxes)) { sources.push('INV'); values.push(invBoxes); }
-  if (plBoxes != null && !isNaN(plBoxes)) { sources.push('PL'); values.push(plBoxes); }
-  if (blBoxes != null && !isNaN(blBoxes)) { sources.push('BL'); values.push(blBoxes); }
+  if (invBoxes != null && !isNaN(invBoxes)) {
+    sources.push('INV');
+    values.push(invBoxes);
+  }
+  if (plBoxes != null && !isNaN(plBoxes)) {
+    sources.push('PL');
+    values.push(plBoxes);
+  }
+  if (blBoxes != null && !isNaN(blBoxes)) {
+    sources.push('BL');
+    values.push(blBoxes);
+  }
 
   if (values.length < 2) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: sources.join(' vs '),
-      message: 'Not enough documents to compare box quantities.',
+      message: 'Documentos insuficientes para comparar quantidade de caixas.',
     };
   }
 
@@ -47,7 +58,7 @@ export default function boxQuantityMatch(input: CheckInput): CheckResult {
       expectedValue: String(values[0]),
       actualValue: String(values[0]),
       documentsCompared: sources.join(' vs '),
-      message: 'Total boxes match across all documents.',
+      message: 'Total de caixas confere em todos os documentos.',
     };
   }
 
@@ -58,6 +69,6 @@ export default function boxQuantityMatch(input: CheckInput): CheckResult {
     expectedValue: String(values[0]),
     actualValue: values.find((v) => v !== values[0])?.toString() ?? String(values[1]),
     documentsCompared: sources.join(' vs '),
-    message: `Box quantity mismatch: ${details}.`,
+    message: `Divergencia na quantidade de caixas: ${details}.`,
   };
 }

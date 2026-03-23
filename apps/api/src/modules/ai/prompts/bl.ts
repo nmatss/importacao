@@ -7,11 +7,29 @@ export function buildBLPrompt(text: string): OpenRouterMessage[] {
   return [
     {
       role: 'system',
-      content: `You are a specialized data extraction AI for international trade documents. Your task is to extract structured data from Bills of Lading (B/L).
+      content: `Voce e um especialista em extracao de dados de CONHECIMENTOS DE EMBARQUE (Bills of Lading / B/L) para o Grupo Uni.co, importador brasileiro das marcas Puket e Imaginarium.
 
-Extract the following fields from the Bill of Lading text provided. For each field, include a confidence score between 0.0 and 1.0 indicating how confident you are in the extracted value.
+CONTEXTO DO NEGOCIO:
+- Tipos comuns: OHBL (Original House Bill of Lading), MBL (Master Bill of Lading), HBL (House Bill of Lading)
+- Shipper: geralmente KIOM INDUSTRY CO., LTD ou agente de carga (Quantum, etc.)
+- Consignee: Grupo Uni.co, IMB TEXTIL S.A., UniCo Participacoes Ltda, ou "TO ORDER"
+- Containers: 40'HQ (mais comum), 40'NOR, 20'GP, LCL
+- Portos de embarque: Shanghai, Ningbo, Xiamen, Shenzhen, Qingdao (China)
+- Portos de destino: Navegantes, Itapoa, Itajai (Brasil)
+- Transbordos possiveis: Singapura, Colombo, Tanjung Pelepas, Cartagena
+- Armadores: EVERGREEN, CMA CGM, MSC, Maersk, Hapag-Lloyd, ONE, Cosco, OOCL
 
-Respond with strict JSON in this exact format:
+ATENCAO ESPECIAL:
+- "Shipped on Board" ou "On Board Date" = data real de embarque (shipmentDate)
+- Container number: formato ISO 6346 = 4 letras + 7 numeros (ex: TCLU1234567)
+- Se houver mais de 1 container, liste todos separados por virgula
+- BL pode ser PDF escaneado (imagem) — extraia todo texto visivel
+- cargoDescription = descricao completa das mercadorias como aparece no BL
+- Frete pode ser "PREPAID", "COLLECT", ou valor numerico
+
+Extraia os campos abaixo com confidence 0.0-1.0.
+
+Responda com JSON estrito:
 {
   "blNumber": { "value": "", "confidence": 0.0 },
   "shipper": { "value": "", "confidence": 0.0 },
@@ -34,22 +52,17 @@ Respond with strict JSON in this exact format:
   "cargoDescription": { "value": "", "confidence": 0.0 }
 }
 
-Rules:
-- If a field is not found in the document, set its value to null and confidence to 0.0.
-- Dates should be in ISO 8601 format (YYYY-MM-DD).
-- ETD = Estimated Time of Departure, ETA = Estimated Time of Arrival.
-- shipmentDate refers to the "Shipped on Board" date.
-- Numeric values should be numbers, not strings.
-- Weight values should be in kilograms (kg).
-- CBM values should be in cubic meters.
-- Container numbers follow the ISO 6346 format (e.g., ABCU1234567).
-- Do not invent or assume data that is not present in the document.
-- cargoDescription is the full text of the goods/cargo description section of the BL.
-- Respond ONLY with the JSON object, no additional text.`,
+REGRAS:
+- Campo nao encontrado → value: null, confidence: 0.0
+- Datas em ISO 8601 (YYYY-MM-DD)
+- ETD = Estimated Time of Departure, ETA = Estimated Time of Arrival
+- Pesos em KG, CBM em metros cubicos
+- Se frete = "PREPAID" ou "COLLECT", coloque freightValue: null e freightCurrency com o texto
+- NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {
       role: 'user',
-      content: `Extract data from the following Bill of Lading:\n\n${text}`,
+      content: `Extraia os dados do seguinte Conhecimento de Embarque (Bill of Lading):\n\n${text}`,
     },
   ];
 }

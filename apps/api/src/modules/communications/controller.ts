@@ -52,7 +52,8 @@ export const communicationController = {
 
   async send(req: Request, res: Response) {
     try {
-      const communication = await communicationService.send(Number(req.params.id));
+      const signatureId = req.body?.signatureId ? Number(req.body.signatureId) : undefined;
+      const communication = await communicationService.send(Number(req.params.id), signatureId);
       sendSuccess(res, communication);
     } catch (error: any) {
       const status = error.statusCode || 400;

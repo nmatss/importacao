@@ -1,4 +1,4 @@
-import { useReducer } from 'react';
+import { useReducer, useState, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 import { toast } from 'sonner';
 import {
@@ -13,6 +13,7 @@ import {
   Send,
   X,
   Sparkles,
+  FileSignature,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -20,6 +21,13 @@ import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+
+interface EmailSignatureOption {
+  id: number;
+  name: string;
+  signatureHtml: string;
+  isDefault: boolean;
+}
 
 interface ValidationCheck {
   id: number;
@@ -195,6 +203,22 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     saving,
   } = state;
 
+  const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
+  const [filter, setFilter] = useState<'all' | 'failed' | 'warning' | 'passed'>('all');
+
+  const { data: emailSignatures } = useApiQuery<EmailSignatureOption[]>(
+    ['email-signatures'],
+    '/api/settings/email-signatures',
+  );
+
+  // Auto-select default signature when signatures load
+  useEffect(() => {
+    if (emailSignatures && emailSignatures.length > 0 && selectedSignatureId === null) {
+      const defaultSig = emailSignatures.find((s) => s.isDefault);
+      if (defaultSig) setSelectedSignatureId(defaultSig.id);
+    }
+  }, [emailSignatures, selectedSignatureId]);
+
   const { data: checks, isLoading } = useApiQuery<ValidationCheck[]>(
     ['validation', processId],
     `/api/validation/${processId}`,
@@ -277,8 +301,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         body: editBody,
         recipientEmail: editRecipientEmail,
       });
-      // Then send
-      await api.post(`/api/communications/${draft.id}/send`);
+      // Then send (with optional signature)
+      await api.post(`/api/communications/${draft.id}/send`, {
+        signatureId: selectedSignatureId || undefined,
+      });
       toast.success('E-mail enviado com sucesso');
       dispatch({ type: 'CLOSE_DRAFT_MODAL' });
     } catch (err: any) {
@@ -295,9 +321,69 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const passedCount = checks?.filter((c) => c.status === 'passed').length ?? 0;
   const failedCount = checks?.filter((c) => c.status === 'failed').length ?? 0;
   const warningCount = checks?.filter((c) => c.status === 'warning').length ?? 0;
+  const totalCount = checks?.length ?? 0;
+  const progressPct = totalCount > 0 ? (passedCount / totalCount) * 100 : 0;
+  const progressColor =
+    progressPct > 80 ? 'bg-green-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-red-500';
+
+  const filteredChecks = checks?.filter((c) => {
+    if (filter === 'all') return true;
+    return c.status === filter;
+  });
 
   return (
     <div className="space-y-4">
+      {/* Progress bar */}
+      {checks && checks.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium text-slate-700">
+              {passedCount} de {totalCount} verificacoes aprovadas
+            </span>
+            <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
+          </div>
+          <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500', progressColor)}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Filter buttons */}
+      {checks && checks.length > 0 && (
+        <div className="flex items-center gap-2">
+          {[
+            { key: 'all' as const, label: 'Todos', count: totalCount },
+            { key: 'failed' as const, label: 'Falhas', count: failedCount },
+            { key: 'warning' as const, label: 'Avisos', count: warningCount },
+            { key: 'passed' as const, label: 'Aprovados', count: passedCount },
+          ].map(({ key, label, count }) => (
+            <button
+              key={key}
+              onClick={() => setFilter(key)}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
+                filter === key
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+              )}
+            >
+              {label}
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                  filter === key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500',
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Actions */}
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -357,9 +443,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       </div>
 
       {/* Checks grid */}
-      {checks && checks.length > 0 ? (
+      {filteredChecks && filteredChecks.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {checks.map((check) => {
+          {filteredChecks.map((check) => {
             const config = statusConfig[check.status] ?? statusConfig.warning;
             const Icon = config.icon;
 
@@ -546,6 +632,46 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   />
                 </div>
               </div>
+
+              {/* Signature Selector */}
+              {emailSignatures && emailSignatures.length > 0 && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    <span className="inline-flex items-center gap-1.5">
+                      <FileSignature className="h-3.5 w-3.5" />
+                      Assinatura de E-mail
+                    </span>
+                  </label>
+                  <select
+                    value={selectedSignatureId ?? ''}
+                    onChange={(e) =>
+                      setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  >
+                    <option value="">Sem assinatura</option>
+                    {emailSignatures.map((sig) => (
+                      <option key={sig.id} value={sig.id}>
+                        {sig.name}
+                        {sig.isDefault ? ' (padrao)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  {selectedSignatureId &&
+                    (() => {
+                      const sig = emailSignatures.find((s) => s.id === selectedSignatureId);
+                      if (!sig) return null;
+                      return (
+                        <div
+                          className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{
+                            __html: DOMPurify.sanitize(sig.signatureHtml),
+                          }}
+                        />
+                      );
+                    })()}
+                </div>
+              )}
             </div>
 
             {/* Footer */}

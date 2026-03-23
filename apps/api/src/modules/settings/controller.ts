@@ -146,4 +146,54 @@ export const settingsController = {
       sendError(res, error.message || 'Falha na conexão com Odoo', status);
     }
   },
+
+  // ── Email Signatures ────────────────────────────────────────────────
+
+  async getSignatures(req: Request, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const signatures = await settingsService.getSignatures(userId);
+      sendSuccess(res, signatures);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async createSignature(req: Request, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const signature = await settingsService.createSignature(userId, req.body);
+      sendSuccess(res, signature, 201);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateSignature(req: Request, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) return sendError(res, 'ID invalido', 400);
+      const signature = await settingsService.updateSignature(id, userId, req.body);
+      sendSuccess(res, signature);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async deleteSignature(req: Request, res: Response) {
+    try {
+      const userId = req.user!.id;
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) return sendError(res, 'ID invalido', 400);
+      const result = await settingsService.deleteSignature(id, userId);
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
 };

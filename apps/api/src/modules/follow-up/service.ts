@@ -9,9 +9,17 @@ import { NotFoundError } from '../../shared/errors/index.js';
 const TRACKING_STEPS = [
   'documentsReceivedAt',
   'preInspectionAt',
+  'savedToFolderAt',
   'ncmVerifiedAt',
+  'ncmBlCheckedAt',
+  'freightBlCheckedAt',
+  'espelhoBuiltAt',
+  'invoiceSentFeniciaAt',
   'espelhoGeneratedAt',
+  'signaturesCollectedAt',
+  'signedDocsSentAt',
   'sentToFeniciaAt',
+  'diDraftAt',
   'liSubmittedAt',
   'liApprovedAt',
 ] as const;
@@ -127,6 +135,50 @@ export const followUpService = {
 
     if (!tracking) throw new NotFoundError('Acompanhamento não encontrado');
     return tracking;
+  },
+
+  async updateStep(processId: number, step: string, completedAt: Date | null) {
+    // Validate step name
+    const validSteps = TRACKING_STEPS as readonly string[];
+    if (!validSteps.includes(step)) {
+      throw new Error(`Passo invalido: ${step}. Passos validos: ${validSteps.join(', ')}`);
+    }
+
+    // Check if tracking exists, create if not
+    const [existing] = await db
+      .select()
+      .from(followUpTracking)
+      .where(eq(followUpTracking.processId, processId))
+      .limit(1);
+
+    if (!existing) {
+      const [created] = await db
+        .insert(followUpTracking)
+        .values({ processId, [step]: completedAt })
+        .returning();
+      const progress = calculateProgress(created);
+      const [updated] = await db
+        .update(followUpTracking)
+        .set({ overallProgress: progress })
+        .where(eq(followUpTracking.processId, processId))
+        .returning();
+      return updated;
+    }
+
+    const [updated] = await db
+      .update(followUpTracking)
+      .set({ [step]: completedAt, updatedAt: new Date() })
+      .where(eq(followUpTracking.processId, processId))
+      .returning();
+
+    const progress = calculateProgress(updated);
+    const [final] = await db
+      .update(followUpTracking)
+      .set({ overallProgress: progress })
+      .where(eq(followUpTracking.processId, processId))
+      .returning();
+
+    return final;
   },
 
   async compareWithSheet(processCode: string) {

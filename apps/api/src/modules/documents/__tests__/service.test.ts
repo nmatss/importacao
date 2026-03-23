@@ -88,7 +88,12 @@ describe('documentService', () => {
 
       const result = await documentService.upload(1, 'invoice', mockFile, 1);
 
-      expect(result).toEqual(mockDoc);
+      expect(result).toMatchObject({
+        id: 1,
+        processId: 1,
+        documentType: 'invoice',
+        aiProcessingStatus: 'processing',
+      });
       expect(mockDb.insert).toHaveBeenCalled();
       expect(auditService.log).toHaveBeenCalledWith(
         1,
@@ -109,11 +114,7 @@ describe('documentService', () => {
         size: 2048,
       } as Express.Multer.File;
 
-      const allDocs = [
-        { type: 'invoice' },
-        { type: 'packing_list' },
-        { type: 'ohbl' },
-      ];
+      const allDocs = [{ type: 'invoice' }, { type: 'packing_list' }, { type: 'ohbl' }];
 
       // insert doc
       queryQueue.push(createResolvedChain([mockDoc]));
@@ -130,7 +131,12 @@ describe('documentService', () => {
 
       const result = await documentService.upload(1, 'ohbl', mockFile, 1);
 
-      expect(result).toEqual(mockDoc);
+      expect(result).toMatchObject({
+        id: 3,
+        processId: 1,
+        documentType: 'ohbl',
+        aiProcessingStatus: 'processing',
+      });
       expect(mockDb.update).toHaveBeenCalled();
     });
   });
@@ -146,8 +152,10 @@ describe('documentService', () => {
 
       const result = await documentService.getByProcess(1);
 
-      expect(result).toEqual(mockDocs);
       expect(result).toHaveLength(2);
+      expect(result[0]).toHaveProperty('fileName');
+      expect(result[0]).toHaveProperty('documentType');
+      expect(result[0]).toHaveProperty('aiProcessingStatus');
     });
   });
 

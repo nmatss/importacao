@@ -16,7 +16,11 @@ interface CheckResult {
 }
 
 function fuzzyMatch(a: string, b: string): boolean {
-  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .trim();
   const na = normalize(a);
   const nb = normalize(b);
   if (na === nb) return true;
@@ -43,7 +47,7 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV vs PL',
-      message: 'No line items found in one or both documents to compare.',
+      message: 'Nenhum item encontrado em um ou ambos os documentos para comparar.',
     };
   }
 
@@ -80,10 +84,10 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
   }
 
   if (missingFromPl.length > 0) {
-    issues.push(`Items in INV but missing from PL: ${missingFromPl.join(', ')}`);
+    issues.push(`Itens na INV ausentes na PL: ${missingFromPl.join(', ')}`);
   }
   if (missingFromInv.length > 0) {
-    issues.push(`Items in PL but missing from INV: ${missingFromInv.join(', ')}`);
+    issues.push(`Itens na PL ausentes na INV: ${missingFromInv.join(', ')}`);
   }
 
   // Compare matching items
@@ -99,7 +103,7 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
     const plQty = Number(plItem.quantity ?? 0);
     if (invQty !== plQty && !(isNaN(invQty) && isNaN(plQty))) {
       qtyMismatches++;
-      warnings.push(`Item ${code}: INV qty=${invQty}, PL qty=${plQty}`);
+      warnings.push(`Item ${code}: INV qtd=${invQty}, PL qtd=${plQty}`);
     }
 
     // Compare descriptions (fuzzy)
@@ -107,7 +111,7 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
     const plDesc = String(plItem.description ?? '');
     if (invDesc && plDesc && !fuzzyMatch(invDesc, plDesc)) {
       descMismatches++;
-      warnings.push(`Item ${code}: description mismatch`);
+      warnings.push(`Item ${code}: descricao divergente`);
     }
   }
 
@@ -116,8 +120,8 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'failed',
-      expectedValue: `${invMap.size} INV items, ${plMap.size} PL items`,
-      actualValue: `${missingFromPl.length} missing from PL, ${missingFromInv.length} missing from INV`,
+      expectedValue: `${invMap.size} itens INV, ${plMap.size} itens PL`,
+      actualValue: `${missingFromPl.length} ausentes na PL, ${missingFromInv.length} ausentes na INV`,
       documentsCompared: 'INV vs PL',
       message: issues.join('. ') + '.',
     };
@@ -127,10 +131,10 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: 'All quantities matching',
-      actualValue: `${qtyMismatches} qty mismatches, ${descMismatches} desc mismatches`,
+      expectedValue: 'Todas as quantidades conferindo',
+      actualValue: `${qtyMismatches} divergencias de qtd, ${descMismatches} divergencias de descricao`,
       documentsCompared: 'INV vs PL',
-      message: `Item quantities differ: ${warnings.join('; ')}.`,
+      message: `Quantidades dos itens divergem: ${warnings.join('; ')}.`,
     };
   }
 
@@ -138,19 +142,19 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: 'All descriptions matching',
-      actualValue: `${descMismatches} description mismatches`,
+      expectedValue: 'Todas as descricoes conferindo',
+      actualValue: `${descMismatches} divergencias de descricao`,
       documentsCompared: 'INV vs PL',
-      message: `${descMismatches} item description(s) differ between INV and PL.`,
+      message: `${descMismatches} descricao(oes) do(s) item(ns) diverge(m) entre INV e PL.`,
     };
   }
 
   return {
     checkName,
     status: 'passed',
-    expectedValue: `${invMap.size} items`,
-    actualValue: `${invMap.size} items matched`,
+    expectedValue: `${invMap.size} itens`,
+    actualValue: `${invMap.size} itens conferidos`,
     documentsCompared: 'INV vs PL',
-    message: `All ${invMap.size} items match between Invoice and Packing List.`,
+    message: `Todos os ${invMap.size} itens conferem entre Invoice e Packing List.`,
   };
 }

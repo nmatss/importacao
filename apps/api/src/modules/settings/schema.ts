@@ -19,3 +19,15 @@ export const integrationSettingsSchema = z.object({
   odoo_db: z.string().optional(),
   odoo_user: z.string().optional(),
 });
+
+export const createEmailSignatureSchema = z.object({
+  name: z.string().min(1, 'Nome obrigatorio').max(100),
+  signatureHtml: z.string().min(1, 'Assinatura obrigatoria').max(50000),
+  isDefault: z.boolean().optional(),
+});
+
+export const updateEmailSignatureSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  signatureHtml: z.string().min(1).max(50000).optional(),
+  isDefault: z.boolean().optional(),
+});

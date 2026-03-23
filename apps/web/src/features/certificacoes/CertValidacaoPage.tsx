@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react"
-import { CertValidationProgress } from "@/features/certificacoes/components/CertValidationProgress"
-import { CertStatsCards } from "@/features/certificacoes/components/CertStatsCards"
-import { startCertValidation, fetchCertStats } from "@/shared/lib/cert-api-client"
-import { cn } from "@/shared/lib/utils"
+import { useState, useEffect } from 'react';
+import { CertValidationProgress } from '@/features/certificacoes/components/CertValidationProgress';
+import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
+import { startCertValidation, fetchCertStats } from '@/shared/lib/cert-api-client';
+import { cn } from '@/shared/lib/utils';
 import {
   PlayCircle,
   Loader2,
@@ -14,76 +14,87 @@ import {
   FileText,
   CheckCircle2,
   Sparkles,
-} from "lucide-react"
+} from 'lucide-react';
 
 interface BrandOption {
-  value: string
-  label: string
-  count: number
+  value: string;
+  label: string;
+  count: number;
 }
 
 const DEFAULT_BRANDS: BrandOption[] = [
-  { value: "", label: "Todas as Marcas", count: 0 },
-  { value: "imaginarium", label: "Imaginarium", count: 0 },
-  { value: "puket", label: "Puket", count: 0 },
-  { value: "puket_escolares", label: "Puket Escolares", count: 0 },
-]
+  { value: '', label: 'Todas as Marcas', count: 0 },
+  { value: 'imaginarium', label: 'Imaginarium', count: 0 },
+  { value: 'puket', label: 'Puket', count: 0 },
+  { value: 'puket_escolares', label: 'Puket Escolares', count: 0 },
+];
 
 export default function CertValidacaoPage() {
-  const [brand, setBrand] = useState("")
-  const [runId, setRunId] = useState<string | null>(null)
-  const [running, setRunning] = useState(false)
-  const [summary, setSummary] = useState<any>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [brands, setBrands] = useState<BrandOption[]>(DEFAULT_BRANDS)
+  const [brand, setBrand] = useState('');
+  const [runId, setRunId] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [summary, setSummary] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [brands, setBrands] = useState<BrandOption[]>(DEFAULT_BRANDS);
 
   useEffect(() => {
     fetchCertStats()
       .then((stats: any) => {
-        const total = stats.total_products || 0
+        const total = stats.total_products || 0;
         // by_brand is an array: [{brand, ok, missing, inconsistent, not_found}, ...]
-        const byBrandArr: Array<{ brand: string; ok: number; missing: number; inconsistent: number; not_found: number }> = stats.by_brand || []
-        const brandCounts: Record<string, number> = {}
+        const byBrandArr: Array<{
+          brand: string;
+          ok: number;
+          missing: number;
+          inconsistent: number;
+          not_found: number;
+        }> = stats.by_brand || [];
+        const brandCounts: Record<string, number> = {};
         for (const b of byBrandArr) {
-          const key = (b.brand || "").toLowerCase().replace(/\s+/g, "_")
-          brandCounts[key] = (b.ok || 0) + (b.missing || 0) + (b.inconsistent || 0) + (b.not_found || 0)
+          const key = (b.brand || '').toLowerCase().replace(/\s+/g, '_');
+          brandCounts[key] =
+            (b.ok || 0) + (b.missing || 0) + (b.inconsistent || 0) + (b.not_found || 0);
         }
         setBrands([
-          { value: "", label: "Todas as Marcas", count: total },
-          { value: "imaginarium", label: "Imaginarium", count: brandCounts["imaginarium"] || 0 },
-          { value: "puket", label: "Puket", count: brandCounts["puket"] || 0 },
-          { value: "puket_escolares", label: "Puket Escolares", count: brandCounts["puket_escolares"] || 0 },
-        ])
+          { value: '', label: 'Todas as Marcas', count: total },
+          { value: 'imaginarium', label: 'Imaginarium', count: brandCounts['imaginarium'] || 0 },
+          { value: 'puket', label: 'Puket', count: brandCounts['puket'] || 0 },
+          {
+            value: 'puket_escolares',
+            label: 'Puket Escolares',
+            count: brandCounts['puket_escolares'] || 0,
+          },
+        ]);
       })
       .catch(() => {
         // Keep defaults on error
-      })
-  }, [])
+      });
+  }, []);
 
-  const selectedBrand = brands.find((b) => b.value === brand)
-  const productCount = selectedBrand?.count || brands[0]?.count || 0
-  const estimatedSeconds = Math.ceil(productCount * 1.5)
-  const estimatedMinutes = Math.ceil(estimatedSeconds / 60)
+  const selectedBrand = brands.find((b) => b.value === brand);
+  const productCount = selectedBrand?.count || brands[0]?.count || 0;
+  const estimatedSeconds = Math.ceil(productCount * 1.5);
+  const estimatedMinutes = Math.ceil(estimatedSeconds / 60);
 
   async function handleStart() {
-    setError(null)
-    setSummary(null)
-    setRunning(true)
+    setError(null);
+    setSummary(null);
+    setRunning(true);
     try {
       const res = await startCertValidation({
         brand: brand || undefined,
-        source: "sheets",
-      })
-      setRunId(res.run_id)
+        source: 'sheets',
+      });
+      setRunId(res.run_id);
     } catch (e: any) {
-      setError(e.message || "Erro ao iniciar validação")
-      setRunning(false)
+      setError(e.message || 'Erro ao iniciar validação');
+      setRunning(false);
     }
   }
 
   function handleComplete(sum: any) {
-    setSummary(sum)
-    setRunning(false)
+    setSummary(sum);
+    setRunning(false);
   }
 
   return (
@@ -106,8 +117,9 @@ export default function CertValidacaoPage() {
                 </span>
               </div>
               <p className="text-sm text-emerald-700/80 leading-relaxed">
-                A verificação consulta os sites em TEMPO REAL via API VTEX. Cada produto é verificado
-                individualmente, comparando o texto de certificação no site com o valor esperado na planilha.
+                A verificação consulta os sites em TEMPO REAL via API VTEX. Cada produto é
+                verificado individualmente, comparando o texto de certificação no site com o valor
+                esperado na planilha.
               </p>
             </div>
           </div>
@@ -147,10 +159,10 @@ export default function CertValidacaoPage() {
                 onClick={handleStart}
                 disabled={running}
                 className={cn(
-                  "flex items-center gap-2.5 px-7 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm",
+                  'flex items-center gap-2.5 px-7 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm',
                   running
-                    ? "bg-slate-300 cursor-not-allowed shadow-none"
-                    : "bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] shadow-emerald-600/20"
+                    ? 'bg-slate-300 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] shadow-emerald-600/20',
                 )}
               >
                 {running ? (
@@ -201,9 +213,7 @@ export default function CertValidacaoPage() {
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">
-                  Resultado da Validação
-                </h2>
+                <h2 className="text-lg font-bold text-slate-900">Resultado da Validação</h2>
                 <p className="text-sm text-slate-500">Verificação concluída com sucesso</p>
               </div>
               <div className="ml-auto">
@@ -218,9 +228,8 @@ export default function CertValidacaoPage() {
               data={{
                 total: summary.total || 0,
                 ok: summary.ok || 0,
-                missing: summary.missing || 0,
                 inconsistent: summary.inconsistent || 0,
-                not_found: summary.not_found || 0,
+                not_found: (summary.not_found || 0) + (summary.missing || 0),
               }}
             />
           </div>
@@ -245,5 +254,5 @@ export default function CertValidacaoPage() {
         </div>
       )}
     </div>
-  )
+  );
 }

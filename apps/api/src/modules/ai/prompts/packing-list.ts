@@ -7,11 +7,22 @@ export function buildPackingListPrompt(text: string): OpenRouterMessage[] {
   return [
     {
       role: 'system',
-      content: `You are a specialized data extraction AI for international trade documents. Your task is to extract structured data from packing lists.
+      content: `Voce e um especialista em extracao de dados de PACKING LISTS (listas de embalagem) de importacao internacional para o Grupo Uni.co, importador brasileiro das marcas Puket e Imaginarium.
 
-Extract the following fields from the packing list text provided. For each field, include a confidence score between 0.0 and 1.0 indicating how confident you are in the extracted value.
+CONTEXTO DO NEGOCIO:
+- Fornecedor principal: KIOM INDUSTRY CO., LTD (China)
+- Produtos: roupas, calcados, acessorios, brinquedos — embalados em caixas (cartons)
+- Pesos em quilogramas (KG), volumes em metros cubicos (CBM)
+- Cada item tem: codigo, descricao, cor, tamanho, quantidade, caixas, pesos
+- Packing Lists tipicamente acompanham a Commercial Invoice
 
-Respond with strict JSON in this exact format:
+REGRA CRITICA:
+- Se o documento for uma nota fiscal domestica (DANFE, CNPJ, BRL), retorne TODOS os campos com confidence: 0 e value: null.
+- Packing List internacional tem: "PACKING LIST", exportador estrangeiro, pesos em KG.
+
+Extraia os campos abaixo com confidence 0.0-1.0.
+
+Responda com JSON estrito:
 {
   "packingListNumber": { "value": "", "confidence": 0.0 },
   "date": { "value": "", "confidence": 0.0 },
@@ -35,19 +46,17 @@ Respond with strict JSON in this exact format:
   "totalCbm": { "value": 0.0, "confidence": 0.0 }
 }
 
-Rules:
-- If a field is not found in the document, set its value to null and confidence to 0.0.
-- Dates should be in ISO 8601 format (YYYY-MM-DD).
-- Numeric values should be numbers, not strings.
-- Weight values should be in kilograms (kg).
-- CBM values should be in cubic meters.
-- Extract ALL line items from the packing list.
-- Do not invent or assume data that is not present in the document.
-- Respond ONLY with the JSON object, no additional text.`,
+REGRAS:
+- Campo nao encontrado → value: null, confidence: 0.0
+- Datas em ISO 8601 (YYYY-MM-DD)
+- Pesos SEMPRE em quilogramas (KG). Se o doc mostra tons, converta para KG.
+- CBM em metros cubicos
+- Extraia TODOS os itens da tabela
+- NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {
       role: 'user',
-      content: `Extract data from the following packing list:\n\n${text}`,
+      content: `Extraia os dados do seguinte Packing List:\n\n${text}`,
     },
   ];
 }

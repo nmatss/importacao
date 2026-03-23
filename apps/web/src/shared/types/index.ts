@@ -58,6 +58,13 @@ export interface ImportProcess {
   totalGrossWeight: string | null;
   totalCbm: string | null;
   containerType: string | null;
+  vesselName: string | null;
+  blNumber: string | null;
+  shippingLine: string | null;
+  diNumber: string | null;
+  customsChannel: string | null;
+  freightAgent: string | null;
+  inspectionType: string | null;
   hasLiItems: boolean;
   hasCertification: boolean;
   hasFreeOfCharge: boolean;

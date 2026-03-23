@@ -16,28 +16,41 @@ interface CheckResult {
 }
 
 function normalize(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 export default function processReference(input: CheckInput): CheckResult {
   const checkName = 'process-reference';
   const invRef = normalize(input.invoiceData?.referenceNumber ?? input.invoiceData?.invoiceNumber);
-  const plRef = normalize(input.packingListData?.referenceNumber ?? input.packingListData?.packingListNumber);
+  const plRef = normalize(
+    input.packingListData?.referenceNumber ?? input.packingListData?.packingListNumber,
+  );
   const blRef = normalize(input.blData?.referenceNumber ?? input.blData?.blNumber);
 
   const sources: string[] = [];
   const values: string[] = [];
 
-  if (invRef) { sources.push('INV'); values.push(invRef); }
-  if (plRef) { sources.push('PL'); values.push(plRef); }
-  if (blRef) { sources.push('BL'); values.push(blRef); }
+  if (invRef) {
+    sources.push('INV');
+    values.push(invRef);
+  }
+  if (plRef) {
+    sources.push('PL');
+    values.push(plRef);
+  }
+  if (blRef) {
+    sources.push('BL');
+    values.push(blRef);
+  }
 
   if (values.length < 2) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: sources.join(' vs '),
-      message: 'Not enough documents to compare process reference.',
+      message: 'Documentos insuficientes para comparar a referencia do processo.',
     };
   }
 
@@ -49,7 +62,7 @@ export default function processReference(input: CheckInput): CheckResult {
       expectedValue: values[0],
       actualValue: values[0],
       documentsCompared: sources.join(' vs '),
-      message: 'Process reference is consistent across all documents.',
+      message: 'Referencia do processo consistente em todos os documentos.',
     };
   }
 
@@ -59,6 +72,6 @@ export default function processReference(input: CheckInput): CheckResult {
     expectedValue: values[0],
     actualValue: values.find((v) => v !== values[0]) ?? values[1],
     documentsCompared: sources.join(' vs '),
-    message: 'Process reference is inconsistent across documents.',
+    message: 'Referencia do processo inconsistente entre os documentos.',
   };
 }

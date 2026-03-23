@@ -16,7 +16,9 @@ interface CheckResult {
 }
 
 function normalize(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 function stripPunctuation(value: string): string {
@@ -32,16 +34,25 @@ export default function importerMatch(input: CheckInput): CheckResult {
   const sources: string[] = [];
   const values: string[] = [];
 
-  if (invImporter) { sources.push('INV'); values.push(invImporter); }
-  if (plImporter) { sources.push('PL'); values.push(plImporter); }
-  if (blImporter) { sources.push('BL'); values.push(blImporter); }
+  if (invImporter) {
+    sources.push('INV');
+    values.push(invImporter);
+  }
+  if (plImporter) {
+    sources.push('PL');
+    values.push(plImporter);
+  }
+  if (blImporter) {
+    sources.push('BL');
+    values.push(blImporter);
+  }
 
   if (values.length < 2) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: sources.join(' vs '),
-      message: 'Not enough documents to compare importer name.',
+      message: 'Documentos insuficientes para comparar o nome do importador.',
     };
   }
 
@@ -53,7 +64,7 @@ export default function importerMatch(input: CheckInput): CheckResult {
       expectedValue: values[0],
       actualValue: values[0],
       documentsCompared: sources.join(' vs '),
-      message: 'Importer name matches across all documents.',
+      message: 'Nome do importador confere em todos os documentos.',
     };
   }
 
@@ -67,7 +78,7 @@ export default function importerMatch(input: CheckInput): CheckResult {
       expectedValue: values[0],
       actualValue: values.find((v) => v !== values[0]) ?? values[1],
       documentsCompared: sources.join(' vs '),
-      message: 'Importer name has minor punctuation differences across documents.',
+      message: 'Nome do importador possui pequenas diferencas de pontuacao entre os documentos.',
     };
   }
 
@@ -77,6 +88,6 @@ export default function importerMatch(input: CheckInput): CheckResult {
     expectedValue: values[0],
     actualValue: values.find((v) => v !== values[0]) ?? values[1],
     documentsCompared: sources.join(' vs '),
-    message: 'Importer name does not match across documents.',
+    message: 'Nome do importador nao confere entre os documentos.',
   };
 }

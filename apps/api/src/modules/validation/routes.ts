@@ -12,5 +12,7 @@ router.get('/:processId/report', validationController.getReport);
 router.patch('/results/:id/resolve', validationController.resolveManually);
 router.post('/:processId/anomalies', validationController.runAnomalyDetection);
 router.post('/:processId/correction-draft', validationController.generateCorrectionDraft);
+router.get('/:processId/corrections', validationController.getCorrections);
+router.patch('/:processId/corrections', validationController.updateCorrection);
 
 export { router as validationRoutes };

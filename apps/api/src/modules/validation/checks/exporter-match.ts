@@ -16,7 +16,9 @@ interface CheckResult {
 }
 
 function normalize(value: unknown): string {
-  return String(value ?? '').trim().toLowerCase();
+  return String(value ?? '')
+    .trim()
+    .toLowerCase();
 }
 
 function stripPunctuation(value: string): string {
@@ -32,16 +34,25 @@ export default function exporterMatch(input: CheckInput): CheckResult {
   const sources: string[] = [];
   const values: string[] = [];
 
-  if (invExporter) { sources.push('INV'); values.push(invExporter); }
-  if (plExporter) { sources.push('PL'); values.push(plExporter); }
-  if (blExporter) { sources.push('BL'); values.push(blExporter); }
+  if (invExporter) {
+    sources.push('INV');
+    values.push(invExporter);
+  }
+  if (plExporter) {
+    sources.push('PL');
+    values.push(plExporter);
+  }
+  if (blExporter) {
+    sources.push('BL');
+    values.push(blExporter);
+  }
 
   if (values.length < 2) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: sources.join(' vs '),
-      message: 'Not enough documents to compare exporter name.',
+      message: 'Documentos insuficientes para comparar o nome do exportador.',
     };
   }
 
@@ -53,7 +64,7 @@ export default function exporterMatch(input: CheckInput): CheckResult {
       expectedValue: values[0],
       actualValue: values[0],
       documentsCompared: sources.join(' vs '),
-      message: 'Exporter name matches across all documents.',
+      message: 'Nome do exportador confere em todos os documentos.',
     };
   }
 
@@ -67,7 +78,7 @@ export default function exporterMatch(input: CheckInput): CheckResult {
       expectedValue: values[0],
       actualValue: values.find((v) => v !== values[0]) ?? values[1],
       documentsCompared: sources.join(' vs '),
-      message: 'Exporter name has minor punctuation differences across documents.',
+      message: 'Nome do exportador possui pequenas diferencas de pontuacao entre os documentos.',
     };
   }
 
@@ -77,6 +88,6 @@ export default function exporterMatch(input: CheckInput): CheckResult {
     expectedValue: values[0],
     actualValue: values.find((v) => v !== values[0]) ?? values[1],
     documentsCompared: sources.join(' vs '),
-    message: 'Exporter name does not match across documents.',
+    message: 'Nome do exportador nao confere entre os documentos.',
   };
 }

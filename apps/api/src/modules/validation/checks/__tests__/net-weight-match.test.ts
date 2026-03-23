@@ -18,7 +18,7 @@ describe('net-weight-match check', () => {
       packingListData: { totalNetWeight: 105 },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('mismatch');
+    expect(result.message).toContain('Divergencia');
   });
 
   it('should warn when neither document has net weight', () => {
@@ -27,7 +27,7 @@ describe('net-weight-match check', () => {
       packingListData: {},
     });
     expect(result.status).toBe('warning');
-    expect(result.message).toContain('not found in either');
+    expect(result.message).toContain('nao encontrado');
   });
 
   it('should warn when only one document has net weight', () => {
@@ -36,7 +36,7 @@ describe('net-weight-match check', () => {
       packingListData: {},
     });
     expect(result.status).toBe('warning');
-    expect(result.message).toContain('only one document');
+    expect(result.message).toContain('apenas um documento');
   });
 
   it('should handle missing input gracefully', () => {

@@ -14,5 +14,6 @@ router.get('/sheet-compare/:processCode', followUpController.compareWithSheet);
 router.post('/sync-from-sheet/:processCode', followUpController.syncFromSheet);
 router.get('/:processId', followUpController.getByProcess);
 router.put('/:processId', validate(updateFollowUpSchema), followUpController.update);
+router.patch('/:processId/step', followUpController.updateStep);
 
 export { router as followUpRoutes };

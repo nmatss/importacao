@@ -16,7 +16,10 @@ interface CheckResult {
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .trim();
 }
 
 function namesSimilar(a: string, b: string): boolean {
@@ -53,25 +56,35 @@ function addressesSimilar(a: string, b: string): boolean {
 export default function supplierAddressMatch(input: CheckInput): CheckResult {
   const checkName = 'supplier-address-match';
 
-  const invExporter = String(input.invoiceData?.exporterName ?? input.invoiceData?.supplierName ?? '').trim();
-  const plExporter = String(input.packingListData?.exporterName ?? input.packingListData?.supplierName ?? '').trim();
-  const blShipper = String(input.blData?.shipper ?? input.blData?.shipperName ?? input.blData?.exporterName ?? '').trim();
+  const invExporter = String(
+    input.invoiceData?.exporterName ?? input.invoiceData?.supplierName ?? '',
+  ).trim();
+  const plExporter = String(
+    input.packingListData?.exporterName ?? input.packingListData?.supplierName ?? '',
+  ).trim();
+  const blShipper = String(
+    input.blData?.shipper ?? input.blData?.shipperName ?? input.blData?.exporterName ?? '',
+  ).trim();
 
-  const invAddress = String(input.invoiceData?.exporterAddress ?? input.invoiceData?.supplierAddress ?? '').trim();
-  const plAddress = String(input.packingListData?.exporterAddress ?? input.packingListData?.supplierAddress ?? '').trim();
+  const invAddress = String(
+    input.invoiceData?.exporterAddress ?? input.invoiceData?.supplierAddress ?? '',
+  ).trim();
+  const plAddress = String(
+    input.packingListData?.exporterAddress ?? input.packingListData?.supplierAddress ?? '',
+  ).trim();
 
   const names = [
     { source: 'INV', value: invExporter },
     { source: 'PL', value: plExporter },
     { source: 'BL', value: blShipper },
-  ].filter(n => n.value.length > 0);
+  ].filter((n) => n.value.length > 0);
 
   if (names.length < 2) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: names.map(n => n.source).join(' vs ') || 'N/A',
-      message: 'Not enough supplier/exporter data across documents to compare.',
+      documentsCompared: names.map((n) => n.source).join(' vs ') || 'N/A',
+      message: 'Dados insuficientes de fornecedor/exportador nos documentos para comparar.',
     };
   }
 
@@ -82,30 +95,40 @@ export default function supplierAddressMatch(input: CheckInput): CheckResult {
   for (let i = 0; i < names.length; i++) {
     for (let j = i + 1; j < names.length; j++) {
       if (!namesSimilar(names[i].value, names[j].value)) {
-        issues.push(`Exporter name mismatch: ${names[i].source}="${names[i].value}" vs ${names[j].source}="${names[j].value}"`);
+        issues.push(
+          `Divergencia no nome do exportador: ${names[i].source}="${names[i].value}" vs ${names[j].source}="${names[j].value}"`,
+        );
       }
     }
   }
 
   // Compare addresses (INV vs PL)
   if (invAddress && plAddress && !addressesSimilar(invAddress, plAddress)) {
-    warnings.push(`Exporter address differs: INV vs PL`);
+    warnings.push(`Endereco do exportador diverge: INV vs PL`);
   }
 
   // Compare manufacturer with known brand manufacturer (from process data)
-  const invManufacturer = String(input.invoiceData?.manufacturerName ?? input.invoiceData?.manufacturer ?? '').trim();
+  const invManufacturer = String(
+    input.invoiceData?.manufacturerName ?? input.invoiceData?.manufacturer ?? '',
+  ).trim();
   const processManufacturer = String(input.processData?.exporterName ?? '').trim();
-  if (invManufacturer && processManufacturer && !namesSimilar(invManufacturer, processManufacturer)) {
-    warnings.push(`Manufacturer in INV (${invManufacturer}) differs from system record (${processManufacturer})`);
+  if (
+    invManufacturer &&
+    processManufacturer &&
+    !namesSimilar(invManufacturer, processManufacturer)
+  ) {
+    warnings.push(
+      `Fabricante na INV (${invManufacturer}) diverge do registro do sistema (${processManufacturer})`,
+    );
   }
 
-  const sources = names.map(n => n.source).join(' vs ');
+  const sources = names.map((n) => n.source).join(' vs ');
 
   if (issues.length > 0) {
     return {
       checkName,
       status: 'failed',
-      expectedValue: 'Consistent exporter/supplier across documents',
+      expectedValue: 'Exportador/fornecedor consistente entre os documentos',
       actualValue: issues.join('; '),
       documentsCompared: sources,
       message: issues.join('. ') + '.',
@@ -116,7 +139,7 @@ export default function supplierAddressMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: 'Matching supplier info',
+      expectedValue: 'Informacoes do fornecedor correspondentes',
       actualValue: warnings.join('; '),
       documentsCompared: sources,
       message: warnings.join('. ') + '.',
@@ -127,8 +150,8 @@ export default function supplierAddressMatch(input: CheckInput): CheckResult {
     checkName,
     status: 'passed',
     expectedValue: names[0].value,
-    actualValue: names.map(n => `${n.source}="${n.value}"`).join(', '),
+    actualValue: names.map((n) => `${n.source}="${n.value}"`).join(', '),
     documentsCompared: sources,
-    message: 'Supplier/exporter information is consistent across all documents.',
+    message: 'Informacoes do fornecedor/exportador consistentes em todos os documentos.',
   };
 }

@@ -27,7 +27,7 @@ describe('fob-calculation check', () => {
       },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('mismatch');
+    expect(result.message).toContain('Divergencia');
   });
 
   it('should warn when no items found', () => {
@@ -73,9 +73,7 @@ describe('fob-calculation check', () => {
     const result = fobCalculation({
       invoiceData: {
         totalFobValue: 0,
-        items: [
-          { unitPrice: null, quantity: undefined },
-        ],
+        items: [{ unitPrice: null, quantity: undefined }],
       },
     });
     // totalFob is 0 which is falsy -> warning

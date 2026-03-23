@@ -25,7 +25,7 @@ export default function fobCalculation(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV',
-      message: 'No line items found in invoice to verify FOB calculation.',
+      message: 'Nenhum item encontrado na Invoice para verificar o calculo FOB.',
     };
   }
 
@@ -34,7 +34,7 @@ export default function fobCalculation(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'INV',
-      message: 'Total FOB value not found in invoice.',
+      message: 'Valor FOB total nao encontrado na Invoice.',
     };
   }
 
@@ -55,7 +55,7 @@ export default function fobCalculation(input: CheckInput): CheckResult {
       expectedValue: totalFob.toFixed(2),
       actualValue: calculatedTotal.toFixed(2),
       documentsCompared: 'INV',
-      message: 'FOB calculation matches total value.',
+      message: 'Calculo FOB confere com o valor total.',
     };
   }
 
@@ -65,6 +65,6 @@ export default function fobCalculation(input: CheckInput): CheckResult {
     expectedValue: totalFob.toFixed(2),
     actualValue: calculatedTotal.toFixed(2),
     documentsCompared: 'INV',
-    message: `FOB calculation mismatch: sum of items = ${calculatedTotal.toFixed(2)}, declared total = ${totalFob.toFixed(2)} (difference: ${difference.toFixed(2)}).`,
+    message: `Divergencia no calculo FOB: soma dos itens = ${calculatedTotal.toFixed(2)}, total declarado = ${totalFob.toFixed(2)} (diferenca: ${difference.toFixed(2)}).`,
   };
 }

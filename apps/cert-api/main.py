@@ -254,6 +254,25 @@ def ensure_tables():
             )
         """)
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS cert_stock (
+                id SERIAL PRIMARY KEY,
+                sku TEXT NOT NULL,
+                brand TEXT,
+                source TEXT NOT NULL,
+                warehouse TEXT,
+                quantity INTEGER DEFAULT 0,
+                available INTEGER DEFAULT 0,
+                reserved INTEGER DEFAULT 0,
+                in_transit INTEGER DEFAULT 0,
+                situation TEXT,
+                storage_area TEXT,
+                synced_at TIMESTAMP DEFAULT NOW(),
+                UNIQUE(sku, source, warehouse)
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS cert_stock_sku_idx ON cert_stock(sku)")
+
     # Migration: add columns for existing deployments
     for col, coltype in [
         ("certification_type", "TEXT DEFAULT ''"),
@@ -826,7 +845,7 @@ def _compare_ecommerce_description(ecommerce_desc: str, actual: str) -> tuple[st
     if not ecommerce_desc:
         return None
     if not actual:
-        return ("MISSING", 0.0)
+        return ("URL_NOT_FOUND", 0.0)
 
     desc_clean = ecommerce_desc.strip().lower()
     actual_clean = actual.strip().lower()
@@ -857,7 +876,7 @@ def _compare_ecommerce_description(ecommerce_desc: str, actual: str) -> tuple[st
     if seq_score >= 0.4:
         return ("INCONSISTENT", seq_score)
 
-    return ("MISSING", seq_score)
+    return ("URL_NOT_FOUND", seq_score)
 
 
 def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") -> tuple[str, float]:
@@ -876,7 +895,7 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
     if not expected and not ecommerce_desc:
         return ("NO_EXPECTED", 0.0)
     if not actual:
-        return ("MISSING", 0.0)
+        return ("URL_NOT_FOUND", 0.0)
 
     # Priority 1: Compare against e-commerce description (exact text match)
     ecom_result = _compare_ecommerce_description(ecommerce_desc, actual)
@@ -888,6 +907,15 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
 
     exp_lower = expected.lower().strip()
     act_lower = actual.lower().strip()
+
+    # 0. Handle "ENCERRAMENTO" products — these are being phased out
+    # If expected says "ENCERRAMENTO", the product is in phase-out.
+    # If the site still has valid certification, it's OK with full score (cert still valid during phase-out).
+    # If no cert on site, it's OK too (cert may have been removed as part of phase-out).
+    if 'encerramento' in exp_lower:
+        if actual and (_extract_cert_body(actual) or _has_registration_number(actual)):
+            return ("OK", 1.0)  # Still has valid cert during phase-out
+        return ("OK", 1.0)  # Phase-out product, no cert needed
 
     # 1. Check if expected has specific registration numbers that should appear on site
     exp_reg_numbers = re.findall(r'\d{4,}/\d{4}', expected)
@@ -952,7 +980,7 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
     elif score >= 0.3:
         return ("INCONSISTENT", score)
     else:
-        return ("MISSING", score)
+        return ("URL_NOT_FOUND", score)
 
 
 def validate_single_product(
@@ -1018,7 +1046,7 @@ def validate_single_product(
     result["status"] = status
     result["score"] = round(score, 3)
 
-    if status == "MISSING" and result["url"]:
+    if status == "URL_NOT_FOUND" and result["url"]:
         result["error"] = "No certification text found on product page"
     elif status == "INCONSISTENT":
         result["error"] = "Certification text found but does not match expected"
@@ -1060,9 +1088,8 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None):
             summary = {
                 "total": state.get("total", 0),
                 "ok": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "OK"),
-                "missing": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "MISSING"),
                 "inconsistent": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") == "INCONSISTENT"),
-                "not_found": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") not in ("OK", "MISSING", "INCONSISTENT")),
+                "not_found": sum(1 for e in state.get("events", []) if e.get("product", {}).get("status") not in ("OK", "INCONSISTENT")),
             }
             cur.execute(
                 """UPDATE cert_schedule_history SET status = 'completed', summary = %s
@@ -1246,17 +1273,15 @@ def get_stats():
                     "date": (last_run_row["finished_at"] or last_run_row["started_at"]).isoformat(),
                     "total": last_run_row["total"],
                     "ok": last_run_row["ok"],
-                    "missing": last_run_row["missing"],
                     "inconsistent": last_run_row["inconsistent"],
-                    "not_found": last_run_row["not_found"],
+                    "not_found": (last_run_row.get("not_found") or 0) + (last_run_row.get("missing") or 0),
                 }
 
             cur.execute("""
                 SELECT brand,
                     COUNT(*) FILTER (WHERE last_validation_status = 'OK') as ok,
-                    COUNT(*) FILTER (WHERE last_validation_status = 'MISSING') as missing,
                     COUNT(*) FILTER (WHERE last_validation_status = 'INCONSISTENT') as inconsistent,
-                    COUNT(*) FILTER (WHERE last_validation_status NOT IN ('OK','MISSING','INCONSISTENT') OR last_validation_status IS NULL) as not_found,
+                    COUNT(*) FILTER (WHERE last_validation_status NOT IN ('OK','INCONSISTENT') OR last_validation_status IS NULL) as not_found,
                     COUNT(*) FILTER (WHERE is_expired = TRUE) as expired
                 FROM cert_products
                 WHERE brand != ''
@@ -1394,7 +1419,42 @@ def list_products(
             f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
             params + [per_page, offset],
         )
-        rows = [_serialize_product(dict(r)) for r in cur.fetchall()]
+        products_raw = [_serialize_product(dict(r)) for r in cur.fetchall()]
+
+        # Enrich with stock data
+        if products_raw:
+            skus = [p["sku"] for p in products_raw]
+            placeholders = ",".join(["%s"] * len(skus))
+            cur.execute(f"""
+                SELECT sku, source, warehouse,
+                    COALESCE(SUM(quantity), 0) as qty,
+                    COALESCE(SUM(available), 0) as avail
+                FROM cert_stock WHERE sku IN ({placeholders})
+                GROUP BY sku, source, warehouse
+            """, skus)
+            stock_rows = cur.fetchall()
+
+            stock_map: dict = {}
+            for sr in stock_rows:
+                sk = sr["sku"]
+                if sk not in stock_map:
+                    stock_map[sk] = {"stock_cd": 0, "stock_ecommerce": 0, "stock_total": 0, "stock_detail": []}
+                entry = {"source": sr["source"], "warehouse": sr["warehouse"], "quantity": sr["qty"], "available": sr["avail"]}
+                stock_map[sk]["stock_detail"].append(entry)
+                if sr["source"] == "wms_biguacu":
+                    stock_map[sk]["stock_cd"] += sr["avail"] or sr["qty"] or 0
+                else:
+                    stock_map[sk]["stock_ecommerce"] += sr["avail"] or sr["qty"] or 0
+                stock_map[sk]["stock_total"] = stock_map[sk]["stock_cd"] + stock_map[sk]["stock_ecommerce"]
+
+            for p in products_raw:
+                s = stock_map.get(p["sku"], {})
+                p["stock_cd"] = s.get("stock_cd", 0)
+                p["stock_ecommerce"] = s.get("stock_ecommerce", 0)
+                p["stock_total"] = s.get("stock_total", 0)
+                p["stock_detail"] = s.get("stock_detail", [])
+
+        rows = products_raw
 
         cur.execute("SELECT MAX(last_validation_date) as last_date FROM cert_products")
         last_date_row = cur.fetchone()
@@ -1565,7 +1625,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                 products = [dict(r) for r in cur.fetchall()]
 
         state["total"] = len(products)
-        ok = missing = inconsistent = not_found = 0
+        ok = inconsistent = not_found = 0
         now = datetime.now(timezone.utc)
         report_products = []
 
@@ -1590,8 +1650,6 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
 
             if status == "OK":
                 ok += 1
-            elif status == "MISSING":
-                missing += 1
             elif status == "INCONSISTENT":
                 inconsistent += 1
             else:
@@ -1648,7 +1706,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
         summary = {
             "total": len(products),
             "ok": ok,
-            "missing": missing,
+            "missing": 0,
             "inconsistent": inconsistent,
             "not_found": not_found,
         }
@@ -1980,12 +2038,12 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
     )
     status_fills = {
         "OK": PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
-        "MISSING": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+        "URL_NOT_FOUND": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
         "INCONSISTENT": PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
     }
     expired_fill = PatternFill(start_color="FCE7F3", end_color="FCE7F3", fill_type="solid")
     status_labels = {
-        "OK": "Conforme", "MISSING": "Ausente", "INCONSISTENT": "Inconsistente",
+        "OK": "Conforme", "INCONSISTENT": "Inconsistente",
         "URL_NOT_FOUND": "Nao Encontrado", "API_ERROR": "Erro de API",
         "NO_EXPECTED": "Sem Certificacao", "EXPIRED": "Vencido",
     }
@@ -2000,15 +2058,35 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
 
     # Count stats
     ok_count = sum(1 for r in rows if r.get("last_validation_status") == "OK")
-    missing_count = sum(1 for r in rows if r.get("last_validation_status") == "MISSING")
+    not_found_count = sum(1 for r in rows if r.get("last_validation_status") in ("MISSING", "URL_NOT_FOUND"))
     inconsistent_count = sum(1 for r in rows if r.get("last_validation_status") == "INCONSISTENT")
     expired_count = sum(1 for r in rows if r.get("is_expired"))
-    ws.append([f"Conforme: {ok_count} | Ausente: {missing_count} | Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"])
+    ws.append([f"Conforme: {ok_count} | Nao Encontrado: {not_found_count} | Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"])
     ws.append([])
+
+    # Fetch stock data for all products
+    stock_map: dict[str, dict] = {}
+    try:
+        with db() as (_conn2, _cur2):
+            _cur2.execute("""
+                SELECT sku, source, SUM(COALESCE(available, quantity, 0)) as qty
+                FROM cert_stock GROUP BY sku, source
+            """)
+            for srow in _cur2.fetchall():
+                sk = srow["sku"]
+                if sk not in stock_map:
+                    stock_map[sk] = {"cd": 0, "ecommerce": 0}
+                if srow["source"] == "wms_biguacu":
+                    stock_map[sk]["cd"] = srow["qty"] or 0
+                else:
+                    stock_map[sk]["ecommerce"] += srow["qty"] or 0
+    except Exception as e:
+        log.warning(f"Could not fetch stock data for export: {e}")
 
     # Headers
     headers = ["SKU", "Nome", "Marca", "Status", "Pontuacao", "Tipo Certificacao",
-               "Texto Esperado", "Texto Encontrado", "URL", "Prazo Venda", "Vencido"]
+               "Texto Esperado", "Texto Encontrado", "URL", "Prazo Venda", "Vencido",
+               "Estoque CD", "Estoque E-commerce", "Total Estoque"]
     ws.append(headers)
     header_row = ws.max_row
     for col_idx in range(1, len(headers) + 1):
@@ -2027,8 +2105,10 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
         label = status_labels.get(status_raw, status_raw)
         score = r.get("last_validation_score")
         score_str = f"{score * 100:.0f}%" if score is not None else ""
+        sku = r.get("sku", "")
+        stock = stock_map.get(sku, {"cd": 0, "ecommerce": 0})
         row_data = [
-            r.get("sku", ""),
+            sku,
             r.get("name", ""),
             r.get("brand", ""),
             label,
@@ -2039,6 +2119,9 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
             r.get("last_validation_url", ""),
             r.get("sale_deadline", ""),
             "Sim" if is_exp else "",
+            stock["cd"],
+            stock["ecommerce"],
+            stock["cd"] + stock["ecommerce"],
         ]
         ws.append(row_data)
         row_idx = ws.max_row
@@ -2053,13 +2136,130 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
             status_cell.fill = status_fills[status_raw]
 
     # Column widths
-    col_widths = [15, 40, 18, 18, 12, 25, 40, 40, 50, 15, 10]
+    col_widths = [15, 40, 18, 18, 12, 25, 40, 40, 50, 15, 10, 12, 18, 14]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
-    ws.auto_filter.ref = f"A{header_row}:K{ws.max_row}"
+    ws.auto_filter.ref = f"A{header_row}:N{ws.max_row}"
 
     filename = f"produtos_certificacoes_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
+    filepath = REPORTS_DIR / filename
+    wb.save(str(filepath))
+
+    return FileResponse(
+        str(filepath),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=filename,
+    )
+
+
+@app.post("/api/reports/export-stock")
+@limiter.limit("5/minute")
+def export_stock_report(request: Request, brand: str = Query("")):
+    """Export detailed stock report with WMS locations as Excel."""
+    if not DATABASE_URL:
+        raise HTTPException(500, "Database not configured")
+
+    now = datetime.now(timezone.utc)
+
+    with db() as (conn, cur):
+        conditions = []
+        params: list = []
+        if brand:
+            conditions.append("cs.brand = %s")
+            params.append(brand)
+
+        where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+        cur.execute(f"""
+            SELECT cs.sku, cp.name, COALESCE(cp.brand, cs.brand) as brand,
+                cs.source, cs.warehouse, cs.quantity, cs.available,
+                cs.reserved, cs.in_transit, cs.situation, cs.storage_area,
+                cp.last_validation_status, cp.sale_deadline, cp.is_expired,
+                cs.synced_at
+            FROM cert_stock cs
+            LEFT JOIN cert_products cp ON cs.sku = cp.sku
+            {where}
+            ORDER BY cs.sku, cs.source, cs.warehouse
+        """, params)
+        rows = cur.fetchall()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Estoque Detalhado"
+
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="1E40AF", end_color="1E40AF", fill_type="solid")
+    thin_border = Border(
+        left=Side(style="thin", color="D1D5DB"),
+        right=Side(style="thin", color="D1D5DB"),
+        top=Side(style="thin", color="D1D5DB"),
+        bottom=Side(style="thin", color="D1D5DB"),
+    )
+
+    # Summary
+    ws.append(["Relatório de Estoque Detalhado - CD Biguaçu + E-commerce"])
+    ws.merge_cells("A1:L1")
+    ws["A1"].font = Font(bold=True, size=14, color="1E40AF")
+    ws.append([f"Data: {now.strftime('%d/%m/%Y %H:%M')}"])
+    ws.append([f"Total registros: {len(rows)}"])
+    ws.append([])
+
+    # Headers
+    headers = ["SKU", "Nome", "Marca", "Origem", "Localização", "Quantidade",
+               "Disponível", "Reserva", "Trânsito", "Situação", "Status Cert", "Prazo Venda"]
+    ws.append(headers)
+    header_row = ws.max_row
+    for col_idx, _ in enumerate(headers, 1):
+        cell = ws.cell(row=header_row, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal="center")
+
+    # Source labels
+    source_labels = {
+        "wms_biguacu": "CD Biguaçu (WMS)",
+        "ecommerce_puket": "E-commerce Puket",
+        "ecommerce_imaginarium": "E-commerce Imaginarium",
+    }
+
+    wms_fill = PatternFill(start_color="DBEAFE", end_color="DBEAFE", fill_type="solid")
+    ecom_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
+
+    for row_data in rows:
+        source_raw = row_data.get("source", "")
+        row_values = [
+            row_data.get("sku", ""),
+            row_data.get("name", ""),
+            row_data.get("brand", ""),
+            source_labels.get(source_raw, source_raw),
+            (row_data.get("warehouse", "") or "").replace("CD ", ""),
+            row_data.get("quantity", 0) or 0,
+            row_data.get("available", 0) or 0,
+            row_data.get("reserved", 0) or 0,
+            row_data.get("in_transit", 0) or 0,
+            row_data.get("situation", ""),
+            row_data.get("last_validation_status", ""),
+            row_data.get("sale_deadline", ""),
+        ]
+        ws.append(row_values)
+        row_idx = ws.max_row
+        fill = wms_fill if "wms" in source_raw else ecom_fill
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.border = thin_border
+            cell.fill = fill
+
+    # Column widths
+    col_widths = [15, 45, 18, 25, 22, 12, 12, 10, 10, 20, 15, 14]
+    for i, w in enumerate(col_widths, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+    ws.auto_filter.ref = f"A{header_row}:L{ws.max_row}"
+
+    filename = f"estoque_detalhado_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = REPORTS_DIR / filename
     wb.save(str(filepath))
 
@@ -2105,7 +2305,17 @@ def download_report(filename: str, format: str = Query("xlsx")):
         raise HTTPException(404, "Report not found")
 
     if format == "json":
+        if filename.endswith(".xlsx"):
+            raise HTTPException(400, "Este arquivo e binario (xlsx), nao pode ser baixado como JSON")
         return FileResponse(filepath, media_type="application/json", filename=filename)
+
+    # If already an xlsx file, serve directly
+    if filename.endswith(".xlsx"):
+        return FileResponse(
+            str(filepath),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=filename,
+        )
 
     # Generate Excel from JSON report
     report_data = json.loads(filepath.read_text())
@@ -2127,13 +2337,12 @@ def download_report(filename: str, format: str = Query("xlsx")):
     )
     status_fills = {
         "OK": PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid"),
-        "MISSING": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+        "URL_NOT_FOUND": PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
         "INCONSISTENT": PatternFill(start_color="FEF3C7", end_color="FEF3C7", fill_type="solid"),
         "EXPIRED": PatternFill(start_color="FCE7F3", end_color="FCE7F3", fill_type="solid"),
     }
     status_labels = {
         "OK": "Conforme",
-        "MISSING": "Ausente",
         "INCONSISTENT": "Inconsistente",
         "URL_NOT_FOUND": "Não Encontrado",
         "API_ERROR": "Erro de API",
@@ -2149,8 +2358,28 @@ def download_report(filename: str, format: str = Query("xlsx")):
     ws.append([f"Total: {summary.get('total', len(products))} | OK: {summary.get('ok', 0)} | Ausente: {summary.get('missing', 0)} | Inconsistente: {summary.get('inconsistent', 0)} | Não Encontrado: {summary.get('not_found', 0)}"])
     ws.append([])
 
+    # Fetch stock data for report
+    stock_map: dict[str, dict] = {}
+    try:
+        with db() as (_conn3, _cur3):
+            _cur3.execute("""
+                SELECT sku, source, SUM(COALESCE(available, quantity, 0)) as qty
+                FROM cert_stock GROUP BY sku, source
+            """)
+            for srow in _cur3.fetchall():
+                sk = srow["sku"]
+                if sk not in stock_map:
+                    stock_map[sk] = {"cd": 0, "ecommerce": 0}
+                if srow["source"] == "wms_biguacu":
+                    stock_map[sk]["cd"] = srow["qty"] or 0
+                else:
+                    stock_map[sk]["ecommerce"] += srow["qty"] or 0
+    except Exception as e:
+        log.warning(f"Could not fetch stock data for report download: {e}")
+
     # Headers
-    headers = ["SKU", "Nome", "Marca", "Status", "Pontuação", "Texto Esperado", "Texto Encontrado", "URL", "Erro"]
+    headers = ["SKU", "Nome", "Marca", "Status", "Pontuacao", "Texto Esperado", "Texto Encontrado", "URL", "Erro",
+               "Estoque CD", "Estoque E-commerce", "Total Estoque"]
     ws.append(headers)
     header_row = ws.max_row
     for col_idx, _ in enumerate(headers, 1):
@@ -2166,8 +2395,10 @@ def download_report(filename: str, format: str = Query("xlsx")):
         status_label = status_labels.get(status_raw, status_raw)
         score = p.get("score")
         score_str = f"{score * 100:.0f}%" if score is not None else ""
+        p_sku = p.get("sku", "")
+        stock = stock_map.get(p_sku, {"cd": 0, "ecommerce": 0})
         row = [
-            p.get("sku", ""),
+            p_sku,
             p.get("name", ""),
             p.get("brand", ""),
             status_label,
@@ -2176,6 +2407,9 @@ def download_report(filename: str, format: str = Query("xlsx")):
             p.get("actual_cert_text", ""),
             p.get("url", ""),
             p.get("error", ""),
+            stock["cd"],
+            stock["ecommerce"],
+            stock["cd"] + stock["ecommerce"],
         ]
         ws.append(row)
         row_idx = ws.max_row
@@ -2188,12 +2422,12 @@ def download_report(filename: str, format: str = Query("xlsx")):
             status_cell.fill = status_fills[status_raw]
 
     # Column widths
-    col_widths = [15, 40, 18, 18, 12, 40, 40, 50, 40]
+    col_widths = [15, 40, 18, 18, 12, 40, 40, 50, 40, 12, 18, 14]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
     # Auto-filter
-    ws.auto_filter.ref = f"A{header_row}:I{ws.max_row}"
+    ws.auto_filter.ref = f"A{header_row}:L{ws.max_row}"
 
     # Save to temp file
     excel_filename = filename.replace(".json", ".xlsx")
@@ -2466,3 +2700,169 @@ def list_licenciados(
             "per_page": per_page,
             "total_pages": total_pages,
         }
+
+
+# ---------------------------------------------------------------------------
+# Stock / Inventory Integration
+# ---------------------------------------------------------------------------
+
+def _fetch_wms_stock():
+    """Fetch stock from WMS Biguacu (Oracle) using thick mode for older Oracle servers."""
+    import oracledb
+    try:
+        oracledb.init_oracle_client(lib_dir="/opt/oracle/instantclient_23_7")
+    except Exception:
+        pass  # Already initialized
+
+    host = os.environ.get("WMS_ORACLE_HOST", "192.168.168.10")
+    port = int(os.environ.get("WMS_ORACLE_PORT", "1521"))
+    sid = os.environ.get("WMS_ORACLE_SID", "WMS")
+    user = os.environ.get("WMS_ORACLE_USER", "wisweb")
+    password = os.environ.get("WMS_ORACLE_PASS", "wisweb")
+
+    dsn = oracledb.makedsn(host, port, sid=sid)
+    with oracledb.connect(user=user, password=password, dsn=dsn) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT te.CD_PRODUTO, tcp.DS_PRODUTO,
+                tta.DS_AREA_ARMAZ AS Area,
+                ts.DS_SITUACAO AS Situacao,
+                SUM(te.QT_ESTOQUE) AS Estoque,
+                SUM(te.QT_RESERVA_SAIDA) AS Reserva,
+                SUM(te.QT_TRANSITO_ENTRADA) AS Transito,
+                SUM(te.QT_TRANSITO_ENTRADA + te.QT_ESTOQUE - te.QT_RESERVA_SAIDA) AS Disponivel
+            FROM T_ESTOQUE te
+            JOIN T_CAB_PRODUTO tcp ON te.CD_PRODUTO = tcp.CD_PRODUTO
+            JOIN T_ENDERECO_ESTOQUE tee ON te.CD_ENDERECO = tee.CD_ENDERECO
+            JOIN T_SITUACAO ts ON ts.CD_SITUACAO = tee.CD_SITUACAO
+            JOIN T_TIPO_AREA tta ON tta.CD_AREA_ARMAZ = tee.CD_AREA_ARMAZ
+            GROUP BY te.CD_PRODUTO, tcp.DS_PRODUTO, tta.DS_AREA_ARMAZ, ts.DS_SITUACAO
+        """)
+        columns = [col[0] for col in cursor.description]
+        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+
+
+def _fetch_ecommerce_stock(brand: str):
+    """Fetch e-commerce stock from SQL Server ERP (Extrema MG)."""
+    import pymssql
+
+    if brand.lower() in ('puket', 'puket_escolares'):
+        host = os.environ.get("ERP_PUKET_HOST", "db01.grupounico.com")
+        db_name = os.environ.get("ERP_PUKET_DB", "DB_puket")
+        filial = "EXTREMA - MG"
+        where = f"filial = '{filial}'"
+    else:
+        host = os.environ.get("ERP_IMG_HOST", "db02.grupounico.com")
+        db_name = os.environ.get("ERP_IMG_DB", "Grupo_Imaginarium")
+        where = "filial LIKE '%IMAGINARIUM EXTREMA MG%'"
+
+    user = os.environ.get("ERP_MSSQL_USER", "nicolas.matsuda")
+    password = os.environ.get("ERP_MSSQL_PASS", "")
+
+    with pymssql.connect(host, user, password, db_name, timeout=15, login_timeout=10) as conn:
+        cursor = conn.cursor(as_dict=True)
+        cursor.execute(f"SELECT * FROM estoque_produtos WHERE {where}")
+        return cursor.fetchall()
+
+
+@app.post("/api/sync-stock")
+@limiter.limit("5/minute")
+def sync_stock(request: Request):
+    """Sync stock data from WMS + ERP into cert_stock table."""
+    if not DATABASE_URL:
+        raise HTTPException(500, "Database not configured")
+
+    results = {"wms": 0, "ecommerce_puket": 0, "ecommerce_imaginarium": 0, "errors": []}
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # 1. WMS Oracle (by storage area)
+    try:
+        wms_rows = _fetch_wms_stock()
+        with db() as (conn, cur):
+            # Clear old WMS data before fresh insert
+            cur.execute("DELETE FROM cert_stock WHERE source = 'wms_biguacu'")
+            for row in wms_rows:
+                sku = str(row.get("CD_PRODUTO", "")).strip()
+                if not sku:
+                    continue
+                area = str(row.get("AREA", "")).strip() or "Geral"
+                situation = str(row.get("SITUACAO", "")).strip() or ""
+                warehouse_name = f"CD {area}"
+                cur.execute("""
+                    INSERT INTO cert_stock (sku, source, warehouse, quantity, available, reserved, in_transit, situation, storage_area, synced_at)
+                    VALUES (%s, 'wms_biguacu', %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (sku, source, warehouse)
+                    DO UPDATE SET quantity=EXCLUDED.quantity, available=EXCLUDED.available,
+                        reserved=EXCLUDED.reserved, in_transit=EXCLUDED.in_transit,
+                        situation=EXCLUDED.situation, storage_area=EXCLUDED.storage_area, synced_at=EXCLUDED.synced_at
+                """, (sku, warehouse_name, int(row.get("ESTOQUE", 0) or 0), int(row.get("DISPONIVEL", 0) or 0),
+                      int(row.get("RESERVA", 0) or 0), int(row.get("TRANSITO", 0) or 0),
+                      situation, area, now))
+        results["wms"] = len(wms_rows)
+    except Exception as e:
+        results["errors"].append(f"WMS Oracle: {str(e)}")
+
+    # 2. ERP Puket
+    try:
+        puket_rows = _fetch_ecommerce_stock("puket")
+        with db() as (conn, cur):
+            for row in puket_rows:
+                sku = str(row.get("PRODUTO", row.get("produto", ""))).strip()
+                qty = int(row.get("ESTOQUE", row.get("estoque", 0)) or 0)
+                if not sku:
+                    continue
+                cur.execute("""
+                    INSERT INTO cert_stock (sku, brand, source, warehouse, quantity, available, synced_at)
+                    VALUES (%s, 'puket', 'ecommerce_puket', 'Extrema MG', %s, %s, %s)
+                    ON CONFLICT (sku, source, warehouse)
+                    DO UPDATE SET quantity=EXCLUDED.quantity, available=EXCLUDED.available, synced_at=EXCLUDED.synced_at
+                """, (sku, qty, qty, now))
+        results["ecommerce_puket"] = len(puket_rows)
+    except Exception as e:
+        results["errors"].append(f"ERP Puket: {str(e)}")
+
+    # 3. ERP Imaginarium
+    try:
+        img_rows = _fetch_ecommerce_stock("imaginarium")
+        with db() as (conn, cur):
+            for row in img_rows:
+                sku = str(row.get("PRODUTO", row.get("produto", ""))).strip()
+                qty = int(row.get("ESTOQUE", row.get("estoque", 0)) or 0)
+                if not sku:
+                    continue
+                cur.execute("""
+                    INSERT INTO cert_stock (sku, brand, source, warehouse, quantity, available, synced_at)
+                    VALUES (%s, 'imaginarium', 'ecommerce_imaginarium', 'Extrema MG', %s, %s, %s)
+                    ON CONFLICT (sku, source, warehouse)
+                    DO UPDATE SET quantity=EXCLUDED.quantity, available=EXCLUDED.available, synced_at=EXCLUDED.synced_at
+                """, (sku, qty, qty, now))
+        results["ecommerce_imaginarium"] = len(img_rows)
+    except Exception as e:
+        results["errors"].append(f"ERP Imaginarium: {str(e)}")
+
+    return results
+
+
+@app.get("/api/stock/{sku}")
+def get_stock_by_sku(sku: str):
+    """Get stock data for a specific SKU across all sources."""
+    if not DATABASE_URL:
+        raise HTTPException(500, "Database not configured")
+
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT source, warehouse, quantity, available, reserved, in_transit, synced_at FROM cert_stock WHERE sku = %s",
+            (sku,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    result = {"sku": sku, "stock": [], "total_quantity": 0, "total_available": 0}
+    for item in rows:
+        # Convert datetime to string for JSON serialization
+        if item.get("synced_at") and hasattr(item["synced_at"], "isoformat"):
+            item["synced_at"] = item["synced_at"].isoformat()
+        result["stock"].append(item)
+        result["total_quantity"] += item.get("quantity", 0) or 0
+        result["total_available"] += item.get("available", 0) or 0
+    return result

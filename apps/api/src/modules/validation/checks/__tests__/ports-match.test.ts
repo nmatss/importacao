@@ -26,7 +26,7 @@ describe('ports-match check', () => {
       blData: { portOfLoading: 'Ningbo', portOfDischarge: 'Santos' },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('Port of loading');
+    expect(result.message).toContain('Porto de embarque');
   });
 
   it('should fail when port of discharge differs', () => {
@@ -35,7 +35,7 @@ describe('ports-match check', () => {
       blData: { portOfLoading: 'Shanghai', portOfDischarge: 'Paranagua' },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('Port of discharge');
+    expect(result.message).toContain('Porto de descarga');
   });
 
   it('should warn when no ports found in either document', () => {

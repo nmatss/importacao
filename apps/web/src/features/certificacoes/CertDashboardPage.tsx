@@ -1,22 +1,27 @@
-import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
-import { CertStatsCards } from "@/features/certificacoes/components/CertStatsCards"
-import { CertBrandChart } from "@/features/certificacoes/components/CertBrandChart"
-import { fetchCertStats, fetchCertReports, fetchCertReportDetail, fetchCertProducts, fetchCertExpired, checkCertApiHealth } from "@/shared/lib/cert-api-client"
-import { formatDateTime, relativeTime, cn, certStatusColor } from "@/shared/lib/utils"
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
+import { CertBrandChart } from '@/features/certificacoes/components/CertBrandChart';
+import {
+  fetchCertStats,
+  fetchCertReports,
+  fetchCertProducts,
+  fetchCertExpired,
+  checkCertApiHealth,
+} from '@/shared/lib/cert-api-client';
+import { formatDateTime, relativeTime, cn, certStatusColor } from '@/shared/lib/utils';
 import {
   PlayCircle,
   FileBarChart,
   Clock,
   TrendingUp,
   AlertTriangle,
-  XCircle,
   ArrowRight,
   BarChart3,
   Activity,
   CalendarX2,
-} from "lucide-react"
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
+} from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 import type { CertStats } from '@/shared/lib/cert-api-client';
 
@@ -42,14 +47,13 @@ interface CertProblemProduct {
 }
 
 const PIE_COLORS = {
-  OK: "#10b981",
-  MISSING: "#ef4444",
-  INCONSISTENT: "#f59e0b",
-  NOT_FOUND: "#94a3b8",
-}
+  OK: '#10b981',
+  INCONSISTENT: '#f59e0b',
+  NOT_FOUND: '#94a3b8',
+};
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />
+  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
 }
 
 function DashboardSkeleton() {
@@ -83,91 +87,101 @@ function DashboardSkeleton() {
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default function CertDashboardPage() {
-  const [stats, setStats] = useState<CertStats | null>(null)
-  const [reports, setReports] = useState<CertReportFile[]>([])
-  const [loading, setLoading] = useState(true)
-  const [apiOnline, setApiOnline] = useState(false)
-  const [problemProducts, setProblemProducts] = useState<CertProblemProduct[]>([])
-  const [expiredProducts, setExpiredProducts] = useState<CertExpiredProduct[]>([])
+  const [stats, setStats] = useState<CertStats | null>(null);
+  const [reports, setReports] = useState<CertReportFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [apiOnline, setApiOnline] = useState(false);
+  const [problemProducts, setProblemProducts] = useState<CertProblemProduct[]>([]);
+  const [expiredProducts, setExpiredProducts] = useState<CertExpiredProduct[]>([]);
 
   useEffect(() => {
     Promise.all([
       fetchCertStats().catch(() => null),
       fetchCertReports().catch(() => []),
       checkCertApiHealth(),
-      // Load problem products directly from DB (MISSING + INCONSISTENT)
-      fetchCertProducts({ per_page: 10, status: "MISSING,INCONSISTENT" }).catch(() => ({ products: [] })),
-      // Also load URL_NOT_FOUND products
-      fetchCertProducts({ per_page: 10, status: "URL_NOT_FOUND" }).catch(() => ({ products: [] })),
+      // Load problem products directly from DB (URL_NOT_FOUND + INCONSISTENT)
+      fetchCertProducts({ per_page: 10, status: 'URL_NOT_FOUND,INCONSISTENT' }).catch(() => ({
+        products: [],
+      })),
       // Load expired products
       fetchCertExpired({ per_page: 10 }).catch(() => ({ products: [] })),
-    ]).then(([s, r, health, missingData, notFoundData, expiredData]) => {
-      setStats(s)
-      setApiOnline(health.connected)
-      const reportList: CertReportFile[] = Array.isArray(r) ? r : []
-      setReports(reportList.filter((f) => f.filename?.endsWith('.json')).slice(0, 5))
+    ]).then(([s, r, health, problemData, expiredData]) => {
+      setStats(s);
+      setApiOnline(health.connected);
+      const reportList: CertReportFile[] = Array.isArray(r) ? r : [];
+      setReports(reportList.filter((f) => f.filename?.endsWith('.json')).slice(0, 5));
 
-      // Combine problem products from DB
-      const missingProds = (missingData?.products || []).map((p: any) => ({
-        sku: p.sku, name: p.name, status: p.last_validation_status || "MISSING", brand: p.brand,
-      }))
-      const notFoundProds = (notFoundData?.products || []).map((p: any) => ({
-        sku: p.sku, name: p.name, status: p.last_validation_status || "URL_NOT_FOUND", brand: p.brand,
-      }))
-      const allProblems = [...missingProds, ...notFoundProds].slice(0, 10)
-      setProblemProducts(allProblems)
+      // Problem products from DB
+      const allProblems = (problemData?.products || [])
+        .map((p: any) => ({
+          sku: p.sku,
+          name: p.name,
+          status: p.last_validation_status || 'URL_NOT_FOUND',
+          brand: p.brand,
+        }))
+        .slice(0, 10);
+      setProblemProducts(allProblems);
 
       // Expired products
-      setExpiredProducts((expiredData?.products || []).map((p: any) => ({
-        sku: p.sku, name: p.name, brand: p.brand,
-        sale_deadline: p.sale_deadline, sale_deadline_date: p.sale_deadline_date,
-      })))
+      setExpiredProducts(
+        (expiredData?.products || []).map((p: any) => ({
+          sku: p.sku,
+          name: p.name,
+          brand: p.brand,
+          sale_deadline: p.sale_deadline,
+          sale_deadline_date: p.sale_deadline_date,
+        })),
+      );
 
-      setLoading(false)
-    })
-  }, [])
+      setLoading(false);
+    });
+  }, []);
 
   // Calculate totals from by_brand (always up-to-date from DB) instead of last_run (may be stale)
-  const byBrand = stats?.by_brand || []
+  const byBrand = stats?.by_brand || [];
   const brandTotals = byBrand.reduce(
     (acc, b) => ({
       ok: acc.ok + (b.ok || 0),
-      missing: acc.missing + (b.missing || 0),
       inconsistent: acc.inconsistent + (b.inconsistent || 0),
-      not_found: acc.not_found + (b.not_found || 0),
+      not_found: acc.not_found + (b.not_found || 0) + (b.missing || 0),
     }),
-    { ok: 0, missing: 0, inconsistent: 0, not_found: 0 }
-  )
-  const brandTotal = brandTotals.ok + brandTotals.missing + brandTotals.inconsistent + brandTotals.not_found
-  const hasBrandData = brandTotal > 0
+    { ok: 0, inconsistent: 0, not_found: 0 },
+  );
+  const brandTotal = brandTotals.ok + brandTotals.inconsistent + brandTotals.not_found;
+  const hasBrandData = brandTotal > 0;
 
-  const lastRun = stats?.last_run
+  const lastRun = stats?.last_run;
   const effectiveData = hasBrandData
     ? { total: brandTotal, ...brandTotals }
     : lastRun
-      ? { total: lastRun.total, ok: lastRun.ok, missing: lastRun.missing, inconsistent: lastRun.inconsistent, not_found: lastRun.not_found }
-      : null
+      ? {
+          total: lastRun.total,
+          ok: lastRun.ok,
+          inconsistent: lastRun.inconsistent,
+          not_found: (lastRun.not_found || 0) + (lastRun.missing || 0),
+        }
+      : null;
 
-  const okRate = effectiveData && effectiveData.total > 0
-    ? ((effectiveData.ok / effectiveData.total) * 100).toFixed(1)
-    : null
-  const okRateNum = okRate ? parseFloat(okRate) : 0
+  const okRate =
+    effectiveData && effectiveData.total > 0
+      ? ((effectiveData.ok / effectiveData.total) * 100).toFixed(1)
+      : null;
+  const okRateNum = okRate ? parseFloat(okRate) : 0;
 
   const pieData = effectiveData
     ? [
-        { name: "Conforme", value: effectiveData.ok || 0 },
-        { name: "Ausente", value: effectiveData.missing || 0 },
-        { name: "Inconsistente", value: effectiveData.inconsistent || 0 },
-        { name: "Não Encontrado", value: effectiveData.not_found || 0 },
+        { name: 'Conforme', value: effectiveData.ok || 0 },
+        { name: 'Inconsistente', value: effectiveData.inconsistent || 0 },
+        { name: 'Não Encontrado', value: effectiveData.not_found || 0 },
       ].filter((d) => d.value > 0)
-    : []
+    : [];
 
   if (loading) {
-    return <DashboardSkeleton />
+    return <DashboardSkeleton />;
   }
 
   return (
@@ -176,30 +190,34 @@ export default function CertDashboardPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Visão geral das certificações de produtos
-          </p>
+          <p className="mt-1 text-sm text-slate-500">Visão geral das certificações de produtos</p>
         </div>
 
         <div className="flex items-center gap-3">
           {/* API Status */}
-          <div className={cn(
-            "flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-colors",
-            apiOnline
-              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-              : "bg-red-50 text-red-700 border-red-200/80"
-          )}>
+          <div
+            className={cn(
+              'flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-colors',
+              apiOnline
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
+                : 'bg-red-50 text-red-700 border-red-200/80',
+            )}
+          >
             <span className="relative flex h-2 w-2">
-              <span className={cn(
-                "absolute inline-flex h-full w-full rounded-full opacity-75",
-                apiOnline ? "bg-emerald-400 animate-ping" : "bg-red-400"
-              )} />
-              <span className={cn(
-                "relative inline-flex h-2 w-2 rounded-full",
-                apiOnline ? "bg-emerald-500" : "bg-red-500"
-              )} />
+              <span
+                className={cn(
+                  'absolute inline-flex h-full w-full rounded-full opacity-75',
+                  apiOnline ? 'bg-emerald-400 animate-ping' : 'bg-red-400',
+                )}
+              />
+              <span
+                className={cn(
+                  'relative inline-flex h-2 w-2 rounded-full',
+                  apiOnline ? 'bg-emerald-500' : 'bg-red-500',
+                )}
+              />
             </span>
-            {apiOnline ? "Sistema Online" : "Sistema Offline"}
+            {apiOnline ? 'Sistema Online' : 'Sistema Offline'}
           </div>
 
           {/* Conformance Rate Badge */}
@@ -232,11 +250,10 @@ export default function CertDashboardPage() {
             ? {
                 total: effectiveData.total || 0,
                 ok: effectiveData.ok || 0,
-                missing: effectiveData.missing || 0,
                 inconsistent: effectiveData.inconsistent || 0,
                 not_found: effectiveData.not_found || 0,
               }
-            : { total: stats?.total_products || 0, ok: 0, missing: 0, inconsistent: 0, not_found: 0 }
+            : { total: stats?.total_products || 0, ok: 0, inconsistent: 0, not_found: 0 }
         }
       />
 
@@ -271,22 +288,23 @@ export default function CertDashboardPage() {
                         <Cell
                           key={i}
                           fill={
-                            entry.name === "Conforme" ? PIE_COLORS.OK :
-                            entry.name === "Ausente" ? PIE_COLORS.MISSING :
-                            entry.name === "Inconsistente" ? PIE_COLORS.INCONSISTENT :
-                            PIE_COLORS.NOT_FOUND
+                            entry.name === 'Conforme'
+                              ? PIE_COLORS.OK
+                              : entry.name === 'Inconsistente'
+                                ? PIE_COLORS.INCONSISTENT
+                                : PIE_COLORS.NOT_FOUND
                           }
                         />
                       ))}
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: "#ffffff",
-                        color: "#1e293b",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "12px",
-                        boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)",
-                        fontSize: "12px",
+                        backgroundColor: '#ffffff',
+                        color: '#1e293b',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                        fontSize: '12px',
                       }}
                     />
                   </PieChart>
@@ -294,10 +312,16 @@ export default function CertDashboardPage() {
                 {/* Center rate */}
                 {okRate && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                    <span className={cn(
-                      "text-xl font-bold",
-                      okRateNum >= 80 ? "text-emerald-600" : okRateNum >= 50 ? "text-amber-600" : "text-red-600"
-                    )}>
+                    <span
+                      className={cn(
+                        'text-xl font-bold',
+                        okRateNum >= 80
+                          ? 'text-emerald-600'
+                          : okRateNum >= 50
+                            ? 'text-amber-600'
+                            : 'text-red-600',
+                      )}
+                    >
                       {okRate}%
                     </span>
                     <span className="text-[10px] text-slate-400 font-medium">conforme</span>
@@ -306,12 +330,14 @@ export default function CertDashboardPage() {
               </div>
               <div className="flex-1 space-y-3">
                 {pieData.map((d) => {
-                  const color = d.name === "Conforme" ? PIE_COLORS.OK :
-                    d.name === "Ausente" ? PIE_COLORS.MISSING :
-                    d.name === "Inconsistente" ? PIE_COLORS.INCONSISTENT :
-                    PIE_COLORS.NOT_FOUND
-                  const total = pieData.reduce((acc, v) => acc + v.value, 0)
-                  const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : "0"
+                  const color =
+                    d.name === 'Conforme'
+                      ? PIE_COLORS.OK
+                      : d.name === 'Inconsistente'
+                        ? PIE_COLORS.INCONSISTENT
+                        : PIE_COLORS.NOT_FOUND;
+                  const total = pieData.reduce((acc, v) => acc + v.value, 0);
+                  const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : '0';
                   return (
                     <div key={d.name} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2.5">
@@ -323,10 +349,12 @@ export default function CertDashboardPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-slate-900 tabular-nums">{d.value}</span>
-                        <span className="text-[11px] text-slate-400 font-medium tabular-nums w-10 text-right">{pct}%</span>
+                        <span className="text-[11px] text-slate-400 font-medium tabular-nums w-10 text-right">
+                          {pct}%
+                        </span>
                       </div>
                     </div>
-                  )
+                  );
                 })}
               </div>
             </div>
@@ -336,7 +364,9 @@ export default function CertDashboardPage() {
                 <BarChart3 className="h-5 w-5 text-slate-300" />
               </div>
               <p className="text-sm font-medium text-slate-400">Nenhum dado disponível</p>
-              <p className="text-xs text-slate-300 mt-1">Execute uma validação para ver os resultados</p>
+              <p className="text-xs text-slate-300 mt-1">
+                Execute uma validação para ver os resultados
+              </p>
             </div>
           )}
         </div>
@@ -368,7 +398,8 @@ export default function CertDashboardPage() {
                   Certificações Vencidas
                 </h3>
                 <p className="text-xs text-pink-600 font-medium mt-0.5">
-                  {stats?.total_expired} produto{(stats?.total_expired ?? 0) > 1 ? 's' : ''} com certificação expirada — não podem ser comercializados
+                  {stats?.total_expired} produto{(stats?.total_expired ?? 0) > 1 ? 's' : ''} com
+                  certificação expirada — não podem ser comercializados
                 </p>
               </div>
             </div>
@@ -391,7 +422,9 @@ export default function CertDashboardPage() {
                       <CalendarX2 className="w-3.5 h-3.5" />
                     </div>
                     <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
-                    <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 transition-colors">{p.name}</span>
+                    <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 transition-colors">
+                      {p.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0 ml-4">
                     <span className="text-xs text-slate-500">{p.brand}</span>
@@ -421,7 +454,7 @@ export default function CertDashboardPage() {
             </div>
             {problemProducts.length > 0 && (
               <Link
-                to="/certificacoes/produtos?status=MISSING,INCONSISTENT"
+                to="/certificacoes/produtos?status=URL_NOT_FOUND,INCONSISTENT"
                 className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
               >
                 Ver todos <ArrowRight className="h-4 w-4" />
@@ -435,9 +468,11 @@ export default function CertDashboardPage() {
                   <AlertTriangle className="h-5 w-5 text-slate-300" />
                 </div>
                 <p className="text-sm font-medium text-slate-400">
-                  {loading ? "Carregando..." : "Nenhum problema encontrado"}
+                  {loading ? 'Carregando...' : 'Nenhum problema encontrado'}
                 </p>
-                <p className="text-xs text-slate-300 mt-1">Todos os produtos estão em conformidade</p>
+                <p className="text-xs text-slate-300 mt-1">
+                  Todos os produtos estão em conformidade
+                </p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -447,28 +482,34 @@ export default function CertDashboardPage() {
                     className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-all duration-200 group"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg",
-                        p.status === "MISSING"
-                          ? "bg-red-50 text-red-500"
-                          : p.status === "URL_NOT_FOUND"
-                            ? "bg-slate-100 text-slate-500"
-                            : "bg-amber-50 text-amber-500"
-                      )}>
-                        {p.status === "MISSING" ? (
-                          <XCircle className="w-3.5 h-3.5" />
-                        ) : (
-                          <AlertTriangle className="w-3.5 h-3.5" />
+                      <div
+                        className={cn(
+                          'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
+                          p.status === 'URL_NOT_FOUND'
+                            ? 'bg-slate-100 text-slate-500'
+                            : 'bg-amber-50 text-amber-500',
                         )}
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
                       </div>
                       <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
-                      <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 transition-colors">{p.name}</span>
+                      <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 transition-colors">
+                        {p.name}
+                      </span>
                     </div>
-                    <span className={cn(
-                      "text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg shrink-0",
-                      certStatusColor(p.status)
-                    )}>
-                      {p.status === 'MISSING' ? 'Ausente' : p.status === 'INCONSISTENT' ? 'Inconsistente' : p.status === 'URL_NOT_FOUND' ? 'Não Encontrado' : p.status === 'API_ERROR' ? 'Erro de API' : p.status}
+                    <span
+                      className={cn(
+                        'text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg shrink-0',
+                        certStatusColor(p.status),
+                      )}
+                    >
+                      {p.status === 'INCONSISTENT'
+                        ? 'Inconsistente'
+                        : p.status === 'URL_NOT_FOUND'
+                          ? 'Não Encontrado'
+                          : p.status === 'API_ERROR'
+                            ? 'Erro de API'
+                            : p.status}
                     </span>
                   </div>
                 ))}
@@ -534,7 +575,10 @@ export default function CertDashboardPage() {
               ) : (
                 <div className="space-y-1">
                   {reports.map((r, i) => (
-                    <div key={i} className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-all duration-200">
+                    <div
+                      key={i}
+                      className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-slate-50 transition-all duration-200"
+                    >
                       <div className="flex items-center gap-3">
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-100">
                           <FileBarChart className="w-3.5 h-3.5 text-slate-400" />
@@ -542,7 +586,7 @@ export default function CertDashboardPage() {
                         <span className="text-sm text-slate-700 font-medium">{r.filename}</span>
                       </div>
                       <span className="text-xs text-slate-400 font-medium tabular-nums">
-                        {r.date ? formatDateTime(r.date) : ""}
+                        {r.date ? formatDateTime(r.date) : ''}
                       </span>
                     </div>
                   ))}
@@ -553,5 +597,5 @@ export default function CertDashboardPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

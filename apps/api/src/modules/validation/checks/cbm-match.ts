@@ -21,29 +21,37 @@ export default function cbmMatch(input: CheckInput): CheckResult {
   const checkName = 'cbm-match';
 
   const invCbm = input.invoiceData?.totalCbm != null ? Number(input.invoiceData.totalCbm) : null;
-  const plCbm = input.packingListData?.totalCbm != null ? Number(input.packingListData.totalCbm) : null;
+  const plCbm =
+    input.packingListData?.totalCbm != null ? Number(input.packingListData.totalCbm) : null;
   const blRaw = input.blData?.totalCbm ?? input.blData?.totalVolume;
   const blCbm = blRaw != null ? Number(blRaw) : null;
 
   const sources: string[] = [];
   const values: number[] = [];
 
-  if (invCbm != null && !isNaN(invCbm)) { sources.push('INV'); values.push(invCbm); }
-  if (plCbm != null && !isNaN(plCbm)) { sources.push('PL'); values.push(plCbm); }
-  if (blCbm != null && !isNaN(blCbm)) { sources.push('BL'); values.push(blCbm); }
+  if (invCbm != null && !isNaN(invCbm)) {
+    sources.push('INV');
+    values.push(invCbm);
+  }
+  if (plCbm != null && !isNaN(plCbm)) {
+    sources.push('PL');
+    values.push(plCbm);
+  }
+  if (blCbm != null && !isNaN(blCbm)) {
+    sources.push('BL');
+    values.push(blCbm);
+  }
 
   if (values.length < 2) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: sources.join(' vs '),
-      message: 'Not enough documents to compare CBM.',
+      message: 'Documentos insuficientes para comparar CBM.',
     };
   }
 
-  const maxDiff = Math.max(
-    ...values.map((v) => Math.abs(v - values[0])),
-  );
+  const maxDiff = Math.max(...values.map((v) => Math.abs(v - values[0])));
 
   if (maxDiff <= TOLERANCE) {
     return {
@@ -52,7 +60,7 @@ export default function cbmMatch(input: CheckInput): CheckResult {
       expectedValue: values[0].toFixed(3),
       actualValue: values.map((v, i) => `${sources[i]}=${v.toFixed(3)}`).join(', '),
       documentsCompared: sources.join(' vs '),
-      message: `CBM matches across documents within tolerance (max diff: ${maxDiff.toFixed(3)}).`,
+      message: `CBM confere entre os documentos dentro da tolerancia (diff max: ${maxDiff.toFixed(3)}).`,
     };
   }
 
@@ -63,6 +71,6 @@ export default function cbmMatch(input: CheckInput): CheckResult {
     expectedValue: values[0].toFixed(3),
     actualValue: details,
     documentsCompared: sources.join(' vs '),
-    message: `CBM mismatch: ${details} (max diff: ${maxDiff.toFixed(3)}, tolerance: ${TOLERANCE}).`,
+    message: `Divergencia no CBM: ${details} (diff max: ${maxDiff.toFixed(3)}, tolerancia: ${TOLERANCE}).`,
   };
 }

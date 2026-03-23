@@ -19,7 +19,8 @@ export default function cbmVsFup(input: CheckInput): CheckResult {
   const checkName = 'cbm-vs-fup';
 
   const blCbmRaw = input.blData?.cbm != null ? Number(input.blData.cbm) : null;
-  const processCbmRaw = input.processData?.totalCbm != null ? Number(input.processData.totalCbm) : null;
+  const processCbmRaw =
+    input.processData?.totalCbm != null ? Number(input.processData.totalCbm) : null;
   const blCbm = blCbmRaw != null && !isNaN(blCbmRaw) ? blCbmRaw : null;
   const processCbm = processCbmRaw != null && !isNaN(processCbmRaw) ? processCbmRaw : null;
 
@@ -28,7 +29,7 @@ export default function cbmVsFup(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'BL vs Sistema',
-      message: 'Skipped: CBM nao cadastrado no processo.',
+      message: 'Ignorado: CBM nao cadastrado no processo.',
     };
   }
 

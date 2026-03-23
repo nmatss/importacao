@@ -1,4 +1,4 @@
-import { CheckCircle, XCircle, AlertTriangle, FileSearch } from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, FileSearch, Play } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
@@ -44,36 +44,55 @@ interface FupComparisonPanelProps {
 }
 
 const statusIcon = {
-  passed: { Icon: CheckCircle, color: 'text-green-500', bg: 'bg-green-50', border: 'border-green-200' },
+  passed: {
+    Icon: CheckCircle,
+    color: 'text-green-500',
+    bg: 'bg-green-50',
+    border: 'border-green-200',
+  },
   failed: { Icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
-  warning: { Icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-50', border: 'border-amber-200' },
-  skipped: { Icon: AlertTriangle, color: 'text-slate-400', bg: 'bg-slate-50', border: 'border-slate-200' },
+  warning: {
+    Icon: AlertTriangle,
+    color: 'text-amber-500',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+  },
+  skipped: {
+    Icon: AlertTriangle,
+    color: 'text-slate-400',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200',
+  },
 };
 
-function CheckRow({ check }: { check: ValidationCheck }) {
+function CheckRow({ check, index }: { check: ValidationCheck; index: number }) {
   const config = statusIcon[check.status] || statusIcon.warning;
   const { Icon } = config;
 
   return (
-    <tr className={cn('border-b last:border-b-0', config.bg)}>
-      <td className="px-4 py-3 text-sm font-medium text-slate-900">
+    <tr
+      className={cn(
+        'border-b last:border-b-0 transition-colors hover:bg-blue-50/40',
+        index % 2 === 0 ? '' : 'bg-slate-50',
+        check.status === 'failed' && 'bg-red-50/40',
+      )}
+    >
+      <td className="px-5 py-3.5 text-sm font-medium text-slate-900">
         <div className="flex items-center gap-2">
           <Icon className={cn('h-4 w-4 shrink-0', config.color)} />
           {checkLabel(check.checkName)}
         </div>
       </td>
-      <td className="px-4 py-3 text-sm text-slate-600 font-mono">
-        {check.expectedValue ?? '-'}
-      </td>
-      <td className={cn(
-        'px-4 py-3 text-sm font-mono',
-        check.status === 'failed' ? 'text-red-700 font-semibold' : 'text-slate-600',
-      )}>
+      <td className="px-5 py-3.5 text-sm text-slate-600 font-mono">{check.expectedValue ?? '-'}</td>
+      <td
+        className={cn(
+          'px-5 py-3.5 text-sm font-mono',
+          check.status === 'failed' ? 'text-red-700 font-semibold' : 'text-slate-600',
+        )}
+      >
         {check.actualValue ?? '-'}
       </td>
-      <td className="px-4 py-3 text-xs text-slate-500">
-        {check.message}
-      </td>
+      <td className="px-5 py-3.5 text-xs text-slate-500">{check.message}</td>
     </tr>
   );
 }
@@ -88,12 +107,20 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
   if (!report) {
     return (
-      <div className="flex flex-col items-center justify-center py-10 text-center">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
-          <FileSearch className="h-6 w-6 text-slate-300" />
+      <div className="flex flex-col items-center justify-center py-14 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100 mb-4">
+          <FileSearch className="h-7 w-7 text-blue-400" />
         </div>
-        <p className="text-sm font-medium text-slate-400">Nenhum relatorio de validacao disponivel.</p>
-        <p className="text-xs text-slate-300 mt-1">Execute a validacao primeiro.</p>
+        <p className="text-sm font-semibold text-slate-600">
+          Nenhum relatorio de validacao disponivel
+        </p>
+        <p className="text-xs text-slate-400 mt-1 mb-4">
+          Rode a Validacao primeiro para ver o comparativo.
+        </p>
+        <div className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white cursor-default">
+          <Play className="h-4 w-4" />
+          Rode a Validacao primeiro
+        </div>
       </div>
     );
   }
@@ -120,29 +147,35 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
       {hasSystemChecks && (
         <div className="rounded-xl border border-blue-200 overflow-hidden">
           <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
-            <h4 className="text-sm font-semibold text-blue-900">
-              Documentos vs Sistema
-            </h4>
+            <h4 className="text-sm font-semibold text-blue-900">Documentos vs Sistema</h4>
             <p className="text-xs text-blue-600 mt-0.5">
               Comparacao entre dados extraidos dos documentos e valores cadastrados no sistema
             </p>
           </div>
           <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-blue-50/50">
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">Verificacao</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">Valor Sistema</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">Valor Documento</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">Mensagem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.systemChecks.map((check) => (
-                <CheckRow key={check.id} check={check} />
-              ))}
-            </tbody>
-          </table>
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-blue-50/50">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                    Verificacao
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                    Valor Sistema
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                    Valor Documento
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                    Mensagem
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.systemChecks.map((check, idx) => (
+                  <CheckRow key={check.id} check={check} index={idx} />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -151,29 +184,35 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
       {hasCrossChecks && (
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-            <h4 className="text-sm font-semibold text-slate-900">
-              Cruzamento entre Documentos
-            </h4>
+            <h4 className="text-sm font-semibold text-slate-900">Cruzamento entre Documentos</h4>
             <p className="text-xs text-slate-500 mt-0.5">
               Comparacao entre Invoice, Packing List e BL
             </p>
           </div>
           <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead>
-              <tr className="bg-slate-50/50">
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Verificacao</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Esperado</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Encontrado</th>
-                <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Mensagem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.crossDocumentChecks.map((check) => (
-                <CheckRow key={check.id} check={check} />
-              ))}
-            </tbody>
-          </table>
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-slate-50/50">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Verificacao
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Esperado
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Encontrado
+                  </th>
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Mensagem
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.crossDocumentChecks.map((check, idx) => (
+                  <CheckRow key={check.id} check={check} index={idx} />
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

@@ -18,8 +18,10 @@ interface CheckResult {
 export default function invoiceValueVsFup(input: CheckInput): CheckResult {
   const checkName = 'invoice-value-vs-fup';
 
-  const invoiceFobRaw = input.invoiceData?.totalFobValue != null ? Number(input.invoiceData.totalFobValue) : null;
-  const processFobRaw = input.processData?.totalFobValue != null ? Number(input.processData.totalFobValue) : null;
+  const invoiceFobRaw =
+    input.invoiceData?.totalFobValue != null ? Number(input.invoiceData.totalFobValue) : null;
+  const processFobRaw =
+    input.processData?.totalFobValue != null ? Number(input.processData.totalFobValue) : null;
   const invoiceFob = invoiceFobRaw != null && !isNaN(invoiceFobRaw) ? invoiceFobRaw : null;
   const processFob = processFobRaw != null && !isNaN(processFobRaw) ? processFobRaw : null;
 
@@ -28,7 +30,7 @@ export default function invoiceValueVsFup(input: CheckInput): CheckResult {
       checkName,
       status: 'warning',
       documentsCompared: 'Invoice vs Sistema',
-      message: 'Skipped: Valor FOB nao cadastrado no processo.',
+      message: 'Ignorado: Valor FOB nao cadastrado no processo.',
     };
   }
 

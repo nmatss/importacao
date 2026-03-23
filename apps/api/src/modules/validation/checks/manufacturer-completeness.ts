@@ -24,7 +24,7 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
       checkName,
       status: 'warning',
       documentsCompared: 'INV',
-      message: 'No invoice data available to check manufacturer information.',
+      message: 'Dados da invoice indisponiveis para verificar informacoes do fabricante.',
     };
   }
 
@@ -32,9 +32,8 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
   const hasAddress = !!invoice.manufacturerAddress;
   const items = invoice.items as Array<Record<string, any>> | undefined;
 
-  const itemManufacturers = items
-    ?.map(item => item.manufacturer ?? item.manufacturerName ?? '')
-    .filter(Boolean) ?? [];
+  const itemManufacturers =
+    items?.map((item) => item.manufacturer ?? item.manufacturerName ?? '').filter(Boolean) ?? [];
 
   const uniqueManufacturers = [...new Set(itemManufacturers)];
 
@@ -42,29 +41,29 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
     return {
       checkName,
       status: 'failed',
-      expectedValue: 'Manufacturer name and address',
-      actualValue: 'None found',
+      expectedValue: 'Nome e endereco do fabricante',
+      actualValue: 'Nenhum encontrado',
       documentsCompared: 'INV',
-      message: 'No manufacturer information found in invoice.',
+      message: 'Nenhuma informacao do fabricante encontrada na invoice.',
     };
   }
 
   const issues: string[] = [];
-  if (!hasName) issues.push('manufacturer name missing');
-  if (!hasAddress) issues.push('manufacturer address missing');
+  if (!hasName) issues.push('nome do fabricante ausente');
+  if (!hasAddress) issues.push('endereco do fabricante ausente');
 
   if (items && items.length > 0 && itemManufacturers.length < items.length) {
-    issues.push(`${items.length - itemManufacturers.length} item(s) without manufacturer`);
+    issues.push(`${items.length - itemManufacturers.length} item(ns) sem fabricante`);
   }
 
   if (issues.length > 0) {
     return {
       checkName,
       status: 'warning',
-      expectedValue: 'Complete manufacturer info',
+      expectedValue: 'Informacoes completas do fabricante',
       actualValue: issues.join(', '),
       documentsCompared: 'INV',
-      message: `Partial manufacturer information: ${issues.join('; ')}.`,
+      message: `Informacoes parciais do fabricante: ${issues.join('; ')}.`,
     };
   }
 
@@ -72,6 +71,6 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
     checkName,
     status: 'passed',
     documentsCompared: 'INV',
-    message: `Manufacturer information complete${uniqueManufacturers.length > 1 ? ` (${uniqueManufacturers.length} manufacturers found)` : ''}.`,
+    message: `Informacoes do fabricante completas${uniqueManufacturers.length > 1 ? ` (${uniqueManufacturers.length} fabricantes encontrados)` : ''}.`,
   };
 }

@@ -77,6 +77,38 @@ export const validationController = {
     }
   },
 
+  async getCorrections(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const correction = await validationService.getCorrections(processId);
+      sendSuccess(res, correction);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateCorrection(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const { correctionReceivedAt, notes } = req.body;
+      const updated = await validationService.updateCorrection(processId, {
+        correctionReceivedAt: correctionReceivedAt ? new Date(correctionReceivedAt) : undefined,
+        notes,
+      });
+      sendSuccess(res, updated);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async generateCorrectionDraft(req: Request, res: Response) {
     try {
       const processId = Number(req.params.processId);

@@ -14,6 +14,9 @@ import {
   Sparkles,
   Hash,
   FileText,
+  Search,
+  Stamp,
+  Navigation,
 } from 'lucide-react';
 import { formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import type { ImportProcess, AiExtractedData } from '@/shared/types';
@@ -47,7 +50,11 @@ function InfoField({
 }
 
 function AiDataSection({ data }: { data: AiExtractedData }) {
-  const fields: Array<{ key: string; label: string; icon: React.ComponentType<{ className?: string }> }> = [
+  const fields: Array<{
+    key: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
     { key: 'blNumber', label: 'Numero BL', icon: Hash },
     { key: 'invoiceNumber', label: 'Numero Invoice', icon: FileText },
     { key: 'vessel', label: 'Navio', icon: Ship },
@@ -59,18 +66,53 @@ function AiDataSection({ data }: { data: AiExtractedData }) {
     { key: 'company', label: 'Empresa', icon: Building },
   ];
 
-  const populated = fields.filter(f => data[f.key]);
+  const populated = fields.filter((f) => data[f.key]);
   if (populated.length === 0) return null;
 
   return (
     <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-4 w-4 text-blue-500" />
-        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">Dados Extraidos (IA / Planilha)</p>
+        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+          Dados Extraidos (IA / Planilha)
+        </p>
       </div>
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
         {populated.map((f) => (
           <InfoField key={f.key} icon={f.icon} label={f.label} value={String(data[f.key])} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LogisticaSection({ process }: { process: ImportProcess }) {
+  const fields: Array<{
+    key: keyof ImportProcess;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    { key: 'vesselName', label: 'Navio', icon: Ship },
+    { key: 'blNumber', label: 'Numero BL', icon: FileText },
+    { key: 'shippingLine', label: 'Armador / Cia Maritima', icon: Anchor },
+    { key: 'freightAgent', label: 'Agente de Carga', icon: Truck },
+    { key: 'diNumber', label: 'Numero DI', icon: Stamp },
+    { key: 'customsChannel', label: 'Canal Aduaneiro', icon: Navigation },
+    { key: 'inspectionType', label: 'Tipo de Inspecao', icon: Search },
+  ];
+
+  const populated = fields.filter((f) => process[f.key] != null && process[f.key] !== '');
+  if (populated.length === 0) return null;
+
+  return (
+    <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/30 p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <Ship className="h-4 w-4 text-indigo-500" />
+        <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Logistica</p>
+      </div>
+      <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+        {populated.map((f) => (
+          <InfoField key={f.key} icon={f.icon} label={f.label} value={String(process[f.key])} />
         ))}
       </div>
     </div>
@@ -127,33 +169,39 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="CBM"
             value={process.totalCbm != null ? `${Number(process.totalCbm).toFixed(3)} m3` : null}
           />
-          <InfoField
-            icon={Box}
-            label="Container"
-            value={process.containerType}
-          />
+          <InfoField icon={Box} label="Container" value={process.containerType} />
           <InfoField
             icon={CalendarDays}
             label="Data Embarque"
             value={process.shipmentDate ? formatDate(process.shipmentDate) : null}
           />
           {process.exporterAddress && (
-            <InfoField icon={Building} label="Endereco Exportador" value={process.exporterAddress} />
+            <InfoField
+              icon={Building}
+              label="Endereco Exportador"
+              value={process.exporterAddress}
+            />
           )}
           {process.importerAddress && (
             <InfoField icon={User} label="Endereco Importador" value={process.importerAddress} />
           )}
         </div>
 
+        {/* Logistica */}
+        <LogisticaSection process={process} />
+
         {/* Payment Terms */}
         {process.paymentTerms && (
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
             <div className="flex items-center gap-2 mb-2">
               <Banknote className="h-4 w-4 text-slate-400" />
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Termos de Pagamento</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Termos de Pagamento
+              </p>
             </div>
             <p className="text-sm text-slate-700">
-              {(process.paymentTerms as Record<string, unknown>).description as string || JSON.stringify(process.paymentTerms)}
+              {((process.paymentTerms as Record<string, unknown>).description as string) ||
+                JSON.stringify(process.paymentTerms)}
             </p>
           </div>
         )}
@@ -163,9 +211,13 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
           <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
             <div className="flex items-center gap-2 mb-2">
               <StickyNote className="h-4 w-4 text-slate-400" />
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Observacoes</p>
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Observacoes
+              </p>
             </div>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{process.notes}</p>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+              {process.notes}
+            </p>
           </div>
         )}
 

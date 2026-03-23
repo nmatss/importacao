@@ -18,6 +18,10 @@ export interface CertProduct {
   cert_url?: string | null;
   cert_expiry?: string | null;
   last_checked?: string | null;
+  stock_cd?: number | null;
+  stock_ecommerce?: number | null;
+  stock_total?: number | null;
+  stock_detail?: Array<{ source: string; warehouse: string; quantity: number; available: number }>;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -36,7 +40,7 @@ export interface CertProductsResponse {
 export interface CertBrandStats {
   brand: string;
   ok: number;
-  missing: number;
+  missing?: number;
   inconsistent: number;
   not_found: number;
   expired: number;
@@ -47,7 +51,7 @@ export interface CertLastRun {
   date: string;
   total: number;
   ok: number;
-  missing: number;
+  missing?: number;
   inconsistent: number;
   not_found: number;
   [key: string]: unknown;
@@ -383,6 +387,13 @@ export async function fetchCertReportDetail(filename: string): Promise<CertRepor
   return certFetch<CertReportData>(`/api/reports/${encodeURIComponent(filename)}/data`);
 }
 
-export function getCertReportDownloadUrl(filename: string): string {
-  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}?format=xlsx`;
+export function getCertReportDownloadUrl(
+  filename: string,
+  format: 'xlsx' | 'json' = 'xlsx',
+): string {
+  // If file is already xlsx, serve directly; otherwise convert from json
+  if (filename.endsWith('.xlsx') && format === 'xlsx') {
+    return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}`;
+  }
+  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}?format=${format}`;
 }

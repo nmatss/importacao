@@ -4,7 +4,15 @@ import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCar
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import { fetchCertReportDetail, getCertReportDownloadUrl } from '@/shared/lib/cert-api-client';
 import type { CertReportResult, CertReportData } from '@/shared/lib/cert-api-client';
-import { Download, Search, Loader2, ArrowLeft, FileSpreadsheet, ExternalLink, Filter } from 'lucide-react';
+import {
+  Download,
+  Search,
+  Loader2,
+  ArrowLeft,
+  FileSpreadsheet,
+  ExternalLink,
+  Filter,
+} from 'lucide-react';
 
 export default function CertRelatorioDetailPage() {
   const { id } = useParams();
@@ -38,7 +46,9 @@ export default function CertRelatorioDetailPage() {
           <FileSpreadsheet className="w-8 h-8 text-slate-300" />
         </div>
         <p className="text-base font-semibold text-slate-900 mb-1">Relatório não encontrado</p>
-        <p className="text-sm text-slate-400 mb-4">O arquivo solicitado não existe ou foi removido</p>
+        <p className="text-sm text-slate-400 mb-4">
+          O arquivo solicitado não existe ou foi removido
+        </p>
         <Link
           to="/certificacoes/relatorios"
           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
@@ -65,7 +75,6 @@ export default function CertRelatorioDetailPage() {
 
   const STATUS_LABELS: Record<string, string> = {
     OK: 'Conforme',
-    MISSING: 'Ausente',
     INCONSISTENT: 'Inconsistente',
     URL_NOT_FOUND: 'Não Encontrado',
     API_ERROR: 'Erro de API',
@@ -105,9 +114,11 @@ export default function CertRelatorioDetailPage() {
         data={{
           total: summary.total || results.length,
           ok: summary.ok || results.filter((r) => r.status === 'OK').length,
-          missing: summary.missing || results.filter((r) => r.status === 'MISSING').length,
-          inconsistent: summary.inconsistent || results.filter((r) => r.status === 'INCONSISTENT').length,
-          not_found: summary.not_found || results.filter((r) => r.status === 'URL_NOT_FOUND').length,
+          inconsistent:
+            summary.inconsistent || results.filter((r) => r.status === 'INCONSISTENT').length,
+          not_found:
+            (summary.not_found || results.filter((r) => r.status === 'URL_NOT_FOUND').length) +
+            (summary.missing || results.filter((r) => r.status === 'MISSING').length),
         }}
       />
 
@@ -115,10 +126,16 @@ export default function CertRelatorioDetailPage() {
       <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Filtros</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            Filtros
+          </span>
           {hasActiveFilters && (
             <button
-              onClick={() => { setSearch(''); setStatusFilter(''); setBrandFilter(''); }}
+              onClick={() => {
+                setSearch('');
+                setStatusFilter('');
+                setBrandFilter('');
+              }}
               className="ml-auto text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
             >
               Limpar filtros
@@ -143,7 +160,9 @@ export default function CertRelatorioDetailPage() {
           >
             <option value="">Todos os status</option>
             {statuses.map((s) => (
-              <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>
+              <option key={s} value={s}>
+                {STATUS_LABELS[s] || s}
+              </option>
             ))}
           </select>
           <select
@@ -153,7 +172,9 @@ export default function CertRelatorioDetailPage() {
           >
             <option value="">Todas as marcas</option>
             {brands.map((b) => (
-              <option key={b} value={b}>{b}</option>
+              <option key={b} value={b}>
+                {b}
+              </option>
             ))}
           </select>
         </div>
@@ -165,33 +186,57 @@ export default function CertRelatorioDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200">
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">SKU</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Nome</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Marca</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">Pontuação</th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">URL</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  SKU
+                </th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  Nome
+                </th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  Marca
+                </th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  Pontuação
+                </th>
+                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                  URL
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-12 text-center">
-                    <p className="text-sm text-slate-400">Nenhum resultado encontrado com os filtros aplicados</p>
+                    <p className="text-sm text-slate-400">
+                      Nenhum resultado encontrado com os filtros aplicados
+                    </p>
                   </td>
                 </tr>
               ) : (
                 filtered.map((r, i) => (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3.5 font-mono text-sm font-medium text-slate-900">{r.sku}</td>
+                    <td className="px-5 py-3.5 font-mono text-sm font-medium text-slate-900">
+                      {r.sku}
+                    </td>
                     <td className="px-5 py-3.5 text-slate-700 max-w-[220px] truncate">{r.name}</td>
                     <td className="px-5 py-3.5 text-slate-600">{r.brand}</td>
-                    <td className="px-5 py-3.5"><CertStatusBadge status={r.status} /></td>
+                    <td className="px-5 py-3.5">
+                      <CertStatusBadge status={r.status} />
+                    </td>
                     <td className="px-5 py-3.5">
                       {r.score != null ? (
-                        <span className={`text-sm font-semibold ${
-                          r.score >= 0.8 ? 'text-emerald-600' : r.score >= 0.5 ? 'text-amber-600' : 'text-red-600'
-                        }`}>
+                        <span
+                          className={`text-sm font-semibold ${
+                            r.score >= 0.8
+                              ? 'text-emerald-600'
+                              : r.score >= 0.5
+                                ? 'text-amber-600'
+                                : 'text-red-600'
+                          }`}
+                        >
                           {(r.score * 100).toFixed(0)}%
                         </span>
                       ) : (
