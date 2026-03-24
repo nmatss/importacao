@@ -18,7 +18,10 @@ interface CheckResult {
 export default function cbmVsFup(input: CheckInput): CheckResult {
   const checkName = 'cbm-vs-fup';
 
-  const blCbmRaw = input.blData?.cbm != null ? Number(input.blData.cbm) : null;
+  const blCbmRaw =
+    (input.blData?.totalCbm ?? input.blData?.cbm) != null
+      ? Number(input.blData?.totalCbm ?? input.blData?.cbm)
+      : null;
   const processCbmRaw =
     input.processData?.totalCbm != null ? Number(input.processData.totalCbm) : null;
   const blCbm = blCbmRaw != null && !isNaN(blCbmRaw) ? blCbmRaw : null;

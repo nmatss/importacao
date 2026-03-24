@@ -40,8 +40,12 @@ function normalizeDate(value: string): string {
 export default function datesMatch(input: CheckInput): CheckResult {
   const checkName = 'dates-match';
 
-  const invEtdRaw = normalize(input.invoiceData?.etd ?? input.invoiceData?.shipmentDate);
-  const blShippedRaw = normalize(input.blData?.shippedOnBoardDate ?? input.blData?.etd);
+  const invEtdRaw = normalize(
+    input.invoiceData?.invoiceDate ?? input.invoiceData?.etd ?? input.invoiceData?.shipmentDate,
+  );
+  const blShippedRaw = normalize(
+    input.blData?.shipmentDate ?? input.blData?.shippedOnBoardDate ?? input.blData?.etd,
+  );
   const invEtd = normalizeDate(invEtdRaw);
   const blShippedOnBoard = normalizeDate(blShippedRaw);
 

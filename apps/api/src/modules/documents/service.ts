@@ -588,13 +588,13 @@ export const documentService = {
         label: 'Exportador / Shipper',
         inv: inv?.exporterName,
         pl: pl?.exporterName,
-        bl: bl?.shipperName ?? bl?.shipper,
+        bl: bl?.shipper ?? bl?.shipperName,
       },
       {
         label: 'Importador / Consignee',
         inv: inv?.importerName,
         pl: pl?.importerName,
-        bl: bl?.consigneeName ?? bl?.consignee,
+        bl: bl?.consignee ?? bl?.consigneeName,
       },
       {
         label: 'Invoice Number',

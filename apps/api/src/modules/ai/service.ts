@@ -1,6 +1,9 @@
 import { logger } from '../../shared/utils/logger.js';
 import { logAIRequest } from './governance.js';
 import { invoiceResponseSchema } from './schemas/invoice-response.js';
+import { packingListResponseSchema } from './schemas/packing-list-response.js';
+import { blResponseSchema } from './schemas/bl-response.js';
+import { draftBLResponseSchema } from './schemas/draft-bl-response.js';
 import { emailAnalysisResponseSchema } from './schemas/email-analysis-response.js';
 import { buildInvoicePrompt } from './prompts/invoice.js';
 import { buildPackingListPrompt } from './prompts/packing-list.js';
@@ -362,7 +365,7 @@ class AIService {
     }
     const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'packing_list_extraction');
-    const data = this.safeJsonParse(response, 'packing list extraction');
+    const data = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
@@ -387,7 +390,7 @@ class AIService {
     }
     const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'bl_extraction');
-    const data = this.safeJsonParse(response, 'bill of lading extraction');
+    const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
@@ -415,7 +418,7 @@ class AIService {
     }
     const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'draft_bl_extraction');
-    const data = this.safeJsonParse(response, 'draft bill of lading extraction');
+    const data = this.zodParse(response, 'draft bill of lading extraction', draftBLResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(

@@ -18,8 +18,7 @@ interface CheckResult {
 export default function ncmBlDescription(input: CheckInput): CheckResult {
   const checkName = 'ncm-bl-description';
   const items = input.invoiceData?.items as Array<Record<string, any>> | undefined;
-  const cargoDescription =
-    input.blData?.cargoDescription?.value ?? input.blData?.cargoDescription ?? '';
+  const cargoDescription = input.blData?.cargoDescription ?? '';
 
   if (!items || items.length === 0) {
     return {

@@ -29,7 +29,7 @@ export default function importerMatch(input: CheckInput): CheckResult {
   const checkName = 'importer-match';
   const invImporter = normalize(input.invoiceData?.importerName);
   const plImporter = normalize(input.packingListData?.importerName);
-  const blImporter = normalize(input.blData?.consigneeName);
+  const blImporter = normalize(input.blData?.consignee ?? input.blData?.consigneeName);
 
   const sources: string[] = [];
   const values: string[] = [];

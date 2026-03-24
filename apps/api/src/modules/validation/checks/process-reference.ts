@@ -23,11 +23,11 @@ function normalize(value: unknown): string {
 
 export default function processReference(input: CheckInput): CheckResult {
   const checkName = 'process-reference';
-  const invRef = normalize(input.invoiceData?.referenceNumber ?? input.invoiceData?.invoiceNumber);
+  const invRef = normalize(input.invoiceData?.invoiceNumber ?? input.invoiceData?.referenceNumber);
   const plRef = normalize(
-    input.packingListData?.referenceNumber ?? input.packingListData?.packingListNumber,
+    input.packingListData?.packingListNumber ?? input.packingListData?.referenceNumber,
   );
-  const blRef = normalize(input.blData?.referenceNumber ?? input.blData?.blNumber);
+  const blRef = normalize(input.blData?.blNumber ?? input.blData?.referenceNumber);
 
   const sources: string[] = [];
   const values: string[] = [];

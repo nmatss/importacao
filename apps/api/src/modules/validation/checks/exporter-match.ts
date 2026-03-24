@@ -29,7 +29,7 @@ export default function exporterMatch(input: CheckInput): CheckResult {
   const checkName = 'exporter-match';
   const invExporter = normalize(input.invoiceData?.exporterName);
   const plExporter = normalize(input.packingListData?.exporterName);
-  const blExporter = normalize(input.blData?.shipperName);
+  const blExporter = normalize(input.blData?.shipper ?? input.blData?.shipperName);
 
   const sources: string[] = [];
   const values: string[] = [];
