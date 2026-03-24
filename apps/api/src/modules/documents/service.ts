@@ -9,7 +9,7 @@ import {
   followUpTracking,
   emailIngestionLogs,
 } from '../../shared/database/schema.js';
-import { aiService } from '../ai/service.js';
+import { aiService, flattenAiData } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -217,24 +217,31 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
 
-    const text = await this.extractText(doc.storagePath, doc.mimeType || '');
+    const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
+
+    // Build extraction options with optional image data for multimodal processing
+    const extractionOpts = extracted.imageBase64
+      ? { imageBase64: extracted.imageBase64, imageMimeType: extracted.imageMimeType }
+      : undefined;
+
+    const text = extracted.text;
 
     let result;
     switch (type) {
       case 'invoice':
-        result = await aiService.extractInvoiceData(text);
+        result = await aiService.extractInvoiceData(text, extractionOpts);
         break;
       case 'packing_list':
-        result = await aiService.extractPackingListData(text);
+        result = await aiService.extractPackingListData(text, extractionOpts);
         break;
       case 'ohbl':
-        result = await aiService.extractBLData(text);
+        result = await aiService.extractBLData(text, extractionOpts);
         break;
       case 'draft_bl':
-        result = await aiService.extractDraftBLData(text);
+        result = await aiService.extractDraftBLData(text, extractionOpts);
         break;
       case 'certificate':
-        result = await aiService.extractCertificateData(text);
+        result = await aiService.extractCertificateData(text, extractionOpts);
         break;
       default:
         return;
@@ -251,14 +258,16 @@ export const documentService = {
       .where(eq(documents.id, documentId));
 
     // Merge AI extracted data with existing data (avoid overwriting other doc types)
+    // Store FLATTENED data (plain values) in importProcesses for validation/comparison
     const [currentProcess] = await db
       .select()
       .from(importProcesses)
       .where(eq(importProcesses.id, doc.processId))
       .limit(1);
 
+    const flatData = flattenAiData(result.data);
     const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
-    const mergedAiData = { ...existingAiData, [type]: result.data };
+    const mergedAiData = { ...existingAiData, [type]: flatData };
 
     await db
       .update(importProcesses)
@@ -374,12 +383,32 @@ export const documentService = {
     }
   },
 
-  async extractText(filePath: string, mimeType: string): Promise<string> {
+  async extractText(
+    filePath: string,
+    mimeType: string,
+  ): Promise<{ text: string; imageBase64?: string; imageMimeType?: string }> {
     const buffer = await fs.readFile(filePath);
+
+    // Images: return base64 for multimodal AI processing
+    if (mimeType?.startsWith('image/')) {
+      const base64 = buffer.toString('base64');
+      return { text: '', imageBase64: base64, imageMimeType: mimeType };
+    }
 
     if (mimeType === 'application/pdf') {
       const data = await pdfParse(buffer);
-      return data.text;
+      const text = data.text?.trim() || '';
+
+      // If PDF has very little text, it's likely a scanned image — extract as image
+      if (text.length < 50) {
+        logger.info(
+          { filePath, textLength: text.length },
+          'PDF has minimal text, treating as scanned document for multimodal processing',
+        );
+        const base64 = buffer.toString('base64');
+        return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
+      }
+      return { text };
     }
 
     if (
@@ -394,10 +423,10 @@ export const documentService = {
         const sheet = workbook.Sheets[sheetName];
         text += XLSX.utils.sheet_to_csv(sheet) + '\n';
       }
-      return text;
+      return { text };
     }
 
-    return buffer.toString('utf-8');
+    return { text: buffer.toString('utf-8') };
   },
 
   async getByProcess(processId: number) {

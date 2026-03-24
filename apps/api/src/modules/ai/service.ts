@@ -16,7 +16,12 @@ import type { ZodType } from 'zod';
 
 interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+}
+
+export interface ImageExtractionOpts {
+  imageBase64: string;
+  imageMimeType?: string;
 }
 
 export interface EmailAnalysisResult {
@@ -65,6 +70,30 @@ const PROMPT_VERSIONS: Record<string, string> = {
   draft_bl_extraction: 'v1.0',
 };
 
+/**
+ * Flatten AI response from { value, confidence } structure to plain values.
+ * Validation checks and comparison logic need plain values, not nested objects.
+ */
+export function flattenAiData(data: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (key === 'items' && Array.isArray(val)) {
+      result[key] = val.map((item: Record<string, any>) => {
+        const flatItem: Record<string, any> = {};
+        for (const [k, v] of Object.entries(item)) {
+          flatItem[k] = v && typeof v === 'object' && 'value' in v ? v.value : v;
+        }
+        return flatItem;
+      });
+    } else if (val && typeof val === 'object' && 'value' in val) {
+      result[key] = val.value;
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
+
 class AIService {
   private baseUrl: string;
   private apiKey: string;
@@ -72,6 +101,29 @@ class AIService {
   constructor() {
     this.baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
     this.apiKey = process.env.OPENROUTER_API_KEY || '';
+  }
+
+  /**
+   * Build a multimodal user message with image if available, falling back to text-only.
+   */
+  private buildUserMessage(
+    textContent: string,
+    imageOpts?: ImageExtractionOpts,
+  ): OpenRouterMessage {
+    if (imageOpts?.imageBase64) {
+      const mime = imageOpts.imageMimeType || 'image/png';
+      const parts: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+        {
+          type: 'image_url',
+          image_url: { url: `data:${mime};base64,${imageOpts.imageBase64}` },
+        },
+      ];
+      if (textContent) {
+        parts.unshift({ type: 'text', text: textContent });
+      }
+      return { role: 'user', content: parts };
+    }
+    return { role: 'user', content: textContent };
   }
 
   private async chat(
@@ -264,14 +316,29 @@ class AIService {
     return raw as T;
   }
 
-  async extractInvoiceData(text: string): Promise<ExtractionResult> {
-    const messages = buildInvoicePrompt(text);
+  async extractInvoiceData(
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildInvoicePrompt(text) as OpenRouterMessage[];
+    // Replace user message with multimodal version if image available
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'invoice_extraction');
     const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data as Record<string, any>);
 
     logger.info(
-      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
       'Invoice data extracted',
     );
 
@@ -282,56 +349,109 @@ class AIService {
     };
   }
 
-  async extractPackingListData(text: string): Promise<ExtractionResult> {
-    const messages = buildPackingListPrompt(text);
+  async extractPackingListData(
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildPackingListPrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'packing_list_extraction');
     const data = this.safeJsonParse(response, 'packing list extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
-      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
       'Packing list data extracted',
     );
 
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
-  async extractBLData(text: string): Promise<ExtractionResult> {
-    const messages = buildBLPrompt(text);
+  async extractBLData(text: string, imageOpts?: ImageExtractionOpts): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildBLPrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'bl_extraction');
     const data = this.safeJsonParse(response, 'bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
-      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
       'Bill of Lading data extracted',
     );
 
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
-  async extractDraftBLData(text: string): Promise<ExtractionResult> {
-    const messages = buildDraftBLPrompt(text);
+  async extractDraftBLData(
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildDraftBLPrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'draft_bl_extraction');
     const data = this.safeJsonParse(response, 'draft bill of lading extraction');
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
-      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
       'Draft BL data extracted',
     );
 
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
-  async extractCertificateData(text: string): Promise<ExtractionResult> {
-    const messages = buildCertificatePrompt(text);
+  async extractCertificateData(
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildCertificatePrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'certificate_extraction');
     const data = this.zodParse(response, 'certificate extraction', certificateResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(
-      { confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
       'Certificate data extracted',
     );
 
