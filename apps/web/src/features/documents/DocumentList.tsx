@@ -19,6 +19,7 @@ import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { AiExtractionSummary } from './AiExtractionSummary';
 
 interface Document {
   id: number;
@@ -386,32 +387,14 @@ export function DocumentList({ processId }: DocumentListProps) {
                       </div>
                     </div>
 
-                    {/* Expanded AI data */}
+                    {/* Expanded AI data — professional summary */}
                     {expanded && doc.aiParsedData && (
                       <div className="border-t border-slate-100 bg-slate-50/50 px-3 py-2.5">
-                        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                          Dados extraídos pela IA
-                        </p>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                          {Object.entries(doc.aiParsedData)
-                            .filter(([key]) => key !== 'items')
-                            .map(([key, val]) => (
-                              <div key={key} className="flex items-baseline gap-1">
-                                <span className="text-slate-400">{key}:</span>
-                                <span className="font-medium text-slate-700 truncate">
-                                  {typeof val === 'object'
-                                    ? JSON.stringify(val)
-                                    : String(val ?? '')}
-                                </span>
-                              </div>
-                            ))}
-                        </div>
-                        {/* Items count if present */}
-                        {Array.isArray(doc.aiParsedData.items) && (
-                          <p className="mt-1.5 text-[11px] text-slate-400">
-                            {String((doc.aiParsedData.items as unknown[]).length)} itens extraídos
-                          </p>
-                        )}
+                        <AiExtractionSummary
+                          documentType={doc.documentType}
+                          data={doc.aiParsedData as Record<string, unknown>}
+                          confidence={doc.aiConfidence ?? null}
+                        />
                       </div>
                     )}
                   </div>
