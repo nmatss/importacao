@@ -192,7 +192,7 @@ describe('documentService', () => {
     it('should handle PDF files', async () => {
       const result = await documentService.extractText('/tmp/test.pdf', 'application/pdf');
 
-      expect(result).toBe('Extracted PDF text');
+      expect(result.text).toBe('Extracted PDF text');
     });
 
     it('should handle Excel files', async () => {
@@ -201,7 +201,7 @@ describe('documentService', () => {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       );
 
-      expect(result).toContain('col1,col2');
+      expect(result.text).toContain('col1,col2');
     });
   });
 });
