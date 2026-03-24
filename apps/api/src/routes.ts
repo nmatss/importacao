@@ -15,6 +15,7 @@ import { emailIngestionRoutes } from './modules/email-ingestion/routes.js';
 import { auditRoutes } from './modules/audit/routes.js';
 import { liTrackingRoutes } from './modules/li-tracking/routes.js';
 import { adminRoutes } from './modules/admin/routes.js';
+import { preConsRoutes } from './modules/pre-cons/routes.js';
 
 const apiRouter = Router();
 
@@ -39,5 +40,6 @@ apiRouter.use('/email-ingestion', emailIngestionRoutes);
 apiRouter.use('/audit', auditRoutes);
 apiRouter.use('/li-tracking', liTrackingRoutes);
 apiRouter.use('/admin', adminRoutes);
+apiRouter.use('/pre-cons', preConsRoutes);
 
 export { apiRouter };

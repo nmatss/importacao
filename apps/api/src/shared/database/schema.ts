@@ -606,3 +606,60 @@ export const processEvents = pgTable(
 
 export type ProcessEvent = typeof processEvents.$inferSelect;
 export type NewProcessEvent = typeof processEvents.$inferInsert;
+
+// ── Pre-Cons Items (KIOM Pre-Conference) ─────────────────────────────
+
+export const preConsItems = pgTable(
+  'pre_cons_items',
+  {
+    id: serial('id').primaryKey(),
+    processCode: varchar('process_code', { length: 50 }),
+    orderDescription: varchar('order_description', { length: 255 }),
+    etd: date('etd'),
+    collection: varchar('collection', { length: 100 }),
+    portOfLoading: varchar('port_of_loading', { length: 100 }),
+    supplier: varchar('supplier', { length: 255 }),
+    productName: text('product_name'),
+    itemCode: varchar('item_code', { length: 50 }),
+    quantity: integer('quantity'),
+    agreedPrice: numeric('agreed_price', { precision: 12, scale: 4 }),
+    ncmCode: varchar('ncm_code', { length: 15 }),
+    requiresReorder: boolean('requires_reorder').default(false),
+    requiresImportLicense: boolean('requires_import_license').default(false),
+    amount: numeric('amount', { precision: 12, scale: 2 }),
+    ableFactor: numeric('able_factor', { precision: 12, scale: 2 }),
+    cbm: numeric('cbm', { precision: 10, scale: 4 }),
+    cargoReadyDate: date('cargo_ready_date'),
+    eta: date('eta'),
+    dcEta: date('dc_eta'),
+    piNumber: varchar('pi_number', { length: 50 }),
+    ean13: varchar('ean13', { length: 20 }),
+    color: varchar('color', { length: 100 }),
+    sheetName: varchar('sheet_name', { length: 100 }),
+    syncedAt: timestamp('synced_at').defaultNow(),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [
+    index('pre_cons_items_process_code_idx').on(table.processCode),
+    index('pre_cons_items_item_code_idx').on(table.itemCode),
+    index('pre_cons_items_pi_number_idx').on(table.piNumber),
+  ],
+);
+
+export const preConsSyncLog = pgTable('pre_cons_sync_log', {
+  id: serial('id').primaryKey(),
+  source: varchar('source', { length: 50 }).notNull(),
+  fileName: varchar('file_name', { length: 255 }),
+  sheetsProcessed: integer('sheets_processed'),
+  totalRows: integer('total_rows'),
+  created: integer('created'),
+  updated: integer('updated'),
+  errors: integer('errors'),
+  details: jsonb('details'),
+  syncedAt: timestamp('synced_at').defaultNow(),
+});
+
+export type PreConsItem = typeof preConsItems.$inferSelect;
+export type NewPreConsItem = typeof preConsItems.$inferInsert;
+export type PreConsSyncLog = typeof preConsSyncLog.$inferSelect;

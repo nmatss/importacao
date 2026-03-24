@@ -497,6 +497,73 @@ export const emailProcessor = {
           continue;
         }
 
+        // ── Step 6.8: Detect Pre-Cons spreadsheet ─────────────────────
+        const isPreCons =
+          /pre.?cons/i.test(email.subject) ||
+          email.attachments.some((att) => /pre.?cons/i.test(att.filename));
+
+        if (isPreCons) {
+          const preConsAttachment =
+            email.attachments.find(
+              (att) =>
+                (att.filename.endsWith('.xlsx') || att.filename.endsWith('.xls')) &&
+                /pre.?cons/i.test(att.filename),
+            ) ||
+            email.attachments.find(
+              (att) => att.filename.endsWith('.xlsx') || att.filename.endsWith('.xls'),
+            );
+
+          if (preConsAttachment) {
+            try {
+              const { preConsService } = await import('../pre-cons/service.js');
+              const result = await preConsService.syncFromXLSX(
+                preConsAttachment.content,
+                preConsAttachment.filename,
+                'email',
+              );
+
+              logger.info(
+                {
+                  messageId: email.messageId,
+                  fileName: preConsAttachment.filename,
+                  totalRows: result.totalRows,
+                  divergences: result.divergences?.length ?? 0,
+                },
+                'Pre-Cons auto-synced from email attachment',
+              );
+
+              await db
+                .update(emailIngestionLogs)
+                .set({
+                  status: 'completed',
+                  processCode: 'PRE_CONS_SYNC',
+                  processedAttachments: {
+                    attachments: [
+                      {
+                        filename: preConsAttachment.filename,
+                        type: 'pre_cons',
+                        status: 'processed',
+                      },
+                    ],
+                    syncResult: {
+                      totalRows: result.totalRows,
+                      created: result.created,
+                      divergences: result.divergences?.length ?? 0,
+                    },
+                  },
+                })
+                .where(eq(emailIngestionLogs.id, logEntry.id));
+
+              continue; // Skip normal attachment processing
+            } catch (preConsErr) {
+              logger.error(
+                { err: preConsErr, filename: preConsAttachment.filename },
+                'Pre-Cons sync from email failed, continuing with normal processing',
+              );
+            }
+          }
+        }
+
         // ── Step 7: Process attachments ──────────────────────────────
         const processedAttachments: Array<{
           filename: string;
