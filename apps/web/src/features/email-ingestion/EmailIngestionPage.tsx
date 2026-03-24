@@ -328,7 +328,7 @@ export function EmailIngestionPage() {
 
       {/* Date Filter */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <DateRangeFilter
             startDate={startDate}
             endDate={endDate}
@@ -388,25 +388,25 @@ export function EmailIngestionPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50/80 text-left">
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Data/Hora
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       De
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Assunto
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Processo
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Anexos
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Status
                     </th>
-                    <th className="px-5 py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
                       Acoes
                     </th>
                   </tr>
@@ -421,16 +421,16 @@ export function EmailIngestionPage() {
                     return (
                       <Fragment key={log.id}>
                         <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="whitespace-nowrap px-5 py-3.5 text-slate-600">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-600">
                             {formatDateTime(log.receivedAt)}
                           </td>
                           <td
-                            className="max-w-[180px] truncate px-5 py-3.5 text-slate-900 font-medium"
+                            className="max-w-[180px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-900 font-medium"
                             title={log.fromAddress}
                           >
                             {log.fromAddress}
                           </td>
-                          <td className="max-w-[250px] px-5 py-3.5">
+                          <td className="max-w-[250px] px-3 py-2.5 sm:px-6 sm:py-3.5">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate text-slate-900" title={log.subject}>
                                 {log.subject}
@@ -451,7 +451,7 @@ export function EmailIngestionPage() {
                               )}
                             </div>
                           </td>
-                          <td className="whitespace-nowrap px-5 py-3.5">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                             {log.processId ? (
                               <Link
                                 to={`/importacao/processos/${log.processId}`}
@@ -464,13 +464,13 @@ export function EmailIngestionPage() {
                               <span className="text-slate-400">{log.processCode ?? '-'}</span>
                             )}
                           </td>
-                          <td className="whitespace-nowrap px-5 py-3.5">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                             <div className="flex items-center gap-1.5 text-slate-600">
                               <Paperclip className="h-3.5 w-3.5 text-slate-400" />
                               {log.processedAttachments}/{log.attachmentsCount}
                             </div>
                           </td>
-                          <td className="whitespace-nowrap px-5 py-3.5">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                             <span
                               className={cn(
                                 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium',
@@ -482,7 +482,7 @@ export function EmailIngestionPage() {
                               {badge.label}
                             </span>
                           </td>
-                          <td className="whitespace-nowrap px-5 py-3.5">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                             {log.status === 'failed' && (
                               <button
                                 onClick={() => handleReprocess(log.id)}

@@ -319,10 +319,10 @@ export function CommunicationsPage() {
                   id="comm-body"
                   value={composer.body}
                   onChange={(e) => setComposer({ ...composer, body: e.target.value })}
-                  rows={8}
+                  rows={5}
                   placeholder="Escreva o conteudo do email..."
                   className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
-                  style={{ minHeight: '200px' }}
+                  style={{ minHeight: '120px' }}
                 />
               </div>
 

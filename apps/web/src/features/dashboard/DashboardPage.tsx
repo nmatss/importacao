@@ -333,7 +333,7 @@ export function DashboardPage() {
       {/* Charts Row 1: Status + Alerts */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Status Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-500/20">
               <BarChart3 className="h-4.5 w-4.5" />
@@ -342,7 +342,7 @@ export function DashboardPage() {
               Processos por Status
             </h3>
           </div>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={byStatus ?? []} margin={{ bottom: 60 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -378,7 +378,7 @@ export function DashboardPage() {
         </div>
 
         {/* Recent Alerts */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
               <Bell className="h-4.5 w-4.5" />
@@ -435,14 +435,14 @@ export function DashboardPage() {
       {/* Charts Row 2: Monthly Trend + FOB by Brand */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
         {/* Monthly Trend */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
               <TrendingUp className="h-4.5 w-4.5" />
             </div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">Tendencia Mensal</h3>
           </div>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             {byMonth && byMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={byMonth} margin={{ bottom: 20 }}>
@@ -512,14 +512,14 @@ export function DashboardPage() {
         </div>
 
         {/* FOB by Brand */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
               <DollarSign className="h-4.5 w-4.5" />
             </div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">FOB por Marca</h3>
           </div>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -671,19 +671,19 @@ export function DashboardPage() {
             <table className="min-w-full">
               <thead>
                 <tr className="bg-slate-50/80">
-                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Codigo
                   </th>
-                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Marca
                   </th>
-                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Status
                   </th>
-                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     ETD
                   </th>
-                  <th className="px-7 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Data Criacao
                   </th>
                 </tr>
@@ -698,7 +698,7 @@ export function DashboardPage() {
                     )}
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                   >
-                    <td className="px-7 py-3.5 text-sm">
+                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm">
                       <Link
                         to={`/importacao/processos/${proc.id}`}
                         className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
@@ -706,16 +706,16 @@ export function DashboardPage() {
                         {proc.processCode}
                       </Link>
                     </td>
-                    <td className="px-7 py-3.5 text-sm text-slate-700 font-medium capitalize">
+                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-700 font-medium capitalize">
                       {proc.brand}
                     </td>
-                    <td className="px-7 py-3.5 text-sm">
+                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
-                    <td className="px-7 py-3.5 text-sm text-slate-500">
+                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-500">
                       {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="px-7 py-3.5 text-sm text-slate-500">
+                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-500">
                       {formatDate(proc.createdAt)}
                     </td>
                   </tr>

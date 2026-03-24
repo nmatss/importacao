@@ -69,7 +69,7 @@ export function ProcessListPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Processos</h2>
           <p className="mt-1 text-sm text-slate-500">Gerencie seus processos de importacao</p>
@@ -86,7 +86,7 @@ export function ProcessListPage() {
       {/* Filter Bar */}
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="relative flex-1 min-w-[240px]">
+          <div className="relative flex-1 min-w-0 w-full sm:min-w-[240px]">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -99,7 +99,7 @@ export function ProcessListPage() {
               className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all"
             />
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-slate-400" />
               <select
@@ -190,22 +190,22 @@ export function ProcessListPage() {
             <table className="min-w-full">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200/80">
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Codigo
                   </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Marca
                   </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden md:table-cell px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     FOB Total
                   </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     ETD
                   </th>
-                  <th className="px-6 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Data Criacao
                   </th>
                 </tr>
@@ -217,7 +217,7 @@ export function ProcessListPage() {
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                     className="hover:bg-slate-50 cursor-pointer transition-colors group"
                   >
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4 text-sm">
                       <div className="flex items-center gap-2.5">
                         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600 group-hover:bg-blue-100 transition-colors">
                           <Package className="h-4 w-4" />
@@ -227,21 +227,23 @@ export function ProcessListPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-600 capitalize">{proc.brand}</td>
-                    <td className="px-6 py-4 text-sm">
+                    <td className="px-3 py-3 sm:px-6 sm:py-4 text-sm text-slate-600 capitalize">
+                      {proc.brand}
+                    </td>
+                    <td className="px-3 py-3 sm:px-6 sm:py-4 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-slate-700">
+                    <td className="hidden md:table-cell px-3 py-3 sm:px-6 sm:py-4 text-sm font-medium text-slate-700">
                       {proc.totalFobValue != null ? (
                         formatCurrency(proc.totalFobValue)
                       ) : (
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
+                    <td className="hidden lg:table-cell px-3 py-3 sm:px-6 sm:py-4 text-sm text-slate-500">
                       {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="px-6 py-4 text-sm text-slate-500">
+                    <td className="hidden lg:table-cell px-3 py-3 sm:px-6 sm:py-4 text-sm text-slate-500">
                       {formatDate(proc.createdAt)}
                     </td>
                   </tr>
@@ -252,7 +254,7 @@ export function ProcessListPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-200/80 px-6 py-4 bg-slate-50/40">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/80 px-6 py-4 bg-slate-50/40">
               <p className="text-sm text-slate-500">
                 Mostrando pagina <span className="font-medium text-slate-700">{page}</span> de{' '}
                 <span className="font-medium text-slate-700">{totalPages}</span>

@@ -199,7 +199,7 @@ export function FollowUpPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm">
             <LayoutGrid className="h-5 w-5 text-white" />
@@ -221,7 +221,7 @@ export function FollowUpPage() {
       </div>
 
       {/* Status Legend & Date Filter */}
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-sm">
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-sm flex-wrap">
         <DateRangeFilter
           startDate={startDate}
           endDate={endDate}

@@ -238,31 +238,31 @@ export function DesembaracoPage() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
                 <tr className="bg-slate-50/80">
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Processo
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     DI
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Data DI
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Canal
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Desembaraco
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Recinto
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Free Time
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Demurrage
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Chegada CD
                   </th>
                 </tr>
@@ -282,20 +282,20 @@ export function DesembaracoPage() {
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                       className="cursor-pointer transition-colors hover:bg-slate-50"
                     >
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900">
                         {proc.processCode}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm font-mono text-slate-700">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
                         {getField(data, 'numeroDI') || <span className="text-slate-300">--</span>}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                         {getField(data, 'dataRegistroDI') ? (
                           formatDate(getField(data, 'dataRegistroDI')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {canal && canalStyle ? (
                           <span
                             className={cn(
@@ -310,24 +310,24 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                         {getField(data, 'desembaraco') ? (
                           formatDate(getField(data, 'desembaraco')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                         {getField(data, 'recinto') || <span className="text-slate-300">--</span>}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                         {getField(data, 'freeTime') ? (
                           `${getField(data, 'freeTime')} dias`
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {demurrage ? (
                           <span
                             className={cn(
@@ -348,7 +348,7 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                         {getField(data, 'chegadaCD') ? (
                           formatDate(getField(data, 'chegadaCD')!)
                         ) : (

@@ -87,7 +87,7 @@ export default function CertRelatorioDetailPage() {
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-center gap-4 min-w-0">
           <Link
             to="/certificacoes/relatorios"
@@ -186,22 +186,22 @@ export default function CertRelatorioDetailPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-200">
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   SKU
                 </th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   Nome
                 </th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   Marca
                 </th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   Pontuação
                 </th>
-                <th className="text-left px-5 py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
+                <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   URL
                 </th>
               </tr>
@@ -218,15 +218,17 @@ export default function CertRelatorioDetailPage() {
               ) : (
                 filtered.map((r, i) => (
                   <tr key={i} className="hover:bg-slate-50 transition-colors">
-                    <td className="px-5 py-3.5 font-mono text-sm font-medium text-slate-900">
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 font-mono text-sm font-medium text-slate-900">
                       {r.sku}
                     </td>
-                    <td className="px-5 py-3.5 text-slate-700 max-w-[220px] truncate">{r.name}</td>
-                    <td className="px-5 py-3.5 text-slate-600">{r.brand}</td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-700 max-w-[220px] truncate">
+                      {r.name}
+                    </td>
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-600">{r.brand}</td>
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5">
                       <CertStatusBadge status={r.status} />
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5">
                       {r.score != null ? (
                         <span
                           className={`text-sm font-semibold ${
@@ -243,7 +245,7 @@ export default function CertRelatorioDetailPage() {
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5">
                       {r.url && (
                         <a
                           href={r.url}
@@ -264,7 +266,7 @@ export default function CertRelatorioDetailPage() {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3.5 border-t border-slate-100 bg-slate-50/50 flex items-center justify-between">
           <span className="text-xs font-medium text-slate-500">
             {filtered.length} de {results.length} resultados
           </span>

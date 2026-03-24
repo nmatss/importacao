@@ -292,28 +292,28 @@ export function LiTrackingPage() {
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
                 <tr className="bg-slate-50/80">
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Processo
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Orgao
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     NCM
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Solicitacao
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Deferimento
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     Validade
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                     LPCO
                   </th>
                 </tr>
@@ -330,24 +330,26 @@ export function LiTrackingPage() {
                       li.processId != null && 'cursor-pointer',
                     )}
                   >
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm font-semibold text-slate-900">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900">
                       {li.processCode}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                       {li.orgao || <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm font-mono text-slate-700">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
                       {li.ncm || <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5">{getStatusBadge(li.status)}</td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
+                      {getStatusBadge(li.status)}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                       {li.requestedByCompanyAt ? (
                         formatDate(li.requestedByCompanyAt)
                       ) : (
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                       {li.deferredAt ? (
                         formatDate(li.deferredAt)
                       ) : li.expectedDeferralAt ? (
@@ -358,14 +360,14 @@ export function LiTrackingPage() {
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                       {li.validUntil ? (
                         formatDate(li.validUntil)
                       ) : (
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-5 py-3.5 text-sm font-mono text-slate-700">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
                       {li.lpcoNumber || <span className="text-slate-300">--</span>}
                     </td>
                   </tr>
@@ -376,7 +378,7 @@ export function LiTrackingPage() {
 
           {/* Pagination */}
           {pagination && pagination.pages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3.5">
+            <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2.5 sm:px-6 sm:py-3.5">
               <p className="text-sm text-slate-500">
                 Pagina {pagination.page} de {pagination.pages} ({pagination.total} registros)
               </p>

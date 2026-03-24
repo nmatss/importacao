@@ -285,7 +285,7 @@ export function ProcessDetailPage() {
 
       {/* Tabs */}
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 bg-slate-50/40 px-5 pt-4">
+        <div className="border-b border-slate-100 bg-slate-50/40 px-3 pt-3 sm:px-5 sm:pt-4">
           <div className="flex gap-1 overflow-x-auto">
             {visibleTabs.map((tab) => {
               const Icon = tab.icon;
@@ -296,15 +296,26 @@ export function ProcessDetailPage() {
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
                   className={cn(
-                    'relative flex items-center gap-2 whitespace-nowrap rounded-t-xl px-5 py-3 text-sm font-semibold transition-all',
+                    'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive
                       ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80 border-b-white -mb-px z-10'
                       : 'text-slate-400 hover:text-slate-600 hover:bg-white/50',
                   )}
                 >
                   <Icon className={cn('h-4 w-4', isActive ? 'text-blue-600' : '')} />
-                  <span className="relative">
+                  <span className="relative hidden sm:inline">
                     {tab.label}
+                    {process && (
+                      <TabIndicator
+                        tabKey={tab.key}
+                        process={process}
+                        validationChecks={validationChecks}
+                        emailCount={emailCount}
+                      />
+                    )}
+                  </span>
+                  {/* Mobile: show indicator on icon, not label */}
+                  <span className="relative sm:hidden">
                     {process && (
                       <TabIndicator
                         tabKey={tab.key}
@@ -324,7 +335,7 @@ export function ProcessDetailPage() {
         </div>
 
         {/* Tab content */}
-        <div className="p-7">
+        <div className="p-4 md:p-7">
           <TabContent activeTab={activeTab} processId={id} processCode={process.processCode} />
         </div>
       </div>

@@ -167,7 +167,7 @@ export function CurrencyExchangePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm">
             <DollarSign className="h-5 w-5 text-white" />
@@ -417,28 +417,28 @@ export function CurrencyExchangePage() {
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead>
                     <tr className="bg-slate-50/80">
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Tipo
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Valor USD
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Taxa
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Valor BRL
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Vencimento
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Expiracao
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Notas
                       </th>
-                      <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                         Acoes
                       </th>
                     </tr>
@@ -446,7 +446,7 @@ export function CurrencyExchangePage() {
                   <tbody className="divide-y divide-slate-100">
                     {exchanges.map((ex) => (
                       <tr key={ex.id} className="transition-colors hover:bg-slate-50">
-                        <td className="whitespace-nowrap px-5 py-3.5">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <span
                             className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${
                               ex.type === 'balance'
@@ -457,25 +457,25 @@ export function CurrencyExchangePage() {
                             {ex.type === 'balance' ? 'Balance' : 'Deposit'}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-slate-900">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900">
                           {formatCurrency(ex.amountUsd)}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 text-sm font-mono text-slate-700">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
                           {Number(ex.exchangeRate).toFixed(4)}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-slate-900">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900">
                           {formatCurrency(ex.amountBrl, 'BRL')}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                           {formatDate(ex.paymentDeadline)}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                           {formatDate(ex.expirationDate)}
                         </td>
-                        <td className="max-w-[200px] truncate px-5 py-3.5 text-sm text-slate-500">
+                        <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
                           {ex.notes || <span className="text-slate-300">--</span>}
                         </td>
-                        <td className="whitespace-nowrap px-5 py-3.5">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <button
                             onClick={() => setDeleteId(ex.id)}
                             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"

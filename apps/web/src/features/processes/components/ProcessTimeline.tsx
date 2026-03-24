@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   FileText,
   ClipboardCheck,
@@ -10,6 +11,8 @@ import {
   CheckCircle,
   XCircle,
   BarChart3,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 import type { FollowUpTracking } from '@/shared/types';
@@ -33,9 +36,10 @@ const STEPS = [
 function Stepper({ currentStatus }: { currentStatus: string }) {
   const isCancelled = currentStatus === 'cancelled';
   const currentIndex = STEPS.findIndex((s) => s.key === currentStatus);
+  const [mobileIndex, setMobileIndex] = useState(Math.max(0, currentIndex));
 
   return (
-    <div className="overflow-x-auto">
+    <div>
       {isCancelled && (
         <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-red-50 border border-red-200/60 px-4 py-3 text-sm font-semibold text-red-700">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100">
@@ -44,7 +48,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
           Processo Cancelado
         </div>
       )}
-      <div className="flex min-w-[700px] items-center px-2 py-1">
+
+      {/* Desktop: horizontal stepper */}
+      <div className="hidden md:flex items-center px-2 py-1">
         {STEPS.map((step, i) => {
           const isCompleted = !isCancelled && i < currentIndex;
           const isCurrent = !isCancelled && i === currentIndex;
@@ -104,6 +110,91 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
           );
         })}
       </div>
+
+      {/* Mobile: carousel with arrows + dots */}
+      <div className="md:hidden flex items-center justify-between px-2 py-2">
+        <button
+          onClick={() => setMobileIndex((prev) => Math.max(0, prev - 1))}
+          disabled={mobileIndex === 0}
+          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+        >
+          <ChevronLeft className="h-5 w-5 text-slate-500" />
+        </button>
+
+        <div className="flex flex-col items-center gap-1.5 flex-1">
+          {/* Progress dots */}
+          <div className="flex gap-1.5">
+            {STEPS.map((_, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  'h-1.5 w-1.5 rounded-full transition-colors',
+                  isCancelled
+                    ? 'bg-slate-200'
+                    : idx < currentIndex
+                      ? 'bg-emerald-400'
+                      : idx === currentIndex
+                        ? 'bg-blue-500'
+                        : 'bg-slate-200',
+                  idx === mobileIndex && 'ring-2 ring-offset-1 ring-blue-300',
+                )}
+              />
+            ))}
+          </div>
+
+          {(() => {
+            const step = STEPS[mobileIndex];
+            const StepIcon = step.icon;
+            const isCompleted = !isCancelled && mobileIndex < currentIndex;
+            const isCurrent = !isCancelled && mobileIndex === currentIndex;
+
+            return (
+              <>
+                <div
+                  className={cn(
+                    'flex h-10 w-10 items-center justify-center rounded-xl transition-all',
+                    isCancelled
+                      ? 'bg-slate-100 text-slate-400'
+                      : isCompleted
+                        ? 'bg-emerald-100 text-emerald-600'
+                        : isCurrent
+                          ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                          : 'bg-slate-100 text-slate-400',
+                  )}
+                >
+                  {isCompleted ? (
+                    <CheckCircle className="h-5 w-5" />
+                  ) : (
+                    <StepIcon className="h-5 w-5" />
+                  )}
+                </div>
+                <span
+                  className={cn(
+                    'text-xs font-semibold',
+                    isCancelled
+                      ? 'text-slate-400'
+                      : isCompleted
+                        ? 'text-emerald-700'
+                        : isCurrent
+                          ? 'text-blue-700'
+                          : 'text-slate-400',
+                  )}
+                >
+                  {step.label}
+                </span>
+              </>
+            );
+          })()}
+        </div>
+
+        <button
+          onClick={() => setMobileIndex((prev) => Math.min(STEPS.length - 1, prev + 1))}
+          disabled={mobileIndex === STEPS.length - 1}
+          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+        >
+          <ChevronRight className="h-5 w-5 text-slate-500" />
+        </button>
+      </div>
     </div>
   );
 }
@@ -130,7 +221,7 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
 
 export function ProcessTimeline({ currentStatus, followUp }: ProcessTimelineProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-6 shadow-sm">
       <Stepper currentStatus={currentStatus} />
       {followUp && <FollowUpProgress followUp={followUp} />}
     </div>

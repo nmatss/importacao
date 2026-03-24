@@ -328,28 +328,28 @@ export function AuditLogPage() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50/80">
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <Clock className="h-3 w-3" />
                       Data/Hora
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <User className="h-3 w-3" />
                       Usuario
                     </div>
                   </th>
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Acao
                   </th>
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Entidade
                   </th>
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     ID
                   </th>
-                  <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Detalhes
                   </th>
                 </tr>
@@ -365,7 +365,7 @@ export function AuditLogPage() {
                         idx !== logs.length - 1 && 'border-b border-slate-100/80',
                       )}
                     >
-                      <td className="whitespace-nowrap px-6 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         <div className="text-sm font-medium text-slate-700">
                           {formatDateShort(log.createdAt)}
                         </div>
@@ -373,7 +373,7 @@ export function AuditLogPage() {
                           {formatDateTime(log.createdAt)}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {log.userName ? (
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">
@@ -392,7 +392,7 @@ export function AuditLogPage() {
                           <span className="text-sm text-slate-300 italic">Sistema</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         <span
                           className={cn(
                             'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold',
@@ -404,7 +404,7 @@ export function AuditLogPage() {
                           {actionLabels[log.action] ?? log.action}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {log.entityType ? (
                           <span className="inline-flex items-center rounded-lg bg-slate-100/80 px-2 py-0.5 text-xs font-medium text-slate-600">
                             {entityTypeLabels[log.entityType] ?? log.entityType}
@@ -413,7 +413,7 @@ export function AuditLogPage() {
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-3.5 text-sm">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm">
                         {log.entityId != null ? (
                           log.entityType === 'process' ? (
                             <Link
@@ -431,7 +431,7 @@ export function AuditLogPage() {
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="px-6 py-3.5 text-sm">
+                      <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm">
                         <DetailsExpander details={log.details} />
                       </td>
                     </tr>
