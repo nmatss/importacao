@@ -650,9 +650,14 @@ export const documentService = {
     const plDoc = docs.find((d) => d.type === 'packing_list');
     const blDoc = docs.find((d) => d.type === 'ohbl');
 
-    const inv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
-    const pl = (plDoc?.aiParsedData as Record<string, any>) ?? null;
-    const bl = (blDoc?.aiParsedData as Record<string, any>) ?? null;
+    // Flatten { value, confidence } structures to plain values for comparison
+    const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
+    const rawPl = (plDoc?.aiParsedData as Record<string, any>) ?? null;
+    const rawBl = (blDoc?.aiParsedData as Record<string, any>) ?? null;
+
+    const inv = rawInv ? flattenAiData(rawInv) : null;
+    const pl = rawPl ? flattenAiData(rawPl) : null;
+    const bl = rawBl ? flattenAiData(rawBl) : null;
 
     // Build aggregate field comparison
     const aggregateFields = [

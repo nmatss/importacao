@@ -309,9 +309,10 @@ export const communicationService = {
     const docs = await db.select().from(documents).where(eq(documents.processId, processId));
 
     const invoiceDoc = docs.find((d) => d.type === 'invoice');
-    const invoiceData = invoiceDoc?.aiParsedData as Record<string, any> | null;
+    const rawInvoiceData = invoiceDoc?.aiParsedData as Record<string, any> | null;
+    // Extract plain value from { value, confidence } structure
     const invoiceNumber =
-      invoiceData?.invoiceNumber?.value || invoiceData?.invoice_number?.value || undefined;
+      rawInvoiceData?.invoiceNumber?.value ?? rawInvoiceData?.invoiceNumber ?? undefined;
 
     let subject: string;
     let body: string;

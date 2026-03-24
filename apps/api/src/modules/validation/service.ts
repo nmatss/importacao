@@ -9,7 +9,7 @@ import {
 } from '../../shared/database/schema.js';
 import { allChecks } from './checks/index.js';
 import type { CheckInput, CheckResult } from './checks/index.js';
-import { aiService } from '../ai/service.js';
+import { aiService, flattenAiData } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -55,10 +55,15 @@ export const validationService = {
       .where(eq(followUpTracking.processId, processId));
 
     // 3. Build CheckInput from document data + process data from DB
+    // Flatten { value, confidence } structures to plain values for validation checks
+    const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? undefined;
+    const rawPl = (packingListDoc?.aiParsedData as Record<string, any>) ?? undefined;
+    const rawBl = (blDoc?.aiParsedData as Record<string, any>) ?? undefined;
+
     const checkInput: CheckInput = {
-      invoiceData: (invoiceDoc?.aiParsedData as Record<string, any>) ?? undefined,
-      packingListData: (packingListDoc?.aiParsedData as Record<string, any>) ?? undefined,
-      blData: (blDoc?.aiParsedData as Record<string, any>) ?? undefined,
+      invoiceData: rawInv ? flattenAiData(rawInv) : undefined,
+      packingListData: rawPl ? flattenAiData(rawPl) : undefined,
+      blData: rawBl ? flattenAiData(rawBl) : undefined,
       processData: { ...process },
       followUpData: followUp ? { ...followUp } : undefined,
     };
@@ -355,9 +360,14 @@ export const validationService = {
     const packingListDoc = docs.find((d) => d.type === 'packing_list');
     const blDoc = docs.find((d) => d.type === 'ohbl');
 
-    const invoiceData = (invoiceDoc?.aiParsedData as Record<string, any>) ?? {};
-    const packingListData = (packingListDoc?.aiParsedData as Record<string, any>) ?? {};
-    const blData = (blDoc?.aiParsedData as Record<string, any>) ?? {};
+    const rawInvAnomaly = (invoiceDoc?.aiParsedData as Record<string, any>) ?? {};
+    const rawPlAnomaly = (packingListDoc?.aiParsedData as Record<string, any>) ?? {};
+    const rawBlAnomaly = (blDoc?.aiParsedData as Record<string, any>) ?? {};
+
+    // Flatten for anomaly detection (AI compares plain values)
+    const invoiceData = Object.keys(rawInvAnomaly).length > 0 ? flattenAiData(rawInvAnomaly) : {};
+    const packingListData = Object.keys(rawPlAnomaly).length > 0 ? flattenAiData(rawPlAnomaly) : {};
+    const blData = Object.keys(rawBlAnomaly).length > 0 ? flattenAiData(rawBlAnomaly) : {};
 
     logger.info({ processId }, 'Running AI anomaly detection');
 

@@ -13,6 +13,7 @@ import {
 import { generatePuketSheet } from './templates/puket.template.js';
 import { generateImaginariumSheet } from './templates/imaginarium.template.js';
 import { logger } from '../../shared/utils/logger.js';
+import { flattenAiData } from '../ai/service.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
@@ -139,7 +140,10 @@ export const espelhoService = {
     if (invoiceDocs.length === 0) return [];
 
     const doc = invoiceDocs[0];
-    const parsed = doc.aiParsedData as Record<string, unknown> | null;
+    const rawParsed = doc.aiParsedData as Record<string, unknown> | null;
+    if (!rawParsed) return [];
+    // Flatten { value, confidence } structures to plain values
+    const parsed = flattenAiData(rawParsed as Record<string, any>);
     if (!parsed?.items || !Array.isArray(parsed.items)) return [];
 
     const itemsToInsert = parsed.items.map((raw: any) => {
