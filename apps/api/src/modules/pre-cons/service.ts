@@ -75,7 +75,7 @@ function parsePreConsXLSX(buffer: Buffer): {
           supplier: String(row[7] || '').trim() || null,
           productName: productName || null,
           itemCode: itemCode || null,
-          quantity: Number(row[10]) || null,
+          quantity: row[10] != null && row[10] !== '' ? Math.round(Number(row[10])) : null,
           agreedPrice: Number(row[11]) || null,
           ncmCode: String(row[12] || '').trim() || null,
           requiresReorder: String(row[13]).toLowerCase() === 'true',
