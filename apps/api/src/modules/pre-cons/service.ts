@@ -6,6 +6,17 @@ import { preConsItems, preConsSyncLog, importProcesses } from '../../shared/data
 import { logger } from '../../shared/utils/logger.js';
 import { alertService } from '../alerts/service.js';
 
+function safeNum(val: any): number | null {
+  if (val == null || val === '') return null;
+  const n = Number(val);
+  return isNaN(n) ? null : n;
+}
+
+function safeInt(val: any): number | null {
+  const n = safeNum(val);
+  return n != null ? Math.round(n) : null;
+}
+
 // Excel serial date → JS Date
 function excelDateToISO(serial: number | string | null): string | null {
   if (serial == null || serial === '' || serial === 0) return null;
@@ -75,14 +86,14 @@ function parsePreConsXLSX(buffer: Buffer): {
           supplier: String(row[7] || '').trim() || null,
           productName: productName || null,
           itemCode: itemCode || null,
-          quantity: row[10] != null && row[10] !== '' ? Math.round(Number(row[10])) : null,
-          agreedPrice: Number(row[11]) || null,
+          quantity: safeInt(row[10]),
+          agreedPrice: safeNum(row[11]),
           ncmCode: String(row[12] || '').trim() || null,
           requiresReorder: String(row[13]).toLowerCase() === 'true',
           requiresImportLicense: String(row[14]).toLowerCase() === 'true',
-          amount: Number(row[16]) || null,
-          ableFactor: Number(row[17]) || null,
-          cbm: Number(row[18]) || null,
+          amount: safeNum(row[16]),
+          ableFactor: safeNum(row[17]),
+          cbm: safeNum(row[18]),
           cargoReadyDate: excelDateToISO(row[19]),
           eta: excelDateToISO(row[20]),
           dcEta: excelDateToISO(row[21]),
