@@ -1,7 +1,9 @@
 import { eq, desc } from 'drizzle-orm';
+import path from 'node:path';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
+import mammoth from 'mammoth';
 import { db } from '../../shared/database/connection.js';
 import {
   documents,
@@ -388,18 +390,20 @@ export const documentService = {
     mimeType: string,
   ): Promise<{ text: string; imageBase64?: string; imageMimeType?: string }> {
     const buffer = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
 
-    // Images: return base64 for multimodal AI processing
+    // ── Images: send as base64 for Gemini multimodal ──
     if (mimeType?.startsWith('image/')) {
       const base64 = buffer.toString('base64');
       return { text: '', imageBase64: base64, imageMimeType: mimeType };
     }
 
-    if (mimeType === 'application/pdf') {
+    // ── PDF ──
+    if (mimeType === 'application/pdf' || ext === '.pdf') {
       const data = await pdfParse(buffer);
       const text = data.text?.trim() || '';
 
-      // If PDF has very little text, it's likely a scanned image — extract as image
+      // If PDF has very little text, it's likely a scanned image
       if (text.length < 50) {
         logger.info(
           { filePath, textLength: text.length },
@@ -411,11 +415,12 @@ export const documentService = {
       return { text };
     }
 
+    // ── Excel (XLSX/XLS) ──
     if (
       mimeType?.includes('spreadsheet') ||
       mimeType?.includes('excel') ||
-      filePath.endsWith('.xlsx') ||
-      filePath.endsWith('.xls')
+      ext === '.xlsx' ||
+      ext === '.xls'
     ) {
       const workbook = XLSX.read(buffer, { type: 'buffer' });
       let text = '';
@@ -426,6 +431,73 @@ export const documentService = {
       return { text };
     }
 
+    // ── Word (DOCX) ──
+    if (
+      mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      ext === '.docx'
+    ) {
+      const result = await mammoth.extractRawText({ buffer });
+      return { text: result.value };
+    }
+
+    // ── Word (DOC) — treat as binary, send to multimodal ──
+    if (mimeType === 'application/msword' || ext === '.doc') {
+      // Old .doc format: try as text first, fallback to multimodal
+      const textAttempt = buffer.toString('utf-8');
+      const readable = textAttempt.replace(/[^\x20-\x7E\n\r\t]/g, '').trim();
+      if (readable.length > 100) {
+        return { text: readable };
+      }
+      const base64 = buffer.toString('base64');
+      return { text: '', imageBase64: base64, imageMimeType: 'application/msword' };
+    }
+
+    // ── CSV ──
+    if (mimeType === 'text/csv' || ext === '.csv') {
+      return { text: buffer.toString('utf-8') };
+    }
+
+    // ── HTML ──
+    if (mimeType === 'text/html' || ext === '.html' || ext === '.htm') {
+      const html = buffer.toString('utf-8');
+      // Strip HTML tags, keep text content
+      const text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return { text };
+    }
+
+    // ── EML (email files) ──
+    if (mimeType === 'message/rfc822' || ext === '.eml') {
+      // Extract readable text from email format
+      const raw = buffer.toString('utf-8');
+      // Find the body after headers (double newline)
+      const bodyStart = raw.indexOf('\n\n');
+      const body = bodyStart > 0 ? raw.substring(bodyStart + 2) : raw;
+      // Strip any remaining HTML
+      const text = body
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      return { text };
+    }
+
+    // ── TIFF / BMP — send as image for multimodal ──
+    if (ext === '.tif' || ext === '.tiff' || ext === '.bmp') {
+      const base64 = buffer.toString('base64');
+      const mime = ext === '.bmp' ? 'image/bmp' : 'image/tiff';
+      return { text: '', imageBase64: base64, imageMimeType: mime };
+    }
+
+    // ── Fallback: plain text ──
     return { text: buffer.toString('utf-8') };
   },
 

@@ -18,7 +18,8 @@ const FILE_TYPES = [
   { value: 'other', label: 'Outro', keywords: [] },
 ] as const;
 
-const ACCEPT = '.pdf,.xlsx,.xls,.jpg,.jpeg,.png';
+const ACCEPT =
+  '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.html,.htm,.eml';
 
 function detectDocType(filename: string): string {
   const lower = filename.toLowerCase();
@@ -204,7 +205,9 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             {state === 'idle' && (
               <>
                 <p className="text-sm font-medium text-slate-700">Arraste ou clique para enviar</p>
-                <p className="text-xs text-slate-400">PDF, Excel, Imagens — máx. 50MB</p>
+                <p className="text-xs text-slate-400">
+                  PDF, Excel, Word, Imagens, CSV, HTML, EML — máx. 50MB
+                </p>
               </>
             )}
 

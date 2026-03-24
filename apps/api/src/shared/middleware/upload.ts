@@ -9,19 +9,41 @@ const UPLOAD_DIR = 'uploads';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const ALLOWED_MIMES = new Set([
+  // PDF
   'application/pdf',
+  // Excel
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
   'application/vnd.ms-excel', // .xls
+  // Word
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  'application/msword', // .doc
+  // Images
   'image/jpeg',
   'image/png',
   'image/gif',
   'image/webp',
+  'image/tiff',
+  'image/bmp',
+  // Text / CSV / HTML
+  'text/plain',
+  'text/csv',
+  'text/html',
+  // Email
+  'message/rfc822', // .eml
+  'application/vnd.ms-outlook', // .msg
 ]);
 
 // MIME types that file-type cannot detect (XML-based or text-based formats)
 const SKIP_MAGIC_CHECK = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'text/plain',
+  'text/csv',
+  'text/html',
+  'message/rfc822',
+  'application/vnd.ms-outlook',
 ]);
 
 const storage = multer.diskStorage({
@@ -42,7 +64,38 @@ export const upload = multer({
     if (ALLOWED_MIMES.has(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Tipo de arquivo não permitido. Aceitos: PDF, Excel, imagens.'));
+      // Also allow by extension for common types that browsers may report differently
+      const ext = path.extname(file.originalname).toLowerCase();
+      const allowedExts = new Set([
+        '.pdf',
+        '.xlsx',
+        '.xls',
+        '.doc',
+        '.docx',
+        '.jpg',
+        '.jpeg',
+        '.png',
+        '.gif',
+        '.webp',
+        '.tif',
+        '.tiff',
+        '.bmp',
+        '.csv',
+        '.txt',
+        '.html',
+        '.htm',
+        '.eml',
+        '.msg',
+      ]);
+      if (allowedExts.has(ext)) {
+        cb(null, true);
+      } else {
+        cb(
+          new Error(
+            'Tipo de arquivo não permitido. Aceitos: PDF, Excel, Word, Imagens, CSV, TXT, HTML, EML.',
+          ),
+        );
+      }
     }
   },
 });
@@ -51,7 +104,11 @@ export const upload = multer({
  * Middleware that validates uploaded file magic bytes match the declared MIME type.
  * Must be used AFTER multer upload middleware.
  */
-export async function validateMagicBytes(req: Request, res: Response, next: NextFunction): Promise<void> {
+export async function validateMagicBytes(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
   const files: Express.Multer.File[] = [];
 
   if (req.file) {
