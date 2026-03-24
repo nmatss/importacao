@@ -41,8 +41,8 @@ import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
 
 /** Tabs that are always visible regardless of process status. */
 const CORE_TABS = [
-  { key: 'documentos', label: 'Documentos', icon: FileText },
   { key: 'draft_bl', label: 'Draft BL', icon: FileSearch },
+  { key: 'documentos', label: 'Documentos', icon: FileText },
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
   { key: 'validacao', label: 'Validacao', icon: ClipboardCheck },

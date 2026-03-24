@@ -12,6 +12,8 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine
 
+RUN apk add --no-cache su-exec
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -22,7 +24,8 @@ COPY --from=builder /app/drizzle ./drizzle
 
 RUN mkdir -p uploads && chown node:node uploads
 
-USER node
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 3001
-CMD ["sh", "-c", "node dist/shared/database/migrate.js && node dist/server.js"]
+ENTRYPOINT ["entrypoint.sh"]

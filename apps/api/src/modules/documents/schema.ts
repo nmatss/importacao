@@ -6,6 +6,7 @@ export const uploadDocumentSchema = z.object({
     'invoice',
     'packing_list',
     'ohbl',
+    'draft_bl',
     'espelho',
     'li',
     'certificate',
