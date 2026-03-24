@@ -49,6 +49,7 @@ Responda com JSON estrito:
   "totalCbm": { "value": 0.0, "confidence": 0.0 },
   "freightValue": { "value": 0.0, "confidence": 0.0 },
   "freightCurrency": { "value": "", "confidence": 0.0 },
+  "containerType": { "value": "", "confidence": 0.0 },
   "cargoDescription": { "value": "", "confidence": 0.0 }
 }
 
@@ -58,6 +59,7 @@ REGRAS:
 - ETD = Estimated Time of Departure, ETA = Estimated Time of Arrival
 - Pesos em KG, CBM em metros cubicos
 - Se frete = "PREPAID" ou "COLLECT", coloque freightValue: null e freightCurrency com o texto
+- containerType: tipo do container (ex: "40HQ", "40NOR", "20GP", "LCL") — extrair do campo de container ou descricao
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

@@ -15,6 +15,7 @@ const invoiceItemSchema = z.object({
   unitPrice: confidenceField(z.number()),
   totalPrice: confidenceField(z.number()),
   ncmCode: confidenceField(z.string()).optional(),
+  unitType: confidenceField(z.string()).optional(),
   manufacturer: confidenceField(z.string()).optional(),
 });
 

@@ -25,6 +25,7 @@ export const blResponseSchema = z.object({
   totalCbm: confidenceField(z.number()),
   freightValue: confidenceField(z.number()),
   freightCurrency: confidenceField(z.string()),
+  containerType: confidenceField(z.string()).optional(),
   cargoDescription: confidenceField(z.string()),
 });
 

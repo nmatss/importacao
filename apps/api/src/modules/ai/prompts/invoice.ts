@@ -11,14 +11,16 @@ export function buildInvoicePrompt(text: string): OpenRouterMessage[] {
 
 CONTEXTO DO NEGOCIO:
 - Fornecedor principal: KIOM INDUSTRY CO., LTD (China)
+- Importadores: Grupo Uni.co, IMB TEXTIL S.A., UniCo Participacoes Ltda
 - Moeda: USD (dolares americanos) — NUNCA BRL
-- Incoterm: FOB (Free On Board)
+- Incoterm: FOB (Free On Board) — pode aparecer tambem CIF ou CFR
 - Portos de embarque: Shanghai, Ningbo, Xiamen, Shenzhen, Qingdao (China)
 - Portos de destino: Navegantes, Itapoa, Itajai (Brasil)
-- Produtos: roupas, calcados, acessorios, brinquedos
-- Unidades: PAR (calcados), SET (conjuntos), PCS (pecas), KG
-- NCMs: codigos de 8 digitos brasileiros (ex: 6404.19.00)
+- Produtos: roupas, calcados, acessorios, brinquedos, artigos de decoracao
+- Unidades de medida: PAR (calcados), SET (conjuntos), PCS (pecas), KG, DZ (duzia)
+- NCMs: codigos de 8 digitos brasileiros (ex: 6404.19.00, 9503.00.99)
 - Pagamento tipico: 30% deposito, 70% saldo em 30-60 dias
+- Marcas nos produtos: Puket, Imaginarium, Ludi (linha infantil)
 
 REGRA CRITICA DE CLASSIFICACAO:
 - Se o documento contem "CNPJ", "NOTA FISCAL", "DANFE", "CTE", "FRETE", ou moeda "BRL/R$", este NAO e uma fatura comercial internacional. Retorne TODOS os campos com confidence: 0 e value: null.
@@ -48,6 +50,7 @@ Responda com JSON estrito neste formato:
       "unitPrice": { "value": 0.0, "confidence": 0.0 },
       "totalPrice": { "value": 0.0, "confidence": 0.0 },
       "ncmCode": { "value": "", "confidence": 0.0 },
+      "unitType": { "value": "", "confidence": 0.0 },
       "manufacturer": { "value": "", "confidence": 0.0 }
     }
   ],
@@ -68,6 +71,7 @@ REGRAS:
 - Moeda em ISO 4217 (USD, EUR, CNY)
 - Extraia TODOS os itens da tabela de produtos
 - manufacturerName = fabrica (nao exportador/trading company)
+- unitType = unidade de medida do item: "PCS", "PAR", "SET", "KG", "DZ", "UN"
 - paymentTerms: "30% deposit, 70% balance within 30 days" → depositPercent: 30, balancePercent: 70, paymentDays: 30
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },

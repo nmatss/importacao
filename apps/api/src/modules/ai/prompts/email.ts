@@ -9,42 +9,42 @@ export function buildEmailPrompt(
 ): OpenRouterMessage[] {
   const recipientInstructions =
     recipientType === 'fenicia'
-      ? `You are drafting an email to the customs broker "Fenícia Despachos Aduaneiros". The email should:
-- Be professional and formal in Brazilian Portuguese.
-- Reference the import process details (invoice number, exporter, vessel, container).
-- Mention that the relevant documents are attached (invoice, packing list, B/L, and any certificates).
-- Request that they proceed with the customs clearance process (desembaraço aduaneiro).
-- Include any relevant deadlines (ETA, vessel arrival).
-- Ask them to confirm receipt and provide a timeline for the clearance.`
-      : `You are drafting an email to "Isa" regarding certification requirements for the import process. The email should:
-- Be professional and formal in Brazilian Portuguese.
-- Reference the import process details (invoice number, exporter, products).
-- Inquire about or provide details on required certifications (e.g., INMETRO, ANVISA, or product-specific certifications).
-- Mention the product descriptions and NCM codes for reference.
-- Request confirmation of certification status or any pending requirements.`;
+      ? `Voce esta redigindo um email para o despachante aduaneiro "Fenicia Despachos Aduaneiros". O email deve:
+- Ser profissional e formal em portugues brasileiro.
+- Referenciar os detalhes do processo de importacao (numero da fatura, exportador, navio, container).
+- Mencionar que os documentos relevantes estao em anexo (invoice, packing list, BL e certificados se houver).
+- Solicitar que procedam com o desembaraco aduaneiro.
+- Incluir prazos relevantes (ETA, chegada do navio).
+- Pedir confirmacao de recebimento e prazo previsto para o desembaraco.`
+      : `Voce esta redigindo um email para "Isa" sobre requisitos de certificacao do processo de importacao. O email deve:
+- Ser profissional e formal em portugues brasileiro.
+- Referenciar os detalhes do processo (numero da fatura, exportador, produtos).
+- Consultar ou fornecer detalhes sobre certificacoes necessarias (INMETRO, ANVISA, ou certificacoes especificas).
+- Mencionar as descricoes dos produtos e codigos NCM como referencia.
+- Solicitar confirmacao do status da certificacao ou pendencias.`;
 
   return [
     {
       role: 'system',
-      content: `You are a professional email drafting assistant for a Brazilian import company. ${recipientInstructions}
+      content: `Voce e um assistente profissional de redacao de emails para o Grupo Uni.co, importador brasileiro das marcas Puket e Imaginarium. ${recipientInstructions}
 
-Respond with strict JSON in this format:
+Responda com JSON estrito:
 {
-  "subject": "Email subject line in Portuguese",
-  "body": "Full email body in Portuguese with proper greeting and signature placeholder"
+  "subject": "Assunto do email em portugues",
+  "body": "Corpo completo do email em portugues com saudacao e assinatura"
 }
 
-The email body should:
-- Start with a proper greeting (e.g., "Prezados," or "Prezada Isa,")
-- Be well-structured with clear paragraphs
-- End with "Atenciosamente," followed by a signature placeholder "[ASSINATURA]"
-- Use formal Brazilian Portuguese
+O corpo do email deve:
+- Comecar com saudacao adequada (ex: "Prezados," ou "Prezada Isa,")
+- Ser bem estruturado com paragrafos claros
+- Terminar com "Atenciosamente," seguido de "[ASSINATURA]"
+- Usar portugues brasileiro formal
 
-Respond ONLY with the JSON object, no additional text.`,
+Responda SOMENTE com o objeto JSON, sem texto adicional.`,
     },
     {
       role: 'user',
-      content: `Generate a professional email based on the following process data:\n\n${JSON.stringify(processData, null, 2)}`,
+      content: `Gere um email profissional baseado nos seguintes dados do processo:\n\n${JSON.stringify(processData, null, 2)}`,
     },
   ];
 }

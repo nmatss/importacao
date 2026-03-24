@@ -11,10 +11,12 @@ export function buildPackingListPrompt(text: string): OpenRouterMessage[] {
 
 CONTEXTO DO NEGOCIO:
 - Fornecedor principal: KIOM INDUSTRY CO., LTD (China)
+- Importadores: Grupo Uni.co, IMB TEXTIL S.A., UniCo Participacoes Ltda
 - Produtos: roupas, calcados, acessorios, brinquedos — embalados em caixas (cartons)
 - Pesos em quilogramas (KG), volumes em metros cubicos (CBM)
 - Cada item tem: codigo, descricao, cor, tamanho, quantidade, caixas, pesos
-- Packing Lists tipicamente acompanham a Commercial Invoice
+- Packing Lists tipicamente acompanham a Commercial Invoice e referenciam o numero da mesma
+- Marcas: Puket, Imaginarium, Ludi
 
 REGRA CRITICA:
 - Se o documento for uma nota fiscal domestica (DANFE, CNPJ, BRL), retorne TODOS os campos com confidence: 0 e value: null.
@@ -25,6 +27,7 @@ Extraia os campos abaixo com confidence 0.0-1.0.
 Responda com JSON estrito:
 {
   "packingListNumber": { "value": "", "confidence": 0.0 },
+  "invoiceNumber": { "value": "", "confidence": 0.0 },
   "date": { "value": "", "confidence": 0.0 },
   "exporterName": { "value": "", "confidence": 0.0 },
   "importerName": { "value": "", "confidence": 0.0 },

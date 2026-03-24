@@ -19,6 +19,7 @@ const packingListItemSchema = z.object({
 
 export const packingListResponseSchema = z.object({
   packingListNumber: confidenceField(z.string()),
+  invoiceNumber: confidenceField(z.string()).optional(),
   date: confidenceField(z.string()),
   exporterName: confidenceField(z.string()),
   importerName: confidenceField(z.string()),
