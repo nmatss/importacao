@@ -46,7 +46,7 @@ function formatCurrency(value: string | null): string {
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-export function PreConsTab({ processId, processCode }: { processId: string; processCode: string }) {
+export function PreConsTab({ processCode }: { processId: string; processCode: string }) {
   const {
     data: items,
     isLoading,

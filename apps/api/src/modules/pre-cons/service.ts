@@ -1,5 +1,4 @@
 import * as XLSX from 'xlsx';
-import fs from 'fs/promises';
 import { eq, and, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { preConsItems, preConsSyncLog, importProcesses } from '../../shared/database/schema.js';
@@ -337,7 +336,6 @@ export const preConsService = {
       // Compare totals
       const preConsTotalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
       const preConsTotalCbm = items.reduce((sum, item) => sum + (Number(item.cbm) || 0), 0);
-      const preConsTotalQty = items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
 
       // Check FOB value divergence
       if (process.totalFobValue && preConsTotalAmount > 0) {
