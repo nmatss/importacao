@@ -7,23 +7,68 @@ import { LoginPage } from '@/features/auth/LoginPage';
 import { PortalPage } from '@/features/portal/PortalPage';
 
 // Lazy-loaded Importacao pages
-const DashboardPage = lazy(() => import('@/features/dashboard/DashboardPage').then(m => ({ default: m.DashboardPage })));
-const ProcessListPage = lazy(() => import('@/features/processes/ProcessListPage').then(m => ({ default: m.ProcessListPage })));
-const ProcessDetailPage = lazy(() => import('@/features/processes/ProcessDetailPage').then(m => ({ default: m.ProcessDetailPage })));
-const ProcessCreatePage = lazy(() => import('@/features/processes/ProcessCreatePage').then(m => ({ default: m.ProcessCreatePage })));
-const ProcessEditPage = lazy(() => import('@/features/processes/ProcessEditPage').then(m => ({ default: m.ProcessEditPage })));
-const CurrencyExchangePage = lazy(() => import('@/features/currency-exchange/CurrencyExchangePage').then(m => ({ default: m.CurrencyExchangePage })));
-const FollowUpPage = lazy(() => import('@/features/follow-up/FollowUpPage').then(m => ({ default: m.FollowUpPage })));
-const CommunicationsPage = lazy(() => import('@/features/communications/CommunicationsPage').then(m => ({ default: m.CommunicationsPage })));
-const SettingsPage = lazy(() => import('@/features/settings/SettingsPage').then(m => ({ default: m.SettingsPage })));
-const AlertsPage = lazy(() => import('@/features/alerts/AlertsPage').then(m => ({ default: m.AlertsPage })));
-const EmailIngestionPage = lazy(() => import('@/features/email-ingestion/EmailIngestionPage').then(m => ({ default: m.EmailIngestionPage })));
-const AuditLogPage = lazy(() => import('@/features/audit/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
-const LiTrackingPage = lazy(() => import('@/features/li-tracking/LiTrackingPage').then(m => ({ default: m.LiTrackingPage })));
-const DesembaracoPage = lazy(() => import('@/features/desembaraco/DesembaracoPage').then(m => ({ default: m.DesembaracoPage })));
-const NumerarioPage = lazy(() => import('@/features/numerario/NumerarioPage').then(m => ({ default: m.NumerarioPage })));
-const MeuDiaPage = lazy(() => import('@/features/dashboard/MeuDiaPage').then(m => ({ default: m.MeuDiaPage })));
-const ExecutiveDashboardPage = lazy(() => import('@/features/dashboard/ExecutiveDashboardPage').then(m => ({ default: m.ExecutiveDashboardPage })));
+const DashboardPage = lazy(() =>
+  import('@/features/dashboard/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const ProcessListPage = lazy(() =>
+  import('@/features/processes/ProcessListPage').then((m) => ({ default: m.ProcessListPage })),
+);
+const ProcessDetailPage = lazy(() =>
+  import('@/features/processes/ProcessDetailPage').then((m) => ({ default: m.ProcessDetailPage })),
+);
+const ProcessCreatePage = lazy(() =>
+  import('@/features/processes/ProcessCreatePage').then((m) => ({ default: m.ProcessCreatePage })),
+);
+const ProcessEditPage = lazy(() =>
+  import('@/features/processes/ProcessEditPage').then((m) => ({ default: m.ProcessEditPage })),
+);
+const CurrencyExchangePage = lazy(() =>
+  import('@/features/currency-exchange/CurrencyExchangePage').then((m) => ({
+    default: m.CurrencyExchangePage,
+  })),
+);
+const FollowUpPage = lazy(() =>
+  import('@/features/follow-up/FollowUpPage').then((m) => ({ default: m.FollowUpPage })),
+);
+const CommunicationsPage = lazy(() =>
+  import('@/features/communications/CommunicationsPage').then((m) => ({
+    default: m.CommunicationsPage,
+  })),
+);
+const SettingsPage = lazy(() =>
+  import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
+);
+const AlertsPage = lazy(() =>
+  import('@/features/alerts/AlertsPage').then((m) => ({ default: m.AlertsPage })),
+);
+const EmailIngestionPage = lazy(() =>
+  import('@/features/email-ingestion/EmailIngestionPage').then((m) => ({
+    default: m.EmailIngestionPage,
+  })),
+);
+const AuditLogPage = lazy(() =>
+  import('@/features/audit/AuditLogPage').then((m) => ({ default: m.AuditLogPage })),
+);
+const LiTrackingPage = lazy(() =>
+  import('@/features/li-tracking/LiTrackingPage').then((m) => ({ default: m.LiTrackingPage })),
+);
+const DesembaracoPage = lazy(() =>
+  import('@/features/desembaraco/DesembaracoPage').then((m) => ({ default: m.DesembaracoPage })),
+);
+const NumerarioPage = lazy(() =>
+  import('@/features/numerario/NumerarioPage').then((m) => ({ default: m.NumerarioPage })),
+);
+const MeuDiaPage = lazy(() =>
+  import('@/features/dashboard/MeuDiaPage').then((m) => ({ default: m.MeuDiaPage })),
+);
+const ExecutiveDashboardPage = lazy(() =>
+  import('@/features/dashboard/ExecutiveDashboardPage').then((m) => ({
+    default: m.ExecutiveDashboardPage,
+  })),
+);
+const PreConsPage = lazy(() =>
+  import('@/features/pre-cons/PreConsPage').then((m) => ({ default: m.PreConsPage })),
+);
 
 // Lazy-loaded Certificacoes pages
 const CertDashboardPage = lazy(() => import('@/features/certificacoes/CertDashboardPage'));
@@ -31,13 +76,16 @@ const CertValidacaoPage = lazy(() => import('@/features/certificacoes/CertValida
 const CertProdutosPage = lazy(() => import('@/features/certificacoes/CertProdutosPage'));
 const CertProdutoDetailPage = lazy(() => import('@/features/certificacoes/CertProdutoDetailPage'));
 const CertRelatoriosPage = lazy(() => import('@/features/certificacoes/CertRelatoriosPage'));
-const CertRelatorioDetailPage = lazy(() => import('@/features/certificacoes/CertRelatorioDetailPage'));
+const CertRelatorioDetailPage = lazy(
+  () => import('@/features/certificacoes/CertRelatorioDetailPage'),
+);
 const CertAgendamentosPage = lazy(() => import('@/features/certificacoes/CertAgendamentosPage'));
 const CertConfiguracoesPage = lazy(() => import('@/features/certificacoes/CertConfiguracoesPage'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen">Carregando...</div>;
+  if (loading)
+    return <div className="flex items-center justify-center h-screen">Carregando...</div>;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -81,6 +129,7 @@ export function AppRoutes() {
                   <Route path="/processos/novo" element={<ProcessCreatePage />} />
                   <Route path="/processos/:id" element={<ProcessDetailPage />} />
                   <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
+                  <Route path="/pre-cons" element={<PreConsPage />} />
                   <Route path="/cambios" element={<CurrencyExchangePage />} />
                   <Route path="/lis" element={<LiTrackingPage />} />
                   <Route path="/desembaraco" element={<DesembaracoPage />} />

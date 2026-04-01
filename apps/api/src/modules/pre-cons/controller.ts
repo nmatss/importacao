@@ -2,6 +2,10 @@ import type { Request, Response } from 'express';
 import fs from 'fs/promises';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { preConsService } from './service.js';
+import { getPreConsItemsSchema } from './schema.js';
+
+const MAX_XLSX_SIZE = 20 * 1024 * 1024; // 20MB for XLSX specifically
+const ALLOWED_EXTENSIONS = /\.xlsx?$/i;
 
 export const preConsController = {
   /**
@@ -13,6 +17,16 @@ export const preConsController = {
         return sendError(res, 'Nenhum arquivo enviado', 400);
       }
 
+      if (!ALLOWED_EXTENSIONS.test(req.file.originalname)) {
+        await fs.unlink(req.file.path).catch(() => {});
+        return sendError(res, 'Apenas arquivos Excel (.xlsx, .xls) sao aceitos', 400);
+      }
+
+      if (req.file.size > MAX_XLSX_SIZE) {
+        await fs.unlink(req.file.path).catch(() => {});
+        return sendError(res, 'Arquivo excede o limite de 20MB', 413);
+      }
+
       const buffer = await fs.readFile(req.file.path);
       const result = await preConsService.syncFromXLSX(buffer, req.file.originalname, 'upload');
 
@@ -20,8 +34,9 @@ export const preConsController = {
       await fs.unlink(req.file.path).catch(() => {});
 
       sendSuccess(res, result, 200);
-    } catch (error: any) {
-      sendError(res, error.message || 'Erro ao sincronizar Pre-Cons', 500);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao sincronizar Pre-Cons';
+      sendError(res, message, 500);
     }
   },
 
@@ -30,11 +45,15 @@ export const preConsController = {
    */
   async getItems(req: Request, res: Response) {
     try {
-      const page = Number(req.query.page) || 1;
-      const limit = Number(req.query.limit) || 50;
-      const processCode = req.query.processCode as string | undefined;
+      const parsed = getPreConsItemsSchema.safeParse(req.query);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => e.message).join('; ');
+        return sendError(res, `Parametros invalidos: ${errors}`, 400);
+      }
 
-      const result = await preConsService.getAll(page, limit, processCode);
+      const { page, limit, processCode, sheetName } = parsed.data;
+      const result = await preConsService.getAll(page, limit, processCode, sheetName);
+
       res.json({
         success: true,
         data: result.data,
@@ -45,8 +64,9 @@ export const preConsController = {
           pages: Math.ceil(result.total / result.limit),
         },
       });
-    } catch (error: any) {
-      sendError(res, error.message, 400);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar itens';
+      sendError(res, message, 400);
     }
   },
 
@@ -57,8 +77,9 @@ export const preConsController = {
     try {
       const items = await preConsService.getByProcessCode(req.params.processCode);
       sendSuccess(res, items);
-    } catch (error: any) {
-      sendError(res, error.message, 400);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar itens do processo';
+      sendError(res, message, 400);
     }
   },
 
@@ -69,8 +90,22 @@ export const preConsController = {
     try {
       const divergences = await preConsService.findDivergences();
       sendSuccess(res, divergences);
-    } catch (error: any) {
-      sendError(res, error.message, 400);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar divergencias';
+      sendError(res, message, 400);
+    }
+  },
+
+  /**
+   * GET /api/pre-cons/sheets — Distinct sheet names for filter
+   */
+  async getSheets(req: Request, res: Response) {
+    try {
+      const sheets = await preConsService.getSheetNames();
+      sendSuccess(res, sheets);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar abas';
+      sendError(res, message, 400);
     }
   },
 
@@ -81,8 +116,9 @@ export const preConsController = {
     try {
       const logs = await preConsService.getSyncLogs();
       sendSuccess(res, logs);
-    } catch (error: any) {
-      sendError(res, error.message, 400);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar logs';
+      sendError(res, message, 400);
     }
   },
 };

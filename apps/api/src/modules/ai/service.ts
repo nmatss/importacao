@@ -230,6 +230,7 @@ class AIService {
         'HTTP-Referer': 'importacao-system',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(90_000),
     });
 
     if (!response.ok) {

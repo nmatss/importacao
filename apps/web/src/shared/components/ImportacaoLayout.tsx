@@ -19,6 +19,7 @@ import {
   Building2,
   Wallet,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
@@ -27,6 +28,7 @@ const navItems = [
   { to: '/importacao/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/importacao/executivo', label: 'Dashboard Executivo', icon: BarChart3 },
   { to: '/importacao/processos', label: 'Processos', icon: FileBox },
+  { to: '/importacao/pre-cons', label: 'Pre-Conferencia', icon: ClipboardList },
   { to: '/importacao/cambios', label: 'Cambios', icon: DollarSign },
   { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },
   { to: '/importacao/desembaraco', label: 'Desembaraco', icon: Building2 },
@@ -44,6 +46,7 @@ const pageTitles: Record<string, string> = {
   '/importacao/executivo': 'Dashboard Executivo',
   '/importacao/processos': 'Processos',
   '/importacao/processos/novo': 'Novo Processo',
+  '/importacao/pre-cons': 'Pre-Conferencia',
   '/importacao/cambios': 'Cambios',
   '/importacao/lis': 'LIs / LPCOs',
   '/importacao/desembaraco': 'Desembaraco Aduaneiro',

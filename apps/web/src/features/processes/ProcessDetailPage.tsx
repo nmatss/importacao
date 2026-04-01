@@ -14,12 +14,13 @@ import {
   Check,
   FileSearch,
   History,
+  ClipboardList,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { Breadcrumbs } from '@/shared/components/Breadcrumbs';
-import type { ImportProcess, EmailLog } from '@/shared/types';
+import type { ImportProcess, EmailLog, CurrencyExchange, CurrencyTotals } from '@/shared/types';
 
 import { ProcessHeader } from './components/ProcessHeader';
 import { ProcessTimeline } from './components/ProcessTimeline';
@@ -36,12 +37,14 @@ import { EmailsTab } from './components/EmailsTab';
 import { DocumentChecklistTab } from './components/DocumentChecklistTab';
 import { DraftBLTab } from './components/DraftBLTab';
 import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
+import { PreConsTab } from './components/PreConsTab';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
 /** Tabs that are always visible regardless of process status. */
 const CORE_TABS = [
   { key: 'draft_bl', label: 'Draft BL', icon: FileSearch },
+  { key: 'pre_cons', label: 'Pre-Cons', icon: ClipboardList },
   { key: 'documentos', label: 'Documentos', icon: FileText },
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
@@ -146,6 +149,8 @@ function TabContent({
       return <DocumentsTab processId={processId} />;
     case 'draft_bl':
       return <DraftBLTab processId={processId} />;
+    case 'pre_cons':
+      return <PreConsTab processId={processId} processCode={processCode} />;
     case 'comparativo':
       return <ComparisonTab processId={processId} />;
     case 'checklist':
@@ -195,6 +200,15 @@ export function ProcessDetailPage() {
     { enabled: !!id && !!process, staleTime: 60_000 },
   );
 
+  // Lightweight check for cambios data (cached — CambiosTab won't re-fetch)
+  const { data: cambiosData } = useApiQuery<{
+    exchanges: CurrencyExchange[];
+    totals: CurrencyTotals;
+  }>(['cambios', id!], `/api/currency-exchange/process/${id}/totals`, {
+    enabled: !!id && !!process && process.status !== 'draft',
+    staleTime: 60_000,
+  });
+
   const emailCount = useMemo(() => {
     if (!emailResponse?.data || !process) return 0;
     return emailResponse.data.filter(
@@ -202,15 +216,16 @@ export function ProcessDetailPage() {
     ).length;
   }, [emailResponse, process]);
 
-  /** Compute which tabs are visible based on process status. */
+  /** Compute which tabs are visible based on process status and available data. */
   const visibleTabs = useMemo(() => {
     if (!process) return [...CORE_TABS];
 
     const status = process.status;
     const tabs: Array<{ key: string; label: string; icon: typeof FileText }> = [...CORE_TABS];
 
-    // Cambios: show when status is anything other than 'draft'
-    if (status !== 'draft') {
+    // Cambios: show only when there is actual data
+    const hasCambios = (cambiosData?.exchanges ?? []).length > 0;
+    if (status !== 'draft' && hasCambios) {
       tabs.push(CONDITIONAL_TABS[0]);
     }
 
@@ -220,7 +235,7 @@ export function ProcessDetailPage() {
     }
 
     return tabs;
-  }, [process]);
+  }, [process, cambiosData]);
 
   // Reset active tab if it becomes hidden
   useEffect(() => {

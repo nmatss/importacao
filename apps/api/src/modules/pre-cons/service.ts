@@ -27,6 +27,76 @@ function excelDateToISO(serial: number | string | null): string | null {
   return date.toISOString().split('T')[0];
 }
 
+/** Known header names → internal field key */
+const HEADER_MAP: Record<string, string> = {
+  order: '_order', // first "Order" = description, second = processCode (handled specially)
+  etd: 'etd',
+  'collection from linked so/collection': 'collectionLinked',
+  collection: 'collection',
+  'port of loading': 'portOfLoading',
+  supplier: 'supplier',
+  'project name': 'productName',
+  'img item #': 'itemCode',
+  'final quantity': 'quantity',
+  'agreed price': 'agreedPrice',
+  ncm: '_ncm', // appears twice; first = full code, second = 4-digit
+  reorder: 'requiresReorder',
+  'import license': 'requiresImportLicense',
+  amount: 'amount',
+  'able factor': 'ableFactor',
+  cbm: 'cbm',
+  'cargo ready date': 'cargoReadyDate',
+  eta: 'eta',
+  'dc eta': 'dcEta',
+  'pi number': 'piNumber',
+  'so number': 'piNumber', // older sheets use SO Number
+  ean13: 'ean13',
+  color: 'color',
+};
+
+/**
+ * Build a column-index → field-key mapping from a header row.
+ * Handles duplicates: first "Order" → orderDescription, second → processCode;
+ * first "NCM" → ncmCode, second → ncm4.
+ */
+function buildColumnMap(headerRow: any[]): Map<number, string> {
+  const map = new Map<number, string>();
+  let orderCount = 0;
+  let ncmCount = 0;
+
+  for (let col = 0; col < headerRow.length; col++) {
+    const raw = String(headerRow[col] || '')
+      .trim()
+      .toLowerCase();
+    if (!raw) continue;
+
+    // Match by exact key or partial (handle "Able Factor " with trailing space)
+    const key = Object.keys(HEADER_MAP).find((k) => raw === k || raw.startsWith(k));
+    if (!key) continue;
+
+    const field = HEADER_MAP[key];
+
+    if (field === '_order') {
+      orderCount++;
+      map.set(col, orderCount === 1 ? 'orderDescription' : 'processCode');
+    } else if (field === '_ncm') {
+      ncmCount++;
+      map.set(col, ncmCount === 1 ? 'ncmCode' : '_ncm4');
+    } else {
+      // Only keep the first occurrence of each field
+      const alreadyMapped = [...map.values()].includes(field);
+      if (!alreadyMapped) {
+        map.set(col, field);
+      }
+    }
+  }
+
+  return map;
+}
+
+// Sheets to skip (not item-level data)
+const SKIP_SHEETS = new Set(['beg test', 'pkt - st']);
+
 // Parse the Pre_Cons XLSX and return normalized rows
 function parsePreConsXLSX(buffer: Buffer): {
   rows: Array<Record<string, any>>;
@@ -36,70 +106,81 @@ function parsePreConsXLSX(buffer: Buffer): {
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const allRows: Array<Record<string, any>> = [];
   const errors: string[] = [];
+  const processedSheets: string[] = [];
 
-  // Only process relevant sheets (Shipped + To Be Shipped)
-  const relevantSheets = wb.SheetNames.filter(
-    (name) => name.toLowerCase().includes('shipped') || name.toLowerCase().includes('to be'),
-  );
+  for (const sheetName of wb.SheetNames) {
+    if (SKIP_SHEETS.has(sheetName.toLowerCase())) continue;
 
-  for (const sheetName of relevantSheets) {
     const sheet = wb.Sheets[sheetName];
     if (!sheet) continue;
 
     const data = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1, defval: '' });
+    if (data.length < 3) continue; // need at least meta + header + 1 data row
 
-    // Find header row (row 1 typically has: Order, Order, ETD, Collection, ...)
+    // Find header row: the one containing "Order" AND "ETD"
     let headerRowIdx = -1;
+    let colMap = new Map<number, string>();
     for (let i = 0; i < Math.min(5, data.length); i++) {
-      const row = data[i] as string[];
-      if (row.some((cell) => String(cell).includes('Order') || String(cell).includes('ETD'))) {
+      const row = data[i] as any[];
+      const hasOrder = row.some((c) => String(c).trim() === 'Order');
+      const hasETD = row.some((c) => String(c).trim() === 'ETD');
+      if (hasOrder && hasETD) {
         headerRowIdx = i;
+        colMap = buildColumnMap(row);
         break;
       }
     }
 
-    if (headerRowIdx < 0) {
-      errors.push(`Sheet "${sheetName}": header row not found`);
+    if (headerRowIdx < 0 || colMap.size < 5) {
+      // Not a data sheet or unrecognizable format — skip silently
       continue;
     }
 
-    // Parse data rows (skip header)
+    processedSheets.push(sheetName);
+
+    // Parse data rows
     for (let i = headerRowIdx + 1; i < data.length; i++) {
       const row = data[i] as any[];
-      if (!row || row.length < 10) continue;
+      if (!row || row.length < 5) continue;
 
-      // Skip empty rows (no item code and no product name)
-      const itemCode = String(row[9] || '').trim();
-      const productName = String(row[8] || '').trim();
-      if (!itemCode && !productName) continue;
+      // Read fields via column map
+      const get = (field: string): any => {
+        for (const [col, f] of colMap) {
+          if (f === field) return row[col];
+        }
+        return undefined;
+      };
 
-      // Process code may be empty for "To Be Shipped" items (not yet assigned)
-      const processCode = String(row[2] || '').trim() || null;
+      const itemCode = String(get('itemCode') || '').trim();
+      const productName = String(get('productName') || '').trim();
+      if (!itemCode && !productName) continue; // skip empty rows
+
+      const processCode = String(get('processCode') || '').trim() || null;
 
       try {
         allRows.push({
           processCode,
-          orderDescription: String(row[1] || '').trim() || null,
-          etd: excelDateToISO(row[3]),
-          collection: String(row[4] || '').trim() || null,
-          portOfLoading: String(row[6] || '').trim() || null,
-          supplier: String(row[7] || '').trim() || null,
+          orderDescription: String(get('orderDescription') || '').trim() || null,
+          etd: excelDateToISO(get('etd')),
+          collection: String(get('collection') || get('collectionLinked') || '').trim() || null,
+          portOfLoading: String(get('portOfLoading') || '').trim() || null,
+          supplier: String(get('supplier') || '').trim() || null,
           productName: productName || null,
           itemCode: itemCode || null,
-          quantity: safeInt(row[10]),
-          agreedPrice: safeNum(row[11]),
-          ncmCode: String(row[12] || '').trim() || null,
-          requiresReorder: String(row[13]).toLowerCase() === 'true',
-          requiresImportLicense: String(row[14]).toLowerCase() === 'true',
-          amount: safeNum(row[16]),
-          ableFactor: safeNum(row[17]),
-          cbm: safeNum(row[18]),
-          cargoReadyDate: excelDateToISO(row[19]),
-          eta: excelDateToISO(row[20]),
-          dcEta: excelDateToISO(row[21]),
-          piNumber: String(row[22] || '').trim() || null,
-          ean13: String(row[23] || '').trim() || null,
-          color: String(row[24] || '').trim() || null,
+          quantity: safeInt(get('quantity')),
+          agreedPrice: safeNum(get('agreedPrice')),
+          ncmCode: String(get('ncmCode') || '').trim() || null,
+          requiresReorder: String(get('requiresReorder')).toLowerCase() === 'true',
+          requiresImportLicense: String(get('requiresImportLicense')).toLowerCase() === 'true',
+          amount: safeNum(get('amount')),
+          ableFactor: safeNum(get('ableFactor')),
+          cbm: safeNum(get('cbm')),
+          cargoReadyDate: excelDateToISO(get('cargoReadyDate')),
+          eta: excelDateToISO(get('eta')),
+          dcEta: excelDateToISO(get('dcEta')),
+          piNumber: String(get('piNumber') || '').trim() || null,
+          ean13: String(get('ean13') || '').trim() || null,
+          color: String(get('color') || '').trim() || null,
           sheetName,
         });
       } catch (err) {
@@ -108,7 +189,7 @@ function parsePreConsXLSX(buffer: Buffer): {
     }
   }
 
-  return { rows: allRows, sheets: relevantSheets, errors };
+  return { rows: allRows, sheets: processedSheets, errors };
 }
 
 export const preConsService = {
@@ -317,8 +398,11 @@ export const preConsService = {
   /**
    * Get all Pre-Cons items with pagination.
    */
-  async getAll(page = 1, limit = 50, processCode?: string) {
-    const conditions = processCode ? eq(preConsItems.processCode, processCode) : undefined;
+  async getAll(page = 1, limit = 50, processCode?: string, sheetName?: string) {
+    const where = [];
+    if (processCode) where.push(eq(preConsItems.processCode, processCode));
+    if (sheetName) where.push(eq(preConsItems.sheetName, sheetName));
+    const conditions = where.length > 0 ? and(...where) : undefined;
 
     const [data, [{ total }]] = await Promise.all([
       db
@@ -334,6 +418,14 @@ export const preConsService = {
     ]);
 
     return { data, total, page, limit };
+  },
+
+  /**
+   * Get distinct sheet names for filter dropdown.
+   */
+  async getSheetNames() {
+    const rows = await db.selectDistinct({ sheetName: preConsItems.sheetName }).from(preConsItems);
+    return rows.map((r) => r.sheetName).filter(Boolean) as string[];
   },
 
   /**

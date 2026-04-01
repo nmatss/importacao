@@ -3,8 +3,9 @@ services:
     image: redis:7-alpine
     container_name: importacao-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    # Redis only accessible internally (no host port exposure)
+    expose:
+      - "6379"
     volumes:
       - redisdata:/data
     healthcheck:
@@ -124,8 +125,9 @@ services:
       ERP_PUKET_DB: ${ERP_PUKET_DB:-DB_puket}
       ERP_IMG_HOST: ${ERP_IMG_HOST:-db02.grupounico.com}
       ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
-      ERP_MSSQL_USER: nicolas.matsuda
-      ERP_MSSQL_PASS: "REMOVED_CREDENTIAL"
+      ERP_MSSQL_USER: ${ERP_MSSQL_USER}
+      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS}
+      CERT_API_KEY: ${CERT_API_KEY:-}
     volumes:
       - cert-reports:/app/reports
     depends_on:
@@ -148,7 +150,7 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        VITE_API_URL:
+        VITE_API_URL: ${VITE_API_URL:-}
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
     container_name: importacao-web
     restart: unless-stopped
