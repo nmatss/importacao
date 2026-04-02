@@ -108,6 +108,16 @@ export const communicationService = {
 
     if (!communication) throw new Error('Comunicação não encontrada');
 
+    if (!communication.recipientEmail) {
+      throw new Error(
+        'E-mail do destinatário não configurado. Verifique as variáveis KIOM_EMAIL / FENICIA_EMAIL / ISA_EMAIL.',
+      );
+    }
+
+    if (!process.env.SMTP_HOST) {
+      throw new Error('SMTP não configurado. Defina SMTP_HOST nas variáveis de ambiente.');
+    }
+
     const transport = getSmtpTransport();
 
     try {
@@ -240,7 +250,7 @@ export const communicationService = {
       eta: proc.eta ?? undefined,
     });
 
-    const feniciaEmail = process.env.FENICIA_EMAIL || 'fenicia@placeholder.com';
+    const feniciaEmail = process.env.FENICIA_EMAIL || '';
 
     return this.create({
       processId,
@@ -348,7 +358,7 @@ export const communicationService = {
     const communication = await this.create({
       processId,
       recipient: 'KIOM',
-      recipientEmail: KIOM_EMAIL || 'kiom@placeholder.com',
+      recipientEmail: KIOM_EMAIL,
       subject,
       body,
     });

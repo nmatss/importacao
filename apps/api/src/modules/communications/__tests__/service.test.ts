@@ -36,6 +36,7 @@ describe('communicationService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    process.env.SMTP_HOST = 'smtp.test.com';
   });
 
   describe('create()', () => {

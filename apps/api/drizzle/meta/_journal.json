@@ -43,6 +43,34 @@
       "when": 1774070400000,
       "tag": "0005_certificate_and_reprocessed",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774156800000,
+      "tag": "0006_first_delivery",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774243200000,
+      "tag": "0007_draft_bl",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1774329600000,
+      "tag": "0008_email_signatures",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1774416000000,
+      "tag": "0009_process_events",
+      "breakpoints": true
     }
   ]
 }

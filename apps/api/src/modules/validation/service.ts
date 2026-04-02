@@ -253,7 +253,7 @@ export const validationService = {
           await communicationService.create({
             processId,
             recipient: 'KIOM',
-            recipientEmail: KIOM_EMAIL || 'kiom@placeholder.com',
+            recipientEmail: KIOM_EMAIL,
             subject,
             body,
           });

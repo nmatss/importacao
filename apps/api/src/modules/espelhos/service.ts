@@ -565,7 +565,7 @@ export const espelhoService = {
       await communicationService.create({
         processId,
         recipient: 'ISA Certificação',
-        recipientEmail: globalThis.process.env.ISA_EMAIL || 'isa@placeholder.com',
+        recipientEmail: globalThis.process.env.ISA_EMAIL || '',
         subject,
         body,
       });

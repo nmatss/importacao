@@ -70,14 +70,22 @@ function wrapWorker<T extends object>(
 
 async function handleEmailSend(data: EmailSendJob): Promise<void> {
   const nodemailer = await import('nodemailer');
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const secure = process.env.SMTP_SECURE === 'true';
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+  const hasAuth = user && pass && user !== 'noreply@grupounico.com';
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    port,
+    secure,
+    ...(hasAuth ? { auth: { user, pass } } : {}),
+    tls: { rejectUnauthorized: false },
+    ignoreTLS: !secure,
   });
   await transporter.sendMail({
-    from: process.env.SMTP_FROM,
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
     to: data.to,
     subject: data.subject,
     html: data.body,
