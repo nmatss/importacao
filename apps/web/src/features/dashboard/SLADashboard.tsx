@@ -679,7 +679,7 @@ export function SLADashboard() {
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 stagger-children">
         {tabConfig.map((card) => {
           const Icon = card.icon;
           const value = summary[card.key] ?? 0;

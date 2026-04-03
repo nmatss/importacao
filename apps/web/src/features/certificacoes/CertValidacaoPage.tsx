@@ -98,7 +98,7 @@ export default function CertValidacaoPage() {
   }
 
   return (
-    <div className="p-5 md:p-7 space-y-6">
+    <div className="p-5 md:p-7 space-y-6 animate-fade-in">
       {/* Real-time Info Banner */}
       <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 overflow-hidden">
         <div className="p-5">

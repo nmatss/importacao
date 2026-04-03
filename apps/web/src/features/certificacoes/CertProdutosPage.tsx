@@ -281,7 +281,7 @@ export default function CertProdutosPage() {
   const hasActiveFilters = status || brand || search || startDate || endDate;
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5 animate-fade-in">
       {/* ── Status Filter Tabs ── */}
       <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-4">
         <div className="flex items-center gap-2 mb-3">

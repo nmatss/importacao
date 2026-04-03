@@ -165,7 +165,7 @@ export function CurrencyExchangePage() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -381,7 +381,7 @@ export function CurrencyExchangePage() {
       {/* KPI Cards */}
       {selectedProcessId && (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
             {kpiCards.map((kpi) => (
               <div
                 key={kpi.label}

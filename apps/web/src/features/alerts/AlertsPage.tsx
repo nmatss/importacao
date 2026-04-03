@@ -115,7 +115,7 @@ export function AlertsPage() {
   const pendingCount = alerts?.filter((a) => !a.acknowledged).length ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>

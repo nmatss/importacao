@@ -11,11 +11,11 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full font-medium ${colors} ${
-        size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-1 text-xs'
+      className={`badge ${colors} ${
+        size === 'sm' ? 'px-2 py-0.5 text-[10px]' : 'px-2.5 py-0.5 text-[11px]'
       }`}
     >
-      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+      <span className="h-1.5 w-1.5 rounded-full bg-current opacity-50" />
       {label}
     </span>
   );

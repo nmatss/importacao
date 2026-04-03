@@ -60,7 +60,7 @@ export function ProcessCreatePage() {
   const errorClass = 'mt-1.5 text-[11px] text-danger-600';
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center gap-3">
         <button

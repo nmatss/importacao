@@ -18,7 +18,7 @@ export function LoginPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left panel — dark branding */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-sidebar-950">
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-sidebar-950 animate-fade-in">
         {/* Gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary-900/40 via-sidebar-950 to-sidebar-950" />
 
@@ -55,10 +55,12 @@ export function LoginPage() {
               <span className="text-xs font-medium text-primary-300">Plataforma v1.0</span>
             </div>
 
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-[1.1] tracking-tight">
+            <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-[1.08] tracking-tight">
               Sistema Integrado
               <br />
-              <span className="text-primary-400">de Importação</span>
+              <span className="bg-gradient-to-r from-primary-300 to-primary-500 bg-clip-text text-transparent">
+                de Importação
+              </span>
             </h1>
             <p className="text-sidebar-200/50 text-base mt-4 leading-relaxed max-w-md">
               Plataforma completa para gestão de processos de importação, validação documental e
@@ -91,7 +93,7 @@ export function LoginPage() {
       </div>
 
       {/* Right panel — login */}
-      <div className="flex-1 flex flex-col bg-slate-50">
+      <div className="flex-1 flex flex-col bg-white">
         {/* Mobile logo */}
         <div className="flex items-center gap-3 p-6 lg:hidden">
           <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-xl" />
@@ -114,7 +116,10 @@ export function LoginPage() {
             </div>
 
             {/* Login card */}
-            <div className="bg-white rounded-2xl border border-slate-200/60 p-8 shadow-sm">
+            <div
+              className="bg-white rounded-2xl border border-slate-200/60 p-8 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up"
+              style={{ animationDelay: '100ms' }}
+            >
               {error && (
                 <div className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3">
                   <div className="mt-0.5 h-2 w-2 rounded-full bg-danger-500 shrink-0" />

@@ -233,7 +233,7 @@ export function MeuDiaPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -247,7 +247,7 @@ export function MeuDiaPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-children">
         <SummaryCard
           icon={<Target className="h-5 w-5 text-primary-600" />}
           label="Processos Ativos"

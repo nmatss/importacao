@@ -182,7 +182,7 @@ export function AuditLogPage() {
     'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Page header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Auditoria</h2>

@@ -67,7 +67,7 @@ export function ProcessListPage() {
   const hasActiveFilters = debouncedSearch || status || brand || startDate || endDate;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>

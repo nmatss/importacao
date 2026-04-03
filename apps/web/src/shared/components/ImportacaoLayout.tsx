@@ -137,7 +137,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
   const breadcrumbs = getBreadcrumb(location.pathname);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-page">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -358,7 +358,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto bg-slate-50 p-4 lg:p-6">{children}</main>
+        <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

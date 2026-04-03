@@ -285,7 +285,7 @@ export function ExecutiveDashboardPage() {
   }));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -299,7 +299,7 @@ export function ExecutiveDashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 stagger-children">
         {kpiCards.map((card) => {
           const Icon = card.icon;
           const isZero = card.value === 0;

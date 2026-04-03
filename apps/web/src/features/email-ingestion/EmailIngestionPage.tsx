@@ -193,7 +193,7 @@ export function EmailIngestionPage() {
   ];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Ingestao de E-mail</h2>
@@ -299,7 +299,7 @@ export function EmailIngestionPage() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 stagger-children">
         {statsCards.map((card) => {
           const Icon = card.icon;
           return (

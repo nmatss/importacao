@@ -180,7 +180,7 @@ export function PortalPage() {
   const firstName = user?.name?.split(' ')[0] || '';
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-page">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200/60">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
@@ -263,7 +263,7 @@ export function PortalPage() {
         </section>
 
         {/* Module Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-children">
           {/* Importacao */}
           <div className="group relative bg-white rounded-2xl border border-slate-200/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
             <div className="h-1 bg-gradient-to-r from-primary-500 to-primary-600" />

@@ -85,7 +85,7 @@ export default function CertRelatorioDetailPage() {
   const hasActiveFilters = search || statusFilter || brandFilter;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="flex items-center gap-4 min-w-0">

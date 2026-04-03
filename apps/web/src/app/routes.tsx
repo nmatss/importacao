@@ -99,8 +99,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function LazyFallback() {
   return (
-    <div className="flex items-center justify-center h-64">
+    <div className="flex flex-col items-center justify-center h-64 gap-3 animate-fade-in">
       <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
+      <span className="text-xs text-slate-400 font-medium">Carregando...</span>
     </div>
   );
 }

@@ -59,7 +59,7 @@ export default function CertConfiguracoesPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       {/* Connection Status */}
       <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
         <div className="p-6">

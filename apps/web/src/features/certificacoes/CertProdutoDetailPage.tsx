@@ -55,7 +55,7 @@ export default function CertProdutoDetailPage() {
   const validation = liveResult || product?.last_validation;
 
   return (
-    <div className="p-5 md:p-7 space-y-6">
+    <div className="p-5 md:p-7 space-y-6 animate-fade-in">
       {/* Back link */}
       <Link
         to="/certificacoes/produtos"

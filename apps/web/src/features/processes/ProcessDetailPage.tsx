@@ -277,7 +277,7 @@ export function ProcessDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       <Breadcrumbs
         items={[
           { label: 'Processos', href: '/importacao/processos' },

@@ -3,7 +3,7 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ className = '' }: SkeletonProps) {
-  return <div className={`animate-pulse rounded-lg bg-slate-200/50 ${className}`} />;
+  return <div className={`skeleton ${className}`} />;
 }
 
 export function CardSkeleton() {
@@ -22,10 +22,10 @@ export function CardSkeleton() {
 
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <div className="space-y-2">
-      <Skeleton className="h-10 w-full rounded-lg" />
+    <div className="space-y-1.5 rounded-2xl border border-slate-200/60 bg-white p-4">
+      <Skeleton className="h-10 w-full" />
       {Array.from({ length: rows }).map((_, i) => (
-        <Skeleton key={i} className="h-12 w-full rounded-lg" />
+        <Skeleton key={i} className="h-12 w-full" />
       ))}
     </div>
   );
@@ -33,12 +33,12 @@ export function TableSkeleton({ rows = 5 }: { rows?: number }) {
 
 export function PageSkeleton() {
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-9 w-32 rounded-lg" />
       </div>
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
         {Array.from({ length: 4 }).map((_, i) => (
           <CardSkeleton key={i} />
         ))}

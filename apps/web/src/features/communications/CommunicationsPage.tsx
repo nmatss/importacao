@@ -205,7 +205,7 @@ export function CommunicationsPage() {
     composer.body;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900">Comunicacoes</h2>
