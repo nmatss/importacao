@@ -8,14 +8,14 @@ export const loginSchema = z.object({
 export const createUserSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter pelo menos 6 caracteres'),
+  password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres'),
   role: z.enum(['admin', 'analyst']).default('analyst'),
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
-  password: z.string().min(6).optional(),
+  password: z.string().min(8, 'Senha deve ter pelo menos 8 caracteres').optional(),
   role: z.enum(['admin', 'analyst']).optional(),
   isActive: z.boolean().optional(),
 });

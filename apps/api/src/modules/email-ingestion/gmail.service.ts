@@ -1,6 +1,18 @@
 import { gmail_v1, auth as googleAuth } from '@googleapis/gmail';
 import { logger } from '../../shared/utils/logger.js';
 
+const GMAIL_API_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Gmail API timeout after 30s: ${label}`)),
+      GMAIL_API_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([promise, timeout]);
+}
+
 export interface FetchedEmail {
   messageId: string;
   gmailId: string;
@@ -174,12 +186,15 @@ export const gmailService = {
       let pageToken: string | undefined;
 
       do {
-        const listResponse = await gmail.users.messages.list({
-          userId: 'me',
-          q: searchQuery,
-          maxResults: 100,
-          pageToken,
-        });
+        const listResponse = await withTimeout(
+          gmail.users.messages.list({
+            userId: 'me',
+            q: searchQuery,
+            maxResults: 100,
+            pageToken,
+          }),
+          'messages.list',
+        );
 
         const messages = listResponse.data.messages || [];
         allMessageIds.push(...messages);
@@ -198,11 +213,14 @@ export const gmailService = {
       for (const msg of messageIds) {
         try {
           // Get full message
-          const fullMessage = await gmail.users.messages.get({
-            userId: 'me',
-            id: msg.id!,
-            format: 'full',
-          });
+          const fullMessage = await withTimeout(
+            gmail.users.messages.get({
+              userId: 'me',
+              id: msg.id!,
+              format: 'full',
+            }),
+            `messages.get(${msg.id})`,
+          );
 
           const headers = fullMessage.data.payload?.headers || [];
           const from = extractHeader(headers, 'From');
@@ -221,11 +239,14 @@ export const gmailService = {
 
           for (const att of attachmentParts) {
             try {
-              const attachmentData = await gmail.users.messages.attachments.get({
-                userId: 'me',
-                messageId: msg.id!,
-                id: att.bodyAttachmentId,
-              });
+              const attachmentData = await withTimeout(
+                gmail.users.messages.attachments.get({
+                  userId: 'me',
+                  messageId: msg.id!,
+                  id: att.bodyAttachmentId,
+                }),
+                `attachments.get(${att.filename})`,
+              );
 
               if (attachmentData.data.data) {
                 attachments.push({
@@ -256,13 +277,16 @@ export const gmailService = {
           });
 
           // Mark as read immediately (prevents re-fetching on next run)
-          await gmail.users.messages.modify({
-            userId: 'me',
-            id: msg.id!,
-            requestBody: {
-              removeLabelIds: ['UNREAD'],
-            },
-          });
+          await withTimeout(
+            gmail.users.messages.modify({
+              userId: 'me',
+              id: msg.id!,
+              requestBody: {
+                removeLabelIds: ['UNREAD'],
+              },
+            }),
+            `messages.modify(${msg.id})`,
+          );
         } catch (msgErr) {
           logger.error({ err: msgErr, messageId: msg.id }, 'Failed to process Gmail message');
         }
@@ -281,7 +305,10 @@ export const gmailService = {
       const gmail = getGmailClient();
       const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX!;
 
-      const profile = await gmail.users.getProfile({ userId: sharedMailbox });
+      const profile = await withTimeout(
+        gmail.users.getProfile({ userId: sharedMailbox }),
+        'getProfile',
+      );
       logger.info({ email: profile.data.emailAddress }, 'Gmail API connection successful');
       return true;
     } catch (err) {

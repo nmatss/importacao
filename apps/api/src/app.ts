@@ -17,6 +17,9 @@ const app = express();
 app.use(helmet());
 
 // CORS
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
+  logger.warn('CORS_ORIGIN not set in production — falling back to default origins');
+}
 app.use(
   cors({
     origin: process.env.CORS_ORIGIN?.split(',') || [
@@ -65,11 +68,9 @@ app.use('/api', apiRouter);
 app.get('/health', async (_req, res) => {
   try {
     await db.execute(sql`SELECT 1`);
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), db: 'connected' });
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
   } catch {
-    res
-      .status(503)
-      .json({ status: 'degraded', timestamp: new Date().toISOString(), db: 'disconnected' });
+    res.status(503).json({ status: 'error', timestamp: new Date().toISOString() });
   }
 });
 

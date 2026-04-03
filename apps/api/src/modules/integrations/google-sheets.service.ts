@@ -1,6 +1,18 @@
 import { sheets_v4, auth as googleAuth } from '@googleapis/sheets';
 import { logger } from '../../shared/utils/logger.js';
 
+const SHEETS_API_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Google Sheets API timeout after 30s: ${label}`)),
+      SHEETS_API_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([promise, timeout]);
+}
+
 let sheetsClient: sheets_v4.Sheets | null = null;
 
 function getSheetsClient(): sheets_v4.Sheets {
@@ -32,7 +44,11 @@ const MILESTONE_COLUMNS: Record<string, string> = {
 
 export const googleSheetsService = {
   isConfigured(): boolean {
-    return !!(process.env.GOOGLE_SHEETS_FOLLOW_UP_ID && process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY);
+    return !!(
+      process.env.GOOGLE_SHEETS_FOLLOW_UP_ID &&
+      process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
+      process.env.GOOGLE_DRIVE_PRIVATE_KEY
+    );
   },
 
   async findProcessRow(processCode: string): Promise<number | null> {
@@ -42,16 +58,22 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'A:A',
-      });
+      const response = await withTimeout(
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'A:A',
+        }),
+        `findProcessRow(${processCode})`,
+      );
 
       const values = response.data.values;
       if (!values) return null;
 
       for (let i = 0; i < values.length; i++) {
-        if (values[i][0] && String(values[i][0]).trim().toUpperCase() === processCode.toUpperCase()) {
+        if (
+          values[i][0] &&
+          String(values[i][0]).trim().toUpperCase() === processCode.toUpperCase()
+        ) {
           return i + 1; // Sheets rows are 1-indexed
         }
       }
@@ -83,14 +105,17 @@ export const googleSheetsService = {
       const sheets = getSheetsClient();
       const formattedDate = date.toLocaleDateString('pt-BR');
 
-      await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `${column}${row}`,
-        valueInputOption: 'USER_ENTERED',
-        requestBody: {
-          values: [[formattedDate]],
-        },
-      });
+      await withTimeout(
+        sheets.spreadsheets.values.update({
+          spreadsheetId,
+          range: `${column}${row}`,
+          valueInputOption: 'USER_ENTERED',
+          requestBody: {
+            values: [[formattedDate]],
+          },
+        }),
+        `updateMilestone(${processCode}, ${field})`,
+      );
 
       logger.info({ processCode, field, row }, 'Milestone updated in Follow-Up sheet');
     } catch (error) {
@@ -100,8 +125,8 @@ export const googleSheetsService = {
 
   async syncMilestone(processCode: string, field: string, date: Date): Promise<void> {
     // Non-blocking wrapper
-    this.updateMilestone(processCode, field, date).catch(err =>
-      logger.error({ err, processCode, field }, 'Failed to sync milestone to Sheets')
+    this.updateMilestone(processCode, field, date).catch((err) =>
+      logger.error({ err, processCode, field }, 'Failed to sync milestone to Sheets'),
     );
   },
 
@@ -116,19 +141,25 @@ export const googleSheetsService = {
       if (!row) return null;
 
       // Read the entire row (columns A through Z)
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: `A${row}:Z${row}`,
-      });
+      const response = await withTimeout(
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `A${row}:Z${row}`,
+        }),
+        `readProcessRow(${processCode})`,
+      );
 
       const values = response.data.values?.[0];
       if (!values) return null;
 
       // Read header row to map column names
-      const headerResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'A1:Z1',
-      });
+      const headerResponse = await withTimeout(
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'A1:Z1',
+        }),
+        `readProcessRow.headers(${processCode})`,
+      );
 
       const headers = headerResponse.data.values?.[0] ?? [];
       const result: Record<string, string> = {};
@@ -154,10 +185,13 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'A:Z',
-      });
+      const response = await withTimeout(
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'A:Z',
+        }),
+        'readAllProcessRows',
+      );
 
       const rows = response.data.values;
       if (!rows || rows.length < 2) return [];
@@ -192,10 +226,13 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range: 'A1:Z1',
-      });
+      const response = await withTimeout(
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: 'A1:Z1',
+        }),
+        'getSheetHeaders',
+      );
 
       return (response.data.values?.[0] ?? []).map((h: string) => String(h).trim()).filter(Boolean);
     } catch (error) {

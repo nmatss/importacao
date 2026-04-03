@@ -22,11 +22,27 @@ export const authService = {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
     if (!user || !user.isActive) {
+      await auditService.log(
+        null,
+        'login_failed',
+        'user',
+        null,
+        { email, reason: 'invalid_credentials' },
+        null,
+      );
       throw new Error('Credenciais inválidas');
     }
 
     const isValid = await bcrypt.compare(password, user.passwordHash);
     if (!isValid) {
+      await auditService.log(
+        null,
+        'login_failed',
+        'user',
+        null,
+        { email, reason: 'invalid_credentials' },
+        null,
+      );
       throw new Error('Credenciais inválidas');
     }
 
@@ -59,6 +75,14 @@ export const authService = {
 
     const allowed = await googleGroupsService.isAllowed(payload.email);
     if (!allowed) {
+      await auditService.log(
+        null,
+        'login_failed',
+        'user',
+        null,
+        { email: payload.email, reason: 'not_in_group' },
+        null,
+      );
       throw new Error('Acesso negado: usuário não pertence ao grupo autorizado');
     }
 

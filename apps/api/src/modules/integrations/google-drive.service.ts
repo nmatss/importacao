@@ -4,6 +4,18 @@ import { db } from '../../shared/database/connection.js';
 import { importProcesses } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 
+const DRIVE_API_TIMEOUT_MS = 30_000;
+
+function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  const timeout = new Promise<never>((_, reject) =>
+    setTimeout(
+      () => reject(new Error(`Google Drive API timeout after 30s: ${label}`)),
+      DRIVE_API_TIMEOUT_MS,
+    ),
+  );
+  return Promise.race([promise, timeout]);
+}
+
 let driveClient: drive_v3.Drive | null = null;
 
 // Cache folder IDs to avoid duplicate creation: "parentId/folderName" -> folderId
@@ -57,14 +69,17 @@ export const googleDriveService = {
     const drive = getDriveClient();
     const rootFolderId = parentId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
 
-    const response = await drive.files.create({
-      requestBody: {
-        name,
-        mimeType: 'application/vnd.google-apps.folder',
-        parents: rootFolderId ? [rootFolderId] : undefined,
-      },
-      fields: 'id',
-    });
+    const response = await withTimeout(
+      drive.files.create({
+        requestBody: {
+          name,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: rootFolderId ? [rootFolderId] : undefined,
+        },
+        fields: 'id',
+      }),
+      `createFolder(${name})`,
+    );
 
     const folderId = response.data.id!;
     logger.info({ folderId, name }, 'Google Drive folder created');
@@ -75,16 +90,19 @@ export const googleDriveService = {
     const drive = getDriveClient();
     const fs = await import('fs');
 
-    const response = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [folderId],
-      },
-      media: {
-        body: fs.createReadStream(filePath),
-      },
-      fields: 'id, webViewLink',
-    });
+    const response = await withTimeout(
+      drive.files.create({
+        requestBody: {
+          name: fileName,
+          parents: [folderId],
+        },
+        media: {
+          body: fs.createReadStream(filePath),
+        },
+        fields: 'id, webViewLink',
+      }),
+      `uploadFile(${fileName})`,
+    );
 
     const fileId = response.data.id!;
     logger.info({ fileId, fileName }, 'File uploaded to Google Drive');
@@ -101,11 +119,14 @@ export const googleDriveService = {
 
   async findFolder(parentId: string, folderName: string): Promise<string | null> {
     const drive = getDriveClient();
-    const response = await drive.files.list({
-      q: `'${escapeDriveQuery(parentId)}' in parents and name = '${escapeDriveQuery(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-      fields: 'files(id, name)',
-      pageSize: 1,
-    });
+    const response = await withTimeout(
+      drive.files.list({
+        q: `'${escapeDriveQuery(parentId)}' in parents and name = '${escapeDriveQuery(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+        fields: 'files(id, name)',
+        pageSize: 1,
+      }),
+      `findFolder(${folderName})`,
+    );
     return response.data.files?.[0]?.id ?? null;
   },
 
@@ -200,12 +221,15 @@ export const googleDriveService = {
 
     // Move process folder: remove from brand, add to correction
     const drive = getDriveClient();
-    await drive.files.update({
-      fileId: processFolderId,
-      addParents: correctionFolderId,
-      removeParents: brandFolderId,
-      fields: 'id, parents',
-    });
+    await withTimeout(
+      drive.files.update({
+        fileId: processFolderId,
+        addParents: correctionFolderId,
+        removeParents: brandFolderId,
+        fields: 'id, parents',
+      }),
+      `moveToCorrection(${processCode})`,
+    );
 
     logger.info({ processCode, correctionFolderId }, 'Process moved to correction folder');
   },
@@ -233,12 +257,15 @@ export const googleDriveService = {
 
     // Move back: remove from correction, add to brand
     const drive = getDriveClient();
-    await drive.files.update({
-      fileId: processFolderId,
-      addParents: brandFolderId,
-      removeParents: correctionFolderId,
-      fields: 'id, parents',
-    });
+    await withTimeout(
+      drive.files.update({
+        fileId: processFolderId,
+        addParents: brandFolderId,
+        removeParents: correctionFolderId,
+        fields: 'id, parents',
+      }),
+      `moveFromCorrection(${processCode})`,
+    );
 
     logger.info({ processCode }, 'Process moved from correction back to brand folder');
   },
@@ -306,12 +333,15 @@ export const googleDriveService = {
     const drive = getDriveClient();
 
     try {
-      await drive.files.update({
-        fileId,
-        addParents: targetFolder,
-        removeParents: inboxId,
-        fields: 'id, parents',
-      });
+      await withTimeout(
+        drive.files.update({
+          fileId,
+          addParents: targetFolder,
+          removeParents: inboxId,
+          fields: 'id, parents',
+        }),
+        `moveFromInboxToProcessados(${processCode})`,
+      );
       logger.info({ fileId, processCode, docType }, 'File moved from INBOX to PROCESSADOS');
     } catch (err: any) {
       if (err?.code === 404) {
@@ -338,18 +368,21 @@ export const googleDriveService = {
     const content = JSON.stringify(reportData, null, 2);
     const fileName = `validacao_${processCode}_${new Date().toISOString().slice(0, 10)}.json`;
 
-    const response = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [reportFolderId],
-        mimeType: 'application/json',
-      },
-      media: {
-        mimeType: 'application/json',
-        body: Readable.from(content),
-      },
-      fields: 'id',
-    });
+    const response = await withTimeout(
+      drive.files.create({
+        requestBody: {
+          name: fileName,
+          parents: [reportFolderId],
+          mimeType: 'application/json',
+        },
+        media: {
+          mimeType: 'application/json',
+          body: Readable.from(content),
+        },
+        fields: 'id',
+      }),
+      `uploadValidationReport(${processCode})`,
+    );
 
     const fileId = response.data.id!;
     logger.info({ fileId, processCode }, 'Validation report uploaded to Sistema Automatico');
@@ -366,18 +399,21 @@ export const googleDriveService = {
     const drive = getDriveClient();
     const { Readable } = await import('stream');
 
-    const response = await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [alertasId],
-        mimeType: 'application/json',
-      },
-      media: {
-        mimeType: 'application/json',
-        body: Readable.from(content),
-      },
-      fields: 'id',
-    });
+    const response = await withTimeout(
+      drive.files.create({
+        requestBody: {
+          name: fileName,
+          parents: [alertasId],
+          mimeType: 'application/json',
+        },
+        media: {
+          mimeType: 'application/json',
+          body: Readable.from(content),
+        },
+        fields: 'id',
+      }),
+      `uploadToAlertas(${fileName})`,
+    );
 
     const fileId = response.data.id!;
     logger.info({ fileId, fileName }, 'Alert uploaded to ALERTAS folder');
@@ -391,12 +427,15 @@ export const googleDriveService = {
     async function listRecursive(parentId: string) {
       let pageToken: string | undefined;
       do {
-        const response = await drive.files.list({
-          q: `'${escapeDriveQuery(parentId)}' in parents and trashed = false`,
-          fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink, createdTime)',
-          pageSize: 100,
-          pageToken,
-        });
+        const response = await withTimeout(
+          drive.files.list({
+            q: `'${escapeDriveQuery(parentId)}' in parents and trashed = false`,
+            fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink, createdTime)',
+            pageSize: 100,
+            pageToken,
+          }),
+          `listProcessFiles(${parentId})`,
+        );
 
         for (const file of response.data.files || []) {
           allFiles.push(file);

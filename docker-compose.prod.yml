@@ -24,15 +24,15 @@ services:
     container_name: importacao-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-importacao}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-importacao123}
-      POSTGRES_DB: ${POSTGRES_DB:-importacao}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
     ports:
       - "127.0.0.1:5450:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-importacao}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:?POSTGRES_USER is required}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -51,7 +51,7 @@ services:
     ports:
       - "127.0.0.1:3050:3001"
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       API_PORT: 3001
@@ -112,7 +112,7 @@ services:
     container_name: importacao-cert-api
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
+      DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
       GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE}

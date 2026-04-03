@@ -45,11 +45,13 @@ logging.basicConfig(level=logging.INFO)
 # ---------------------------------------------------------------------------
 
 API_KEY = os.environ.get("CERT_API_KEY", "")
+if not API_KEY:
+    log.warning("CERT_API_KEY is not set — API key auth is DISABLED (relying on Nginx proxy)")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def verify_api_key(request: Request, api_key: str = Security(api_key_header)):
-    """Verify API key from X-API-Key header. Skips auth if CERT_API_KEY is not set."""
+    """Verify API key from X-API-Key header. Warns at startup if CERT_API_KEY is not set."""
     if request.url.path == "/api/health":
         return
     if API_KEY and not hmac.compare_digest(api_key or "", API_KEY):
@@ -78,8 +80,8 @@ _cors_origins = (
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
