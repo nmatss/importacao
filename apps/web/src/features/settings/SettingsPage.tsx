@@ -60,8 +60,8 @@ const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
 ];
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
-  admin: { bg: 'bg-red-50', text: 'text-red-700' },
-  manager: { bg: 'bg-blue-50', text: 'text-blue-700' },
+  admin: { bg: 'bg-danger-50', text: 'text-danger-700' },
+  manager: { bg: 'bg-primary-50', text: 'text-primary-700' },
   operator: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   viewer: { bg: 'bg-slate-100', text: 'text-slate-600' },
 };
@@ -69,7 +69,7 @@ const roleBadge: Record<string, { bg: string; text: string }> = {
 const defaultRoleBadge = { bg: 'bg-slate-100', text: 'text-slate-600' };
 
 const inputClasses =
-  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 placeholder:text-slate-300 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 const labelClasses = 'block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider';
 
 export function SettingsPage() {
@@ -85,8 +85,8 @@ export function SettingsPage() {
   if (isNonAdmin && effectiveTab !== 'signatures') {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5">
-          <ShieldAlert className="h-8 w-8 text-red-400" />
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger-50 mb-5">
+          <ShieldAlert className="h-8 w-8 text-danger-400" />
         </div>
         <h2 className="text-xl font-bold text-slate-900">Acesso negado</h2>
         <p className="mt-2 text-sm text-slate-500 max-w-sm">
@@ -185,7 +185,7 @@ function SaveButton({
       <button
         onClick={onClick}
         disabled={saving}
-        className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
+        className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
       >
         {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
         {label}
@@ -445,7 +445,7 @@ function UsersTab() {
         </p>
         <button
           onClick={openCreate}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 transition-all"
         >
           <Plus className="h-4 w-4" />
           Novo Usuario
@@ -491,7 +491,7 @@ function UsersTab() {
                         className={cn(
                           'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
                           user.active
-                            ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white'
+                            ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white'
                             : 'bg-slate-100 text-slate-400',
                         )}
                       >
@@ -525,7 +525,7 @@ function UsersTab() {
                       aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
                       className={cn(
                         'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
-                        user.active ? 'bg-blue-600' : 'bg-slate-200',
+                        user.active ? 'bg-primary-600' : 'bg-slate-200',
                       )}
                     >
                       <span
@@ -540,7 +540,7 @@ function UsersTab() {
                     <div className="flex gap-1">
                       <button
                         onClick={() => openEdit(user)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                        className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                         title="Editar"
                         aria-label={`Editar usuario ${user.name}`}
                       >
@@ -548,7 +548,7 @@ function UsersTab() {
                       </button>
                       <button
                         onClick={() => setDeactivateId(user.id)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                        className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
                         title="Desativar"
                         aria-label={`Desativar usuario ${user.name}`}
                       >
@@ -638,7 +638,7 @@ function UsersTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {saving ? 'Salvando...' : 'Salvar'}
@@ -938,7 +938,7 @@ function SignaturesTab() {
           (signatures?.length ?? 0) < 4 ? (
             <button
               onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 transition-all duration-200"
+              className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 transition-all"
             >
               <Plus className="h-4 w-4" />
               Nova Assinatura
@@ -954,7 +954,7 @@ function SignaturesTab() {
             <p className="text-sm text-slate-400 font-medium">Nenhuma assinatura cadastrada.</p>
             <button
               onClick={openCreate}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Criar primeira assinatura
@@ -967,14 +967,16 @@ function SignaturesTab() {
                 key={sig.id}
                 className={cn(
                   'rounded-xl border p-4 transition-colors',
-                  sig.isDefault ? 'border-blue-200 bg-blue-50/50' : 'border-slate-200 bg-white',
+                  sig.isDefault
+                    ? 'border-primary-200 bg-primary-50/50'
+                    : 'border-slate-200 bg-white',
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <span className="text-sm font-semibold text-slate-800">{sig.name}</span>
                     {sig.isDefault && (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">
                         <Star className="h-3 w-3" />
                         Padrao
                       </span>
@@ -984,7 +986,7 @@ function SignaturesTab() {
                     {!sig.isDefault && (
                       <button
                         onClick={() => handleSetDefault(sig)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                        className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                         title="Definir como padrao"
                       >
                         <Star className="h-4 w-4" />
@@ -999,14 +1001,14 @@ function SignaturesTab() {
                     </button>
                     <button
                       onClick={() => openEdit(sig)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-blue-50 hover:text-blue-600 transition-all duration-200"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                       title="Editar"
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => setDeletingId(sig.id)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 transition-all duration-200"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
                       title="Excluir"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1077,7 +1079,7 @@ function SignaturesTab() {
                     type="checkbox"
                     checked={form.isDefault}
                     onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-slate-600">Definir como assinatura padrao</span>
                 </label>
@@ -1093,7 +1095,7 @@ function SignaturesTab() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all duration-200"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
                 >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   {saving ? 'Salvando...' : 'Salvar'}
@@ -1124,7 +1126,7 @@ function StatusIndicator({ status }: { status: 'idle' | 'success' | 'error' }) {
       Conectado
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600">
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600">
       <XCircle className="h-3.5 w-3.5" />
       Falha na conexao
     </span>

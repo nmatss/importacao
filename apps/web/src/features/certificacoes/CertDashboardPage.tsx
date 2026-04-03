@@ -65,7 +65,7 @@ function DashboardSkeleton() {
       </div>
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div key={i} className="rounded-2xl border border-slate-200/60 bg-white p-6 shadow-sm">
             <div className="flex items-start justify-between">
               <div className="space-y-3 flex-1">
                 <Skeleton className="h-4 w-24" />
@@ -77,11 +77,11 @@ function DashboardSkeleton() {
         ))}
       </div>
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-7 shadow-sm">
           <Skeleton className="h-5 w-40 mb-6" />
           <Skeleton className="h-56 w-full rounded-xl" />
         </div>
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-7 shadow-sm">
           <Skeleton className="h-5 w-40 mb-6" />
           <Skeleton className="h-56 w-full rounded-xl" />
         </div>
@@ -200,20 +200,20 @@ export default function CertDashboardPage() {
               'flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-colors',
               apiOnline
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
-                : 'bg-red-50 text-red-700 border-red-200/80',
+                : 'bg-danger-50 text-danger-700 border-danger-200/80',
             )}
           >
             <span className="relative flex h-2 w-2">
               <span
                 className={cn(
                   'absolute inline-flex h-full w-full rounded-full opacity-75',
-                  apiOnline ? 'bg-emerald-400 animate-ping' : 'bg-red-400',
+                  apiOnline ? 'bg-emerald-400 animate-ping' : 'bg-danger-400',
                 )}
               />
               <span
                 className={cn(
                   'relative inline-flex h-2 w-2 rounded-full',
-                  apiOnline ? 'bg-emerald-500' : 'bg-red-500',
+                  apiOnline ? 'bg-emerald-500' : 'bg-danger-500',
                 )}
               />
             </span>
@@ -222,7 +222,7 @@ export default function CertDashboardPage() {
 
           {/* Conformance Rate Badge */}
           {okRate && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/80 shadow-sm">
+            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/60 shadow-sm">
               <TrendingUp className="w-4 h-4 text-emerald-500" />
               <span className="text-sm font-bold text-emerald-600">{okRate}%</span>
               <span className="text-xs text-slate-500">conformidade</span>
@@ -231,7 +231,7 @@ export default function CertDashboardPage() {
 
           {/* Last run */}
           {lastRun?.date && (
-            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/80 shadow-sm text-xs text-slate-500">
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/60 shadow-sm text-xs text-slate-500">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               <span>{formatDateTime(lastRun.date)}</span>
               <span className="px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium text-[10px]">
@@ -260,9 +260,9 @@ export default function CertDashboardPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* Status Distribution Pie Chart */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
               <BarChart3 className="h-4 w-4" />
             </div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">
@@ -319,7 +319,7 @@ export default function CertDashboardPage() {
                           ? 'text-emerald-600'
                           : okRateNum >= 50
                             ? 'text-amber-600'
-                            : 'text-red-600',
+                            : 'text-danger-600',
                       )}
                     >
                       {okRate}%
@@ -372,9 +372,9 @@ export default function CertDashboardPage() {
         </div>
 
         {/* Brand Chart */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-7 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-sm">
               <Activity className="h-4 w-4" />
             </div>
             <h3 className="text-base font-bold text-slate-900 tracking-tight">
@@ -390,7 +390,7 @@ export default function CertDashboardPage() {
         <div className="rounded-2xl border border-pink-200/80 bg-gradient-to-r from-pink-50 to-rose-50 shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-7 py-5 border-b border-pink-100">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-md shadow-pink-500/20">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-sm">
                 <CalendarX2 className="h-4 w-4" />
               </div>
               <div>
@@ -442,10 +442,10 @@ export default function CertDashboardPage() {
       {/* Bottom Row */}
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         {/* Products with Problems */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-sm">
                 <AlertTriangle className="h-4 w-4" />
               </div>
               <h3 className="text-base font-bold text-slate-900 tracking-tight">
@@ -521,16 +521,16 @@ export default function CertDashboardPage() {
         {/* Quick Actions & Recent Reports */}
         <div className="space-y-8">
           {/* Quick Actions */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+          <div className="rounded-2xl border border-slate-200/60 bg-white p-7 shadow-sm">
             <h3 className="text-base font-bold text-slate-900 tracking-tight mb-5">
               Ações Rápidas
             </h3>
             <div className="grid grid-cols-2 gap-4">
               <Link
                 to="/certificacoes/validacao"
-                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/80 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
+                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20 group-hover:shadow-lg group-hover:shadow-emerald-500/30 transition-shadow">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm group-hover:shadow-md transition-shadow">
                   <PlayCircle className="w-5 h-5" />
                 </div>
                 <div>
@@ -540,9 +540,9 @@ export default function CertDashboardPage() {
               </Link>
               <Link
                 to="/certificacoes/relatorios"
-                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/80 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
+                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
               >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-md shadow-slate-500/20 group-hover:shadow-lg group-hover:shadow-slate-500/30 transition-shadow">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm group-hover:shadow-md transition-shadow">
                   <FileBarChart className="w-5 h-5" />
                 </div>
                 <div>
@@ -554,9 +554,9 @@ export default function CertDashboardPage() {
           </div>
 
           {/* Recent Reports */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+          <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
             <div className="flex items-center gap-3 px-7 py-5 border-b border-slate-100">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-md shadow-slate-500/20">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm">
                 <Clock className="h-4 w-4" />
               </div>
               <h3 className="text-base font-bold text-slate-900 tracking-tight">

@@ -70,10 +70,10 @@ function AiDataSection({ data }: { data: AiExtractedData }) {
   if (populated.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-blue-100 bg-blue-50/30 p-5">
+    <div className="mt-6 rounded-xl border border-primary-100 bg-primary-50/30 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-4 w-4 text-blue-500" />
-        <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+        <Sparkles className="h-4 w-4 text-primary-500" />
+        <p className="text-xs font-bold text-primary-700 uppercase tracking-wider">
           Dados Extraidos (IA / Planilha)
         </p>
       </div>
@@ -105,10 +105,10 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
   if (populated.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/30 p-5">
+    <div className="mt-6 rounded-xl border border-primary-100 bg-primary-50/30 p-5">
       <div className="flex items-center gap-2 mb-4">
-        <Ship className="h-4 w-4 text-indigo-500" />
-        <p className="text-xs font-bold text-indigo-700 uppercase tracking-wider">Logistica</p>
+        <Ship className="h-4 w-4 text-primary-500" />
+        <p className="text-xs font-bold text-primary-700 uppercase tracking-wider">Logistica</p>
       </div>
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
         {populated.map((f) => (
@@ -121,10 +121,10 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
 
 export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
       <div className="border-b border-slate-100 bg-slate-50/50 px-7 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-200">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm">
             <Package className="h-4.5 w-4.5" />
           </div>
           <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600">

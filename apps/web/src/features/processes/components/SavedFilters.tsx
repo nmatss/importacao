@@ -110,14 +110,14 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
           className={cn(
             'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
             presets.length > 0
-              ? 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100'
+              ? 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
               : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
           )}
         >
           <Bookmark className="h-4 w-4" />
           Filtros Salvos
           {presets.length > 0 && (
-            <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-blue-600 text-white text-xs">
+            <span className="inline-flex items-center justify-center h-5 min-w-5 rounded-full bg-primary-600 text-white text-xs">
               {presets.length}
             </span>
           )}
@@ -129,7 +129,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
           <button
             type="button"
             onClick={() => setShowSaveForm(!showSaveForm)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-100 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
           >
             <Plus className="h-4 w-4" />
             Salvar Filtro Atual
@@ -153,7 +153,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nome do filtro..."
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none"
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
               autoFocus
             />
@@ -162,7 +162,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
             type="button"
             onClick={handleSave}
             disabled={!newName.trim()}
-            className="w-full rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="w-full rounded-lg bg-primary-600 px-3 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Salvar
           </button>
@@ -203,7 +203,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
                       e.stopPropagation();
                       handleDelete(preset.id);
                     }}
-                    className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                    className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
                     aria-label={`Excluir filtro ${preset.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />

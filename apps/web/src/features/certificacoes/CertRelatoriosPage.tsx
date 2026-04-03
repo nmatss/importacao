@@ -33,7 +33,7 @@ const EXPORT_TYPES = [
     description: 'Relatorio completo com status, estoque e certificacoes',
     icon: ClipboardList,
     color: 'from-emerald-600 to-emerald-700',
-    shadow: 'shadow-emerald-500/20',
+    shadow: 'shadow-sm',
     params: {},
   },
   {
@@ -42,7 +42,7 @@ const EXPORT_TYPES = [
     description: 'Apenas produtos com problemas de certificacao',
     icon: AlertTriangle,
     color: 'from-amber-500 to-amber-600',
-    shadow: 'shadow-amber-500/20',
+    shadow: 'shadow-sm',
     params: { status: 'URL_NOT_FOUND,INCONSISTENT' },
   },
   {
@@ -51,7 +51,7 @@ const EXPORT_TYPES = [
     description: 'Produtos com certificacao vencida ou em fase de encerramento',
     icon: CalendarX2,
     color: 'from-pink-500 to-pink-600',
-    shadow: 'shadow-pink-500/20',
+    shadow: 'shadow-sm',
     params: { status: 'EXPIRED' },
   },
   {
@@ -59,8 +59,8 @@ const EXPORT_TYPES = [
     label: 'Estoque Detalhado (WMS + E-commerce)',
     description: 'Estoque aberto por localizacao: CD Biguacu (Picking, Armazem, etc) + Extrema MG',
     icon: Warehouse,
-    color: 'from-blue-600 to-blue-700',
-    shadow: 'shadow-blue-500/20',
+    color: 'from-emerald-600 to-emerald-700',
+    shadow: 'shadow-sm',
     params: {},
     exportUrl: '/api/reports/export-stock',
   },
@@ -160,7 +160,7 @@ export default function CertRelatoriosPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
           <div>
@@ -174,7 +174,7 @@ export default function CertRelatoriosPage() {
           <button
             onClick={handleSyncStock}
             disabled={syncing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-all disabled:opacity-50"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50"
           >
             {syncing ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -187,7 +187,7 @@ export default function CertRelatoriosPage() {
       </div>
 
       {/* Export Cards */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm p-5">
+      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
@@ -261,7 +261,7 @@ export default function CertRelatoriosPage() {
       </div>
 
       {/* Reports History */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
         <div className="px-6 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Relatorios Gerados
@@ -326,7 +326,7 @@ export default function CertRelatoriosPage() {
                   </Link>
                   <a
                     href={getCertReportDownloadUrl(report.filename)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
                   >
                     <Table className="w-3 h-3" />
                     Excel

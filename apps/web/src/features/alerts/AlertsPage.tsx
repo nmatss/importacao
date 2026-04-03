@@ -31,12 +31,12 @@ type AckResponse = Alert;
 const severityConfig = {
   info: {
     icon: Info,
-    dot: 'bg-blue-500',
-    bar: 'bg-blue-500',
-    badgeBg: 'bg-blue-50',
-    badgeText: 'text-blue-700',
-    iconColor: 'text-blue-600',
-    iconBg: 'bg-blue-50',
+    dot: 'bg-primary-500',
+    bar: 'bg-primary-500',
+    badgeBg: 'bg-primary-50',
+    badgeText: 'text-primary-700',
+    iconColor: 'text-primary-600',
+    iconBg: 'bg-primary-50',
     label: 'Info',
   },
   warning: {
@@ -51,12 +51,12 @@ const severityConfig = {
   },
   critical: {
     icon: AlertTriangle,
-    dot: 'bg-red-500',
-    bar: 'bg-red-500',
-    badgeBg: 'bg-red-50',
-    badgeText: 'text-red-700',
-    iconColor: 'text-red-600',
-    iconBg: 'bg-red-50',
+    dot: 'bg-danger-500',
+    bar: 'bg-danger-500',
+    badgeBg: 'bg-danger-50',
+    badgeText: 'text-danger-700',
+    iconColor: 'text-danger-600',
+    iconBg: 'bg-danger-50',
     label: 'Critico',
   },
 } as const;
@@ -291,7 +291,7 @@ export function AlertsPage() {
                       {alert.processId && (
                         <Link
                           to={`/importacao/processos/${alert.processId}`}
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
                         >
                           <ExternalLink className="h-3 w-3" />
                           {alert.processCode || alert.processId}

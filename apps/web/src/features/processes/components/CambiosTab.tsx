@@ -21,7 +21,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
 
   const typeLabel = (t: string) => (t === 'deposit' ? 'Deposito' : 'Saldo');
   const typeColor = (t: string) =>
-    t === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700';
+    t === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-700';
 
   return (
     <div className="space-y-4">
@@ -30,19 +30,19 @@ export function CambiosTab({ processId }: CambiosTabProps) {
       {/* Totals summary */}
       {totals && (Number(totals.totalBalanceUsd) > 0 || Number(totals.totalDepositUsd) > 0) && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
+          <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-4">
+            <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo USD
             </p>
-            <p className="mt-1 text-lg font-bold text-blue-800">
+            <p className="mt-1 text-lg font-bold text-primary-800">
               {formatCurrency(totals.totalBalanceUsd)}
             </p>
           </div>
-          <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4">
-            <p className="text-xs font-semibold text-blue-500 uppercase tracking-wider">
+          <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-4">
+            <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo BRL
             </p>
-            <p className="mt-1 text-lg font-bold text-blue-800">
+            <p className="mt-1 text-lg font-bold text-primary-800">
               {formatCurrency(totals.totalBalanceBrl, 'BRL')}
             </p>
           </div>
@@ -75,7 +75,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/60">
           <table className="min-w-full divide-y divide-slate-100 text-sm">
             <thead className="bg-slate-50/80">
               <tr>

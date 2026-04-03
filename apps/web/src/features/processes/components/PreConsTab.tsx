@@ -69,8 +69,8 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
   if (isError) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
-        <XCircle className="h-8 w-8 text-red-300" />
-        <p className="text-sm text-red-500 font-medium">
+        <XCircle className="h-8 w-8 text-danger-300" />
+        <p className="text-sm text-danger-500 font-medium">
           Erro ao carregar dados de Pre-Conferencia.
         </p>
       </div>
@@ -102,7 +102,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold text-slate-800">Pre-Conferencia (KIOM)</h3>
         {divergences.length === 0 ? (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700 border border-green-200">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Sem divergencias
           </span>
@@ -116,17 +116,17 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Itens</p>
           <p className="mt-1 text-lg font-bold text-slate-800">{items.length}</p>
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Qtd Total</p>
           <p className="mt-1 text-lg font-bold text-slate-800">
             {totalQty.toLocaleString('pt-BR')}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Valor Total
           </p>
@@ -134,7 +134,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
             {totalAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3">
+        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">CBM Total</p>
           <p className="mt-1 text-lg font-bold text-slate-800">{totalCbm.toFixed(2)}</p>
         </div>
@@ -152,10 +152,10 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
                 className={cn(
                   'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold',
                   d.severity === 'critical'
-                    ? 'bg-red-100 text-red-700'
+                    ? 'bg-danger-100 text-danger-700'
                     : d.severity === 'warning'
                       ? 'bg-amber-100 text-amber-700'
-                      : 'bg-blue-100 text-blue-700',
+                      : 'bg-primary-100 text-primary-700',
                 )}
               >
                 {d.severity}
@@ -171,7 +171,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
       )}
 
       {/* Items table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+      <div className="overflow-x-auto rounded-xl border border-slate-200/60">
         <table className="min-w-full divide-y divide-slate-100 text-sm">
           <thead className="bg-slate-50/80">
             <tr>

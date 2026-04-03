@@ -47,9 +47,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
       description: `${failedCheckCount ?? 0} verificacao(oes) falharam. Revise os documentos e corrija as inconsistencias.`,
       actionLabel: 'Ver Divergencias',
       link: `/importacao/processos/${processId}`,
-      color: 'text-red-700',
-      bgColor: 'bg-red-50',
-      borderColor: 'border-red-200',
+      color: 'text-danger-700',
+      bgColor: 'bg-danger-50',
+      borderColor: 'border-danger-200',
     };
   }
 
@@ -58,7 +58,8 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
       return {
         icon: <FileText className="h-5 w-5" />,
         title: 'Aguardando Documentos',
-        description: 'Envie os documentos do processo (Invoice, Packing List, BL) para iniciar a validacao.',
+        description:
+          'Envie os documentos do processo (Invoice, Packing List, BL) para iniciar a validacao.',
         actionLabel: 'Enviar Documentos',
         link: `/importacao/processos/${processId}`,
         color: 'text-slate-700',
@@ -70,24 +71,26 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
       return {
         icon: <CheckCircle className="h-5 w-5" />,
         title: 'Pronto para Validacao',
-        description: 'Os documentos foram recebidos. Execute a validacao automatica para verificar consistencia.',
+        description:
+          'Os documentos foram recebidos. Execute a validacao automatica para verificar consistencia.',
         actionLabel: 'Iniciar Validacao',
         link: `/importacao/processos/${processId}`,
-        color: 'text-blue-700',
-        bgColor: 'bg-blue-50',
-        borderColor: 'border-blue-200',
+        color: 'text-primary-700',
+        bgColor: 'bg-primary-50',
+        borderColor: 'border-primary-200',
       };
 
     case 'validating':
       return {
         icon: <Clock className="h-5 w-5" />,
         title: 'Validacao em Andamento',
-        description: 'A validacao esta sendo processada. Aguarde o resultado ou revise manualmente.',
+        description:
+          'A validacao esta sendo processada. Aguarde o resultado ou revise manualmente.',
         actionLabel: 'Acompanhar',
         link: `/importacao/processos/${processId}`,
-        color: 'text-blue-700',
-        bgColor: 'bg-blue-50',
-        borderColor: 'border-blue-200',
+        color: 'text-primary-700',
+        bgColor: 'bg-primary-50',
+        borderColor: 'border-primary-200',
       };
 
     case 'validated':
@@ -97,9 +100,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Processo validado com sucesso. Gere o espelho para envio a Fenicia.',
         actionLabel: 'Gerar Espelho',
         link: `/importacao/processos/${processId}`,
-        color: 'text-indigo-700',
-        bgColor: 'bg-indigo-50',
-        borderColor: 'border-indigo-200',
+        color: 'text-primary-700',
+        bgColor: 'bg-primary-50',
+        borderColor: 'border-primary-200',
       };
 
     case 'espelho_generated':
@@ -109,9 +112,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'O espelho esta pronto. Envie para a Fenicia para registro da DI.',
         actionLabel: 'Enviar',
         link: `/importacao/processos/${processId}`,
-        color: 'text-purple-700',
-        bgColor: 'bg-purple-50',
-        borderColor: 'border-purple-200',
+        color: 'text-violet-700',
+        bgColor: 'bg-violet-50',
+        borderColor: 'border-violet-200',
       };
 
     case 'sent_to_fenicia':
@@ -119,7 +122,8 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         return {
           icon: <Package className="h-5 w-5" />,
           title: 'Acompanhar LIs',
-          description: 'Processo enviado para Fenicia com itens que requerem Licenca de Importacao. Acompanhe o status.',
+          description:
+            'Processo enviado para Fenicia com itens que requerem Licenca de Importacao. Acompanhe o status.',
           actionLabel: 'Ver LIs',
           link: '/importacao/lis',
           color: 'text-amber-700',
@@ -157,9 +161,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Este processo foi finalizado com sucesso.',
         actionLabel: 'Ver Detalhes',
         link: `/importacao/processos/${processId}`,
-        color: 'text-green-700',
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200',
+        color: 'text-emerald-700',
+        bgColor: 'bg-emerald-50',
+        borderColor: 'border-emerald-200',
       };
 
     case 'cancelled':
@@ -169,9 +173,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Este processo foi cancelado.',
         actionLabel: 'Ver Detalhes',
         link: `/importacao/processos/${processId}`,
-        color: 'text-red-700',
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200',
+        color: 'text-danger-700',
+        bgColor: 'bg-danger-50',
+        borderColor: 'border-danger-200',
       };
 
     default:
@@ -195,12 +199,7 @@ export function NextBestAction(props: NextBestActionProps) {
 
   return (
     <div
-      className={cn(
-        'rounded-xl border p-4',
-        action.bgColor,
-        action.borderColor,
-        props.className,
-      )}
+      className={cn('rounded-xl border p-4', action.bgColor, action.borderColor, props.className)}
     >
       <div className="flex items-start gap-3">
         <div className={cn('mt-0.5 flex-shrink-0', action.color)}>

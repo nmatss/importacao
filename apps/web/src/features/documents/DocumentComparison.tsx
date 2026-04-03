@@ -76,7 +76,7 @@ function DocBadge({
               ? 'bg-emerald-100 text-emerald-700'
               : confidence >= 0.6
                 ? 'bg-amber-100 text-amber-700'
-                : 'bg-red-100 text-red-700',
+                : 'bg-danger-100 text-danger-700',
           )}
         >
           {(confidence * 100).toFixed(0)}%
@@ -98,7 +98,7 @@ function StatusCell({
     <td
       className={cn(
         'px-3 py-2.5 text-sm font-mono',
-        status === 'divergent' ? 'text-red-700 font-semibold bg-red-50/50' : 'text-slate-700',
+        status === 'divergent' ? 'text-danger-700 font-semibold bg-danger-50/50' : 'text-slate-700',
       )}
     >
       {value}
@@ -141,11 +141,11 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
       {/* Summary badges */}
       <div className="flex items-center gap-4 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
           <CheckCircle className="h-3.5 w-3.5" /> {matchCount} campos ok
         </span>
         {divergentCount > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 font-medium text-red-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700">
             <XCircle className="h-3.5 w-3.5" /> {divergentCount} divergencias
           </span>
         )}
@@ -155,7 +155,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       <div className="rounded-xl border border-slate-200 overflow-hidden">
         <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
           <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-            <FileText className="h-4 w-4 text-blue-600" />
+            <FileText className="h-4 w-4 text-primary-600" />
             Comparativo Geral - Invoice vs Packing List vs BL
           </h4>
         </div>
@@ -167,10 +167,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Campo
                 </th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-500">
                   Invoice
                 </th>
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-purple-500">
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
                   Packing List
                 </th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
@@ -186,14 +186,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     key={i}
                     className={cn(
                       'border-b last:border-b-0',
-                      field.status === 'divergent' ? 'bg-red-50/30' : '',
+                      field.status === 'divergent' ? 'bg-danger-50/30' : '',
                     )}
                   >
                     <td className="px-3 py-2.5">
                       {field.status === 'match' && (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
-                      {field.status === 'divergent' && <XCircle className="h-4 w-4 text-red-500" />}
+                      {field.status === 'divergent' && (
+                        <XCircle className="h-4 w-4 text-danger-500" />
+                      )}
                     </td>
                     <td className="px-3 py-2.5 text-sm font-medium text-slate-800">
                       {field.label}
@@ -213,7 +215,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="rounded-xl border border-slate-200 overflow-hidden">
           <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
             <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-              <Package className="h-4 w-4 text-purple-600" />
+              <Package className="h-4 w-4 text-violet-600" />
               Comparativo por Item - Invoice vs Packing List
             </h4>
             <p className="text-xs text-slate-500 mt-0.5">
@@ -235,10 +237,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     NCM
                   </th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-blue-500">
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-primary-500">
                     Qtd INV
                   </th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-purple-500">
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-violet-500">
                     Qtd PL
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -258,7 +260,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       !item.matched
                         ? 'bg-amber-50/50'
                         : item.qtyMatch === false
-                          ? 'bg-red-50/30'
+                          ? 'bg-danger-50/30'
                           : '',
                     )}
                   >
@@ -266,9 +268,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       {!item.matched ? (
                         <AlertTriangle className="h-4 w-4 text-amber-500" />
                       ) : item.qtyMatch === false ? (
-                        <XCircle className="h-4 w-4 text-red-500" />
+                        <XCircle className="h-4 w-4 text-danger-500" />
                       ) : (
-                        <CheckCircle className="h-4 w-4 text-green-500" />
+                        <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700">{item.itemCode || '-'}</td>
@@ -276,13 +278,15 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       {item.description || '-'}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-600">{item.ncm || '-'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-blue-700">
+                    <td className="px-3 py-2 text-right font-mono text-primary-700">
                       {item.invoiceQty ?? '-'}
                     </td>
                     <td
                       className={cn(
                         'px-3 py-2 text-right font-mono',
-                        item.qtyMatch === false ? 'text-red-700 font-semibold' : 'text-purple-700',
+                        item.qtyMatch === false
+                          ? 'text-danger-700 font-semibold'
+                          : 'text-violet-700',
                       )}
                     >
                       {item.plQty ?? '-'}

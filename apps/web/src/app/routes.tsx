@@ -85,7 +85,14 @@ const CertConfiguracoesPage = lazy(() => import('@/features/certificacoes/CertCo
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading)
-    return <div className="flex items-center justify-center h-screen">Carregando...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
+          <span className="text-sm text-slate-500">Carregando...</span>
+        </div>
+      </div>
+    );
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
@@ -93,7 +100,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function LazyFallback() {
   return (
     <div className="flex items-center justify-center h-64">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+      <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
     </div>
   );
 }

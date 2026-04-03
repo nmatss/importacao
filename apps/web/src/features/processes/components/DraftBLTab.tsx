@@ -140,17 +140,17 @@ function DraftUploadSection({
               <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                 <span>{new Date(draftDoc.uploadedAt).toLocaleDateString('pt-BR')}</span>
                 {draftDoc.aiProcessingStatus === 'processing' && (
-                  <span className="inline-flex items-center gap-1 text-blue-500">
+                  <span className="inline-flex items-center gap-1 text-primary-500">
                     <Loader2 className="h-3 w-3 animate-spin" /> Processando IA...
                   </span>
                 )}
                 {draftDoc.aiProcessingStatus === 'completed' && (
-                  <span className="inline-flex items-center gap-1 text-green-600">
+                  <span className="inline-flex items-center gap-1 text-emerald-600">
                     <CheckCircle2 className="h-3 w-3" /> Dados extraidos
                   </span>
                 )}
                 {draftDoc.aiProcessingStatus === 'failed' && (
-                  <span className="inline-flex items-center gap-1 text-red-500">
+                  <span className="inline-flex items-center gap-1 text-danger-500">
                     <AlertTriangle className="h-3 w-3" /> Erro na extracao
                   </span>
                 )}
@@ -159,10 +159,10 @@ function DraftUploadSection({
                     className={cn(
                       'rounded-full px-2 py-0.5 text-[10px] font-medium',
                       draftDoc.aiConfidence >= 0.8
-                        ? 'bg-green-50 text-green-700'
+                        ? 'bg-emerald-50 text-emerald-700'
                         : draftDoc.aiConfidence >= 0.5
-                          ? 'bg-yellow-50 text-yellow-700'
-                          : 'bg-red-50 text-red-700',
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-danger-50 text-danger-700',
                     )}
                   >
                     {Math.round(draftDoc.aiConfidence * 100)}%
@@ -241,7 +241,7 @@ function ConferenceChecklist({ processId }: { processId: string }) {
               className={cn(
                 'h-full rounded-full transition-all duration-500',
                 progressPct === 100
-                  ? 'bg-green-500'
+                  ? 'bg-emerald-500'
                   : progressPct > 50
                     ? 'bg-violet-500'
                     : 'bg-amber-500',
@@ -267,14 +267,14 @@ function ConferenceChecklist({ processId }: { processId: string }) {
               className={cn(
                 'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
                 isChecked
-                  ? 'border-green-200 bg-green-50/50 hover:bg-green-50'
+                  ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50'
                   : 'border-slate-150 bg-white hover:bg-slate-50 hover:border-slate-200',
               )}
             >
               <span
                 className={cn(
                   'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                  isChecked ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500',
+                  isChecked ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500',
                 )}
               >
                 {isChecked ? <CheckCircle2 className="h-3.5 w-3.5" /> : String(index + 1)}
@@ -284,7 +284,7 @@ function ConferenceChecklist({ processId }: { processId: string }) {
                 <p
                   className={cn(
                     'text-sm font-medium',
-                    isChecked ? 'text-green-700' : 'text-slate-700',
+                    isChecked ? 'text-emerald-700' : 'text-slate-700',
                   )}
                 >
                   {check.label}
@@ -294,7 +294,7 @@ function ConferenceChecklist({ processId }: { processId: string }) {
 
               <div className="shrink-0 text-right">
                 {isChecked && timestamp ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-green-600">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
                     <Clock className="h-3 w-3" />
                     {timestamp}
                   </span>
@@ -343,10 +343,10 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
             className={cn(
               'ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-medium',
               confidence >= 0.8
-                ? 'bg-green-50 text-green-600'
+                ? 'bg-emerald-50 text-emerald-600'
                 : confidence >= 0.5
-                  ? 'bg-yellow-50 text-yellow-600'
-                  : 'bg-red-50 text-red-600',
+                  ? 'bg-amber-50 text-amber-600'
+                  : 'bg-danger-50 text-danger-600',
             )}
           >
             {Math.round(confidence * 100)}%
@@ -409,11 +409,13 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
 
       {/* Critical warnings */}
       {woodDeclaration === false && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5">
-          <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-2.5">
+          <AlertTriangle className="h-4 w-4 text-danger-500 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-red-700">Declaracao de Madeira NAO encontrada</p>
-            <p className="text-xs text-red-500">
+            <p className="text-sm font-medium text-danger-700">
+              Declaracao de Madeira NAO encontrada
+            </p>
+            <p className="text-xs text-danger-500">
               A declaracao de madeira e obrigatoria. Solicite ao agente de carga.
             </p>
           </div>
@@ -639,17 +641,17 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                   <span>{new Date(revisadoDoc.uploadedAt).toLocaleDateString('pt-BR')}</span>
                   {revisadoDoc.aiProcessingStatus === 'processing' && (
-                    <span className="inline-flex items-center gap-1 text-blue-500">
+                    <span className="inline-flex items-center gap-1 text-primary-500">
                       <Loader2 className="h-3 w-3 animate-spin" /> Processando IA...
                     </span>
                   )}
                   {revisadoDoc.aiProcessingStatus === 'completed' && (
-                    <span className="inline-flex items-center gap-1 text-green-600">
+                    <span className="inline-flex items-center gap-1 text-emerald-600">
                       <CheckCircle2 className="h-3 w-3" /> Dados extraidos
                     </span>
                   )}
                   {revisadoDoc.aiProcessingStatus === 'failed' && (
-                    <span className="inline-flex items-center gap-1 text-red-500">
+                    <span className="inline-flex items-center gap-1 text-danger-500">
                       <AlertTriangle className="h-3 w-3" /> Erro na extracao
                     </span>
                   )}
@@ -668,7 +670,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                     {changedCount} {changedCount === 1 ? 'alteracao' : 'alteracoes'}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-semibold text-green-700">
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
                     Sem alteracoes
                   </span>
                 )}
@@ -711,7 +713,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                               Alterado
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-green-600">
+                            <span className="inline-flex items-center gap-1 text-emerald-600">
                               <Check className="h-3 w-3" />
                               OK
                             </span>

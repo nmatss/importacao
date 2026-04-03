@@ -69,7 +69,16 @@ interface FobByBrand {
 
 // ── Constants ────────────────────────────────────────────────────────────
 
-const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#f97316'];
+const PIE_COLORS = [
+  '#6366f1',
+  '#8b5cf6',
+  '#ec4899',
+  '#10b981',
+  '#f59e0b',
+  '#f43f5e',
+  '#06b6d4',
+  '#f97316',
+];
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Rascunho',
@@ -83,12 +92,12 @@ const STATUS_LABELS: Record<string, string> = {
 
 const PIPELINE_COLORS: Record<string, string> = {
   draft: '#94a3b8',
-  documents_received: '#3b82f6',
+  documents_received: '#6366f1',
   validating: '#f59e0b',
   validated: '#10b981',
   espelho_generated: '#8b5cf6',
   sent_to_fenicia: '#ec4899',
-  li_pending: '#ef4444',
+  li_pending: '#f43f5e',
 };
 
 // ── Skeletons ────────────────────────────────────────────────────────────
@@ -99,7 +108,7 @@ function Skeleton({ className }: { className?: string }) {
 
 function KpiSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="space-y-3 flex-1">
           <Skeleton className="h-4 w-24" />
@@ -113,7 +122,7 @@ function KpiSkeleton() {
 
 function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
       <Skeleton className="h-5 w-40 mb-6" />
       <Skeleton className={cn(height, 'w-full rounded-xl')} />
     </div>
@@ -129,12 +138,15 @@ function ChangeBadge({ value }: { value: number }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold',
-        isPositive ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700',
+        'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1',
+        isPositive
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60'
+          : 'bg-danger-50 text-danger-700 ring-danger-200/60',
       )}
     >
       <Icon className="h-3 w-3" />
-      {isPositive ? '+' : ''}{value}%
+      {isPositive ? '+' : ''}
+      {value}%
     </span>
   );
 }
@@ -142,35 +154,45 @@ function ChangeBadge({ value }: { value: number }) {
 // ── Main Page ────────────────────────────────────────────────────────────
 
 export function ExecutiveDashboardPage() {
-  const { data: kpis, isLoading: loadingKpis } =
-    useApiQuery<ExecutiveKpis>(['dashboard', 'executive'], '/api/dashboard/executive');
+  const { data: kpis, isLoading: loadingKpis } = useApiQuery<ExecutiveKpis>(
+    ['dashboard', 'executive'],
+    '/api/dashboard/executive',
+  );
 
-  const { data: timeline, isLoading: loadingTimeline } =
-    useApiQuery<TimelineEntry[]>(['dashboard', 'executive', 'timeline'], '/api/dashboard/executive/timeline');
+  const { data: timeline, isLoading: loadingTimeline } = useApiQuery<TimelineEntry[]>(
+    ['dashboard', 'executive', 'timeline'],
+    '/api/dashboard/executive/timeline',
+  );
 
-  const { data: byMonth } =
-    useApiQuery<MonthlyTrend[]>(['dashboard', 'by-month'], '/api/dashboard/by-month');
+  const { data: byMonth } = useApiQuery<MonthlyTrend[]>(
+    ['dashboard', 'by-month'],
+    '/api/dashboard/by-month',
+  );
 
-  const { data: fobByBrand } =
-    useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
+  const { data: fobByBrand } = useApiQuery<FobByBrand[]>(
+    ['dashboard', 'fob-by-brand'],
+    '/api/dashboard/fob-by-brand',
+  );
 
   if (loadingKpis) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div>
-          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-6 w-64 mb-2" />
           <Skeleton className="h-4 w-96" />
         </div>
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <KpiSkeleton key={i} />
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
-          <div className="lg:col-span-2"><ChartSkeleton /></div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <ChartSkeleton />
+          </div>
           <ChartSkeleton />
         </div>
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <ChartSkeleton />
           <ChartSkeleton />
         </div>
@@ -184,7 +206,6 @@ export function ExecutiveDashboardPage() {
       value: kpis?.totalProcesses ?? 0,
       icon: FileBox,
       gradient: 'from-slate-600 to-slate-800',
-      shadowColor: 'shadow-slate-500/25',
       valueColor: 'text-slate-800',
       borderColor: 'border-l-slate-600',
     },
@@ -192,17 +213,15 @@ export function ExecutiveDashboardPage() {
       label: 'Processos Ativos',
       value: kpis?.activeProcesses ?? 0,
       icon: Activity,
-      gradient: 'from-blue-500 to-blue-700',
-      shadowColor: 'shadow-blue-500/25',
-      valueColor: 'text-blue-700',
-      borderColor: 'border-l-blue-500',
+      gradient: 'from-primary-500 to-primary-600',
+      valueColor: 'text-primary-700',
+      borderColor: 'border-l-primary-500',
     },
     {
       label: 'Concluidos no Mes',
       value: kpis?.completedThisMonth ?? 0,
       icon: CheckCircle,
-      gradient: 'from-emerald-500 to-emerald-700',
-      shadowColor: 'shadow-emerald-500/25',
+      gradient: 'from-emerald-500 to-emerald-600',
       valueColor: 'text-emerald-600',
       borderColor: 'border-l-emerald-500',
       change: kpis?.completedChange,
@@ -211,8 +230,7 @@ export function ExecutiveDashboardPage() {
       label: 'FOB no Mes',
       value: formatCurrency(Number(kpis?.totalFobThisMonth ?? 0)),
       icon: DollarSign,
-      gradient: 'from-violet-500 to-violet-700',
-      shadowColor: 'shadow-violet-500/25',
+      gradient: 'from-violet-500 to-violet-600',
       valueColor: 'text-violet-700',
       borderColor: 'border-l-violet-500',
       change: kpis?.fobChange,
@@ -221,8 +239,7 @@ export function ExecutiveDashboardPage() {
       label: 'Taxa de Aprovacao',
       value: `${kpis?.validationPassRate ?? 0}%`,
       icon: ShieldCheck,
-      gradient: 'from-teal-500 to-teal-700',
-      shadowColor: 'shadow-teal-500/25',
+      gradient: 'from-teal-500 to-teal-600',
       valueColor: 'text-teal-700',
       borderColor: 'border-l-teal-500',
     },
@@ -231,8 +248,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.pendingPayments?.count ?? 0,
       subtitle: formatCurrency(Number(kpis?.pendingPayments?.totalUsd ?? 0)),
       icon: CreditCard,
-      gradient: 'from-amber-500 to-amber-700',
-      shadowColor: 'shadow-amber-500/25',
+      gradient: 'from-amber-500 to-amber-600',
       valueColor: 'text-amber-700',
       borderColor: 'border-l-amber-500',
     },
@@ -240,8 +256,7 @@ export function ExecutiveDashboardPage() {
       label: 'Espelhos Gerados',
       value: kpis?.espelhosGenerated ?? 0,
       icon: FileText,
-      gradient: 'from-pink-500 to-pink-700',
-      shadowColor: 'shadow-pink-500/25',
+      gradient: 'from-pink-500 to-pink-600',
       valueColor: 'text-pink-700',
       borderColor: 'border-l-pink-500',
     },
@@ -249,10 +264,9 @@ export function ExecutiveDashboardPage() {
       label: 'Emails Enviados',
       value: kpis?.emailsSent ?? 0,
       icon: Mail,
-      gradient: 'from-indigo-500 to-indigo-700',
-      shadowColor: 'shadow-indigo-500/25',
-      valueColor: 'text-indigo-700',
-      borderColor: 'border-l-indigo-500',
+      gradient: 'from-primary-500 to-primary-600',
+      valueColor: 'text-primary-700',
+      borderColor: 'border-l-primary-500',
     },
   ];
 
@@ -271,17 +285,21 @@ export function ExecutiveDashboardPage() {
   }));
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard Executivo</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Visao consolidada dos indicadores de importacao
-        </p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+            Dashboard Executivo
+          </h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Visao consolidada dos indicadores de importacao
+          </p>
+        </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {kpiCards.map((card) => {
           const Icon = card.icon;
           const isZero = card.value === 0;
@@ -290,15 +308,15 @@ export function ExecutiveDashboardPage() {
             <div
               key={card.label}
               className={cn(
-                'group rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm',
-                'hover:shadow-lg hover:border-slate-300/80 transition-all duration-300',
+                'group rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm',
+                'hover:shadow-md hover:border-slate-300/80 transition-all duration-300',
                 'border-l-4',
                 card.borderColor,
               )}
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">{card.label}</p>
+                  <p className="text-xs font-medium text-slate-500">{card.label}</p>
                   <p
                     className={cn(
                       'mt-2 text-2xl font-bold tabular-nums tracking-tight',
@@ -319,10 +337,9 @@ export function ExecutiveDashboardPage() {
                 <div
                   className={cn(
                     'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
-                    'bg-gradient-to-br text-white shadow-lg transition-shadow',
+                    'bg-gradient-to-br text-white shadow-sm transition-shadow',
                     card.gradient,
-                    card.shadowColor,
-                    'group-hover:shadow-xl',
+                    'group-hover:shadow-md',
                   )}
                 >
                   <Icon className="h-6 w-6" />
@@ -334,14 +351,12 @@ export function ExecutiveDashboardPage() {
       </div>
 
       {/* Processing Pipeline */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-500/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-sm">
             <BarChart3 className="h-4.5 w-4.5" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 tracking-tight">
-            Pipeline de Processos
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-800">Pipeline de Processos</h3>
         </div>
         {pipelineData.length > 0 ? (
           <div className="flex items-end gap-2 overflow-x-auto pb-2">
@@ -363,7 +378,7 @@ export function ExecutiveDashboardPage() {
                     className="w-full h-1 rounded-b-sm"
                     style={{ backgroundColor: stage.fill, opacity: 0.3 }}
                   />
-                  <p className="mt-2 text-[11px] font-medium text-slate-500 text-center leading-tight">
+                  <p className="mt-2 text-[11px] text-slate-400 text-center leading-tight">
                     {stage.name}
                   </p>
                 </div>
@@ -375,22 +390,20 @@ export function ExecutiveDashboardPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
               <BarChart3 className="h-5 w-5 text-slate-300" />
             </div>
-            <p className="text-sm font-medium text-slate-400">Nenhum processo ativo no pipeline</p>
+            <p className="text-sm text-slate-400">Nenhum processo ativo no pipeline</p>
           </div>
         )}
       </div>
 
       {/* Charts Row: Monthly Trend + FOB by Brand */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Monthly Trend - Area Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm">
               <TrendingUp className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Tendencia Mensal
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-800">Tendencia Mensal</h3>
           </div>
           <div className="h-72">
             {byMonth && byMonth.length > 0 ? (
@@ -398,8 +411,8 @@ export function ExecutiveDashboardPage() {
                 <AreaChart data={byMonth} margin={{ bottom: 20 }}>
                   <defs>
                     <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorFob" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
@@ -434,23 +447,20 @@ export function ExecutiveDashboardPage() {
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '13px',
+                      fontSize: '14px',
                     }}
                   />
-                  <Legend
-                    iconType="circle"
-                    wrapperStyle={{ fontSize: '12px', color: '#64748b' }}
-                  />
+                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#64748b' }} />
                   <Area
                     yAxisId="left"
                     type="monotone"
                     dataKey="count"
                     name="Processos"
-                    stroke="#3b82f6"
+                    stroke="#6366f1"
                     strokeWidth={2.5}
                     fill="url(#colorCount)"
-                    dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                    dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
                   />
                   <Area
                     yAxisId="right"
@@ -470,21 +480,19 @@ export function ExecutiveDashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                   <TrendingUp className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">Sem dados mensais disponiveis</p>
+                <p className="text-sm text-slate-400">Sem dados mensais disponiveis</p>
               </div>
             )}
           </div>
         </div>
 
         {/* FOB by Brand - Donut */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-sm">
               <DollarSign className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              FOB por Marca
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-800">FOB por Marca</h3>
           </div>
           <div className="h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
@@ -505,10 +513,7 @@ export function ExecutiveDashboardPage() {
                     }
                   >
                     {fobByBrand.map((_entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={PIE_COLORS[index % PIE_COLORS.length]}
-                      />
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                     ))}
                   </Pie>
                   <Tooltip
@@ -517,7 +522,7 @@ export function ExecutiveDashboardPage() {
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '13px',
+                      fontSize: '14px',
                     }}
                     formatter={(value: number) => formatCurrency(value)}
                   />
@@ -528,7 +533,7 @@ export function ExecutiveDashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                   <DollarSign className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">Sem dados de FOB por marca</p>
+                <p className="text-sm text-slate-400">Sem dados de FOB por marca</p>
               </div>
             )}
           </div>
@@ -536,14 +541,12 @@ export function ExecutiveDashboardPage() {
       </div>
 
       {/* Average processing time per stage */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm">
             <Clock className="h-4.5 w-4.5" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 tracking-tight">
-            Tempo Medio por Etapa (dias)
-          </h3>
+          <h3 className="text-sm font-semibold text-slate-800">Tempo Medio por Etapa (dias)</h3>
         </div>
         <div className="h-72">
           {loadingTimeline ? (
@@ -580,15 +583,11 @@ export function ExecutiveDashboardPage() {
                     border: '1px solid #e2e8f0',
                     borderRadius: '12px',
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                    fontSize: '13px',
+                    fontSize: '14px',
                   }}
                   formatter={(value: number) => [`${value} dias`, 'Tempo Medio']}
                 />
-                <Bar
-                  dataKey="dias"
-                  radius={[6, 6, 0, 0]}
-                  name="Dias"
-                >
+                <Bar dataKey="dias" radius={[6, 6, 0, 0]} name="Dias">
                   {timelineBarData.map((entry, index) => (
                     <Cell key={`bar-${index}`} fill={entry.fill} />
                   ))}
@@ -600,7 +599,7 @@ export function ExecutiveDashboardPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                 <Clock className="h-5 w-5 text-slate-300" />
               </div>
-              <p className="text-sm font-medium text-slate-400">Sem dados de tempo por etapa</p>
+              <p className="text-sm text-slate-400">Sem dados de tempo por etapa</p>
             </div>
           )}
         </div>

@@ -55,12 +55,12 @@ const actionLabels: Record<string, string> = {
 };
 
 const actionColors: Record<string, { bg: string; text: string; dot: string }> = {
-  login: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
+  login: { bg: 'bg-primary-50', text: 'text-primary-700', dot: 'bg-primary-500' },
   create: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
   update: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-  delete: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-  upload: { bg: 'bg-indigo-50', text: 'text-indigo-700', dot: 'bg-indigo-500' },
-  reprocess: { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
+  delete: { bg: 'bg-danger-50', text: 'text-danger-700', dot: 'bg-danger-500' },
+  upload: { bg: 'bg-primary-50', text: 'text-primary-700', dot: 'bg-primary-500' },
+  reprocess: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' },
   email_processed: { bg: 'bg-teal-50', text: 'text-teal-700', dot: 'bg-teal-500' },
   validation_run: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
   manual_resolution: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
@@ -177,9 +177,9 @@ export function AuditLogPage() {
   };
 
   const selectClasses =
-    'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200 appearance-none cursor-pointer';
+    'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all appearance-none cursor-pointer';
   const inputClasses =
-    'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 focus:outline-none transition-all duration-200';
+    'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 
   return (
     <div className="space-y-6">
@@ -418,7 +418,7 @@ export function AuditLogPage() {
                           log.entityType === 'process' ? (
                             <Link
                               to={`/importacao/processos/${log.entityId}`}
-                              className="inline-flex items-center rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 transition-colors"
+                              className="inline-flex items-center rounded-lg bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-600 hover:bg-primary-100 transition-colors"
                             >
                               #{log.entityId}
                             </Link>

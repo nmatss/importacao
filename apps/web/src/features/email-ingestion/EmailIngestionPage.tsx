@@ -81,19 +81,19 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
       text: 'text-emerald-700',
       label: 'Concluido',
     },
-    failed: { dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700', label: 'Falha' },
+    failed: { dot: 'bg-danger-500', bg: 'bg-danger-50', text: 'text-danger-700', label: 'Falha' },
     processing: {
-      dot: 'bg-blue-500',
-      bg: 'bg-blue-50',
-      text: 'text-blue-700',
+      dot: 'bg-primary-500',
+      bg: 'bg-primary-50',
+      text: 'text-primary-700',
       label: 'Processando',
     },
     ignored: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', label: 'Ignorado' },
     pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
     reprocessed: {
-      dot: 'bg-purple-500',
-      bg: 'bg-purple-50',
-      text: 'text-purple-700',
+      dot: 'bg-violet-500',
+      bg: 'bg-violet-50',
+      text: 'text-violet-700',
       label: 'Reprocessado',
     },
   };
@@ -182,7 +182,7 @@ export function EmailIngestionPage() {
       label: 'Falhas',
       value: getStat('failed'),
       icon: XCircle,
-      gradient: 'from-red-500 to-red-600',
+      gradient: 'from-danger-500 to-danger-600',
     },
     {
       label: 'Ignorados',
@@ -210,7 +210,7 @@ export function EmailIngestionPage() {
             'h-1',
             status?.enabled
               ? 'bg-gradient-to-r from-emerald-500 to-teal-500'
-              : 'bg-gradient-to-r from-red-400 to-red-500',
+              : 'bg-gradient-to-r from-danger-400 to-danger-500',
           )}
         />
 
@@ -226,7 +226,7 @@ export function EmailIngestionPage() {
                     'flex items-center gap-2.5 rounded-xl px-4 py-2',
                     status?.enabled
                       ? 'bg-emerald-50 border border-emerald-200'
-                      : 'bg-red-50 border border-red-200',
+                      : 'bg-danger-50 border border-danger-200',
                   )}
                 >
                   {status?.enabled ? (
@@ -240,9 +240,9 @@ export function EmailIngestionPage() {
                     </>
                   ) : (
                     <>
-                      <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-                      <WifiOff className="h-4 w-4 text-red-600" />
-                      <span className="text-sm font-semibold text-red-700">Inativo</span>
+                      <span className="h-2.5 w-2.5 rounded-full bg-danger-500" />
+                      <WifiOff className="h-4 w-4 text-danger-600" />
+                      <span className="text-sm font-semibold text-danger-700">Inativo</span>
                     </>
                   )}
                 </div>
@@ -258,7 +258,7 @@ export function EmailIngestionPage() {
                     ) : status?.method === 'imap' ? (
                       <span className="font-medium text-emerald-600">IMAP</span>
                     ) : (
-                      <span className="font-medium text-red-600">Nao configurado</span>
+                      <span className="font-medium text-danger-600">Nao configurado</span>
                     )}
                   </div>
                   <div className="hidden h-4 w-px bg-slate-200 sm:block" />
@@ -279,7 +279,7 @@ export function EmailIngestionPage() {
                 <button
                   onClick={() => handleTrigger(false)}
                   disabled={triggering}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
                 >
                   <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
                   Verificar Novos
@@ -287,7 +287,7 @@ export function EmailIngestionPage() {
                 <button
                   onClick={() => handleTrigger(true)}
                   disabled={triggering}
-                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 disabled:opacity-50 transition-all"
                 >
                   <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
                   Buscar Todos
@@ -348,7 +348,7 @@ export function EmailIngestionPage() {
                 setEndDate('');
                 setPage(1);
               }}
-              className="rounded-xl px-3 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors"
             >
               Limpar datas
             </button>
@@ -455,7 +455,7 @@ export function EmailIngestionPage() {
                             {log.processId ? (
                               <Link
                                 to={`/importacao/processos/${log.processId}`}
-                                className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-700 font-medium transition-colors"
                               >
                                 {log.processCode ?? log.processId}
                                 <ExternalLink className="h-3 w-3" />
@@ -506,8 +506,8 @@ export function EmailIngestionPage() {
                             <td colSpan={7} className="bg-slate-50/60 px-5 py-0">
                               <div className="py-3 pl-4 border-l-2 border-slate-200">
                                 {log.status === 'failed' && log.errorMessage && (
-                                  <div className="flex items-start gap-2 rounded-xl bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-700">
-                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+                                  <div className="flex items-start gap-2 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3 text-sm text-danger-700">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-500" />
                                     <span>{log.errorMessage}</span>
                                   </div>
                                 )}

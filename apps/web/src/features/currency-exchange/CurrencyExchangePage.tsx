@@ -138,8 +138,8 @@ export function CurrencyExchangePage() {
       label: 'Total Balance USD',
       value: formatCurrency(totalBalanceUsd),
       icon: Wallet,
-      gradient: 'from-blue-500 to-blue-600',
-      bg: 'bg-blue-50',
+      gradient: 'from-primary-500 to-primary-600',
+      bg: 'bg-primary-50',
     },
     {
       label: 'Total Deposit USD',
@@ -173,19 +173,19 @@ export function CurrencyExchangePage() {
             <DollarSign className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Cambios</h2>
-            <p className="text-sm text-slate-500">Gerenciamento de cambios por processo</p>
+            <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Cambios</h2>
+            <p className="text-sm text-slate-600">Gerenciamento de cambios por processo</p>
           </div>
         </div>
       </div>
 
       {/* Process Selector */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex-1 max-w-md">
             <label
               htmlFor="exchange-process"
-              className="mb-1.5 block text-sm font-medium text-slate-700"
+              className="mb-1.5 block text-xs font-medium text-slate-500"
             >
               Processo
             </label>
@@ -195,7 +195,7 @@ export function CurrencyExchangePage() {
                 id="exchange-process"
                 value={selectedProcessId}
                 onChange={(e) => setSelectedProcessId(e.target.value)}
-                className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-10 pr-10 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full appearance-none rounded-lg border border-slate-200 py-2 pl-10 pr-10 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               >
                 <option value="">Selecione um processo</option>
                 {processes?.map((p) => (
@@ -210,7 +210,7 @@ export function CurrencyExchangePage() {
           {selectedProcessId && (
             <button
               onClick={() => setShowForm(!showForm)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-md"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700"
             >
               <Plus className="h-4 w-4" />
               Novo Cambio
@@ -223,9 +223,9 @@ export function CurrencyExchangePage() {
 
       {/* New Exchange Form */}
       {selectedProcessId && showForm && (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <h3 className="text-base font-semibold text-slate-900">Novo Cambio</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Novo Cambio</h3>
             <button
               onClick={() => {
                 setShowForm(false);
@@ -242,7 +242,7 @@ export function CurrencyExchangePage() {
               <div>
                 <label
                   htmlFor="exchange-type"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Tipo
                 </label>
@@ -252,7 +252,7 @@ export function CurrencyExchangePage() {
                   onChange={(e) =>
                     setForm({ ...form, type: e.target.value as 'balance' | 'deposit' })
                   }
-                  className="w-full appearance-none rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full appearance-none rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 >
                   <option value="balance">Balance</option>
                   <option value="deposit">Deposit</option>
@@ -261,7 +261,7 @@ export function CurrencyExchangePage() {
               <div>
                 <label
                   htmlFor="exchange-amount-usd"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Valor USD
                 </label>
@@ -272,14 +272,14 @@ export function CurrencyExchangePage() {
                   value={form.amountUsd}
                   onChange={(e) => setForm({ ...form, amountUsd: e.target.value })}
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
                 <label
                   htmlFor="exchange-rate"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Taxa de Cambio
                 </label>
@@ -290,15 +290,15 @@ export function CurrencyExchangePage() {
                   value={form.exchangeRate}
                   onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
                   placeholder="0.0000"
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500">
                   Valor BRL (calculado)
                 </label>
-                <div className="flex h-[42px] items-center rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 text-sm font-medium text-slate-600">
+                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-sm font-medium text-slate-600">
                   {calculatedBrl ? (
                     formatCurrency(calculatedBrl, 'BRL')
                   ) : (
@@ -309,7 +309,7 @@ export function CurrencyExchangePage() {
               <div>
                 <label
                   htmlFor="exchange-payment-deadline"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Vencimento Pagamento
                 </label>
@@ -318,14 +318,14 @@ export function CurrencyExchangePage() {
                   type="date"
                   value={form.paymentDeadline}
                   onChange={(e) => setForm({ ...form, paymentDeadline: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
                 <label
                   htmlFor="exchange-expiration"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Data de Expiracao
                 </label>
@@ -334,14 +334,14 @@ export function CurrencyExchangePage() {
                   type="date"
                   value={form.expirationDate}
                   onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
                 <label
                   htmlFor="exchange-notes"
-                  className="mb-1.5 block text-sm font-medium text-slate-700"
+                  className="mb-1.5 block text-xs font-medium text-slate-500"
                 >
                   Notas
                 </label>
@@ -351,7 +351,7 @@ export function CurrencyExchangePage() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
                   placeholder="Observacoes opcionais..."
-                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
               </div>
             </div>
@@ -362,14 +362,14 @@ export function CurrencyExchangePage() {
                   setShowForm(false);
                   setForm(emptyForm);
                 }}
-                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               >
                 Cancelar
               </button>
               <button
                 type="submit"
                 disabled={createMutation.isPending}
-                className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-md disabled:opacity-50"
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700 disabled:opacity-50"
               >
                 {createMutation.isPending ? 'Salvando...' : 'Salvar'}
               </button>
@@ -385,7 +385,7 @@ export function CurrencyExchangePage() {
             {kpiCards.map((kpi) => (
               <div
                 key={kpi.label}
-                className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+                className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
               >
                 <div className="flex items-center gap-3.5">
                   <div
@@ -412,45 +412,48 @@ export function CurrencyExchangePage() {
               description="Adicione um novo cambio para este processo."
             />
           ) : (
-            <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-slate-200">
                   <thead>
-                    <tr className="bg-slate-50/80">
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <tr className="bg-slate-50">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Tipo
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Valor USD
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Taxa
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Valor BRL
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Vencimento
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Expiracao
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Notas
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                         Acoes
                       </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {exchanges.map((ex) => (
-                      <tr key={ex.id} className="transition-colors hover:bg-slate-50">
+                      <tr
+                        key={ex.id}
+                        className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                      >
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <span
                             className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${
                               ex.type === 'balance'
-                                ? 'bg-blue-50 text-blue-700'
+                                ? 'bg-primary-50 text-primary-700'
                                 : 'bg-emerald-50 text-emerald-700'
                             }`}
                           >
@@ -466,19 +469,19 @@ export function CurrencyExchangePage() {
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900">
                           {formatCurrency(ex.amountBrl, 'BRL')}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                           {formatDate(ex.paymentDeadline)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                           {formatDate(ex.expirationDate)}
                         </td>
-                        <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                        <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                           {ex.notes || <span className="text-slate-300">--</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <button
                             onClick={() => setDeleteId(ex.id)}
-                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
                             title="Excluir"
                             aria-label="Excluir cambio"
                           >

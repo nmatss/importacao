@@ -33,7 +33,7 @@ const STATUS_FILTERS = [
     label: 'Todos',
     icon: LayoutGrid,
     color: 'text-slate-600',
-    activeBg: 'bg-slate-900 text-white shadow-lg shadow-slate-900/25',
+    activeBg: 'bg-slate-900 text-white shadow-sm',
     dotColor: 'bg-slate-400',
     countKey: 'total' as const,
   },
@@ -42,7 +42,7 @@ const STATUS_FILTERS = [
     label: 'Conforme',
     icon: CheckCircle2,
     color: 'text-emerald-700',
-    activeBg: 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/30',
+    activeBg: 'bg-emerald-600 text-white shadow-sm',
     dotColor: 'bg-emerald-500',
     countKey: 'ok' as const,
   },
@@ -51,7 +51,7 @@ const STATUS_FILTERS = [
     label: 'Inconsistente',
     icon: AlertTriangle,
     color: 'text-amber-700',
-    activeBg: 'bg-amber-500 text-white shadow-lg shadow-amber-500/30',
+    activeBg: 'bg-amber-500 text-white shadow-sm',
     dotColor: 'bg-amber-500',
     countKey: 'inconsistent' as const,
   },
@@ -60,7 +60,7 @@ const STATUS_FILTERS = [
     label: 'Nao Encontrado',
     icon: SearchX,
     color: 'text-slate-600',
-    activeBg: 'bg-slate-600 text-white shadow-lg shadow-slate-600/25',
+    activeBg: 'bg-slate-600 text-white shadow-sm',
     dotColor: 'bg-slate-400',
     countKey: 'not_found' as const,
   },
@@ -69,7 +69,7 @@ const STATUS_FILTERS = [
     label: 'Vencido',
     icon: CalendarX2,
     color: 'text-pink-700',
-    activeBg: 'bg-pink-600 text-white shadow-lg shadow-pink-600/30',
+    activeBg: 'bg-pink-600 text-white shadow-sm',
     dotColor: 'bg-pink-500',
     countKey: 'expired' as const,
   },
@@ -78,7 +78,7 @@ const STATUS_FILTERS = [
     label: 'Sem Cert.',
     icon: Ban,
     color: 'text-slate-500',
-    activeBg: 'bg-slate-500 text-white shadow-lg shadow-slate-500/25',
+    activeBg: 'bg-slate-500 text-white shadow-sm',
     dotColor: 'bg-slate-300',
     countKey: 'no_expected' as const,
   },
@@ -283,7 +283,7 @@ export default function CertProdutosPage() {
   return (
     <div className="space-y-5">
       {/* ── Status Filter Tabs ── */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
             Status
@@ -291,7 +291,7 @@ export default function CertProdutosPage() {
           {hasActiveFilters && (
             <button
               onClick={clearFilters}
-              className="ml-auto flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-red-500 transition-colors"
+              className="ml-auto flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-danger-500 transition-colors"
             >
               <X className="w-3 h-3" /> Limpar filtros
             </button>
@@ -333,7 +333,7 @@ export default function CertProdutosPage() {
       </div>
 
       {/* ── Search + Brand Filters ── */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-4">
         <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
           {/* Search */}
           <form onSubmit={handleSearch} className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -344,12 +344,12 @@ export default function CertProdutosPage() {
                 placeholder="Buscar por SKU ou nome..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 focus:outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all"
               />
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm shadow-emerald-600/20"
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm"
             >
               Buscar
             </button>
@@ -383,7 +383,7 @@ export default function CertProdutosPage() {
                   className={cn(
                     'px-3.5 py-2 rounded-xl text-xs font-semibold transition-all duration-200',
                     isActive
-                      ? 'bg-violet-600 text-white shadow-md shadow-violet-600/25'
+                      ? 'bg-violet-600 text-white shadow-md shadow-sm'
                       : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60',
                   )}
                 >
@@ -417,7 +417,7 @@ export default function CertProdutosPage() {
       </div>
 
       {/* ── Table ── */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
         {loading ? (
           <div className="p-6 space-y-3">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -442,7 +442,7 @@ export default function CertProdutosPage() {
         ) : (
           <table className="w-full">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200/60">
+              <tr className="bg-slate-50 border-b border-slate-200/60">
                 <th
                   className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 transition-colors"
                   onClick={() => handleSort('sku')}
@@ -548,7 +548,7 @@ export default function CertProdutosPage() {
                   <td className="px-4 py-3.5 text-right">
                     {(p.stock_cd ?? 0) > 0 ? (
                       <div className="group/cd relative inline-block">
-                        <button className="text-xs font-mono font-semibold tabular-nums text-slate-700 underline decoration-dotted underline-offset-2 hover:text-blue-600 cursor-pointer">
+                        <button className="text-xs font-mono font-semibold tabular-nums text-slate-700 underline decoration-dotted underline-offset-2 hover:text-emerald-600 cursor-pointer">
                           {(p.stock_cd ?? 0).toLocaleString('pt-BR')}
                         </button>
                         <div className="absolute z-50 bottom-full right-0 mb-2 hidden group-hover/cd:block">
@@ -605,7 +605,7 @@ export default function CertProdutosPage() {
                         'text-xs font-mono font-bold tabular-nums px-2 py-0.5 rounded',
                         (p.stock_total ?? 0) > 0
                           ? 'text-emerald-700 bg-emerald-50'
-                          : 'text-red-600 bg-red-50',
+                          : 'text-danger-600 bg-danger-50',
                       )}
                     >
                       {(p.stock_total ?? 0).toLocaleString('pt-BR')}
@@ -681,7 +681,7 @@ export default function CertProdutosPage() {
                     className={cn(
                       'w-9 h-9 rounded-xl text-xs font-semibold transition-all',
                       page === pageNum
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm shadow-emerald-600/20'
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm'
                         : 'text-slate-600 bg-white border border-slate-200 hover:bg-slate-50',
                     )}
                   >

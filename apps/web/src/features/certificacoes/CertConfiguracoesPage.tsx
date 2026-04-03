@@ -1,14 +1,28 @@
 import { useEffect, useState } from 'react';
 import { fetchCertStats, checkCertApiHealth } from '@/shared/lib/cert-api-client';
 import { cn } from '@/shared/lib/utils';
-import { CheckCircle2, XCircle, Database, Globe, Cpu, Zap, Loader2, Radio, Clock, Info, ArrowRight } from 'lucide-react';
+import {
+  CheckCircle2,
+  XCircle,
+  Database,
+  Globe,
+  Cpu,
+  Zap,
+  Loader2,
+  Radio,
+  Clock,
+  Info,
+  ArrowRight,
+} from 'lucide-react';
 
 export default function CertConfiguracoesPage() {
   const [stats, setStats] = useState<any>(null);
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ connected: boolean; latencyMs: number } | null>(null);
+  const [testResult, setTestResult] = useState<{ connected: boolean; latencyMs: number } | null>(
+    null,
+  );
 
   useEffect(() => {
     async function load() {
@@ -47,11 +61,11 @@ export default function CertConfiguracoesPage() {
   return (
     <div className="space-y-8">
       {/* Connection Status */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
@@ -67,7 +81,7 @@ export default function CertConfiguracoesPage() {
                   'flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200',
                   testing
                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:shadow-md hover:shadow-emerald-500/20',
+                    : 'bg-gradient-to-r from-emerald-600 to-emerald-700 text-white shadow-sm hover:shadow-md hover:shadow-sm',
                 )}
               >
                 {testing ? (
@@ -83,13 +97,15 @@ export default function CertConfiguracoesPage() {
                     'text-[11px] font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5',
                     testResult.connected
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                      : 'bg-red-50 text-red-700 border border-red-200/60',
+                      : 'bg-danger-50 text-danger-700 border border-danger-200/60',
                   )}
                 >
-                  <span className={cn(
-                    'w-1.5 h-1.5 rounded-full',
-                    testResult.connected ? 'bg-emerald-500' : 'bg-red-500'
-                  )} />
+                  <span
+                    className={cn(
+                      'w-1.5 h-1.5 rounded-full',
+                      testResult.connected ? 'bg-emerald-500' : 'bg-danger-500',
+                    )}
+                  />
                   {testResult.connected
                     ? `Sucesso - ${testResult.latencyMs}ms`
                     : `Falha - ${testResult.latencyMs}ms`}
@@ -122,8 +138,8 @@ export default function CertConfiguracoesPage() {
                       Online
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200/60 px-3 py-1.5 rounded-lg">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg">
+                      <span className="w-1.5 h-1.5 rounded-full bg-danger-500" />
                       Offline
                     </span>
                   )}
@@ -148,8 +164,8 @@ export default function CertConfiguracoesPage() {
                       Conectado
                     </span>
                   ) : apiHealthy && !stats ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200/60 px-3 py-1.5 rounded-lg">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg">
+                      <span className="w-1.5 h-1.5 rounded-full bg-danger-500" />
                       Erro ao ler dados
                     </span>
                   ) : (
@@ -172,7 +188,9 @@ export default function CertConfiguracoesPage() {
                     <p className="text-xs text-slate-500">puket.com.br, loja.imaginarium.com.br</p>
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">2 sites</span>
+                <span className="text-xs font-semibold text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg">
+                  2 sites
+                </span>
               </div>
             </div>
           )}
@@ -180,10 +198,10 @@ export default function CertConfiguracoesPage() {
       </div>
 
       {/* How it Works */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
               <Zap className="w-5 h-5" />
             </div>
             <div>
@@ -196,58 +214,66 @@ export default function CertConfiguracoesPage() {
             <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-4">
               <p className="text-sm text-slate-700 leading-relaxed">
                 O sistema consulta os e-commerces Puket e Imaginarium em{' '}
-                <span className="font-semibold text-emerald-700">tempo real</span> usando
-                a API pública VTEX. Nenhum dado de produto é armazenado localmente.
+                <span className="font-semibold text-emerald-700">tempo real</span> usando a API
+                pública VTEX. Nenhum dado de produto é armazenado localmente.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4">
+              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     1
                   </div>
                   <p className="font-semibold text-slate-800 text-sm">Leitura da Planilha</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">Produtos e certificações esperadas são carregados do Google Sheets</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">
+                  Produtos e certificações esperadas são carregados do Google Sheets
+                </p>
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
-              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4">
+              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     2
                   </div>
                   <p className="font-semibold text-slate-800 text-sm">Consulta VTEX</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">Cada SKU é buscado na API VTEX para obter a descrição do produto</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">
+                  Cada SKU é buscado na API VTEX para obter a descrição do produto
+                </p>
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
-              <div className="flex flex-col gap-3 rounded-xl border border-slate-200/80 bg-slate-50/50 p-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-200/60 bg-slate-50/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     3
                   </div>
                   <p className="font-semibold text-slate-800 text-sm">Comparação</p>
                 </div>
-                <p className="text-xs text-slate-500 leading-relaxed pl-11">O texto de certificação encontrado é comparado com o valor esperado</p>
+                <p className="text-xs text-slate-500 leading-relaxed pl-11">
+                  O texto de certificação encontrado é comparado com o valor esperado
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2.5 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-3 border border-slate-100">
               <Clock className="w-4 h-4 text-slate-400 shrink-0" />
-              <span>Intervalo entre requisições: 1.5s por produto para evitar bloqueio da API VTEX</span>
+              <span>
+                Intervalo entre requisições: 1.5s por produto para evitar bloqueio da API VTEX
+              </span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Info */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
         <div className="p-6">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
               <Info className="w-5 h-5" />
             </div>
             <div>
@@ -266,7 +292,9 @@ export default function CertConfiguracoesPage() {
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 p-4">
               <p className="text-xs text-slate-500 mb-1">Marcas</p>
-              <p className="text-lg font-bold text-slate-900">Imaginarium, Puket, Puket Escolares</p>
+              <p className="text-lg font-bold text-slate-900">
+                Imaginarium, Puket, Puket Escolares
+              </p>
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 p-4">
               <p className="text-xs text-slate-500 mb-1">Intervalo entre Requisições</p>

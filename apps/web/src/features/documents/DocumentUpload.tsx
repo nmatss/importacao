@@ -143,7 +143,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             className={cn(
               'rounded-full px-3 py-1 text-xs font-medium transition-all',
               docType === ft.value
-                ? 'bg-blue-600 text-white shadow-sm'
+                ? 'bg-primary-600 text-white shadow-sm'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
             )}
           >
@@ -166,13 +166,13 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
         }}
         className={cn(
           'relative cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200',
-          dragOver && 'border-blue-400 bg-blue-50 scale-[1.01]',
+          dragOver && 'border-primary-400 bg-primary-50 scale-[1.01]',
           state === 'idle' &&
             !dragOver &&
-            'border-slate-200 hover:border-blue-300 hover:bg-slate-50',
-          state === 'uploading' && 'border-blue-300 bg-blue-50/50 cursor-wait',
-          state === 'success' && 'border-green-300 bg-green-50',
-          state === 'error' && 'border-red-300 bg-red-50',
+            'border-slate-200 hover:border-primary-300 hover:bg-slate-50',
+          state === 'uploading' && 'border-primary-300 bg-primary-50/50 cursor-wait',
+          state === 'success' && 'border-emerald-300 bg-emerald-50',
+          state === 'error' && 'border-danger-300 bg-danger-50',
         )}
       >
         <input
@@ -189,15 +189,15 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             className={cn(
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-lg',
               state === 'idle' && 'bg-slate-100',
-              state === 'uploading' && 'bg-blue-100',
-              state === 'success' && 'bg-green-100',
-              state === 'error' && 'bg-red-100',
+              state === 'uploading' && 'bg-primary-100',
+              state === 'success' && 'bg-emerald-100',
+              state === 'error' && 'bg-danger-100',
             )}
           >
             {state === 'idle' && <Upload className="h-5 w-5 text-slate-400" />}
-            {state === 'uploading' && <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />}
-            {state === 'success' && <CheckCircle className="h-5 w-5 text-green-500" />}
-            {state === 'error' && <AlertCircle className="h-5 w-5 text-red-500" />}
+            {state === 'uploading' && <Loader2 className="h-5 w-5 text-primary-500 animate-spin" />}
+            {state === 'success' && <CheckCircle className="h-5 w-5 text-emerald-500" />}
+            {state === 'error' && <AlertCircle className="h-5 w-5 text-danger-500" />}
           </div>
 
           {/* Content */}
@@ -214,37 +214,37 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             {state === 'uploading' && selectedFile && (
               <>
                 <div className="flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5 text-blue-500" />
+                  <FileText className="h-3.5 w-3.5 text-primary-500" />
                   <p className="truncate text-sm font-medium text-slate-700">{selectedFile.name}</p>
                   <span className="text-xs text-slate-400">
                     {formatFileSize(selectedFile.size)}
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-blue-100">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-100">
                     <div
-                      className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                      className="h-full rounded-full bg-primary-500 transition-all duration-300"
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <span className="text-xs font-medium text-blue-600">{progress}%</span>
+                  <span className="text-xs font-medium text-primary-600">{progress}%</span>
                 </div>
               </>
             )}
 
             {state === 'success' && selectedFile && (
               <>
-                <p className="text-sm font-medium text-green-700">
+                <p className="text-sm font-medium text-emerald-700">
                   {selectedFile.name} enviado com sucesso
                 </p>
-                <p className="text-xs text-green-500">IA processando em background...</p>
+                <p className="text-xs text-emerald-500">IA processando em background...</p>
               </>
             )}
 
             {state === 'error' && (
               <>
-                <p className="text-sm font-medium text-red-700">{error || 'Erro no upload'}</p>
-                <p className="text-xs text-red-400">Clique para tentar novamente</p>
+                <p className="text-sm font-medium text-danger-700">{error || 'Erro no upload'}</p>
+                <p className="text-xs text-danger-400">Clique para tentar novamente</p>
               </>
             )}
           </div>

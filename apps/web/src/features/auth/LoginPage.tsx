@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { Ship, FileCheck, BarChart3, Shield } from 'lucide-react';
+import { Ship, FileCheck, BarChart3, Shield, ArrowRight } from 'lucide-react';
 
 const features = [
-  { icon: Ship, label: 'Gestao de Importacoes' },
-  { icon: FileCheck, label: 'Validacao de Documentos' },
-  { icon: BarChart3, label: 'Dashboards em Tempo Real' },
-  { icon: Shield, label: 'Certificacoes INMETRO / ANATEL' },
+  { icon: Ship, label: 'Gestão de Importações', desc: 'Controle completo dos processos' },
+  { icon: FileCheck, label: 'Validação de Documentos', desc: 'IA para conferência automática' },
+  { icon: BarChart3, label: 'Dashboards em Tempo Real', desc: 'Métricas e indicadores' },
+  { icon: Shield, label: 'Certificações INMETRO', desc: 'Monitoramento e-commerce' },
 ];
 
 export function LoginPage() {
@@ -17,86 +17,115 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* Left panel - branding */}
-      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900">
-        {/* Background pattern */}
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 -left-10 w-72 h-72 rounded-full border border-white/30" />
-          <div className="absolute top-40 left-40 w-96 h-96 rounded-full border border-white/20" />
-          <div className="absolute -bottom-20 left-20 w-80 h-80 rounded-full border border-white/25" />
-          <div className="absolute top-10 right-20 w-64 h-64 rounded-full border border-white/15" />
-          <div className="absolute bottom-40 right-10 w-48 h-48 rounded-full border border-white/20" />
-        </div>
+      {/* Left panel — dark branding */}
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-sidebar-950">
+        {/* Gradient overlay */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary-900/40 via-sidebar-950 to-sidebar-950" />
+
+        {/* Grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.03]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
+            backgroundSize: '64px 64px',
+          }}
+        />
+
+        {/* Glow accent */}
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-primary-600/20 rounded-full blur-3xl" />
+        <div className="absolute -bottom-32 right-0 w-80 h-80 bg-primary-500/10 rounded-full blur-3xl" />
 
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
-          {/* Top - logo */}
+          {/* Top — logo */}
           <div className="flex items-center gap-3">
-            <img src="/logo-unico.png" alt="Uni.co" className="h-10 w-10 rounded-full bg-white p-0.5" />
-            <span className="text-white/90 text-lg font-semibold tracking-wide">Uni.co</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
+              <img src="/logo-unico.png" alt="Uni.co" className="h-8 w-8 rounded-lg" />
+            </div>
+            <div>
+              <span className="text-white text-base font-bold tracking-tight">Uni.co</span>
+              <p className="text-white/30 text-[10px] font-medium">Sistema Integrado</p>
+            </div>
           </div>
 
-          {/* Center - hero text */}
+          {/* Center — hero */}
           <div className="max-w-lg">
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-tight">
-              Sistema Integrado de Importacao
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary-500/10 border border-primary-500/20 px-3 py-1 mb-6">
+              <div className="h-1.5 w-1.5 rounded-full bg-primary-400 animate-pulse" />
+              <span className="text-xs font-medium text-primary-300">Plataforma v1.0</span>
+            </div>
+
+            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-[1.1] tracking-tight">
+              Sistema Integrado
+              <br />
+              <span className="text-primary-400">de Importação</span>
             </h1>
-            <p className="text-blue-100 text-lg mt-4 leading-relaxed">
-              Plataforma completa para gestao de processos de importacao, validacao documental e certificacoes.
+            <p className="text-sidebar-200/50 text-base mt-4 leading-relaxed max-w-md">
+              Plataforma completa para gestão de processos de importação, validação documental e
+              certificações.
             </p>
 
-            <div className="grid grid-cols-2 gap-4 mt-10">
+            <div className="grid grid-cols-2 gap-3 mt-10">
               {features.map((f) => (
-                <div key={f.label} className="flex items-center gap-3 rounded-xl bg-white/10 backdrop-blur-sm px-4 py-3">
-                  <f.icon className="h-5 w-5 text-blue-200 shrink-0" />
-                  <span className="text-sm text-white/90 font-medium">{f.label}</span>
+                <div
+                  key={f.label}
+                  className="group flex items-start gap-3 rounded-xl bg-white/[0.03] border border-white/5 px-4 py-3.5 hover:bg-white/[0.06] transition-colors"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-500/10">
+                    <f.icon className="h-4 w-4 text-primary-400" />
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-white/80">{f.label}</span>
+                    <p className="text-[11px] text-white/30 mt-0.5">{f.desc}</p>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Bottom - footer */}
-          <p className="text-blue-200/60 text-xs">
+          {/* Bottom — footer */}
+          <p className="text-sidebar-200/20 text-xs">
             &copy; {new Date().getFullYear()} Grupo Unico. Todos os direitos reservados.
           </p>
         </div>
       </div>
 
-      {/* Right panel - login */}
+      {/* Right panel — login */}
       <div className="flex-1 flex flex-col bg-slate-50">
         {/* Mobile logo */}
         <div className="flex items-center gap-3 p-6 lg:hidden">
-          <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-full" />
-          <span className="text-slate-800 font-semibold">Uni.co</span>
+          <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-xl" />
+          <span className="text-slate-800 font-bold">Uni.co</span>
         </div>
 
         <div className="flex-1 flex items-center justify-center px-6 py-12">
           <div className="w-full max-w-sm">
             {/* Welcome text */}
             <div className="text-center mb-8">
-              <div className="lg:hidden inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-5">
-                <Ship className="h-8 w-8 text-white" />
+              <div className="lg:hidden inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-600 mb-5">
+                <Ship className="h-7 w-7 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900">
-                Bem-vindo
+              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+                Bem-vindo de volta
               </h2>
               <p className="text-slate-500 mt-2 text-sm">
-                Faca login com sua conta Google corporativa
+                Faça login com sua conta Google corporativa
               </p>
             </div>
 
             {/* Login card */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-8">
+            <div className="bg-white rounded-2xl border border-slate-200/60 p-8 shadow-sm">
               {error && (
-                <div className="mb-6 flex items-start gap-3 rounded-xl bg-red-50 border border-red-100 px-4 py-3">
-                  <div className="mt-0.5 h-2 w-2 rounded-full bg-red-400 shrink-0" />
-                  <p className="text-sm text-red-600">{error}</p>
+                <div className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3">
+                  <div className="mt-0.5 h-2 w-2 rounded-full bg-danger-500 shrink-0" />
+                  <p className="text-sm text-danger-600">{error}</p>
                 </div>
               )}
 
               <div className="flex flex-col items-center">
                 {loading ? (
                   <div className="flex flex-col items-center gap-3 py-4">
-                    <div className="h-10 w-10 rounded-full border-[3px] border-slate-200 border-t-blue-600 animate-spin" />
+                    <div className="h-10 w-10 rounded-full border-[3px] border-slate-200 border-t-primary-600 animate-spin" />
                     <p className="text-sm text-slate-500">Autenticando...</p>
                   </div>
                 ) : (
@@ -108,7 +137,9 @@ export function LoginPage() {
                       try {
                         await loginWithGoogle(response.credential);
                       } catch (err) {
-                        setError(err instanceof Error ? err.message : 'Erro ao fazer login com Google');
+                        setError(
+                          err instanceof Error ? err.message : 'Erro ao fazer login com Google',
+                        );
                         setLoading(false);
                       }
                     }}
@@ -126,7 +157,7 @@ export function LoginPage() {
 
               <div className="mt-6 flex items-center gap-2 justify-center">
                 <div className="h-px flex-1 bg-slate-100" />
-                <span className="text-xs text-slate-400 px-2">@grupounico.com</span>
+                <span className="text-[11px] text-slate-400 px-2 font-medium">@grupounico.com</span>
                 <div className="h-px flex-1 bg-slate-100" />
               </div>
             </div>

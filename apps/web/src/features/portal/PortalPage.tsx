@@ -64,14 +64,14 @@ function UserAvatar({ name }: { name: string }) {
     .join('')
     .toUpperCase();
   return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-sm font-bold text-white ring-2 ring-white shadow">
+    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 text-[11px] font-bold text-white shadow-sm">
       {initials}
     </div>
   );
 }
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
+  return <div className={cn('bg-slate-200/50 rounded-lg animate-pulse', className)} />;
 }
 
 function StatCard({
@@ -82,21 +82,28 @@ function StatCard({
 }: {
   value: number;
   label: string;
-  color: 'blue' | 'red' | 'emerald' | 'slate';
+  color: 'primary' | 'danger' | 'emerald' | 'slate';
   loading?: boolean;
 }) {
-  if (loading) return <Skeleton className="h-[72px]" />;
+  if (loading) return <Skeleton className="h-[68px]" />;
 
   const colorMap = {
-    blue: 'text-blue-600',
-    red: 'text-red-500',
+    primary: 'text-primary-600',
+    danger: 'text-danger-500',
     emerald: 'text-emerald-600',
     slate: 'text-slate-700',
   };
 
   return (
-    <div className="rounded-xl bg-white border border-slate-100 px-4 py-3 text-center shadow-sm">
-      <p className={cn('text-2xl font-bold tabular-nums', value === 0 && color !== 'blue' && color !== 'slate' ? 'text-slate-300' : colorMap[color])}>
+    <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-center">
+      <p
+        className={cn(
+          'text-xl font-bold tabular-nums',
+          value === 0 && color !== 'primary' && color !== 'slate'
+            ? 'text-slate-300'
+            : colorMap[color],
+        )}
+      >
         {value}
       </p>
       <p className="text-[11px] text-slate-500 mt-0.5 font-medium">{label}</p>
@@ -108,7 +115,7 @@ function QuickLink({
   to,
   icon: Icon,
   label,
-  hoverColor = 'hover:text-blue-600 hover:bg-blue-50',
+  hoverColor = 'hover:text-primary-600 hover:bg-primary-50',
 }: {
   to: string;
   icon: typeof Plus;
@@ -119,7 +126,7 @@ function QuickLink({
     <Link
       to={to}
       className={cn(
-        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-slate-500 transition-colors',
+        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors',
         hoverColor,
       )}
     >
@@ -173,30 +180,34 @@ export function PortalPage() {
   const firstName = user?.name?.split(' ')[0] || '';
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100/50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white/80 backdrop-blur-xl border-b border-slate-200/60 shadow-sm shadow-slate-100/50">
-        <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/60">
+        <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-full" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-900">
+              <img src="/logo-unico.png" alt="Uni.co" className="h-6 w-6 rounded" />
+            </div>
             <div className="hidden sm:block">
               <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">Uni.co</p>
               <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Sistema Integrado</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {user && (
               <>
                 <div className="text-right hidden sm:block mr-1">
-                  <p className="text-sm font-semibold text-slate-800 leading-tight">{user.name}</p>
-                  <p className="text-[11px] text-slate-400 font-medium">{user.role === 'admin' ? 'Administrador' : 'Analista'}</p>
+                  <p className="text-sm font-medium text-slate-700 leading-tight">{user.name}</p>
+                  <p className="text-[11px] text-slate-400">
+                    {user.role === 'admin' ? 'Administrador' : 'Analista'}
+                  </p>
                 </div>
                 <UserAvatar name={user.name || 'U'} />
-                <div className="w-px h-7 bg-slate-200 mx-1" />
+                <div className="w-px h-5 bg-slate-200 mx-1" />
                 <button
                   onClick={logout}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Sair</span>
@@ -207,35 +218,35 @@ export function PortalPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main className="mx-auto max-w-6xl px-6 py-8">
         {/* Welcome */}
-        <section className="mb-10">
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+        <section className="mb-8">
+          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
             {getGreeting()}, {firstName}
           </h1>
-          <p className="mt-2 text-sm text-slate-500 first-letter:capitalize">
-            {formatDatePtBr()}
-          </p>
+          <p className="mt-1 text-sm text-slate-500 first-letter:capitalize">{formatDatePtBr()}</p>
 
           {/* Summary pills */}
-          <div className="mt-5 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             {importLoading ? (
               <Skeleton className="h-7 w-44 rounded-full" />
             ) : overview ? (
               <>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 border border-primary-100 px-3 py-1 text-xs font-medium text-primary-700">
                   <Activity className="h-3 w-3" />
-                  {overview.activeProcesses} processo{overview.activeProcesses !== 1 ? 's' : ''} ativo{overview.activeProcesses !== 1 ? 's' : ''}
+                  {overview.activeProcesses} processo{overview.activeProcesses !== 1 ? 's' : ''}{' '}
+                  ativo{overview.activeProcesses !== 1 ? 's' : ''}
                 </span>
                 {overview.overdueProcesses > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 border border-red-100 px-3 py-1 text-xs font-semibold text-red-600">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 border border-danger-100 px-3 py-1 text-xs font-medium text-danger-600">
                     <AlertTriangle className="h-3 w-3" />
                     {overview.overdueProcesses} atrasado{overview.overdueProcesses !== 1 ? 's' : ''}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
                   <TrendingUp className="h-3 w-3" />
-                  {overview.completedThisMonth} concluido{overview.completedThisMonth !== 1 ? 's' : ''} no mes
+                  {overview.completedThisMonth} concluído
+                  {overview.completedThisMonth !== 1 ? 's' : ''} no mês
                 </span>
               </>
             ) : null}
@@ -243,7 +254,7 @@ export function PortalPage() {
             {certLoading ? (
               <Skeleton className="h-7 w-40 rounded-full" />
             ) : certStats ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
                 <Package className="h-3 w-3" />
                 {certStats.total_products} produtos monitorados
               </span>
@@ -252,41 +263,41 @@ export function PortalPage() {
         </section>
 
         {/* Module Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Importacao */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-lg hover:border-blue-200/60 transition-all duration-300 overflow-hidden">
-            <div className="h-1.5 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600" />
+          <div className="group relative bg-white rounded-2xl border border-slate-200/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+            <div className="h-1 bg-gradient-to-r from-primary-500 to-primary-600" />
 
-            <div className="p-7">
-              <div className="flex items-start gap-4 mb-6">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-500/25 group-hover:shadow-blue-500/40 transition-shadow">
-                  <Ship className="h-6 w-6" />
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+                  <Ship className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-slate-900">Importacao</h2>
+                  <h2 className="text-base font-bold text-slate-900">Importação</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Processos, documentos, validacao, cambios e follow-up
+                    Processos, documentos, validação, câmbios e follow-up
                   </p>
                 </div>
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-3 gap-3 mb-5">
                 <StatCard
                   value={overview?.activeProcesses ?? 0}
                   label="Ativos"
-                  color="blue"
+                  color="primary"
                   loading={importLoading}
                 />
                 <StatCard
                   value={overview?.overdueProcesses ?? 0}
                   label="Atrasados"
-                  color="red"
+                  color="danger"
                   loading={importLoading}
                 />
                 <StatCard
                   value={overview?.completedThisMonth ?? 0}
-                  label="Concluidos"
+                  label="Concluídos"
                   color="emerald"
                   loading={importLoading}
                 />
@@ -294,16 +305,16 @@ export function PortalPage() {
 
               <Link
                 to="/importacao/dashboard"
-                className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-3 text-sm font-semibold text-white hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] transition-all shadow-sm shadow-blue-600/20"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-primary-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-primary-700 active:scale-[0.98] transition-all shadow-sm"
               >
                 <BarChart3 className="h-4 w-4" />
                 Acessar Dashboard
-                <ArrowRight className="h-4 w-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                <ArrowRight className="h-4 w-4 ml-auto opacity-60 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5 flex items-center gap-1">
+            <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-2 flex items-center gap-1">
               <QuickLink to="/importacao/processos/novo" icon={Plus} label="Novo" />
               <QuickLink to="/importacao/processos" icon={Eye} label="Processos" />
               <QuickLink to="/importacao/follow-up" icon={CalendarClock} label="Follow-Up" />
@@ -311,93 +322,120 @@ export function PortalPage() {
           </div>
 
           {/* Certificacoes */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-lg hover:border-emerald-200/60 transition-all duration-300 overflow-hidden">
-            <div className="h-1.5 bg-gradient-to-r from-emerald-500 via-emerald-600 to-teal-600" />
+          <div className="group relative bg-white rounded-2xl border border-slate-200/60 hover:border-emerald-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+            <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
 
-            <div className="p-7">
-              <div className="flex items-start gap-4 mb-6">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25 group-hover:shadow-emerald-500/40 transition-shadow">
-                  <ShieldCheck className="h-6 w-6" />
+            <div className="p-6">
+              <div className="flex items-start gap-4 mb-5">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                  <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-lg font-bold text-slate-900">Certificacoes</h2>
+                  <h2 className="text-base font-bold text-slate-900">Certificações</h2>
                   <p className="mt-0.5 text-sm text-slate-500">
-                    Verificacao INMETRO / ANATEL nos e-commerces
+                    Verificação INMETRO / ANATEL nos e-commerces
                   </p>
                 </div>
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="grid grid-cols-3 gap-3 mb-5">
                 {certLoading ? (
                   <>
-                    <Skeleton className="h-[72px]" />
-                    <Skeleton className="h-[72px]" />
-                    <Skeleton className="h-[72px]" />
+                    <Skeleton className="h-[68px]" />
+                    <Skeleton className="h-[68px]" />
+                    <Skeleton className="h-[68px]" />
                   </>
                 ) : certStats ? (
                   <>
                     <StatCard value={certStats.total_products} label="Produtos" color="slate" />
                     <StatCard value={certStats.ok} label="Conforme" color="emerald" />
-                    <StatCard value={problems} label="Pendencias" color="red" />
+                    <StatCard value={problems} label="Pendências" color="danger" />
                   </>
                 ) : (
                   <div className="col-span-3 rounded-xl bg-slate-50 border border-slate-100 py-5 text-center text-xs text-slate-400 font-medium">
-                    API indisponivel
+                    API indisponível
                   </div>
                 )}
               </div>
 
               <Link
                 to="/certificacoes"
-                className="flex items-center justify-center gap-2 w-full rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 px-4 py-3 text-sm font-semibold text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm shadow-emerald-600/20"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-sm"
               >
                 <ShieldCheck className="h-4 w-4" />
-                Acessar Certificacoes
-                <ArrowRight className="h-4 w-4 ml-auto group-hover:translate-x-0.5 transition-transform" />
+                Acessar Certificações
+                <ArrowRight className="h-4 w-4 ml-auto opacity-60 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-2.5 flex items-center gap-1">
-              <QuickLink to="/certificacoes/validacao" icon={Play} label="Validar" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
-              <QuickLink to="/certificacoes/produtos" icon={Package} label="Produtos" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
-              <QuickLink to="/certificacoes/relatorios" icon={FileBarChart} label="Relatorios" hoverColor="hover:text-emerald-600 hover:bg-emerald-50" />
+            <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-2 flex items-center gap-1">
+              <QuickLink
+                to="/certificacoes/validacao"
+                icon={Play}
+                label="Validar"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+              />
+              <QuickLink
+                to="/certificacoes/produtos"
+                icon={Package}
+                label="Produtos"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+              />
+              <QuickLink
+                to="/certificacoes/relatorios"
+                icon={FileBarChart}
+                label="Relatórios"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+              />
             </div>
           </div>
         </div>
 
         {/* Status footer */}
-        <footer className="mt-10 rounded-xl border border-slate-200/60 bg-white/60 backdrop-blur-sm px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+        <footer className="mt-8 rounded-xl border border-slate-200/60 bg-white px-6 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-6">
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className={cn(
-                'h-2 w-2 rounded-full',
-                importHealth === null ? 'bg-slate-300 animate-pulse' : importHealth.connected ? 'bg-emerald-500' : 'bg-red-400',
-              )} />
-              <span className="font-medium">Importacao</span>
-              {importHealth && (
-                importHealth.connected
-                  ? <span className="text-emerald-600">{importHealth.latencyMs}ms</span>
-                  : <span className="text-red-500">offline</span>
-              )}
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  importHealth === null
+                    ? 'bg-slate-300 animate-pulse'
+                    : importHealth.connected
+                      ? 'bg-emerald-500'
+                      : 'bg-danger-500',
+                )}
+              />
+              <span className="font-medium">Importação</span>
+              {importHealth &&
+                (importHealth.connected ? (
+                  <span className="text-emerald-600">{importHealth.latencyMs}ms</span>
+                ) : (
+                  <span className="text-danger-500">offline</span>
+                ))}
             </div>
             <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className={cn(
-                'h-2 w-2 rounded-full',
-                certHealth === null ? 'bg-slate-300 animate-pulse' : certHealth.connected ? 'bg-emerald-500' : 'bg-red-400',
-              )} />
-              <span className="font-medium">Certificacoes</span>
-              {certHealth && (
-                certHealth.connected
-                  ? <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
-                  : <span className="text-red-500">offline</span>
-              )}
+              <span
+                className={cn(
+                  'h-2 w-2 rounded-full',
+                  certHealth === null
+                    ? 'bg-slate-300 animate-pulse'
+                    : certHealth.connected
+                      ? 'bg-emerald-500'
+                      : 'bg-danger-500',
+                )}
+              />
+              <span className="font-medium">Certificações</span>
+              {certHealth &&
+                (certHealth.connected ? (
+                  <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
+                ) : (
+                  <span className="text-danger-500">offline</span>
+                ))}
             </div>
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">
-            v1.0.0
-          </p>
+          <p className="text-[11px] text-slate-400 font-medium">v1.0.0</p>
         </footer>
       </main>
     </div>

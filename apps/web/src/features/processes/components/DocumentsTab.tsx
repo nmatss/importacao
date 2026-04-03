@@ -92,9 +92,9 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
   return (
     <div className="space-y-4">
       {/* Email sync header — primary action */}
-      <div className="flex items-center gap-3 rounded-xl border border-blue-100 bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-100">
-          <Inbox className="h-5 w-5 text-blue-600" />
+      <div className="flex items-center gap-3 rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-primary-50 px-4 py-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-100">
+          <Inbox className="h-5 w-5 text-primary-600" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -104,7 +104,7 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
             {emailStatus?.enabled ? (
               <>
-                <span className="inline-flex items-center gap-1 text-green-600">
+                <span className="inline-flex items-center gap-1 text-emerald-600">
                   <CheckCircle className="h-3 w-3" />
                   {emailStatus.method === 'gmail_api'
                     ? 'Gmail API'
@@ -139,8 +139,8 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
           className={cn(
             'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
             syncing
-              ? 'bg-blue-100 text-blue-400 cursor-wait'
-              : 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
+              ? 'bg-primary-100 text-primary-400 cursor-wait'
+              : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm',
           )}
         >
           {syncing ? (

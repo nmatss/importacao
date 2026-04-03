@@ -46,11 +46,16 @@ interface FupComparisonPanelProps {
 const statusIcon = {
   passed: {
     Icon: CheckCircle,
-    color: 'text-green-500',
-    bg: 'bg-green-50',
-    border: 'border-green-200',
+    color: 'text-emerald-500',
+    bg: 'bg-emerald-50',
+    border: 'border-emerald-200',
   },
-  failed: { Icon: XCircle, color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200' },
+  failed: {
+    Icon: XCircle,
+    color: 'text-danger-500',
+    bg: 'bg-danger-50',
+    border: 'border-danger-200',
+  },
   warning: {
     Icon: AlertTriangle,
     color: 'text-amber-500',
@@ -72,9 +77,9 @@ function CheckRow({ check, index }: { check: ValidationCheck; index: number }) {
   return (
     <tr
       className={cn(
-        'border-b last:border-b-0 transition-colors hover:bg-blue-50/40',
+        'border-b last:border-b-0 transition-colors hover:bg-primary-50/40',
         index % 2 === 0 ? '' : 'bg-slate-50',
-        check.status === 'failed' && 'bg-red-50/40',
+        check.status === 'failed' && 'bg-danger-50/40',
       )}
     >
       <td className="px-5 py-3.5 text-sm font-medium text-slate-900">
@@ -87,7 +92,7 @@ function CheckRow({ check, index }: { check: ValidationCheck; index: number }) {
       <td
         className={cn(
           'px-5 py-3.5 text-sm font-mono',
-          check.status === 'failed' ? 'text-red-700 font-semibold' : 'text-slate-600',
+          check.status === 'failed' ? 'text-danger-700 font-semibold' : 'text-slate-600',
         )}
       >
         {check.actualValue ?? '-'}
@@ -108,8 +113,8 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
   if (!report) {
     return (
       <div className="flex flex-col items-center justify-center py-14 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 border border-blue-100 mb-4">
-          <FileSearch className="h-7 w-7 text-blue-400" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 border border-primary-100 mb-4">
+          <FileSearch className="h-7 w-7 text-primary-400" />
         </div>
         <p className="text-sm font-semibold text-slate-600">
           Nenhum relatorio de validacao disponivel
@@ -117,7 +122,7 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
         <p className="text-xs text-slate-400 mt-1 mb-4">
           Rode a Validacao primeiro para ver o comparativo.
         </p>
-        <div className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white cursor-default">
+        <div className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-medium text-white cursor-default">
           <Play className="h-4 w-4" />
           Rode a Validacao primeiro
         </div>
@@ -132,10 +137,10 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
     <div className="space-y-6">
       {/* Summary */}
       <div className="flex items-center gap-4 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 font-medium text-green-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
           <CheckCircle className="h-3.5 w-3.5" /> {report.summary.passed} passou
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-red-100 px-3 py-1 font-medium text-red-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700">
           <XCircle className="h-3.5 w-3.5" /> {report.summary.failed} falhou
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700">
@@ -145,27 +150,27 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
       {/* System vs Document checks */}
       {hasSystemChecks && (
-        <div className="rounded-xl border border-blue-200 overflow-hidden">
-          <div className="bg-blue-50 px-4 py-3 border-b border-blue-200">
-            <h4 className="text-sm font-semibold text-blue-900">Documentos vs Sistema</h4>
-            <p className="text-xs text-blue-600 mt-0.5">
+        <div className="rounded-xl border border-primary-200 overflow-hidden">
+          <div className="bg-primary-50 px-4 py-3 border-b border-primary-200">
+            <h4 className="text-sm font-semibold text-primary-900">Documentos vs Sistema</h4>
+            <p className="text-xs text-primary-600 mt-0.5">
               Comparacao entre dados extraidos dos documentos e valores cadastrados no sistema
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-blue-50/50">
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                <tr className="bg-primary-50/50">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Verificacao
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Valor Sistema
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Valor Documento
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-blue-400">
+                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Mensagem
                   </th>
                 </tr>

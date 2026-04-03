@@ -71,7 +71,7 @@ const emptyComposer: ComposerForm = {
 const statusConfig: Record<string, { label: string; dot: string; bg: string; text: string }> = {
   draft: { label: 'Rascunho', dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600' },
   sent: { label: 'Enviado', dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  failed: { label: 'Falhou', dot: 'bg-red-500', bg: 'bg-red-50', text: 'text-red-700' },
+  failed: { label: 'Falhou', dot: 'bg-danger-500', bg: 'bg-danger-50', text: 'text-danger-700' },
 };
 
 export function CommunicationsPage() {
@@ -218,7 +218,7 @@ export function CommunicationsPage() {
         <div className="xl:col-span-3">
           <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
             {/* Gradient header */}
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+            <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-6 py-4">
               <h3 className="flex items-center gap-2.5 text-lg font-semibold text-white">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
                   <Mail className="h-4.5 w-4.5 text-white" />
@@ -240,7 +240,7 @@ export function CommunicationsPage() {
                   id="comm-process"
                   value={composer.processId}
                   onChange={(e) => setComposer({ ...composer, processId: e.target.value })}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                 >
                   <option value="">Selecione um processo</option>
                   {processes?.map((p) => (
@@ -267,7 +267,7 @@ export function CommunicationsPage() {
                     value={composer.recipient}
                     onChange={(e) => setComposer({ ...composer, recipient: e.target.value })}
                     placeholder="Nome do destinatario"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   />
                 </div>
                 <div>
@@ -284,7 +284,7 @@ export function CommunicationsPage() {
                     value={composer.recipientEmail}
                     onChange={(e) => setComposer({ ...composer, recipientEmail: e.target.value })}
                     placeholder="email@exemplo.com"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   />
                 </div>
               </div>
@@ -303,7 +303,7 @@ export function CommunicationsPage() {
                   value={composer.subject}
                   onChange={(e) => setComposer({ ...composer, subject: e.target.value })}
                   placeholder="Assunto do email"
-                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                 />
               </div>
 
@@ -321,7 +321,7 @@ export function CommunicationsPage() {
                   onChange={(e) => setComposer({ ...composer, body: e.target.value })}
                   rows={5}
                   placeholder="Escreva o conteudo do email..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-shadow"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   style={{ minHeight: '120px' }}
                 />
               </div>
@@ -333,11 +333,11 @@ export function CommunicationsPage() {
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* AI with recipient selector */}
-                  <div className="inline-flex items-center rounded-xl border border-purple-200 bg-gradient-to-r from-purple-50 to-violet-50 overflow-hidden">
+                  <div className="inline-flex items-center rounded-xl border border-violet-200 bg-gradient-to-r from-violet-50 to-violet-50 overflow-hidden">
                     <select
                       value={aiRecipientType}
                       onChange={(e) => setAiRecipientType(e.target.value as 'fenicia' | 'isa')}
-                      className="bg-transparent border-none text-xs font-medium text-purple-600 pl-3 pr-1 py-2 focus:ring-0"
+                      className="bg-transparent border-none text-xs font-medium text-violet-600 pl-3 pr-1 py-2 focus:ring-0"
                     >
                       <option value="fenicia">Fenicia</option>
                       <option value="isa">Isa</option>
@@ -345,7 +345,7 @@ export function CommunicationsPage() {
                     <button
                       onClick={handleGenerateAi}
                       disabled={!composer.processId || generatingAi}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100/50 disabled:opacity-50 transition-all"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100/50 disabled:opacity-50 transition-all"
                     >
                       <Sparkles className="h-4 w-4" />
                       {generatingAi ? 'Gerando...' : 'Gerar com IA'}
@@ -382,14 +382,14 @@ export function CommunicationsPage() {
                         className={cn(
                           'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-all',
                           selectedSignatureId === sig.id
-                            ? 'border-blue-300 bg-blue-50 text-blue-700'
+                            ? 'border-primary-300 bg-primary-50 text-primary-700'
                             : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
                         )}
                       >
                         <PenTool className="h-3 w-3" />
                         {sig.name}
                         {sig.isDefault && (
-                          <span className="text-[10px] text-blue-400">(padrao)</span>
+                          <span className="text-[10px] text-primary-400">(padrao)</span>
                         )}
                       </button>
                     ))}
@@ -425,7 +425,7 @@ export function CommunicationsPage() {
                 <button
                   onClick={handleSend}
                   disabled={!isFormValid}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
                 >
                   <Send className="h-4 w-4" />
                   Enviar Email

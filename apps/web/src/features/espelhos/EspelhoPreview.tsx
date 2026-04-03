@@ -188,7 +188,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
             if (e.key === 'Enter') saveEdit();
             if (e.key === 'Escape') setEditingCell(null);
           }}
-          className="w-full rounded border border-blue-400 px-1 py-0.5 text-xs focus:outline-none"
+          className="w-full rounded border border-primary-400 px-1 py-0.5 text-xs focus:outline-none"
         />
       );
     }
@@ -196,7 +196,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     return (
       <span
         onDoubleClick={() => startEdit(item.id, field, value)}
-        className="cursor-pointer hover:bg-blue-50 rounded px-1 py-0.5 block"
+        className="cursor-pointer hover:bg-primary-50 rounded px-1 py-0.5 block"
         title="Clique duplo para editar"
       >
         {value}
@@ -209,8 +209,8 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   }
 
   const rowBg = (item: EspelhoItem) => {
-    if (item.isFoc) return 'bg-yellow-50';
-    if (item.requiresLi) return 'bg-purple-50';
+    if (item.isFoc) return 'bg-amber-50';
+    if (item.requiresLi) return 'bg-violet-50';
     if (item.requiresCert) return 'bg-orange-50';
     return '';
   };
@@ -222,7 +222,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
         <button
           onClick={generate}
           disabled={generating}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {generating ? <LoadingSpinner size="sm" /> : <RefreshCw className="h-4 w-4" />}
           Gerar Espelho
@@ -232,28 +232,28 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           <>
             <button
               onClick={downloadXlsx}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Download className="h-4 w-4" />
               Baixar XLSX
             </button>
             <button
               onClick={sendToDrive}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Upload className="h-4 w-4" />
               Enviar para Drive
             </button>
             <button
               onClick={sendToFenicia}
-              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
             >
               <Send className="h-4 w-4" />
               Enviar para Fenícia
             </button>
             <button
               onClick={generatePartialLi}
-              className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Gerar Parcial (LI)
@@ -264,12 +264,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
       {/* Legend */}
       {espelho && (
-        <div className="flex flex-wrap gap-4 text-xs text-gray-500">
+        <div className="flex flex-wrap gap-4 text-xs text-slate-500">
           <span className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded bg-yellow-200" /> FOC
+            <span className="inline-block h-3 w-3 rounded bg-amber-200" /> FOC
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block h-3 w-3 rounded bg-purple-200" /> LI
+            <span className="inline-block h-3 w-3 rounded bg-violet-200" /> LI
           </span>
           <span className="flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded bg-orange-200" /> Certificado
@@ -281,11 +281,11 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       {espelho && (espelho.driveFileId || espelho.sentToFenicia) && (
         <div className="flex flex-wrap gap-3">
           {espelho.driveFileId && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
               <CheckCircle className="h-4 w-4" />
               Enviado ao Drive
               {espelho.driveSentAt && (
-                <span className="text-xs text-green-600">
+                <span className="text-xs text-emerald-600">
                   em{' '}
                   {new Date(espelho.driveSentAt).toLocaleDateString('pt-BR', {
                     day: '2-digit',
@@ -321,46 +321,46 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
       {/* Table */}
       {espelho ? (
-        <div className="rounded-lg border border-gray-200 overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200 text-xs">
+        <div className="rounded-lg border border-slate-200 overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200 text-xs">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-500">
+              <tr className="bg-slate-50">
+                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-slate-500">
                   Código
                 </th>
-                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-slate-500">
                   Descrição
                 </th>
-                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-slate-500">
                   Cor
                 </th>
-                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-slate-500">
                   Tamanho
                 </th>
-                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-left font-medium uppercase tracking-wider text-slate-500">
                   NCM
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Preço Unit.
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Qtd.
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Total
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Caixas
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Peso Líq.
                 </th>
-                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-2 text-right font-medium uppercase tracking-wider text-slate-500">
                   Peso Bruto
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200 bg-white">
+            <tbody className="divide-y divide-slate-200 bg-white">
               {espelho.items.map((item) => (
                 <tr key={item.id} className={cn('transition-colors', rowBg(item))}>
                   <td className="px-3 py-2">{renderCell(item, 'itemCode', item.itemCode)}</td>
@@ -386,20 +386,20 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               ))}
 
               {/* Totals row */}
-              <tr className="bg-gray-100 font-semibold">
-                <td colSpan={5} className="px-3 py-2 text-right text-gray-700">
+              <tr className="bg-slate-100 font-semibold">
+                <td colSpan={5} className="px-3 py-2 text-right text-slate-700">
                   Totais
                 </td>
                 <td className="px-3 py-2 text-right" />
-                <td className="px-3 py-2 text-right text-gray-900">{espelho.totalQuantity}</td>
-                <td className="px-3 py-2 text-right text-gray-900">
+                <td className="px-3 py-2 text-right text-slate-900">{espelho.totalQuantity}</td>
+                <td className="px-3 py-2 text-right text-slate-900">
                   {formatCurrency(espelho.totalFobValue)}
                 </td>
-                <td className="px-3 py-2 text-right text-gray-900">{espelho.totalBoxes}</td>
-                <td className="px-3 py-2 text-right text-gray-900">
+                <td className="px-3 py-2 text-right text-slate-900">{espelho.totalBoxes}</td>
+                <td className="px-3 py-2 text-right text-slate-900">
                   {formatWeight(espelho.totalNetWeight)}
                 </td>
-                <td className="px-3 py-2 text-right text-gray-900">
+                <td className="px-3 py-2 text-right text-slate-900">
                   {formatWeight(espelho.totalGrossWeight)}
                 </td>
               </tr>
@@ -407,9 +407,9 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           </table>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-200 bg-white py-12 text-center">
-          <FileSpreadsheet className="mx-auto h-10 w-10 text-gray-300" />
-          <p className="mt-2 text-sm text-gray-500">
+        <div className="rounded-lg border border-slate-200 bg-white py-12 text-center">
+          <FileSpreadsheet className="mx-auto h-10 w-10 text-slate-300" />
+          <p className="mt-2 text-sm text-slate-500">
             Nenhum espelho gerado ainda. Clique em "Gerar Espelho" para criar.
           </p>
         </div>
@@ -419,7 +419,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       {espelho && (
         <button
           onClick={addItem}
-          className="inline-flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700"
         >
           <Plus className="h-4 w-4" />
           Adicionar item

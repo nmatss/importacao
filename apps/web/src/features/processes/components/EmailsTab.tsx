@@ -35,9 +35,9 @@ export interface EmailsTabProps {
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluido' },
-  processing: { color: 'bg-blue-100 text-blue-700', label: 'Processando' },
+  processing: { color: 'bg-primary-100 text-primary-700', label: 'Processando' },
   pending: { color: 'bg-slate-100 text-slate-600', label: 'Pendente' },
-  failed: { color: 'bg-red-100 text-red-700', label: 'Falhou' },
+  failed: { color: 'bg-danger-100 text-danger-700', label: 'Falhou' },
   ignored: { color: 'bg-slate-100 text-slate-400', label: 'Ignorado' },
 };
 
@@ -82,7 +82,7 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
             return (
               <div
                 key={log.id}
-                className="rounded-xl border border-slate-200/80 bg-white p-4 hover:bg-slate-50/30 transition-colors"
+                className="rounded-xl border border-slate-200/60 bg-white p-4 hover:bg-slate-50/30 transition-colors"
               >
                 {/* Header: status + date */}
                 <div className="flex items-center justify-between gap-3">
@@ -149,7 +149,7 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
                 )}
 
                 {log.errorMessage && (
-                  <div className="mt-2 text-xs text-red-500 flex items-center gap-1">
+                  <div className="mt-2 text-xs text-danger-500 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     {log.errorMessage}
                   </div>

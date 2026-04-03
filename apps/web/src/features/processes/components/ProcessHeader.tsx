@@ -15,7 +15,7 @@ function ProcessFlags({ process }: { process: ImportProcess }) {
     {
       active: process.hasLiItems,
       label: 'LI',
-      color: 'bg-purple-100 text-purple-700 border-purple-200',
+      color: 'bg-violet-100 text-violet-700 border-violet-200',
     },
     {
       active: process.hasCertification,
@@ -25,7 +25,7 @@ function ProcessFlags({ process }: { process: ImportProcess }) {
     {
       active: process.hasFreeOfCharge,
       label: 'FOC',
-      color: 'bg-yellow-100 text-yellow-700 border-yellow-200',
+      color: 'bg-amber-100 text-amber-700 border-amber-200',
     },
   ].filter((f) => f.active);
 
@@ -128,7 +128,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               href={`https://drive.google.com/drive/folders/${process.sistemaDriveFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-all shadow-sm"
+              className="inline-flex items-center gap-2 rounded-xl border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 transition-all shadow-sm"
             >
               <ExternalLink className="h-4 w-4" />
               Sistema Automatico

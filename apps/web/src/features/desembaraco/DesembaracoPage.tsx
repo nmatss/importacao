@@ -27,8 +27,8 @@ const canalColors: Record<string, { bg: string; text: string }> = {
   verde: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
   Amarelo: { bg: 'bg-amber-50', text: 'text-amber-700' },
   amarelo: { bg: 'bg-amber-50', text: 'text-amber-700' },
-  Vermelho: { bg: 'bg-red-50', text: 'text-red-700' },
-  vermelho: { bg: 'bg-red-50', text: 'text-red-700' },
+  Vermelho: { bg: 'bg-danger-50', text: 'text-danger-700' },
+  vermelho: { bg: 'bg-danger-50', text: 'text-danger-700' },
 };
 
 function getField(data: Record<string, unknown> | null | undefined, key: string): string | null {
@@ -129,7 +129,7 @@ export function DesembaracoPage() {
       label: 'Free Time Medio (dias)',
       value: avgFreeTime,
       icon: AlertTriangle,
-      gradient: 'from-blue-500 to-blue-600',
+      gradient: 'from-primary-500 to-primary-600',
     },
   ];
 
@@ -145,8 +145,10 @@ export function DesembaracoPage() {
           <Anchor className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Desembaraco Aduaneiro</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+            Desembaraco Aduaneiro
+          </h2>
+          <p className="text-sm text-slate-600">
             {customsProcesses.length} processo{customsProcesses.length !== 1 ? 's' : ''} com dados
             aduaneiros
           </p>
@@ -158,7 +160,7 @@ export function DesembaracoPage() {
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
-            className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
           >
             <div className="flex items-center gap-3.5">
               <div
@@ -179,13 +181,13 @@ export function DesembaracoPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Search */}
           <div className="flex-1 max-w-xs">
             <label
               htmlFor="desembaraco-search"
-              className="mb-1.5 block text-sm font-medium text-slate-700"
+              className="mb-1.5 block text-xs font-medium text-slate-500"
             >
               Processo
             </label>
@@ -197,14 +199,14 @@ export function DesembaracoPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar processo..."
-                className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
           </div>
 
           {/* Status Filter Pills */}
           <div>
-            <p className="mb-1.5 text-sm font-medium text-slate-700">Status</p>
+            <p className="mb-1.5 text-xs font-medium text-slate-500">Status</p>
             <div className="flex items-center gap-1.5">
               {filterOptions.map((opt) => (
                 <button
@@ -233,36 +235,36 @@ export function DesembaracoPage() {
           description="Nenhum processo com dados de desembaraco encontrado com os filtros selecionados."
         />
       ) : (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Processo
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     DI
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Data DI
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Canal
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Desembaraco
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Recinto
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Free Time
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Demurrage
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Chegada CD
                   </th>
                 </tr>
@@ -280,7 +282,7 @@ export function DesembaracoPage() {
                     <tr
                       key={proc.id}
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
                     >
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900">
                         {proc.processCode}
@@ -288,7 +290,7 @@ export function DesembaracoPage() {
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
                         {getField(data, 'numeroDI') || <span className="text-slate-300">--</span>}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                         {getField(data, 'dataRegistroDI') ? (
                           formatDate(getField(data, 'dataRegistroDI')!)
                         ) : (
@@ -310,7 +312,7 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                         {getField(data, 'desembaraco') ? (
                           formatDate(getField(data, 'desembaraco')!)
                         ) : (
@@ -334,7 +336,7 @@ export function DesembaracoPage() {
                               'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold',
                               demurrage.toLowerCase().includes('sim') ||
                                 demurrage.toLowerCase().includes('yes')
-                                ? 'bg-red-50 text-red-700'
+                                ? 'bg-danger-50 text-danger-700'
                                 : 'bg-emerald-50 text-emerald-700',
                             )}
                           >
@@ -348,7 +350,7 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                         {getField(data, 'chegadaCD') ? (
                           formatDate(getField(data, 'chegadaCD')!)
                         ) : (

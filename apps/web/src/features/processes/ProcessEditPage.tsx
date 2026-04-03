@@ -121,10 +121,10 @@ export function ProcessEditPage() {
   if (!process) {
     return (
       <div className="flex flex-col items-center justify-center py-24">
-        <p className="text-sm text-slate-500">Processo nao encontrado.</p>
+        <p className="text-sm text-slate-600">Processo nao encontrado.</p>
         <button
           onClick={() => navigate('/importacao/processos')}
-          className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+          className="mt-4 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
         >
           Voltar para lista
         </button>
@@ -133,9 +133,9 @@ export function ProcessEditPage() {
   }
 
   const inputClass =
-    'w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 focus:outline-none transition-all';
-  const labelClass = 'block text-sm font-medium text-slate-700 mb-1.5';
-  const errorClass = 'mt-1.5 text-xs text-red-600';
+    'w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
+  const labelClass = 'block text-xs font-medium text-slate-500 mb-1.5';
+  const errorClass = 'mt-1.5 text-[11px] text-danger-600';
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -143,30 +143,30 @@ export function ProcessEditPage() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate(`/importacao/processos/${id}`)}
-          className="rounded-xl p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
+          className="rounded-lg p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-all"
           aria-label="Voltar para detalhes do processo"
         >
           <ArrowLeft className="h-5 w-5" />
         </button>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Editar Processo</h2>
-          <p className="text-sm text-slate-500">{process.processCode}</p>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Editar Processo</h2>
+          <p className="text-sm text-slate-600">{process.processCode}</p>
         </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Main Fields */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
               <Ship className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">Dados Gerais</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Dados Gerais</h3>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
               <label className={labelClass}>
-                Codigo do Processo <span className="text-red-500">*</span>
+                Codigo do Processo <span className="text-danger-500">*</span>
               </label>
               <input
                 {...register('processCode')}
@@ -177,7 +177,7 @@ export function ProcessEditPage() {
             </div>
             <div>
               <label className={labelClass}>
-                Marca <span className="text-red-500">*</span>
+                Marca <span className="text-danger-500">*</span>
               </label>
               <select {...register('brand')} className={inputClass}>
                 <option value="">Selecione a marca...</option>
@@ -218,12 +218,12 @@ export function ProcessEditPage() {
         </div>
 
         {/* Exporter */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <Building2 className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">Exportador</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Exportador</h3>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
@@ -247,12 +247,12 @@ export function ProcessEditPage() {
         </div>
 
         {/* Importer */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
               <Warehouse className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">Importador</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Importador</h3>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
@@ -276,12 +276,12 @@ export function ProcessEditPage() {
         </div>
 
         {/* Financial & Cargo */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-green-50 text-green-600">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
               <DollarSign className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">Dados Financeiros e Carga</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Dados Financeiros e Carga</h3>
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
@@ -356,12 +356,12 @@ export function ProcessEditPage() {
         </div>
 
         {/* Notes */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm space-y-6">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm space-y-6">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
               <FileText className="h-5 w-5" />
             </div>
-            <h3 className="text-lg font-semibold text-slate-900">Observacoes</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Observacoes</h3>
           </div>
           <textarea
             {...register('notes')}
@@ -375,25 +375,25 @@ export function ProcessEditPage() {
         {mutation.error && (
           <div
             role="alert"
-            className="rounded-xl bg-red-50 border border-red-200 px-5 py-4 text-sm text-red-700"
+            className="rounded-lg bg-danger-50 border border-danger-200 px-5 py-4 text-sm text-danger-700"
           >
             {mutation.error.message}
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-end gap-3 rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
           <button
             type="button"
             onClick={() => navigate(`/importacao/processos/${id}`)}
-            className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-all"
+            className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 active:scale-[0.98] transition-colors"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={isSubmitting || mutation.isPending}
-            className="rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-blue-700 hover:to-blue-800 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-all"
+            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-colors"
           >
             {mutation.isPending ? 'Salvando...' : 'Salvar Alteracoes'}
           </button>

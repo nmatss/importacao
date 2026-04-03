@@ -19,7 +19,7 @@ export function CertStatusBadge({ status }: { status: string }) {
       case 'URL_NOT_FOUND':
         return 'bg-slate-400';
       case 'API_ERROR':
-        return 'bg-red-500';
+        return 'bg-danger-500';
       case 'NO_EXPECTED':
         return 'bg-slate-400';
       case 'EXPIRED':

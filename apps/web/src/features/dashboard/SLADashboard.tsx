@@ -98,78 +98,85 @@ interface SlaData {
 
 // ── Tab Configuration ───────────────────────────────────────────────────
 
-type TabKey = 'docsOverdue' | 'liUrgent' | 'withDivergences' | 'pendingFenicia' | 'noEspelho' | 'noFollowUpUpdate' | 'agingByUser' | 'upcomingPayments';
+type TabKey =
+  | 'docsOverdue'
+  | 'liUrgent'
+  | 'withDivergences'
+  | 'pendingFenicia'
+  | 'noEspelho'
+  | 'noFollowUpUpdate'
+  | 'agingByUser'
+  | 'upcomingPayments';
 
-const tabConfig: { key: TabKey; label: string; icon: typeof FileWarning; gradient: string; shadowColor: string; borderColor: string; valueColor: string }[] = [
+const tabConfig: {
+  key: TabKey;
+  label: string;
+  icon: typeof FileWarning;
+  gradient: string;
+  borderColor: string;
+  valueColor: string;
+}[] = [
   {
     key: 'docsOverdue',
     label: 'Docs Atrasados',
     icon: FileWarning,
-    gradient: 'from-red-500 to-red-700',
-    shadowColor: 'shadow-red-500/25',
-    borderColor: 'border-l-red-500',
-    valueColor: 'text-red-600',
+    gradient: 'from-danger-500 to-danger-600',
+    borderColor: 'border-l-danger-500',
+    valueColor: 'text-danger-600',
   },
   {
     key: 'liUrgent',
     label: 'LI Urgente',
     icon: ShieldAlert,
-    gradient: 'from-amber-500 to-amber-700',
-    shadowColor: 'shadow-amber-500/25',
+    gradient: 'from-amber-500 to-amber-600',
     borderColor: 'border-l-amber-500',
     valueColor: 'text-amber-600',
   },
   {
     key: 'withDivergences',
-    label: 'Divergencias',
+    label: 'Divergências',
     icon: AlertOctagon,
-    gradient: 'from-orange-500 to-orange-700',
-    shadowColor: 'shadow-orange-500/25',
+    gradient: 'from-orange-500 to-orange-600',
     borderColor: 'border-l-orange-500',
     valueColor: 'text-orange-600',
   },
   {
     key: 'pendingFenicia',
-    label: 'Pendente Fenicia',
+    label: 'Pendente Fenícia',
     icon: Send,
-    gradient: 'from-purple-500 to-purple-700',
-    shadowColor: 'shadow-purple-500/25',
-    borderColor: 'border-l-purple-500',
-    valueColor: 'text-purple-600',
+    gradient: 'from-violet-500 to-violet-600',
+    borderColor: 'border-l-violet-500',
+    valueColor: 'text-violet-600',
   },
   {
     key: 'noEspelho',
     label: 'Sem Espelho',
     icon: FileX,
-    gradient: 'from-pink-500 to-pink-700',
-    shadowColor: 'shadow-pink-500/25',
-    borderColor: 'border-l-pink-500',
-    valueColor: 'text-pink-600',
+    gradient: 'from-rose-500 to-rose-600',
+    borderColor: 'border-l-rose-500',
+    valueColor: 'text-rose-600',
   },
   {
     key: 'noFollowUpUpdate',
-    label: 'Sem Atualizacao',
+    label: 'Sem Atualização',
     icon: Clock,
-    gradient: 'from-slate-500 to-slate-700',
-    shadowColor: 'shadow-slate-500/25',
+    gradient: 'from-slate-500 to-slate-600',
     borderColor: 'border-l-slate-500',
     valueColor: 'text-slate-600',
   },
   {
     key: 'agingByUser',
-    label: 'Por Usuario',
+    label: 'Por Usuário',
     icon: Users,
-    gradient: 'from-blue-500 to-blue-700',
-    shadowColor: 'shadow-blue-500/25',
-    borderColor: 'border-l-blue-500',
-    valueColor: 'text-blue-600',
+    gradient: 'from-primary-500 to-primary-600',
+    borderColor: 'border-l-primary-500',
+    valueColor: 'text-primary-600',
   },
   {
     key: 'upcomingPayments',
     label: 'Pagamentos',
     icon: Banknote,
-    gradient: 'from-emerald-500 to-emerald-700',
-    shadowColor: 'shadow-emerald-500/25',
+    gradient: 'from-emerald-500 to-emerald-600',
     borderColor: 'border-l-emerald-500',
     valueColor: 'text-emerald-600',
   },
@@ -180,23 +187,23 @@ const tabConfig: { key: TabKey; label: string; icon: typeof FileWarning; gradien
 function severityColor(count: number): string {
   if (count === 0) return 'text-slate-300';
   if (count <= 2) return 'text-amber-500';
-  return 'text-red-500';
+  return 'text-danger-500';
 }
 
 function urgencyBg(days: number): string {
-  if (days <= 0) return 'bg-red-50';
-  if (days <= 3) return 'bg-amber-50';
+  if (days <= 0) return 'bg-danger-50/50';
+  if (days <= 3) return 'bg-amber-50/50';
   return '';
 }
 
 function urgencyText(days: number): string {
-  if (days <= 0) return 'text-red-700 font-bold';
+  if (days <= 0) return 'text-danger-700 font-bold';
   if (days <= 3) return 'text-amber-700 font-semibold';
   return 'text-slate-600';
 }
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
+  return <div className={cn('bg-slate-200/50 rounded-lg animate-pulse', className)} />;
 }
 
 // ── Component ───────────────────────────────────────────────────────────
@@ -242,12 +249,14 @@ export function SLADashboard() {
   function SortHeader({ field, children }: { field: string; children: React.ReactNode }) {
     return (
       <th
-        className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 cursor-pointer hover:text-slate-600 select-none"
+        className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 select-none"
         onClick={() => handleSort(field)}
       >
         <span className="inline-flex items-center gap-1">
           {children}
-          <ArrowUpDown className={cn('h-3 w-3', sortField === field ? 'text-blue-500' : 'text-slate-300')} />
+          <ArrowUpDown
+            className={cn('h-3 w-3', sortField === field ? 'text-primary-500' : 'text-slate-300')}
+          />
         </span>
       </th>
     );
@@ -276,26 +285,34 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
             <SortHeader field="shipmentDate">Data Embarque</SortHeader>
             <SortHeader field="daysSinceShipment">Dias Atraso</SortHeader>
-            <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Usuario</th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Usuário
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaDocsOverdue).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors">
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.shipmentDate ? formatDate(row.shipmentDate) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-700">
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.shipmentDate ? formatDate(row.shipmentDate) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span className="inline-flex items-center rounded-full bg-danger-50 px-2.5 py-0.5 text-xs font-bold text-danger-700 ring-1 ring-danger-200/60">
                   {row.daysSinceShipment}d
                 </span>
               </td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.assignedUser ?? '--'}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">{row.assignedUser ?? '--'}</td>
             </tr>
           ))}
         </tbody>
@@ -309,26 +326,51 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
             <SortHeader field="liDeadline">Prazo LI</SortHeader>
             <SortHeader field="daysRemaining">Dias Restantes</SortHeader>
-            <th className="px-6 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">Status</th>
+            <th className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              Status
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaLiUrgent).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className={cn('hover:bg-blue-50/50 cursor-pointer transition-colors', urgencyBg(row.daysRemaining))}>
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.liDeadline ? formatDate(row.liDeadline) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', urgencyText(row.daysRemaining), row.daysRemaining <= 0 ? 'bg-red-100' : row.daysRemaining <= 3 ? 'bg-amber-100' : 'bg-slate-100')}>
-                  {row.daysRemaining <= 0 ? `${Math.abs(row.daysRemaining)}d atrasado` : `${row.daysRemaining}d`}
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className={cn(
+                'hover:bg-slate-50/50 cursor-pointer transition-colors',
+                urgencyBg(row.daysRemaining),
+              )}
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.liDeadline ? formatDate(row.liDeadline) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    urgencyText(row.daysRemaining),
+                    row.daysRemaining <= 0
+                      ? 'bg-danger-50 ring-1 ring-danger-200/60'
+                      : row.daysRemaining <= 3
+                        ? 'bg-amber-50 ring-1 ring-amber-200/60'
+                        : 'bg-slate-100 ring-1 ring-slate-200/60',
+                  )}
+                >
+                  {row.daysRemaining <= 0
+                    ? `${Math.abs(row.daysRemaining)}d atrasado`
+                    : `${row.daysRemaining}d`}
                 </span>
               </td>
-              <td className="px-6 py-3.5 text-sm"><StatusBadge status={row.status} /></td>
+              <td className="px-5 py-3 text-sm">
+                <StatusBadge status={row.status} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -342,24 +384,30 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
             <SortHeader field="failedCheckCount">Checks Falhos</SortHeader>
-            <SortHeader field="lastValidationDate">Ultima Validacao</SortHeader>
+            <SortHeader field="lastValidationDate">Última Validação</SortHeader>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaWithDivergences).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors">
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-bold text-orange-700">
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm">
+                <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-orange-700 ring-1 ring-orange-200/60">
                   {row.failedCheckCount}
                 </span>
               </td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.lastValidationDate ? formatDate(row.lastValidationDate) : '--'}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.lastValidationDate ? formatDate(row.lastValidationDate) : '--'}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -373,7 +421,7 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
             <SortHeader field="espelhoGeneratedDate">Espelho Gerado</SortHeader>
@@ -382,12 +430,25 @@ export function SLADashboard() {
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaPendingFenicia).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors">
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.espelhoGeneratedDate ? formatDate(row.espelhoGeneratedDate) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', row.daysPending > 3 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700')}>
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.espelhoGeneratedDate ? formatDate(row.espelhoGeneratedDate) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    row.daysPending > 3
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
+                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
+                  )}
+                >
                   {row.daysPending}d
                 </span>
               </td>
@@ -404,21 +465,34 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
-            <SortHeader field="validatedDate">Data Validacao</SortHeader>
+            <SortHeader field="validatedDate">Data Validação</SortHeader>
             <SortHeader field="daysPending">Dias Pendente</SortHeader>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaNoEspelho).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors">
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.validatedDate ? formatDate(row.validatedDate) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', row.daysPending > 3 ? 'bg-pink-100 text-pink-700' : 'bg-slate-100 text-slate-600')}>
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.validatedDate ? formatDate(row.validatedDate) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    row.daysPending > 3
+                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60'
+                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                  )}
+                >
                   {row.daysPending}d
                 </span>
               </td>
@@ -435,21 +509,34 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="brand">Marca</SortHeader>
-            <SortHeader field="lastUpdateDate">Ultima Atualizacao</SortHeader>
-            <SortHeader field="daysSinceUpdate">Dias sem Atualizacao</SortHeader>
+            <SortHeader field="lastUpdateDate">Última Atualização</SortHeader>
+            <SortHeader field="daysSinceUpdate">Dias sem Atualização</SortHeader>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaNoFollowUpUpdate).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.id)} className="hover:bg-blue-50/50 cursor-pointer transition-colors">
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-700 capitalize">{row.brand}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.lastUpdateDate ? formatDate(row.lastUpdateDate) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', row.daysSinceUpdate > 10 ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600')}>
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.id)}
+              className="hover:bg-slate-50/50 cursor-pointer transition-colors"
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm text-slate-600 capitalize">{row.brand}</td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.lastUpdateDate ? formatDate(row.lastUpdateDate) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    row.daysSinceUpdate > 10
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
+                      : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                  )}
+                >
                   {row.daysSinceUpdate}d
                 </span>
               </td>
@@ -466,23 +553,32 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
-            <SortHeader field="userName">Usuario</SortHeader>
-            <SortHeader field="pendingCount">Pendencias</SortHeader>
+          <tr className="bg-slate-50 border-b border-slate-200/60">
+            <SortHeader field="userName">Usuário</SortHeader>
+            <SortHeader field="pendingCount">Pendências</SortHeader>
             <SortHeader field="oldestPendingDays">Mais Antigo (dias)</SortHeader>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaAgingByUser).map((row, i) => (
-            <tr key={i} className="hover:bg-blue-50/50 transition-colors">
-              <td className="px-6 py-3.5 text-sm font-medium text-slate-700">{row.userName}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-bold text-blue-700">
+            <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+              <td className="px-5 py-3 text-sm font-medium text-slate-700">{row.userName}</td>
+              <td className="px-5 py-3 text-sm">
+                <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-primary-200/60">
                   {row.pendingCount}
                 </span>
               </td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', row.oldestPendingDays > 30 ? 'bg-red-100 text-red-700' : row.oldestPendingDays > 14 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600')}>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    row.oldestPendingDays > 30
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
+                      : row.oldestPendingDays > 14
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60'
+                        : 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+                  )}
+                >
                   {row.oldestPendingDays}d
                 </span>
               </td>
@@ -499,7 +595,7 @@ export function SLADashboard() {
     return (
       <table className="min-w-full">
         <thead>
-          <tr className="bg-slate-50/80 border-b border-slate-200/80">
+          <tr className="bg-slate-50 border-b border-slate-200/60">
             <SortHeader field="processCode">Processo</SortHeader>
             <SortHeader field="amountUsd">Valor USD</SortHeader>
             <SortHeader field="paymentDeadline">Vencimento</SortHeader>
@@ -508,13 +604,36 @@ export function SLADashboard() {
         </thead>
         <tbody className="divide-y divide-slate-100">
           {sorted(items, sortField as keyof SlaUpcomingPayments).map((row) => (
-            <tr key={row.id} onClick={() => goToProcess(row.processId)} className={cn('hover:bg-blue-50/50 cursor-pointer transition-colors', urgencyBg(row.daysUntilDue))}>
-              <td className="px-6 py-3.5 text-sm font-semibold text-blue-600">{row.processCode}</td>
-              <td className="px-6 py-3.5 text-sm font-medium text-slate-700">{formatCurrency(Number(row.amountUsd))}</td>
-              <td className="px-6 py-3.5 text-sm text-slate-500">{row.paymentDeadline ? formatDate(row.paymentDeadline) : '--'}</td>
-              <td className="px-6 py-3.5 text-sm">
-                <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold', urgencyText(row.daysUntilDue), row.daysUntilDue <= 0 ? 'bg-red-100' : row.daysUntilDue <= 3 ? 'bg-amber-100' : 'bg-emerald-100')}>
-                  {row.daysUntilDue <= 0 ? `${Math.abs(row.daysUntilDue)}d vencido` : `${row.daysUntilDue}d`}
+            <tr
+              key={row.id}
+              onClick={() => goToProcess(row.processId)}
+              className={cn(
+                'hover:bg-slate-50/50 cursor-pointer transition-colors',
+                urgencyBg(row.daysUntilDue),
+              )}
+            >
+              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-slate-700">
+                {formatCurrency(Number(row.amountUsd))}
+              </td>
+              <td className="px-5 py-3 text-sm text-slate-500">
+                {row.paymentDeadline ? formatDate(row.paymentDeadline) : '--'}
+              </td>
+              <td className="px-5 py-3 text-sm">
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
+                    urgencyText(row.daysUntilDue),
+                    row.daysUntilDue <= 0
+                      ? 'bg-danger-50 ring-1 ring-danger-200/60'
+                      : row.daysUntilDue <= 3
+                        ? 'bg-amber-50 ring-1 ring-amber-200/60'
+                        : 'bg-emerald-50 ring-1 ring-emerald-200/60',
+                  )}
+                >
+                  {row.daysUntilDue <= 0
+                    ? `${Math.abs(row.daysUntilDue)}d vencido`
+                    : `${row.daysUntilDue}d`}
                 </span>
               </td>
             </tr>
@@ -527,11 +646,11 @@ export function SLADashboard() {
   function EmptyTab() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
-          <Clock className="h-6 w-6 text-slate-300" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 mb-4">
+          <Clock className="h-5 w-5 text-slate-400" />
         </div>
-        <p className="text-sm font-medium text-slate-400">Nenhuma pendencia nesta categoria</p>
-        <p className="text-xs text-slate-300 mt-1">Tudo em dia por aqui</p>
+        <p className="text-sm font-medium text-slate-500">Nenhuma pendência nesta categoria</p>
+        <p className="text-xs text-slate-400 mt-1">Tudo em dia por aqui</p>
       </div>
     );
   }
@@ -551,12 +670,16 @@ export function SLADashboard() {
     <div className="space-y-6">
       {/* Section Header */}
       <div>
-        <h3 className="text-lg font-bold text-slate-900 tracking-tight">Painel SLA / Pendencias</h3>
-        <p className="mt-0.5 text-sm text-slate-500">Visao consolidada de todas as pendencias e prazos</p>
+        <h3 className="text-base font-semibold text-slate-900 tracking-tight">
+          Painel SLA / Pendências
+        </h3>
+        <p className="mt-0.5 text-sm text-slate-500">
+          Visão consolidada de todas as pendências e prazos
+        </p>
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8">
         {tabConfig.map((card) => {
           const Icon = card.icon;
           const value = summary[card.key] ?? 0;
@@ -565,33 +688,45 @@ export function SLADashboard() {
           return (
             <button
               key={card.key}
-              onClick={() => { setActiveTab(card.key); setSortField(''); }}
+              onClick={() => {
+                setActiveTab(card.key);
+                setSortField('');
+              }}
               className={cn(
-                'group rounded-2xl border bg-white p-4 shadow-sm text-left transition-all duration-200',
-                'hover:shadow-md hover:border-slate-300/80',
+                'group rounded-2xl border bg-white p-4 text-left transition-all duration-200',
+                'hover:shadow-md',
                 'border-l-4',
                 card.borderColor,
-                isActive && 'ring-2 ring-blue-500/30 shadow-md border-blue-300',
+                isActive ? 'ring-2 ring-primary-500/20 shadow-md border-primary-300' : 'shadow-sm',
               )}
             >
               <div className="flex items-center justify-between mb-2">
                 <div
                   className={cn(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
                     'bg-gradient-to-br text-white shadow-sm',
                     card.gradient,
-                    card.shadowColor,
                   )}
                 >
                   <Icon className="h-4 w-4" />
                 </div>
                 {value > 0 && (
-                  <span className={cn('text-[10px] font-bold uppercase tracking-wider', severityColor(value))}>
+                  <span
+                    className={cn(
+                      'text-[10px] font-bold uppercase tracking-wider',
+                      severityColor(value),
+                    )}
+                  >
                     {value > 5 ? 'ALTO' : value > 0 ? 'ATIVO' : ''}
                   </span>
                 )}
               </div>
-              <p className={cn('text-xl font-bold tabular-nums', value === 0 ? 'text-slate-300' : card.valueColor)}>
+              <p
+                className={cn(
+                  'text-xl font-bold tabular-nums',
+                  value === 0 ? 'text-slate-300' : card.valueColor,
+                )}
+              >
                 {value}
               </p>
               <p className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{card.label}</p>
@@ -601,29 +736,34 @@ export function SLADashboard() {
       </div>
 
       {/* Tab Content */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
         {/* Tab Bar */}
-        <div className="flex items-center gap-1 px-4 pt-4 pb-0 overflow-x-auto">
+        <div className="flex items-center gap-1 px-4 pt-3 pb-0 overflow-x-auto">
           {tabConfig.map((tab) => {
             const isActive = activeTab === tab.key;
             const cnt = summary[tab.key] ?? 0;
             return (
               <button
                 key={tab.key}
-                onClick={() => { setActiveTab(tab.key); setSortField(''); }}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  setSortField('');
+                }}
                 className={cn(
-                  'inline-flex items-center gap-1.5 px-3.5 py-2 rounded-t-xl text-sm font-medium whitespace-nowrap transition-all border-b-2',
+                  'inline-flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all border-b-2',
                   isActive
-                    ? 'bg-slate-50 text-blue-700 border-blue-500'
+                    ? 'bg-slate-50 text-primary-700 border-primary-500'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border-transparent',
                 )}
               >
                 {tab.label}
                 {cnt > 0 && (
-                  <span className={cn(
-                    'inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold',
-                    isActive ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500',
-                  )}>
+                  <span
+                    className={cn(
+                      'inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold',
+                      isActive ? 'bg-primary-100 text-primary-700' : 'bg-slate-100 text-slate-500',
+                    )}
+                  >
                     {cnt}
                   </span>
                 )}
@@ -634,9 +774,7 @@ export function SLADashboard() {
 
         {/* Active Tab Content */}
         <div className="border-t border-slate-100">
-          <div className="overflow-x-auto">
-            {tabRenderers[activeTab]()}
-          </div>
+          <div className="overflow-x-auto">{tabRenderers[activeTab]()}</div>
         </div>
       </div>
     </div>

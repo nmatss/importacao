@@ -1,1 +1,251 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/* ══════════════════════════════════════════════════════════════
+   ENTERPRISE DESIGN SYSTEM — Uni.co
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Font ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+/* ── Tailwind v4 Theme ── */
+@theme {
+  --font-sans:
+    'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
+
+  /* Brand Primary — Deep Indigo Blue */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+  --color-primary-950: #1e1b4b;
+
+  /* Sidebar — Dark Navy */
+  --color-sidebar-50: #f8fafc;
+  --color-sidebar-100: #f1f5f9;
+  --color-sidebar-200: #e2e8f0;
+  --color-sidebar-600: #475569;
+  --color-sidebar-700: #334155;
+  --color-sidebar-800: #1e293b;
+  --color-sidebar-900: #0f172a;
+  --color-sidebar-950: #020617;
+
+  /* Success — Emerald */
+  --color-success-50: #ecfdf5;
+  --color-success-100: #d1fae5;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+
+  /* Warning — Amber */
+  --color-warning-50: #fffbeb;
+  --color-warning-100: #fef3c7;
+  --color-warning-500: #f59e0b;
+  --color-warning-600: #d97706;
+  --color-warning-700: #b45309;
+
+  /* Danger — Rose */
+  --color-danger-50: #fff1f2;
+  --color-danger-100: #ffe4e6;
+  --color-danger-200: #fecdd3;
+  --color-danger-500: #f43f5e;
+  --color-danger-600: #e11d48;
+  --color-danger-700: #be123c;
+
+  /* ── Accent Palette (for category/status differentiation) ── */
+
+  /* Accent Violet — AI features, espelho, special states */
+  --color-accent-violet-50: #f5f3ff;
+  --color-accent-violet-100: #ede9fe;
+  --color-accent-violet-200: #ddd6fe;
+  --color-accent-violet-400: #a78bfa;
+  --color-accent-violet-500: #8b5cf6;
+  --color-accent-violet-600: #7c3aed;
+  --color-accent-violet-700: #6d28d9;
+
+  /* Accent Orange — Fenícia, divergences */
+  --color-accent-orange-50: #fff7ed;
+  --color-accent-orange-100: #ffedd5;
+  --color-accent-orange-200: #fed7aa;
+  --color-accent-orange-500: #f97316;
+  --color-accent-orange-600: #ea580c;
+  --color-accent-orange-700: #c2410c;
+
+  /* Accent Cyan — Logistics, transit */
+  --color-accent-cyan-50: #ecfeff;
+  --color-accent-cyan-100: #cffafe;
+  --color-accent-cyan-200: #a5f3fc;
+  --color-accent-cyan-500: #06b6d4;
+  --color-accent-cyan-600: #0891b2;
+  --color-accent-cyan-700: #0e7490;
+
+  /* Chart Colors */
+  --color-chart-1: #6366f1;
+  --color-chart-2: #8b5cf6;
+  --color-chart-3: #f43f5e;
+  --color-chart-4: #10b981;
+  --color-chart-5: #f59e0b;
+  --color-chart-6: #f97316;
+  --color-chart-7: #06b6d4;
+  --color-chart-8: #64748b;
+}
+
+/* ── Base Styles ── */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  color: #1e293b;
+  background: #f8fafc;
+}
+
+/* ── Scrollbar (Webkit) ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ── Custom Utilities ── */
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ── Animations ── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out both;
+}
+
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s ease-out both;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out both;
+}
+
+/* ── Focus Ring ── */
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px #6366f1;
+  border-radius: inherit;
+}
+
+/* ── Card Elevation ── */
+.card {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.04),
+    0 1px 2px -1px rgba(0, 0, 0, 0.04);
+}
+
+.card:hover {
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.06),
+    0 2px 4px -2px rgba(0, 0, 0, 0.04);
+}
+
+/* ── Table Styles ── */
+table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+thead th {
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+/* ── Input base ── */
+input[type='text'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+input[type='date'],
+input[type='search'],
+input[type='url'],
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ── Transitions ── */
+.transition-smooth {
+  transition-property: all;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 200ms;
+}

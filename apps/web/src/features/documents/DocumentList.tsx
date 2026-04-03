@@ -44,9 +44,9 @@ interface DocumentListProps {
 const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
 
 const TYPE_COLORS: Record<string, string> = {
-  invoice: 'bg-blue-50 text-blue-700 border-blue-200',
+  invoice: 'bg-primary-50 text-primary-700 border-primary-200',
   packing_list: 'bg-amber-50 text-amber-700 border-amber-200',
-  ohbl: 'bg-purple-50 text-purple-700 border-purple-200',
+  ohbl: 'bg-violet-50 text-violet-700 border-violet-200',
   draft_bl: 'bg-violet-50 text-violet-700 border-violet-200',
   espelho: 'bg-cyan-50 text-cyan-700 border-cyan-200',
   li: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -58,10 +58,10 @@ function ConfidenceBadge({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const color =
     pct >= 80
-      ? 'text-green-700 bg-green-50'
+      ? 'text-emerald-700 bg-emerald-50'
       : pct >= 50
-        ? 'text-yellow-700 bg-yellow-50'
-        : 'text-red-700 bg-red-50';
+        ? 'text-amber-700 bg-amber-50'
+        : 'text-danger-700 bg-danger-50';
 
   return (
     <span
@@ -80,21 +80,21 @@ function AiStatus({ status }: { status: Document['aiProcessingStatus'] }) {
     case 'processing':
     case 'pending':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-blue-500">
+        <span className="inline-flex items-center gap-1 text-xs text-primary-500">
           <Loader2 className="h-3 w-3 animate-spin" />
           Processando
         </span>
       );
     case 'completed':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-green-600">
+        <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
           <CheckCircle className="h-3 w-3" />
           Extraído
         </span>
       );
     case 'failed':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-red-500">
+        <span className="inline-flex items-center gap-1 text-xs text-danger-500">
           <AlertTriangle className="h-3 w-3" />
           Erro
         </span>
@@ -239,7 +239,7 @@ export function DocumentList({ processId }: DocumentListProps) {
         {hasAll3 && (
           <>
             <span className="text-slate-300">|</span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-green-600">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
               <CheckCircle className="h-3 w-3" />
               INV + PL + BL completos
             </span>
@@ -316,7 +316,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                         >
                           {source ? (
                             source.source === 'email' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-blue-600">
+                              <span className="inline-flex items-center gap-1 text-[10px] text-primary-600">
                                 <Mail className="h-3 w-3" />
                               </span>
                             ) : (
@@ -336,7 +336,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-green-50 hover:text-green-600"
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
                             title="Abrir no Drive"
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -367,7 +367,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             handleReprocess(doc.id);
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
                           title="Reprocessar IA"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
@@ -379,7 +379,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             setDeleteTarget(doc);
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
                           title="Excluir"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

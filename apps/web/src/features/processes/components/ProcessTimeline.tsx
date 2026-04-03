@@ -41,9 +41,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
   return (
     <div>
       {isCancelled && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-red-50 border border-red-200/60 px-4 py-3 text-sm font-semibold text-red-700">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-red-100">
-            <XCircle className="h-4 w-4 text-red-600" />
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-danger-50 border border-danger-200/60 px-4 py-3 text-sm font-semibold text-danger-700">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-danger-100">
+            <XCircle className="h-4 w-4 text-danger-600" />
           </div>
           Processo Cancelado
         </div>
@@ -65,9 +65,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                     isCancelled
                       ? 'bg-slate-100 text-slate-400'
                       : isCompleted
-                        ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-md shadow-emerald-200'
+                        ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm'
                         : isCurrent
-                          ? 'bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-lg shadow-blue-200 ring-4 ring-blue-100'
+                          ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm ring-2 ring-primary-100'
                           : 'bg-slate-100 text-slate-400',
                   )}
                 >
@@ -85,7 +85,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       : isCompleted
                         ? 'text-emerald-700'
                         : isCurrent
-                          ? 'font-bold text-blue-700'
+                          ? 'font-bold text-primary-700'
                           : 'text-slate-400',
                   )}
                 >
@@ -100,7 +100,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       !isCancelled && i < currentIndex
                         ? 'w-full bg-gradient-to-r from-emerald-400 to-emerald-500'
                         : !isCancelled && i === currentIndex
-                          ? 'w-1/2 bg-gradient-to-r from-blue-400 to-blue-300'
+                          ? 'w-1/2 bg-gradient-to-r from-primary-400 to-primary-300'
                           : 'w-0',
                     )}
                   />
@@ -134,9 +134,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                     : idx < currentIndex
                       ? 'bg-emerald-400'
                       : idx === currentIndex
-                        ? 'bg-blue-500'
+                        ? 'bg-primary-500'
                         : 'bg-slate-200',
-                  idx === mobileIndex && 'ring-2 ring-offset-1 ring-blue-300',
+                  idx === mobileIndex && 'ring-2 ring-offset-1 ring-primary-300',
                 )}
               />
             ))}
@@ -158,7 +158,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       : isCompleted
                         ? 'bg-emerald-100 text-emerald-600'
                         : isCurrent
-                          ? 'bg-blue-600 text-white shadow-md shadow-blue-200'
+                          ? 'bg-primary-600 text-white shadow-sm'
                           : 'bg-slate-100 text-slate-400',
                   )}
                 >
@@ -176,7 +176,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       : isCompleted
                         ? 'text-emerald-700'
                         : isCurrent
-                          ? 'text-blue-700'
+                          ? 'text-primary-700'
                           : 'text-slate-400',
                   )}
                 >
@@ -210,7 +210,7 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
         </div>
         <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+            className="h-full rounded-full bg-gradient-to-r from-primary-500 to-emerald-500 transition-all duration-500"
             style={{ width: `${followUp.overallProgress}%` }}
           />
         </div>
@@ -221,7 +221,7 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
 
 export function ProcessTimeline({ currentStatus, followUp }: ProcessTimelineProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white p-4 md:p-6 shadow-sm">
       <Stepper currentStatus={currentStatus} />
       {followUp && <FollowUpProgress followUp={followUp} />}
     </div>

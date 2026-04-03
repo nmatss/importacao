@@ -94,8 +94,8 @@ function TabIndicator({
     if (failedCount > 0) {
       return (
         <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-danger-400 opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-danger-500" />
         </span>
       );
     }
@@ -114,7 +114,7 @@ function TabIndicator({
       types.has('bill-of-lading');
     if (hasInv && hasPl && hasBl) {
       return (
-        <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-white">
+        <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
           <Check className="h-2.5 w-2.5" />
         </span>
       );
@@ -124,7 +124,7 @@ function TabIndicator({
 
   if (tabKey === 'emails' && emailCount > 0) {
     return (
-      <span className="absolute -top-1 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white px-1">
+      <span className="absolute -top-1 -right-2 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary-600 text-[10px] font-bold text-white px-1">
         {emailCount}
       </span>
     );
@@ -250,7 +250,7 @@ export function ProcessDetailPage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-blue-700 shadow-lg shadow-blue-200">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700 shadow-sm">
           <Package className="h-7 w-7 text-white animate-pulse" />
         </div>
         <LoadingSpinner size="lg" />
@@ -268,7 +268,7 @@ export function ProcessDetailPage() {
         <p className="text-sm font-medium text-slate-500">Processo nao encontrado.</p>
         <button
           onClick={() => navigate('/importacao/processos')}
-          className="mt-2 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+          className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
         >
           Voltar para processos
         </button>
@@ -299,7 +299,7 @@ export function ProcessDetailPage() {
       <ProcessInfoCard process={process} />
 
       {/* Tabs */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 bg-slate-50/40 px-3 pt-3 sm:px-5 sm:pt-4">
           <div className="flex gap-1 overflow-x-auto">
             {visibleTabs.map((tab) => {
@@ -313,11 +313,11 @@ export function ProcessDetailPage() {
                   className={cn(
                     'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive
-                      ? 'bg-white text-blue-700 shadow-sm border border-slate-200/80 border-b-white -mb-px z-10'
+                      ? 'bg-white text-primary-700 shadow-sm border border-slate-200/60 border-b-white -mb-px z-10'
                       : 'text-slate-400 hover:text-slate-600 hover:bg-white/50',
                   )}
                 >
-                  <Icon className={cn('h-4 w-4', isActive ? 'text-blue-600' : '')} />
+                  <Icon className={cn('h-4 w-4', isActive ? 'text-primary-600' : '')} />
                   <span className="relative hidden sm:inline">
                     {tab.label}
                     {process && (
@@ -341,7 +341,7 @@ export function ProcessDetailPage() {
                     )}
                   </span>
                   {isActive && (
-                    <div className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-600" />
+                    <div className="absolute bottom-0 left-4 right-4 h-0.5 rounded-full bg-gradient-to-r from-primary-500 to-primary-600" />
                   )}
                 </button>
               );

@@ -132,9 +132,9 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               className={cn(
                 'h-full rounded-full transition-all duration-500',
                 progressPct === 100
-                  ? 'bg-green-500'
+                  ? 'bg-emerald-500'
                   : progressPct > 50
-                    ? 'bg-blue-500'
+                    ? 'bg-primary-500'
                     : 'bg-amber-500',
               )}
               style={{ width: `${progressPct}%` }}
@@ -160,7 +160,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               className={cn(
                 'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
                 isCompleted
-                  ? 'border-green-200 bg-green-50/50 hover:bg-green-50'
+                  ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50'
                   : 'border-slate-150 bg-white hover:bg-slate-50 hover:border-slate-200',
                 isToggling && 'opacity-60',
               )}
@@ -169,7 +169,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               <span
                 className={cn(
                   'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                  isCompleted ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-500',
+                  isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500',
                 )}
               >
                 {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : String(index + 1)}
@@ -179,7 +179,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               <Icon
                 className={cn(
                   'h-4 w-4 shrink-0',
-                  isCompleted ? 'text-green-500' : 'text-slate-400',
+                  isCompleted ? 'text-emerald-500' : 'text-slate-400',
                 )}
               />
 
@@ -188,7 +188,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                 <p
                   className={cn(
                     'text-sm font-medium',
-                    isCompleted ? 'text-green-700' : 'text-slate-700',
+                    isCompleted ? 'text-emerald-700' : 'text-slate-700',
                   )}
                 >
                   {step.label}
@@ -201,7 +201,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                 {isToggling ? (
                   <LoadingSpinner size="sm" />
                 ) : isCompleted && timestamp ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-green-600">
+                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
                     <Clock className="h-3 w-3" />
                     {timestamp}
                   </span>

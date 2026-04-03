@@ -26,9 +26,9 @@ const EVENT_CONFIG: Record<
 > = {
   document_uploaded: {
     icon: FileUp,
-    color: 'text-blue-600',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-200',
+    color: 'text-primary-600',
+    bgColor: 'bg-primary-50',
+    borderColor: 'border-primary-200',
   },
   validation_run: {
     icon: ClipboardCheck,
@@ -38,15 +38,15 @@ const EVENT_CONFIG: Record<
   },
   correction_needed: {
     icon: AlertTriangle,
-    color: 'text-red-600',
-    bgColor: 'bg-red-50',
-    borderColor: 'border-red-200',
+    color: 'text-danger-600',
+    bgColor: 'bg-danger-50',
+    borderColor: 'border-danger-200',
   },
   email_sent: {
     icon: Mail,
-    color: 'text-purple-600',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-200',
+    color: 'text-violet-600',
+    bgColor: 'bg-violet-50',
+    borderColor: 'border-violet-200',
   },
   status_changed: {
     icon: ArrowRight,

@@ -56,14 +56,14 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold text-slate-800">Acompanhamento (Follow-Up)</h3>
         <span className="text-sm font-semibold text-slate-500">
-          Progresso: <span className="text-blue-700">{tracking.overallProgress}%</span>
+          Progresso: <span className="text-primary-700">{tracking.overallProgress}%</span>
         </span>
       </div>
 
       {/* Progress bar */}
       <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
         <div
-          className="h-full rounded-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+          className="h-full rounded-full bg-gradient-to-r from-primary-500 to-emerald-500 transition-all duration-500"
           style={{ width: `${tracking.overallProgress}%` }}
         />
       </div>
@@ -80,15 +80,15 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
               className={cn(
                 'flex items-center gap-4 rounded-xl border p-4 transition-colors',
                 isCompleted
-                  ? 'border-emerald-200/80 bg-emerald-50/50'
-                  : 'border-slate-200/80 bg-white',
+                  ? 'border-emerald-200/60 bg-emerald-50/50'
+                  : 'border-slate-200/60 bg-white',
               )}
             >
               <div
                 className={cn(
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all',
                   isCompleted
-                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-md shadow-emerald-200'
+                    ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm'
                     : 'bg-slate-100',
                 )}
               >
@@ -99,7 +99,12 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <p className={cn('text-sm font-semibold', isCompleted ? 'text-emerald-800' : 'text-slate-500')}>
+                <p
+                  className={cn(
+                    'text-sm font-semibold',
+                    isCompleted ? 'text-emerald-800' : 'text-slate-500',
+                  )}
+                >
                   {label}
                 </p>
                 {isCompleted && (
@@ -119,8 +124,12 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
           <div className="flex items-center gap-3">
             <Timer className="h-5 w-5 text-amber-600" />
             <div>
-              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">Prazo LI</p>
-              <p className="text-sm font-bold text-amber-800 mt-0.5">{formatDate(tracking.liDeadline)}</p>
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">
+                Prazo LI
+              </p>
+              <p className="text-sm font-bold text-amber-800 mt-0.5">
+                {formatDate(tracking.liDeadline)}
+              </p>
             </div>
           </div>
         </div>
@@ -131,9 +140,13 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
         <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
           <div className="flex items-center gap-2 mb-2">
             <StickyNote className="h-4 w-4 text-slate-400" />
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Observacoes</p>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Observacoes
+            </p>
           </div>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{tracking.notes}</p>
+          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+            {tracking.notes}
+          </p>
         </div>
       )}
     </div>

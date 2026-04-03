@@ -123,7 +123,7 @@ export default function CertRelatorioDetailPage() {
       />
 
       {/* Filters Card */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-4">
         <div className="flex items-center gap-2 mb-3">
           <Filter className="w-4 h-4 text-slate-400" />
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -150,13 +150,13 @@ export default function CertRelatorioDetailPage() {
               placeholder="Buscar por SKU ou nome..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all min-w-[160px]"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all min-w-[160px]"
           >
             <option value="">Todos os status</option>
             {statuses.map((s) => (
@@ -168,7 +168,7 @@ export default function CertRelatorioDetailPage() {
           <select
             value={brandFilter}
             onChange={(e) => setBrandFilter(e.target.value)}
-            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all min-w-[160px]"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all min-w-[160px]"
           >
             <option value="">Todas as marcas</option>
             {brands.map((b) => (
@@ -181,11 +181,11 @@ export default function CertRelatorioDetailPage() {
       </div>
 
       {/* Results Table */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200">
+              <tr className="bg-slate-50 border-b border-slate-200/60">
                 <th className="text-left px-3 py-2.5 sm:px-6 sm:py-3.5 font-semibold text-xs text-slate-500 uppercase tracking-wider">
                   SKU
                 </th>
@@ -236,7 +236,7 @@ export default function CertRelatorioDetailPage() {
                               ? 'text-emerald-600'
                               : r.score >= 0.5
                                 ? 'text-amber-600'
-                                : 'text-red-600'
+                                : 'text-danger-600'
                           }`}
                         >
                           {(r.score * 100).toFixed(0)}%

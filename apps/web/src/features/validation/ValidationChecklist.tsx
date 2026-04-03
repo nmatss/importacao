@@ -161,15 +161,15 @@ const checkLabel = (name: string) =>
 const statusConfig = {
   passed: {
     icon: CheckCircle,
-    border: 'border-green-200',
-    bg: 'bg-green-50',
-    iconColor: 'text-green-500',
+    border: 'border-emerald-200',
+    bg: 'bg-emerald-50',
+    iconColor: 'text-emerald-500',
   },
   failed: {
     icon: XCircle,
-    border: 'border-red-200',
-    bg: 'bg-red-50',
-    iconColor: 'text-red-500',
+    border: 'border-danger-200',
+    bg: 'bg-danger-50',
+    iconColor: 'text-danger-500',
   },
   warning: {
     icon: AlertTriangle,
@@ -179,9 +179,9 @@ const statusConfig = {
   },
   skipped: {
     icon: Minus,
-    border: 'border-gray-200',
-    bg: 'bg-gray-50',
-    iconColor: 'text-gray-400',
+    border: 'border-slate-200',
+    bg: 'bg-slate-50',
+    iconColor: 'text-slate-400',
   },
 };
 
@@ -324,7 +324,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const totalCount = checks?.length ?? 0;
   const progressPct = totalCount > 0 ? (passedCount / totalCount) * 100 : 0;
   const progressColor =
-    progressPct > 80 ? 'bg-green-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-red-500';
+    progressPct > 80 ? 'bg-emerald-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-danger-500';
 
   const filteredChecks = checks?.filter((c) => {
     if (filter === 'all') return true;
@@ -366,7 +366,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
                 filter === key
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-primary-600 text-white'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
               )}
             >
@@ -389,7 +389,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <button
           onClick={runValidation}
           disabled={running}
-          className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {running ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4" />}
           Executar Validacao
@@ -397,7 +397,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <button
           onClick={detectAnomalies}
           disabled={detectingAnomalies}
-          className="inline-flex items-center gap-2 rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors"
         >
           {detectingAnomalies ? <LoadingSpinner size="sm" /> : <Brain className="h-4 w-4" />}
           Detectar Anomalias (IA)
@@ -409,7 +409,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <button
               onClick={() => generateCorrectionDraft(false)}
               disabled={generatingDraft}
-              className="inline-flex items-center gap-2 rounded-lg border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-danger-300 bg-danger-50 px-4 py-2 text-sm font-medium text-danger-700 hover:bg-danger-100 disabled:opacity-50 transition-colors"
             >
               {generatingDraft ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
               Gerar E-mail Correcao
@@ -429,10 +429,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         {/* Summary badges */}
         {checks && checks.length > 0 && (
           <div className="flex items-center gap-2 ml-auto text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 font-medium text-green-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
               <CheckCircle className="h-3 w-3" /> {passedCount}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-1 font-medium text-red-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2.5 py-1 font-medium text-danger-700">
               <XCircle className="h-3 w-3" /> {failedCount}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
@@ -457,34 +457,36 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 <div className="flex items-start gap-3">
                   <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.iconColor)} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-slate-900">
                       {checkLabel(check.checkName)}
                     </p>
                     {check.message && (
-                      <p className="mt-0.5 text-xs text-gray-600">{check.message}</p>
+                      <p className="mt-0.5 text-xs text-slate-600">{check.message}</p>
                     )}
                     {check.status === 'failed' && (check.expectedValue || check.actualValue) && (
                       <div className="mt-2 space-y-1 text-xs">
                         {check.expectedValue && (
                           <p>
-                            <span className="text-gray-500">Esperado: </span>
-                            <span className="font-medium text-gray-800">{check.expectedValue}</span>
+                            <span className="text-slate-500">Esperado: </span>
+                            <span className="font-medium text-slate-800">
+                              {check.expectedValue}
+                            </span>
                           </p>
                         )}
                         {check.actualValue && (
                           <p>
-                            <span className="text-gray-500">Encontrado: </span>
-                            <span className="font-medium text-red-700">{check.actualValue}</span>
+                            <span className="text-slate-500">Encontrado: </span>
+                            <span className="font-medium text-danger-700">{check.actualValue}</span>
                           </p>
                         )}
                       </div>
                     )}
                     {check.resolvedManually && check.resolvedBy && (
-                      <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-blue-50 px-2 py-1 text-xs text-blue-700">
+                      <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700">
                         <Wrench className="h-3 w-3" />
                         Resolvido por {check.resolvedBy}
                         {check.resolvedAt && (
-                          <span className="text-blue-500">
+                          <span className="text-primary-500">
                             em{' '}
                             {new Date(check.resolvedAt).toLocaleDateString('pt-BR', {
                               day: '2-digit',
@@ -500,7 +502,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     {check.status === 'failed' && !check.resolvedManually && (
                       <button
                         onClick={() => resolveManually(check.id)}
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
                       >
                         <Wrench className="h-3 w-3" />
                         Resolver Manualmente
@@ -513,38 +515,38 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           })}
         </div>
       ) : (
-        <p className="py-6 text-center text-sm text-gray-500">
+        <p className="py-6 text-center text-sm text-slate-500">
           Nenhuma validacao executada ainda. Clique em "Executar Validacao" para iniciar.
         </p>
       )}
 
       {/* Anomalies */}
       {anomalies && anomalies.length > 0 && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50 p-4">
-          <h4 className="mb-3 text-sm font-semibold text-purple-900">
+        <div className="rounded-lg border border-violet-200 bg-violet-50 p-4">
+          <h4 className="mb-3 text-sm font-semibold text-violet-900">
             Anomalias Detectadas pela IA
           </h4>
           <div className="space-y-2">
             {anomalies.map((anomaly, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 rounded-lg bg-white p-3 border border-purple-100"
+                className="flex items-start gap-3 rounded-lg bg-white p-3 border border-violet-100"
               >
                 <AlertTriangle
                   className={cn(
                     'mt-0.5 h-4 w-4 shrink-0',
                     anomaly.severity === 'high'
-                      ? 'text-red-500'
+                      ? 'text-danger-500'
                       : anomaly.severity === 'medium'
                         ? 'text-amber-500'
-                        : 'text-blue-500',
+                        : 'text-primary-500',
                   )}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-gray-900">{anomaly.field}</p>
-                  <p className="text-xs text-gray-600">{anomaly.description}</p>
+                  <p className="text-sm font-medium text-slate-900">{anomaly.field}</p>
+                  <p className="text-xs text-slate-600">{anomaly.description}</p>
                 </div>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-slate-400">
                   {(anomaly.confidence * 100).toFixed(0)}%
                 </span>
               </div>
@@ -554,9 +556,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       )}
 
       {anomalies && anomalies.length === 0 && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-center">
-          <CheckCircle className="mx-auto h-6 w-6 text-green-500" />
-          <p className="mt-1 text-sm text-green-700">Nenhuma anomalia detectada pela IA.</p>
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+          <CheckCircle className="mx-auto h-6 w-6 text-emerald-500" />
+          <p className="mt-1 text-sm text-emerald-700">Nenhuma anomalia detectada pela IA.</p>
         </div>
       )}
 
@@ -567,8 +569,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 rounded-t-2xl">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-100">
-                  <Mail className="h-4.5 w-4.5 text-red-600" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger-100">
+                  <Mail className="h-4.5 w-4.5 text-danger-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-slate-900">E-mail de Correcao</h3>
@@ -598,7 +600,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   onChange={(e) =>
                     dispatch({ type: 'SET_EDIT_RECIPIENT_EMAIL', payload: e.target.value })
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                 />
               </div>
 
@@ -611,7 +613,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   type="text"
                   value={editSubject}
                   onChange={(e) => dispatch({ type: 'SET_EDIT_SUBJECT', payload: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                 />
               </div>
 
@@ -647,7 +649,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     onChange={(e) =>
                       setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-all"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                   >
                     <option value="">Sem assinatura</option>
                     {emailSignatures.map((sig) => (
@@ -685,7 +687,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               <button
                 onClick={saveDraft}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors"
               >
                 {saving ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
                 Salvar Rascunho
@@ -693,7 +695,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               <button
                 onClick={sendEmail}
                 disabled={sending}
-                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white hover:bg-danger-700 disabled:opacity-50 transition-colors"
               >
                 {sending ? <LoadingSpinner size="sm" /> : <Send className="h-4 w-4" />}
                 Enviar E-mail

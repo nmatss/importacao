@@ -142,7 +142,7 @@ function FieldConfidence({ confidence }: { confidence: number | null }) {
     <span
       className={cn(
         'ml-1 text-[9px] font-medium',
-        pct >= 80 ? 'text-green-500' : pct >= 50 ? 'text-amber-500' : 'text-red-400',
+        pct >= 80 ? 'text-emerald-500' : pct >= 50 ? 'text-amber-500' : 'text-danger-400',
       )}
     >
       {pct}%
@@ -203,7 +203,7 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
   if (hasNoData) {
     return (
-      <div className="rounded-lg border border-red-100 bg-red-50/50 px-3 py-2.5 text-xs text-red-600">
+      <div className="rounded-lg border border-danger-100 bg-danger-50/50 px-3 py-2.5 text-xs text-danger-600">
         <strong>Documento não reconhecido</strong> — A IA não conseguiu extrair dados deste
         documento. Verifique se é o tipo correto ou reprocesse.
       </div>

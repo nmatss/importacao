@@ -307,7 +307,7 @@ export default function CertAgendamentosPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
             <CalendarClock className="w-6 h-6" />
           </div>
           <div>
@@ -325,7 +325,7 @@ export default function CertAgendamentosPage() {
       </div>
 
       {/* Date Filter */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white p-4">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-4">
         <DateRangeFilter
           startDate={startDate}
           endDate={endDate}
@@ -342,7 +342,7 @@ export default function CertAgendamentosPage() {
           <p className="text-sm text-slate-400 mt-3">Carregando agendamentos...</p>
         </div>
       ) : schedules.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white flex flex-col items-center justify-center py-20 px-6">
+        <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white flex flex-col items-center justify-center py-20 px-6">
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 mb-4">
             <CalendarClock className="w-8 h-8 text-slate-300" />
           </div>
@@ -366,7 +366,7 @@ export default function CertAgendamentosPage() {
             <div
               key={schedule.id}
               className={`rounded-2xl border shadow-sm bg-white overflow-hidden transition-colors ${
-                schedule.enabled ? 'border-slate-200/80' : 'border-slate-200/60 bg-slate-50/50'
+                schedule.enabled ? 'border-slate-200/60' : 'border-slate-200/60 bg-slate-50/50'
               }`}
             >
               {/* Status accent bar */}
@@ -504,7 +504,7 @@ export default function CertAgendamentosPage() {
 
                     <button
                       onClick={() => setDeleteConfirm(schedule.id)}
-                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
                       title="Excluir"
                       aria-label="Excluir agendamento"
                     >
@@ -558,8 +558,8 @@ export default function CertAgendamentosPage() {
                             <span
                               className={`flex items-center justify-center w-2.5 h-2.5 rounded-full ${
                                 entry.status === 'completed'
-                                  ? 'bg-emerald-500 shadow-sm shadow-emerald-500/30'
-                                  : 'bg-red-500 shadow-sm shadow-red-500/30'
+                                  ? 'bg-emerald-500 shadow-sm'
+                                  : 'bg-danger-500 shadow-sm'
                               }`}
                             />
                             <span className="text-slate-600 font-medium text-xs">
@@ -578,7 +578,7 @@ export default function CertAgendamentosPage() {
                               )}
                               {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0) >
                                 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-red-50 text-red-700 font-semibold">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-danger-50 text-danger-700 font-semibold">
                                   {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0)}{' '}
                                   nao encontrados
                                 </span>
@@ -599,15 +599,19 @@ export default function CertAgendamentosPage() {
 
               {/* Delete confirmation */}
               {deleteConfirm === schedule.id && (
-                <div className="border-t border-red-100 bg-red-50/80 px-5 py-4 md:px-6">
+                <div className="border-t border-danger-100 bg-danger-50/80 px-5 py-4 md:px-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-red-100">
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                      <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-danger-100">
+                        <Trash2 className="w-4 h-4 text-danger-600" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-red-800">Excluir agendamento?</p>
-                        <p className="text-xs text-red-600/70">Esta ação não pode ser desfeita</p>
+                        <p className="text-sm font-semibold text-danger-800">
+                          Excluir agendamento?
+                        </p>
+                        <p className="text-xs text-danger-600/70">
+                          Esta ação não pode ser desfeita
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -619,7 +623,7 @@ export default function CertAgendamentosPage() {
                       </button>
                       <button
                         onClick={() => handleDelete(schedule.id)}
-                        className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-[0.98] transition-all"
+                        className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-danger-600 hover:bg-danger-700 active:scale-[0.98] transition-all"
                       >
                         Excluir
                       </button>
@@ -642,7 +646,7 @@ export default function CertAgendamentosPage() {
               resetForm();
             }}
           />
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/80 w-full max-w-md">
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-md">
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
               <div className="flex items-center gap-3">
@@ -680,7 +684,7 @@ export default function CertAgendamentosPage() {
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Ex: Validação diária Imaginarium"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                 />
               </div>
 
@@ -696,7 +700,7 @@ export default function CertAgendamentosPage() {
                   id="schedule-brand"
                   value={formBrand}
                   onChange={(e) => setFormBrand(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                 >
                   {BRAND_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -718,7 +722,7 @@ export default function CertAgendamentosPage() {
                   id="schedule-frequency"
                   value={formPreset}
                   onChange={(e) => setFormPreset(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                 >
                   {FREQUENCY_PRESETS.map((opt) => (
                     <option key={opt.value} value={opt.value}>
@@ -745,7 +749,7 @@ export default function CertAgendamentosPage() {
                       max={23}
                       value={formHour}
                       onChange={(e) => setFormHour(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                     />
                   </div>
                   <div className="flex-1">
@@ -762,7 +766,7 @@ export default function CertAgendamentosPage() {
                       max={59}
                       value={formMinute}
                       onChange={(e) => setFormMinute(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                     />
                   </div>
                 </div>
@@ -783,7 +787,7 @@ export default function CertAgendamentosPage() {
                     value={formCustomCron}
                     onChange={(e) => setFormCustomCron(e.target.value)}
                     placeholder="0 8 * * 1-5"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 transition-all font-mono"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-mono"
                   />
                   <p className="text-xs text-slate-400 mt-1.5">
                     Formato: minuto hora dia mês dia_semana -- Ex: 0 8 * * 1-5 = dias úteis às 08:00
@@ -820,8 +824,8 @@ export default function CertAgendamentosPage() {
 
               {/* Error */}
               {formError && (
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-100">
-                  <p className="text-sm text-red-700 font-medium">{formError}</p>
+                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-danger-50 border border-danger-100">
+                  <p className="text-sm text-danger-700 font-medium">{formError}</p>
                 </div>
               )}
 

@@ -28,33 +28,33 @@ export const statusLabels: Record<string, string> = {
 };
 
 export const statusColors: Record<string, string> = {
-  draft: 'bg-gray-100 text-gray-700',
-  documents_received: 'bg-yellow-100 text-yellow-700',
-  validating: 'bg-blue-100 text-blue-700',
-  validated: 'bg-indigo-100 text-indigo-700',
-  espelho_generated: 'bg-purple-100 text-purple-700',
-  sent_to_fenicia: 'bg-orange-100 text-orange-700',
-  li_pending: 'bg-amber-100 text-amber-700',
-  completed: 'bg-green-200 text-green-800',
-  cancelled: 'bg-red-100 text-red-700',
+  draft: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
+  documents_received: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
+  validating: 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60',
+  validated: 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60',
+  espelho_generated: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200/60',
+  sent_to_fenicia: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200/60',
+  li_pending: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
+  completed: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60',
+  cancelled: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60',
 };
 
 export function certStatusColor(status: string): string {
   switch (status) {
     case 'OK':
-      return 'bg-emerald-100 text-emerald-800';
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
     case 'INCONSISTENT':
-      return 'bg-amber-100 text-amber-800';
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60';
     case 'URL_NOT_FOUND':
-      return 'bg-slate-100 text-slate-600';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
     case 'API_ERROR':
-      return 'bg-red-100 text-red-700';
+      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60';
     case 'NO_EXPECTED':
-      return 'bg-slate-100 text-slate-500';
+      return 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60';
     case 'EXPIRED':
-      return 'bg-pink-100 text-pink-800';
+      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
     default:
-      return 'bg-slate-100 text-slate-600';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
   }
 }
 

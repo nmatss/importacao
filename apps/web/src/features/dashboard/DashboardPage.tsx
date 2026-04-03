@@ -100,13 +100,13 @@ interface EmailLogsResponse {
   total: number;
 }
 
-const PIE_COLORS = ['#3b82f6', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#ef4444'];
+const PIE_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#f43f5e'];
 
 const severityConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
   critical: {
-    dot: 'bg-red-500',
-    bg: 'bg-red-50 border-red-100',
-    text: 'text-red-700',
+    dot: 'bg-danger-500',
+    bg: 'bg-danger-50 border-danger-100',
+    text: 'text-danger-700',
     label: 'Critico',
   },
   warning: {
@@ -116,9 +116,9 @@ const severityConfig: Record<string, { dot: string; bg: string; text: string; la
     label: 'Alerta',
   },
   info: {
-    dot: 'bg-blue-500',
-    bg: 'bg-blue-50 border-blue-100',
-    text: 'text-blue-700',
+    dot: 'bg-primary-500',
+    bg: 'bg-primary-50 border-primary-100',
+    text: 'text-primary-700',
     label: 'Info',
   },
 };
@@ -129,7 +129,7 @@ function Skeleton({ className }: { className?: string }) {
 
 function KpiSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="space-y-3 flex-1">
           <Skeleton className="h-4 w-24" />
@@ -143,7 +143,7 @@ function KpiSkeleton() {
 
 function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-7 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
       <Skeleton className="h-5 w-40 mb-6" />
       <Skeleton className={cn(height, 'w-full rounded-xl')} />
     </div>
@@ -152,12 +152,12 @@ function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
 
 function TableSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-      <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+    <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
         <Skeleton className="h-5 w-40" />
         <Skeleton className="h-4 w-20" />
       </div>
-      <div className="p-7 space-y-3">
+      <div className="p-5 space-y-3">
         {Array.from({ length: 5 }).map((_, i) => (
           <Skeleton key={i} className="h-12 w-full" />
         ))}
@@ -171,26 +171,23 @@ const kpiConfig = [
     key: 'active',
     label: 'Processos Ativos',
     icon: FileBox,
-    gradient: 'from-blue-500 to-blue-700',
-    shadowColor: 'shadow-blue-500/25',
-    valueColor: 'text-blue-700',
-    borderColor: 'border-l-blue-500',
+    gradient: 'from-primary-500 to-primary-600',
+    valueColor: 'text-primary-700',
+    borderColor: 'border-l-primary-500',
   },
   {
     key: 'overdue',
     label: 'Atrasados',
     icon: AlertTriangle,
-    gradient: 'from-red-500 to-red-700',
-    shadowColor: 'shadow-red-500/25',
-    valueColor: 'text-red-600',
-    borderColor: 'border-l-red-500',
+    gradient: 'from-danger-500 to-danger-600',
+    valueColor: 'text-danger-600',
+    borderColor: 'border-l-danger-500',
   },
   {
     key: 'completed',
     label: 'Concluidos no Mes',
     icon: CheckCircle,
-    gradient: 'from-emerald-500 to-emerald-700',
-    shadowColor: 'shadow-emerald-500/25',
+    gradient: 'from-emerald-500 to-emerald-600',
     valueColor: 'text-emerald-600',
     borderColor: 'border-l-emerald-500',
   },
@@ -198,8 +195,7 @@ const kpiConfig = [
     key: 'fob',
     label: 'Valor FOB Total',
     icon: DollarSign,
-    gradient: 'from-violet-500 to-violet-700',
-    shadowColor: 'shadow-violet-500/25',
+    gradient: 'from-violet-500 to-violet-600',
     valueColor: 'text-violet-700',
     borderColor: 'border-l-violet-500',
   },
@@ -242,22 +238,22 @@ export function DashboardPage() {
 
   if (isLoading) {
     return (
-      <div className="space-y-8">
+      <div className="space-y-6">
         {/* Header skeleton */}
         <div>
-          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-6 w-48 mb-2" />
           <Skeleton className="h-4 w-72" />
         </div>
 
         {/* KPI skeletons */}
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <KpiSkeleton key={i} />
           ))}
         </div>
 
         {/* Chart skeletons */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <ChartSkeleton />
           </div>
@@ -277,15 +273,17 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Dashboard</h2>
-        <p className="mt-1 text-sm text-slate-500">Visao geral dos processos de importacao</p>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Dashboard</h2>
+          <p className="mt-1 text-sm text-slate-600">Visao geral dos processos de importacao</p>
+        </div>
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {kpiConfig.map((card) => {
           const Icon = card.icon;
           const value = kpiValues[card.key];
@@ -295,15 +293,15 @@ export function DashboardPage() {
             <div
               key={card.key}
               className={cn(
-                'group rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm',
-                'hover:shadow-lg hover:border-slate-300/80 transition-all duration-300',
+                'group rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm',
+                'hover:shadow-md hover:border-slate-300/80 transition-all duration-300',
                 'border-l-4',
                 card.borderColor,
               )}
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-500">{card.label}</p>
+                  <p className="text-xs font-medium text-slate-500">{card.label}</p>
                   <p
                     className={cn(
                       'mt-2 text-2xl font-bold tabular-nums tracking-tight',
@@ -316,10 +314,9 @@ export function DashboardPage() {
                 <div
                   className={cn(
                     'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
-                    'bg-gradient-to-br text-white shadow-lg transition-shadow',
+                    'bg-gradient-to-br text-white shadow-sm transition-shadow',
                     card.gradient,
-                    card.shadowColor,
-                    'group-hover:shadow-xl',
+                    'group-hover:shadow-md',
                   )}
                 >
                   <Icon className="h-6 w-6" />
@@ -331,16 +328,14 @@ export function DashboardPage() {
       </div>
 
       {/* Charts Row 1: Status + Alerts */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Status Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 text-white shadow-md shadow-blue-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-sm">
               <BarChart3 className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Processos por Status
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-800">Processos por Status</h3>
           </div>
           <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -368,22 +363,22 @@ export function DashboardPage() {
                     border: '1px solid #e2e8f0',
                     borderRadius: '12px',
                     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                    fontSize: '13px',
+                    fontSize: '14px',
                   }}
                 />
-                <Bar dataKey="count" fill="#3b82f6" radius={[6, 6, 0, 0]} name="Processos" />
+                <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} name="Processos" />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         {/* Recent Alerts */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md shadow-amber-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm">
               <Bell className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">Alertas Recentes</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Alertas Recentes</h3>
           </div>
           <div className="space-y-3">
             {(overview?.recentAlerts ?? []).length === 0 ? (
@@ -391,8 +386,8 @@ export function DashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                   <Bell className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">Nenhum alerta recente</p>
-                <p className="text-xs text-slate-300 mt-1">Tudo em ordem por aqui</p>
+                <p className="text-sm text-slate-400">Nenhum alerta recente</p>
+                <p className="text-[11px] text-slate-400 mt-1">Tudo em ordem por aqui</p>
               </div>
             ) : (
               overview!.recentAlerts.map((alert) => {
@@ -418,8 +413,8 @@ export function DashboardPage() {
                             {config.label}
                           </span>
                         </div>
-                        <p className="text-sm text-slate-700 leading-relaxed">{alert.message}</p>
-                        <p className="mt-1.5 text-[11px] text-slate-400 font-medium">
+                        <p className="text-sm text-slate-600 leading-relaxed">{alert.message}</p>
+                        <p className="mt-1.5 text-[11px] text-slate-400">
                           {formatDate(alert.createdAt)}
                         </p>
                       </div>
@@ -433,14 +428,14 @@ export function DashboardPage() {
       </div>
 
       {/* Charts Row 2: Monthly Trend + FOB by Brand */}
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Monthly Trend */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-md shadow-emerald-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm">
               <TrendingUp className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">Tendencia Mensal</h3>
+            <h3 className="text-sm font-semibold text-slate-800">Tendencia Mensal</h3>
           </div>
           <div className="h-56 sm:h-72">
             {byMonth && byMonth.length > 0 ? (
@@ -474,7 +469,7 @@ export function DashboardPage() {
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '13px',
+                      fontSize: '14px',
                     }}
                   />
                   <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#64748b' }} />
@@ -483,10 +478,10 @@ export function DashboardPage() {
                     type="monotone"
                     dataKey="count"
                     name="Processos"
-                    stroke="#3b82f6"
+                    stroke="#6366f1"
                     strokeWidth={2.5}
-                    dot={{ r: 4, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-                    activeDot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+                    dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }}
                   />
                   <Line
                     yAxisId="right"
@@ -505,19 +500,19 @@ export function DashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                   <TrendingUp className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">Sem dados mensais disponiveis</p>
+                <p className="text-sm text-slate-400">Sem dados mensais disponiveis</p>
               </div>
             )}
           </div>
         </div>
 
         {/* FOB by Brand */}
-        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 md:p-7 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 text-white shadow-md shadow-violet-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-sm">
               <DollarSign className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">FOB por Marca</h3>
+            <h3 className="text-sm font-semibold text-slate-800">FOB por Marca</h3>
           </div>
           <div className="h-56 sm:h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
@@ -545,7 +540,7 @@ export function DashboardPage() {
                       border: '1px solid #e2e8f0',
                       borderRadius: '12px',
                       boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '13px',
+                      fontSize: '14px',
                     }}
                     formatter={(value: number) => formatCurrency(value)}
                   />
@@ -556,7 +551,7 @@ export function DashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
                   <DollarSign className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">Sem dados de FOB por marca</p>
+                <p className="text-sm text-slate-400">Sem dados de FOB por marca</p>
               </div>
             )}
           </div>
@@ -564,19 +559,17 @@ export function DashboardPage() {
       </div>
 
       {/* Recent Emails */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 text-white shadow-md shadow-indigo-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-sm">
               <Mail className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Processos Recentes via Email
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-800">Processos Recentes via Email</h3>
           </div>
         </div>
         {loadingEmails ? (
-          <div className="p-7 space-y-3">
+          <div className="p-5 space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <Skeleton key={i} className="h-12 w-full" />
             ))}
@@ -586,10 +579,8 @@ export function DashboardPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
               <Mail className="h-6 w-6 text-slate-300" />
             </div>
-            <p className="text-sm font-medium text-slate-400">
-              Nenhum email processado recentemente
-            </p>
-            <p className="text-xs text-slate-300 mt-1">Emails recebidos aparecerao aqui</p>
+            <p className="text-sm text-slate-400">Nenhum email processado recentemente</p>
+            <p className="text-[11px] text-slate-400 mt-1">Emails recebidos aparecerao aqui</p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -601,35 +592,35 @@ export function DashboardPage() {
                 <div
                   key={log.id}
                   className={cn(
-                    'flex items-center gap-4 px-7 py-3.5',
-                    isFailed && 'bg-red-50/40',
-                    isReprocessed && 'bg-purple-50/40',
+                    'flex items-center gap-4 px-5 py-3.5 transition-colors',
+                    isFailed && 'bg-danger-50/40',
+                    isReprocessed && 'bg-violet-50/40',
                   )}
                 >
                   <div className="shrink-0">
                     {isCompleted ? (
-                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      <CheckCircle className="h-5 w-5 text-emerald-500" />
                     ) : isFailed ? (
-                      <XCircle className="h-5 w-5 text-red-500" />
+                      <XCircle className="h-5 w-5 text-danger-500" />
                     ) : isReprocessed ? (
-                      <RefreshCw className="h-5 w-5 text-purple-500" />
+                      <RefreshCw className="h-5 w-5 text-violet-500" />
                     ) : (
                       <Clock className="h-5 w-5 text-amber-500" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-700 truncate">{log.subject}</p>
-                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400">
+                    <p className="text-sm text-slate-700 truncate">{log.subject}</p>
+                    <div className="flex items-center gap-3 mt-0.5 text-[11px] text-slate-400">
                       <span>{log.fromAddress}</span>
                       <span>{log.attachmentsCount} anexo(s)</span>
                     </div>
                   </div>
                   {log.processCode && (
-                    <span className="shrink-0 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                    <span className="shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700 ring-1 ring-primary-200/60">
                       {log.processCode}
                     </span>
                   )}
-                  <span className="shrink-0 text-[11px] text-slate-400 font-medium">
+                  <span className="shrink-0 text-[11px] text-slate-400">
                     {formatDate(log.createdAt)}
                   </span>
                 </div>
@@ -640,19 +631,17 @@ export function DashboardPage() {
       </div>
 
       {/* Recent Processes */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-7 py-5 border-b border-slate-100">
+      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-md shadow-slate-500/20">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm">
               <Clock className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 tracking-tight">
-              Processos Recentes
-            </h3>
+            <h3 className="text-sm font-semibold text-slate-800">Processos Recentes</h3>
           </div>
           <Link
             to="/importacao/processos"
-            className="flex items-center gap-1.5 text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
           >
             Ver todos <ArrowRight className="h-4 w-4" />
           </Link>
@@ -663,27 +652,27 @@ export function DashboardPage() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 mb-4">
               <FileBox className="h-6 w-6 text-slate-300" />
             </div>
-            <p className="text-sm font-medium text-slate-400">Nenhum processo recente</p>
-            <p className="text-xs text-slate-300 mt-1">Processos criados aparecerao aqui</p>
+            <p className="text-sm text-slate-400">Nenhum processo recente</p>
+            <p className="text-[11px] text-slate-400 mt-1">Processos criados aparecerao aqui</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <tr className="bg-slate-50">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Codigo
                   </th>
-                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Marca
                   </th>
-                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     ETD
                   </th>
-                  <th className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Data Criacao
                   </th>
                 </tr>
@@ -693,29 +682,29 @@ export function DashboardPage() {
                   <tr
                     key={proc.id}
                     className={cn(
-                      'cursor-pointer transition-colors hover:bg-blue-50/50',
+                      'cursor-pointer border-t border-slate-100 hover:bg-slate-50/50 transition-colors',
                       index % 2 === 1 && 'bg-slate-50/40',
                     )}
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                   >
-                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm">
+                    <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm">
                       <Link
                         to={`/importacao/processos/${proc.id}`}
-                        className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+                        className="font-semibold text-primary-600 hover:text-primary-700 transition-colors"
                       >
                         {proc.processCode}
                       </Link>
                     </td>
-                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-700 font-medium capitalize">
+                    <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm text-slate-600 capitalize">
                       {proc.brand}
                     </td>
-                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm">
+                    <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
-                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-500">
+                    <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm text-slate-600">
                       {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="px-3 py-2.5 sm:px-7 sm:py-3.5 text-sm text-slate-500">
+                    <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm text-slate-600">
                       {formatDate(proc.createdAt)}
                     </td>
                   </tr>

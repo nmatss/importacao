@@ -103,7 +103,7 @@ export default function CertValidacaoPage() {
       <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 overflow-hidden">
         <div className="p-5">
           <div className="flex items-start gap-4">
-            <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25 flex-shrink-0">
+            <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm flex-shrink-0">
               <Zap className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
@@ -127,7 +127,7 @@ export default function CertValidacaoPage() {
       </div>
 
       {/* Controls Card */}
-      <div className="rounded-2xl border border-slate-200/80 shadow-sm bg-white">
+      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
         <div className="p-6 md:p-7">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             {/* Brand Selector */}
@@ -140,7 +140,7 @@ export default function CertValidacaoPage() {
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   disabled={running}
-                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 font-medium focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer min-w-[200px]"
+                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer min-w-[200px]"
                 >
                   {brands.map((b) => (
                     <option key={b.value} value={b.value}>
@@ -162,7 +162,7 @@ export default function CertValidacaoPage() {
                   'flex items-center gap-2.5 px-7 py-2.5 rounded-xl text-sm font-semibold text-white transition-all shadow-sm',
                   running
                     ? 'bg-slate-300 cursor-not-allowed shadow-none'
-                    : 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] shadow-emerald-600/20',
+                    : 'bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] shadow-sm',
                 )}
               >
                 {running ? (
@@ -191,9 +191,9 @@ export default function CertValidacaoPage() {
           </div>
 
           {error && (
-            <div className="mt-5 p-4 rounded-xl bg-red-50 border border-red-200/80 text-sm text-red-700 flex items-start gap-3">
-              <div className="p-1 rounded-lg bg-red-100 flex-shrink-0 mt-0.5">
-                <Sparkles className="w-3.5 h-3.5 text-red-500" />
+            <div className="mt-5 p-4 rounded-xl bg-danger-50 border border-danger-200/80 text-sm text-danger-700 flex items-start gap-3">
+              <div className="p-1 rounded-lg bg-danger-100 flex-shrink-0 mt-0.5">
+                <Sparkles className="w-3.5 h-3.5 text-danger-500" />
               </div>
               <span>{error}</span>
             </div>
@@ -209,7 +209,7 @@ export default function CertValidacaoPage() {
         <div className="space-y-6">
           <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/50 to-white p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-lg shadow-emerald-500/25">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>

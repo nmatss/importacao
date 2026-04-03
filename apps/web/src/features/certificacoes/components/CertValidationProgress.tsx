@@ -61,7 +61,7 @@ export function CertValidationProgress({
   const statusIcon = {
     running: <Loader2 className="w-[18px] h-[18px] text-emerald-600 animate-spin" />,
     complete: <CheckCircle2 className="w-[18px] h-[18px] text-emerald-600" />,
-    error: <AlertCircle className="w-[18px] h-[18px] text-red-600" />,
+    error: <AlertCircle className="w-[18px] h-[18px] text-danger-600" />,
   };
 
   const statusLabel = {
@@ -73,7 +73,7 @@ export function CertValidationProgress({
   const progressBarColor = {
     running: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
     complete: 'bg-gradient-to-r from-emerald-500 to-emerald-600',
-    error: 'bg-gradient-to-r from-red-500 to-red-600',
+    error: 'bg-gradient-to-r from-danger-500 to-danger-600',
   };
 
   return (
@@ -90,7 +90,7 @@ export function CertValidationProgress({
               status === 'complete'
                 ? 'bg-emerald-50 text-emerald-700'
                 : status === 'error'
-                  ? 'bg-red-50 text-red-700'
+                  ? 'bg-danger-50 text-danger-700'
                   : 'bg-slate-100 text-slate-600',
             )}
           >

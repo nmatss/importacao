@@ -54,9 +54,19 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string; labe
     label: 'Deferida',
   },
   pending: { bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-400', label: 'Pendente' },
-  submitted: { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500', label: 'Submetida' },
-  expired: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'Vencida' },
-  cancelled: { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500', label: 'Cancelada' },
+  submitted: {
+    bg: 'bg-primary-50',
+    text: 'text-primary-700',
+    dot: 'bg-primary-500',
+    label: 'Submetida',
+  },
+  expired: { bg: 'bg-danger-50', text: 'text-danger-700', dot: 'bg-danger-500', label: 'Vencida' },
+  cancelled: {
+    bg: 'bg-danger-50',
+    text: 'text-danger-700',
+    dot: 'bg-danger-500',
+    label: 'Cancelada',
+  },
 };
 
 const defaultStatus = {
@@ -68,14 +78,19 @@ const defaultStatus = {
 
 const kpiList = [
   { key: 'pending', label: 'Pendentes', icon: Clock, gradient: 'from-slate-500 to-slate-600' },
-  { key: 'submitted', label: 'Submetidas', icon: Send, gradient: 'from-blue-500 to-blue-600' },
+  {
+    key: 'submitted',
+    label: 'Submetidas',
+    icon: Send,
+    gradient: 'from-primary-500 to-primary-600',
+  },
   {
     key: 'deferred',
     label: 'Deferidas',
     icon: CheckCircle2,
     gradient: 'from-emerald-500 to-emerald-600',
   },
-  { key: 'expired', label: 'Vencidas', icon: XCircle, gradient: 'from-red-500 to-red-600' },
+  { key: 'expired', label: 'Vencidas', icon: XCircle, gradient: 'from-danger-500 to-danger-600' },
 ];
 
 const ORGAO_OPTIONS = ['Inmetro', 'MAPA', 'Anvisa', 'DECEX', 'Ibama'];
@@ -148,8 +163,10 @@ export function LiTrackingPage() {
           <FileCheck className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Licencas de Importacao (LI)</h2>
-          <p className="text-sm text-slate-500">
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+            Licencas de Importacao (LI)
+          </h2>
+          <p className="text-sm text-slate-600">
             {pagination?.total ?? liData?.length ?? 0} licenca
             {(pagination?.total ?? liData?.length ?? 0) !== 1 ? 's' : ''} registrada
             {(pagination?.total ?? liData?.length ?? 0) !== 1 ? 's' : ''}
@@ -162,7 +179,7 @@ export function LiTrackingPage() {
         {kpiList.map((kpi) => (
           <div
             key={kpi.key}
-            className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
           >
             <div className="flex items-center gap-3.5">
               <div
@@ -185,11 +202,11 @@ export function LiTrackingPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Search */}
           <div className="flex-1 max-w-xs">
-            <label htmlFor="li-search" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="li-search" className="mb-1.5 block text-xs font-medium text-slate-500">
               Processo
             </label>
             <div className="relative">
@@ -203,14 +220,14 @@ export function LiTrackingPage() {
                   setPage(1);
                 }}
                 placeholder="Buscar processo..."
-                className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
           </div>
 
           {/* Status Filter */}
           <div className="max-w-[200px]">
-            <label htmlFor="li-status" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="li-status" className="mb-1.5 block text-xs font-medium text-slate-500">
               Status
             </label>
             <div className="relative">
@@ -221,7 +238,7 @@ export function LiTrackingPage() {
                   setStatusFilter(e.target.value);
                   setPage(1);
                 }}
-                className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-3.5 pr-10 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full appearance-none rounded-lg border border-slate-200 py-2 pl-3 pr-10 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               >
                 {STATUS_OPTIONS.map((opt) => (
                   <option key={opt.value} value={opt.value}>
@@ -235,7 +252,7 @@ export function LiTrackingPage() {
 
           {/* Orgao Filter */}
           <div className="max-w-[200px]">
-            <label htmlFor="li-orgao" className="mb-1.5 block text-sm font-medium text-slate-700">
+            <label htmlFor="li-orgao" className="mb-1.5 block text-xs font-medium text-slate-500">
               Orgao
             </label>
             <div className="relative">
@@ -246,7 +263,7 @@ export function LiTrackingPage() {
                   setOrgaoFilter(e.target.value);
                   setPage(1);
                 }}
-                className="w-full appearance-none rounded-xl border border-slate-200 py-2.5 pl-3.5 pr-10 text-sm text-slate-900 transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full appearance-none rounded-lg border border-slate-200 py-2 pl-3 pr-10 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               >
                 <option value="">Todos os Orgaos</option>
                 {ORGAO_OPTIONS.map((org) => (
@@ -261,7 +278,7 @@ export function LiTrackingPage() {
 
           {/* Date Range Filter */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-slate-700">Periodo</label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-500">Periodo</label>
             <DateRangeFilter
               startDate={startDate}
               endDate={endDate}
@@ -287,33 +304,33 @@ export function LiTrackingPage() {
           description="Nenhuma licenca de importacao encontrada com os filtros selecionados."
         />
       ) : (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Processo
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Orgao
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     NCM
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Status
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Solicitacao
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Deferimento
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Validade
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     LPCO
                   </th>
                 </tr>
@@ -326,7 +343,7 @@ export function LiTrackingPage() {
                       li.processId ? navigate(`/importacao/processos/${li.processId}`) : undefined
                     }
                     className={cn(
-                      'transition-colors hover:bg-slate-50',
+                      'border-t border-slate-100 hover:bg-slate-50/50 transition-colors',
                       li.processId != null && 'cursor-pointer',
                     )}
                   >
@@ -342,14 +359,14 @@ export function LiTrackingPage() {
                     <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                       {getStatusBadge(li.status)}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                       {li.requestedByCompanyAt ? (
                         formatDate(li.requestedByCompanyAt)
                       ) : (
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                       {li.deferredAt ? (
                         formatDate(li.deferredAt)
                       ) : li.expectedDeferralAt ? (
@@ -360,7 +377,7 @@ export function LiTrackingPage() {
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500">
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
                       {li.validUntil ? (
                         formatDate(li.validUntil)
                       ) : (
@@ -379,14 +396,14 @@ export function LiTrackingPage() {
           {/* Pagination */}
           {pagination && pagination.pages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-100 px-3 py-2.5 sm:px-6 sm:py-3.5">
-              <p className="text-sm text-slate-500">
+              <p className="text-sm text-slate-600">
                 Pagina {pagination.page} de {pagination.pages} ({pagination.total} registros)
               </p>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                   disabled={pagination.page <= 1}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
@@ -394,7 +411,7 @@ export function LiTrackingPage() {
                 <button
                   onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
                   disabled={pagination.page >= pagination.pages}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   Proximo
                   <ChevronRight className="h-4 w-4" />

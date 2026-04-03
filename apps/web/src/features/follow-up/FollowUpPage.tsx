@@ -88,7 +88,7 @@ function enrichFollowUpData(raw: RawFollowUpProcess[]): FollowUpProcess[] {
 
 const STAGES = [
   { key: 'docs_received', label: 'Docs Recebidos', color: 'bg-sky-500' },
-  { key: 'pre_inspection', label: 'Pre-Inspecao', color: 'bg-indigo-500' },
+  { key: 'pre_inspection', label: 'Pre-Inspecao', color: 'bg-primary-500' },
   { key: 'ncm_verification', label: 'Verificacao NCM', color: 'bg-violet-500' },
   { key: 'espelho_generated', label: 'Espelho Gerado', color: 'bg-fuchsia-500' },
   { key: 'sent_fenicia', label: 'Enviado Fenicia', color: 'bg-amber-500' },
@@ -112,10 +112,10 @@ const statusConfig = {
     label: 'Proximo ao prazo',
   },
   overdue: {
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-    accent: 'bg-red-500',
-    text: 'text-red-700',
+    bg: 'bg-danger-50',
+    border: 'border-danger-200',
+    accent: 'bg-danger-500',
+    text: 'text-danger-700',
     label: 'Atrasado',
   },
 };
@@ -201,7 +201,7 @@ export function FollowUpPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-sm">
             <LayoutGrid className="h-5 w-5 text-white" />
           </div>
           <div>
@@ -410,8 +410,8 @@ export function FollowUpPage() {
                     let urgencyBg = 'bg-emerald-50';
                     let urgencyText = 'text-emerald-700';
                     if (isUrgent) {
-                      urgencyBg = 'bg-red-50';
-                      urgencyText = 'text-red-700';
+                      urgencyBg = 'bg-danger-50';
+                      urgencyText = 'text-danger-700';
                     } else if (isWarning) {
                       urgencyBg = 'bg-amber-50';
                       urgencyText = 'text-amber-700';

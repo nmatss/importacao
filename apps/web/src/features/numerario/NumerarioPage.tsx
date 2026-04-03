@@ -86,7 +86,7 @@ export function NumerarioPage() {
       label: 'Processos',
       value: numerarioProcesses.length,
       icon: Calculator,
-      gradient: 'from-blue-500 to-blue-600',
+      gradient: 'from-primary-500 to-primary-600',
     },
     {
       label: 'Percentual Medio',
@@ -108,8 +108,8 @@ export function NumerarioPage() {
           <Banknote className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Numerario</h2>
-          <p className="text-sm text-slate-500">Depositos antecipados de numerario por processo</p>
+          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Numerario</h2>
+          <p className="text-sm text-slate-600">Depositos antecipados de numerario por processo</p>
         </div>
       </div>
 
@@ -118,7 +118,7 @@ export function NumerarioPage() {
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
-            className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
           >
             <div className="flex items-center gap-3.5">
               <div
@@ -139,11 +139,11 @@ export function NumerarioPage() {
       </div>
 
       {/* Search */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
         <div className="max-w-xs">
           <label
             htmlFor="numerario-search"
-            className="mb-1.5 block text-sm font-medium text-slate-700"
+            className="mb-1.5 block text-xs font-medium text-slate-500"
           >
             Processo
           </label>
@@ -155,7 +155,7 @@ export function NumerarioPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar processo..."
-              className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-4 text-sm text-slate-900 transition-colors placeholder:text-slate-400 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
         </div>
@@ -169,30 +169,30 @@ export function NumerarioPage() {
           description="Nenhum processo com dados de numerario encontrado."
         />
       ) : (
-        <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200">
               <thead>
-                <tr className="bg-slate-50/80">
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Processo
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Valor FOB
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Valor Numerario
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     % Numerario
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Data Pagamento
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Solicitante
                   </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                     Dados Cambio
                   </th>
                 </tr>
@@ -208,7 +208,7 @@ export function NumerarioPage() {
                     <tr
                       key={proc.id}
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-slate-50"
+                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
                     >
                       <td className="whitespace-nowrap px-5 py-3.5 text-sm font-semibold text-slate-900">
                         {proc.processCode}
@@ -235,7 +235,7 @@ export function NumerarioPage() {
                               percentual >= 100
                                 ? 'bg-emerald-50 text-emerald-700'
                                 : percentual >= 50
-                                  ? 'bg-blue-50 text-blue-700'
+                                  ? 'bg-primary-50 text-primary-700'
                                   : 'bg-amber-50 text-amber-700',
                             )}
                           >
@@ -245,7 +245,7 @@ export function NumerarioPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-500">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
                         {getField(data, 'dataPgtoNumerario') ? (
                           formatDate(getField(data, 'dataPgtoNumerario')!)
                         ) : (
@@ -257,7 +257,7 @@ export function NumerarioPage() {
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="max-w-[200px] truncate px-5 py-3.5 text-sm text-slate-500">
+                      <td className="max-w-[200px] truncate px-5 py-3.5 text-sm text-slate-600">
                         {getField(data, 'dadosCambio') || (
                           <span className="text-slate-300">--</span>
                         )}
