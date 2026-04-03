@@ -48,8 +48,10 @@ function getSmtpTransport() {
     port,
     secure,
     ...(hasAuth ? { auth: { user, pass } } : {}),
-    tls: { rejectUnauthorized: false },
-    ignoreTLS: !secure,
+    tls: {
+      rejectUnauthorized: process.env.NODE_ENV === 'production',
+      minVersion: 'TLSv1.2',
+    },
   });
 }
 
@@ -144,10 +146,13 @@ export const communicationService = {
         }
       }
 
+      // Sanitize headers to prevent CRLF injection
+      const sanitizeHeader = (v: string) => v.replace(/[\r\n]/g, '').trim();
+
       await transport.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: communication.recipientEmail,
-        subject: communication.subject,
+        to: sanitizeHeader(communication.recipientEmail),
+        subject: sanitizeHeader(communication.subject),
         html: sanitizeHtml(htmlBody),
         attachments: mailAttachments,
       });

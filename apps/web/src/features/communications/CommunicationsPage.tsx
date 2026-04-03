@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import DOMPurify from 'dompurify';
 import {
   Mail,
   Send,
@@ -402,9 +403,10 @@ export function CommunicationsPage() {
                       <div
                         className="text-xs text-slate-600"
                         dangerouslySetInnerHTML={{
-                          __html:
+                          __html: DOMPurify.sanitize(
                             signatures.find((s) => s.id === selectedSignatureId)?.signatureHtml ||
-                            '',
+                              '',
+                          ),
                         }}
                       />
                     </div>

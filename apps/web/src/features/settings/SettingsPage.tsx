@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
+import DOMPurify from 'dompurify';
 import {
   Settings,
   Users,
@@ -1018,7 +1019,7 @@ function SignaturesTab() {
                 {previewId === sig.id && (
                   <div
                     className="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: sig.signatureHtml }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(sig.signatureHtml) }}
                   />
                 )}
               </div>
@@ -1069,7 +1070,7 @@ function SignaturesTab() {
                   <label className={labelClasses}>Pre-visualizacao</label>
                   <div
                     className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: form.signatureHtml }}
+                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.signatureHtml) }}
                   />
                 </div>
               )}
