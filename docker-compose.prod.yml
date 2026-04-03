@@ -28,7 +28,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-importacao123}
       POSTGRES_DB: ${POSTGRES_DB:-importacao}
     ports:
-      - "5450:5432"
+      - "127.0.0.1:5450:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -49,7 +49,7 @@ services:
     container_name: importacao-api
     restart: unless-stopped
     ports:
-      - "3050:3001"
+      - "127.0.0.1:3050:3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-importacao}:${POSTGRES_PASSWORD:-importacao123}@postgres:5432/${POSTGRES_DB:-importacao}
       JWT_SECRET: ${JWT_SECRET}
