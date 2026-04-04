@@ -98,7 +98,7 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Page header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Configuracoes</h2>
