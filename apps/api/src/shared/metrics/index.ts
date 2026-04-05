@@ -31,6 +31,31 @@ export const queueJobsActive = new Gauge({
   registers: [register],
 });
 
+// Custom histogram: database query duration
+export const dbQueryDuration = new Histogram({
+  name: 'db_query_duration_seconds',
+  help: 'Duration of database queries in seconds',
+  labelNames: ['operation'] as const,
+  buckets: [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1, 5],
+  registers: [register],
+});
+
+// Custom histogram: external integration request duration
+export const integrationRequestDuration = new Histogram({
+  name: 'integration_request_duration_seconds',
+  help: 'Duration of external integration requests in seconds',
+  labelNames: ['provider'] as const,
+  buckets: [0.1, 0.5, 1, 2.5, 5, 10, 30, 60],
+  registers: [register],
+});
+
+// Custom gauge: currently running validation checks
+export const validationChecksRunning = new Gauge({
+  name: 'validation_checks_running',
+  help: 'Number of currently running validation check sets',
+  registers: [register],
+});
+
 /**
  * Normalize path to avoid high-cardinality labels.
  * Replaces UUID-like and numeric path segments with placeholders.

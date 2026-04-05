@@ -1,3 +1,7 @@
+// Initialize Sentry before anything else (captures import errors)
+import { initSentry } from './shared/observability/sentry.js';
+initSentry();
+
 import { getEnv } from './shared/config/env.js';
 import { app } from './app.js';
 import { logger } from './shared/utils/logger.js';

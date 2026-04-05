@@ -48,8 +48,21 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Prometheus metrics endpoint
-app.get('/metrics', async (_req, res) => {
+// Prometheus metrics endpoint — protected by token or IP allow-list
+app.get('/metrics', (req, res, next) => {
+  const expectedToken = process.env.METRICS_TOKEN;
+  const allowedIps = (process.env.METRICS_ALLOWED_IPS || '').split(',').map((s) => s.trim()).filter(Boolean);
+  const providedToken = req.header('x-metrics-token');
+  const clientIp = req.ip || req.socket.remoteAddress || '';
+
+  // Allow if token matches
+  if (expectedToken && providedToken === expectedToken) return next();
+  // Allow if IP is in allow-list (defaults to localhost only)
+  const defaultAllow = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+  if ([...defaultAllow, ...allowedIps].some((ip) => clientIp === ip || clientIp.endsWith(ip))) return next();
+
+  res.status(401).json({ success: false, error: 'Unauthorized' });
+}, async (_req, res) => {
   try {
     res.set('Content-Type', register.contentType);
     res.end(await register.metrics());
