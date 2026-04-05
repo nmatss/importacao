@@ -15,3 +15,4 @@ certifications.db
 # Deploy artifacts
 deploy.log
 scripts/deploy.sh.backup
+.claude/worktrees/

@@ -33,7 +33,14 @@ import { ValidationChecklist } from './ValidationChecklist';
 import { useApiQuery } from '@/shared/hooks/useApi';
 
 function renderChecklist(
-  checks: { id: number; checkName: string; status: 'passed' | 'failed' | 'warning' | 'skipped'; message?: string }[] | null = null,
+  checks:
+    | {
+        id: number;
+        checkName: string;
+        status: 'passed' | 'failed' | 'warning' | 'skipped';
+        message?: string;
+      }[]
+    | null = null,
 ) {
   vi.mocked(useApiQuery).mockReturnValue({
     data: checks,
@@ -41,14 +48,14 @@ function renderChecklist(
     refetch: mockRefetch,
     error: null,
     isError: false,
-  } as ReturnType<typeof useApiQuery>);
+  } as unknown as ReturnType<typeof useApiQuery>);
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter>
       <QueryClientProvider client={qc}>
         <MockAuthProvider>
-          <ValidationChecklist processId={1} />
+          <ValidationChecklist processId="1" />
         </MockAuthProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -62,9 +69,7 @@ describe('ValidationChecklist', () => {
   });
 
   it('renders without crashing with passed checks', () => {
-    renderChecklist([
-      { id: 1, checkName: 'check_invoice_number', status: 'passed' },
-    ]);
+    renderChecklist([{ id: 1, checkName: 'check_invoice_number', status: 'passed' }]);
     expect(document.body).toBeTruthy();
   });
 

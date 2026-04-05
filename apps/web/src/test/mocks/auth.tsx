@@ -15,6 +15,7 @@ export const mockAuthValue: AuthContextValue = {
   login: vi.fn(),
   loginWithGoogle: vi.fn(),
   logout: vi.fn(),
+  getToken: vi.fn(() => 'mock-token'),
 };
 
 export function MockAuthProvider({
@@ -25,16 +26,12 @@ export function MockAuthProvider({
   value?: Partial<AuthContextValue>;
 }) {
   return (
-    <AuthContext.Provider value={{ ...mockAuthValue, ...value }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={{ ...mockAuthValue, ...value }}>{children}</AuthContext.Provider>
   );
 }
 
 export function MockUnauthProvider({ children }: { children: React.ReactNode }) {
   return (
-    <AuthContext.Provider value={{ ...mockAuthValue, user: null }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={{ ...mockAuthValue, user: null }}>{children}</AuthContext.Provider>
   );
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { AuthProvider } from '@/shared/contexts/AuthContext';
+import { AuthProvider, type AuthContextValue } from '@/shared/contexts/AuthContext';
 import { useAuth } from '@/shared/hooks/useAuth';
 
 // Mock the API client
@@ -45,56 +45,56 @@ describe('AuthContext', () => {
 
   it('starts with null user when no token in localStorage', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('no token'));
-    let capturedAuth: ReturnType<typeof useAuth> | null = null;
+    const captured: { auth: AuthContextValue | null } = { auth: null };
 
     renderWithAuth((auth) => {
-      capturedAuth = auth;
+      captured.auth = auth;
     });
 
-    await waitFor(() => expect(capturedAuth?.loading).toBe(false));
-    expect(capturedAuth?.user).toBeNull();
+    await waitFor(() => expect(captured.auth?.loading).toBe(false));
+    expect(captured.auth?.user).toBeNull();
   });
 
   it('restores user from token in localStorage', async () => {
     localStorage.setItem('importacao_token', mockToken);
     vi.mocked(api.get).mockResolvedValue(mockUser);
 
-    let capturedAuth: ReturnType<typeof useAuth> | null = null;
+    const captured: { auth: AuthContextValue | null } = { auth: null };
     renderWithAuth((auth) => {
-      capturedAuth = auth;
+      captured.auth = auth;
     });
 
-    await waitFor(() => expect(capturedAuth?.loading).toBe(false));
-    expect(capturedAuth?.user?.email).toBe('test@grupounico.com');
+    await waitFor(() => expect(captured.auth?.loading).toBe(false));
+    expect(captured.auth?.user?.email).toBe('test@grupounico.com');
   });
 
   it('removes token from localStorage on auth/me failure', async () => {
     localStorage.setItem('importacao_token', 'invalid-token');
     vi.mocked(api.get).mockRejectedValue(new Error('Unauthorized'));
 
-    let capturedAuth: ReturnType<typeof useAuth> | null = null;
+    const captured: { auth: AuthContextValue | null } = { auth: null };
     renderWithAuth((auth) => {
-      capturedAuth = auth;
+      captured.auth = auth;
     });
 
-    await waitFor(() => expect(capturedAuth?.loading).toBe(false));
+    await waitFor(() => expect(captured.auth?.loading).toBe(false));
     expect(localStorage.getItem('importacao_token')).toBeNull();
-    expect(capturedAuth?.user).toBeNull();
+    expect(captured.auth?.user).toBeNull();
   });
 
   it('login sets token and user', async () => {
     vi.mocked(api.get).mockRejectedValue(new Error('no token'));
     vi.mocked(api.post).mockResolvedValue({ token: mockToken, user: mockUser });
 
-    let capturedAuth: ReturnType<typeof useAuth> | null = null;
+    const captured: { auth: AuthContextValue | null } = { auth: null };
     renderWithAuth((auth) => {
-      capturedAuth = auth;
+      captured.auth = auth;
     });
 
-    await waitFor(() => expect(capturedAuth?.loading).toBe(false));
+    await waitFor(() => expect(captured.auth?.loading).toBe(false));
 
     await act(async () => {
-      await capturedAuth?.login('test@grupounico.com', 'password123');
+      await captured.auth?.login('test@grupounico.com', 'password123');
     });
 
     expect(localStorage.getItem('importacao_token')).toBe(mockToken);
@@ -104,15 +104,15 @@ describe('AuthContext', () => {
     localStorage.setItem('importacao_token', mockToken);
     vi.mocked(api.get).mockResolvedValue(mockUser);
 
-    let capturedAuth: ReturnType<typeof useAuth> | null = null;
+    const captured: { auth: AuthContextValue | null } = { auth: null };
     renderWithAuth((auth) => {
-      capturedAuth = auth;
+      captured.auth = auth;
     });
 
-    await waitFor(() => expect(capturedAuth?.loading).toBe(false));
+    await waitFor(() => expect(captured.auth?.loading).toBe(false));
 
     act(() => {
-      capturedAuth?.logout();
+      captured.auth?.logout();
     });
 
     expect(localStorage.getItem('importacao_token')).toBeNull();
