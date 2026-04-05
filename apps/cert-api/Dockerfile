@@ -3,7 +3,7 @@
 # =============================================================================
 
 # ---- Stage 1: Oracle Instant Client ----
-FROM python:3.12-slim AS oracle-builder
+FROM python:3.14-slim AS oracle-builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl unzip libaio1t64 \
@@ -16,7 +16,7 @@ RUN curl -fsSL https://download.oracle.com/otn_software/linux/instantclient/2370
     && rm /tmp/ic.zip
 
 # ---- Stage 2: Python dependencies ----
-FROM python:3.12-slim AS deps
+FROM python:3.14-slim AS deps
 
 WORKDIR /build
 
@@ -28,7 +28,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --target=/build/site-packages -r requirements.txt
 
 # ---- Stage 3: Runtime ----
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     freetds-bin libaio1t64 curl \
