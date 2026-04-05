@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-# Fix uploads directory permissions (Docker named volume may be root-owned)
-mkdir -p /app/uploads
-chown node:node /app/uploads
+# Container runs as USER node (Dockerfile). Ensure uploads dir exists.
+mkdir -p /app/uploads 2>/dev/null || true
 
-# Run migrations and start server as non-root user
-exec su-exec node sh -c "node dist/shared/database/migrate.js && node dist/server.js"
+# Run migrations then start server
+node dist/shared/database/migrate.js
+exec node dist/server.js
