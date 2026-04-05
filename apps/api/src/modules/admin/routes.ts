@@ -2,14 +2,24 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { getQueue } from '../../shared/queue/index.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { queueStatsQuerySchema } from './schema.js';
+
+const adminPostLimiter = createRateLimiter(30, 60_000);
 
 const router = Router();
 
 router.use(authMiddleware);
 router.use(adminMiddleware);
+// Rate-limit all POST/PATCH/PUT/DELETE admin operations (30 req/min)
+router.use((req, res, next) => {
+  if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method)) {
+    return adminPostLimiter(req, res, next);
+  }
+  next();
+});
 
 const QUEUE_NAMES = ['email-send', 'drive-sync', 'sheets-sync', 'ai-extraction'] as const;
 
