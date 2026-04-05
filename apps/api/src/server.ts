@@ -1,8 +1,12 @@
+import { getEnv } from './shared/config/env.js';
 import { app } from './app.js';
 import { logger } from './shared/utils/logger.js';
 import { startScheduler } from './jobs/scheduler.js';
 
-const PORT = process.env.API_PORT || 3001;
+// Validate env vars at startup — fail-fast if invalid
+const env = getEnv();
+
+const PORT = env.API_PORT;
 
 // ── Startup checks for critical environment variables ──────────────
 function checkEnvVars() {
