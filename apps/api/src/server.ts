@@ -1,3 +1,6 @@
+import { initSentry } from './shared/observability/sentry.js';
+initSentry();
+
 import { app } from './app.js';
 import { logger } from './shared/utils/logger.js';
 import { startScheduler } from './jobs/scheduler.js';

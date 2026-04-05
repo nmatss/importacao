@@ -3,6 +3,7 @@ import { ZodError } from 'zod';
 import multer from 'multer';
 import { AppError, ValidationError } from '../errors/index.js';
 import { logger } from '../utils/logger.js';
+import { Sentry } from '../observability/sentry.js';
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   logger.error({ err }, err.message);
@@ -78,6 +79,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     });
   }
 
+  Sentry.captureException(err);
   return res.status(500).json({
     success: false,
     error: 'Erro interno do servidor',
