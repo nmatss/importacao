@@ -18,6 +18,7 @@ import {
   Stamp,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
 import { CHECKLIST_STEPS } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -65,6 +66,7 @@ function formatTimestamp(val: unknown): string | null {
 }
 
 export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
+  const { getToken } = useAuth();
   const [toggling, setToggling] = useState<string | null>(null);
 
   const {
@@ -76,7 +78,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   const toggleStep = async (stepKey: string) => {
     setToggling(stepKey);
     try {
-      const token = localStorage.getItem('importacao_token');
+      const token = getToken();
       const baseUrl = import.meta.env.VITE_API_URL || '';
       const isCompleted = followUp && followUp[stepKey];
 
@@ -101,8 +103,9 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
       } else {
         toast.success(`${stepLabel} concluido`);
       }
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao atualizar checklist');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao atualizar checklist';
+      toast.error(msg);
     } finally {
       setToggling(null);
     }

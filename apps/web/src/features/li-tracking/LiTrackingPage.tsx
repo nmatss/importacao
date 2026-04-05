@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileCheck,
@@ -114,14 +114,17 @@ export function LiTrackingPage() {
   const [page, setPage] = useState(1);
   const limit = 25;
 
-  const queryParams = new URLSearchParams();
-  queryParams.set('page', String(page));
-  queryParams.set('limit', String(limit));
-  if (statusFilter) queryParams.set('status', statusFilter);
-  if (orgaoFilter) queryParams.set('orgao', orgaoFilter);
-  if (search) queryParams.set('processCode', search);
-  if (startDate) queryParams.set('startDate', startDate);
-  if (endDate) queryParams.set('endDate', endDate);
+  const queryParams = useMemo(() => {
+    const p = new URLSearchParams();
+    p.set('page', String(page));
+    p.set('limit', String(limit));
+    if (statusFilter) p.set('status', statusFilter);
+    if (orgaoFilter) p.set('orgao', orgaoFilter);
+    if (search) p.set('processCode', search);
+    if (startDate) p.set('startDate', startDate);
+    if (endDate) p.set('endDate', endDate);
+    return p;
+  }, [page, limit, statusFilter, orgaoFilter, search, startDate, endDate]);
 
   const { data: liResponse, isLoading } = useApiQuery<{
     data: LiItem[];
@@ -139,7 +142,7 @@ export function LiTrackingPage() {
     return <PageSkeleton />;
   }
 
-  function getStatusBadge(status: string) {
+  const getStatusBadge = useCallback((status: string) => {
     const config = statusConfig[status] ?? defaultStatus;
     return (
       <span
@@ -153,7 +156,7 @@ export function LiTrackingPage() {
         {config.label || status}
       </span>
     );
-  }
+  }, []);
 
   return (
     <div className="space-y-6 animate-fade-in">

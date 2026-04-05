@@ -2,6 +2,7 @@ import { DollarSign } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { CurrencyExchange, CurrencyTotals } from '@/shared/types';
 
 export interface CambiosTabProps {
@@ -14,7 +15,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
     totals: CurrencyTotals;
   }>(['cambios', processId], `/api/currency-exchange/process/${processId}/totals`);
 
-  if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isLoading) return <TableSkeleton />;
 
   const exchanges = data?.exchanges ?? [];
   const totals = data?.totals;

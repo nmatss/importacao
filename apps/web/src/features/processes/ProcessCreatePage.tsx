@@ -2,7 +2,8 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign, Loader2 } from 'lucide-react';
+import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
+import { SubmitButton } from '@/shared/components/SubmitButton';
 import { useApiMutation } from '@/shared/hooks/useApi';
 
 const processSchema = z.object({
@@ -321,20 +322,13 @@ export function ProcessCreatePage() {
           >
             Cancelar
           </button>
-          <button
+          <SubmitButton
             type="submit"
+            loading={mutation.isPending}
             disabled={isSubmitting || mutation.isPending}
-            className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none transition-colors"
           >
-            {mutation.isPending ? (
-              <span className="flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Salvando...
-              </span>
-            ) : (
-              'Criar Processo'
-            )}
-          </button>
+            Criar Processo
+          </SubmitButton>
         </div>
       </form>
     </div>

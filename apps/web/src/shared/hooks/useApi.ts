@@ -2,7 +2,7 @@ import { useQuery, useMutation, type UseQueryOptions, type UseMutationOptions } 
 import { api } from '@/shared/lib/api-client';
 
 export function useApiQuery<T>(
-  key: string[],
+  key: readonly unknown[],
   url: string,
   options?: Omit<UseQueryOptions<T>, 'queryKey' | 'queryFn'>,
 ) {

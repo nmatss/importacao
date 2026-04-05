@@ -17,6 +17,7 @@ import {
   FileJson,
   Table,
 } from 'lucide-react';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface CertReportFile {
   filename: string;
@@ -124,8 +125,8 @@ export default function CertRelatoriosPage() {
 
       toast.success(`Relatorio "${exportType.label}" exportado`);
       loadReports();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar relatorio');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setExporting(null);
     }

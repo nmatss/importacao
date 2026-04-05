@@ -19,6 +19,7 @@ import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface Process {
   id: number;
@@ -93,8 +94,8 @@ export function CurrencyExchangePage() {
       await api.delete(`/api/currency-exchange/${deleteId}`);
       queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
       setDeleteId(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao excluir cambio');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 

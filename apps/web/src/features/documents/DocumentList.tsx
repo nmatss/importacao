@@ -18,6 +18,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { AiExtractionSummary } from './AiExtractionSummary';
 
@@ -179,9 +180,7 @@ export function DocumentList({ processId }: DocumentListProps) {
       });
   };
 
-  if (isLoading) {
-    return <LoadingSpinner className="py-8" />;
-  }
+  if (isLoading) return <TableSkeleton />;
 
   if (!documents || documents.length === 0) {
     return (

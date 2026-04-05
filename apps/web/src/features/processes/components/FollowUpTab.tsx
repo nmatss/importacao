@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatDateTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { FollowUpTracking } from '@/shared/types';
 
 export interface FollowUpTabProps {
@@ -36,7 +37,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
     `/api/follow-up/${processId}`,
   );
 
-  if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isLoading) return <TableSkeleton />;
 
   if (!tracking) {
     return (
