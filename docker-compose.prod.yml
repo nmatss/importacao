@@ -182,6 +182,7 @@ services:
   certbot:
     image: certbot/certbot
     container_name: importacao-certbot
+    profiles: ["tls"]  # enable only after domain+DNS configured: `docker compose --profile tls up -d certbot`
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-webroot:/var/www/certbot
