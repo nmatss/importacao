@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { preConsController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { upload } from '../../shared/middleware/upload.js';
+import { validate } from '../../shared/middleware/validate.js';
+import { getPreConsItemsSchema } from './schema.js';
 
 const router = Router();
 
@@ -11,7 +13,7 @@ router.use(authMiddleware);
 router.post('/sync', adminMiddleware, upload.single('file'), preConsController.sync);
 
 // List Pre-Cons items (with optional processCode filter)
-router.get('/items', preConsController.getItems);
+router.get('/items', validate(getPreConsItemsSchema, 'query'), preConsController.getItems);
 
 // Get Pre-Cons items for a specific process
 router.get('/process/:processCode', preConsController.getByProcess);

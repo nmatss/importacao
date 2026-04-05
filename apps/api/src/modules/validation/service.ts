@@ -125,15 +125,12 @@ export const validationService = {
           .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
           .where(eq(importProcesses.id, processId));
 
-        import('../integrations/google-drive.service.js')
-          .then(({ googleDriveService }) => {
-            googleDriveService
-              .moveFromCorrection(process.processCode, process.brand)
-              .catch((err) =>
-                logger.error({ err, processId }, 'Failed to move from correction folder'),
-              );
-          })
-          .catch((err) => logger.error({ err }, 'Dynamic import failed'));
+        try {
+          const { googleDriveService } = await import('../integrations/google-drive.service.js');
+          await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+        } catch (err) {
+          logger.error({ err, processId }, 'Failed to move from correction folder');
+        }
       } else {
         assertTransition('validating' as ProcessStatus, 'validated');
         await db
@@ -154,18 +151,15 @@ export const validationService = {
         .set({ correctionStatus: 'pending_correction', updatedAt: new Date() })
         .where(eq(importProcesses.id, processId));
 
-      import('../integrations/google-drive.service.js')
-        .then(({ googleDriveService }) => {
-          googleDriveService
-            .moveToCorrection(process.processCode, process.brand)
-            .catch((err) =>
-              logger.error({ err, processId }, 'Failed to move to correction folder'),
-            );
-        })
-        .catch((err) => logger.error({ err }, 'Dynamic import failed'));
+      try {
+        const { googleDriveService } = await import('../integrations/google-drive.service.js');
+        await googleDriveService.moveToCorrection(process.processCode, process.brand);
+      } catch (err) {
+        logger.error({ err, processId }, 'Failed to move to correction folder');
+      }
     }
 
-    auditService.log(
+    await auditService.log(
       userId,
       'validation_run',
       'process',
@@ -183,7 +177,7 @@ export const validationService = {
     const failed = results.filter((r) => r.status === 'failed').length;
     const warnings = results.filter((r) => r.status === 'warning').length;
 
-    recordProcessEvent(
+    await recordProcessEvent(
       processId,
       {
         eventType: 'validation_run',
@@ -197,7 +191,7 @@ export const validationService = {
       const errorTypes = getErrorTypesFromChecks(
         results.filter((r) => r.status === 'failed').map((r) => r.checkName),
       );
-      recordProcessEvent(
+      await recordProcessEvent(
         processId,
         {
           eventType: 'correction_needed',
@@ -348,7 +342,7 @@ export const validationService = {
       throw new Error('Resultado de validação não encontrado');
     }
 
-    auditService.log(userId, 'manual_resolution', 'validation', resultId, null, null);
+    await auditService.log(userId, 'manual_resolution', 'validation', resultId, null, null);
     logger.info({ resultId, userId }, 'Validation result resolved manually');
     return updated;
   },

@@ -149,27 +149,30 @@ export const documentService = {
         .from(importProcesses)
         .where(eq(importProcesses.id, processId))
         .limit(1);
-      alertService
-        .create({
+      try {
+        await alertService.create({
           processId,
           severity: 'info',
           title: 'Documentos Completos',
           message: `Todos os 3 documentos recebidos para processo ${proc?.processCode ?? processId}.`,
           processCode: proc?.processCode,
-        })
-        .catch((err) => logger.error({ err }, 'Failed to create documents-received alert'));
+        });
+      } catch (err) {
+        logger.error({ err }, 'Failed to create documents-received alert');
+      }
 
       // Sync milestone to Follow-Up sheet
       if (proc?.processCode) {
-        import('../integrations/google-sheets.service.js')
-          .then(({ googleSheetsService }) => {
-            googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
-          })
-          .catch(() => {});
+        try {
+          const { googleSheetsService } = await import('../integrations/google-sheets.service.js');
+          await googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
+        } catch (err) {
+          logger.error({ err, processCode: proc.processCode }, 'Failed to sync milestone to Sheets');
+        }
       }
     }
 
-    auditService.log(
+    await auditService.log(
       userId,
       'upload',
       'document',
@@ -179,7 +182,7 @@ export const documentService = {
     );
 
     // Record timeline event
-    recordProcessEvent(
+    await recordProcessEvent(
       processId,
       {
         eventType: 'document_uploaded',
@@ -340,18 +343,12 @@ export const documentService = {
 
     // Auto-populate currency exchanges from invoice payment terms
     if (type === 'invoice' && result.data) {
-      import('../currency-exchange/service.js')
-        .then(({ currencyExchangeService }) => {
-          currencyExchangeService
-            .autoPopulate(doc.processId, result.data)
-            .catch((err) =>
-              logger.error(
-                { err, processId: doc.processId },
-                'Currency exchange auto-populate failed',
-              ),
-            );
-        })
-        .catch(() => {});
+      try {
+        const { currencyExchangeService } = await import('../currency-exchange/service.js');
+        await currencyExchangeService.autoPopulate(doc.processId, result.data);
+      } catch (err) {
+        logger.error({ err, processId: doc.processId }, 'Currency exchange auto-populate failed');
+      }
     }
 
     // Upload to Drive with standardized name after AI extraction

@@ -16,9 +16,12 @@ const app = express();
 // Security headers
 app.use(helmet());
 
-// CORS
+// CORS — fail-fast in production if CORS_ORIGIN not set
 if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
-  logger.warn('CORS_ORIGIN not set in production — falling back to default origins');
+  logger.fatal(
+    'CORS_ORIGIN environment variable is required in production. Refusing to start with localhost fallback.',
+  );
+  throw new Error('CORS_ORIGIN must be set in production');
 }
 app.use(
   cors({
