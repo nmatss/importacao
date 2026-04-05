@@ -28,51 +28,56 @@ export function buildCorrectionPrompt(context: CorrectionContext): OpenRouterMes
     divergencesByCategory[d.category].push(d);
   }
 
-  const divergenceSummary = Object.entries(divergencesByCategory).map(([cat, items]) => {
-    const itemsText = items.map(d =>
-      `  - ${d.checkName}: Esperado "${d.expectedValue || 'N/A'}" / Encontrado "${d.actualValue || 'N/A'}" — ${d.message}`
-    ).join('\n');
-    return `[${cat}]\n${itemsText}`;
-  }).join('\n\n');
+  const divergenceSummary = Object.entries(divergencesByCategory)
+    .map(([cat, items]) => {
+      const itemsText = items
+        .map(
+          (d) =>
+            `  - ${d.checkName}: Expected "${d.expectedValue || 'N/A'}" / Found "${d.actualValue || 'N/A'}" — ${d.message}`,
+        )
+        .join('\n');
+      return `[${cat}]\n${itemsText}`;
+    })
+    .join('\n\n');
 
   return [
     {
       role: 'system',
-      content: `Voce e um assistente profissional de uma empresa de importacao brasileira. Sua tarefa e redigir um e-mail formal de solicitacao de correcao de documentos em portugues brasileiro.
+      content: `You are a professional assistant for a Brazilian import company. Your task is to draft a formal document-correction request email in English.
 
-O e-mail deve:
-- Ser enderecado ao fornecedor/KIOM
-- Referenciar o codigo do processo e numero da fatura
-- Listar cada divergencia encontrada com valores esperados vs encontrados
-- Solicitar as correcoes especificas necessarias
-- Ser profissional, conciso e objetivo
-- Usar tom formal mas cordial
-- Terminar com "Atenciosamente," seguido de "[ASSINATURA]"
+The email must:
+- Be addressed to the supplier/KIOM
+- Reference the process code and invoice number
+- List each divergence found with expected vs. found values
+- Request the specific corrections needed
+- Be professional, concise and objective
+- Use a formal yet cordial tone
+- End with "Best regards," followed by "[SIGNATURE]"
 
-Responda com JSON estrito neste formato:
+Respond with strict JSON in this format:
 {
-  "subject": "Assunto do e-mail em portugues",
-  "body": "Corpo completo do e-mail em HTML com formatacao profissional usando tags <p>, <ul>, <li>, <strong>, <table>, etc."
+  "subject": "Email subject in English",
+  "body": "Full email body as HTML with professional formatting using <p>, <ul>, <li>, <strong>, <table>, etc."
 }
 
-O corpo em HTML deve:
-- Usar uma tabela para listar as divergencias (com colunas: Verificacao, Esperado, Encontrado, Detalhes)
-- Ter estilos inline para boa apresentacao (font-family Arial, cores profissionais)
-- Incluir cabecalho com titulo "Correcao de Documentos Necessaria"
-- Agrupar divergencias por categoria quando houver mais de uma categoria
+The HTML body must:
+- Use a table to list the divergences (columns: Check, Expected, Found, Details)
+- Include inline styles for good presentation (Arial font-family, professional colors)
+- Include a header with the title "Document Correction Required"
+- Group divergences by category when more than one category is present
 
-Responda SOMENTE com o objeto JSON, sem texto adicional.`,
+Respond ONLY with the JSON object, no additional text.`,
     },
     {
       role: 'user',
-      content: `Gere um e-mail profissional de solicitacao de correcao baseado nos seguintes dados:
+      content: `Generate a professional correction-request email based on the following data:
 
-Processo: ${context.processCode}
-Marca: ${context.brand}
-${context.invoiceNumber ? `Fatura: ${context.invoiceNumber}` : ''}
-${context.exporterName ? `Exportador: ${context.exporterName}` : ''}
+Process: ${context.processCode}
+Brand: ${context.brand}
+${context.invoiceNumber ? `Invoice: ${context.invoiceNumber}` : ''}
+${context.exporterName ? `Exporter: ${context.exporterName}` : ''}
 
-Divergencias encontradas:
+Divergences found:
 ${divergenceSummary}`,
     },
   ];

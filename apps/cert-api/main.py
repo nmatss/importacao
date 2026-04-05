@@ -1770,10 +1770,12 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
         }
         report_path.write_text(json.dumps(report_data, indent=2, ensure_ascii=False))
 
-        # Update run in DB
+        # Update run in DB — use a FRESH connection (pool conn may be stale after long validation)
         if DATABASE_URL:
+            fresh_conn = None
             try:
-                with db() as (conn, cur):
+                fresh_conn = psycopg2.connect(DATABASE_URL)
+                with fresh_conn.cursor() as cur:
                     cur.execute(
                         """
                         UPDATE cert_validation_runs
@@ -1784,8 +1786,16 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                         [len(products), ok, missing, inconsistent, not_found,
                          datetime.now(timezone.utc), report_filename, run_id],
                     )
-            except Exception:
-                pass
+                fresh_conn.commit()
+                log.info(f"Validation run {run_id} marked completed in DB")
+            except Exception as e:
+                log.error(f"Failed to update cert_validation_runs for {run_id}: {e}", exc_info=True)
+            finally:
+                if fresh_conn is not None:
+                    try:
+                        fresh_conn.close()
+                    except Exception:
+                        pass
 
         state["status"] = "completed"
         state["_finished_at"] = time.time()
@@ -1796,6 +1806,25 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
         state["status"] = "error"
         state["_finished_at"] = time.time()
         state["events"].append({"type": "error", "error": str(e)})
+        # Mark the run as failed in DB so dashboard doesn't show it as perpetually running
+        if DATABASE_URL:
+            fresh_conn = None
+            try:
+                fresh_conn = psycopg2.connect(DATABASE_URL)
+                with fresh_conn.cursor() as cur:
+                    cur.execute(
+                        "UPDATE cert_validation_runs SET status = 'failed', finished_at = %s WHERE id = %s",
+                        [datetime.now(timezone.utc), run_id],
+                    )
+                fresh_conn.commit()
+            except Exception as db_err:
+                log.error(f"Failed to mark run {run_id} as failed: {db_err}")
+            finally:
+                if fresh_conn is not None:
+                    try:
+                        fresh_conn.close()
+                    except Exception:
+                        pass
 
 
 @app.get("/api/validate/{run_id}")
