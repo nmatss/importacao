@@ -27,5 +27,7 @@ RUN mkdir -p uploads && chown node:node uploads
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+USER node
+
 EXPOSE 3001
 ENTRYPOINT ["entrypoint.sh"]
