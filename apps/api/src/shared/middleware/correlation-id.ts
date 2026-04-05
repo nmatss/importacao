@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger.js';
+import { requestContext } from '../observability/context.js';
 import type { Logger } from 'pino';
 
 declare global {
@@ -17,5 +18,5 @@ export function correlationId(req: Request, res: Response, next: NextFunction): 
   req.correlationId = id;
   req.log = logger.child({ correlationId: id });
   res.setHeader('x-correlation-id', id);
-  next();
+  requestContext.run({ requestId: id }, next);
 }
