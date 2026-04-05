@@ -7,7 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  lint-and-typecheck:
+  lint-api:
+    name: Lint & Typecheck API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,14 +19,39 @@ jobs:
       - run: npm ci
       - name: Typecheck API
         run: npx -w apps/api tsc --noEmit
+      - name: Lint API
+        run: npx -w apps/api eslint src --max-warnings=0 || true
+
+  lint-web:
+    name: Lint & Typecheck Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Typecheck Web
         run: npx -w apps/web tsc --noEmit
-      - name: Security audit
-        run: npm audit --audit-level=high || true
-      - name: Check formatting
-        run: npx prettier --check "apps/**/*.{ts,tsx}" || true
+      - name: Lint Web
+        run: npx -w apps/web eslint src --max-warnings=0 || true
 
-  test:
+  lint-python:
+    name: Lint Python (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check apps/cert-api/
+
+  test-api:
+    name: Test API
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -55,13 +81,13 @@ jobs:
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: coverage
+          name: api-coverage
           path: apps/api/coverage/
           retention-days: 7
 
-  build:
+  test-web:
+    name: Test Web
     runs-on: ubuntu-latest
-    needs: [lint-and-typecheck, test]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -69,7 +95,86 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build API
-        run: npm run build -w apps/api
-      - name: Build Web
-        run: npm run build -w apps/web
+      - name: Run Web tests
+        run: npm test -w apps/web --if-present
+
+  test-python:
+    name: Test Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install pytest pytest-cov -r apps/cert-api/requirements.txt || true
+      - name: Run pytest
+        run: pytest apps/cert-api/ --tb=short -q || true
+
+  security-scan:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: npm audit (blocking on high/critical)
+        run: npm audit --audit-level=high
+
+  build-docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint-api, lint-web, test-api, security-scan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/api
+          push: false
+          tags: importacao-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker
+      - name: Build Web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/web
+          push: false
+          tags: importacao-web:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker
+      - name: Trivy scan - API image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: importacao-api:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Trivy scan - Web image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: importacao-web:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: SBOM - API (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: importacao-api:ci
+          artifact-name: sbom-api.spdx.json
+          output-file: sbom-api.spdx.json
+      - name: SBOM - Web (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: importacao-web:ci
+          artifact-name: sbom-web.spdx.json
+          output-file: sbom-web.spdx.json
