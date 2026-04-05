@@ -124,10 +124,11 @@ export const googleSheetsService = {
   },
 
   async syncMilestone(processCode: string, field: string, date: Date): Promise<void> {
-    // Non-blocking wrapper
-    this.updateMilestone(processCode, field, date).catch((err) =>
-      logger.error({ err, processCode, field }, 'Failed to sync milestone to Sheets'),
-    );
+    try {
+      await this.updateMilestone(processCode, field, date);
+    } catch (err) {
+      logger.error({ err, processCode, field }, 'Failed to sync milestone to Sheets');
+    }
   },
 
   async readProcessRow(processCode: string): Promise<Record<string, string> | null> {

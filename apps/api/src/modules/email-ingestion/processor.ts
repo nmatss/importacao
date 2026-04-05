@@ -14,7 +14,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 
-const UPLOAD_DIR = path.resolve('uploads');
+import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
 // ── Regex-based process code extraction (fast, first pass) ──────────────
 
@@ -636,15 +636,12 @@ export const emailProcessor = {
 
             // Move from INBOX to PROCESSADOS
             if (sistemaFileId && processCode) {
-              import('../integrations/google-drive.service.js')
-                .then(({ googleDriveService }) => {
-                  googleDriveService
-                    .moveFromInboxToProcessados(sistemaFileId!, processCode!, docType)
-                    .catch((err) =>
-                      logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS'),
-                    );
-                })
-                .catch(() => {});
+              try {
+                const { googleDriveService } = await import('../integrations/google-drive.service.js');
+                await googleDriveService.moveFromInboxToProcessados(sistemaFileId, processCode, docType);
+              } catch (err) {
+                logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS');
+              }
             }
 
             processedAttachments.push({

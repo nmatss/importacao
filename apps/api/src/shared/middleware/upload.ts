@@ -5,7 +5,7 @@ import multer from 'multer';
 import { fileTypeFromFile } from 'file-type';
 import type { Request, Response, NextFunction } from 'express';
 
-const UPLOAD_DIR = 'uploads';
+import { UPLOAD_DIR } from '../config/paths.js';
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const ALLOWED_MIMES = new Set([

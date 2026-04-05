@@ -1,4 +1,5 @@
 import { logger } from '../../shared/utils/logger.js';
+import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
 import { logAIRequest } from './governance.js';
 import { invoiceResponseSchema } from './schemas/invoice-response.js';
 import { packingListResponseSchema } from './schemas/packing-list-response.js';
@@ -52,11 +53,12 @@ interface ExtractionResult {
 }
 
 // ── Model fallback chains ────────────────────────────────────────────
-
-const MODEL_FALLBACKS: Record<string, string> = {
-  'gemini-2.5-flash': 'gemini-2.5-flash-lite',
-  'gemini-2.5-flash-lite': 'gemini-2.5-flash',
-};
+// Ordered list of models to try — primary first, then fallbacks in order
+const MODEL_FALLBACK_CHAIN: string[] = [
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-pro',
+];
 
 // ── Prompt versions (for governance tracking) ────────────────────────
 
@@ -135,81 +137,69 @@ class AIService {
     jsonMode = true,
     context = 'unknown',
   ): Promise<string> {
-    const startTime = Date.now();
     const promptVersion = PROMPT_VERSIONS[context] || 'v1.0';
 
-    try {
-      const content = await this.callOpenRouter(model, messages, jsonMode);
-      const latencyMs = Date.now() - startTime;
+    // Build fallback chain starting from the requested model position
+    const startIdx = MODEL_FALLBACK_CHAIN.indexOf(model);
+    const modelsToTry =
+      startIdx >= 0 ? MODEL_FALLBACK_CHAIN.slice(startIdx) : [model, ...MODEL_FALLBACK_CHAIN];
 
-      logAIRequest({
-        model,
-        promptVersion,
-        latencyMs,
-        status: 'success',
-        context,
-      });
+    let lastError: Error | unknown;
 
-      return content;
-    } catch (primaryError: any) {
-      const latencyMs = Date.now() - startTime;
-      logAIRequest({
-        model,
-        promptVersion,
-        latencyMs,
-        status: 'error',
-        errorMessage: primaryError.message,
-        context,
-      });
+    for (let i = 0; i < modelsToTry.length; i++) {
+      const currentModel = modelsToTry[i];
+      const isRetry = i > 0;
+      const attemptContext = isRetry ? `${context}:fallback-${currentModel}` : context;
 
-      // ── Fallback to secondary model ──────────────────────────────
-      const fallbackModel = MODEL_FALLBACKS[model];
-      if (fallbackModel) {
+      if (isRetry) {
         logger.warn(
-          { primaryModel: model, fallbackModel, context, error: primaryError.message },
-          'Primary model failed, attempting fallback',
+          { primaryModel: modelsToTry[0], currentModel, context, attempt: i + 1 },
+          'Falling back to next model in chain',
         );
-
-        const fallbackStart = Date.now();
-        try {
-          const content = await this.callOpenRouter(fallbackModel, messages, jsonMode);
-          const fallbackLatency = Date.now() - fallbackStart;
-
-          logAIRequest({
-            model: fallbackModel,
-            promptVersion,
-            latencyMs: fallbackLatency,
-            status: 'success',
-            context: `${context}:fallback`,
-          });
-
-          return content;
-        } catch (fallbackError: any) {
-          const fallbackLatency = Date.now() - fallbackStart;
-          logAIRequest({
-            model: fallbackModel,
-            promptVersion,
-            latencyMs: fallbackLatency,
-            status: 'error',
-            errorMessage: fallbackError.message,
-            context: `${context}:fallback`,
-          });
-
-          logger.error(
-            { primaryModel: model, fallbackModel, context },
-            'Both primary and fallback models failed',
-          );
-        }
       }
 
-      throw primaryError;
+      const attemptStart = Date.now();
+      try {
+        const content = await withRetry(
+          () =>
+            withTimeout(
+              (signal) => this.callOpenRouter(currentModel, messages, jsonMode, signal),
+              90_000,
+              `${currentModel}/${context}`,
+            ),
+          { attempts: 2, baseDelayMs: 1000, maxDelayMs: 5000 },
+          `ai:${currentModel}`,
+        );
+
+        const latencyMs = Date.now() - attemptStart;
+        logAIRequest({ model: currentModel, promptVersion, latencyMs, status: 'success', context: attemptContext });
+        logger.info({ model: currentModel, context, isRetry }, 'AI model responded successfully');
+
+        return content;
+      } catch (err: any) {
+        lastError = err;
+        const latencyMs = Date.now() - attemptStart;
+        logAIRequest({
+          model: currentModel,
+          promptVersion,
+          latencyMs,
+          status: 'error',
+          errorMessage: err.message,
+          context: attemptContext,
+        });
+        logger.error({ err, model: currentModel, context }, 'AI model request failed');
+      }
     }
+
+    logger.error({ modelsAttempted: modelsToTry, context }, 'All AI models in fallback chain failed');
+    throw lastError;
   }
 
   private async callOpenRouter(
     model: string,
     messages: OpenRouterMessage[],
     jsonMode: boolean,
+    signal?: AbortSignal,
   ): Promise<string> {
     const url = `${this.baseUrl}/chat/completions`;
 
@@ -230,7 +220,7 @@ class AIService {
         'HTTP-Referer': 'importacao-system',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(90_000),
+      signal,
     });
 
     if (!response.ok) {
