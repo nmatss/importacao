@@ -240,3 +240,5 @@ volumes:
   cert-reports:
   prometheusdata:
   grafanadata:
+  letsencrypt:
+  certbot-webroot:
