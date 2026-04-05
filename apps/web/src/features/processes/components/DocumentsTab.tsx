@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
 import { cn } from '@/shared/lib/utils';
@@ -29,6 +30,7 @@ interface EmailStatus {
 
 export function DocumentsTab({ processId }: DocumentsTabProps) {
   const queryClient = useQueryClient();
+  const { getToken } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [showManualUpload, setShowManualUpload] = useState(true);
   const [countdown, setCountdown] = useState(300);
@@ -62,7 +64,7 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
   const triggerEmailSync = async () => {
     setSyncing(true);
     try {
-      const token = localStorage.getItem('importacao_token');
+      const token = getToken();
       const baseUrl = import.meta.env.VITE_API_URL || '';
       const res = await fetch(`${baseUrl}/api/email-ingestion/trigger?includeRead=true`, {
         method: 'POST',
@@ -73,8 +75,9 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
       // Refresh document list + reset countdown
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
       resetCountdown();
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao sincronizar emails');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar emails';
+      toast.error(msg);
     } finally {
       setSyncing(false);
     }

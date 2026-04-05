@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import {
   FileText,
@@ -245,6 +245,10 @@ export function ProcessDetailPage() {
     }
   }, [visibleTabs, activeTab]);
 
+  const handleTabChange = useCallback((key: string) => setActiveTab(key), []);
+  const handleBack = useCallback(() => navigate('/importacao/processos'), [navigate]);
+  const handleEdit = useCallback(() => navigate(`/importacao/processos/${id}/editar`), [navigate, id]);
+
   if (!id) return <Navigate to="/importacao/processos" replace />;
 
   if (isLoading) {
@@ -288,8 +292,8 @@ export function ProcessDetailPage() {
       <ProcessHeader
         process={process}
         processId={id}
-        onBack={() => navigate('/importacao/processos')}
-        onEdit={() => navigate(`/importacao/processos/${id}/editar`)}
+        onBack={handleBack}
+        onEdit={handleEdit}
       />
 
       <ProcessTimeline currentStatus={process.status} followUp={process.followUp} />
@@ -309,7 +313,7 @@ export function ProcessDetailPage() {
               return (
                 <button
                   key={tab.key}
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => handleTabChange(tab.key)}
                   className={cn(
                     'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive

@@ -2,6 +2,7 @@ import { Package, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 
 interface PreConsItem {
   id: number;
@@ -64,7 +65,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
 
   const divergences = allDivergences?.filter((d) => d.processCode === processCode) ?? [];
 
-  if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isLoading) return <TableSkeleton />;
 
   if (isError) {
     return (

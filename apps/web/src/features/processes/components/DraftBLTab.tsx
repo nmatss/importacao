@@ -24,6 +24,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { DRAFT_BL_CHECKS } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -766,9 +767,7 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
     },
   );
 
-  if (isLoading) {
-    return <LoadingSpinner className="py-8" />;
-  }
+  if (isLoading) return <TableSkeleton />;
 
   // All draft_bl documents sorted by upload date (oldest first)
   const allDraftDocs = (documents ?? [])

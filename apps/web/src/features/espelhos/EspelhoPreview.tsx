@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EspelhoItem {
   id: number;
@@ -85,8 +86,8 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       const res = await apiCall(`/api/espelhos/${processId}/generate`);
       if (!res.ok) throw new Error('Falha ao gerar espelho');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar espelho');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setGenerating(false);
     }
@@ -107,8 +108,8 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       a.download = `espelho_${processId}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao baixar espelho');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -116,24 +117,24 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     try {
       const res = await apiCall(`/api/espelhos/${processId}/send-drive`);
       if (!res.ok) throw new Error('Falha ao enviar para Drive');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar para Drive');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
   const sendToFenicia = async () => {
     try {
       const res = await apiCall(`/api/espelhos/${processId}/send-fenicia`);
       if (!res.ok) throw new Error('Falha ao enviar para Fenicia');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar para Fenicia');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
   const generatePartialLi = async () => {
     try {
       const res = await apiCall(`/api/espelhos/${processId}/generate-li`);
       if (!res.ok) throw new Error('Falha ao gerar parcial LI');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar parcial LI');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -151,8 +152,8 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       if (!res.ok) throw new Error('Falha ao salvar edicao');
       setEditingCell(null);
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar edicao');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -169,8 +170,8 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       });
       if (!res.ok) throw new Error('Falha ao adicionar item');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao adicionar item');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 

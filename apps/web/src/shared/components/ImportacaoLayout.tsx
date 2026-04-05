@@ -148,6 +148,8 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar — Dark Enterprise */}
       <aside
+        role="navigation"
+        aria-label="Menu principal"
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-800/50 transition-all duration-300 ease-in-out lg:relative',
           'bg-gradient-to-b from-sidebar-900 via-sidebar-900 to-sidebar-950',
@@ -184,6 +186,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => setMobileOpen(false)}
             className="ml-auto rounded-lg p-1.5 text-sidebar-200/40 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
+            aria-label="Fechar menu"
           >
             <X className="h-5 w-5" />
           </button>
@@ -358,7 +361,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+        <main id="main" role="main" className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
       </div>
     </div>
   );

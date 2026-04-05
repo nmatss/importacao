@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import DOMPurify from 'dompurify';
@@ -24,12 +24,15 @@ import {
   Star,
   Eye,
 } from 'lucide-react';
+import { SubmitButton } from '@/shared/components/SubmitButton';
+import { settingsKeys, userKeys, emailSignatureKeys } from '@/shared/api/query-keys';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '@/shared/lib/api-client';
 import { PageSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface User {
   id: number;
@@ -213,12 +216,12 @@ function GeneralTab() {
   const [savedSmtp, setSavedSmtp] = useState(false);
 
   const { data: webhookSetting } = useApiQuery<SettingValue>(
-    ['settings', 'google_chat_webhook'],
+    settingsKeys.webhook(),
     '/api/settings/google_chat_webhook',
   );
 
   const { data: smtpSettings } = useApiQuery<SettingValue[]>(
-    ['settings', 'smtp'],
+    settingsKeys.smtp(),
     '/api/settings/smtp',
   );
 
@@ -237,20 +240,20 @@ function GeneralTab() {
     }
   }, [smtpSettings]);
 
-  const handleSaveWebhook = async () => {
+  const handleSaveWebhook = useCallback(async () => {
     setSavingWebhook(true);
     try {
       await api.put('/api/settings/google_chat_webhook', { value: webhookUrl });
       setSavedWebhook(true);
       setTimeout(() => setSavedWebhook(false), 2000);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar webhook');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSavingWebhook(false);
     }
-  };
+  }, [webhookUrl]);
 
-  const handleSaveSmtp = async () => {
+  const handleSaveSmtp = useCallback(async () => {
     setSavingSmtp(true);
     try {
       await api.put('/api/settings/smtp', {
@@ -261,12 +264,12 @@ function GeneralTab() {
       });
       setSavedSmtp(true);
       setTimeout(() => setSavedSmtp(false), 2000);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar configuracoes SMTP');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSavingSmtp(false);
     }
-  };
+  }, [smtpHost, smtpPort, smtpUser, smtpFrom]);
 
   return (
     <div className="space-y-6">
@@ -376,7 +379,7 @@ function UsersTab() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, []);
 
-  const { data: users, isLoading } = useApiQuery<User[]>(['users'], '/api/auth/users');
+  const { data: users, isLoading } = useApiQuery<User[]>(userKeys.all, '/api/auth/users');
 
   const openCreate = () => {
     setEditUser(null);
@@ -405,10 +408,10 @@ function UsersTab() {
       } else {
         await api.post('/api/auth/users', form);
       }
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
       setShowModal(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar usuario');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -418,19 +421,19 @@ function UsersTab() {
     if (!deactivateId) return;
     try {
       await api.delete(`/api/auth/users/${deactivateId}`);
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
       setDeactivateId(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao desativar usuario');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
   const toggleActive = async (user: User) => {
     try {
       await api.put(`/api/auth/users/${user.id}`, { active: !user.active });
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao alterar status do usuario');
+      queryClient.invalidateQueries({ queryKey: userKeys.all });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -454,7 +457,7 @@ function UsersTab() {
       </div>
 
       {/* Users table */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden overflow-x-auto">
         <table className="min-w-full">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/80">
@@ -568,8 +571,13 @@ function UsersTab() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
           <div className="fixed inset-0" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
-            <h2 className="text-lg font-bold text-slate-900 mb-5">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="user-modal-title"
+            className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+          >
+            <h2 id="user-modal-title" className="text-lg font-bold text-slate-900 mb-5">
               {editUser ? 'Editar Usuario' : 'Novo Usuario'}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
@@ -676,7 +684,7 @@ function IntegrationsTab() {
   const [saved, setSaved] = useState(false);
 
   const { data: integrationSettings } = useApiQuery<SettingValue[]>(
-    ['settings', 'integrations'],
+    settingsKeys.integrations(),
     '/api/settings/integrations',
   );
 
@@ -730,8 +738,8 @@ function IntegrationsTab() {
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar integracoes');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -862,7 +870,7 @@ function SignaturesTab() {
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const { data: signatures, isLoading } = useApiQuery<EmailSignatureData[]>(
-    ['email-signatures'],
+    emailSignatureKeys.all,
     '/api/settings/email-signatures',
   );
 
@@ -898,10 +906,10 @@ function SignaturesTab() {
       } else {
         await api.post('/api/settings/email-signatures', form);
       }
-      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
+      queryClient.invalidateQueries({ queryKey: emailSignatureKeys.all });
       setShowModal(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar assinatura');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -911,19 +919,19 @@ function SignaturesTab() {
     if (!deletingId) return;
     try {
       await api.delete(`/api/settings/email-signatures/${deletingId}`);
-      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
+      queryClient.invalidateQueries({ queryKey: emailSignatureKeys.all });
       setDeletingId(null);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao excluir assinatura');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
   const handleSetDefault = async (sig: EmailSignatureData) => {
     try {
       await api.put(`/api/settings/email-signatures/${sig.id}`, { isDefault: true });
-      queryClient.invalidateQueries({ queryKey: ['email-signatures'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao definir padrao');
+      queryClient.invalidateQueries({ queryKey: emailSignatureKeys.all });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -989,6 +997,7 @@ function SignaturesTab() {
                         onClick={() => handleSetDefault(sig)}
                         className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                         title="Definir como padrao"
+                        aria-label={`Definir ${sig.name} como padrao`}
                       >
                         <Star className="h-4 w-4" />
                       </button>
@@ -997,6 +1006,7 @@ function SignaturesTab() {
                       onClick={() => setPreviewId(previewId === sig.id ? null : sig.id)}
                       className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all duration-200"
                       title="Visualizar"
+                      aria-label={`Visualizar assinatura ${sig.name}`}
                     >
                       <Eye className="h-4 w-4" />
                     </button>
@@ -1004,6 +1014,7 @@ function SignaturesTab() {
                       onClick={() => openEdit(sig)}
                       className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                       title="Editar"
+                      aria-label={`Editar assinatura ${sig.name}`}
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
@@ -1011,6 +1022,7 @@ function SignaturesTab() {
                       onClick={() => setDeletingId(sig.id)}
                       className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
                       title="Excluir"
+                      aria-label={`Excluir assinatura ${sig.name}`}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -1032,8 +1044,13 @@ function SignaturesTab() {
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
           <div className="fixed inset-0" onClick={() => setShowModal(false)} />
-          <div className="relative z-10 w-full max-w-lg rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200">
-            <h2 className="text-lg font-bold text-slate-900 mb-5">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="signature-modal-title"
+            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+          >
+            <h2 id="signature-modal-title" className="text-lg font-bold text-slate-900 mb-5">
               {editSig ? 'Editar Assinatura' : 'Nova Assinatura'}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">

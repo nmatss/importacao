@@ -30,6 +30,7 @@ import type {
   CertSchedule as Schedule,
   CertScheduleHistoryEntry as HistoryEntry,
 } from '@/shared/lib/cert-api-client';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 const BRAND_OPTIONS = [
   { value: '', label: 'Todas as marcas' },
@@ -202,8 +203,8 @@ export default function CertAgendamentosPage() {
       setShowForm(false);
       resetForm();
       await loadSchedules();
-    } catch (err: any) {
-      setFormError(err?.message || 'Erro ao salvar agendamento');
+    } catch (err: unknown) {
+      setFormError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -646,14 +647,19 @@ export default function CertAgendamentosPage() {
               resetForm();
             }}
           />
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-md">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="agendamento-modal-title"
+            className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 w-full max-w-md max-h-[90vh] overflow-y-auto"
+          >
             {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
                   {editingId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                 </div>
-                <h3 className="text-base font-bold text-slate-900">
+                <h3 id="agendamento-modal-title" className="text-base font-bold text-slate-900">
                   {editingId ? 'Editar Agendamento' : 'Novo Agendamento'}
                 </h3>
               </div>
@@ -663,6 +669,7 @@ export default function CertAgendamentosPage() {
                   resetForm();
                 }}
                 className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                aria-label="Fechar modal"
               >
                 <X className="w-4 h-4" />
               </button>

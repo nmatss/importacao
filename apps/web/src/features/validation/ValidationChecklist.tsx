@@ -1,4 +1,4 @@
-import { useReducer, useState, useEffect } from 'react';
+import { useReducer, useState, useEffect, useMemo, useCallback } from 'react';
 import DOMPurify from 'dompurify';
 import { toast } from 'sonner';
 import {
@@ -21,6 +21,8 @@ import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { SubmitButton } from '@/shared/components/SubmitButton';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EmailSignatureOption {
   id: number;
@@ -224,38 +226,48 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     `/api/validation/${processId}`,
   );
 
-  const runValidation = async () => {
+  const filteredChecks = useMemo(() => {
+    if (!checks) return [];
+    if (filter === 'all') return checks;
+    return checks.filter((c) => c.status === filter);
+  }, [checks, filter]);
+
+  const failedCount = useMemo(() => checks?.filter((c) => c.status === 'failed').length ?? 0, [checks]);
+  const warningCount = useMemo(() => checks?.filter((c) => c.status === 'warning').length ?? 0, [checks]);
+  const passedCount = useMemo(() => checks?.filter((c) => c.status === 'passed').length ?? 0, [checks]);
+
+  const runValidation = useCallback(async () => {
     dispatch({ type: 'SET_RUNNING', payload: true });
     try {
       await api.post(`/api/validation/${processId}/run`);
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao executar validacao');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_RUNNING', payload: false });
     }
-  };
+  }, [processId, queryClient]);
 
-  const detectAnomalies = async () => {
+  const detectAnomalies = useCallback(async () => {
     dispatch({ type: 'SET_DETECTING_ANOMALIES', payload: true });
     try {
       const data = await api.post<AnomalyDetectionResult>(`/api/validation/${processId}/anomalies`);
       dispatch({ type: 'SET_ANOMALIES', payload: data.anomalies ?? [] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao detectar anomalias');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_DETECTING_ANOMALIES', payload: false });
     }
-  };
+  }, [processId]);
 
-  const resolveManually = async (resultId: number) => {
+  const resolveManually = useCallback(async (resultId: number) => {
     try {
       await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
       queryClient.invalidateQueries({ queryKey: ['validation', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao resolver manualmente');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
-  };
+  }, [processId, queryClient]);
 
   const generateCorrectionDraft = async (useAi = false) => {
     dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
@@ -265,8 +277,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         { useAi },
       );
       dispatch({ type: 'OPEN_DRAFT_MODAL', payload: { draft: data } });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar rascunho de correcao');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_GENERATING_DRAFT', payload: false });
     }
@@ -283,8 +295,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       });
       dispatch({ type: 'UPDATE_DRAFT', payload: updated });
       toast.success('Rascunho salvo com sucesso');
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao salvar rascunho');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_SAVING', payload: false });
     }
@@ -307,8 +319,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       });
       toast.success('E-mail enviado com sucesso');
       dispatch({ type: 'CLOSE_DRAFT_MODAL' });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar e-mail');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_SENDING', payload: false });
     }
@@ -318,18 +330,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     return <LoadingSpinner className="py-8" />;
   }
 
-  const passedCount = checks?.filter((c) => c.status === 'passed').length ?? 0;
-  const failedCount = checks?.filter((c) => c.status === 'failed').length ?? 0;
-  const warningCount = checks?.filter((c) => c.status === 'warning').length ?? 0;
   const totalCount = checks?.length ?? 0;
   const progressPct = totalCount > 0 ? (passedCount / totalCount) * 100 : 0;
   const progressColor =
     progressPct > 80 ? 'bg-emerald-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-danger-500';
-
-  const filteredChecks = checks?.filter((c) => {
-    if (filter === 'all') return true;
-    return c.status === filter;
-  });
 
   return (
     <div className="space-y-4">
@@ -565,7 +569,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       {/* Correction Draft Modal */}
       {showDraftModal && draft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="draft-modal-title"
+            className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl"
+          >
             {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 rounded-t-2xl">
               <div className="flex items-center gap-3">
@@ -573,7 +582,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   <Mail className="h-4.5 w-4.5 text-danger-600" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-slate-900">E-mail de Correcao</h3>
+                  <h3 id="draft-modal-title" className="text-lg font-bold text-slate-900">E-mail de Correcao</h3>
                   <p className="text-xs text-slate-400">
                     Rascunho para {draft.recipient} - Revise antes de enviar
                   </p>
@@ -582,6 +591,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               <button
                 onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                aria-label="Fechar modal"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -692,14 +702,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 {saving ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
                 Salvar Rascunho
               </button>
-              <button
+              <SubmitButton
+                type="button"
                 onClick={sendEmail}
+                loading={sending}
                 disabled={sending}
-                className="inline-flex items-center gap-2 rounded-lg bg-danger-600 px-4 py-2 text-sm font-medium text-white hover:bg-danger-700 disabled:opacity-50 transition-colors"
+                variant="danger"
               >
-                {sending ? <LoadingSpinner size="sm" /> : <Send className="h-4 w-4" />}
+                <Send className="h-4 w-4" />
                 Enviar E-mail
-              </button>
+              </SubmitButton>
             </div>
           </div>
         </div>

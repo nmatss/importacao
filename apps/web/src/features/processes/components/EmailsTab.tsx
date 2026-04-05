@@ -2,6 +2,7 @@ import { FileText, Paperclip, AlertTriangle, Inbox, User } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { EmailLog } from '@/shared/types';
 
 function relativeTime(dateStr: string): string {
@@ -47,7 +48,7 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
     `/api/email-ingestion/logs?limit=50`,
   );
 
-  if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isLoading) return <TableSkeleton />;
 
   // Filter logs related to this process
   const allLogs = response?.data ?? [];

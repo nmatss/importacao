@@ -10,6 +10,7 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface Alert {
   id: number;
@@ -107,8 +108,8 @@ export function AlertsPage() {
     try {
       await api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`);
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao reconhecer alerta');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 

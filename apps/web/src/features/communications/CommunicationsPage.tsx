@@ -22,6 +22,8 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
+import { SubmitButton } from '@/shared/components/SubmitButton';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EmailSignatureOption {
   id: number;
@@ -80,6 +82,7 @@ export function CommunicationsPage() {
   const [composer, setComposer] = useState<ComposerForm>(emptyComposer);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [generatingAi, setGeneratingAi] = useState(false);
+  const [sending, setSending] = useState(false);
   const [aiRecipientType, setAiRecipientType] = useState<'fenicia' | 'isa'>('fenicia');
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('');
@@ -143,6 +146,7 @@ export function CommunicationsPage() {
   };
 
   const handleSend = async () => {
+    setSending(true);
     try {
       const draft = await api.post<Communication>('/api/communications', {
         processId: Number(composer.processId),
@@ -157,8 +161,10 @@ export function CommunicationsPage() {
       toast.success('Email enviado com sucesso');
       queryClient.invalidateQueries({ queryKey: ['communications'] });
       setComposer(emptyComposer);
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao enviar email');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSending(false);
     }
   };
 
@@ -175,8 +181,8 @@ export function CommunicationsPage() {
         subject: draft.subject,
         body: draft.body,
       }));
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao gerar email com IA');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setGeneratingAi(false);
     }
@@ -424,14 +430,15 @@ export function CommunicationsPage() {
                   <Save className="h-4 w-4" />
                   Salvar Rascunho
                 </button>
-                <button
+                <SubmitButton
+                  type="button"
                   onClick={handleSend}
-                  disabled={!isFormValid}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                  loading={sending}
+                  disabled={!isFormValid || sending}
                 >
                   <Send className="h-4 w-4" />
                   Enviar Email
-                </button>
+                </SubmitButton>
               </div>
             </div>
           </div>

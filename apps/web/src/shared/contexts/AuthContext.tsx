@@ -17,6 +17,7 @@ export interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (credential: string) => Promise<void>;
   logout: () => void;
+  getToken: () => string | null;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -71,8 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     navigate('/login');
   }, [navigate]);
 
+  const getToken = useCallback(() => localStorage.getItem(TOKEN_KEY), []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, getToken }}>
       {children}
     </AuthContext.Provider>
   );
