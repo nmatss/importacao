@@ -1,7 +1,30 @@
 """Pytest fixtures for cert-api tests."""
 
+import sys
+from types import ModuleType
+from unittest.mock import MagicMock
+
 import pytest
 from httpx import ASGITransport, AsyncClient
+
+
+def _make_stub_module(name: str) -> ModuleType:
+    """Create a stub module so imports don't fail when native libs are absent."""
+    mod = ModuleType(name)
+    sys.modules[name] = mod
+    return mod
+
+
+# Stub oracledb and pymssql if not installed (they require native libs unavailable in CI)
+if "oracledb" not in sys.modules:
+    _oracledb = _make_stub_module("oracledb")
+    _oracledb.connect = MagicMock()  # type: ignore[attr-defined]
+    _oracledb.makedsn = MagicMock(return_value="mock_dsn")  # type: ignore[attr-defined]
+    _oracledb.init_oracle_client = MagicMock()  # type: ignore[attr-defined]
+
+if "pymssql" not in sys.modules:
+    _pymssql = _make_stub_module("pymssql")
+    _pymssql.connect = MagicMock()  # type: ignore[attr-defined]
 
 
 @pytest.fixture
@@ -30,9 +53,10 @@ def mock_oracle_conn(mocker):
     mock_conn.__enter__ = mocker.MagicMock(return_value=mock_conn)
     mock_conn.__exit__ = mocker.MagicMock(return_value=False)
 
-    mocker.patch("oracledb.connect", return_value=mock_conn)
-    mocker.patch("oracledb.makedsn", return_value="mock_dsn")
-    mocker.patch("oracledb.init_oracle_client")
+    import oracledb
+    mocker.patch.object(oracledb, "connect", return_value=mock_conn)
+    mocker.patch.object(oracledb, "makedsn", return_value="mock_dsn")
+    mocker.patch.object(oracledb, "init_oracle_client")
     return mock_cursor
 
 
@@ -51,7 +75,8 @@ def mock_sqlserver_conn(mocker):
     mock_conn.__enter__ = mocker.MagicMock(return_value=mock_conn)
     mock_conn.__exit__ = mocker.MagicMock(return_value=False)
 
-    mocker.patch("pymssql.connect", return_value=mock_conn)
+    import pymssql
+    mocker.patch.object(pymssql, "connect", return_value=mock_conn)
     return mock_cursor
 
 
@@ -81,17 +106,32 @@ def mock_db(mocker):
 async def test_client(mocker):
     """AsyncClient pointed at the FastAPI app with DB mocked out.
 
+    Startup hooks are patched to prevent actual DB/scheduler initialization.
+    Module-level DATABASE_URL constants are patched to empty string so routes
+    return early without hitting psycopg2.
+
     Yields:
         httpx.AsyncClient configured for the FastAPI app.
     """
     import os
-    os.environ.setdefault("CERT_API_KEY", "test-key")
-    os.environ.setdefault("DATABASE_URL", "")
+    os.environ["CERT_API_KEY"] = "test-key"
+    os.environ["DATABASE_URL"] = ""
 
-    # Prevent actual DB/scheduler startup
-    mocker.patch("app.main.ensure_tables", return_value=None)
+    # Patch startup side-effects
+    mocker.patch("app.db.postgres.ensure_tables", return_value=None)
     mocker.patch("app.routes.schedules.scheduler.start")
     mocker.patch("app.routes.schedules.load_schedules_into_scheduler")
+
+    # Patch the cached DATABASE_URL constants in all route modules
+    # (they're imported at module load time so env changes don't propagate)
+    for mod in (
+        "app.routes.certifications",
+        "app.routes.stock",
+        "app.routes.reports",
+        "app.routes.schedules",
+        "app.routes.health",
+    ):
+        mocker.patch(f"{mod}.DATABASE_URL", "")
 
     from app.main import app
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

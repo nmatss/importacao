@@ -116,9 +116,15 @@ class TestCompareCertTexts:
         assert status == "OK"
         assert score >= 0.9
 
-    def test_encerramento_always_ok(self):
-        status, score = compare_cert_texts("ENCERRAMENTO - Prazo: 01/06/2024", "")
+    def test_encerramento_with_actual_always_ok(self):
+        # ENCERRAMENTO products return OK when actual cert text is present on the page
+        status, score = compare_cert_texts("ENCERRAMENTO - Prazo: 01/06/2024", "Certificado INMETRO Nº 006083/2024")
         assert status == "OK"
+
+    def test_encerramento_empty_actual_is_url_not_found(self):
+        # When actual is empty, URL_NOT_FOUND fires before ENCERRAMENTO logic
+        status, score = compare_cert_texts("ENCERRAMENTO - Prazo: 01/06/2024", "")
+        assert status == "URL_NOT_FOUND"
 
     def test_inconsistent_same_body_no_reg(self):
         status, score = compare_cert_texts("INMETRO BRINQUEDOS", "Produto com certificação INMETRO")

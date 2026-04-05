@@ -1,23 +1,29 @@
 """API key authentication utilities."""
 
 import hmac
+import os
 
 from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 
-from app.config import API_KEY
 from app.utils.logging import log
 
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-if not API_KEY:
-    log.warning("CERT_API_KEY is not set — API key auth is DISABLED (relying on Nginx proxy)")
+
+def _get_api_key() -> str:
+    """Read CERT_API_KEY from environment at call time (supports test overrides).
+
+    Returns:
+        Current value of the CERT_API_KEY env var, or empty string if not set.
+    """
+    return os.environ.get("CERT_API_KEY", "")
 
 
 async def verify_api_key(request: Request, api_key: str = Security(api_key_header)) -> None:
     """Verify API key from X-API-Key header.
 
-    Skips verification for /api/health. Warns at startup if CERT_API_KEY is not set.
+    Skips verification for /api/health. Warns if CERT_API_KEY is not set.
 
     Args:
         request: Incoming HTTP request.
@@ -28,5 +34,9 @@ async def verify_api_key(request: Request, api_key: str = Security(api_key_heade
     """
     if request.url.path == "/api/health":
         return
-    if API_KEY and not hmac.compare_digest(api_key or "", API_KEY):
+    configured_key = _get_api_key()
+    if not configured_key:
+        log.warning("CERT_API_KEY is not set — API key auth is DISABLED (relying on Nginx proxy)")
+        return
+    if not hmac.compare_digest(api_key or "", configured_key):
         raise HTTPException(status_code=403, detail="Invalid API key")
