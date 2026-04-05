@@ -104,6 +104,8 @@ services:
         limits:
           memory: 512M
           cpus: '1.0'
+    security_opt:
+      - no-new-privileges:true
 
   cert-api:
     build:
@@ -127,7 +129,7 @@ services:
       ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
       ERP_MSSQL_USER: ${ERP_MSSQL_USER}
       ERP_MSSQL_PASS: ${ERP_MSSQL_PASS}
-      CERT_API_KEY: ${CERT_API_KEY:-}
+      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     volumes:
       - cert-reports:/app/reports
     depends_on:
@@ -144,6 +146,8 @@ services:
         limits:
           memory: 256M
           cpus: '0.5'
+    security_opt:
+      - no-new-privileges:true
 
   web:
     build:
@@ -172,6 +176,20 @@ services:
         limits:
           memory: 128M
           cpus: '0.25'
+    security_opt:
+      - no-new-privileges:true
+
+  certbot:
+    image: certbot/certbot
+    container_name: importacao-certbot
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    # Initial issuance: docker compose -f docker-compose.prod.yml run --rm certbot certonly ...
+    # Renewal: use scripts/renew-certs.sh via cron (twice daily)
+    entrypoint: /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $$!; done"
+    depends_on:
+      - web
 
   prometheus:
     image: prom/prometheus:v2.54.1

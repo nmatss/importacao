@@ -1,0 +1,19 @@
+# SOPS creation rules for importacao project
+# See: https://github.com/getsops/sops#using-sops-yaml-conf-to-select-kms-pgp-and-age-for-new-files
+#
+# Setup:
+#   1. Install age: https://github.com/FiloSottile/age
+#   2. Generate key: age-keygen -o ~/.config/sops/age/keys.txt
+#   3. Add your public key below
+#   4. Install SOPS: https://github.com/getsops/sops/releases
+#
+# Encrypt:  sops --encrypt --in-place .env.sops.yaml
+# Decrypt:  sops --decrypt .env.sops.yaml > .env
+# Or use:   bash scripts/generate-env-from-vault.sh --sops
+
+creation_rules:
+  - path_regex: \.env\.sops\.yaml$
+    age:
+      # Add admin age public keys here (comma-separated or one per line)
+      # Replace the placeholder with your actual age public key
+      - "age1PLACEHOLDER_REPLACE_WITH_YOUR_AGE_PUBLIC_KEY"

@@ -1,0 +1,63 @@
+name: Deploy (manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (simulate only - no actual deploy)"
+        required: false
+        default: "true"
+        type: boolean
+      confirm:
+        description: "Type DEPLOY to confirm production deployment"
+        required: true
+        default: ""
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    environment: production
+    if: ${{ github.ref == 'refs/heads/master' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate confirmation
+        if: ${{ !inputs.dry_run }}
+        run: |
+          if [ "${{ inputs.confirm }}" != "DEPLOY" ]; then
+            echo "ERROR: You must type DEPLOY in the confirm field to proceed."
+            exit 1
+          fi
+
+      - name: Dry-run - show what would be deployed
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "=== DRY RUN MODE ==="
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo ""
+          echo "Would rsync to: ${{ secrets.DEPLOY_SERVER }} (user: ${{ secrets.DEPLOY_USER }})"
+          echo "Remote dir: ~/importacao"
+          echo ""
+          echo "Docker compose file: docker-compose.prod.yml"
+          echo "Services that would restart: api web"
+          echo ""
+          echo "Health check endpoint: http://localhost:3050/health/ready"
+          echo ""
+          echo "=== END DRY RUN ==="
+
+      - name: Deploy to production server
+        if: ${{ !inputs.dry_run }}
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_SERVER }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd ~/importacao
+            git pull origin master
+            bash scripts/deploy.sh

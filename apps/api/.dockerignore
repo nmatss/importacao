@@ -1,5 +1,14 @@
 node_modules
-dist
-uploads
-*.log
 .env
+.env.*
+*.log
+.git
+dist
+coverage
+src/__tests__
+**/*.test.ts
+**/*.spec.ts
+.eslintrc*
+.prettierrc*
+tsconfig*.tsbuildinfo
+uploads

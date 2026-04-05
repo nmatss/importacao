@@ -7,3 +7,11 @@ uploads/
 coverage/
 *.tsbuildinfo
 certifications.db
+
+# SOPS encrypted file — commit only when encrypted
+# Unencrypted version must never be committed
+.env.sops.yaml
+
+# Deploy artifacts
+deploy.log
+scripts/deploy.sh.backup
