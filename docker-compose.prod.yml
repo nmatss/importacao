@@ -129,7 +129,7 @@ services:
       ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
       ERP_MSSQL_USER: ${ERP_MSSQL_USER}
       ERP_MSSQL_PASS: ${ERP_MSSQL_PASS}
-      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
+      CERT_API_KEY: ${CERT_API_KEY:-}
     volumes:
       - cert-reports:/app/reports
     depends_on:
