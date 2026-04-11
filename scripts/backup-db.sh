@@ -25,10 +25,31 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 # Remote delegation mode
 # ---------------------------------------------------------------------------
+# When invoked with --remote, SSH into the target and run this same script
+# there. Propagate optional overrides via `VAR=value ... bash ...` so the
+# caller can steer BACKUP_LOCAL_DIR, retention, etc. without editing the
+# remote copy. If BACKUP_LOCAL_DIR is not provided, default to
+# $HOME/backups/importacao (user-writable) instead of /backups — /backups
+# typically requires root on a fresh host and breaks pre-deploy backups.
 if [[ "${1:-}" == "--remote" ]]; then
   REMOTE_HOST="${2:?--remote requires a host}"
   REMOTE_USER="${4:-nicolas}"
-  ssh "${REMOTE_USER}@${REMOTE_HOST}" "cd ~/importacao && bash scripts/backup-db.sh"
+
+  REMOTE_ENV=""
+  for var in BACKUP_LOCAL_DIR RETENTION_DAYS CONTAINER_NAME POSTGRES_DB POSTGRES_USER \
+             BACKUP_REMOTE_HOST BACKUP_REMOTE_PATH BACKUP_S3_BUCKET \
+             UPLOADS_DIR CERT_REPORTS_DIR; do
+    if [[ -n "${!var:-}" ]]; then
+      REMOTE_ENV+=" ${var}=$(printf '%q' "${!var}")"
+    fi
+  done
+  # Default BACKUP_LOCAL_DIR (evaluated on the remote side via escaped $HOME).
+  if [[ -z "${BACKUP_LOCAL_DIR:-}" ]]; then
+    REMOTE_ENV+=' BACKUP_LOCAL_DIR="$HOME/backups/importacao"'
+  fi
+
+  ssh "${REMOTE_USER}@${REMOTE_HOST}" \
+    "cd ~/importacao &&${REMOTE_ENV} bash scripts/backup-db.sh"
   exit $?
 fi
 
@@ -77,9 +98,13 @@ log "Backup created: ${BACKUP_LOCAL_DIR}/${BACKUP_FILE} (${BACKUP_SIZE})"
 # ---------------------------------------------------------------------------
 # Integrity check
 # ---------------------------------------------------------------------------
+# `docker exec` needs -i to forward stdin into the container; without it the
+# redirected dump never reaches pg_restore and the check always fails with
+# "input file is too short (read 0, expected 5)". pg_restore with no file
+# argument reads from stdin by default, so the `sh -c` wrapper is redundant.
 log "Verifying backup integrity with pg_restore --list..."
-docker exec "${CONTAINER_NAME}" sh -c \
-  "pg_restore --list /dev/stdin" < "${BACKUP_LOCAL_DIR}/${BACKUP_FILE}" > /dev/null \
+docker exec -i "${CONTAINER_NAME}" pg_restore --list \
+  < "${BACKUP_LOCAL_DIR}/${BACKUP_FILE}" > /dev/null \
   || die "Backup integrity check FAILED"
 log "Backup integrity OK."
 
