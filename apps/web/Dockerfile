@@ -1,4 +1,4 @@
-FROM node:22-alpine AS builder
+FROM node:25-alpine AS builder
 
 # Refresh base-image OS packages (same reason as apps/api/Dockerfile).
 RUN apk upgrade --no-cache
