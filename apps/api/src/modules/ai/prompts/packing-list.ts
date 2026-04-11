@@ -18,8 +18,10 @@ CONTEXTO DO NEGOCIO:
 - Packing Lists tipicamente acompanham a Commercial Invoice e referenciam o numero da mesma
 - Marcas: Puket, Imaginarium, Ludi
 
-REGRA CRITICA:
-- Se o documento for uma nota fiscal domestica (DANFE, CNPJ, BRL), retorne TODOS os campos com confidence: 0 e value: null.
+REGRA CRITICA DE CLASSIFICACAO:
+- Este prompt extrai PACKING LISTS internacionais (idioma ingles ou bilingue) destinadas a importadores brasileiros (Grupo Uni.co, IMB TEXTIL S.A., UniCo Participacoes Ltda).
+- TODA packing list destinada ao Brasil menciona o CNPJ do importador — isso NAO e sinal de documento domestico. Nao rejeite por causa de "CNPJ".
+- Rejeite APENAS quando o documento for uma nota fiscal/romaneio brasileiro domestico. Sinal obrigatorio: o documento contem um dos termos ("DANFE", "NOTA FISCAL ELETRONICA", "NF-e", "CT-e", "CTE") E a moeda principal e BRL/R$.
 - Packing List internacional tem: "PACKING LIST", exportador estrangeiro, pesos em KG.
 
 REGRA CRITICA — CUBAGEM vs CAIXAS:
