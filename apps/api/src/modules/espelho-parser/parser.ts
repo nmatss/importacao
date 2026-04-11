@@ -394,7 +394,7 @@ function parseSummary(rows: Row[], headerIdx: number): EspelhoSummary {
   }
 
   // CNPJ: regex across every summary cell
-  const cnpjRegex = /cnpj[:\s]*([\d.\/-]+)/i;
+  const cnpjRegex = /cnpj[:\s]*([\d./-]+)/i;
   outer: for (const row of summaryRows) {
     for (const cell of row || []) {
       if (isEmpty(cell)) continue;
@@ -488,13 +488,19 @@ function parseSummary(rows: Row[], headerIdx: number): EspelhoSummary {
       const n = pickNumericOnRow(row);
       if (n !== null) summary.totalGrossWeight = n;
     }
-    if (summary.totalCbm === null && (joined.includes('cbm') || joined.includes('m³') || joined.includes(' m3'))) {
+    if (
+      summary.totalCbm === null &&
+      (joined.includes('cbm') || joined.includes('m³') || joined.includes(' m3'))
+    ) {
       const n = pickNumericOnRow(row);
       if (n !== null) summary.totalCbm = n;
     }
     if (
       summary.totalBoxes === null &&
-      (joined.includes('caixa') || joined.includes('carton') || joined.includes('packages') || joined.includes('volumes'))
+      (joined.includes('caixa') ||
+        joined.includes('carton') ||
+        joined.includes('packages') ||
+        joined.includes('volumes'))
     ) {
       const n = pickNumericOnRow(row);
       if (n !== null) summary.totalBoxes = Math.round(n);

@@ -58,4 +58,4 @@ def fetch_wms_stock() -> list[dict]:
             GROUP BY te.CD_PRODUTO, tcp.DS_PRODUTO, tta.DS_AREA_ARMAZ, ts.DS_SITUACAO
         """)
         columns = [col[0] for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]

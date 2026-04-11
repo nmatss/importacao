@@ -1,15 +1,14 @@
 """PostgreSQL connection pool and context manager."""
 
 import threading
-from contextlib import contextmanager
 from collections.abc import Generator
+from contextlib import contextmanager
 
 import psycopg2
 import psycopg2.extras
 from psycopg2 import pool as pg_pool
 
 from app.config import DATABASE_URL
-from app.utils.logging import log
 
 _pool: pg_pool.ThreadedConnectionPool | None = None
 _pool_lock = threading.Lock()

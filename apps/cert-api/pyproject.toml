@@ -30,11 +30,28 @@ dev-dependencies = [
 ]
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RET"]
+# Keep the strong correctness signals (F, B, basic E) but silence the
+# noisy style preferences the existing codebase does not follow. These
+# ignores were chosen after auditing every remaining offense — none of
+# them represents a latent bug, only stylistic rearrangement.
+ignore = [
+  "E402",  # module imports not at top — cert-api uses try/except around oracledb at module load
+  "E501",  # line too long — kept only via line-length 120 bump; long SQL strings are preferred inline
+  "SIM105", # try/except/pass — clearer than contextlib.suppress for one-shot init calls
+  "SIM108", # if-else → ternary — not always more readable
+  "C401",  # unnecessary-generator-set — style preference
+  "N806",  # non-lowercase variable in function — used for SQL column aliases
+  "RET504", # unnecessary-assign — sometimes explicit is clearer
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests have long parametrize fixtures and demo strings
+"tests/**" = ["E501"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

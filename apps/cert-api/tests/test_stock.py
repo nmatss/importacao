@@ -1,6 +1,5 @@
 """Tests for WMS and ERP stock fetch functions."""
 
-import pytest
 
 from app.db.oracle import fetch_wms_stock
 from app.db.sqlserver import fetch_ecommerce_stock

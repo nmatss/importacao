@@ -5,7 +5,7 @@ import re
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -29,7 +29,7 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None) -> None:
         brand_filter: Optional brand to restrict to.
     """
     # Import here to avoid circular dependency at module load time
-    from app.routes.certifications import _running_validations, _run_validation
+    from app.routes.certifications import _run_validation, _running_validations
 
     log.info(f"Scheduler executing schedule {schedule_id} (brand={brand_filter})")
     try:
@@ -39,7 +39,7 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None) -> None:
                 "INSERT INTO cert_validation_runs (id, status, brand_filter) VALUES (%s, 'running', %s)",
                 [run_id, brand_filter],
             )
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
             cur.execute(
                 "INSERT INTO cert_schedule_history (schedule_id, status) VALUES (%s, 'running')",
@@ -122,7 +122,7 @@ def load_schedules_into_scheduler() -> None:
                     replace_existing=True,
                     max_instances=1,
                 )
-                next_run = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+                next_run = trigger.get_next_fire_time(None, datetime.now(UTC))
                 if next_run:
                     with db() as (conn, cur):
                         cur.execute("UPDATE cert_schedules SET next_run = %s WHERE id = %s", [next_run, s["id"]])
@@ -278,7 +278,11 @@ def run_schedule_now(schedule_id: str) -> dict:
     Raises:
         HTTPException: 404 if not found.
     """
-    from app.routes.certifications import _run_validation, _running_validations, cleanup_old_validations
+    from app.routes.certifications import (
+        _run_validation,
+        _running_validations,
+        cleanup_old_validations,
+    )
 
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
@@ -294,7 +298,7 @@ def run_schedule_now(schedule_id: str) -> dict:
             "INSERT INTO cert_validation_runs (id, status, brand_filter) VALUES (%s, 'running', %s)",
             [run_id, brand],
         )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
 
     cleanup_old_validations()

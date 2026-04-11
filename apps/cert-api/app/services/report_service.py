@@ -1,7 +1,7 @@
 """Excel report generation via openpyxl."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import openpyxl
@@ -110,7 +110,7 @@ def generate_products_report(rows: list[dict], brand: str = "", status: str = ""
     Returns:
         Path to the generated .xlsx file.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     stock_map = _fetch_stock_map()
 
     wb = openpyxl.Workbook()
@@ -191,7 +191,7 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
     Returns:
         Path to the generated .xlsx file.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     wb = openpyxl.Workbook()
     ws = wb.active

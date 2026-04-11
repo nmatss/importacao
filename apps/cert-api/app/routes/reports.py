@@ -1,7 +1,7 @@
 """Report download and generation routes."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -141,7 +141,7 @@ def list_reports() -> list:
             stat = f.stat()
             reports.append({
                 "filename": f.name,
-                "date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "date": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
                 "size_bytes": stat.st_size,
             })
     return reports

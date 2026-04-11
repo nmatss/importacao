@@ -1,18 +1,23 @@
 """Certification product routes."""
 
 import json
-import time
 import threading
+import time
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from app.config import DATABASE_URL, REPORTS_DIR, VTEX_REQUEST_DELAY, SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY
+from app.config import (
+    DATABASE_URL,
+    REPORTS_DIR,
+    SHEETS_CLIENT_EMAIL,
+    SHEETS_PRIVATE_KEY,
+    VTEX_REQUEST_DELAY,
+)
 from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
@@ -106,7 +111,7 @@ def _run_validation(
 
         state["total"] = len(products)
         ok = inconsistent = not_found = 0
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         report_products = []
 
         for i, p in enumerate(products):
@@ -205,7 +210,7 @@ def _run_validation(
                         WHERE id=%s
                         """,
                         [len(products), ok, inconsistent, not_found,
-                         datetime.now(timezone.utc), report_filename, run_id],
+                         datetime.now(UTC), report_filename, run_id],
                     )
             except Exception:
                 pass
@@ -512,7 +517,7 @@ def verify_product(req: VerifyRequest) -> dict:
     Returns:
         Validation result dict.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expected_cert = product_name = ecommerce_desc = sheet_status = sale_deadline_date_str = ""
     is_expired = False
 

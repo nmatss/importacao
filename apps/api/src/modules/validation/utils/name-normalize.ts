@@ -1,13 +1,27 @@
 const COMPANY_SUFFIXES = [
-  'co.,ltd', 'co., ltd', 'co.ltd', 'co ltd', 'co.',
-  'limited', 'ltd.', 'ltd',
-  'ltda.', 'ltda',
-  's.a.', 's/a', 'sa',
-  'inc.', 'inc',
-  'corp.', 'corp', 'corporation',
+  'co.,ltd',
+  'co., ltd',
+  'co.ltd',
+  'co ltd',
+  'co.',
+  'limited',
+  'ltd.',
+  'ltd',
+  'ltda.',
+  'ltda',
+  's.a.',
+  's/a',
+  'sa',
+  'inc.',
+  'inc',
+  'corp.',
+  'corp',
+  'corporation',
   'company',
-  'gmbh', 'ag',
-  'llc', 'llp',
+  'gmbh',
+  'ag',
+  'llc',
+  'llp',
 ];
 
 const ADDRESS_HINT_RE =
@@ -26,7 +40,11 @@ export function extractCompanyLine(value: unknown): string {
   // slice at the first hint match.
   const hintMatch = firstLine.match(ADDRESS_HINT_RE);
   if (hintMatch && typeof hintMatch.index === 'number' && hintMatch.index > 0) {
-    return firstLine.slice(0, hintMatch.index).trim().replace(/[,;\-]+$/g, '').trim();
+    return firstLine
+      .slice(0, hintMatch.index)
+      .trim()
+      .replace(/[,;-]+$/g, '')
+      .trim();
   }
   return firstLine;
 }
@@ -36,11 +54,14 @@ export function normalizeCompanyName(value: unknown): string {
   let s = extractCompanyLine(value).toLowerCase();
   s = s.replace(/\s+/g, ' ').trim();
   // remove punctuation except spaces
-  s = s.replace(/[.,;:()\[\]{}'"\/\\|!?*<>@#%&^`~]/g, ' ');
+  s = s.replace(/[.,;:()[\]{}'"/\\|!?*<>@#%&^`~]/g, ' ');
   s = s.replace(/\s+/g, ' ').trim();
   // drop common company suffixes
   for (const suffix of COMPANY_SUFFIXES) {
-    const re = new RegExp(`(?:^|\\s)${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|\\s)`, 'g');
+    const re = new RegExp(
+      `(?:^|\\s)${suffix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:$|\\s)`,
+      'g',
+    );
     s = s.replace(re, ' ');
   }
   return s.replace(/\s+/g, ' ').trim();

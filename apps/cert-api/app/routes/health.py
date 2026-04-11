@@ -1,6 +1,6 @@
 """Health check routes."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
 
@@ -17,7 +17,7 @@ def health() -> dict:
     Returns:
         Dict with status, timestamp, database connectivity, and config flags.
     """
-    result: dict = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    result: dict = {"status": "ok", "timestamp": datetime.now(UTC).isoformat()}
     if DATABASE_URL:
         try:
             with db() as (conn, cur):

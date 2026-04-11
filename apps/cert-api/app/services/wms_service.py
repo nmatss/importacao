@@ -1,6 +1,6 @@
 """WMS + ERP stock synchronization service."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.db.oracle import fetch_wms_stock
 from app.db.postgres import db
@@ -15,7 +15,7 @@ def sync_stock_all() -> dict:
         Dict with keys: wms, ecommerce_puket, ecommerce_imaginarium, errors.
     """
     results: dict = {"wms": 0, "ecommerce_puket": 0, "ecommerce_imaginarium": 0, "errors": []}
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # 1. WMS Oracle
     try:

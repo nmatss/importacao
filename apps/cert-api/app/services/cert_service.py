@@ -2,14 +2,13 @@
 
 import difflib
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html import unescape
 
 import requests
 
 from app.config import CERT_KEYWORDS, CERT_SPEC_NAMES, VTEX_STORES
 from app.utils.logging import log
-
 
 # ---------------------------------------------------------------------------
 # HTML / text utilities
@@ -282,9 +281,7 @@ def extract_cert_text_from_vtex(product_data: dict) -> str:
                 is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                 for val in values:
                     val_str = strip_html(str(val))
-                    if is_cert_field and val_str:
-                        found_texts.append(f"{name}: {val_str}")
-                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
+                    if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
                         kw in name_lower for kw in CERT_KEYWORDS
                     ):
                         found_texts.append(f"{name}: {val_str}")
@@ -299,9 +296,7 @@ def extract_cert_text_from_vtex(product_data: dict) -> str:
                         is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                         for val in values:
                             val_str = strip_html(str(val))
-                            if is_cert_field and val_str:
-                                found_texts.append(f"{name}: {val_str}")
-                            elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
+                            if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
                                 kw in name_lower for kw in CERT_KEYWORDS
                             ):
                                 found_texts.append(f"{name}: {val_str}")
@@ -329,9 +324,7 @@ def extract_cert_text_from_vtex(product_data: dict) -> str:
             if isinstance(spec_values, list):
                 for val in spec_values:
                     val_str = strip_html(str(val))
-                    if is_cert_field and val_str:
-                        found_texts.append(f"{spec_name}: {val_str}")
-                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
+                    if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(
                         kw in name_lower for kw in CERT_KEYWORDS
                     ):
                         found_texts.append(f"{spec_name}: {val_str}")
@@ -517,10 +510,9 @@ def compare_cert_texts(
 
     if score >= 0.7:
         return ("OK", score)
-    elif score >= 0.3:
+    if score >= 0.3:
         return ("INCONSISTENT", score)
-    else:
-        return ("URL_NOT_FOUND", score)
+    return ("URL_NOT_FOUND", score)
 
 
 def validate_single_product(
@@ -549,7 +541,7 @@ def validate_single_product(
         Dict with keys: sku, brand, status, score, url, actual_cert_text,
         expected_cert_text, ecommerce_description, error, verified_at.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result: dict = {
         "sku": sku,
         "brand": brand,

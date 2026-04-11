@@ -1,6 +1,5 @@
 """Tests for certification comparison logic."""
 
-import pytest
 
 from app.services.cert_service import (
     compare_cert_texts,

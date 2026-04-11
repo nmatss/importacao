@@ -361,10 +361,12 @@ def _read_licenciados_from_sheets() -> list[dict]:
 
     items: list[dict] = []
     for row in rows[1:]:
-        def get_val(col_idx: int | None) -> str:
-            if col_idx is None or col_idx >= len(row):
+        # _row=row default-arg binds the loop variable at function-definition time;
+        # this satisfies B023 without relying on late-binding closures.
+        def get_val(col_idx: int | None, _row: list = row) -> str:
+            if col_idx is None or col_idx >= len(_row):
                 return ""
-            return str(row[col_idx]).strip()
+            return str(_row[col_idx]).strip()
 
         process_code = get_val(process_col)
         if not process_code:

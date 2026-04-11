@@ -4,38 +4,40 @@ Validates certification info on VTEX e-commerce sites against Google Sheets data
 """
 
 import os
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
-import re
-import hmac
-import uuid
-import json
-import time
-import threading
-import logging
-import difflib
-from html import unescape
-from datetime import datetime, timezone
-from pathlib import Path
-from contextlib import contextmanager
 
-import requests
-import psycopg2
-import psycopg2.extras
-from psycopg2 import pool as pg_pool
+from dotenv import load_dotenv
+
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+import difflib
+import hmac
+import json
+import logging
+import re
+import threading
+import time
+import uuid
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from html import unescape
+from pathlib import Path
+
 import gspread
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from google.oauth2.service_account import Credentials
-from fastapi import FastAPI, HTTPException, Query, Security, Depends, Request
-from fastapi.responses import StreamingResponse, FileResponse
+import psycopg2
+import psycopg2.extras
+import requests
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Security
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.security import APIKeyHeader
+from google.oauth2.service_account import Credentials
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from psycopg2 import pool as pg_pool
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
 
 log = logging.getLogger("cert-api")
 logging.basicConfig(level=logging.INFO)
@@ -753,9 +755,7 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
                 is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                 for val in values:
                     val_str = _strip_html(str(val))
-                    if is_cert_field and val_str:
-                        found_texts.append(f"{name}: {val_str}")
-                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
+                    if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                         found_texts.append(f"{name}: {val_str}")
 
         # 3. Check specificationGroups (key for marketplace products in "Detalhes")
@@ -769,9 +769,7 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
                         is_cert_field = any(cn in name_lower for cn in CERT_SPEC_NAMES)
                         for val in values:
                             val_str = _strip_html(str(val))
-                            if is_cert_field and val_str:
-                                found_texts.append(f"{name}: {val_str}")
-                            elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
+                            if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                                 found_texts.append(f"{name}: {val_str}")
 
         # 4. Check items (SKU-level) — complementName is key for certification text
@@ -799,9 +797,7 @@ def _extract_cert_text_from_vtex(product_data: dict) -> str:
             if isinstance(spec_values, list):
                 for val in spec_values:
                     val_str = _strip_html(str(val))
-                    if is_cert_field and val_str:
-                        found_texts.append(f"{spec_name}: {val_str}")
-                    elif any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
+                    if is_cert_field and val_str or any(kw in val_str.lower() for kw in CERT_KEYWORDS) or any(kw in name_lower for kw in CERT_KEYWORDS):
                         found_texts.append(f"{spec_name}: {val_str}")
 
         for item in (product_data.get("items") or []):
@@ -1025,10 +1021,9 @@ def _compare_cert_texts(expected: str, actual: str, ecommerce_desc: str = "") ->
     # Determine status
     if score >= 0.7:
         return ("OK", score)
-    elif score >= 0.3:
+    if score >= 0.3:
         return ("INCONSISTENT", score)
-    else:
-        return ("URL_NOT_FOUND", score)
+    return ("URL_NOT_FOUND", score)
 
 
 def validate_single_product(
@@ -1040,7 +1035,7 @@ def validate_single_product(
     Validate a single product against VTEX.
     Returns dict with: status, score, url, actual_cert_text, error.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = {
         "sku": sku,
         "brand": brand,
@@ -1119,7 +1114,7 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None):
                 "INSERT INTO cert_validation_runs (id, status, brand_filter) VALUES (%s, 'running', %s)",
                 [run_id, brand_filter],
             )
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
             cur.execute(
                 "INSERT INTO cert_schedule_history (schedule_id, status) VALUES (%s, 'running')",
@@ -1209,7 +1204,7 @@ def _load_schedules_into_scheduler():
                     max_instances=1,
                 )
                 # Calculate and store next_run
-                next_run = trigger.get_next_fire_time(None, datetime.now(timezone.utc))
+                next_run = trigger.get_next_fire_time(None, datetime.now(UTC))
                 if next_run:
                     with db() as (conn, cur):
                         cur.execute("UPDATE cert_schedules SET next_run = %s WHERE id = %s", [next_run, s["id"]])
@@ -1266,7 +1261,7 @@ def shutdown():
 
 @app.get("/api/health")
 def health():
-    result = {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
+    result = {"status": "ok", "timestamp": datetime.now(UTC).isoformat()}
     if DATABASE_URL:
         try:
             with db() as (conn, cur):
@@ -1553,7 +1548,7 @@ class VerifyRequest(BaseModel):
 @app.post("/api/products/verify")
 def verify_product(req: VerifyRequest):
     """Verify a single product against the VTEX e-commerce site in real time."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Get expected cert text, product name, and ecommerce description from DB
     expected_cert = ""
@@ -1673,8 +1668,8 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                 products = [dict(r) for r in cur.fetchall()]
 
         state["total"] = len(products)
-        ok = inconsistent = not_found = 0
-        now = datetime.now(timezone.utc)
+        ok = missing = inconsistent = not_found = 0
+        now = datetime.now(UTC)
         report_products = []
 
         for i, p in enumerate(products):
@@ -1784,7 +1779,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                         WHERE id = %s
                         """,
                         [len(products), ok, missing, inconsistent, not_found,
-                         datetime.now(timezone.utc), report_filename, run_id],
+                         datetime.now(UTC), report_filename, run_id],
                     )
                 fresh_conn.commit()
                 log.info(f"Validation run {run_id} marked completed in DB")
@@ -1814,7 +1809,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                 with fresh_conn.cursor() as cur:
                     cur.execute(
                         "UPDATE cert_validation_runs SET status = 'failed', finished_at = %s WHERE id = %s",
-                        [datetime.now(timezone.utc), run_id],
+                        [datetime.now(UTC), run_id],
                     )
                 fresh_conn.commit()
             except Exception as db_err:
@@ -2021,7 +2016,7 @@ def run_schedule_now(schedule_id: str):
             "INSERT INTO cert_validation_runs (id, status, brand_filter) VALUES (%s, 'running', %s)",
             [run_id, brand],
         )
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         cur.execute("UPDATE cert_schedules SET last_run = %s WHERE id = %s", [now, schedule_id])
 
     _cleanup_old_validations()
@@ -2100,7 +2095,7 @@ def export_products_report(request: Request, brand: str = Query(""), status: str
         cur.execute(f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
         rows = [dict(r) for r in cur.fetchall()]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Produtos"
@@ -2237,7 +2232,7 @@ def export_stock_report(request: Request, brand: str = Query("")):
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     with db() as (conn, cur):
         conditions = []
@@ -2357,7 +2352,7 @@ def list_reports():
             stat = f.stat()
             reports.append({
                 "filename": f.name,
-                "date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "date": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
                 "size_bytes": stat.st_size,
             })
     return reports
@@ -2583,10 +2578,12 @@ def _read_licenciados_from_sheets() -> list[dict]:
 
     items: list[dict] = []
     for row in rows[1:]:
-        def get_val(col_idx: int | None) -> str:
-            if col_idx is None or col_idx >= len(row):
+        # _row=row default-arg binds the loop variable at function-definition time;
+        # this satisfies B023 without relying on late-binding closures.
+        def get_val(col_idx: int | None, _row: list = row) -> str:
+            if col_idx is None or col_idx >= len(_row):
                 return ""
-            return str(row[col_idx]).strip()
+            return str(_row[col_idx]).strip()
 
         process_code = get_val(process_col)
         if not process_code:
@@ -2838,7 +2835,7 @@ def _fetch_wms_stock():
             GROUP BY te.CD_PRODUTO, tcp.DS_PRODUTO, tta.DS_AREA_ARMAZ, ts.DS_SITUACAO
         """)
         columns = [col[0] for col in cursor.description]
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        return [dict(zip(columns, row, strict=False)) for row in cursor.fetchall()]
 
 
 def _fetch_ecommerce_stock(brand: str):
@@ -2873,7 +2870,7 @@ def sync_stock(request: Request):
 
     results = {"wms": 0, "ecommerce_puket": 0, "ecommerce_imaginarium": 0, "errors": []}
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     # 1. WMS Oracle (by storage area)
     try:
