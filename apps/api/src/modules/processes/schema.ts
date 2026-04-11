@@ -23,6 +23,16 @@ export const createProcessSchema = z.object({
   shipmentDate: z.string().max(30).optional(),
 });
 
+export const createFromPreConsSchema = z.object({
+  processCode: z.string().min(1).max(50),
+  brand: z.enum(['puket', 'imaginarium']),
+  preConsCode: z.string().max(100).optional(),
+  etd: z.string().max(30).optional(),
+  eta: z.string().max(30).optional(),
+  notes: z.string().max(5000).optional(),
+});
+export type CreateFromPreConsInput = z.infer<typeof createFromPreConsSchema>;
+
 export const updateProcessSchema = z.object({
   processCode: z.string().min(1).max(50).optional(),
   brand: z.enum(['puket', 'imaginarium']).optional(),

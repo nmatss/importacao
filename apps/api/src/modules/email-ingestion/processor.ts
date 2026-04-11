@@ -12,6 +12,7 @@ import { gmailService } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
+import { alertService } from '../alerts/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
@@ -418,7 +419,34 @@ export const emailProcessor = {
             // Update processCode to the canonical form from DB
             processCode = matched.processCode;
           } else {
-            // Create new process
+            const autoCreateEnabled = process.env.FOLLOW_UP_AUTO_CREATE !== '0';
+
+            if (!autoCreateEnabled) {
+              // Feature flag disabled: do not create, just alert operator
+              try {
+                await alertService.create({
+                  severity: 'warning',
+                  title: 'Email recebido para processo inexistente',
+                  message: `O codigo "${processCode}" nao foi encontrado no sistema e a criacao automatica via follow-up esta desativada. Crie o processo manualmente a partir do Pre-Cons. Assunto: ${email.subject}`,
+                });
+              } catch (alertErr) {
+                logger.warn(
+                  { err: alertErr, processCode },
+                  'Failed to create alert for missing process (auto-create disabled)',
+                );
+              }
+              await db
+                .update(emailIngestionLogs)
+                .set({
+                  status: 'ignored',
+                  errorMessage:
+                    'Processo nao encontrado e FOLLOW_UP_AUTO_CREATE=0 — criacao automatica desativada',
+                })
+                .where(eq(emailIngestionLogs.id, logEntry.id));
+              continue;
+            }
+
+            // Create new process (fallback path — tagged for operator review)
             const brand = detectBrand(email.subject, email.from);
             const [newProcess] = await db
               .insert(importProcesses)
@@ -426,7 +454,8 @@ export const emailProcessor = {
                 processCode,
                 brand,
                 status: 'draft',
-                notes: `Processo criado automaticamente a partir do email: ${email.subject}`,
+                logisticStatus: 'consolidation',
+                notes: 'Criado via follow-up — confirme referência no Pre-Cons.',
               })
               .returning();
             processId = newProcess.id;
@@ -434,8 +463,22 @@ export const emailProcessor = {
             await db.insert(followUpTracking).values({ processId: newProcess.id });
             logger.info(
               { processCode, processId: newProcess.id },
-              'New process created from email',
+              'New process created from email (follow-up fallback)',
             );
+
+            try {
+              await alertService.create({
+                processId: newProcess.id,
+                severity: 'warning',
+                title: 'Processo criado via follow-up (confirme no Pre-Cons)',
+                message: `O processo "${processCode}" foi criado automaticamente a partir de um email (assunto: ${email.subject}). Confirme a referencia na planilha Pre-Cons antes de prosseguir.`,
+              });
+            } catch (alertErr) {
+              logger.warn(
+                { err: alertErr, processCode, processId: newProcess.id },
+                'Failed to create warning alert for follow-up auto-created process',
+              );
+            }
           }
         }
 

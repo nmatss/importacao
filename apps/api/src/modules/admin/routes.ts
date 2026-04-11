@@ -6,6 +6,10 @@ import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { getQueue } from '../../shared/queue/index.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { queueStatsQuerySchema } from './schema.js';
+import { db } from '../../shared/database/connection.js';
+import { importProcesses } from '../../shared/database/schema.js';
+import { processService } from '../processes/service.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const adminPostLimiter = createRateLimiter(30, 60_000);
 
@@ -63,5 +67,24 @@ router.get(
     }
   },
 );
+
+router.post('/logistic-status/backfill', async (_req: Request, res: Response) => {
+  try {
+    const rows = await db.select({ id: importProcesses.id }).from(importProcesses);
+    let updated = 0;
+    for (const row of rows) {
+      try {
+        const result = await processService.advanceLogisticStatus(row.id);
+        if (result?.updated) updated += 1;
+      } catch (err) {
+        logger.warn({ err, processId: row.id }, 'backfill: advanceLogisticStatus failed');
+      }
+    }
+    sendSuccess(res, { scanned: rows.length, updated });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Erro ao executar backfill';
+    sendError(res, message, 500);
+  }
+});
 
 export { router as adminRoutes };

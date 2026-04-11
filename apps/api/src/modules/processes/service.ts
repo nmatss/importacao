@@ -7,12 +7,21 @@ import {
   processEvents,
   users,
 } from '../../shared/database/schema.js';
-import type { CreateProcessInput, UpdateProcessInput, ProcessFilter } from './schema.js';
+import type {
+  CreateProcessInput,
+  UpdateProcessInput,
+  ProcessFilter,
+  CreateFromPreConsInput,
+} from './schema.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import {
+  deriveLogisticStatus,
+  isForwardTransition,
+} from './logistic-auto-advance.js';
 
 export const processService = {
   async list(filter: ProcessFilter) {
@@ -97,6 +106,7 @@ export const processService = {
           importerName: input.importerName,
           importerAddress: input.importerAddress,
           notes: input.notes,
+          logisticStatus: 'consolidation',
           createdBy: userId,
         })
         .returning();
@@ -116,6 +126,136 @@ export const processService = {
 
       return process;
     });
+  },
+
+  async createFromPreCons(input: CreateFromPreConsInput, userId: number) {
+    const [existing] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.processCode, input.processCode))
+      .limit(1);
+
+    if (existing) {
+      return { created: false as const, process: existing };
+    }
+
+    const process = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(importProcesses)
+        .values({
+          processCode: input.processCode,
+          brand: input.brand,
+          status: 'draft',
+          logisticStatus: 'consolidation',
+          etd: input.etd,
+          eta: input.eta,
+          notes: input.notes ?? 'Criado a partir do Pre-Cons',
+          createdBy: userId,
+        })
+        .returning();
+
+      await tx.insert(followUpTracking).values({
+        processId: created.id,
+      });
+
+      auditService.log(
+        userId,
+        'create_from_pre_cons',
+        'process',
+        created.id,
+        { processCode: input.processCode, preConsCode: input.preConsCode ?? null },
+        null,
+      );
+
+      return created;
+    });
+
+    recordProcessEvent(
+      process.id,
+      {
+        eventType: 'created_from_pre_cons',
+        title: 'Processo criado a partir do Pre-Cons',
+        metadata: { processCode: input.processCode, source: 'pre_cons_manual' },
+      },
+      userId,
+    );
+
+    return { created: true as const, process };
+  },
+
+  async advanceLogisticStatus(processId: number, userId: number | null = null) {
+    const [process] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!process) return { updated: false as const, current: null };
+
+    const [followUp] = await db
+      .select()
+      .from(followUpTracking)
+      .where(eq(followUpTracking.processId, processId))
+      .limit(1);
+
+    const derived = deriveLogisticStatus({
+      process: {
+        etd: process.etd ?? null,
+        eta: process.eta ?? null,
+        shipmentDate: process.shipmentDate ?? null,
+        customsChannel: process.customsChannel ?? null,
+        diNumber: process.diNumber ?? null,
+        customsClearanceAt: process.customsClearanceAt ?? null,
+        cdArrivalAt: process.cdArrivalAt ?? null,
+        logisticStatus: process.logisticStatus ?? null,
+        status: process.status,
+      },
+      followUp: followUp
+        ? {
+            espelhoBuiltAt: followUp.espelhoBuiltAt ?? null,
+            espelhoGeneratedAt: followUp.espelhoGeneratedAt ?? null,
+            sentToFeniciaAt: followUp.sentToFeniciaAt ?? null,
+            invoiceSentFeniciaAt: followUp.invoiceSentFeniciaAt ?? null,
+            documentsReceivedAt: followUp.documentsReceivedAt ?? null,
+          }
+        : null,
+    });
+
+    if (!isForwardTransition(process.logisticStatus, derived)) {
+      return { updated: false as const, current: process.logisticStatus };
+    }
+
+    if (process.logisticStatus === derived) {
+      return { updated: false as const, current: process.logisticStatus };
+    }
+
+    const previousStatus = process.logisticStatus;
+
+    await db
+      .update(importProcesses)
+      .set({ logisticStatus: derived, updatedAt: new Date() })
+      .where(eq(importProcesses.id, processId));
+
+    auditService.log(
+      userId,
+      'logistic_status_auto_advance',
+      'process',
+      processId,
+      { previousStatus, newStatus: derived },
+      null,
+    );
+
+    recordProcessEvent(
+      processId,
+      {
+        eventType: 'logistic_status_auto_advanced',
+        title: `Status logistico avancado para ${derived}`,
+        metadata: { previousStatus, newStatus: derived, source: 'auto_advance' },
+      },
+      userId,
+    );
+
+    return { updated: true as const, previous: previousStatus, current: derived };
   },
 
   async update(id: number, input: UpdateProcessInput, userId: number | null = null) {

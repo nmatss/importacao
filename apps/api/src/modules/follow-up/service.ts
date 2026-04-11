@@ -5,6 +5,7 @@ import type { FollowUpTracking } from '../../shared/database/schema.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { processService } from '../processes/service.js';
 
 const TRACKING_STEPS = [
   'documentsReceivedAt',
@@ -134,6 +135,13 @@ export const followUpService = {
       .returning();
 
     if (!tracking) throw new NotFoundError('Acompanhamento não encontrado');
+
+    processService
+      .advanceLogisticStatus(processId)
+      .catch((err) =>
+        logger.error({ err, processId }, 'advanceLogisticStatus failed after follow-up update'),
+      );
+
     return tracking;
   },
 
@@ -177,6 +185,12 @@ export const followUpService = {
       .set({ overallProgress: progress })
       .where(eq(followUpTracking.processId, processId))
       .returning();
+
+    processService
+      .advanceLogisticStatus(processId)
+      .catch((err) =>
+        logger.error({ err, processId }, 'advanceLogisticStatus failed after follow-up updateStep'),
+      );
 
     return final;
   },

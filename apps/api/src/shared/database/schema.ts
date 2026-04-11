@@ -120,7 +120,7 @@ export const importProcesses = pgTable(
     freeTimeDays: integer('free_time_days'),
     numerarioValue: numeric('numerario_value', { precision: 12, scale: 2 }),
     numerarioPct: numeric('numerario_pct', { precision: 5, scale: 4 }),
-    logisticStatus: varchar('logistic_status', { length: 50 }),
+    logisticStatus: varchar('logistic_status', { length: 50 }).default('consolidation'),
     documentStage: varchar('document_stage', { length: 30 }).default('pre_con'),
     aiExtractedData: jsonb('ai_extracted_data'),
     notes: text('notes'),
