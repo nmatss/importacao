@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { checkDeadlines } from './deadline-check.js';
 import { checkStalledProcesses } from './stalled-process.js';
 import { checkEmails, doubleCheckEmails } from './email-check.js';
+import { runLogisticSync } from './logistic-sync.js';
 import { logger } from '../shared/utils/logger.js';
 import { alertService } from '../modules/alerts/service.js';
 
@@ -76,7 +77,20 @@ export function startScheduler() {
     tz,
   );
 
+  // Every 30 minutes - Sync logistic status from process + follow-up state
+  cron.schedule(
+    '*/30 * * * *',
+    async () => {
+      try {
+        await runLogisticSync();
+      } catch (error) {
+        await handleCronError('logistic-sync', error);
+      }
+    },
+    tz,
+  );
+
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min) - timezone: America/Sao_Paulo',
   );
 }

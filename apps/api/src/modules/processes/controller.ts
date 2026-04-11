@@ -38,6 +38,21 @@ export const processController = {
     }
   },
 
+  async createFromPreCons(req: Request, res: Response) {
+    try {
+      const userId = (req as AuthenticatedRequest).user.id;
+      const result = await processService.createFromPreCons(req.body, userId);
+      if (result.created) {
+        sendSuccess(res, result.process, 201);
+      } else {
+        sendSuccess(res, { ...result.process, existed: true }, 200);
+      }
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async update(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
