@@ -36,38 +36,105 @@ function extractProcessCode(text: string): string | null {
 }
 
 // ── Document classification (filename-based, fast) ──────────────────────
-
+//
+// IMPORTANT — ordering matters. Checks run top to bottom and the first match
+// wins. The sequence below was hand-tuned against the real Odett test set
+// (/tmp/odett_analysis/zip/ + ai classifier smoke in /tmp/classify-test.ts):
+//   1. invoice / packing_list — unambiguous keyword tokens
+//   2. espelho — xlsx file with the literal word
+//   3. DRAFT BL before final BL — a file that contains *both* a draft
+//      signal (draft / rascunho / preliminar) AND any BL signal must be
+//      routed to draft_bl, otherwise it hits the ohbl branch and fires the
+//      `documentsReceivedAt` trigger on a draft instead of on the real BL.
+//   4. final BL
+//   5. draft (without BL token) — still treated as draft_bl because
+//      Odett's partners routinely send drafts named only with numeric IDs
+//      plus "(draft <process>)".
+//   6. certificate (expanded keyword set — phyto / fumiga / ispm / CO / COA
+//      / origem / inmetro / radiation / anvisa)
+//   7. li — checked last since "li" is a very generic 2-char token
+//   8. other — catch-all; processWithAI logs + alerts instead of silent drop
 function classifyDocument(filename: string): string {
   const lower = filename.toLowerCase();
-  // Split filename into tokens by common separators (strip extension first)
-  const tokens = lower.replace(/\.[^.]+$/, '').split(/[-_.\s]+/);
+  // Strip extension, then split on separators including parentheses.
+  const tokens = lower.replace(/\.[^.]+$/, '').split(/[-_.\s()[\]]+/);
 
+  const hasDraftSignal =
+    tokens.includes('draft') ||
+    tokens.includes('rascunho') ||
+    tokens.includes('preliminar') ||
+    lower.includes('draft') ||
+    lower.includes('rascunho') ||
+    lower.includes('preliminar');
+
+  const hasBLSignal =
+    tokens.includes('bl') ||
+    tokens.includes('ohbl') ||
+    tokens.includes('hbl') ||
+    tokens.includes('mbl') ||
+    lower.includes('bill') ||
+    lower.includes('lading') ||
+    lower.includes('conhecimento') ||
+    lower.includes('ohbl');
+
+  // 1. invoice — wide keyword base (INV token is Uni.co standard)
   if (
     lower.includes('invoice') ||
     lower.includes('fatura') ||
     lower.includes('commercial') ||
-    tokens.includes('inv')
+    tokens.includes('inv') ||
+    tokens.includes('ci')
   )
     return 'invoice';
-  if (lower.includes('packing') || tokens.includes('pl') || lower.includes('pack'))
-    return 'packing_list';
+
+  // 2. packing list
   if (
-    tokens.includes('bl') ||
-    lower.includes('bill') ||
-    lower.includes('lading') ||
-    lower.includes('conhecimento') ||
-    lower.includes('ohbl')
+    lower.includes('packing') ||
+    tokens.includes('pl') ||
+    lower.includes('pack') ||
+    lower.includes('romaneio')
   )
-    return 'ohbl';
+    return 'packing_list';
+
+  // 3. espelho (xlsx) — literal
   if (lower.includes('espelho')) return 'espelho';
-  if (tokens.includes('li') || lower.includes('licen')) return 'li';
+
+  // 4. DRAFT BL — BEFORE final BL. Also catches "draft <process-code>" files
+  //    where the BL signal is only implicit (no "bl" token, but the payload
+  //    *is* a BL draft in the Uni.co email flow).
+  if (hasDraftSignal && (hasBLSignal || /draft[-\s_]*\(?[a-z]{2,5}\d{5,}\)?/i.test(filename))) {
+    return 'draft_bl';
+  }
+
+  // 5. final BL
+  if (hasBLSignal) return 'ohbl';
+
+  // 6. draft alone — still route to draft_bl (the only "draft" type the
+  //    system models; DUIMP drafts fall through to 'other' and are handled
+  //    below with an explicit keyword check).
+  if (hasDraftSignal && !lower.includes('duimp')) return 'draft_bl';
+
+  // 7. certificate — expanded keyword set
   if (
     lower.includes('certificado') ||
     lower.includes('certificate') ||
     tokens.includes('cert') ||
-    lower.includes('inmetro')
+    tokens.includes('co') || // standalone CO token (Certificate of Origin)
+    lower.includes('coa') ||
+    lower.includes('inmetro') ||
+    lower.includes('anvisa') ||
+    lower.includes('phyto') ||
+    lower.includes('fito') ||
+    lower.includes('fumig') ||
+    lower.includes('ispm') ||
+    lower.includes('origem') ||
+    lower.includes('origin')
   )
     return 'certificate';
+
+  // 8. LI — last (too generic otherwise)
+  if (tokens.includes('li') || lower.includes('licen') || lower.includes('lpco')) return 'li';
+
   return 'other';
 }
 
@@ -84,7 +151,11 @@ function classifyDocumentWithContext(
   // If filename is generic (e.g. "document.pdf", "scan001.pdf"), use AI context
   if (!aiAnalysis || aiAnalysis.documentTypes.length === 0) return filenameType;
 
-  // Map AI document type mentions to our classification types
+  // Map AI document type mentions to our classification types.
+  // Note: 'draft' and 'draft_bl' both route to draft_bl so the getComparison
+  // draftBlRevisions feature actually receives documents via the email path.
+  // 'correction' stays as 'other' — there is no correction type in the DB
+  // enum yet; the operator handles these via the manual upload UI.
   const typeMapping: Record<string, string> = {
     invoice: 'invoice',
     fatura: 'invoice',
@@ -95,6 +166,10 @@ function classifyDocumentWithContext(
     ohbl: 'ohbl',
     bl: 'ohbl',
     bill_of_lading: 'ohbl',
+    draft: 'draft_bl',
+    draft_bl: 'draft_bl',
+    rascunho_bl: 'draft_bl',
+    draft_bill_of_lading: 'draft_bl',
     espelho: 'espelho',
     li: 'li',
     licenca: 'li',
@@ -103,12 +178,15 @@ function classifyDocumentWithContext(
     certificado: 'certificate',
     cert_of_origin: 'certificate',
     certificate_of_origin: 'certificate',
+    certificado_de_origem: 'certificate',
     quality_certificate: 'certificate',
     phytosanitary_certificate: 'certificate',
+    certificado_fitossanitario: 'certificate',
     fumigation_certificate: 'certificate',
+    certificado_de_fumigacao: 'certificate',
     inmetro: 'certificate',
+    anvisa: 'certificate',
     correction: 'other',
-    draft: 'other',
   };
 
   // If AI detected exactly one document type, use it for generic filenames
@@ -135,6 +213,9 @@ function extractDocumentTypesFromText(text: string): string[] {
 
   if (/\b(invoice|fatura|commercial\s+invoice)\b/.test(lower)) types.push('invoice');
   if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
+  // Draft BL BEFORE final BL so a body mentioning "draft BL" is detected.
+  if (/\b(draft\s+bl|draft\s+bill|rascunho\s+(do\s+)?bl|bl\s+draft|preliminary\s+bl)\b/.test(lower))
+    types.push('draft_bl');
   if (
     /\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl)\b|(?:^|[^a-z])bl(?:$|[^a-z])/.test(
       lower,
@@ -144,7 +225,12 @@ function extractDocumentTypesFromText(text: string): string[] {
   if (/\b(espelho)\b/.test(lower)) types.push('espelho');
   if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o)\b|(?:^|[^a-z])li(?:$|[^a-z])/.test(lower))
     types.push('li');
-  if (/\b(certificado|certificate|cert\s+of\s+origin)\b/.test(lower)) types.push('certificate');
+  if (
+    /\b(certificado|certificate|cert\s+of\s+origin|fito(ssanit[aá]rio)?|phyto|fumiga[çc][aã]o|ispm|inmetro|anvisa)\b/.test(
+      lower,
+    )
+  )
+    types.push('certificate');
 
   return [...new Set(types)];
 }
@@ -680,8 +766,13 @@ export const emailProcessor = {
             // Move from INBOX to PROCESSADOS
             if (sistemaFileId && processCode) {
               try {
-                const { googleDriveService } = await import('../integrations/google-drive.service.js');
-                await googleDriveService.moveFromInboxToProcessados(sistemaFileId, processCode, docType);
+                const { googleDriveService } =
+                  await import('../integrations/google-drive.service.js');
+                await googleDriveService.moveFromInboxToProcessados(
+                  sistemaFileId,
+                  processCode,
+                  docType,
+                );
               } catch (err) {
                 logger.warn({ err }, 'Failed to move file from INBOX to PROCESSADOS');
               }

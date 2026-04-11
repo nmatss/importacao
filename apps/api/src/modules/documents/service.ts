@@ -166,9 +166,16 @@ export const documentService = {
       if (proc?.processCode) {
         try {
           const { googleSheetsService } = await import('../integrations/google-sheets.service.js');
-          await googleSheetsService.syncMilestone(proc.processCode, 'documentsReceivedAt', new Date());
+          await googleSheetsService.syncMilestone(
+            proc.processCode,
+            'documentsReceivedAt',
+            new Date(),
+          );
         } catch (err) {
-          logger.error({ err, processCode: proc.processCode }, 'Failed to sync milestone to Sheets');
+          logger.error(
+            { err, processCode: proc.processCode },
+            'Failed to sync milestone to Sheets',
+          );
         }
       }
     }
@@ -255,8 +262,56 @@ export const documentService = {
       case 'certificate':
         result = await aiService.extractCertificateData(text, extractionOpts);
         break;
-      default:
+      default: {
+        // Do NOT silent-drop — previously `li` and `other` fell through here
+        // with no side effects, which hid documents forever from the pipeline.
+        // Now we mark the document as processed so the UI stops spinning,
+        // store a structured note, and raise a warning alert so the operator
+        // can either pick a correct type manually or investigate.
+        logger.warn(
+          { documentId: doc.id, processId: doc.processId, type },
+          'Document type has no AI extractor — marking processed without extraction',
+        );
+        await db
+          .update(documents)
+          .set({
+            aiParsedData: {
+              skipped: true,
+              reason:
+                type === 'li'
+                  ? 'Licença de Importação (LI) — extração automática ainda não implementada'
+                  : 'Tipo de documento sem extractor dedicado — revisar manualmente',
+              type,
+            } as Record<string, unknown>,
+            confidenceScore: '0',
+            isProcessed: true,
+            updatedAt: new Date(),
+          })
+          .where(eq(documents.id, documentId));
+
+        const [proc] = await db
+          .select({ processCode: importProcesses.processCode })
+          .from(importProcesses)
+          .where(eq(importProcesses.id, doc.processId))
+          .limit(1);
+
+        alertService
+          .create({
+            processId: doc.processId,
+            severity: 'warning',
+            title:
+              type === 'li'
+                ? 'LI recebida — extração não disponível'
+                : 'Documento sem extractor automático',
+            message:
+              type === 'li'
+                ? `Uma Licença de Importação foi armazenada no processo ${proc?.processCode ?? doc.processId}. A extração automática de LI ainda não está implementada — revise o documento manualmente.`
+                : `Documento do tipo "${type}" no processo ${proc?.processCode ?? doc.processId} foi armazenado mas não tem extractor automático. Revisar classificação manual via UI.`,
+            processCode: proc?.processCode,
+          })
+          .catch((err) => logger.error({ err }, 'Failed to create skip-extraction alert'));
         return;
+      }
     }
 
     await db
@@ -867,10 +922,7 @@ export const documentService = {
       }));
 
     // Draft BL vs Final BL ("Revisado") — only when both are present
-    const draftBlRevisions =
-      draftBl && bl
-        ? computeDraftBlRevisions(draftBl, bl)
-        : [];
+    const draftBlRevisions = draftBl && bl ? computeDraftBlRevisions(draftBl, bl) : [];
 
     return {
       hasInvoice: !!inv,
@@ -957,8 +1009,16 @@ function draftBlFieldMatches(a: unknown, b: unknown): boolean {
   if (da && db) return da === db;
 
   // String normalization (lowercase + collapse whitespace + strip common punctuation)
-  const sa = String(a).toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:()]/g, '').trim();
-  const sb = String(b).toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:()]/g, '').trim();
+  const sa = String(a)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:()]/g, '')
+    .trim();
+  const sb = String(b)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:()]/g, '')
+    .trim();
   return sa === sb;
 }
 
