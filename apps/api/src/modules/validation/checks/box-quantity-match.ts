@@ -25,6 +25,42 @@ export default function boxQuantityMatch(input: CheckInput): CheckResult {
   const blRaw = input.blData?.totalBoxes ?? input.blData?.totalPackages;
   const blBoxes = blRaw != null ? Number(blRaw) : null;
 
+  // Sanity: box counts must be integers. Decimals usually mean the extractor confused
+  // carton count with CBM (cubagem). Flag as warning before doing the cross-doc compare.
+  if (plBoxes != null && !isNaN(plBoxes) && !Number.isInteger(plBoxes)) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: String(input.packingListData?.totalBoxes),
+      actualValue: String(input.packingListData?.totalBoxes),
+      documentsCompared: 'PL',
+      message:
+        'Quantidade de caixas no Packing List veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
+    };
+  }
+  if (invBoxes != null && !isNaN(invBoxes) && !Number.isInteger(invBoxes)) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: String(input.invoiceData?.totalBoxes),
+      actualValue: String(input.invoiceData?.totalBoxes),
+      documentsCompared: 'INV',
+      message:
+        'Quantidade de caixas na Invoice veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
+    };
+  }
+  if (blBoxes != null && !isNaN(blBoxes) && !Number.isInteger(blBoxes)) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: String(blRaw),
+      actualValue: String(blRaw),
+      documentsCompared: 'BL',
+      message:
+        'Quantidade de caixas no BL veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
+    };
+  }
+
   const sources: string[] = [];
   const values: number[] = [];
 

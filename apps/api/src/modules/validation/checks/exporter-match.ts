@@ -1,3 +1,10 @@
+import {
+  extractCompanyLine,
+  companySimilarity,
+  COMPANY_PASS_THRESHOLD,
+  COMPANY_WARN_THRESHOLD,
+} from '../utils/name-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -15,79 +22,70 @@ interface CheckResult {
   message: string;
 }
 
-function normalize(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
-function stripPunctuation(value: string): string {
-  return value.replace(/[.,;:\-()]/g, '');
-}
-
 export default function exporterMatch(input: CheckInput): CheckResult {
   const checkName = 'exporter-match';
-  const invExporter = normalize(input.invoiceData?.exporterName);
-  const plExporter = normalize(input.packingListData?.exporterName);
-  const blExporter = normalize(input.blData?.shipper ?? input.blData?.shipperName);
 
-  const sources: string[] = [];
-  const values: string[] = [];
+  const rawInv = input.invoiceData?.exporterName;
+  const rawPl = input.packingListData?.exporterName;
+  const rawBl = input.blData?.shipper ?? input.blData?.shipperName;
 
-  if (invExporter) {
-    sources.push('INV');
-    values.push(invExporter);
-  }
-  if (plExporter) {
-    sources.push('PL');
-    values.push(plExporter);
-  }
-  if (blExporter) {
-    sources.push('BL');
-    values.push(blExporter);
-  }
+  const entries: { source: string; raw: unknown; display: string }[] = [];
+  if (rawInv) entries.push({ source: 'INV', raw: rawInv, display: extractCompanyLine(rawInv) });
+  if (rawPl) entries.push({ source: 'PL', raw: rawPl, display: extractCompanyLine(rawPl) });
+  if (rawBl) entries.push({ source: 'BL', raw: rawBl, display: extractCompanyLine(rawBl) });
 
-  if (values.length < 2) {
+  if (entries.length < 2) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: sources.join(' vs '),
+      documentsCompared: entries.map((e) => e.source).join(' vs '),
       message: 'Documentos insuficientes para comparar o nome do exportador.',
     };
   }
 
-  const allEqual = values.every((v) => v === values[0]);
-  if (allEqual) {
+  // Compute lowest pairwise similarity — worst case wins.
+  let minSim = 1;
+  let worstPair: [typeof entries[number], typeof entries[number]] = [entries[0], entries[1]];
+  for (let i = 0; i < entries.length; i++) {
+    for (let j = i + 1; j < entries.length; j++) {
+      const sim = companySimilarity(entries[i].raw, entries[j].raw);
+      if (sim < minSim) {
+        minSim = sim;
+        worstPair = [entries[i], entries[j]];
+      }
+    }
+  }
+
+  const documentsCompared = entries.map((e) => e.source).join(' vs ');
+
+  if (minSim >= COMPANY_PASS_THRESHOLD) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: values[0],
-      actualValue: values[0],
-      documentsCompared: sources.join(' vs '),
-      message: 'Nome do exportador confere em todos os documentos.',
+      expectedValue: entries[0].display,
+      actualValue: entries[0].display,
+      documentsCompared,
+      message: 'Nome do exportador confere (match fuzzy) entre os documentos.',
     };
   }
 
-  const stripped = values.map(stripPunctuation);
-  const minorDifference = stripped.every((v) => v === stripped[0]);
-
-  if (minorDifference) {
+  if (minSim >= COMPANY_WARN_THRESHOLD) {
     return {
       checkName,
       status: 'warning',
-      expectedValue: values[0],
-      actualValue: values.find((v) => v !== values[0]) ?? values[1],
-      documentsCompared: sources.join(' vs '),
-      message: 'Nome do exportador possui pequenas diferencas de pontuacao entre os documentos.',
+      expectedValue: worstPair[0].display,
+      actualValue: worstPair[1].display,
+      documentsCompared,
+      message: `Nome do exportador possui diferenças leves entre ${worstPair[0].source} e ${worstPair[1].source} (similaridade ${(minSim * 100).toFixed(0)}%).`,
     };
   }
 
   return {
     checkName,
     status: 'failed',
-    expectedValue: values[0],
-    actualValue: values.find((v) => v !== values[0]) ?? values[1],
-    documentsCompared: sources.join(' vs '),
-    message: 'Nome do exportador nao confere entre os documentos.',
+    expectedValue: worstPair[0].display,
+    actualValue: worstPair[1].display,
+    documentsCompared,
+    message: `Nome do exportador não confere entre ${worstPair[0].source} e ${worstPair[1].source} (similaridade ${(minSim * 100).toFixed(0)}%).`,
   };
 }
