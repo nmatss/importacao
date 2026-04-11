@@ -76,6 +76,64 @@ const PROMPT_VERSIONS: Record<string, string> = {
 };
 
 /**
+ * Strip a spurious single-letter prefix that sometimes bleeds in from the
+ * adjacent packaging column in PDF layouts (e.g. every itemCode arrives as
+ * "WABC-123" instead of "ABC-123" because the layout glued "WHITE BOX" to
+ * the code column). If ≥70% of a set of ≥3 items share the same leading
+ * uppercase letter followed by another uppercase/digit, we strip it.
+ */
+function stripSpuriousItemPrefix(items: any[]): void {
+  if (!Array.isArray(items) || items.length < 3) return;
+
+  const pattern = /^[A-Z](?=[A-Z0-9])/;
+  const prefixCounts = new Map<string, number>();
+  let totalWithCode = 0;
+
+  for (const item of items) {
+    const code = item?.itemCode?.value;
+    if (typeof code !== 'string' || code.length === 0) continue;
+    totalWithCode++;
+    const m = code.match(pattern);
+    if (m) {
+      const letter = code[0];
+      prefixCounts.set(letter, (prefixCounts.get(letter) || 0) + 1);
+    }
+  }
+
+  if (totalWithCode < 3) return;
+
+  let topLetter: string | null = null;
+  let topCount = 0;
+  for (const [letter, count] of prefixCounts.entries()) {
+    if (count > topCount) {
+      topLetter = letter;
+      topCount = count;
+    }
+  }
+
+  if (!topLetter) return;
+  const ratio = topCount / totalWithCode;
+  if (ratio < 0.7) return;
+
+  let stripped = 0;
+  for (const item of items) {
+    const code = item?.itemCode?.value;
+    if (typeof code !== 'string' || code.length === 0) continue;
+    if (code[0] === topLetter && pattern.test(code)) {
+      item.itemCode.value = code.slice(1);
+      stripped++;
+    }
+  }
+
+  if (stripped > 0) {
+    logger.warn(
+      { prefix: topLetter, strippedCount: stripped, totalWithCode, ratio },
+      'Stripped spurious single-letter prefix from item codes (likely packaging column bleed)',
+    );
+  }
+}
+
+/**
  * Flatten AI response from { value, confidence } structure to plain values.
  * Validation checks and comparison logic need plain values, not nested objects.
  */
@@ -325,7 +383,11 @@ class AIService {
     const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'invoice_extraction');
     const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
-    const { score, lowConfidenceFields } = this.calculateConfidence(data as Record<string, any>);
+    const dataAsRecord = data as Record<string, any>;
+    if (Array.isArray(dataAsRecord.items)) {
+      stripSpuriousItemPrefix(dataAsRecord.items);
+    }
+    const { score, lowConfidenceFields } = this.calculateConfidence(dataAsRecord);
 
     logger.info(
       {
@@ -357,6 +419,10 @@ class AIService {
     const messages = msgs;
     const response = await this.chat('gemini-2.5-flash', messages, true, 'packing_list_extraction');
     const data = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
+    const dataAsRecord = data as Record<string, any>;
+    if (Array.isArray(dataAsRecord.items)) {
+      stripSpuriousItemPrefix(dataAsRecord.items);
+    }
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
     logger.info(

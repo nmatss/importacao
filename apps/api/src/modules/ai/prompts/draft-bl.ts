@@ -30,11 +30,19 @@ ATENCAO ESPECIAL PARA DRAFT BL:
 - Se houver mais de 1 container, liste todos separados por virgula
 - cargoDescription = descricao completa das mercadorias como aparece no BL
 
+REGRAS DE EXTRACAO — BL:
+- vesselName: NOME do navio. Se aparecer no formato "VESSEL/VOYAGE" ou "NAVIO/VIAGEM" (ex.: "COSCO SHIPPING ARGENTINA/0BDNIW1MA"), separe: vesselName="COSCO SHIPPING ARGENTINA", voyageNumber="0BDNIW1MA".
+- portOfLoading: porto de embarque (ex.: "NINGBO, CHINA", "SHANGHAI, CHINA"). Pode estar rotulado "PORT OF LOADING", "PORT OF ORIGIN", "PORTO DE EMBARQUE".
+- portOfDischarge: porto de destino (ex.: "ITAPOA, BRAZIL", "ITAJAI, BRAZIL", "NAVEGANTES, BRAZIL"). Rotulos: "PORT OF DISCHARGE", "PORT OF DESTINATION", "PORTO DE DESCARGA".
+- customerReference: referencia do CLIENTE/processo no BL — NAO confunda com blNumber. Rotulos: "ORDER NO.", "ORDER NUMBER", "PO CUSTOMER REF", "CUSTOMER REFERENCE", "SHIPPER REF", "BOOKING REF". Exemplo: "ORDER NO.: IM0712602NB" → customerReference="IM0712602NB".
+- blNumber: numero do conhecimento de embarque (ex.: "SHYY26021495A"). E diferente de customerReference.
+
 Extraia os campos abaixo com confidence 0.0-1.0.
 
 Responda com JSON estrito:
 {
   "blNumber": { "value": "", "confidence": 0.0 },
+  "customerReference": { "value": "", "confidence": 0.0 },
   "shipper": { "value": "", "confidence": 0.0 },
   "consignee": { "value": "", "confidence": 0.0 },
   "notifyParty": { "value": "", "confidence": 0.0 },

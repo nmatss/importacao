@@ -22,6 +22,12 @@ REGRA CRITICA:
 - Se o documento for uma nota fiscal domestica (DANFE, CNPJ, BRL), retorne TODOS os campos com confidence: 0 e value: null.
 - Packing List internacional tem: "PACKING LIST", exportador estrangeiro, pesos em KG.
 
+REGRA CRITICA — CUBAGEM vs CAIXAS:
+- totalBoxes = NUMERO INTEIRO de caixas/cartons/volumes/packages (rótulos tipicos: "CARTON", "CARTONS", "QTY CARTONS", "BOXES", "VOLUMES", "PACKAGES", "TOTAL PACKAGES"). Exemplo: "QTY CARTONS 314" → totalBoxes=314.
+- totalCbm = VOLUME EM METROS CUBICOS, decimal (rótulos tipicos: "CBM", "M3", "M³", "CUBIC METERS", "VOLUME (CBM)", "TOTAL CBM"). Exemplo: "TOTAL CBM 21.557" → totalCbm=21.557.
+- Nunca confunda os dois. Se o mesmo texto aparecer em colunas proximas (muito comum em PDFs com layout compacto), use o rotulo para decidir.
+- totalBoxes DEVE ser inteiro. totalCbm DEVE ser decimal.
+
 Extraia os campos abaixo com confidence 0.0-1.0.
 
 Responda com JSON estrito:
@@ -55,6 +61,8 @@ REGRAS:
 - Pesos SEMPRE em quilogramas (KG). Se o doc mostra tons, converta para KG.
 - CBM em metros cubicos
 - Extraia TODOS os itens da tabela
+- itemCode: somente o codigo real do item. NAO inclua palavras que descrevem EMBALAGEM ("WHITE BOX", "BROWN BOX", "POLYBAG", "POLY BAG", "GIFT BOX", "COLOR BOX") como prefixo do codigo. Se o layout do PDF colocar a coluna de embalagem colada ao codigo, separe os valores.
+- Se todos os item codes comecarem com a MESMA letra isolada (ex.: todos comecam com "W"), isso provavelmente e ruido da coluna ao lado — retorne os codigos sem esse prefixo.
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

@@ -23,8 +23,11 @@ CONTEXTO DO NEGOCIO:
 - Marcas nos produtos: Puket, Imaginarium, Ludi (linha infantil)
 
 REGRA CRITICA DE CLASSIFICACAO:
-- Se o documento contem "CNPJ", "NOTA FISCAL", "DANFE", "CTE", "FRETE", ou moeda "BRL/R$", este NAO e uma fatura comercial internacional. Retorne TODOS os campos com confidence: 0 e value: null.
-- Fatura comercial internacional tem: "COMMERCIAL INVOICE", exportador estrangeiro, moeda USD/EUR/CNY.
+- Este prompt extrai FATURAS COMERCIAIS INTERNACIONAIS (Commercial Invoices) em USD/EUR/CNY destinadas a importadores brasileiros (Grupo Uni.co, IMB TEXTIL S.A., UniCo Participacoes Ltda).
+- TODA commercial invoice destinada ao Brasil menciona o CNPJ do importador — isso NAO e sinal de documento domestico. Nao rejeite por causa de "CNPJ".
+- Rejeite APENAS quando o documento for claramente uma nota fiscal/documento fiscal domestico brasileiro. Sinal obrigatorio para rejeitar: o documento contem um dos termos ("DANFE", "NOTA FISCAL ELETRONICA", "NF-e", "CT-e", "CTE") E a moeda principal e BRL ou "R$".
+- Se rejeitar, retorne TODOS os campos com confidence:0 e value:null.
+- Exemplo POSITIVO (deve extrair): "COMMERCIAL INVOICE ... KIOM GLOBAL LIMITED ... USD ... IM0712602NB ... UNI.CO COMERCIO S/A CNPJ: 00.399.603/0006-12".
 
 Extraia os campos abaixo. Para cada campo, inclua confidence entre 0.0 e 1.0.
 
@@ -73,6 +76,8 @@ REGRAS:
 - manufacturerName = fabrica (nao exportador/trading company)
 - unitType = unidade de medida do item: "PCS", "PAR", "SET", "KG", "DZ", "UN"
 - paymentTerms: "30% deposit, 70% balance within 30 days" → depositPercent: 30, balancePercent: 70, paymentDays: 30
+- itemCode: somente o codigo real do item. NAO inclua palavras que descrevem EMBALAGEM ("WHITE BOX", "BROWN BOX", "POLYBAG", "POLY BAG", "GIFT BOX", "COLOR BOX") como prefixo do codigo. Se o layout do PDF colocar a coluna de embalagem colada ao codigo, separe os valores.
+- Se todos os item codes comecarem com a MESMA letra isolada (ex.: todos comecam com "W"), isso provavelmente e ruido da coluna ao lado — retorne os codigos sem esse prefixo.
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

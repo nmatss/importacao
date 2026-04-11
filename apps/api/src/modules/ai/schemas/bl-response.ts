@@ -8,6 +8,7 @@ const confidenceField = <T extends z.ZodTypeAny>(valueSchema: T) =>
 
 export const blResponseSchema = z.object({
   blNumber: confidenceField(z.string()),
+  customerReference: confidenceField(z.string()),
   shipper: confidenceField(z.string()),
   consignee: confidenceField(z.string()),
   notifyParty: confidenceField(z.string()),
