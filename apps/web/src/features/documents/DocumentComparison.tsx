@@ -1,4 +1,12 @@
-import { CheckCircle, XCircle, AlertTriangle, Minus, FileText, Package } from 'lucide-react';
+import {
+  CheckCircle,
+  XCircle,
+  AlertTriangle,
+  Minus,
+  FileText,
+  Package,
+  History,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -36,16 +44,27 @@ interface UnmatchedItem {
   source: string;
 }
 
+interface DraftBlRevision {
+  field: string;
+  label: string;
+  draftValue: string | null;
+  finalValue: string | null;
+  isRevised: boolean;
+}
+
 interface ComparisonData {
   hasInvoice: boolean;
   hasPackingList: boolean;
   hasBl: boolean;
+  hasDraftBl?: boolean;
   aggregateComparison: AggregateField[];
   itemComparison: ItemComparison[];
   unmatchedPlItems: UnmatchedItem[];
+  draftBlRevisions?: DraftBlRevision[];
   invoiceConfidence: number | null;
   plConfidence: number | null;
   blConfidence: number | null;
+  draftBlConfidence?: number | null;
 }
 
 function DocBadge({
@@ -137,6 +156,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
           confidence={data.plConfidence}
         />
         <DocBadge label="Bill of Lading" available={data.hasBl} confidence={data.blConfidence} />
+        {data.hasDraftBl && (
+          <DocBadge
+            label="Draft BL"
+            available={true}
+            confidence={data.draftBlConfidence ?? null}
+          />
+        )}
       </div>
 
       {/* Summary badges */}
@@ -209,6 +235,58 @@ export function DocumentComparison({ processId }: { processId: string }) {
           </table>
         </div>
       </div>
+
+      {/* Draft BL vs Final BL revisions */}
+      {data.draftBlRevisions && data.draftBlRevisions.length > 0 && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/20 overflow-hidden">
+          <div className="bg-violet-50 px-4 py-3 border-b border-violet-200 flex items-center gap-2">
+            <History className="h-4 w-4 text-violet-600" />
+            <h4 className="text-sm font-semibold text-violet-900">
+              Revisado — Draft BL vs BL Final
+            </h4>
+            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+              {data.draftBlRevisions.length} campo(s) alterado(s)
+            </span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="bg-violet-50/50">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
+                    Campo
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Draft BL
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+                    BL Final
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.draftBlRevisions.map((rev, i) => (
+                  <tr key={i} className="border-b last:border-b-0">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                          Revisado
+                        </span>
+                        <span className="text-sm font-medium text-slate-800">{rev.label}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-sm font-mono text-slate-500 line-through">
+                      {rev.draftValue ?? '—'}
+                    </td>
+                    <td className="px-3 py-2.5 text-sm font-mono text-emerald-700 font-semibold">
+                      {rev.finalValue ?? '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Item-level comparison */}
       {data.itemComparison.length > 0 && (

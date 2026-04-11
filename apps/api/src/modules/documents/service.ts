@@ -13,6 +13,7 @@ import {
 } from '../../shared/database/schema.js';
 import { aiService, flattenAiData } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
+import { tryParseEspelhoBuffer } from '../espelho-parser/parser.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -222,6 +223,12 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
 
+    // Espelho (xlsx) — deterministic parser; no AI round-trip.
+    if (type === 'espelho') {
+      await this.processEspelho(doc);
+      return;
+    }
+
     const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
 
     // Build extraction options with optional image data for multimodal processing
@@ -380,6 +387,86 @@ export const documentService = {
         logger.error({ err: valErr, processId: doc.processId }, 'Auto-validation failed');
       }
     }
+  },
+
+  async processEspelho(doc: typeof documents.$inferSelect) {
+    const buffer = await fs.readFile(doc.storagePath);
+    const parsed = tryParseEspelhoBuffer(buffer);
+
+    if (!parsed.ok) {
+      logger.warn(
+        { documentId: doc.id, processId: doc.processId, error: parsed.error },
+        'Espelho parse failed — formato não reconhecido',
+      );
+      await db
+        .update(documents)
+        .set({
+          aiParsedData: { error: parsed.error } as Record<string, unknown>,
+          confidenceScore: '0',
+          isProcessed: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, doc.id));
+
+      const [proc] = await db
+        .select({ processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
+
+      alertService
+        .create({
+          processId: doc.processId,
+          severity: 'warning',
+          title: 'Espelho não pôde ser processado',
+          message: `O arquivo de espelho do processo ${proc?.processCode ?? doc.processId} não foi reconhecido (cabeçalho Processo/Fornecedor ausente). Revise o layout ou envie em formato compatível.`,
+          processCode: proc?.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create espelho-parse alert'));
+      return;
+    }
+
+    const { summary, items, headerRowIndex, sheetName, rawRowCount } = parsed.data;
+
+    await db
+      .update(documents)
+      .set({
+        aiParsedData: { summary, items, headerRowIndex, sheetName, rawRowCount } as Record<
+          string,
+          unknown
+        >,
+        confidenceScore: '0.99',
+        isProcessed: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, doc.id));
+
+    const [currentProcess] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, doc.processId))
+      .limit(1);
+
+    const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
+    const mergedAiData = {
+      ...existingAiData,
+      espelho: { summary, items },
+    };
+
+    await db
+      .update(importProcesses)
+      .set({ aiExtractedData: mergedAiData, updatedAt: new Date() })
+      .where(eq(importProcesses.id, doc.processId));
+
+    logger.info(
+      {
+        documentId: doc.id,
+        processId: doc.processId,
+        itemCount: items.length,
+        headerRowIndex,
+      },
+      'Espelho parsed successfully',
+    );
   },
 
   async extractText(
@@ -646,15 +733,18 @@ export const documentService = {
     const invoiceDoc = docs.find((d) => d.type === 'invoice');
     const plDoc = docs.find((d) => d.type === 'packing_list');
     const blDoc = docs.find((d) => d.type === 'ohbl');
+    const draftBlDoc = docs.find((d) => d.type === 'draft_bl');
 
     // Flatten { value, confidence } structures to plain values for comparison
     const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
     const rawPl = (plDoc?.aiParsedData as Record<string, any>) ?? null;
     const rawBl = (blDoc?.aiParsedData as Record<string, any>) ?? null;
+    const rawDraftBl = (draftBlDoc?.aiParsedData as Record<string, any>) ?? null;
 
     const inv = rawInv ? flattenAiData(rawInv) : null;
     const pl = rawPl ? flattenAiData(rawPl) : null;
     const bl = rawBl ? flattenAiData(rawBl) : null;
+    const draftBl = rawDraftBl ? flattenAiData(rawDraftBl) : null;
 
     // Build aggregate field comparison
     const aggregateFields = [
@@ -776,16 +866,109 @@ export const documentService = {
         source: 'packing_list',
       }));
 
+    // Draft BL vs Final BL ("Revisado") — only when both are present
+    const draftBlRevisions =
+      draftBl && bl
+        ? computeDraftBlRevisions(draftBl, bl)
+        : [];
+
     return {
       hasInvoice: !!inv,
       hasPackingList: !!pl,
       hasBl: !!bl,
+      hasDraftBl: !!draftBl,
       aggregateComparison,
       itemComparison,
       unmatchedPlItems,
+      draftBlRevisions,
       invoiceConfidence: invoiceDoc?.confidenceScore,
       plConfidence: plDoc?.confidenceScore,
       blConfidence: blDoc?.confidenceScore,
+      draftBlConfidence: draftBlDoc?.confidenceScore,
     };
   },
 };
+
+interface DraftBlRevision {
+  field: string;
+  label: string;
+  draftValue: string | null;
+  finalValue: string | null;
+  isRevised: boolean;
+}
+
+const DRAFT_BL_COMPARE_FIELDS: { field: string; label: string }[] = [
+  { field: 'blNumber', label: 'BL Number' },
+  { field: 'customerReference', label: 'Order / Customer Reference' },
+  { field: 'shipper', label: 'Exportador / Shipper' },
+  { field: 'consignee', label: 'Importador / Consignee' },
+  { field: 'notifyParty', label: 'Notify Party' },
+  { field: 'vesselName', label: 'Navio' },
+  { field: 'voyageNumber', label: 'Viagem' },
+  { field: 'portOfLoading', label: 'Porto Embarque' },
+  { field: 'portOfDischarge', label: 'Porto Destino' },
+  { field: 'etd', label: 'ETD' },
+  { field: 'eta', label: 'ETA' },
+  { field: 'shipmentDate', label: 'Shipment Date' },
+  { field: 'containerNumber', label: 'Container' },
+  { field: 'sealNumber', label: 'Seal' },
+  { field: 'totalBoxes', label: 'Total Caixas' },
+  { field: 'totalGrossWeight', label: 'Peso Bruto (kg)' },
+  { field: 'totalCbm', label: 'CBM (m³)' },
+  { field: 'freightValue', label: 'Frete' },
+  { field: 'freightCurrency', label: 'Moeda do Frete' },
+];
+
+function computeDraftBlRevisions(
+  draft: Record<string, any>,
+  final: Record<string, any>,
+): DraftBlRevision[] {
+  return DRAFT_BL_COMPARE_FIELDS.map(({ field, label }) => {
+    const d = draft[field];
+    const f = final[field];
+    const isRevised = !draftBlFieldMatches(d, f);
+    return {
+      field,
+      label,
+      draftValue: d != null && d !== '' ? String(d) : null,
+      finalValue: f != null && f !== '' ? String(f) : null,
+      isRevised,
+    };
+  }).filter((r) => r.isRevised && (r.draftValue != null || r.finalValue != null));
+}
+
+function draftBlFieldMatches(a: unknown, b: unknown): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  if (a === '' && b === '') return true;
+  if (a === '' || b === '') return false;
+
+  // Numeric tolerance (0.5 absolute or 0.5% relative)
+  const na = typeof a === 'number' ? a : parseFloat(String(a).replace(',', '.'));
+  const nb = typeof b === 'number' ? b : parseFloat(String(b).replace(',', '.'));
+  if (!isNaN(na) && !isNaN(nb)) {
+    const diff = Math.abs(na - nb);
+    return diff < 0.5 || diff / Math.max(Math.abs(na), Math.abs(nb), 1) < 0.005;
+  }
+
+  // Date normalization (ISO or dd/mm/yyyy or dd-mmm-yyyy)
+  const da = toIsoDate(a);
+  const db = toIsoDate(b);
+  if (da && db) return da === db;
+
+  // String normalization (lowercase + collapse whitespace + strip common punctuation)
+  const sa = String(a).toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:()]/g, '').trim();
+  const sb = String(b).toLowerCase().replace(/\s+/g, ' ').replace(/[.,;:()]/g, '').trim();
+  return sa === sb;
+}
+
+function toIsoDate(v: unknown): string | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  const s = String(v).trim();
+  const iso = /^\d{4}-\d{2}-\d{2}/.exec(s);
+  if (iso) return s.slice(0, 10);
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
+}

@@ -26,16 +26,36 @@ describe('exporter-match check', () => {
       packingListData: { exporterName: 'Different Company Ltd' },
     });
     expect(result.status).toBe('failed');
-    expect(result.message).toContain('nao confere');
+    expect(result.message).toContain('não confere');
   });
 
-  it('should warn on minor punctuation differences', () => {
+  it('should pass when only punctuation differs (suffix stripping + fuzzy match)', () => {
     const result = exporterMatch({
       invoiceData: { exporterName: 'ACME Corp.' },
       packingListData: { exporterName: 'ACME Corp' },
     });
-    expect(result.status).toBe('warning');
-    expect(result.message).toContain('pontuacao');
+    expect(result.status).toBe('passed');
+  });
+
+  it('should pass when BL shipper block embeds address/phone on extra lines', () => {
+    const result = exporterMatch({
+      invoiceData: { exporterName: 'KIOM GLOBAL LIMITED' },
+      packingListData: { exporterName: 'KIOM GLOBAL LIMITED' },
+      blData: {
+        shipper:
+          'KIOM GLOBAL LIMITED\nROOM E, 10/F, NEW HENNESSY TOWER\n263 HENNESSY ROAD, WANCHAI, HONG KONG\n+86 755 2167 3686',
+      },
+    });
+    expect(result.status).toBe('passed');
+    expect(result.documentsCompared).toContain('BL');
+  });
+
+  it('should not be "passed" when there is a typo in a company token', () => {
+    const result = exporterMatch({
+      invoiceData: { exporterName: 'KIOM GLOBAL LIMITED' },
+      packingListData: { exporterName: 'KIOM GLOBEL LIMITED' }, // typo
+    });
+    expect(['warning', 'failed']).toContain(result.status);
   });
 
   it('should warn when less than 2 documents have exporter name', () => {
