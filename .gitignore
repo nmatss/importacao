@@ -16,3 +16,10 @@ certifications.db
 deploy.log
 scripts/deploy.sh.backup
 .claude/worktrees/
+
+# Python bytecode (cert-api)
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/

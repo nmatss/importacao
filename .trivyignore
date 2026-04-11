@@ -1,0 +1,18 @@
+# .trivyignore — repository-wide Trivy suppression list.
+#
+# Each line is a single CVE or advisory ID that Trivy should skip. Every
+# entry MUST carry a short rationale so a future reader can re-audit the
+# decision. When a suppression is no longer needed (fix available and
+# applied), delete the entry.
+
+# -----------------------------------------------------------------------
+# CVE-2026-33671 — picomatch <4.0.4 (Regular Expression Denial of Service
+# via crafted extglob patterns). Reachable only from `picomatch` bundled
+# inside npm's own `node_modules/npm/node_modules/picomatch` which ships
+# with the `node:22-alpine` base image. We do NOT execute npm at runtime
+# — the container entrypoint is `node dist/index.js` — so the vulnerable
+# code path is never loaded. Our own prod deps do not depend on
+# picomatch at all (`npm ls picomatch --omit=dev` returns empty). This
+# entry should be removed once the upstream `node:22-alpine` image ships
+# with npm bundling picomatch >= 4.0.4.
+CVE-2026-33671

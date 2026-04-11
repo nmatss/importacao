@@ -1,6 +1,11 @@
 # Build stage
 FROM node:22-alpine AS builder
 
+# Refresh OS packages to pick up the latest patched libcrypto3 / libssl3 /
+# zlib — otherwise Trivy (aquasecurity/trivy-action) finds fixable HIGH
+# CVEs in the base layer and blocks the Build Docker Images CI job.
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
@@ -12,7 +17,7 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine
 
-RUN apk add --no-cache su-exec
+RUN apk upgrade --no-cache && apk add --no-cache su-exec
 
 WORKDIR /app
 

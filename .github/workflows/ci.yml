@@ -158,6 +158,7 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
       - name: Trivy scan - Web image
         uses: aquasecurity/trivy-action@master
         with:
@@ -166,6 +167,7 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
+          trivyignores: .trivyignore
       - name: SBOM - API (syft)
         uses: anchore/sbom-action@v0
         with:
