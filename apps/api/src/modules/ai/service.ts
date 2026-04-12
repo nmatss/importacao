@@ -54,11 +54,7 @@ interface ExtractionResult {
 
 // ── Model fallback chains ────────────────────────────────────────────
 // Ordered list of models to try — primary first, then fallbacks in order
-const MODEL_FALLBACK_CHAIN: string[] = [
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-  'gemini-1.5-pro',
-];
+const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
 
 // ── Prompt versions (for governance tracking) ────────────────────────
 
@@ -78,56 +74,59 @@ const PROMPT_VERSIONS: Record<string, string> = {
 /**
  * Strip a spurious single-letter prefix that sometimes bleeds in from the
  * adjacent packaging column in PDF layouts (e.g. every itemCode arrives as
- * "WABC-123" instead of "ABC-123" because the layout glued "WHITE BOX" to
- * the code column). If ≥70% of a set of ≥3 items share the same leading
- * uppercase letter followed by another uppercase/digit, we strip it.
+ * "W7765Y" instead of "7765Y" because the layout glued "WHITE BOX" to the
+ * code column).
+ *
+ * SAFETY RULES — only strip when ALL conditions hold:
+ *   1) There are ≥3 items with itemCodes.
+ *   2) ≥80% of items match the shape LETTER + DIGIT at positions 0..1.
+ *      A letter followed by a DIGIT is the shape of noise bleed; a letter
+ *      followed by a LETTER (e.g. "PI7765Y", "AC2285Y") is a legitimate
+ *      2-char vendor prefix used by Uni.co and MUST NOT be stripped. This
+ *      is the core fix for the regression found against DEMO-IM0712602NB
+ *      on 2026-04-11 where the previous heuristic (LETTER + LETTER|DIGIT
+ *      ≥70%) stripped the legitimate "P" of "PI7765Y" and broke
+ *      item-level-match.
+ *   3) All of those matching items share the SAME leading letter (if they
+ *      don't, there's no single bleed signal — don't touch anything).
+ *   4) Stripping produces a code of ≥3 chars (avoid creating 1-char junk).
+ * Only items that themselves match rule 2 are stripped; items with legit
+ * letter+letter prefixes (like AC2285Y in a mixed batch) stay untouched.
  */
 function stripSpuriousItemPrefix(items: any[]): void {
   if (!Array.isArray(items) || items.length < 3) return;
 
-  const pattern = /^[A-Z](?=[A-Z0-9])/;
-  const prefixCounts = new Map<string, number>();
-  let totalWithCode = 0;
+  // Rule 2: letter followed by a digit at position 0..1
+  const noisePattern = /^[A-Z]\d/;
 
+  const codedItems: { item: any; code: string }[] = [];
   for (const item of items) {
     const code = item?.itemCode?.value;
-    if (typeof code !== 'string' || code.length === 0) continue;
-    totalWithCode++;
-    const m = code.match(pattern);
-    if (m) {
-      const letter = code[0];
-      prefixCounts.set(letter, (prefixCounts.get(letter) || 0) + 1);
+    if (typeof code === 'string' && code.length > 0) {
+      codedItems.push({ item, code });
     }
   }
+  if (codedItems.length < 3) return;
 
-  if (totalWithCode < 3) return;
+  const matches = codedItems.filter((c) => noisePattern.test(c.code));
+  const ratio = matches.length / codedItems.length;
+  if (ratio < 0.8) return;
 
-  let topLetter: string | null = null;
-  let topCount = 0;
-  for (const [letter, count] of prefixCounts.entries()) {
-    if (count > topCount) {
-      topLetter = letter;
-      topCount = count;
-    }
-  }
+  const firstLetter = matches[0].code[0];
+  if (!matches.every((m) => m.code[0] === firstLetter)) return;
 
-  if (!topLetter) return;
-  const ratio = topCount / totalWithCode;
-  if (ratio < 0.7) return;
+  // Rule 4: post-strip length ≥3
+  if (matches.some((m) => m.code.length - 1 < 3)) return;
 
   let stripped = 0;
-  for (const item of items) {
-    const code = item?.itemCode?.value;
-    if (typeof code !== 'string' || code.length === 0) continue;
-    if (code[0] === topLetter && pattern.test(code)) {
-      item.itemCode.value = code.slice(1);
-      stripped++;
-    }
+  for (const { item, code } of matches) {
+    item.itemCode.value = code.slice(1);
+    stripped++;
   }
 
   if (stripped > 0) {
     logger.warn(
-      { prefix: topLetter, strippedCount: stripped, totalWithCode, ratio },
+      { prefix: firstLetter, strippedCount: stripped, totalWithCode: codedItems.length, ratio },
       'Stripped spurious single-letter prefix from item codes (likely packaging column bleed)',
     );
   }
@@ -230,7 +229,13 @@ class AIService {
         );
 
         const latencyMs = Date.now() - attemptStart;
-        logAIRequest({ model: currentModel, promptVersion, latencyMs, status: 'success', context: attemptContext });
+        logAIRequest({
+          model: currentModel,
+          promptVersion,
+          latencyMs,
+          status: 'success',
+          context: attemptContext,
+        });
         logger.info({ model: currentModel, context, isRetry }, 'AI model responded successfully');
 
         return content;
@@ -249,7 +254,10 @@ class AIService {
       }
     }
 
-    logger.error({ modelsAttempted: modelsToTry, context }, 'All AI models in fallback chain failed');
+    logger.error(
+      { modelsAttempted: modelsToTry, context },
+      'All AI models in fallback chain failed',
+    );
     throw lastError;
   }
 
