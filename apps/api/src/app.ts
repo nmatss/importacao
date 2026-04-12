@@ -33,8 +33,13 @@ app.use(
     credentials: true,
   }),
 );
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+// JSON body limit: 2MB is plenty for any structured request — the largest
+// shape this API accepts via JSON is a process with extracted AI data, which
+// is well under 100KB. File uploads go through multer separately at 50MB.
+// Keeping this tight reduces the DoS surface on unauth endpoints and makes
+// the PayloadTooLargeError path in error-handler actually reachable.
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // Prometheus metrics (before request logging so all requests are captured)
 app.use(metricsMiddleware);

@@ -5,8 +5,45 @@ import { AppError, ValidationError } from '../errors/index.js';
 import { logger } from '../utils/logger.js';
 import { Sentry } from '../observability/sentry.js';
 
+// body-parser attaches `.type` to its errors and (in newer versions) a
+// `.status` property. We match by `.type` because that's stable across
+// middleware versions. See https://github.com/expressjs/body-parser#errors
+interface BodyParserError extends Error {
+  type?: string;
+  status?: number;
+  length?: number;
+  limit?: number;
+}
+
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   logger.error({ err }, err.message);
+
+  // body-parser: payload too large — MUST return 413, not fall through to 500.
+  // Without this branch, unauthenticated clients can POST oversized JSON and
+  // see only a generic "Erro interno do servidor" message — which is both
+  // confusing and useful for fingerprinting the limit.
+  const bpErr = err as BodyParserError;
+  if (bpErr.type === 'entity.too.large' || bpErr.status === 413) {
+    return res.status(413).json({
+      success: false,
+      error:
+        'Corpo da requisição excede o limite máximo (2MB). Para arquivos, use o endpoint de upload de documentos.',
+    });
+  }
+  // body-parser: malformed JSON
+  if (bpErr.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+    return res.status(400).json({
+      success: false,
+      error: 'JSON inválido no corpo da requisição.',
+    });
+  }
+  // body-parser: unsupported charset or encoding
+  if (bpErr.type === 'charset.unsupported' || bpErr.type === 'encoding.unsupported') {
+    return res.status(415).json({
+      success: false,
+      error: 'Encoding ou charset não suportado.',
+    });
+  }
 
   // Multer errors (file upload issues)
   if (err instanceof multer.MulterError) {
