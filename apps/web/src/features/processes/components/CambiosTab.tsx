@@ -26,12 +26,12 @@ export function CambiosTab({ processId }: CambiosTabProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800">Cambios do Processo</h3>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Cambios do Processo</h3>
 
       {/* Totals summary */}
       {totals && (Number(totals.totalBalanceUsd) > 0 || Number(totals.totalDepositUsd) > 0) && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-xl border border-primary-100 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-950/30 p-4">
             <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo USD
             </p>
@@ -39,7 +39,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
               {formatCurrency(totals.totalBalanceUsd)}
             </p>
           </div>
-          <div className="rounded-xl border border-primary-100 bg-primary-50/50 p-4">
+          <div className="rounded-xl border border-primary-100 dark:border-primary-800 bg-primary-50/50 dark:bg-primary-950/30 p-4">
             <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo BRL
             </p>
@@ -47,7 +47,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
               {formatCurrency(totals.totalBalanceBrl, 'BRL')}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+          <div className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
               Deposito USD
             </p>
@@ -55,7 +55,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
               {formatCurrency(totals.totalDepositUsd)}
             </p>
           </div>
-          <div className="rounded-xl border border-amber-100 bg-amber-50/50 p-4">
+          <div className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
               Deposito BRL
             </p>
@@ -68,7 +68,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
 
       {exchanges.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
             <DollarSign className="h-6 w-6 text-slate-300" />
           </div>
           <p className="text-sm text-slate-400 font-medium">
@@ -76,36 +76,39 @@ export function CambiosTab({ processId }: CambiosTabProps) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200/60">
-          <table className="min-w-full divide-y divide-slate-100 text-sm">
-            <thead className="bg-slate-50/80">
+        <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+          <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+            <thead className="bg-slate-50/80 dark:bg-slate-900/80">
               <tr>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Tipo
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Valor USD
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Taxa
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Valor BRL
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Vencimento
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Validade
                 </th>
-                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                <th className="px-3 py-2 sm:px-4 sm:py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Obs.
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
               {exchanges.map((ex) => (
-                <tr key={ex.id} className="hover:bg-slate-50/50 transition-colors">
+                <tr
+                  key={ex.id}
+                  className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                >
                   <td className="px-3 py-2 sm:px-4 sm:py-3">
                     <span
                       className={cn(
@@ -116,23 +119,23 @@ export function CambiosTab({ processId }: CambiosTabProps) {
                       {typeLabel(ex.type)}
                     </span>
                   </td>
-                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-mono text-slate-700">
+                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-mono text-slate-700 dark:text-slate-300">
                     {formatCurrency(ex.amountUsd)}
                   </td>
-                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-mono text-slate-600">
+                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-mono text-slate-600 dark:text-slate-400">
                     {ex.exchangeRate ? Number(ex.exchangeRate).toFixed(4) : '\u2014'}
                   </td>
-                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-semibold text-slate-900">
+                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-right font-semibold text-slate-900 dark:text-slate-100">
                     {ex.amountBrl ? formatCurrency(ex.amountBrl, 'BRL') : '\u2014'}
                   </td>
-                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-slate-600">
+                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-slate-600 dark:text-slate-400">
                     {ex.paymentDeadline ? formatDate(ex.paymentDeadline) : '\u2014'}
                   </td>
-                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-slate-600">
+                  <td className="px-3 py-2 sm:px-4 sm:py-3 text-slate-600 dark:text-slate-400">
                     {ex.expirationDate ? formatDate(ex.expirationDate) : '\u2014'}
                   </td>
                   <td
-                    className="px-3 py-2 sm:px-4 sm:py-3 text-slate-500 max-w-[200px] truncate"
+                    className="px-3 py-2 sm:px-4 sm:py-3 text-slate-500 dark:text-slate-400 max-w-[200px] truncate"
                     title={ex.notes ?? ''}
                   >
                     {ex.notes || '\u2014'}

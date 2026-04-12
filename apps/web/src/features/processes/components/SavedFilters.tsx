@@ -111,7 +111,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
             'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
             presets.length > 0
               ? 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
-              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50',
+              : 'border-slate-200 dark:border-slate-600 bg-white text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
           )}
         >
           <Bookmark className="h-4 w-4" />
@@ -139,21 +139,25 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
 
       {/* Save form */}
       {showSaveForm && (
-        <div className="absolute top-full left-0 mt-2 z-20 w-72 rounded-xl border border-slate-200 bg-white p-4 shadow-lg">
+        <div className="absolute top-full left-0 mt-2 z-20 w-72 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 shadow-lg">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-sm font-semibold text-slate-900">Salvar Filtro</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Salvar Filtro
+            </p>
             <button type="button" onClick={() => setShowSaveForm(false)}>
               <X className="h-4 w-4 text-slate-400" />
             </button>
           </div>
           <div className="mb-3">
-            <p className="text-xs text-slate-500 mb-2">{formatFilterSummary(currentFilters)}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+              {formatFilterSummary(currentFilters)}
+            </p>
             <input
               type="text"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nome do filtro..."
-              className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none"
               onKeyDown={(e) => e.key === 'Enter' && handleSave()}
               autoFocus
             />
@@ -171,7 +175,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
 
       {/* Presets dropdown */}
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 z-20 w-80 rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden">
+        <div className="absolute top-full left-0 mt-2 z-20 w-80 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg overflow-hidden">
           {presets.length === 0 ? (
             <div className="p-6 text-center">
               <Bookmark className="h-6 w-6 text-slate-300 mx-auto mb-2" />
@@ -181,18 +185,20 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto">
+            <div className="divide-y divide-slate-100 dark:divide-slate-700 max-h-64 overflow-y-auto">
               {presets.map((preset) => (
                 <div
                   key={preset.id}
-                  className="flex items-center justify-between gap-2 p-3 hover:bg-slate-50 transition-colors"
+                  className="flex items-center justify-between gap-2 p-3 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
                 >
                   <button
                     type="button"
                     onClick={() => handleApply(preset)}
                     className="flex-1 text-left min-w-0"
                   >
-                    <p className="text-sm font-medium text-slate-900 truncate">{preset.name}</p>
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
+                      {preset.name}
+                    </p>
                     <p className="text-xs text-slate-400 truncate">
                       {formatFilterSummary(preset.filters)}
                     </p>

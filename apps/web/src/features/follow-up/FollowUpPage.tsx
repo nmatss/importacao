@@ -125,7 +125,11 @@ const brandColors: Record<string, { bg: string; text: string; dot: string }> = {
   imaginarium: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-400' },
 };
 
-const defaultBrandColor = { bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-400' };
+const defaultBrandColor = {
+  bg: 'bg-slate-100 dark:bg-slate-700',
+  text: 'text-slate-700 dark:text-slate-300',
+  dot: 'bg-slate-400',
+};
 
 function formatStageDate(date: string | null): string {
   if (!date) return '-';
@@ -205,15 +209,17 @@ export function FollowUpPage() {
             <LayoutGrid className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Follow-Up</h2>
-            <p className="text-sm text-slate-500">
+            <h2 className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+              Follow-Up
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               {totalProcesses} processo{totalProcesses !== 1 ? 's' : ''} em andamento
             </p>
           </div>
         </div>
         <button
           onClick={() => setShowDeadlines(!showDeadlines)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition-all hover:bg-slate-50 hover:shadow lg:hidden"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:shadow lg:hidden"
         >
           <Calendar className="h-4 w-4 text-slate-400" />
           Prazos LI
@@ -221,14 +227,14 @@ export function FollowUpPage() {
       </div>
 
       {/* Status Legend & Date Filter */}
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-sm flex-wrap">
+      <div className="flex flex-wrap items-center gap-4 rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 px-3 sm:px-5 py-3.5 shadow-sm">
         <DateRangeFilter
           startDate={startDate}
           endDate={endDate}
           onStartDateChange={setStartDate}
           onEndDateChange={setEndDate}
         />
-        <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+        <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
         {Object.entries(statusConfig).map(([key, config]) => {
           const count =
             key === 'overdue'
@@ -239,7 +245,7 @@ export function FollowUpPage() {
           return (
             <div key={key} className="flex items-center gap-2 text-sm">
               <span className={`inline-block h-2.5 w-2.5 rounded-full ${config.accent}`} />
-              <span className="text-slate-600">{config.label}</span>
+              <span className="text-slate-600 dark:text-slate-400">{config.label}</span>
               <span
                 className={`ml-0.5 rounded-full px-1.5 py-0.5 text-xs font-semibold ${config.bg} ${config.text}`}
               >
@@ -251,9 +257,9 @@ export function FollowUpPage() {
       </div>
 
       {/* Main Content */}
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {/* Kanban Board */}
-        <div className="flex-1 overflow-x-auto">
+        <div className="flex-1 min-w-0 overflow-x-auto">
           <div className="flex gap-4" style={{ minWidth: `${STAGES.length * 240}px` }}>
             {STAGES.map((stage) => {
               const processes = getProcessesForStage(stage.key);
@@ -262,17 +268,19 @@ export function FollowUpPage() {
                   {/* Column Header */}
                   <div className="mb-3 flex items-center gap-2.5">
                     <div className={`h-2 w-2 rounded-full ${stage.color}`} />
-                    <h3 className="text-sm font-semibold text-slate-700">{stage.label}</h3>
-                    <span className="ml-auto rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                    <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      {stage.label}
+                    </h3>
+                    <span className="ml-auto rounded-full bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs font-bold text-slate-500 dark:text-slate-400">
                       {processes.length}
                     </span>
                   </div>
 
                   {/* Column Body */}
-                  <div className="space-y-2.5 rounded-2xl border border-slate-200/60 bg-slate-50/50 p-2.5 min-h-[220px]">
+                  <div className="space-y-2.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 p-2.5 min-h-[220px]">
                     {processes.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center">
-                        <div className="mb-2 h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+                        <div className="mb-2 h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                           <ClipboardList className="h-4 w-4 text-slate-300" />
                         </div>
                         <p className="text-xs text-slate-400">Nenhum processo</p>
@@ -286,7 +294,7 @@ export function FollowUpPage() {
                         return (
                           <div
                             key={proc.id}
-                            className={`rounded-xl border bg-white shadow-sm transition-all hover:shadow-md ${status.border}`}
+                            className={`rounded-xl border bg-white dark:bg-slate-800 shadow-sm transition-all hover:shadow-md ${status.border}`}
                           >
                             {/* Status accent bar */}
                             <div className={`h-1 rounded-t-xl ${status.accent}`} />
@@ -296,7 +304,7 @@ export function FollowUpPage() {
                               className="w-full px-3.5 pt-2.5 pb-2 text-left"
                             >
                               <div className="flex items-center justify-between">
-                                <span className="text-sm font-semibold text-slate-900">
+                                <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                   {proc.processCode}
                                 </span>
                                 <span
@@ -332,7 +340,7 @@ export function FollowUpPage() {
                                 e.stopPropagation();
                                 setExpandedProcessId(isExpanded ? null : proc.id);
                               }}
-                              className="flex w-full items-center justify-center border-t border-slate-100 py-1.5 text-xs text-slate-300 hover:text-slate-500 transition-colors"
+                              className="flex w-full items-center justify-center border-t border-slate-100 dark:border-slate-700 py-1.5 text-xs text-slate-300 hover:text-slate-500 dark:text-slate-400 transition-colors"
                             >
                               <ChevronDown
                                 className={`h-3.5 w-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -341,7 +349,7 @@ export function FollowUpPage() {
 
                             {/* Expanded timeline */}
                             {isExpanded && (
-                              <div className="border-t border-slate-100 px-3.5 pb-3 pt-2 space-y-1">
+                              <div className="border-t border-slate-100 dark:border-slate-700 px-3.5 pb-3 pt-2 space-y-1">
                                 {STAGE_DATE_LABELS.map((s) => {
                                   const val = proc[s.key] as string | null;
                                   return (
@@ -352,7 +360,9 @@ export function FollowUpPage() {
                                       <span className="text-slate-400">{s.label}</span>
                                       <span
                                         className={
-                                          val ? 'font-medium text-slate-700' : 'text-slate-300'
+                                          val
+                                            ? 'font-medium text-slate-700 dark:text-slate-300'
+                                            : 'text-slate-300'
                                         }
                                       >
                                         {formatStageDate(val)}
@@ -374,15 +384,17 @@ export function FollowUpPage() {
         </div>
 
         {/* LI Deadlines Sidebar */}
-        <div className={`w-80 shrink-0 ${showDeadlines ? 'block' : 'hidden'} lg:block`}>
-          <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-            <div className="border-b border-slate-100 px-5 py-4">
+        <div className={`w-full lg:w-80 shrink-0 ${showDeadlines ? 'block' : 'hidden'} lg:block`}>
+          <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm">
+            <div className="border-b border-slate-100 dark:border-slate-700 px-5 py-4">
               <div className="flex items-center gap-2.5">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
                   <AlertTriangle className="h-4 w-4 text-white" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Prazos LI</h3>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                    Prazos LI
+                  </h3>
                   <p className="text-xs text-slate-400">
                     {liDeadlines?.length ?? 0} prazo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}{' '}
                     ativo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}
@@ -395,13 +407,13 @@ export function FollowUpPage() {
                 <LoadingSpinner className="py-8" size="sm" />
               ) : !liDeadlines?.length ? (
                 <div className="flex flex-col items-center gap-3 py-10 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-900">
                     <CheckCircle className="h-6 w-6 text-slate-300" />
                   </div>
                   <p className="text-sm text-slate-400">Nenhum prazo de LI ativo</p>
                 </div>
               ) : (
-                <ul className="divide-y divide-slate-100">
+                <ul className="divide-y divide-slate-100 dark:divide-slate-700">
                   {liDeadlines.map((item) => {
                     const isUrgent = item.daysRemaining <= 3;
                     const isWarning = item.daysRemaining <= 7 && item.daysRemaining > 3;
@@ -420,11 +432,11 @@ export function FollowUpPage() {
                     return (
                       <li
                         key={item.processId}
-                        className="px-5 py-3.5 transition-colors hover:bg-slate-50/50"
+                        className="px-5 py-3.5 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
                       >
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm font-semibold text-slate-900">
+                            <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                               {item.processCode}
                             </p>
                             <div className="mt-1 flex items-center gap-1.5">

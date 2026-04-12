@@ -144,7 +144,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
               'rounded-full px-3 py-1 text-xs font-medium transition-all',
               docType === ft.value
                 ? 'bg-primary-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
             )}
           >
             {ft.label}
@@ -169,7 +169,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           dragOver && 'border-primary-400 bg-primary-50 scale-[1.01]',
           state === 'idle' &&
             !dragOver &&
-            'border-slate-200 hover:border-primary-300 hover:bg-slate-50',
+            'border-slate-200 dark:border-slate-600 hover:border-primary-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
           state === 'uploading' && 'border-primary-300 bg-primary-50/50 cursor-wait',
           state === 'success' && 'border-emerald-300 bg-emerald-50',
           state === 'error' && 'border-danger-300 bg-danger-50',
@@ -188,7 +188,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           <div
             className={cn(
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-lg',
-              state === 'idle' && 'bg-slate-100',
+              state === 'idle' && 'bg-slate-100 dark:bg-slate-700',
               state === 'uploading' && 'bg-primary-100',
               state === 'success' && 'bg-emerald-100',
               state === 'error' && 'bg-danger-100',
@@ -204,7 +204,9 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           <div className="min-w-0 flex-1">
             {state === 'idle' && (
               <>
-                <p className="text-sm font-medium text-slate-700">Arraste ou clique para enviar</p>
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  Arraste ou clique para enviar
+                </p>
                 <p className="text-xs text-slate-400">
                   PDF, Excel, Word, Imagens, CSV, HTML, EML — máx. 50MB
                 </p>
@@ -215,7 +217,9 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
               <>
                 <div className="flex items-center gap-2">
                   <FileText className="h-3.5 w-3.5 text-primary-500" />
-                  <p className="truncate text-sm font-medium text-slate-700">{selectedFile.name}</p>
+                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">
+                    {selectedFile.name}
+                  </p>
                   <span className="text-xs text-slate-400">
                     {formatFileSize(selectedFile.size)}
                   </span>
@@ -250,7 +254,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           </div>
 
           {/* Selected type badge */}
-          <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-500">
+          <span className="shrink-0 rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
             {FILE_TYPES.find((ft) => ft.value === docType)?.label}
           </span>
         </div>

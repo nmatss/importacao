@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ══════════════════════════════════════════════════════════════
    ENTERPRISE DESIGN SYSTEM v2 — Uni.co
    Premium polish · Refined typography · Micro-interactions
@@ -116,9 +118,20 @@ body {
   line-height: 1.6;
 }
 
+.dark body,
+body:where(.dark *) {
+  color: #e2e8f0;
+  background: #0f172a;
+}
+
 ::selection {
   background: #c7d2fe;
   color: #312e81;
+}
+
+.dark ::selection {
+  background: #4338ca;
+  color: #e0e7ff;
 }
 
 /* ══════════════════════════════════════
@@ -144,10 +157,31 @@ body {
   background: #9ca3af;
 }
 
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
 /* Firefox */
 * {
   scrollbar-width: thin;
   scrollbar-color: #d1d5db transparent;
+}
+
+.dark * {
+  scrollbar-color: #334155 transparent;
+}
+
+/* Hide scrollbar while keeping scroll functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 /* ══════════════════════════════════════
@@ -250,6 +284,11 @@ body {
   animation: shimmer 1.8s ease-in-out infinite;
 }
 
+.dark .animate-shimmer {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
+}
+
 /* Staggered children animation */
 .stagger-children > * {
   animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -289,6 +328,10 @@ body {
   -webkit-backdrop-filter: blur(24px) saturate(180%);
 }
 
+.dark .glass {
+  background: rgba(15, 23, 42, 0.75);
+}
+
 .glass-dark {
   background: rgba(15, 23, 42, 0.92);
   backdrop-filter: blur(24px) saturate(180%);
@@ -309,6 +352,12 @@ body {
   border-radius: inherit;
 }
 
+.dark .focus-ring:focus-visible {
+  box-shadow:
+    0 0 0 2px #0f172a,
+    0 0 0 4px #818cf8;
+}
+
 /* ══════════════════════════════════════
    CARDS — Layered shadows for depth
    ══════════════════════════════════════ */
@@ -327,6 +376,15 @@ body {
     transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.dark .card {
+  background: #1e293b;
+  border-color: rgba(51, 65, 85, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.1),
+    0 1px 2px 0 rgba(0, 0, 0, 0.15),
+    0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
 .card:hover {
   border-color: rgba(199, 210, 254, 0.5);
   box-shadow:
@@ -334,6 +392,14 @@ body {
     0 2px 4px 0 rgba(0, 0, 0, 0.04),
     0 8px 16px -4px rgba(0, 0, 0, 0.06);
   transform: translateY(-1px);
+}
+
+.dark .card:hover {
+  border-color: rgba(99, 102, 241, 0.3);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.1),
+    0 2px 4px 0 rgba(0, 0, 0, 0.2),
+    0 8px 16px -4px rgba(0, 0, 0, 0.3);
 }
 
 /* ══════════════════════════════════════
@@ -355,12 +421,22 @@ thead th {
   border-bottom: 1px solid #e2e8f0;
 }
 
+.dark thead th {
+  color: #94a3b8;
+  background: #1e293b;
+  border-bottom-color: #334155;
+}
+
 tbody tr {
   transition: background-color 0.15s ease;
 }
 
 tbody tr:hover {
   background-color: rgba(248, 250, 252, 0.8);
+}
+
+.dark tbody tr:hover {
+  background-color: rgba(30, 41, 59, 0.8);
 }
 
 /* Zebra striping */
@@ -370,6 +446,14 @@ tbody tr:nth-child(even) {
 
 tbody tr:nth-child(even):hover {
   background-color: rgba(248, 250, 252, 0.9);
+}
+
+.dark tbody tr:nth-child(even) {
+  background-color: rgba(30, 41, 59, 0.4);
+}
+
+.dark tbody tr:nth-child(even):hover {
+  background-color: rgba(30, 41, 59, 0.9);
 }
 
 /* ══════════════════════════════════════
@@ -396,6 +480,32 @@ select:focus,
 textarea:focus {
   border-color: #818cf8;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.dark input[type='text'],
+.dark input[type='email'],
+.dark input[type='password'],
+.dark input[type='number'],
+.dark input[type='date'],
+.dark input[type='search'],
+.dark input[type='url'],
+.dark select,
+.dark textarea {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #475569;
+}
+
+.dark input:focus,
+.dark select:focus,
+.dark textarea:focus {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 /* ══════════════════════════════════════
@@ -434,6 +544,11 @@ button:active:not(:disabled) {
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
   border-radius: 8px;
+}
+
+.dark .skeleton {
+  background: linear-gradient(90deg, #1e293b 25%, #334155 50%, #1e293b 75%);
+  background-size: 200% 100%;
 }
 
 /* ══════════════════════════════════════
@@ -511,4 +626,8 @@ main {
 /* Subtle gradient background for page */
 .bg-page {
   background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.dark .bg-page {
+  background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
 }

@@ -5,6 +5,15 @@
     <link rel="icon" type="image/png" href="/logo-unico.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Importação - Sistema de Gestão</title>
+    <script>
+      // Prevent FOUC: apply dark class before first paint
+      (function() {
+        var t = localStorage.getItem('theme');
+        if (t === 'dark' || (!t || t === 'system') && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

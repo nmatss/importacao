@@ -173,7 +173,10 @@ function getStageSubInfo(
       else if (channel === 'vermelho')
         badge = { label: 'Vermelho', color: 'bg-danger-100 text-danger-700' };
       else if (channel)
-        badge = { label: props.customsChannel!, color: 'bg-slate-100 text-slate-600' };
+        badge = {
+          label: props.customsChannel!,
+          color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
+        };
       return parts.length > 0 || badge ? { text: parts.join(''), badge } : null;
     }
     case 5: {
@@ -237,11 +240,14 @@ function StatusDropdown({
   return (
     <div
       ref={dropdownRef}
-      className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-slate-200 bg-white shadow-lg py-1 max-h-72 overflow-y-auto"
+      className="absolute top-full right-0 z-50 mt-1 w-56 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 shadow-lg py-1 max-h-72 overflow-y-auto"
     >
       <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
         <span>Alterar Status</span>
-        <button onClick={onClose} className="p-0.5 hover:bg-slate-100 rounded">
+        <button
+          onClick={onClose}
+          className="p-0.5 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 rounded"
+        >
           <X className="h-3 w-3" />
         </button>
       </div>
@@ -251,7 +257,7 @@ function StatusDropdown({
           onClick={() => handleSelect(stage.key)}
           disabled={saving}
           className={cn(
-            'w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 transition-colors flex items-center gap-2',
+            'w-full text-left px-3 py-1.5 text-xs hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors flex items-center gap-2',
             stage.key === currentStepKey && 'bg-primary-50 text-primary-700 font-semibold',
             saving && 'opacity-50 cursor-wait',
           )}
@@ -303,7 +309,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
   const currentStepKey = LOGISTIC_STAGES[currentStep].key;
 
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+    <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
       <div className="px-4 pt-2.5 pb-0 flex items-center justify-between">
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
           Ciclo de Transporte
@@ -311,7 +317,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
         <div className="relative">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
           >
             <Pencil className="h-3 w-3" />
             editar
@@ -345,7 +351,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                       'flex h-9 w-9 items-center justify-center rounded-full transition-all',
                       isCompleted && 'bg-emerald-100 text-emerald-600 ring-2 ring-emerald-200',
                       isActive && 'bg-primary-600 text-white ring-2 ring-primary-300 shadow-sm',
-                      isFuture && 'bg-slate-100 text-slate-400',
+                      isFuture && 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                     )}
                   >
                     {isCompleted ? (
@@ -386,7 +392,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                   <div
                     className={cn(
                       'h-0.5 flex-1 mx-1 rounded-full min-w-2',
-                      idx < currentStep ? 'bg-emerald-300' : 'bg-slate-200',
+                      idx < currentStep ? 'bg-emerald-300' : 'bg-slate-200 dark:bg-slate-700',
                     )}
                   />
                 )}
@@ -401,9 +407,9 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
         <button
           onClick={() => setMobileIndex((prev) => Math.max(0, prev - 1))}
           disabled={mobileIndex === 0}
-          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
         >
-          <ChevronLeft className="h-5 w-5 text-slate-500" />
+          <ChevronLeft className="h-5 w-5 text-slate-500 dark:text-slate-400" />
         </button>
 
         <div className="flex flex-col items-center gap-1 flex-1">
@@ -416,7 +422,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                   'h-1.5 w-1.5 rounded-full transition-colors',
                   idx < currentStep && 'bg-emerald-400',
                   idx === currentStep && 'bg-primary-500',
-                  idx > currentStep && 'bg-slate-200',
+                  idx > currentStep && 'bg-slate-200 dark:bg-slate-700',
                   idx === mobileIndex && 'ring-2 ring-offset-1 ring-primary-300',
                 )}
               />
@@ -437,7 +443,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                     'flex h-10 w-10 items-center justify-center rounded-full',
                     isCompleted && 'bg-emerald-100 text-emerald-600',
                     isActive && 'bg-primary-600 text-white shadow-sm',
-                    !isCompleted && !isActive && 'bg-slate-100 text-slate-400',
+                    !isCompleted && !isActive && 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                   )}
                 >
                   {isCompleted ? (
@@ -461,7 +467,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
                   {stage.label}
                 </span>
                 {subInfo && (
-                  <div className="text-[10px] text-slate-500">
+                  <div className="text-[10px] text-slate-500 dark:text-slate-400">
                     <SubInfoDisplay info={subInfo} />
                   </div>
                 )}
@@ -473,9 +479,9 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
         <button
           onClick={() => setMobileIndex((prev) => Math.min(LOGISTIC_STAGES.length - 1, prev + 1))}
           disabled={mobileIndex === LOGISTIC_STAGES.length - 1}
-          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
         >
-          <ChevronRight className="h-5 w-5 text-slate-500" />
+          <ChevronRight className="h-5 w-5 text-slate-500 dark:text-slate-400" />
         </button>
       </div>
     </div>

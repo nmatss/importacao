@@ -103,12 +103,16 @@ const PIPELINE_COLORS: Record<string, string> = {
 // ── Skeletons ────────────────────────────────────────────────────────────
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200/60 rounded-lg animate-pulse', className)} />;
+  return (
+    <div
+      className={cn('bg-slate-200/60 dark:bg-slate-700/60 rounded-lg animate-pulse', className)}
+    />
+  );
 }
 
 function KpiSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="space-y-3 flex-1">
           <Skeleton className="h-4 w-24" />
@@ -122,7 +126,7 @@ function KpiSkeleton() {
 
 function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
       <Skeleton className="h-5 w-40 mb-6" />
       <Skeleton className={cn(height, 'w-full rounded-xl')} />
     </div>
@@ -206,7 +210,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.totalProcesses ?? 0,
       icon: FileBox,
       gradient: 'from-slate-600 to-slate-800',
-      valueColor: 'text-slate-800',
+      valueColor: 'text-slate-800 dark:text-slate-100',
       borderColor: 'border-l-slate-600',
     },
     {
@@ -287,12 +291,12 @@ export function ExecutiveDashboardPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
             Dashboard Executivo
           </h2>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Visao consolidada dos indicadores de importacao
           </p>
         </div>
@@ -308,7 +312,7 @@ export function ExecutiveDashboardPage() {
             <div
               key={card.label}
               className={cn(
-                'group rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm',
+                'group rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm',
                 'hover:shadow-md hover:border-slate-300/80 transition-all duration-300',
                 'border-l-4',
                 card.borderColor,
@@ -316,10 +320,12 @@ export function ExecutiveDashboardPage() {
             >
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs font-medium text-slate-500">{card.label}</p>
+                  <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                    {card.label}
+                  </p>
                   <p
                     className={cn(
-                      'mt-2 text-2xl font-bold tabular-nums tracking-tight',
+                      'mt-2 text-lg sm:text-2xl font-bold tabular-nums tracking-tight',
                       isZero ? 'text-slate-300' : card.valueColor,
                     )}
                   >
@@ -351,21 +357,28 @@ export function ExecutiveDashboardPage() {
       </div>
 
       {/* Processing Pipeline */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-sm">
             <BarChart3 className="h-4.5 w-4.5" />
           </div>
-          <h3 className="text-sm font-semibold text-slate-800">Pipeline de Processos</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Pipeline de Processos
+          </h3>
         </div>
         {pipelineData.length > 0 ? (
-          <div className="flex items-end gap-2 overflow-x-auto pb-2">
+          <div className="flex items-end gap-1.5 sm:gap-2 overflow-x-auto pb-2">
             {pipelineData.map((stage, index) => {
               const maxCount = Math.max(...pipelineData.map((s) => s.count), 1);
               const heightPercent = Math.max((stage.count / maxCount) * 100, 8);
               return (
-                <div key={index} className="flex flex-col items-center flex-1 min-w-[80px]">
-                  <span className="text-lg font-bold text-slate-800 mb-1">{stage.count}</span>
+                <div
+                  key={index}
+                  className="flex flex-col items-center flex-1 min-w-[60px] sm:min-w-[80px]"
+                >
+                  <span className="text-sm sm:text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">
+                    {stage.count}
+                  </span>
                   <div
                     className="w-full rounded-t-xl transition-all duration-500"
                     style={{
@@ -387,7 +400,7 @@ export function ExecutiveDashboardPage() {
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
               <BarChart3 className="h-5 w-5 text-slate-300" />
             </div>
             <p className="text-sm text-slate-400">Nenhum processo ativo no pipeline</p>
@@ -398,14 +411,16 @@ export function ExecutiveDashboardPage() {
       {/* Charts Row: Monthly Trend + FOB by Brand */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Monthly Trend - Area Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm">
               <TrendingUp className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-800">Tendencia Mensal</h3>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Tendencia Mensal
+            </h3>
           </div>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             {byMonth && byMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={byMonth} margin={{ bottom: 20 }}>
@@ -477,7 +492,7 @@ export function ExecutiveDashboardPage() {
               </ResponsiveContainer>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <TrendingUp className="h-5 w-5 text-slate-300" />
                 </div>
                 <p className="text-sm text-slate-400">Sem dados mensais disponiveis</p>
@@ -487,14 +502,16 @@ export function ExecutiveDashboardPage() {
         </div>
 
         {/* FOB by Brand - Donut */}
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-sm">
               <DollarSign className="h-4.5 w-4.5" />
             </div>
-            <h3 className="text-sm font-semibold text-slate-800">FOB por Marca</h3>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              FOB por Marca
+            </h3>
           </div>
-          <div className="h-72">
+          <div className="h-56 sm:h-72">
             {fobByBrand && fobByBrand.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -530,7 +547,7 @@ export function ExecutiveDashboardPage() {
               </ResponsiveContainer>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <DollarSign className="h-5 w-5 text-slate-300" />
                 </div>
                 <p className="text-sm text-slate-400">Sem dados de FOB por marca</p>
@@ -541,14 +558,16 @@ export function ExecutiveDashboardPage() {
       </div>
 
       {/* Average processing time per stage */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
         <div className="flex items-center gap-3 mb-6">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 text-white shadow-sm">
             <Clock className="h-4.5 w-4.5" />
           </div>
-          <h3 className="text-sm font-semibold text-slate-800">Tempo Medio por Etapa (dias)</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Tempo Medio por Etapa (dias)
+          </h3>
         </div>
-        <div className="h-72">
+        <div className="h-56 sm:h-72">
           {loadingTimeline ? (
             <Skeleton className="h-full w-full rounded-xl" />
           ) : timelineBarData.length > 0 ? (
@@ -596,7 +615,7 @@ export function ExecutiveDashboardPage() {
             </ResponsiveContainer>
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 mb-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                 <Clock className="h-5 w-5 text-slate-300" />
               </div>
               <p className="text-sm text-slate-400">Sem dados de tempo por etapa</p>

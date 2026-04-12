@@ -67,14 +67,18 @@ const roleBadge: Record<string, { bg: string; text: string }> = {
   admin: { bg: 'bg-danger-50', text: 'text-danger-700' },
   manager: { bg: 'bg-primary-50', text: 'text-primary-700' },
   operator: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  viewer: { bg: 'bg-slate-100', text: 'text-slate-600' },
+  viewer: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400' },
 };
 
-const defaultRoleBadge = { bg: 'bg-slate-100', text: 'text-slate-600' };
+const defaultRoleBadge = {
+  bg: 'bg-slate-100 dark:bg-slate-700',
+  text: 'text-slate-600 dark:text-slate-400',
+};
 
 const inputClasses =
-  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 placeholder:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
-const labelClasses = 'block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wider';
+  'w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
+const labelClasses =
+  'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider';
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -92,8 +96,8 @@ export function SettingsPage() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger-50 mb-5">
           <ShieldAlert className="h-8 w-8 text-danger-400" />
         </div>
-        <h2 className="text-xl font-bold text-slate-900">Acesso negado</h2>
-        <p className="mt-2 text-sm text-slate-500 max-w-sm">
+        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Acesso negado</h2>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-sm">
           Somente administradores podem acessar as configuracoes do sistema.
         </p>
       </div>
@@ -104,12 +108,16 @@ export function SettingsPage() {
     <div className="space-y-6 animate-fade-in">
       {/* Page header */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Configuracoes</h2>
-        <p className="mt-1 text-sm text-slate-500">Gerencie preferencias, usuarios e integracoes</p>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+          Configuracoes
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Gerencie preferencias, usuarios e integracoes
+        </p>
       </div>
 
       {/* Pill tabs */}
-      <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-100/80 p-1">
+      <div className="inline-flex items-center gap-1 rounded-2xl bg-slate-100/80 dark:bg-slate-800/80 p-1 overflow-x-auto max-w-full">
         {visibleTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = effectiveTab === tab.key;
@@ -118,10 +126,10 @@ export function SettingsPage() {
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
               className={cn(
-                'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-all duration-200',
+                'flex shrink-0 items-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-sm font-medium transition-all duration-200',
                 isActive
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700',
+                  ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200',
               )}
             >
               <Icon className="h-4 w-4" />
@@ -153,22 +161,22 @@ function SectionCard({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 px-6 py-4">
-        <div className="flex items-center justify-between">
+    <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100">
-              <Icon className="h-4.5 w-4.5 text-slate-600" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
+              <Icon className="h-4.5 w-4.5 text-slate-600 dark:text-slate-400" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
               {description && <p className="text-xs text-slate-400 mt-0.5">{description}</p>}
             </div>
           </div>
           {actions}
         </div>
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-4 sm:p-6">{children}</div>
     </div>
   );
 }
@@ -443,9 +451,11 @@ function UsersTab() {
     <div className="space-y-5">
       {/* Action bar */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-500">
-          <span className="font-semibold text-slate-700">{users?.length ?? 0}</span> usuarios
-          cadastrados
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          <span className="font-semibold text-slate-700 dark:text-slate-300">
+            {users?.length ?? 0}
+          </span>{' '}
+          usuarios cadastrados
         </p>
         <button
           onClick={openCreate}
@@ -457,114 +467,119 @@ function UsersTab() {
       </div>
 
       {/* Users table */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden overflow-x-auto">
-        <table className="min-w-full">
-          <thead>
-            <tr className="border-b border-slate-100 bg-slate-50/80">
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Usuario
-              </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Perfil
-              </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Status
-              </th>
-              <th className="px-6 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                Acoes
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {users?.map((user, idx) => {
-              const badge = roleBadge[user.role] ?? defaultRoleBadge;
-              return (
-                <tr
-                  key={user.id}
-                  className={cn(
-                    'group transition-colors duration-150 hover:bg-slate-50/80',
-                    idx !== (users?.length ?? 0) - 1 && 'border-b border-slate-100/80',
-                  )}
-                >
-                  <td className="whitespace-nowrap px-6 py-3.5">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
-                          user.active
-                            ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white'
-                            : 'bg-slate-100 text-slate-400',
-                        )}
-                      >
-                        {user.name
-                          .split(' ')
-                          .map((w) => w[0])
-                          .slice(0, 2)
-                          .join('')
-                          .toUpperCase()}
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-[600px] w-full">
+            <thead>
+              <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80">
+                <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Usuario
+                </th>
+                <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Email
+                </th>
+                <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Perfil
+                </th>
+                <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Status
+                </th>
+                <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Acoes
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users?.map((user, idx) => {
+                const badge = roleBadge[user.role] ?? defaultRoleBadge;
+                return (
+                  <tr
+                    key={user.id}
+                    className={cn(
+                      'group transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80',
+                      idx !== (users?.length ?? 0) - 1 &&
+                        'border-b border-slate-100 dark:border-slate-700/80',
+                    )}
+                  >
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={cn(
+                            'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
+                            user.active
+                              ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white'
+                              : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
+                          )}
+                        >
+                          {user.name
+                            .split(' ')
+                            .map((w) => w[0])
+                            .slice(0, 2)
+                            .join('')
+                            .toUpperCase()}
+                        </div>
+                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                          {user.name}
+                        </span>
                       </div>
-                      <span className="text-sm font-semibold text-slate-800">{user.name}</span>
-                    </div>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-3.5 text-sm text-slate-500">
-                    {user.email}
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-3.5">
-                    <span
-                      className={cn(
-                        'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold',
-                        badge.bg,
-                        badge.text,
-                      )}
-                    >
-                      {user.role}
-                    </span>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-3.5">
-                    <button
-                      onClick={() => toggleActive(user)}
-                      aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
-                      className={cn(
-                        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
-                        user.active ? 'bg-primary-600' : 'bg-slate-200',
-                      )}
-                    >
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-500 dark:text-slate-400">
+                      {user.email}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                       <span
                         className={cn(
-                          'inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform duration-200',
-                          user.active ? 'translate-x-5' : 'translate-x-0',
+                          'inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold',
+                          badge.bg,
+                          badge.text,
                         )}
-                      />
-                    </button>
-                  </td>
-                  <td className="whitespace-nowrap px-6 py-3.5">
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => openEdit(user)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
-                        title="Editar"
-                        aria-label={`Editar usuario ${user.name}`}
                       >
-                        <Pencil className="h-4 w-4" />
-                      </button>
+                        {user.role}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                       <button
-                        onClick={() => setDeactivateId(user.id)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
-                        title="Desativar"
-                        aria-label={`Desativar usuario ${user.name}`}
+                        onClick={() => toggleActive(user)}
+                        aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
+                        className={cn(
+                          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
+                          user.active ? 'bg-primary-600' : 'bg-slate-200',
+                        )}
                       >
-                        <UserX className="h-4 w-4" />
+                        <span
+                          className={cn(
+                            'inline-block h-5 w-5 rounded-full bg-white dark:bg-slate-800 shadow-sm transition-transform duration-200',
+                            user.active ? 'translate-x-5' : 'translate-x-0',
+                          )}
+                        />
                       </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => openEdit(user)}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
+                          title="Editar"
+                          aria-label={`Editar usuario ${user.name}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeactivateId(user.id)}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
+                          title="Desativar"
+                          aria-label={`Desativar usuario ${user.name}`}
+                        >
+                          <UserX className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* User modal */}
@@ -575,9 +590,12 @@ function UsersTab() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="user-modal-title"
-            className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+            className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
           >
-            <h2 id="user-modal-title" className="text-lg font-bold text-slate-900 mb-5">
+            <h2
+              id="user-modal-title"
+              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+            >
               {editUser ? 'Editar Usuario' : 'Novo Usuario'}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
@@ -636,11 +654,11 @@ function UsersTab() {
                   <option value="viewer">Viewer</option>
                 </select>
               </div>
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
+                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
                 >
                   Cancelar
                 </button>
@@ -848,7 +866,7 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
     <button
       onClick={onClick}
       disabled={testing}
-      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
+      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
     >
       {testing ? (
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -957,7 +975,7 @@ function SignaturesTab() {
       >
         {!signatures || signatures.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
               <FileSignature className="h-6 w-6 text-slate-300" />
             </div>
             <p className="text-sm text-slate-400 font-medium">Nenhuma assinatura cadastrada.</p>
@@ -978,12 +996,14 @@ function SignaturesTab() {
                   'rounded-xl border p-4 transition-colors',
                   sig.isDefault
                     ? 'border-primary-200 bg-primary-50/50'
-                    : 'border-slate-200 bg-white',
+                    : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800',
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-slate-800">{sig.name}</span>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {sig.name}
+                    </span>
                     {sig.isDefault && (
                       <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">
                         <Star className="h-3 w-3" />
@@ -1004,7 +1024,7 @@ function SignaturesTab() {
                     )}
                     <button
                       onClick={() => setPreviewId(previewId === sig.id ? null : sig.id)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-all duration-200"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 transition-all duration-200"
                       title="Visualizar"
                       aria-label={`Visualizar assinatura ${sig.name}`}
                     >
@@ -1030,7 +1050,7 @@ function SignaturesTab() {
                 </div>
                 {previewId === sig.id && (
                   <div
-                    className="mt-3 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700 prose prose-sm max-w-none"
+                    className="mt-3 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-4 text-sm text-slate-700 dark:text-slate-300 prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(sig.signatureHtml) }}
                   />
                 )}
@@ -1048,9 +1068,12 @@ function SignaturesTab() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="signature-modal-title"
-            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
           >
-            <h2 id="signature-modal-title" className="text-lg font-bold text-slate-900 mb-5">
+            <h2
+              id="signature-modal-title"
+              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+            >
               {editSig ? 'Editar Assinatura' : 'Nova Assinatura'}
             </h2>
             <form onSubmit={handleSave} className="space-y-4">
@@ -1086,7 +1109,7 @@ function SignaturesTab() {
                 <div>
                   <label className={labelClasses}>Pre-visualizacao</label>
                   <div
-                    className="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 prose prose-sm max-w-none"
+                    className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 p-4 text-sm text-slate-700 dark:text-slate-300 prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.signatureHtml) }}
                   />
                 </div>
@@ -1099,14 +1122,16 @@ function SignaturesTab() {
                     onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
                     className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
-                  <span className="text-sm text-slate-600">Definir como assinatura padrao</span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
+                    Definir como assinatura padrao
+                  </span>
                 </label>
               </div>
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-all duration-200"
+                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
                 >
                   Cancelar
                 </button>

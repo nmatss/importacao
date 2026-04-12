@@ -63,12 +63,12 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                   className={cn(
                     'relative flex h-10 w-10 items-center justify-center rounded-xl text-sm font-semibold transition-all duration-300',
                     isCancelled
-                      ? 'bg-slate-100 text-slate-400'
+                      ? 'bg-slate-100 dark:bg-slate-700 text-slate-400'
                       : isCompleted
                         ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm'
                         : isCurrent
                           ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm ring-2 ring-primary-100'
-                          : 'bg-slate-100 text-slate-400',
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                   )}
                 >
                   {isCompleted ? (
@@ -93,7 +93,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                 </span>
               </div>
               {i < STEPS.length - 1 && (
-                <div className="relative mx-2 flex-1 h-1 rounded-full overflow-hidden bg-slate-100">
+                <div className="relative mx-2 flex-1 h-1 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700">
                   <div
                     className={cn(
                       'absolute inset-y-0 left-0 rounded-full transition-all duration-500',
@@ -116,9 +116,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
         <button
           onClick={() => setMobileIndex((prev) => Math.max(0, prev - 1))}
           disabled={mobileIndex === 0}
-          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
         >
-          <ChevronLeft className="h-5 w-5 text-slate-500" />
+          <ChevronLeft className="h-5 w-5 text-slate-500 dark:text-slate-400" />
         </button>
 
         <div className="flex flex-col items-center gap-1.5 flex-1">
@@ -130,12 +130,12 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                 className={cn(
                   'h-1.5 w-1.5 rounded-full transition-colors',
                   isCancelled
-                    ? 'bg-slate-200'
+                    ? 'bg-slate-200 dark:bg-slate-700'
                     : idx < currentIndex
                       ? 'bg-emerald-400'
                       : idx === currentIndex
                         ? 'bg-primary-500'
-                        : 'bg-slate-200',
+                        : 'bg-slate-200 dark:bg-slate-700',
                   idx === mobileIndex && 'ring-2 ring-offset-1 ring-primary-300',
                 )}
               />
@@ -154,12 +154,12 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                   className={cn(
                     'flex h-10 w-10 items-center justify-center rounded-xl transition-all',
                     isCancelled
-                      ? 'bg-slate-100 text-slate-400'
+                      ? 'bg-slate-100 dark:bg-slate-700 text-slate-400'
                       : isCompleted
                         ? 'bg-emerald-100 text-emerald-600'
                         : isCurrent
                           ? 'bg-primary-600 text-white shadow-sm'
-                          : 'bg-slate-100 text-slate-400',
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                   )}
                 >
                   {isCompleted ? (
@@ -190,9 +190,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
         <button
           onClick={() => setMobileIndex((prev) => Math.min(STEPS.length - 1, prev + 1))}
           disabled={mobileIndex === STEPS.length - 1}
-          className="p-1 rounded-lg hover:bg-slate-100 disabled:opacity-30 transition-colors"
+          className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
         >
-          <ChevronRight className="h-5 w-5 text-slate-500" />
+          <ChevronRight className="h-5 w-5 text-slate-500 dark:text-slate-400" />
         </button>
       </div>
     </div>
@@ -205,10 +205,14 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
       <BarChart3 className="h-4 w-4 text-slate-400" />
       <div className="flex-1">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-slate-500">Progresso Geral</span>
-          <span className="text-xs font-bold text-slate-700">{followUp.overallProgress}%</span>
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+            Progresso Geral
+          </span>
+          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+            {followUp.overallProgress}%
+          </span>
         </div>
-        <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
           <div
             className="h-full rounded-full bg-gradient-to-r from-primary-500 to-emerald-500 transition-all duration-500"
             style={{ width: `${followUp.overallProgress}%` }}
@@ -221,7 +225,7 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
 
 export function ProcessTimeline({ currentStatus, followUp }: ProcessTimelineProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white p-4 md:p-6 shadow-sm">
+    <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-6 shadow-sm">
       <Stepper currentStatus={currentStatus} />
       {followUp && <FollowUpProgress followUp={followUp} />}
     </div>

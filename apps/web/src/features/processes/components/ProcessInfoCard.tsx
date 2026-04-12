@@ -37,13 +37,15 @@ function InfoField({
   return (
     <div className="flex items-start gap-3 py-2">
       {Icon && (
-        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-400">
           <Icon className="h-4 w-4" />
         </div>
       )}
       <div className="min-w-0">
         <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className="mt-0.5 text-sm font-medium text-slate-800 truncate">{value || '\u2014'}</p>
+        <p className="mt-0.5 text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+          {value || '\u2014'}
+        </p>
       </div>
     </div>
   );
@@ -70,14 +72,14 @@ function AiDataSection({ data }: { data: AiExtractedData }) {
   if (populated.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-primary-100 bg-primary-50/30 p-5">
+    <div className="mt-6 rounded-xl border border-primary-100 dark:border-primary-800 bg-primary-50/30 dark:bg-primary-950/30 p-5">
       <div className="flex items-center gap-2 mb-4">
         <Sparkles className="h-4 w-4 text-primary-500" />
-        <p className="text-xs font-bold text-primary-700 uppercase tracking-wider">
+        <p className="text-xs font-bold text-primary-700 dark:text-primary-400 uppercase tracking-wider">
           Dados Extraidos (IA / Planilha)
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {populated.map((f) => (
           <InfoField key={f.key} icon={f.icon} label={f.label} value={String(data[f.key])} />
         ))}
@@ -105,12 +107,14 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
   if (populated.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-primary-100 bg-primary-50/30 p-5">
+    <div className="mt-6 rounded-xl border border-primary-100 dark:border-primary-800 bg-primary-50/30 dark:bg-primary-950/30 p-5">
       <div className="flex items-center gap-2 mb-4">
         <Ship className="h-4 w-4 text-primary-500" />
-        <p className="text-xs font-bold text-primary-700 uppercase tracking-wider">Logistica</p>
+        <p className="text-xs font-bold text-primary-700 dark:text-primary-400 uppercase tracking-wider">
+          Logistica
+        </p>
       </div>
-      <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
         {populated.map((f) => (
           <InfoField key={f.key} icon={f.icon} label={f.label} value={String(process[f.key])} />
         ))}
@@ -121,19 +125,19 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
 
 export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
-      <div className="border-b border-slate-100 bg-slate-50/50 px-7 py-4">
+    <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
+      <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-4 py-3 sm:px-7 sm:py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm">
             <Package className="h-4.5 w-4.5" />
           </div>
-          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
             Informacoes do Processo
           </h3>
         </div>
       </div>
-      <div className="p-7">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="p-4 sm:p-7">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
           <InfoField icon={Building} label="Exportador" value={process.exporterName} />
           <InfoField icon={User} label="Importador" value={process.importerName} />
           <InfoField icon={Anchor} label="Porto Embarque" value={process.portOfLoading} />
@@ -192,14 +196,14 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
 
         {/* Payment Terms */}
         {process.paymentTerms && (
-          <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+          <div className="mt-5 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 p-4">
             <div className="flex items-center gap-2 mb-2">
               <Banknote className="h-4 w-4 text-slate-400" />
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Termos de Pagamento
               </p>
             </div>
-            <p className="text-sm text-slate-700">
+            <p className="text-sm text-slate-700 dark:text-slate-300">
               {((process.paymentTerms as Record<string, unknown>).description as string) ||
                 JSON.stringify(process.paymentTerms)}
             </p>
@@ -208,14 +212,14 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
 
         {/* Notes */}
         {process.notes && (
-          <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+          <div className="mt-5 rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 p-4">
             <div className="flex items-center gap-2 mb-2">
               <StickyNote className="h-4 w-4 text-slate-400" />
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Observacoes
               </p>
             </div>
-            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+            <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
               {process.notes}
             </p>
           </div>

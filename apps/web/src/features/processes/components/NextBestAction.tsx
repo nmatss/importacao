@@ -62,9 +62,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
           'Envie os documentos do processo (Invoice, Packing List, BL) para iniciar a validacao.',
         actionLabel: 'Enviar Documentos',
         link: `/importacao/processos/${processId}`,
-        color: 'text-slate-700',
-        bgColor: 'bg-slate-50',
-        borderColor: 'border-slate-200',
+        color: 'text-slate-700 dark:text-slate-300',
+        bgColor: 'bg-slate-50 dark:bg-slate-900',
+        borderColor: 'border-slate-200 dark:border-slate-600',
       };
 
     case 'documents_received':
@@ -185,9 +185,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Verifique o processo para mais informacoes.',
         actionLabel: 'Ver Processo',
         link: `/importacao/processos/${processId}`,
-        color: 'text-slate-700',
-        bgColor: 'bg-slate-50',
-        borderColor: 'border-slate-200',
+        color: 'text-slate-700 dark:text-slate-300',
+        bgColor: 'bg-slate-50 dark:bg-slate-900',
+        borderColor: 'border-slate-200 dark:border-slate-600',
       };
   }
 }
@@ -208,7 +208,7 @@ export function NextBestAction(props: NextBestActionProps) {
         </div>
         <div className="flex-1 min-w-0">
           <p className={cn('text-sm font-semibold', action.color)}>{action.title}</p>
-          <p className="text-sm text-slate-600 mt-1">{action.description}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{action.description}</p>
 
           {action.link && (
             <Link

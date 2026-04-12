@@ -93,11 +93,11 @@ export function LoginPage() {
       </div>
 
       {/* Right panel — login */}
-      <div className="flex-1 flex flex-col bg-white">
+      <div className="flex-1 flex flex-col bg-white dark:bg-slate-900">
         {/* Mobile logo */}
         <div className="flex items-center gap-3 p-6 lg:hidden">
           <img src="/logo-unico.png" alt="Uni.co" className="h-9 w-9 rounded-xl" />
-          <span className="text-slate-800 font-bold">Uni.co</span>
+          <span className="text-slate-800 dark:text-slate-200 font-bold">Uni.co</span>
         </div>
 
         <div className="flex-1 flex items-center justify-center px-6 py-12">
@@ -107,17 +107,17 @@ export function LoginPage() {
               <div className="lg:hidden inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-600 mb-5">
                 <Ship className="h-7 w-7 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 tracking-tight">
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                 Bem-vindo de volta
               </h2>
-              <p className="text-slate-500 mt-2 text-sm">
+              <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">
                 Faça login com sua conta Google corporativa
               </p>
             </div>
 
             {/* Login card */}
             <div
-              className="bg-white rounded-2xl border border-slate-200/60 p-8 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up"
+              className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-8 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up"
               style={{ animationDelay: '100ms' }}
             >
               {error && (
@@ -161,14 +161,14 @@ export function LoginPage() {
               </div>
 
               <div className="mt-6 flex items-center gap-2 justify-center">
-                <div className="h-px flex-1 bg-slate-100" />
+                <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
                 <span className="text-[11px] text-slate-400 px-2 font-medium">@grupounico.com</span>
-                <div className="h-px flex-1 bg-slate-100" />
+                <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
               </div>
             </div>
 
             {/* Help text */}
-            <p className="text-center text-xs text-slate-400 mt-6 leading-relaxed">
+            <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-6 leading-relaxed">
               Acesso restrito a colaboradores do Grupo Unico.
               <br />
               Problemas? Contate o administrador.

@@ -64,9 +64,9 @@ const EVENT_CONFIG: Record<
 
 const DEFAULT_CONFIG = {
   icon: History,
-  color: 'text-slate-600',
-  bgColor: 'bg-slate-50',
-  borderColor: 'border-slate-200',
+  color: 'text-slate-600 dark:text-slate-400',
+  bgColor: 'bg-slate-50 dark:bg-slate-900',
+  borderColor: 'border-slate-200 dark:border-slate-600',
 };
 
 function EventMetadata({ metadata }: { metadata: Record<string, unknown> }) {
@@ -79,17 +79,19 @@ function EventMetadata({ metadata }: { metadata: Record<string, unknown> }) {
     <div className="mt-2">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+        className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 transition-colors"
       >
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
         Detalhes
       </button>
       {expanded && (
-        <div className="mt-1.5 rounded-lg bg-slate-50/80 border border-slate-100 p-2.5 text-xs text-slate-600 space-y-1">
+        <div className="mt-1.5 rounded-lg bg-slate-50/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-700 p-2.5 text-xs text-slate-600 dark:text-slate-400 space-y-1">
           {entries.map(([key, value]) => (
             <div key={key} className="flex gap-2">
-              <span className="font-medium text-slate-500 min-w-[80px]">{key}:</span>
-              <span className="text-slate-700 break-all">
+              <span className="font-medium text-slate-500 dark:text-slate-400 min-w-[80px]">
+                {key}:
+              </span>
+              <span className="text-slate-700 dark:text-slate-300 break-all">
                 {typeof value === 'object' ? JSON.stringify(value) : String(value)}
               </span>
             </div>
@@ -114,7 +116,7 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
   if (!events || events.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-10 gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <History className="h-6 w-6 text-slate-300" />
         </div>
         <p className="text-sm text-slate-400 font-medium">Nenhum evento registrado ainda.</p>
@@ -126,15 +128,17 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
     <div className="space-y-4">
       <div className="flex items-center gap-2">
         <History className="h-5 w-5 text-slate-400" />
-        <h3 className="text-lg font-bold text-slate-800">Historico de Eventos</h3>
-        <span className="text-xs font-medium text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          Historico de Eventos
+        </h3>
+        <span className="text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">
           {events.length}
         </span>
       </div>
 
       <div className="relative">
         {/* Vertical line */}
-        <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200" />
+        <div className="absolute left-5 top-3 bottom-3 w-px bg-slate-200 dark:bg-slate-700" />
 
         <div className="space-y-3">
           {events.map((event) => {
@@ -157,7 +161,7 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
                 {/* Content */}
                 <div className="flex-1 min-w-0 pb-1">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-700 leading-snug">
+                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-snug">
                       {event.title}
                     </p>
                     <span className="shrink-0 text-xs text-slate-400 font-medium whitespace-nowrap">
@@ -166,7 +170,7 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
                   </div>
 
                   {event.description && (
-                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                       {event.description}
                     </p>
                   )}

@@ -108,8 +108,12 @@ export function NumerarioPage() {
           <Banknote className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Numerario</h2>
-          <p className="text-sm text-slate-600">Depositos antecipados de numerario por processo</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+            Numerario
+          </h2>
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Depositos antecipados de numerario por processo
+          </p>
         </div>
       </div>
 
@@ -118,7 +122,7 @@ export function NumerarioPage() {
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
-            className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm"
           >
             <div className="flex items-center gap-3.5">
               <div
@@ -130,8 +134,10 @@ export function NumerarioPage() {
                 <kpi.icon className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
-                <p className="text-lg font-bold text-slate-900">{kpi.value}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {kpi.label}
+                </p>
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{kpi.value}</p>
               </div>
             </div>
           </div>
@@ -139,11 +145,11 @@ export function NumerarioPage() {
       </div>
 
       {/* Search */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
         <div className="max-w-xs">
           <label
             htmlFor="numerario-search"
-            className="mb-1.5 block text-xs font-medium text-slate-500"
+            className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
           >
             Processo
           </label>
@@ -155,7 +161,7 @@ export function NumerarioPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar processo..."
-              className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
             />
           </div>
         </div>
@@ -169,35 +175,35 @@ export function NumerarioPage() {
           description="Nenhum processo com dados de numerario encontrado."
         />
       ) : (
-        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
+            <table className="min-w-[800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
               <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50 dark:bg-slate-900">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Processo
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Valor FOB
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Valor Numerario
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     % Numerario
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Data Pagamento
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Solicitante
                   </th>
-                  <th className="px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Dados Cambio
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filtered.map((proc) => {
                   const data = proc.aiExtractedData;
                   const valorNumerario = getNumericField(data, 'valorNumerario');
@@ -208,26 +214,26 @@ export function NumerarioPage() {
                     <tr
                       key={proc.id}
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                      className="cursor-pointer border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {proc.processCode}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
                         {fobValue != null && !isNaN(fobValue) ? (
                           formatCurrency(fobValue)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm font-medium text-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
                         {valorNumerario != null ? (
                           formatCurrency(valorNumerario, 'BRL')
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5">
                         {percentual != null ? (
                           <span
                             className={cn(
@@ -245,19 +251,19 @@ export function NumerarioPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'dataPgtoNumerario') ? (
                           formatDate(getField(data, 'dataPgtoNumerario')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'solicitanteNumerario') || (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="max-w-[200px] truncate px-5 py-3.5 text-sm text-slate-600">
+                      <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'dadosCambio') || (
                           <span className="text-slate-300">--</span>
                         )}

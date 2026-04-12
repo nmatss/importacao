@@ -88,7 +88,12 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
       text: 'text-primary-700',
       label: 'Processando',
     },
-    ignored: { dot: 'bg-slate-400', bg: 'bg-slate-50', text: 'text-slate-600', label: 'Ignorado' },
+    ignored: {
+      dot: 'bg-slate-400',
+      bg: 'bg-slate-50 dark:bg-slate-900',
+      text: 'text-slate-600 dark:text-slate-400',
+      label: 'Ignorado',
+    },
     pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
     reprocessed: {
       dot: 'bg-violet-500',
@@ -196,14 +201,16 @@ export function EmailIngestionPage() {
     <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900">Ingestao de E-mail</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+          Ingestao de E-mail
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
           Monitore e gerencie a ingestao automatica de emails
         </p>
       </div>
 
       {/* Status Card */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         {/* Gradient top bar */}
         <div
           className={cn(
@@ -217,9 +224,9 @@ export function EmailIngestionPage() {
         {statusLoading ? (
           <LoadingSpinner className="py-8" />
         ) : (
-          <div className="p-6">
-            <div className="flex flex-wrap items-center justify-between gap-6">
-              <div className="flex flex-wrap items-center gap-6">
+          <div className="p-4 sm:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 sm:gap-6">
+              <div className="flex flex-wrap items-center gap-4 sm:gap-6">
                 {/* Live indicator */}
                 <div
                   className={cn(
@@ -249,7 +256,7 @@ export function EmailIngestionPage() {
 
                 {/* Details */}
                 <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1.5 text-slate-600">
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <span className="font-medium text-slate-400">Metodo:</span>
                     {status?.method === 'gmail_api' ? (
                       <span className="font-medium text-emerald-600">
@@ -261,13 +268,13 @@ export function EmailIngestionPage() {
                       <span className="font-medium text-danger-600">Nao configurado</span>
                     )}
                   </div>
-                  <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-                  <div className="flex items-center gap-1.5 text-slate-600">
+                  <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <span className="font-medium text-slate-400">Remetentes:</span>
                     <span>{status?.allowedSenders}</span>
                   </div>
-                  <div className="hidden h-4 w-px bg-slate-200 sm:block" />
-                  <div className="flex items-center gap-1.5 text-slate-600">
+                  <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <span className="font-medium text-slate-400">Ultima verificacao:</span>
                     <span>{status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}</span>
                   </div>
@@ -305,12 +312,14 @@ export function EmailIngestionPage() {
           return (
             <div
               key={card.label}
-              className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+              className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-5 shadow-sm"
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-slate-900">{card.value}</p>
-                  <p className="mt-0.5 text-sm text-slate-500">{card.label}</p>
+                  <p className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+                    {card.value}
+                  </p>
+                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{card.label}</p>
                 </div>
                 <div
                   className={cn(
@@ -327,7 +336,7 @@ export function EmailIngestionPage() {
       </div>
 
       {/* Date Filter */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-4">
           <DateRangeFilter
             startDate={startDate}
@@ -357,17 +366,17 @@ export function EmailIngestionPage() {
       </div>
 
       {/* Logs Table */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-6 py-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-900">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
-                <Inbox className="h-4 w-4 text-slate-600" />
+            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                <Inbox className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Emails Processados
             </h3>
             {pagination && (
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
                 {pagination.total} registros
               </span>
             )}
@@ -385,33 +394,33 @@ export function EmailIngestionPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="min-w-[900px] w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/80 text-left">
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <tr className="border-b border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900/80 text-left">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Data/Hora
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       De
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Assunto
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Processo
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Anexos
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Status
                     </th>
-                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Acoes
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {logs.map((log) => {
                     const badge = statusBadgeConfig[log.status] ?? statusBadgeConfig.pending;
                     const isExpanded = expandedLogId === log.id;
@@ -420,25 +429,28 @@ export function EmailIngestionPage() {
                       (log.status === 'completed' && log.processedAttachmentDetails?.length);
                     return (
                       <Fragment key={log.id}>
-                        <tr className="hover:bg-slate-50 transition-colors">
-                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-600">
+                        <tr className="hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
+                          <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-600 dark:text-slate-400">
                             {formatDateTime(log.receivedAt)}
                           </td>
                           <td
-                            className="max-w-[180px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-900 font-medium"
+                            className="max-w-[180px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-900 dark:text-slate-100 font-medium"
                             title={log.fromAddress}
                           >
                             {log.fromAddress}
                           </td>
                           <td className="max-w-[250px] px-3 py-2.5 sm:px-6 sm:py-3.5">
                             <div className="flex items-center gap-1.5">
-                              <span className="truncate text-slate-900" title={log.subject}>
+                              <span
+                                className="truncate text-slate-900 dark:text-slate-100"
+                                title={log.subject}
+                              >
                                 {log.subject}
                               </span>
                               {hasDetails && (
                                 <button
                                   onClick={() => setExpandedLogId(isExpanded ? null : log.id)}
-                                  className="shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                                  className="shrink-0 flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 transition-colors"
                                   aria-label={isExpanded ? 'Ocultar detalhes' : 'Ver detalhes'}
                                 >
                                   <ChevronDown
@@ -465,7 +477,7 @@ export function EmailIngestionPage() {
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
-                            <div className="flex items-center gap-1.5 text-slate-600">
+                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                               <Paperclip className="h-3.5 w-3.5 text-slate-400" />
                               {log.processedAttachments}/{log.attachmentsCount}
                             </div>
@@ -487,7 +499,7 @@ export function EmailIngestionPage() {
                               <button
                                 onClick={() => handleReprocess(log.id)}
                                 disabled={reprocessingId === log.id}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 disabled:opacity-50 transition-all"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 disabled:opacity-50 transition-all"
                               >
                                 <RotateCcw
                                   className={cn(
@@ -503,8 +515,11 @@ export function EmailIngestionPage() {
                         {/* Expanded details row */}
                         {isExpanded && (
                           <tr key={`${log.id}-details`}>
-                            <td colSpan={7} className="bg-slate-50/60 px-5 py-0">
-                              <div className="py-3 pl-4 border-l-2 border-slate-200">
+                            <td
+                              colSpan={7}
+                              className="bg-slate-50/60 dark:bg-slate-900/60 px-5 py-0"
+                            >
+                              <div className="py-3 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
                                 {log.status === 'failed' && log.errorMessage && (
                                   <div className="flex items-start gap-2 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3 text-sm text-danger-700">
                                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-500" />
@@ -543,15 +558,15 @@ export function EmailIngestionPage() {
 
             {/* Pagination */}
             {pagination && totalPages > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-                <p className="text-sm text-slate-500">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
                   Pagina {pagination.page} de {totalPages} ({pagination.total} registros)
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
@@ -559,7 +574,7 @@ export function EmailIngestionPage() {
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
                   >
                     Proximo
                     <ChevronRight className="h-4 w-4" />

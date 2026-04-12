@@ -17,11 +17,13 @@ export function LoadingSpinner({ size = 'md', className, label }: LoadingSpinner
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
       <div
         className={cn(
-          'animate-spin rounded-full border-slate-200 border-t-primary-600',
+          'animate-spin rounded-full border-slate-200 dark:border-slate-700 border-t-primary-600',
           sizes[size],
         )}
       />
-      {label && <span className="text-xs text-slate-500 font-medium">{label}</span>}
+      {label && (
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{label}</span>
+      )}
     </div>
   );
 }

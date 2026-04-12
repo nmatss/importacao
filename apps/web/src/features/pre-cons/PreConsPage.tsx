@@ -216,8 +216,10 @@ export function PreConsPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900 tracking-tight">Pre-Conferencia</h1>
-          <p className="text-sm text-slate-600 mt-1">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+            Pre-Conferencia
+          </h1>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Dados da planilha Pre_Cons KIOM — comparados automaticamente com o sistema
           </p>
         </div>
@@ -239,7 +241,7 @@ export function PreConsPage() {
             className={cn(
               'flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors shadow-sm',
               uploading
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                ? 'bg-slate-100 dark:bg-slate-700 text-slate-400 cursor-not-allowed'
                 : 'bg-primary-600 text-white hover:bg-primary-700',
             )}
           >
@@ -279,35 +281,37 @@ export function PreConsPage() {
 
       {/* Stats cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 stagger-children">
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <Package className="h-3.5 w-3.5" />
             Total Itens
           </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900">
+          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
             {loadingItems ? '-' : (pagination?.total ?? 0)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <AlertTriangle className="h-3.5 w-3.5" />
             Divergencias
           </div>
           <p
             className={cn(
               'mt-2 text-2xl font-bold',
-              (divergences?.length ?? 0) > 0 ? 'text-amber-600' : 'text-slate-900',
+              (divergences?.length ?? 0) > 0
+                ? 'text-amber-600'
+                : 'text-slate-900 dark:text-slate-100',
             )}
           >
             {loadingDivergences ? '-' : divergencesError ? '!' : (divergences?.length ?? 0)}
           </p>
         </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <Clock className="h-3.5 w-3.5" />
             Ultimo Sync
           </div>
-          <p className="mt-2 text-sm font-semibold text-slate-700">
+          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
             {loadingLogs ? '-' : lastSync ? formatDate(lastSync.syncedAt) : 'Nunca'}
           </p>
           {lastSync && (
@@ -316,12 +320,12 @@ export function PreConsPage() {
             </p>
           )}
         </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             <FileSpreadsheet className="h-3.5 w-3.5" />
             Fonte
           </div>
-          <p className="mt-2 text-sm font-semibold text-slate-700">
+          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
             {lastSync?.source === 'email'
               ? 'E-mail (auto)'
               : lastSync?.source === 'upload'
@@ -363,8 +367,10 @@ export function PreConsPage() {
                   >
                     {d.severity}
                   </span>
-                  <span className="text-sm font-semibold text-slate-800">{d.processCode}</span>
-                  <span className="text-sm text-slate-600">
+                  <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {d.processCode}
+                  </span>
+                  <span className="text-sm text-slate-600 dark:text-slate-400">
                     {fieldLabels[d.field] || d.field}: Pre-Cons <strong>{d.preConsValue}</strong> vs
                     Sistema <strong>{d.systemValue}</strong>
                   </span>
@@ -376,12 +382,14 @@ export function PreConsPage() {
       )}
 
       {/* Items table */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-800">Itens Pre-Conferencia</h3>
-          <div className="flex items-center gap-2">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 px-4 py-3">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Itens Pre-Conferencia
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
             {loadingSheets ? (
-              <div className="h-8 w-32 rounded-lg bg-slate-100 animate-pulse" />
+              <div className="h-8 w-32 rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
             ) : (sheetNames?.length ?? 0) > 1 ? (
               <select
                 value={sheetFilter}
@@ -389,7 +397,7 @@ export function PreConsPage() {
                   setSheetFilter(e.target.value);
                   setPage(1);
                 }}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all bg-white"
+                className="rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all bg-white dark:bg-slate-800"
               >
                 <option value="">Todas as abas</option>
                 {sheetNames!.map((s) => (
@@ -409,7 +417,7 @@ export function PreConsPage() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all w-48"
+                className="pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all w-full sm:w-48"
               />
             </div>
           </div>
@@ -424,7 +432,7 @@ export function PreConsPage() {
           <LoadingSpinner className="py-12" />
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
               <Package className="h-6 w-6 text-slate-300" />
             </div>
             <p className="text-sm text-slate-400 font-medium">
@@ -441,78 +449,82 @@ export function PreConsPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-sm">
-                <thead className="bg-slate-50">
+              <table className="min-w-[900px] w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Processo
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Fornecedor
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Produto
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Cod. Item
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Qtd
                     </th>
-                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Valor
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       NCM
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       ETD
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       ETA
                     </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Aba
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {items.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                      className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <td className="px-3 py-2 font-semibold text-primary-700">
                         {item.processCode || <span className="text-slate-300">--</span>}
                       </td>
                       <td
-                        className="px-3 py-2 text-slate-600 max-w-[140px] truncate"
+                        className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[140px] truncate"
                         title={item.supplier ?? ''}
                       >
                         {item.supplier || '--'}
                       </td>
                       <td
-                        className="px-3 py-2 text-slate-700 max-w-[180px] truncate"
+                        className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[180px] truncate"
                         title={item.productName ?? ''}
                       >
                         {item.productName || '--'}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                         {item.itemCode || '--'}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-slate-700">
+                      <td className="px-3 py-2 text-right font-mono text-slate-700 dark:text-slate-300">
                         {item.quantity?.toLocaleString('pt-BR') ?? '--'}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-slate-700">
+                      <td className="px-3 py-2 text-right font-mono text-slate-700 dark:text-slate-300">
                         {formatCurrency(item.amount)}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                      <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                         {item.ncmCode || '--'}
                       </td>
-                      <td className="px-3 py-2 text-slate-600">{item.etd || '--'}</td>
-                      <td className="px-3 py-2 text-slate-600">{item.eta || '--'}</td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                        {item.etd || '--'}
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                        {item.eta || '--'}
+                      </td>
                       <td className="px-3 py-2">
-                        <span className="inline-flex rounded-md px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-600">
+                        <span className="inline-flex rounded-md px-2 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">
                           {item.sheetName || '--'}
                         </span>
                       </td>
@@ -524,22 +536,22 @@ export function PreConsPage() {
 
             {/* Pagination */}
             {pagination && pagination.pages > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
-                <p className="text-xs font-medium text-slate-500">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-700 px-4 py-3">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                   Pagina {pagination.page} de {pagination.pages} ({pagination.total} itens)
                 </p>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Anterior
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(pagination.pages, p + 1))}
                     disabled={page >= pagination.pages}
-                    className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Proximo
                   </button>
@@ -551,10 +563,10 @@ export function PreConsPage() {
       </div>
 
       {/* Sync logs */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
         <button
           onClick={() => setLogsExpanded(!logsExpanded)}
-          className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50/50 transition-colors"
+          className="flex items-center justify-between w-full px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
         >
           <span>Historico de Sincronizacao ({syncLogs?.length ?? 0})</span>
           {logsExpanded ? (
@@ -575,52 +587,54 @@ export function PreConsPage() {
             <p className="px-4 pb-4 text-sm text-slate-400">Nenhum sync realizado.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-100 text-sm">
-                <thead className="bg-slate-50">
+              <table className="min-w-[500px] w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Data
                     </th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Fonte
                     </th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Arquivo
                     </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Itens
                     </th>
-                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Erros
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {syncLogs!.map((log) => (
                     <tr
                       key={log.id}
-                      className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                      className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
-                      <td className="px-3 py-2 text-slate-600">{formatDate(log.syncedAt)}</td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                        {formatDate(log.syncedAt)}
+                      </td>
                       <td className="px-3 py-2">
                         <span
                           className={cn(
                             'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold',
                             log.source === 'email'
                               ? 'bg-primary-100 text-primary-700'
-                              : 'bg-slate-100 text-slate-600',
+                              : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
                           )}
                         >
                           {log.source === 'email' ? 'E-mail' : 'Upload'}
                         </span>
                       </td>
                       <td
-                        className="px-3 py-2 text-slate-700 max-w-[200px] truncate"
+                        className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[200px] truncate"
                         title={log.fileName}
                       >
                         {log.fileName}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-slate-700">
+                      <td className="px-3 py-2 text-right font-mono text-slate-700 dark:text-slate-300">
                         {log.created}
                       </td>
                       <td className="px-3 py-2 text-right">

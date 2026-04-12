@@ -71,8 +71,12 @@ export function ProcessListPage() {
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Processos</h2>
-          <p className="mt-1 text-sm text-slate-600">Gerencie seus processos de importacao</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+            Processos
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
+            Gerencie seus processos de importacao
+          </p>
         </div>
         <Link
           to="/importacao/processos/novo"
@@ -84,7 +88,7 @@ export function ProcessListPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative flex-1 min-w-0 w-full sm:min-w-[240px]">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -96,7 +100,7 @@ export function ProcessListPage() {
                 setSearch(e.target.value);
                 setPage(1);
               }}
-              className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
+              className="w-full rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -108,7 +112,7 @@ export function ProcessListPage() {
                   setStatus(e.target.value);
                   setPage(1);
                 }}
-                className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
+                className="rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
               >
                 <option value="">Todos os status</option>
                 {PROCESS_STATUSES.map((s) => (
@@ -124,7 +128,7 @@ export function ProcessListPage() {
                 setBrand(e.target.value);
                 setPage(1);
               }}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
+              className="rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
             >
               <option value="">Todas as marcas</option>
               {BRANDS.map((b) => (
@@ -170,7 +174,7 @@ export function ProcessListPage() {
       ) : isLoading ? (
         <PageSkeleton />
       ) : processes.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm">
           <EmptyState
             title="Nenhum processo encontrado"
             description={
@@ -185,37 +189,37 @@ export function ProcessListPage() {
           />
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200/60">
-                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-700/60">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Codigo
                   </th>
-                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Marca
                   </th>
-                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Status
                   </th>
-                  <th className="hidden md:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden md:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     FOB Total
                   </th>
-                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     ETD
                   </th>
-                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="hidden lg:table-cell px-3 py-2.5 sm:px-5 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Data Criacao
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {processes.map((proc) => (
                   <tr
                     key={proc.id}
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                    className="border-t border-slate-100 hover:bg-slate-50/50 cursor-pointer transition-colors group"
+                    className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
                   >
                     <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm">
                       <div className="flex items-center gap-2.5">
@@ -227,23 +231,23 @@ export function ProcessListPage() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600 capitalize">
+                    <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600 dark:text-slate-400 capitalize">
                       {proc.brand}
                     </td>
                     <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm">
                       <StatusBadge status={proc.status} />
                     </td>
-                    <td className="hidden md:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600">
+                    <td className="hidden md:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600 dark:text-slate-400">
                       {proc.totalFobValue != null ? (
                         formatCurrency(proc.totalFobValue)
                       ) : (
                         <span className="text-slate-300">--</span>
                       )}
                     </td>
-                    <td className="hidden lg:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600">
+                    <td className="hidden lg:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600 dark:text-slate-400">
                       {proc.etd ? formatDate(proc.etd) : <span className="text-slate-300">--</span>}
                     </td>
-                    <td className="hidden lg:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600">
+                    <td className="hidden lg:table-cell px-3 py-3 sm:px-5 sm:py-4 text-sm text-slate-600 dark:text-slate-400">
                       {formatDate(proc.createdAt)}
                     </td>
                   </tr>
@@ -254,18 +258,22 @@ export function ProcessListPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/60 px-5 py-4 bg-slate-50/40">
-              <p className="text-sm text-slate-600">
-                Mostrando pagina <span className="font-medium text-slate-700">{page}</span> de{' '}
-                <span className="font-medium text-slate-700">{totalPages}</span>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-t border-slate-200/60 dark:border-slate-700/60 px-5 py-4 bg-slate-50/40 dark:bg-slate-800/40">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                Mostrando pagina{' '}
+                <span className="font-medium text-slate-700 dark:text-slate-300">{page}</span> de{' '}
+                <span className="font-medium text-slate-700 dark:text-slate-300">{totalPages}</span>
                 <span className="mx-1.5 text-slate-300">|</span>
-                <span className="font-medium text-slate-700">{totalResults}</span> resultados
+                <span className="font-medium text-slate-700 dark:text-slate-300">
+                  {totalResults}
+                </span>{' '}
+                resultados
               </p>
               <div className="flex items-center gap-1.5">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage((p) => p - 1)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
@@ -273,7 +281,7 @@ export function ProcessListPage() {
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   Proxima
                   <ChevronRight className="h-4 w-4" />

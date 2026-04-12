@@ -145,10 +145,10 @@ export function DesembaracoPage() {
           <Anchor className="h-5 w-5 text-white" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
             Desembaraco Aduaneiro
           </h2>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
             {customsProcesses.length} processo{customsProcesses.length !== 1 ? 's' : ''} com dados
             aduaneiros
           </p>
@@ -160,7 +160,7 @@ export function DesembaracoPage() {
         {kpiCards.map((kpi) => (
           <div
             key={kpi.label}
-            className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
+            className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm"
           >
             <div className="flex items-center gap-3.5">
               <div
@@ -172,8 +172,10 @@ export function DesembaracoPage() {
                 <kpi.icon className="h-5 w-5 text-white" />
               </div>
               <div>
-                <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
-                <p className="text-lg font-bold text-slate-900">{kpi.value}</p>
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {kpi.label}
+                </p>
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">{kpi.value}</p>
               </div>
             </div>
           </div>
@@ -181,13 +183,13 @@ export function DesembaracoPage() {
       </div>
 
       {/* Filter Bar */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           {/* Search */}
           <div className="flex-1 max-w-xs">
             <label
               htmlFor="desembaraco-search"
-              className="mb-1.5 block text-xs font-medium text-slate-500"
+              className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
             >
               Processo
             </label>
@@ -199,15 +201,15 @@ export function DesembaracoPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Buscar processo..."
-                className="w-full rounded-lg border border-slate-200 py-2 pl-10 pr-4 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               />
             </div>
           </div>
 
           {/* Status Filter Pills */}
           <div>
-            <p className="mb-1.5 text-xs font-medium text-slate-500">Status</p>
-            <div className="flex items-center gap-1.5">
+            <p className="mb-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">Status</p>
+            <div className="flex flex-wrap items-center gap-1.5">
               {filterOptions.map((opt) => (
                 <button
                   key={opt.value}
@@ -216,7 +218,7 @@ export function DesembaracoPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     filter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}
@@ -235,46 +237,49 @@ export function DesembaracoPage() {
           description="Nenhum processo com dados de desembaraco encontrado com os filtros selecionados."
         />
       ) : (
-        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200">
+            <table className="min-w-[900px] w-full divide-y divide-slate-200 dark:divide-slate-700">
               <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                <tr className="bg-slate-50 dark:bg-slate-900">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Processo
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     DI
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Data DI
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Canal
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Desembaraco
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Recinto
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Free Time
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Demurrage
                   </th>
-                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Chegada CD
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filtered.map((proc) => {
                   const data = proc.aiExtractedData;
                   const canal = getField(data, 'canal');
                   const canalStyle = canal
-                    ? (canalColors[canal] ?? { bg: 'bg-slate-100', text: 'text-slate-700' })
+                    ? (canalColors[canal] ?? {
+                        bg: 'bg-slate-100 dark:bg-slate-700',
+                        text: 'text-slate-700 dark:text-slate-300',
+                      })
                     : null;
                   const demurrage = getField(data, 'alertaDemurrage');
 
@@ -282,15 +287,15 @@ export function DesembaracoPage() {
                     <tr
                       key={proc.id}
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                      className="cursor-pointer border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                      className="cursor-pointer border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {proc.processCode}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700 dark:text-slate-300">
                         {getField(data, 'numeroDI') || <span className="text-slate-300">--</span>}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'dataRegistroDI') ? (
                           formatDate(getField(data, 'dataRegistroDI')!)
                         ) : (
@@ -312,17 +317,17 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'desembaraco') ? (
                           formatDate(getField(data, 'desembaraco')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'recinto') || <span className="text-slate-300">--</span>}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'freeTime') ? (
                           `${getField(data, 'freeTime')} dias`
                         ) : (
@@ -350,7 +355,7 @@ export function DesembaracoPage() {
                           <span className="text-sm text-slate-300">--</span>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                      <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                         {getField(data, 'chegadaCD') ? (
                           formatDate(getField(data, 'chegadaCD')!)
                         ) : (

@@ -181,8 +181,8 @@ const statusConfig = {
   },
   skipped: {
     icon: Minus,
-    border: 'border-slate-200',
-    bg: 'bg-slate-50',
+    border: 'border-slate-200 dark:border-slate-600',
+    bg: 'bg-slate-50 dark:bg-slate-900',
     iconColor: 'text-slate-400',
   },
 };
@@ -232,9 +232,18 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     return checks.filter((c) => c.status === filter);
   }, [checks, filter]);
 
-  const failedCount = useMemo(() => checks?.filter((c) => c.status === 'failed').length ?? 0, [checks]);
-  const warningCount = useMemo(() => checks?.filter((c) => c.status === 'warning').length ?? 0, [checks]);
-  const passedCount = useMemo(() => checks?.filter((c) => c.status === 'passed').length ?? 0, [checks]);
+  const failedCount = useMemo(
+    () => checks?.filter((c) => c.status === 'failed').length ?? 0,
+    [checks],
+  );
+  const warningCount = useMemo(
+    () => checks?.filter((c) => c.status === 'warning').length ?? 0,
+    [checks],
+  );
+  const passedCount = useMemo(
+    () => checks?.filter((c) => c.status === 'passed').length ?? 0,
+    [checks],
+  );
 
   const runValidation = useCallback(async () => {
     dispatch({ type: 'SET_RUNNING', payload: true });
@@ -260,14 +269,17 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     }
   }, [processId]);
 
-  const resolveManually = useCallback(async (resultId: number) => {
-    try {
-      await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
-      queryClient.invalidateQueries({ queryKey: ['validation', processId] });
-    } catch (err: unknown) {
-      toast.error(getErrorMessage(err));
-    }
-  }, [processId, queryClient]);
+  const resolveManually = useCallback(
+    async (resultId: number) => {
+      try {
+        await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
+        queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+      } catch (err: unknown) {
+        toast.error(getErrorMessage(err));
+      }
+    },
+    [processId, queryClient],
+  );
 
   const generateCorrectionDraft = async (useAi = false) => {
     dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
@@ -341,12 +353,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       {checks && checks.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
-            <span className="font-medium text-slate-700">
+            <span className="font-medium text-slate-700 dark:text-slate-300">
               {passedCount} de {totalCount} verificacoes aprovadas
             </span>
             <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
           </div>
-          <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden">
+          <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
             <div
               className={cn('h-full rounded-full transition-all duration-500', progressColor)}
               style={{ width: `${progressPct}%` }}
@@ -371,14 +383,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
                 filter === key
                   ? 'bg-primary-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
               )}
             >
               {label}
               <span
                 className={cn(
                   'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
-                  filter === key ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-500',
+                  filter === key
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-400',
                 )}
               >
                 {count}
@@ -461,25 +475,27 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 <div className="flex items-start gap-3">
                   <Icon className={cn('mt-0.5 h-5 w-5 shrink-0', config.iconColor)} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
                       {checkLabel(check.checkName)}
                     </p>
                     {check.message && (
-                      <p className="mt-0.5 text-xs text-slate-600">{check.message}</p>
+                      <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
+                        {check.message}
+                      </p>
                     )}
                     {check.status === 'failed' && (check.expectedValue || check.actualValue) && (
                       <div className="mt-2 space-y-1 text-xs">
                         {check.expectedValue && (
                           <p>
-                            <span className="text-slate-500">Esperado: </span>
-                            <span className="font-medium text-slate-800">
+                            <span className="text-slate-500 dark:text-slate-400">Esperado: </span>
+                            <span className="font-medium text-slate-800 dark:text-slate-100">
                               {check.expectedValue}
                             </span>
                           </p>
                         )}
                         {check.actualValue && (
                           <p>
-                            <span className="text-slate-500">Encontrado: </span>
+                            <span className="text-slate-500 dark:text-slate-400">Encontrado: </span>
                             <span className="font-medium text-danger-700">{check.actualValue}</span>
                           </p>
                         )}
@@ -519,22 +535,22 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           })}
         </div>
       ) : (
-        <p className="py-6 text-center text-sm text-slate-500">
+        <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
           Nenhuma validacao executada ainda. Clique em "Executar Validacao" para iniciar.
         </p>
       )}
 
       {/* Anomalies */}
       {anomalies && anomalies.length > 0 && (
-        <div className="rounded-lg border border-violet-200 bg-violet-50 p-4">
-          <h4 className="mb-3 text-sm font-semibold text-violet-900">
+        <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 p-4">
+          <h4 className="mb-3 text-sm font-semibold text-violet-900 dark:text-violet-300">
             Anomalias Detectadas pela IA
           </h4>
           <div className="space-y-2">
             {anomalies.map((anomaly, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 rounded-lg bg-white p-3 border border-violet-100"
+                className="flex items-start gap-3 rounded-lg bg-white dark:bg-slate-800 p-3 border border-violet-100 dark:border-violet-800"
               >
                 <AlertTriangle
                   className={cn(
@@ -547,8 +563,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   )}
                 />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900">{anomaly.field}</p>
-                  <p className="text-xs text-slate-600">{anomaly.description}</p>
+                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                    {anomaly.field}
+                  </p>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    {anomaly.description}
+                  </p>
                 </div>
                 <span className="text-xs text-slate-400">
                   {(anomaly.confidence * 100).toFixed(0)}%
@@ -560,9 +580,11 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       )}
 
       {anomalies && anomalies.length === 0 && (
-        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 p-4 text-center">
           <CheckCircle className="mx-auto h-6 w-6 text-emerald-500" />
-          <p className="mt-1 text-sm text-emerald-700">Nenhuma anomalia detectada pela IA.</p>
+          <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
+            Nenhuma anomalia detectada pela IA.
+          </p>
         </div>
       )}
 
@@ -573,16 +595,21 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             role="dialog"
             aria-modal="true"
             aria-labelledby="draft-modal-title"
-            className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-xl"
+            className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 shadow-xl"
           >
             {/* Header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 rounded-t-2xl">
+            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-6 py-4 rounded-t-2xl">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger-100">
                   <Mail className="h-4.5 w-4.5 text-danger-600" />
                 </div>
                 <div>
-                  <h3 id="draft-modal-title" className="text-lg font-bold text-slate-900">E-mail de Correcao</h3>
+                  <h3
+                    id="draft-modal-title"
+                    className="text-lg font-bold text-slate-900 dark:text-slate-100"
+                  >
+                    E-mail de Correcao
+                  </h3>
                   <p className="text-xs text-slate-400">
                     Rascunho para {draft.recipient} - Revise antes de enviar
                   </p>
@@ -590,7 +617,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               </div>
               <button
                 onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 transition-colors"
                 aria-label="Fechar modal"
               >
                 <X className="h-5 w-5" />
@@ -601,7 +628,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <div className="p-6 space-y-4">
               {/* Recipient Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Destinatario
                 </label>
                 <input
@@ -610,31 +637,31 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   onChange={(e) =>
                     dispatch({ type: 'SET_EDIT_RECIPIENT_EMAIL', payload: e.target.value })
                   }
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                 />
               </div>
 
               {/* Subject */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Assunto
                 </label>
                 <input
                   type="text"
                   value={editSubject}
                   onChange={(e) => dispatch({ type: 'SET_EDIT_SUBJECT', payload: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                 />
               </div>
 
               {/* Body Preview / Edit */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                   Corpo do E-mail
                 </label>
-                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                   <div
-                    className="p-4 text-sm text-slate-700 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
+                    className="p-4 text-sm text-slate-700 dark:text-slate-300 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
                     contentEditable
                     suppressContentEditableWarning
                     onBlur={(e) =>
@@ -648,7 +675,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               {/* Signature Selector */}
               {emailSignatures && emailSignatures.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                     <span className="inline-flex items-center gap-1.5">
                       <FileSignature className="h-3.5 w-3.5" />
                       Assinatura de E-mail
@@ -659,7 +686,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     onChange={(e) =>
                       setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                   >
                     <option value="">Sem assinatura</option>
                     {emailSignatures.map((sig) => (
@@ -675,7 +702,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                       if (!sig) return null;
                       return (
                         <div
-                          className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600 prose prose-sm max-w-none"
+                          className="mt-2 rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 p-3 text-sm text-slate-600 dark:text-slate-400 prose prose-sm max-w-none"
                           dangerouslySetInnerHTML={{
                             __html: DOMPurify.sanitize(sig.signatureHtml),
                           }}
@@ -687,10 +714,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             </div>
 
             {/* Footer */}
-            <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4 rounded-b-2xl">
+            <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-6 py-4 rounded-b-2xl">
               <button
                 onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
               >
                 Cancelar
               </button>

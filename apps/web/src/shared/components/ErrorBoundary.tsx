@@ -26,13 +26,17 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen flex-col items-center justify-center p-8 bg-slate-50">
-          <div className="max-w-md rounded-2xl border border-danger-200/60 bg-white p-8 text-center shadow-sm">
-            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-danger-50">
+        <div className="flex min-h-screen flex-col items-center justify-center p-8 bg-slate-50 dark:bg-slate-900">
+          <div className="max-w-md rounded-2xl border border-danger-200/60 bg-white dark:bg-slate-800 dark:border-danger-800/60 p-8 text-center shadow-sm">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-danger-50 dark:bg-danger-900/30">
               <AlertTriangle className="h-6 w-6 text-danger-500" />
             </div>
-            <h2 className="text-base font-semibold text-slate-900">Algo deu errado</h2>
-            <p className="mt-2 text-sm text-slate-500">{this.state.error?.message}</p>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Algo deu errado
+            </h2>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              {this.state.error?.message}
+            </p>
             <button
               onClick={() => window.location.reload()}
               className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors shadow-sm"

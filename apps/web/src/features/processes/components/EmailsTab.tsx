@@ -37,9 +37,12 @@ export interface EmailsTabProps {
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluido' },
   processing: { color: 'bg-primary-100 text-primary-700', label: 'Processando' },
-  pending: { color: 'bg-slate-100 text-slate-600', label: 'Pendente' },
+  pending: {
+    color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
+    label: 'Pendente',
+  },
   failed: { color: 'bg-danger-100 text-danger-700', label: 'Falhou' },
-  ignored: { color: 'bg-slate-100 text-slate-400', label: 'Ignorado' },
+  ignored: { color: 'bg-slate-100 dark:bg-slate-700 text-slate-400', label: 'Ignorado' },
 };
 
 export function EmailsTab({ processId, processCode }: EmailsTabProps) {
@@ -58,17 +61,17 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800">Emails Recebidos</h3>
-      <p className="text-sm text-slate-500">
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Emails Recebidos</h3>
+      <p className="text-sm text-slate-500 dark:text-slate-400">
         Emails processados automaticamente que foram vinculados a este processo.
       </p>
       {logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 border border-slate-100">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700">
             <Inbox className="h-8 w-8 text-slate-300" />
           </div>
           <div className="text-center">
-            <p className="text-sm font-semibold text-slate-500">
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               Nenhum email vinculado a este processo
             </p>
             <p className="text-xs text-slate-400 mt-1">
@@ -83,10 +86,10 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
             return (
               <div
                 key={log.id}
-                className="rounded-xl border border-slate-200/60 bg-white p-4 hover:bg-slate-50/30 transition-colors"
+                className="rounded-xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
               >
                 {/* Header: status + date */}
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
                   <span
                     className={cn(
                       'shrink-0 inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold',
@@ -99,13 +102,13 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
                     <span className="font-medium" title={formatDateTime(log.receivedAt)}>
                       {relativeTime(log.receivedAt)}
                     </span>
-                    <span className="text-slate-300">|</span>
-                    <span>{formatDateTime(log.receivedAt)}</span>
+                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+                    <span className="hidden sm:inline">{formatDateTime(log.receivedAt)}</span>
                   </div>
                 </div>
 
                 {/* Subject */}
-                <p className="mt-2 text-sm font-semibold text-slate-800 line-clamp-2">
+                <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2">
                   {log.subject}
                 </p>
 
@@ -118,11 +121,13 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
 
                 {/* Sender */}
                 <div className="mt-2 flex items-center gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-600">
+                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <User className="h-3 w-3 text-slate-400" />
                     <span className="font-medium">{extractSenderName(log.fromAddress)}</span>
                   </div>
-                  <span className="text-slate-300">&lt;{log.fromAddress}&gt;</span>
+                  <span className="text-slate-300 dark:text-slate-600">
+                    &lt;{log.fromAddress}&gt;
+                  </span>
                 </div>
 
                 {/* Attachments with filenames */}
@@ -134,7 +139,7 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
                         log.processedAttachments.map((att, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600 border border-slate-200/50"
+                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600/50"
                           >
                             <FileText className="h-3 w-3" />
                             {att.filename}

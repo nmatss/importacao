@@ -120,8 +120,10 @@ export function AlertsPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Alertas</h2>
-          <p className="mt-1 text-sm text-slate-500">Monitore e gerencie alertas do sistema</p>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Alertas</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Monitore e gerencie alertas do sistema
+          </p>
         </div>
         {pendingCount > 0 && (
           <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
@@ -137,8 +139,8 @@ export function AlertsPage() {
       </div>
 
       {/* Filter Pills */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-center gap-6">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-3 sm:p-5 shadow-sm">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           {/* Severity Filter */}
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
@@ -153,7 +155,7 @@ export function AlertsPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     severityFilter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}
@@ -163,7 +165,7 @@ export function AlertsPage() {
           </div>
 
           {/* Divider */}
-          <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+          <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
 
           {/* Date Range Filter */}
           <div>
@@ -180,7 +182,7 @@ export function AlertsPage() {
           </div>
 
           {/* Divider */}
-          <div className="hidden h-8 w-px bg-slate-200 sm:block" />
+          <div className="hidden h-8 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
 
           {/* Ack Filter */}
           <div>
@@ -196,7 +198,7 @@ export function AlertsPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     ackFilter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}
@@ -208,17 +210,17 @@ export function AlertsPage() {
       </div>
 
       {/* Alerts List */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 px-6 py-4">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-900">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100">
-                <Shield className="h-4 w-4 text-slate-600" />
+            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Alertas do Sistema
             </h3>
             {alerts?.length ? (
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-medium text-slate-600">
+              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
                 {alerts.length} alerta{alerts.length !== 1 ? 's' : ''}
               </span>
             ) : null}
@@ -245,14 +247,16 @@ export function AlertsPage() {
                 <div
                   key={alert.id}
                   className={cn(
-                    'relative border-b border-slate-100 last:border-b-0 transition-colors',
-                    alert.acknowledged ? 'bg-slate-50/50' : 'bg-white',
+                    'relative border-b border-slate-100 dark:border-slate-700 last:border-b-0 transition-colors',
+                    alert.acknowledged
+                      ? 'bg-slate-50/50 dark:bg-slate-900/50'
+                      : 'bg-white dark:bg-slate-800',
                   )}
                 >
                   {/* Severity bar on left */}
                   <div className={cn('absolute left-0 top-0 bottom-0 w-1', config.bar)} />
 
-                  <div className="flex items-start gap-4 px-6 py-5 pl-7">
+                  <div className="flex items-start gap-3 sm:gap-4 px-4 sm:px-6 py-4 sm:py-5 pl-5 sm:pl-7">
                     {/* Severity icon */}
                     <div
                       className={cn(
@@ -266,7 +270,9 @@ export function AlertsPage() {
                     {/* Content */}
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-slate-900">{alert.title}</span>
+                        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {alert.title}
+                        </span>
                         <span
                           className={cn(
                             'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
@@ -285,7 +291,7 @@ export function AlertsPage() {
                         )}
                       </div>
 
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                         {alert.message}
                       </p>
 
@@ -317,10 +323,10 @@ export function AlertsPage() {
                     {!alert.acknowledged && (
                       <button
                         onClick={() => handleAcknowledge(alert.id)}
-                        className="shrink-0 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 hover:border-slate-300 transition-all"
+                        className="shrink-0 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        Reconhecer
+                        <span className="hidden sm:inline">Reconhecer</span>
                       </button>
                     )}
                   </div>

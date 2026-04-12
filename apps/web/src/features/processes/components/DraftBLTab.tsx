@@ -112,14 +112,14 @@ function DraftUploadSection({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
           <FileSearch className="h-4 w-4 text-violet-500" />
           Draft BL
         </h3>
         {draftDoc && (
           <button
             onClick={() => setShowUpload(!showUpload)}
-            className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+            className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 flex items-center gap-1"
           >
             <Upload className="h-3 w-3" />
             {showUpload ? 'Ocultar upload' : 'Enviar novo'}
@@ -131,14 +131,16 @@ function DraftUploadSection({
       </div>
 
       {draftDoc ? (
-        <div className="rounded-lg border border-violet-200 bg-violet-50/50 px-4 py-3">
+        <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50/50 dark:bg-violet-950/30 px-4 py-3">
           <div className="flex items-center gap-3">
-            <span className="inline-flex shrink-0 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700">
+            <span className="inline-flex shrink-0 rounded border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-violet-700 dark:text-violet-300">
               DRAFT
             </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-slate-800">{draftDoc.fileName}</p>
-              <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+              <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                {draftDoc.fileName}
+              </p>
+              <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span>{new Date(draftDoc.uploadedAt).toLocaleDateString('pt-BR')}</span>
                 {draftDoc.aiProcessingStatus === 'processing' && (
                   <span className="inline-flex items-center gap-1 text-primary-500">
@@ -174,9 +176,9 @@ function DraftUploadSection({
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border-2 border-dashed border-violet-200 bg-violet-50/30 px-4 py-6 text-center">
+        <div className="rounded-lg border-2 border-dashed border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-950/20 px-4 py-6 text-center">
           <FileSearch className="mx-auto h-8 w-8 text-violet-300" />
-          <p className="mt-2 text-sm text-slate-500">Nenhum Draft BL enviado</p>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Nenhum Draft BL enviado</p>
           <p className="text-xs text-slate-400">Envie o rascunho do BL abaixo</p>
         </div>
       )}
@@ -223,21 +225,23 @@ function ConferenceChecklist({ processId }: { processId: string }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
         <CheckCircle2 className="h-4 w-4 text-violet-500" />
         Conferencia do Draft BL
       </h3>
 
       {/* Progress bar */}
-      <div className="flex items-center gap-4 rounded-lg bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-4 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-3">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-xs font-medium text-slate-500">Progresso</span>
-            <span className="text-xs font-semibold text-slate-500">
+            <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Progresso
+            </span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               {completedCount}/{totalChecks} itens ({progressPct}%)
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -268,14 +272,16 @@ function ConferenceChecklist({ processId }: { processId: string }) {
               className={cn(
                 'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
                 isChecked
-                  ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50'
-                  : 'border-slate-150 bg-white hover:bg-slate-50 hover:border-slate-200',
+                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
+                  : 'border-slate-150 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-200',
               )}
             >
               <span
                 className={cn(
                   'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                  isChecked ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500',
+                  isChecked
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
                 )}
               >
                 {isChecked ? <CheckCircle2 className="h-3.5 w-3.5" /> : String(index + 1)}
@@ -285,7 +291,9 @@ function ConferenceChecklist({ processId }: { processId: string }) {
                 <p
                   className={cn(
                     'text-sm font-medium',
-                    isChecked ? 'text-emerald-700' : 'text-slate-700',
+                    isChecked
+                      ? 'text-emerald-700 dark:text-emerald-400'
+                      : 'text-slate-700 dark:text-slate-300',
                   )}
                 >
                   {check.label}
@@ -331,7 +339,9 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
     <div
       className={cn(
         'rounded-lg border px-3 py-2.5',
-        warning ? 'border-amber-200 bg-amber-50/50' : 'border-slate-100 bg-white',
+        warning
+          ? 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30'
+          : 'border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800',
       )}
     >
       <div className="flex items-center gap-1.5 mb-1">
@@ -357,7 +367,7 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
       <p
         className={cn(
           'text-sm font-medium truncate',
-          isPlaceholder ? 'text-slate-300 italic' : 'text-slate-800',
+          isPlaceholder ? 'text-slate-300 italic' : 'text-slate-800 dark:text-slate-100',
         )}
       >
         {displayValue}
@@ -376,11 +386,11 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
   if (!draftDoc || draftDoc.aiProcessingStatus !== 'completed' || !draftDoc.aiParsedData) {
     return (
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
           <Info className="h-4 w-4 text-violet-500" />
           Dados Extraidos pela IA
         </h3>
-        <div className="rounded-lg border border-slate-100 bg-slate-50/50 px-4 py-8 text-center">
+        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-4 py-8 text-center">
           {!draftDoc ? (
             <p className="text-sm text-slate-400">Envie um Draft BL para ver os dados extraidos</p>
           ) : draftDoc.aiProcessingStatus === 'processing' ? (
@@ -403,14 +413,14 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
         <Info className="h-4 w-4 text-violet-500" />
         Dados Extraidos pela IA
       </h3>
 
       {/* Critical warnings */}
       {woodDeclaration === false && (
-        <div className="flex items-center gap-2 rounded-lg border border-danger-200 bg-danger-50 px-4 py-2.5">
+        <div className="flex items-center gap-2 rounded-lg border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/30 px-4 py-2.5">
           <AlertTriangle className="h-4 w-4 text-danger-500 shrink-0" />
           <div>
             <p className="text-sm font-medium text-danger-700">
@@ -424,7 +434,7 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
       )}
 
       {(freeTime == null || freeTime === '') && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5">
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5">
           <Timer className="h-4 w-4 text-amber-500 shrink-0" />
           <div>
             <p className="text-sm font-medium text-amber-700">Free Time nao informado</p>
@@ -436,7 +446,7 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
       )}
 
       {/* Main fields grid */}
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <ExtractedField
           label="Embarcador / Shipper"
           value={getFieldValue(data, 'shipper')}
@@ -522,7 +532,7 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
 
       {/* NCM List */}
       {Array.isArray(ncmList) && ncmList.length > 0 && (
-        <div className="rounded-lg border border-slate-100 bg-white px-3 py-2.5">
+        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
             NCMs encontrados ({ncmList.length})
           </p>
@@ -530,7 +540,7 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
             {ncmList.map((ncm: string, i: number) => (
               <span
                 key={i}
-                className="inline-flex rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-mono font-medium text-slate-700"
+                className="inline-flex rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-mono font-medium text-slate-700 dark:text-slate-300"
               >
                 {ncm}
               </span>
@@ -541,11 +551,11 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
 
       {/* Cargo description */}
       {getFieldValue(data, 'cargoDescription') && (
-        <div className="rounded-lg border border-slate-100 bg-white px-3 py-2.5">
+        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
             Descricao da Carga
           </p>
-          <p className="text-xs text-slate-600 whitespace-pre-wrap line-clamp-6">
+          <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-6">
             {getFieldValue(data, 'cargoDescription')}
           </p>
         </div>
@@ -613,13 +623,13 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
           <GitCompareArrows className="h-4 w-4 text-violet-500" />
           Documento Revisado
         </h3>
         <button
           onClick={() => setShowUpload(!showUpload)}
-          className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+          className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 flex items-center gap-1"
         >
           <Upload className="h-3 w-3" />
           {showUpload ? 'Ocultar upload' : 'Enviar Documento Revisado'}
@@ -630,16 +640,16 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
       {hasRevisado ? (
         <div className="space-y-3">
           {/* Revisado document info */}
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+          <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 px-4 py-3">
             <div className="flex items-center gap-3">
-              <span className="inline-flex shrink-0 rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-700">
+              <span className="inline-flex shrink-0 rounded border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/50 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-700 dark:text-emerald-300">
                 REVISADO
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">
+                <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                   {revisadoDoc.fileName}
                 </p>
-                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <span>{new Date(revisadoDoc.uploadedAt).toLocaleDateString('pt-BR')}</span>
                   {revisadoDoc.aiProcessingStatus === 'processing' && (
                     <span className="inline-flex items-center gap-1 text-primary-500">
@@ -664,45 +674,59 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
           {/* Comparison table */}
           {differences && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <span className="font-medium">Comparativo Draft vs Revisado</span>
                 {changedCount > 0 ? (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  <span className="rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
                     {changedCount} {changedCount === 1 ? 'alteracao' : 'alteracoes'}
                   </span>
                 ) : (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                  <span className="rounded-full bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                     Sem alteracoes
                   </span>
                 )}
               </div>
 
-              <div className="overflow-hidden rounded-lg border border-slate-200">
-                <table className="w-full text-xs">
+              <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
+                <table className="min-w-full text-xs">
                   <thead>
-                    <tr className="bg-slate-50 text-left">
-                      <th className="px-3 py-2 font-semibold text-slate-500">Campo</th>
-                      <th className="px-3 py-2 font-semibold text-slate-500">Draft</th>
-                      <th className="px-3 py-2 font-semibold text-slate-500">Revisado</th>
-                      <th className="px-3 py-2 font-semibold text-slate-500 text-center w-20">
+                    <tr className="bg-slate-50 dark:bg-slate-900 text-left">
+                      <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400">
+                        Campo
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400">
+                        Draft
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400">
+                        Revisado
+                      </th>
+                      <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400 text-center w-20">
                         Status
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {differences.map((diff) => (
                       <tr
                         key={diff.key}
-                        className={cn(diff.changed ? 'bg-amber-50/50' : 'bg-white')}
+                        className={cn(
+                          diff.changed
+                            ? 'bg-amber-50/50 dark:bg-amber-950/30'
+                            : 'bg-white dark:bg-slate-800',
+                        )}
                       >
-                        <td className="px-3 py-2 font-medium text-slate-700">{diff.label}</td>
-                        <td className="px-3 py-2 text-slate-600 max-w-[150px] truncate">
+                        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">
+                          {diff.label}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[150px] truncate">
                           {diff.draftValue}
                         </td>
                         <td
                           className={cn(
                             'px-3 py-2 max-w-[150px] truncate',
-                            diff.changed ? 'text-amber-700 font-medium' : 'text-slate-600',
+                            diff.changed
+                              ? 'text-amber-700 font-medium'
+                              : 'text-slate-600 dark:text-slate-400',
                           )}
                         >
                           {diff.revisadoValue}
@@ -729,9 +753,11 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
           )}
         </div>
       ) : (
-        <div className="rounded-lg border-2 border-dashed border-slate-200 bg-slate-50/30 px-4 py-6 text-center">
+        <div className="rounded-lg border-2 border-dashed border-slate-200 dark:border-slate-600 bg-slate-50/30 px-4 py-6 text-center">
           <GitCompareArrows className="mx-auto h-8 w-8 text-slate-300" />
-          <p className="mt-2 text-sm text-slate-500">Nenhum documento revisado</p>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+            Nenhum documento revisado
+          </p>
           <p className="text-xs text-slate-400">
             Envie a versao revisada do Draft BL apos a conferencia
           </p>
@@ -783,19 +809,19 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
       <DraftUploadSection draftDoc={draftDoc} processId={processId} />
 
       {/* Divider */}
-      <div className="border-t border-slate-100" />
+      <div className="border-t border-slate-100 dark:border-slate-700" />
 
       {/* Section B: Conference Checklist */}
       <ConferenceChecklist processId={processId} />
 
       {/* Divider */}
-      <div className="border-t border-slate-100" />
+      <div className="border-t border-slate-100 dark:border-slate-700" />
 
       {/* Section C: AI Extracted Data */}
       <AIExtractedData draftDoc={draftDoc} />
 
       {/* Divider */}
-      <div className="border-t border-slate-100" />
+      <div className="border-t border-slate-100 dark:border-slate-700" />
 
       {/* Section D: Documento Revisado */}
       <RevisadoSection draftDocs={allDraftDocs} processId={processId} />

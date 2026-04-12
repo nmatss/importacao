@@ -95,16 +95,16 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
   return (
     <div className="space-y-4">
       {/* Email sync header — primary action */}
-      <div className="flex items-center gap-3 rounded-xl border border-primary-100 bg-gradient-to-r from-primary-50 to-primary-50 px-4 py-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-100">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary-100 dark:border-primary-800 bg-gradient-to-r from-primary-50 to-primary-50 dark:from-primary-950/30 dark:to-primary-950/30 px-3 py-3 sm:px-4">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-100 dark:bg-primary-900/50">
           <Inbox className="h-5 w-5 text-primary-600" />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-700">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Documentos chegam automaticamente via email
           </p>
-          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+          <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             {emailStatus?.enabled ? (
               <>
                 <span className="inline-flex items-center gap-1 text-emerald-600">
@@ -118,7 +118,7 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
                 </span>
                 {lastCheckTime && (
                   <>
-                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-300 dark:text-slate-600">|</span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3 w-3" />
                       Ultima busca: {lastCheckTime}
@@ -162,11 +162,11 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
       <DocumentList processId={processId} />
 
       {/* Manual upload — collapsible, open by default */}
-      <div className="border-t border-slate-100 pt-3">
+      <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
         <button
           type="button"
           onClick={() => setShowManualUpload(!showManualUpload)}
-          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-800"
+          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:text-slate-800 dark:text-slate-100"
         >
           <Upload className="h-4 w-4" />
           <span>Enviar Documento</span>

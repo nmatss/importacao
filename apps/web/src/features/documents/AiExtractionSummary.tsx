@@ -163,7 +163,7 @@ function renderSecondaryFields(
         return (
           <div key={key} className="min-w-0">
             <span className="text-[10px] text-slate-400">{labels[key] || key}</span>
-            <p className="text-xs text-slate-600 truncate">
+            <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
               {formatValue(value, key)}
               <FieldConfidence confidence={fieldConf} />
             </p>
@@ -221,7 +221,7 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
               <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
                 {labels[key] || key}
               </span>
-              <p className="text-sm font-semibold text-slate-800 truncate">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
                 {formatValue(value, key)}
                 <FieldConfidence confidence={fieldConf} />
               </p>
@@ -235,7 +235,7 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
       {/* Items summary */}
       {items && items.length > 0 ? (
-        <div className="rounded-lg border border-slate-100 bg-slate-50/50 px-3 py-2">
+        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
             Itens ({items.length})
           </p>
@@ -246,9 +246,16 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
               const qty = extractValue(item.quantity).value;
               const unit = extractValue(item.unitType || item.unit).value;
               return (
-                <div key={idx} className="flex items-center gap-2 text-xs text-slate-600">
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400"
+                >
                   <span className="font-mono text-slate-400 w-5 text-right">{idx + 1}.</span>
-                  {code ? <span className="font-medium text-slate-700">{String(code)}</span> : null}
+                  {code ? (
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      {String(code)}
+                    </span>
+                  ) : null}
                   <span className="truncate flex-1">{desc ? String(desc) : '—'}</span>
                   {qty != null && (
                     <span className="shrink-0 font-medium">
@@ -267,7 +274,7 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
       {/* NCM list (Draft BL) */}
       {ncmList != null ? (
-        <div className="text-xs text-slate-500">
+        <div className="text-xs text-slate-500 dark:text-slate-400">
           <span className="font-medium">NCMs:</span>{' '}
           {Array.isArray(extractValue(ncmList).value)
             ? (extractValue(ncmList).value as string[]).join(', ')

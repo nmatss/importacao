@@ -14,11 +14,13 @@ export function ErrorState({
       role="alert"
       className="flex flex-col items-center justify-center py-16 text-center animate-fade-in"
     >
-      <div className="mb-4 rounded-2xl bg-danger-50 p-5">
+      <div className="mb-4 rounded-2xl bg-danger-50 dark:bg-danger-900/30 p-5">
         <AlertTriangle className="h-7 w-7 text-danger-500" />
       </div>
-      <h3 className="text-sm font-semibold text-slate-800">Erro</h3>
-      <p className="mt-1.5 max-w-sm text-sm text-slate-500 leading-relaxed">{message}</p>
+      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Erro</h3>
+      <p className="mt-1.5 max-w-sm text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+        {message}
+      </p>
       {onRetry && (
         <button
           onClick={onRetry}

@@ -159,14 +159,14 @@ export default function CertRelatoriosPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <div className="flex items-center justify-center w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
+          <div className="flex items-center justify-center w-12 h-12 shrink-0 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
             <FileSpreadsheet className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Relatorios</h1>
-            <p className="text-sm text-slate-500">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100">Relatorios</h1>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Exporte dados de certificacao, estoque e validacao
             </p>
           </div>
@@ -188,18 +188,18 @@ export default function CertRelatoriosPage() {
       </div>
 
       {/* Export Cards */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm p-5">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Gerar Novo Relatorio
             </span>
           </div>
           <select
             value={brandFilter}
             onChange={(e) => setBrandFilter(e.target.value)}
-            className="text-xs font-medium rounded-lg border border-slate-200 px-3 py-1.5 text-slate-600 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+            className="text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-1.5 text-slate-600 dark:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
           >
             {BRAND_OPTIONS.map((b) => (
               <option key={b.value} value={b.value}>
@@ -220,7 +220,7 @@ export default function CertRelatoriosPage() {
                 disabled={!!exporting}
                 className={cn(
                   'group relative flex flex-col items-start gap-2 rounded-xl p-4 text-left transition-all',
-                  'border-2 border-transparent hover:border-slate-200',
+                  'border-2 border-transparent hover:border-slate-200 dark:border-slate-600',
                   isExporting && 'opacity-70 cursor-wait',
                   !exporting && 'hover:shadow-md active:scale-[0.98]',
                 )}
@@ -239,7 +239,7 @@ export default function CertRelatoriosPage() {
                   )}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-slate-800">{et.label}</p>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{et.label}</p>
                   <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
                     {et.description}
                   </p>
@@ -262,9 +262,9 @@ export default function CertRelatoriosPage() {
       </div>
 
       {/* Reports History */}
-      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
-        <div className="px-6 py-3.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+      <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
+        <div className="px-6 py-3.5 bg-slate-50/80 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Relatorios Gerados
             {reports.length > 0 && (
               <span className="ml-2 text-slate-400 font-normal">({reports.length})</span>
@@ -272,7 +272,7 @@ export default function CertRelatoriosPage() {
           </span>
           <button
             onClick={loadReports}
-            className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+            className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
@@ -284,28 +284,30 @@ export default function CertRelatoriosPage() {
           </div>
         ) : reports.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 px-6">
-            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 mb-3">
+            <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700 mb-3">
               <FileText className="w-7 h-7 text-slate-300" />
             </div>
-            <p className="text-sm font-semibold text-slate-500">Nenhum relatorio gerado</p>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
+              Nenhum relatorio gerado
+            </p>
             <p className="text-xs text-slate-400 mt-1">Execute uma validacao ou exporte acima</p>
           </div>
         ) : (
-          <div className="divide-y divide-slate-100">
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
             {reports.map((report, i) => (
               <div
                 key={i}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50/60 transition-colors group"
+                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 group-hover:bg-emerald-100 transition-colors">
                     <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
                       {report.filename.replace('.json', '')}
                     </p>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                       {report.date && <span>{formatDateTime(report.date)}</span>}
                       {report.size_bytes && (
                         <>
@@ -317,7 +319,7 @@ export default function CertRelatoriosPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 shrink-0 ml-3">
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-3">
                   <Link
                     to={`/certificacoes/relatorios/${encodeURIComponent(report.filename)}`}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
@@ -334,7 +336,7 @@ export default function CertRelatoriosPage() {
                   </a>
                   <button
                     onClick={() => handleDownloadJson(report.filename)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors"
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
                   >
                     <FileJson className="w-3 h-3" />
                     JSON

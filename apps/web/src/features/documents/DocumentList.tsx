@@ -52,7 +52,8 @@ const TYPE_COLORS: Record<string, string> = {
   espelho: 'bg-cyan-50 text-cyan-700 border-cyan-200',
   li: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   certificate: 'bg-pink-50 text-pink-700 border-pink-200',
-  other: 'bg-slate-50 text-slate-600 border-slate-200',
+  other:
+    'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600',
 };
 
 function ConfidenceBadge({ value }: { value: number }) {
@@ -227,17 +228,17 @@ export function DocumentList({ processId }: DocumentListProps) {
   return (
     <>
       {/* Summary bar */}
-      <div className="flex items-center gap-3 rounded-lg bg-slate-50 px-4 py-2">
-        <span className="text-xs font-medium text-slate-500">
+      <div className="flex items-center gap-3 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-2">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {totalDocs} documento{totalDocs !== 1 ? 's' : ''}
         </span>
-        <span className="text-slate-300">|</span>
-        <span className="text-xs text-slate-500">
+        <span className="text-slate-300 dark:text-slate-600">|</span>
+        <span className="text-xs text-slate-500 dark:text-slate-400">
           IA: {completedDocs}/{totalDocs} extraídos
         </span>
         {hasAll3 && (
           <>
-            <span className="text-slate-300">|</span>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
             <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
               <CheckCircle className="h-3 w-3" />
               INV + PL + BL completos
@@ -263,7 +264,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                 return (
                   <div
                     key={doc.id}
-                    className="group rounded-lg border border-slate-150 bg-white transition-shadow hover:shadow-sm"
+                    className="group rounded-lg border border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 transition-shadow hover:shadow-sm"
                   >
                     <div className="flex items-center gap-3 px-3 py-2.5">
                       {/* Type badge */}
@@ -290,7 +291,7 @@ export function DocumentList({ processId }: DocumentListProps) {
 
                       {/* File info */}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-800">
+                        <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                           {doc.fileName}
                         </p>
                         <div className="mt-0.5 flex items-center gap-2">
@@ -310,7 +311,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             fetchSource(doc.id);
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
                           title="Ver origem"
                         >
                           {source ? (
@@ -319,7 +320,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                                 <Mail className="h-3 w-3" />
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
+                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
                                 <Upload className="h-3 w-3" />
                               </span>
                             )
@@ -349,7 +350,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                               e.stopPropagation();
                               setExpandedId(expanded ? null : doc.id);
                             }}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
                             title="Ver dados extraídos"
                           >
                             {expanded ? (
@@ -388,7 +389,7 @@ export function DocumentList({ processId }: DocumentListProps) {
 
                     {/* Expanded AI data — professional summary */}
                     {expanded && doc.aiParsedData && (
-                      <div className="border-t border-slate-100 bg-slate-50/50 px-3 py-2.5">
+                      <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-3 py-2.5">
                         <AiExtractionSummary
                           documentType={doc.documentType}
                           data={doc.aiParsedData as Record<string, unknown>}

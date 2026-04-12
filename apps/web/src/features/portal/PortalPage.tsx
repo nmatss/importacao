@@ -21,6 +21,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { fetchCertStats, checkCertApiHealth } from '@/shared/lib/cert-api-client';
+import { ThemeToggle } from '@/shared/components/ThemeToggle';
 
 interface DashboardOverview {
   activeProcesses: number;
@@ -71,7 +72,11 @@ function UserAvatar({ name }: { name: string }) {
 }
 
 function Skeleton({ className }: { className?: string }) {
-  return <div className={cn('bg-slate-200/50 rounded-lg animate-pulse', className)} />;
+  return (
+    <div
+      className={cn('bg-slate-200/50 dark:bg-slate-700/50 rounded-lg animate-pulse', className)}
+    />
+  );
 }
 
 function StatCard({
@@ -91,22 +96,22 @@ function StatCard({
     primary: 'text-primary-600',
     danger: 'text-danger-500',
     emerald: 'text-emerald-600',
-    slate: 'text-slate-700',
+    slate: 'text-slate-700 dark:text-slate-300',
   };
 
   return (
-    <div className="rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 text-center">
+    <div className="rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 px-4 py-3 text-center">
       <p
         className={cn(
           'text-xl font-bold tabular-nums',
           value === 0 && color !== 'primary' && color !== 'slate'
-            ? 'text-slate-300'
+            ? 'text-slate-300 dark:text-slate-600'
             : colorMap[color],
         )}
       >
         {value}
       </p>
-      <p className="text-[11px] text-slate-500 mt-0.5 font-medium">{label}</p>
+      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">{label}</p>
     </div>
   );
 }
@@ -126,7 +131,7 @@ function QuickLink({
     <Link
       to={to}
       className={cn(
-        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 transition-colors',
+        'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 transition-colors',
         hoverColor,
       )}
     >
@@ -182,29 +187,34 @@ export function PortalPage() {
   return (
     <div className="min-h-screen bg-page">
       {/* Header */}
-      <header className="sticky top-0 z-30 bg-white border-b border-slate-200/60">
+      <header className="sticky top-0 z-30 bg-white dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-700/60">
         <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-900">
               <img src="/logo-unico.png" alt="Uni.co" className="h-6 w-6 rounded" />
             </div>
             <div className="hidden sm:block">
-              <p className="text-sm font-bold text-slate-900 leading-none tracking-tight">Uni.co</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-none tracking-tight">
+                Uni.co
+              </p>
               <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Sistema Integrado</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {user && (
               <>
                 <div className="text-right hidden sm:block mr-1">
-                  <p className="text-sm font-medium text-slate-700 leading-tight">{user.name}</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
+                    {user.name}
+                  </p>
                   <p className="text-[11px] text-slate-400">
                     {user.role === 'admin' ? 'Administrador' : 'Analista'}
                   </p>
                 </div>
                 <UserAvatar name={user.name || 'U'} />
-                <div className="w-px h-5 bg-slate-200 mx-1" />
+                <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
                 <button
                   onClick={logout}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
@@ -221,10 +231,12 @@ export function PortalPage() {
       <main className="mx-auto max-w-6xl px-6 py-8">
         {/* Welcome */}
         <section className="mb-8">
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
             {getGreeting()}, {firstName}
           </h1>
-          <p className="mt-1 text-sm text-slate-500 first-letter:capitalize">{formatDatePtBr()}</p>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400 first-letter:capitalize">
+            {formatDatePtBr()}
+          </p>
 
           {/* Summary pills */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -254,7 +266,7 @@ export function PortalPage() {
             {certLoading ? (
               <Skeleton className="h-7 w-40 rounded-full" />
             ) : certStats ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-400">
                 <Package className="h-3 w-3" />
                 {certStats.total_products} produtos monitorados
               </span>
@@ -265,7 +277,7 @@ export function PortalPage() {
         {/* Module Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-children">
           {/* Importacao */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
             <div className="h-1 bg-gradient-to-r from-primary-500 to-primary-600" />
 
             <div className="p-6">
@@ -274,15 +286,17 @@ export function PortalPage() {
                   <Ship className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-bold text-slate-900">Importação</h2>
-                  <p className="mt-0.5 text-sm text-slate-500">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Importação
+                  </h2>
+                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                     Processos, documentos, validação, câmbios e follow-up
                   </p>
                 </div>
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
                 <StatCard
                   value={overview?.activeProcesses ?? 0}
                   label="Ativos"
@@ -314,7 +328,7 @@ export function PortalPage() {
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-2 flex items-center gap-1">
+            <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-5 py-2 flex flex-wrap items-center gap-1">
               <QuickLink to="/importacao/processos/novo" icon={Plus} label="Novo" />
               <QuickLink to="/importacao/processos" icon={Eye} label="Processos" />
               <QuickLink to="/importacao/follow-up" icon={CalendarClock} label="Follow-Up" />
@@ -322,7 +336,7 @@ export function PortalPage() {
           </div>
 
           {/* Certificacoes */}
-          <div className="group relative bg-white rounded-2xl border border-slate-200/60 hover:border-emerald-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
             <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
 
             <div className="p-6">
@@ -331,15 +345,17 @@ export function PortalPage() {
                   <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h2 className="text-base font-bold text-slate-900">Certificações</h2>
-                  <p className="mt-0.5 text-sm text-slate-500">
+                  <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                    Certificações
+                  </h2>
+                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
                     Verificação INMETRO / ANATEL nos e-commerces
                   </p>
                 </div>
               </div>
 
               {/* Stats grid */}
-              <div className="grid grid-cols-3 gap-3 mb-5">
+              <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
                 {certLoading ? (
                   <>
                     <Skeleton className="h-[68px]" />
@@ -353,7 +369,7 @@ export function PortalPage() {
                     <StatCard value={problems} label="Pendências" color="danger" />
                   </>
                 ) : (
-                  <div className="col-span-3 rounded-xl bg-slate-50 border border-slate-100 py-5 text-center text-xs text-slate-400 font-medium">
+                  <div className="col-span-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 py-5 text-center text-xs text-slate-400 font-medium">
                     API indisponível
                   </div>
                 )}
@@ -370,7 +386,7 @@ export function PortalPage() {
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 bg-slate-50/50 px-5 py-2 flex items-center gap-1">
+            <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-5 py-2 flex flex-wrap items-center gap-1">
               <QuickLink
                 to="/certificacoes/validacao"
                 icon={Play}
@@ -394,9 +410,9 @@ export function PortalPage() {
         </div>
 
         {/* Status footer */}
-        <footer className="mt-8 rounded-xl border border-slate-200/60 bg-white px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+        <footer className="mt-8 rounded-xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span
                 className={cn(
                   'h-2 w-2 rounded-full',
@@ -415,7 +431,7 @@ export function PortalPage() {
                   <span className="text-danger-500">offline</span>
                 ))}
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
               <span
                 className={cn(
                   'h-2 w-2 rounded-full',

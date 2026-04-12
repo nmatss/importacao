@@ -81,7 +81,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
   if (!items || items.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <Package className="h-6 w-6 text-slate-300" />
         </div>
         <p className="text-sm text-slate-400 font-medium">
@@ -101,7 +101,9 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-800">Pre-Conferencia (KIOM)</h3>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          Pre-Conferencia (KIOM)
+        </h3>
         {divergences.length === 0 ? (
           <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
             <CheckCircle2 className="h-3.5 w-3.5" />
@@ -116,34 +118,44 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Itens</p>
-          <p className="mt-1 text-lg font-bold text-slate-800">{items.length}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/50 p-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Itens
+          </p>
+          <p className="mt-1 text-lg font-bold text-slate-800 dark:text-slate-100">
+            {items.length}
+          </p>
         </div>
-        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Qtd Total</p>
-          <p className="mt-1 text-lg font-bold text-slate-800">
+        <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/50 p-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            Qtd Total
+          </p>
+          <p className="mt-1 text-lg font-bold text-slate-800 dark:text-slate-100">
             {totalQty.toLocaleString('pt-BR')}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+        <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/50 p-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Valor Total
           </p>
-          <p className="mt-1 text-lg font-bold text-slate-800">
+          <p className="mt-1 text-lg font-bold text-slate-800 dark:text-slate-100">
             {totalAmount.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
           </p>
         </div>
-        <div className="rounded-xl border border-slate-200/60 bg-slate-50/50 p-3">
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">CBM Total</p>
-          <p className="mt-1 text-lg font-bold text-slate-800">{totalCbm.toFixed(2)}</p>
+        <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-800/50 p-3">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            CBM Total
+          </p>
+          <p className="mt-1 text-lg font-bold text-slate-800 dark:text-slate-100">
+            {totalCbm.toFixed(2)}
+          </p>
         </div>
       </div>
 
       {/* Divergences for this process */}
       {divergences.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-3 space-y-2">
           <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">
             Divergencias
           </h4>
@@ -161,10 +173,11 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
               >
                 {d.severity}
               </span>
-              <span className="text-slate-700">
+              <span className="text-slate-700 dark:text-slate-300">
                 {fieldLabels[d.field] || d.field}: Pre-Cons{' '}
-                <strong className="text-slate-900">{d.preConsValue}</strong> vs Sistema{' '}
-                <strong className="text-slate-900">{d.systemValue}</strong>
+                <strong className="text-slate-900 dark:text-slate-100">{d.preConsValue}</strong> vs
+                Sistema{' '}
+                <strong className="text-slate-900 dark:text-slate-100">{d.systemValue}</strong>
               </span>
             </div>
           ))}
@@ -172,72 +185,81 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
       )}
 
       {/* Items table */}
-      <div className="overflow-x-auto rounded-xl border border-slate-200/60">
-        <table className="min-w-full divide-y divide-slate-100 text-sm">
-          <thead className="bg-slate-50/80">
+      <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+        <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
+          <thead className="bg-slate-50/80 dark:bg-slate-900/80">
             <tr>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Produto
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Cod. Item
               </th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Qtd
               </th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Preco Unit.
               </th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Valor
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 NCM
               </th>
-              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 CBM
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 EAN
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Cor
               </th>
-              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 PI
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
             {items.map((item) => (
-              <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
+              <tr
+                key={item.id}
+                className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+              >
                 <td
-                  className="px-3 py-2 text-slate-700 max-w-[180px] truncate"
+                  className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[180px] truncate"
                   title={item.productName ?? ''}
                 >
                   {item.productName || '--'}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                   {item.itemCode || '--'}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-slate-700">
+                <td className="px-3 py-2 text-right font-mono text-slate-700 dark:text-slate-300">
                   {item.quantity?.toLocaleString('pt-BR') ?? '--'}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-slate-600">
+                <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
                   {item.agreedPrice ? `$${Number(item.agreedPrice).toFixed(2)}` : '--'}
                 </td>
-                <td className="px-3 py-2 text-right font-mono font-semibold text-slate-800">
+                <td className="px-3 py-2 text-right font-mono font-semibold text-slate-800 dark:text-slate-100">
                   {formatCurrency(item.amount)}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                   {item.ncmCode || '--'}
                 </td>
-                <td className="px-3 py-2 text-right font-mono text-slate-600">
+                <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
                   {item.cbm ? Number(item.cbm).toFixed(3) : '--'}
                 </td>
-                <td className="px-3 py-2 font-mono text-xs text-slate-500">{item.ean13 || '--'}</td>
-                <td className="px-3 py-2 text-slate-600">{item.color || '--'}</td>
-                <td className="px-3 py-2 text-slate-600">{item.piNumber || '--'}</td>
+                <td className="px-3 py-2 font-mono text-xs text-slate-500 dark:text-slate-400">
+                  {item.ean13 || '--'}
+                </td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                  {item.color || '--'}
+                </td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                  {item.piNumber || '--'}
+                </td>
               </tr>
             ))}
           </tbody>

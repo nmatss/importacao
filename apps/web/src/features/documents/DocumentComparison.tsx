@@ -82,7 +82,7 @@ function DocBadge({
         'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border',
         available
           ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-          : 'bg-slate-50 border-slate-200 text-slate-400',
+          : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-600 text-slate-400',
       )}
     >
       {available ? <CheckCircle className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
@@ -112,12 +112,15 @@ function StatusCell({
   value: string | null;
   status?: 'match' | 'divergent' | 'empty';
 }) {
-  if (!value) return <td className="px-3 py-2.5 text-sm text-slate-300 font-mono">-</td>;
+  if (!value)
+    return <td className="px-3 py-2.5 text-sm text-slate-300 dark:text-slate-600 font-mono">-</td>;
   return (
     <td
       className={cn(
         'px-3 py-2.5 text-sm font-mono',
-        status === 'divergent' ? 'text-danger-700 font-semibold bg-danger-50/50' : 'text-slate-700',
+        status === 'divergent'
+          ? 'text-danger-700 dark:text-danger-400 font-semibold bg-danger-50/50 dark:bg-danger-950/30'
+          : 'text-slate-700 dark:text-slate-300',
       )}
     >
       {value}
@@ -157,11 +160,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         />
         <DocBadge label="Bill of Lading" available={data.hasBl} confidence={data.blConfidence} />
         {data.hasDraftBl && (
-          <DocBadge
-            label="Draft BL"
-            available={true}
-            confidence={data.draftBlConfidence ?? null}
-          />
+          <DocBadge label="Draft BL" available={true} confidence={data.draftBlConfidence ?? null} />
         )}
       </div>
 
@@ -178,9 +177,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
       </div>
 
       {/* Aggregate comparison table */}
-      <div className="rounded-xl border border-slate-200 overflow-hidden">
-        <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-          <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
+        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary-600" />
             Comparativo Geral - Invoice vs Packing List vs BL
           </h4>
@@ -188,7 +187,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-slate-50/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Campo
@@ -212,7 +211,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     key={i}
                     className={cn(
                       'border-b last:border-b-0',
-                      field.status === 'divergent' ? 'bg-danger-50/30' : '',
+                      field.status === 'divergent' ? 'bg-danger-50/30 dark:bg-danger-950/20' : '',
                     )}
                   >
                     <td className="px-3 py-2.5">
@@ -223,7 +222,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                         <XCircle className="h-4 w-4 text-danger-500" />
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-sm font-medium text-slate-800">
+                    <td className="px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">
                       {field.label}
                     </td>
                     <StatusCell value={field.invoice} status={field.status} />
@@ -238,8 +237,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
       {/* Draft BL vs Final BL revisions */}
       {data.draftBlRevisions && data.draftBlRevisions.length > 0 && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50/20 overflow-hidden">
-          <div className="bg-violet-50 px-4 py-3 border-b border-violet-200 flex items-center gap-2">
+        <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/20 dark:bg-violet-950/10 overflow-hidden">
+          <div className="bg-violet-50 dark:bg-violet-950/30 px-4 py-3 border-b border-violet-200 dark:border-violet-800 flex items-center gap-2">
             <History className="h-4 w-4 text-violet-600" />
             <h4 className="text-sm font-semibold text-violet-900">
               Revisado — Draft BL vs BL Final
@@ -251,7 +250,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-violet-50/50">
+                <tr className="bg-violet-50/50 dark:bg-violet-950/20">
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
                     Campo
                   </th>
@@ -271,10 +270,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
                         <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
                           Revisado
                         </span>
-                        <span className="text-sm font-medium text-slate-800">{rev.label}</span>
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                          {rev.label}
+                        </span>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-sm font-mono text-slate-500 line-through">
+                    <td className="px-3 py-2.5 text-sm font-mono text-slate-500 dark:text-slate-400 line-through">
                       {rev.draftValue ?? '—'}
                     </td>
                     <td className="px-3 py-2.5 text-sm font-mono text-emerald-700 font-semibold">
@@ -290,13 +291,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
       {/* Item-level comparison */}
       {data.itemComparison.length > 0 && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-            <h4 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Package className="h-4 w-4 text-violet-600" />
               Comparativo por Item - Invoice vs Packing List
             </h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {data.itemComparison.filter((i) => i.matched).length} de {data.itemComparison.length}{' '}
               itens encontrados no Packing List
             </p>
@@ -304,7 +305,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-slate-50/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+                <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Codigo
@@ -336,9 +337,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     className={cn(
                       'border-b last:border-b-0',
                       !item.matched
-                        ? 'bg-amber-50/50'
+                        ? 'bg-amber-50/50 dark:bg-amber-950/20'
                         : item.qtyMatch === false
-                          ? 'bg-danger-50/30'
+                          ? 'bg-danger-50/30 dark:bg-danger-950/20'
                           : '',
                     )}
                   >
@@ -351,11 +352,15 @@ export function DocumentComparison({ processId }: { processId: string }) {
                         <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-slate-700">{item.itemCode || '-'}</td>
-                    <td className="px-3 py-2 text-slate-700 max-w-[200px] truncate">
+                    <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300">
+                      {item.itemCode || '-'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[200px] truncate">
                       {item.description || '-'}
                     </td>
-                    <td className="px-3 py-2 font-mono text-slate-600">{item.ncm || '-'}</td>
+                    <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
+                      {item.ncm || '-'}
+                    </td>
                     <td className="px-3 py-2 text-right font-mono text-primary-700">
                       {item.invoiceQty ?? '-'}
                     </td>
@@ -369,12 +374,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     >
                       {item.plQty ?? '-'}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-600">
+                    <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
                       {item.invoiceUnitPrice != null
                         ? `$${Number(item.invoiceUnitPrice).toFixed(2)}`
                         : '-'}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-800 font-medium">
+                    <td className="px-3 py-2 text-right font-mono text-slate-800 dark:text-slate-100 font-medium">
                       {item.invoiceTotal != null ? `$${Number(item.invoiceTotal).toFixed(2)}` : '-'}
                     </td>
                   </tr>
@@ -387,8 +392,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
       {/* Unmatched PL items */}
       {data.unmatchedPlItems.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/30 overflow-hidden">
-          <div className="bg-amber-50 px-4 py-3 border-b border-amber-200">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 overflow-hidden">
+          <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
             <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
               Itens no Packing List sem correspondencia na Invoice ({data.unmatchedPlItems.length})
@@ -397,7 +402,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-amber-50/50 sticky top-0 z-10 bg-amber-50 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+                <tr className="bg-amber-50/50 dark:bg-amber-950/30 sticky top-0 z-10 bg-amber-50 dark:bg-amber-950/30 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
                     Codigo
                   </th>

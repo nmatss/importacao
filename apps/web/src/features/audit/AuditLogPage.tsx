@@ -70,7 +70,11 @@ const actionColors: Record<string, { bg: string; text: string; dot: string }> = 
   sent_to_fenicia: { bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },
 };
 
-const defaultActionColor = { bg: 'bg-slate-50', text: 'text-slate-700', dot: 'bg-slate-400' };
+const defaultActionColor = {
+  bg: 'bg-slate-50 dark:bg-slate-900',
+  text: 'text-slate-700 dark:text-slate-300',
+  dot: 'bg-slate-400',
+};
 
 const entityTypeLabels: Record<string, string> = {
   process: 'Processo',
@@ -118,8 +122,8 @@ function DetailsExpander({ details }: { details: Record<string, unknown> | null 
         className={cn(
           'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all duration-200',
           open
-            ? 'bg-slate-100 text-slate-700'
-            : 'text-slate-400 hover:bg-slate-50 hover:text-slate-600',
+            ? 'bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+            : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:text-slate-600 dark:text-slate-400',
         )}
       >
         <Code2 className="h-3 w-3" />
@@ -127,14 +131,14 @@ function DetailsExpander({ details }: { details: Record<string, unknown> | null 
         {open ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
       </button>
       {open && (
-        <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50 overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-200/60 px-3 py-1.5">
+        <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-600/80 bg-slate-50 dark:bg-slate-900 overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
               JSON
             </span>
             <span className="text-[10px] text-slate-300">{Object.keys(details).length} campos</span>
           </div>
-          <pre className="p-3 text-xs text-slate-600 max-w-lg overflow-auto font-mono leading-relaxed">
+          <pre className="p-3 text-xs text-slate-600 dark:text-slate-400 max-w-lg overflow-auto font-mono leading-relaxed">
             {JSON.stringify(details, null, 2)}
           </pre>
         </div>
@@ -177,27 +181,31 @@ export function AuditLogPage() {
   };
 
   const selectClasses =
-    'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all appearance-none cursor-pointer';
+    'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all appearance-none cursor-pointer';
   const inputClasses =
-    'rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
+    'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page header */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Auditoria</h2>
-        <p className="mt-1 text-sm text-slate-500">Registro de atividades e acoes do sistema</p>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+          Auditoria
+        </h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Registro de atividades e acoes do sistema
+        </p>
       </div>
 
       {/* Filter bar */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-3 sm:p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Search className="h-4 w-4 text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-700">Filtros</h3>
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Filtros</h3>
           {hasFilters && (
             <button
               onClick={clearFilters}
-              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+              className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:text-slate-600 dark:text-slate-400 transition-colors"
             >
               <X className="h-3 w-3" />
               Limpar
@@ -205,10 +213,10 @@ export function AuditLogPage() {
           )}
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[160px]">
+          <div className="w-full sm:w-auto sm:min-w-[160px]">
             <label
               htmlFor="audit-action"
-              className="block text-xs font-medium text-slate-500 mb-1.5"
+              className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
               Acao
             </label>
@@ -230,10 +238,10 @@ export function AuditLogPage() {
             </select>
           </div>
 
-          <div className="min-w-[140px]">
+          <div className="w-full sm:w-auto sm:min-w-[140px]">
             <label
               htmlFor="audit-entity-type"
-              className="block text-xs font-medium text-slate-500 mb-1.5"
+              className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
               Tipo
             </label>
@@ -258,7 +266,7 @@ export function AuditLogPage() {
           <div>
             <label
               htmlFor="audit-start-date"
-              className="block text-xs font-medium text-slate-500 mb-1.5"
+              className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
               De
             </label>
@@ -277,7 +285,7 @@ export function AuditLogPage() {
           <div>
             <label
               htmlFor="audit-end-date"
-              className="block text-xs font-medium text-slate-500 mb-1.5"
+              className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
               Ate
             </label>
@@ -296,18 +304,18 @@ export function AuditLogPage() {
       </div>
 
       {/* Table card */}
-      <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+      <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         {/* Card header */}
-        <div className="border-b border-slate-100 px-6 py-4">
+        <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-800">
-              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100">
-                <Shield className="h-4 w-4 text-slate-600" />
+            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100">
+              <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
+                <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Logs de Auditoria
             </h3>
             {pagination && (
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">
+              <span className="rounded-lg bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 {pagination.total.toLocaleString('pt-BR')} registro
                 {pagination.total !== 1 ? 's' : ''}
               </span>
@@ -325,9 +333,9 @@ export function AuditLogPage() {
           />
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full">
+            <table className="min-w-[800px] w-full">
               <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/80">
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80">
                   <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <Clock className="h-3 w-3" />
@@ -361,12 +369,13 @@ export function AuditLogPage() {
                     <tr
                       key={log.id}
                       className={cn(
-                        'group transition-colors duration-150 hover:bg-slate-50/80',
-                        idx !== logs.length - 1 && 'border-b border-slate-100/80',
+                        'group transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80',
+                        idx !== logs.length - 1 &&
+                          'border-b border-slate-100 dark:border-slate-700/80',
                       )}
                     >
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
-                        <div className="text-sm font-medium text-slate-700">
+                        <div className="text-sm font-medium text-slate-700 dark:text-slate-300">
                           {formatDateShort(log.createdAt)}
                         </div>
                         <div className="text-[11px] text-slate-400 mt-0.5 hidden xl:block">
@@ -376,7 +385,7 @@ export function AuditLogPage() {
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {log.userName ? (
                           <div className="flex items-center gap-2.5">
-                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-[10px] font-bold text-slate-500">
+                            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-[10px] font-bold text-slate-500 dark:text-slate-400">
                               {log.userName
                                 .split(' ')
                                 .map((w) => w[0])
@@ -384,7 +393,7 @@ export function AuditLogPage() {
                                 .join('')
                                 .toUpperCase()}
                             </div>
-                            <span className="text-sm font-medium text-slate-700">
+                            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
                               {log.userName}
                             </span>
                           </div>
@@ -406,7 +415,7 @@ export function AuditLogPage() {
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {log.entityType ? (
-                          <span className="inline-flex items-center rounded-lg bg-slate-100/80 px-2 py-0.5 text-xs font-medium text-slate-600">
+                          <span className="inline-flex items-center rounded-lg bg-slate-100 dark:bg-slate-700/80 px-2 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
                             {entityTypeLabels[log.entityType] ?? log.entityType}
                           </span>
                         ) : (
@@ -423,7 +432,7 @@ export function AuditLogPage() {
                               #{log.entityId}
                             </Link>
                           ) : (
-                            <span className="text-sm font-medium text-slate-500">
+                            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
                               #{log.entityId}
                             </span>
                           )
@@ -444,16 +453,22 @@ export function AuditLogPage() {
 
         {/* Pagination */}
         {pagination && pagination.pages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-6 py-4">
-            <p className="text-sm text-slate-500">
-              Pagina <span className="font-semibold text-slate-700">{pagination.page}</span> de{' '}
-              <span className="font-semibold text-slate-700">{pagination.pages}</span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Pagina{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {pagination.page}
+              </span>{' '}
+              de{' '}
+              <span className="font-semibold text-slate-700 dark:text-slate-300">
+                {pagination.pages}
+              </span>
             </p>
             <div className="flex gap-2">
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Anterior
@@ -461,7 +476,7 @@ export function AuditLogPage() {
               <button
                 disabled={page >= pagination.pages}
                 onClick={() => setPage(page + 1)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 Proximo
                 <ChevronRight className="h-4 w-4" />

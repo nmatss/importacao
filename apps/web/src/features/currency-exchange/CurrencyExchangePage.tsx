@@ -174,19 +174,23 @@ export function CurrencyExchangePage() {
             <DollarSign className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Cambios</h2>
-            <p className="text-sm text-slate-600">Gerenciamento de cambios por processo</p>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+              Cambios
+            </h2>
+            <p className="text-sm text-slate-600 dark:text-slate-400">
+              Gerenciamento de cambios por processo
+            </p>
           </div>
         </div>
       </div>
 
       {/* Process Selector */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
           <div className="flex-1 max-w-md">
             <label
               htmlFor="exchange-process"
-              className="mb-1.5 block text-xs font-medium text-slate-500"
+              className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
             >
               Processo
             </label>
@@ -196,7 +200,7 @@ export function CurrencyExchangePage() {
                 id="exchange-process"
                 value={selectedProcessId}
                 onChange={(e) => setSelectedProcessId(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-slate-200 py-2 pl-10 pr-10 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                className="w-full appearance-none rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-10 pr-10 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               >
                 <option value="">Selecione um processo</option>
                 {processes?.map((p) => (
@@ -224,26 +228,28 @@ export function CurrencyExchangePage() {
 
       {/* New Exchange Form */}
       {selectedProcessId && showForm && (
-        <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-            <h3 className="text-sm font-semibold text-slate-800">Novo Cambio</h3>
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Novo Cambio
+            </h3>
             <button
               onClick={() => {
                 setShowForm(false);
                 setForm(emptyForm);
               }}
-              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
               aria-label="Fechar formulario"
             >
               <X className="h-4 w-4" />
             </button>
           </div>
-          <form onSubmit={handleSubmit} className="p-6">
+          <form onSubmit={handleSubmit} className="p-4 sm:p-6">
             <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
               <div>
                 <label
                   htmlFor="exchange-type"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Tipo
                 </label>
@@ -253,7 +259,7 @@ export function CurrencyExchangePage() {
                   onChange={(e) =>
                     setForm({ ...form, type: e.target.value as 'balance' | 'deposit' })
                   }
-                  className="w-full appearance-none rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full appearance-none rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 >
                   <option value="balance">Balance</option>
                   <option value="deposit">Deposit</option>
@@ -262,7 +268,7 @@ export function CurrencyExchangePage() {
               <div>
                 <label
                   htmlFor="exchange-amount-usd"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Valor USD
                 </label>
@@ -273,14 +279,14 @@ export function CurrencyExchangePage() {
                   value={form.amountUsd}
                   onChange={(e) => setForm({ ...form, amountUsd: e.target.value })}
                   placeholder="0.00"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
                 <label
                   htmlFor="exchange-rate"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Taxa de Cambio
                 </label>
@@ -291,15 +297,15 @@ export function CurrencyExchangePage() {
                   value={form.exchangeRate}
                   onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
                   placeholder="0.0000"
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
                   Valor BRL (calculado)
                 </label>
-                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 bg-slate-50/80 px-3 text-sm font-medium text-slate-600">
+                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 px-3 text-sm font-medium text-slate-600 dark:text-slate-400">
                   {calculatedBrl ? (
                     formatCurrency(calculatedBrl, 'BRL')
                   ) : (
@@ -310,7 +316,7 @@ export function CurrencyExchangePage() {
               <div>
                 <label
                   htmlFor="exchange-payment-deadline"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Vencimento Pagamento
                 </label>
@@ -319,14 +325,14 @@ export function CurrencyExchangePage() {
                   type="date"
                   value={form.paymentDeadline}
                   onChange={(e) => setForm({ ...form, paymentDeadline: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div>
                 <label
                   htmlFor="exchange-expiration"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Data de Expiracao
                 </label>
@@ -335,14 +341,14 @@ export function CurrencyExchangePage() {
                   type="date"
                   value={form.expirationDate}
                   onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
               </div>
               <div className="sm:col-span-2 lg:col-span-3">
                 <label
                   htmlFor="exchange-notes"
-                  className="mb-1.5 block text-xs font-medium text-slate-500"
+                  className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
                 >
                   Notas
                 </label>
@@ -352,18 +358,18 @@ export function CurrencyExchangePage() {
                   onChange={(e) => setForm({ ...form, notes: e.target.value })}
                   rows={2}
                   placeholder="Observacoes opcionais..."
-                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                 />
               </div>
             </div>
-            <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 pt-5">
+            <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700 pt-5">
               <button
                 type="button"
                 onClick={() => {
                   setShowForm(false);
                   setForm(emptyForm);
                 }}
-                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900"
               >
                 Cancelar
               </button>
@@ -386,7 +392,7 @@ export function CurrencyExchangePage() {
             {kpiCards.map((kpi) => (
               <div
                 key={kpi.label}
-                className="rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm"
+                className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm"
               >
                 <div className="flex items-center gap-3.5">
                   <div
@@ -395,8 +401,12 @@ export function CurrencyExchangePage() {
                     <kpi.icon className="h-5 w-5 text-white" />
                   </div>
                   <div>
-                    <p className="text-xs font-medium text-slate-500">{kpi.label}</p>
-                    <p className="text-lg font-bold text-slate-900">{kpi.value}</p>
+                    <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {kpi.label}
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                      {kpi.value}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -413,42 +423,42 @@ export function CurrencyExchangePage() {
               description="Adicione um novo cambio para este processo."
             />
           ) : (
-            <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
+            <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-slate-200">
+                <table className="min-w-[800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
                   <thead>
-                    <tr className="bg-slate-50">
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                    <tr className="bg-slate-50 dark:bg-slate-900">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Tipo
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Valor USD
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Taxa
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Valor BRL
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Vencimento
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Expiracao
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Notas
                       </th>
-                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                         Acoes
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                     {exchanges.map((ex) => (
                       <tr
                         key={ex.id}
-                        className="border-t border-slate-100 hover:bg-slate-50/50 transition-colors"
+                        className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                       >
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <span
@@ -461,22 +471,22 @@ export function CurrencyExchangePage() {
                             {ex.type === 'balance' ? 'Balance' : 'Deposit'}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
                           {formatCurrency(ex.amountUsd)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700 dark:text-slate-300">
                           {Number(ex.exchangeRate).toFixed(4)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
                           {formatCurrency(ex.amountBrl, 'BRL')}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                           {formatDate(ex.paymentDeadline)}
                         </td>
-                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                        <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                           {formatDate(ex.expirationDate)}
                         </td>
-                        <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600">
+                        <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                           {ex.notes || <span className="text-slate-300">--</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">

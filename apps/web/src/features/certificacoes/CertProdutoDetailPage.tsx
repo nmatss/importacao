@@ -59,7 +59,7 @@ export default function CertProdutoDetailPage() {
       {/* Back link */}
       <Link
         to="/certificacoes/produtos"
-        className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-emerald-600 transition-colors font-medium group"
+        className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors font-medium group"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
         Voltar para Produtos
@@ -67,22 +67,22 @@ export default function CertProdutoDetailPage() {
 
       {loading ? (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-slate-200/60 bg-white p-7">
+          <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-7">
             <div className="flex items-start gap-5">
-              <div className="w-14 h-14 rounded-2xl bg-slate-100 animate-pulse" />
+              <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
               <div className="flex-1 space-y-3">
-                <div className="h-5 w-64 bg-slate-100 rounded-lg animate-pulse" />
-                <div className="h-4 w-40 bg-slate-100 rounded-lg animate-pulse" />
+                <div className="h-5 w-64 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
+                <div className="h-4 w-40 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
               </div>
             </div>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-48 rounded-2xl bg-slate-100 animate-pulse" />
-            <div className="h-48 rounded-2xl bg-slate-100 animate-pulse" />
+            <div className="h-48 rounded-2xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
+            <div className="h-48 rounded-2xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
           </div>
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-danger-200/60 bg-white p-10 text-center">
+        <div className="rounded-2xl border border-danger-200/60 bg-white dark:bg-slate-800 p-10 text-center">
           <div className="inline-flex p-4 rounded-2xl bg-danger-50 mb-4">
             <AlertCircle className="w-8 h-8 text-danger-400" />
           </div>
@@ -92,7 +92,7 @@ export default function CertProdutoDetailPage() {
       ) : product ? (
         <>
           {/* Product Header Card */}
-          <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
+          <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-7 py-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -131,17 +131,19 @@ export default function CertProdutoDetailPage() {
 
             <div className="px-7 py-5">
               <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2 text-sm text-slate-600">
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <Hash className="w-4 h-4 text-slate-400" />
-                  <span className="font-mono font-semibold text-slate-800">{product.sku}</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
+                    {product.sku}
+                  </span>
                 </div>
                 <div className="w-px h-4 bg-slate-200" />
-                <div className="flex items-center gap-2 text-sm text-slate-600">
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <Tag className="w-4 h-4 text-slate-400" />
                   <span>{product.brand}</span>
                 </div>
                 <div className="w-px h-4 bg-slate-200" />
-                <div className="flex items-center gap-2 text-sm text-slate-600">
+                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <FileText className="w-4 h-4 text-slate-400" />
                   <span>Linha {product.excel_row}</span>
                 </div>
@@ -174,27 +176,27 @@ export default function CertProdutoDetailPage() {
 
           {/* Validation Status Bar */}
           {validation && (
-            <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white p-5">
-              <div className="flex items-center justify-between">
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div
                     className={cn(
                       'p-2 rounded-xl',
                       liveResult
                         ? 'bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm'
-                        : 'bg-slate-100 text-slate-500',
+                        : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
                     )}
                   >
                     <ShieldCheck className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
                       {liveResult ? 'Resultado em Tempo Real' : 'Última Validação'}
                     </h3>
                     {(validation.date || validation.verified_at) && (
                       <div className="flex items-center gap-2 mt-0.5">
                         <Clock className="w-3 h-3 text-slate-400" />
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
                           {formatDateTime(validation.verified_at || validation.date)}
                         </p>
                         {liveResult && (
@@ -233,13 +235,13 @@ export default function CertProdutoDetailPage() {
           {/* Side-by-side Text Comparison */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Expected Text */}
-            <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60">
                 <div className="flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-emerald-100">
                     <FileText className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Texto Esperado (Planilha)
                   </h4>
                 </div>
@@ -251,7 +253,7 @@ export default function CertProdutoDetailPage() {
                       Descrição E-commerce
                     </p>
                     <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-100/60">
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                      <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
                         {product.ecommerce_description}
                       </p>
                     </div>
@@ -268,11 +270,11 @@ export default function CertProdutoDetailPage() {
                       'p-4 rounded-xl min-h-[100px]',
                       product.expected_cert_text || product.certification_type
                         ? 'bg-emerald-50/50 border border-emerald-100/60'
-                        : 'bg-slate-50 border border-slate-100',
+                        : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700',
                     )}
                   >
                     {product.expected_cert_text || product.certification_type ? (
-                      <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                      <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
                         {product.ecommerce_description
                           ? product.certification_type
                           : product.expected_cert_text}
@@ -288,13 +290,13 @@ export default function CertProdutoDetailPage() {
             </div>
 
             {/* Actual Text */}
-            <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/60">
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60">
                 <div className="flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-emerald-100">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Texto Encontrado (E-commerce)
                   </h4>
                 </div>
@@ -309,11 +311,11 @@ export default function CertProdutoDetailPage() {
                         : validation?.status === 'INCONSISTENT'
                           ? 'bg-amber-50/50 border border-amber-100/60'
                           : 'bg-danger-50/50 border border-danger-100/60'
-                      : 'bg-slate-50 border border-slate-100',
+                      : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700',
                   )}
                 >
                   {validation?.actual_cert_text ? (
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-relaxed">
+                    <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
                       {validation.actual_cert_text}
                     </p>
                   ) : (
@@ -330,19 +332,19 @@ export default function CertProdutoDetailPage() {
 
           {/* AI Assessment */}
           {validation?.ai_assessment && (
-            <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 bg-gradient-to-r from-violet-50/60 to-violet-50/40">
+            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-violet-50/60 to-violet-50/40">
                 <div className="flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-sm">
                     <Sparkles className="w-3.5 h-3.5" />
                   </div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Avaliação IA
                   </h4>
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
                   {validation.ai_assessment}
                 </p>
               </div>
@@ -351,7 +353,7 @@ export default function CertProdutoDetailPage() {
 
           {/* Error details */}
           {validation?.error && validation.status && (
-            <div className="rounded-2xl border border-amber-200/60 shadow-sm bg-white overflow-hidden">
+            <div className="rounded-2xl border border-amber-200/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
               <div className="px-6 py-4 border-b border-amber-100 bg-amber-50/60">
                 <div className="flex items-center gap-2.5">
                   <div className="p-1.5 rounded-lg bg-amber-100">
@@ -363,7 +365,9 @@ export default function CertProdutoDetailPage() {
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-sm text-slate-700 leading-relaxed">{validation.error}</p>
+                <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                  {validation.error}
+                </p>
               </div>
             </div>
           )}

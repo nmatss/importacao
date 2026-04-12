@@ -127,12 +127,12 @@ export default function CertValidacaoPage() {
       </div>
 
       {/* Controls Card */}
-      <div className="rounded-2xl border border-slate-200/60 shadow-sm bg-white">
+      <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800">
         <div className="p-6 md:p-7">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             {/* Brand Selector */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 uppercase tracking-wider">
+              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 Marca
               </label>
               <div className="relative">
@@ -140,7 +140,7 @@ export default function CertValidacaoPage() {
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   disabled={running}
-                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer min-w-[200px]"
+                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 dark:bg-slate-900 disabled:text-slate-400 cursor-pointer min-w-[200px]"
                 >
                   {brands.map((b) => (
                     <option key={b.value} value={b.value}>
@@ -180,7 +180,7 @@ export default function CertValidacaoPage() {
             </div>
 
             {/* Estimated time */}
-            <div className="flex items-center gap-2 text-sm text-slate-500 sm:ml-auto bg-slate-50 px-4 py-2.5 rounded-xl">
+            <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 sm:ml-auto bg-slate-50 dark:bg-slate-900 px-4 py-2.5 rounded-xl">
               <Clock className="w-4 h-4 text-slate-400" />
               <span>
                 ~{estimatedMinutes} min
@@ -213,8 +213,12 @@ export default function CertValidacaoPage() {
                 <ShieldCheck className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Resultado da Validação</h2>
-                <p className="text-sm text-slate-500">Verificação concluída com sucesso</p>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  Resultado da Validação
+                </h2>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Verificação concluída com sucesso
+                </p>
               </div>
               <div className="ml-auto">
                 <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-semibold">

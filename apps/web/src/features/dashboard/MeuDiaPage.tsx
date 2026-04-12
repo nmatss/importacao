@@ -90,6 +90,11 @@ interface AlertData {
   createdAt: string;
 }
 
+interface PaginatedAlerts {
+  data: AlertData[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+}
+
 // ── Component ────────────────────────────────────────────────────────────
 
 export function MeuDiaPage() {
@@ -103,10 +108,15 @@ export function MeuDiaPage() {
     '/api/dashboard/overview',
   );
 
-  const { data: alerts, isLoading: alertsLoading } = useApiQuery<AlertData[]>(
+  const { data: alertsResponse, isLoading: alertsLoading } = useApiQuery<PaginatedAlerts>(
     ['alerts'],
     '/api/alerts?limit=10',
   );
+  const alerts = Array.isArray(alertsResponse)
+    ? alertsResponse
+    : Array.isArray((alertsResponse as any)?.data)
+      ? (alertsResponse as PaginatedAlerts).data
+      : [];
 
   const isLoading = slaLoading || overviewLoading || alertsLoading;
 
@@ -217,7 +227,7 @@ export function MeuDiaPage() {
   }, [slaData]);
 
   const criticalAlerts = useMemo(() => {
-    if (!alerts) return [];
+    if (!Array.isArray(alerts)) return [];
     return alerts.filter((a) => a.severity === 'critical').slice(0, 5);
   }, [alerts]);
 
@@ -235,14 +245,18 @@ export function MeuDiaPage() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900 tracking-tight">Meu Dia</h2>
-          <p className="mt-1 text-sm text-slate-600 capitalize">{today}</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+            Meu Dia
+          </h2>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 capitalize">{today}</p>
         </div>
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 text-primary-600" />
-          <span className="text-sm font-medium text-primary-600">Cockpit Pessoal</span>
+          <span className="text-sm font-medium text-primary-600 hidden sm:inline">
+            Cockpit Pessoal
+          </span>
         </div>
       </div>
 
@@ -252,25 +266,25 @@ export function MeuDiaPage() {
           icon={<Target className="h-5 w-5 text-primary-600" />}
           label="Processos Ativos"
           value={overview?.activeProcesses ?? 0}
-          bgColor="bg-primary-50"
+          bgColor="bg-primary-50 dark:bg-primary-950/40"
         />
         <SummaryCard
           icon={<AlertTriangle className="h-5 w-5 text-danger-600" />}
           label="Atrasados"
           value={overview?.overdueProcesses ?? 0}
-          bgColor="bg-danger-50"
+          bgColor="bg-danger-50 dark:bg-danger-950/40"
         />
         <SummaryCard
           icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
           label="Concluidos no Mes"
           value={overview?.completedThisMonth ?? 0}
-          bgColor="bg-emerald-50"
+          bgColor="bg-emerald-50 dark:bg-emerald-950/40"
         />
         <SummaryCard
           icon={<DollarSign className="h-5 w-5 text-amber-600" />}
           label="Valor FOB Total"
           value={formatCurrency(overview?.totalFobValue ?? 0)}
-          bgColor="bg-amber-50"
+          bgColor="bg-amber-50 dark:bg-amber-950/40"
         />
       </div>
 
@@ -278,7 +292,7 @@ export function MeuDiaPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Pending Tasks - 2 columns */}
         <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Clock className="h-5 w-5 text-slate-400" />
             Tarefas Pendentes
             {pendingTasks.length > 0 && (
@@ -289,9 +303,11 @@ export function MeuDiaPage() {
           </h3>
 
           {pendingTasks.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-emerald-300 bg-emerald-50 p-8 text-center">
+            <div className="rounded-2xl border border-dashed border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/30 p-8 text-center">
               <CheckCircle className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
-              <p className="text-sm font-medium text-emerald-700">Nenhuma pendencia para hoje!</p>
+              <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                Nenhuma pendencia para hoje!
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -302,10 +318,10 @@ export function MeuDiaPage() {
                   className={cn(
                     'block rounded-2xl border p-4 transition-all hover:shadow-md',
                     task.priority === 'critical'
-                      ? 'border-danger-200 bg-danger-50 hover:border-danger-300'
+                      ? 'border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/40 hover:border-danger-300'
                       : task.priority === 'high'
-                        ? 'border-amber-200 bg-amber-50 hover:border-amber-300'
-                        : 'border-slate-200/60 bg-white hover:border-primary-300',
+                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:border-amber-300'
+                        : 'border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-primary-300',
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -314,16 +330,18 @@ export function MeuDiaPage() {
                         className={cn(
                           'flex items-center justify-center h-10 w-10 rounded-lg text-sm font-bold',
                           task.priority === 'critical'
-                            ? 'bg-danger-100 text-danger-700'
+                            ? 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400'
                             : task.priority === 'high'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-primary-100 text-primary-700',
+                              ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400'
+                              : 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-400',
                         )}
                       >
                         {task.count}
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{task.title}</p>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                          {task.title}
+                        </p>
                         <p className="text-[11px] text-slate-400">{task.description}</p>
                       </div>
                     </div>
@@ -337,12 +355,12 @@ export function MeuDiaPage() {
 
         {/* Alerts sidebar - 1 column */}
         <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
             <Bell className="h-5 w-5 text-slate-400" />
             Alertas Recentes
           </h3>
 
-          <div className="rounded-2xl border border-slate-200/60 bg-white divide-y divide-slate-100">
+          <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 divide-y divide-slate-100 dark:divide-slate-700">
             {!alerts || alerts.length === 0 ? (
               <div className="p-6 text-center">
                 <Bell className="h-6 w-6 text-slate-300 mx-auto mb-2" />
@@ -362,7 +380,9 @@ export function MeuDiaPage() {
                     )}
                   />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-slate-600 truncate">{alert.message}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 truncate">
+                      {alert.message}
+                    </p>
                     <p className="text-[11px] text-slate-400 mt-0.5">
                       {formatDate(alert.createdAt)}
                     </p>
@@ -384,11 +404,11 @@ export function MeuDiaPage() {
           {/* Urgent LIs */}
           {slaData?.liUrgent && slaData.liUrgent.length > 0 && (
             <>
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2 pt-2">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 pt-2">
                 <FileWarning className="h-5 w-5 text-amber-500" />
                 LIs com Prazo Critico
               </h3>
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 divide-y divide-amber-100">
+              <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 divide-y divide-amber-100 dark:divide-amber-800">
                 {slaData.liUrgent.slice(0, 5).map((li) => (
                   <Link
                     key={li.id}
@@ -396,7 +416,9 @@ export function MeuDiaPage() {
                     className="block p-3 hover:bg-amber-100 transition-colors"
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-slate-900">{li.processCode}</span>
+                      <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                        {li.processCode}
+                      </span>
                       <span className="text-[11px] font-medium text-danger-600">
                         {li.daysRemaining}d restantes
                       </span>
@@ -426,12 +448,21 @@ function SummaryCard({
   bgColor: string;
 }) {
   return (
-    <div className={cn('rounded-2xl border border-slate-200/60 p-5 shadow-sm', bgColor)}>
+    <div
+      className={cn(
+        'rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-5 shadow-sm',
+        bgColor,
+      )}
+    >
       <div className="flex items-center gap-3">
         {icon}
         <div>
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
-          <p className="text-xl font-bold text-slate-900">{value}</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            {label}
+          </p>
+          <p className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
+            {value}
+          </p>
         </div>
       </div>
     </div>

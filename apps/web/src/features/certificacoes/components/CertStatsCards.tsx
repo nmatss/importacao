@@ -44,7 +44,7 @@ export function CertStatsCards({ data, loading }: { data?: StatsData; loading?: 
       {CARDS.map((card) => (
         <div
           key={card.key}
-          className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5 transition-shadow hover:shadow-md"
+          className="bg-white rounded-2xl border border-slate-200 dark:border-slate-600/80 shadow-sm p-5 transition-shadow hover:shadow-md"
         >
           <div className="flex items-center gap-4">
             <div
@@ -53,10 +53,12 @@ export function CertStatsCards({ data, loading }: { data?: StatsData; loading?: 
               <card.icon className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold text-slate-900 leading-none mb-1">
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none mb-1">
                 {loading ? '-' : (data?.[card.key] ?? 0)}
               </p>
-              <p className="text-xs font-medium text-slate-500 truncate">{card.label}</p>
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+                {card.label}
+              </p>
             </div>
           </div>
         </div>

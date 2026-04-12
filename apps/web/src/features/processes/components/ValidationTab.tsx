@@ -8,13 +8,13 @@ export interface ValidationTabProps {
 export function ValidationTab({ processId }: ValidationTabProps) {
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800">
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
         Checklist de Validacao
       </h3>
       <ValidationChecklist processId={processId} />
 
-      <div className="border-t border-slate-200/80 pt-6 mt-6">
-        <h3 className="text-lg font-bold text-slate-800 mb-4">
+      <div className="border-t border-slate-200 dark:border-slate-600/80 pt-6 mt-6">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">
           Comparativo Sistema vs Follow-Up
         </h3>
         <FupComparisonPanel processId={processId} />

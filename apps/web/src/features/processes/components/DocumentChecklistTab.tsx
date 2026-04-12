@@ -122,15 +122,17 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   return (
     <div className="space-y-4">
       {/* Progress header */}
-      <div className="flex items-center gap-4 rounded-lg bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-4 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-3">
         <div className="flex-1">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm font-medium text-slate-700">Conferencia Documental</span>
-            <span className="text-xs font-semibold text-slate-500">
+            <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+              Conferencia Documental
+            </span>
+            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
               {completedCount}/{totalSteps} passos ({progressPct}%)
             </span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
             <div
               className={cn(
                 'h-full rounded-full transition-all duration-500',
@@ -163,8 +165,8 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               className={cn(
                 'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
                 isCompleted
-                  ? 'border-emerald-200 bg-emerald-50/50 hover:bg-emerald-50'
-                  : 'border-slate-150 bg-white hover:bg-slate-50 hover:border-slate-200',
+                  ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
+                  : 'border-slate-150 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-200',
                 isToggling && 'opacity-60',
               )}
             >
@@ -172,7 +174,9 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               <span
                 className={cn(
                   'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold',
-                  isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-200 text-slate-500',
+                  isCompleted
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
                 )}
               >
                 {isCompleted ? <CheckCircle2 className="h-3.5 w-3.5" /> : String(index + 1)}
@@ -191,7 +195,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                 <p
                   className={cn(
                     'text-sm font-medium',
-                    isCompleted ? 'text-emerald-700' : 'text-slate-700',
+                    isCompleted ? 'text-emerald-700' : 'text-slate-700 dark:text-slate-300',
                   )}
                 >
                   {step.label}

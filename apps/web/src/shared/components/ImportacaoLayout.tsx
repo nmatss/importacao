@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
+import { ThemeToggle } from '@/shared/components/ThemeToggle';
 
 const navSections = [
   {
@@ -305,11 +306,11 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white px-4 lg:px-6">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 lg:hidden transition-colors"
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 lg:hidden transition-colors"
               aria-label="Abrir menu"
             >
               <Menu className="h-5 w-5" />
@@ -317,11 +318,14 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
 
             <div className="flex items-center gap-2">
               {breadcrumbs.length > 1 && (
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
                   {breadcrumbs.slice(0, -1).map((crumb, i) => (
                     <span key={i} className="flex items-center gap-1.5">
                       {crumb.href ? (
-                        <Link to={crumb.href} className="hover:text-primary-600 transition-colors">
+                        <Link
+                          to={crumb.href}
+                          className="hover:text-primary-600 dark:hover:text-primary-400 transition-colors"
+                        >
                           {crumb.label}
                         </Link>
                       ) : (
@@ -332,24 +336,29 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
                   ))}
                 </div>
               )}
-              <h1 className="text-base font-semibold text-slate-800 tracking-tight">{pageTitle}</h1>
+              <h1 className="text-base font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
+                {pageTitle}
+              </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {user && (
               <>
                 <div className="hidden sm:block text-right mr-1">
-                  <p className="text-sm font-medium text-slate-700 leading-tight">{user.name}</p>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
+                    {user.name}
+                  </p>
                   <p className="text-[11px] text-slate-400">{user.role}</p>
                 </div>
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 text-white text-[11px] font-bold shadow-sm">
                   {getInitials(user.name)}
                 </div>
-                <div className="w-px h-5 bg-slate-200 hidden sm:block mx-1" />
+                <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block mx-1" />
                 <button
                   onClick={logout}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-150"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400 transition-all duration-150"
                   title="Sair"
                 >
                   <LogOut className="h-4 w-4" />
@@ -361,7 +370,9 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Content */}
-        <main id="main" role="main" className="flex-1 overflow-auto p-4 lg:p-6">{children}</main>
+        <main id="main" role="main" className="flex-1 overflow-auto p-4 lg:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

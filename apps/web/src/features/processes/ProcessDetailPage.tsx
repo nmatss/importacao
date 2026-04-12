@@ -247,7 +247,10 @@ export function ProcessDetailPage() {
 
   const handleTabChange = useCallback((key: string) => setActiveTab(key), []);
   const handleBack = useCallback(() => navigate('/importacao/processos'), [navigate]);
-  const handleEdit = useCallback(() => navigate(`/importacao/processos/${id}/editar`), [navigate, id]);
+  const handleEdit = useCallback(
+    () => navigate(`/importacao/processos/${id}/editar`),
+    [navigate, id],
+  );
 
   if (!id) return <Navigate to="/importacao/processos" replace />;
 
@@ -258,7 +261,9 @@ export function ProcessDetailPage() {
           <Package className="h-7 w-7 text-white animate-pulse" />
         </div>
         <LoadingSpinner size="lg" />
-        <p className="text-sm text-slate-400 font-medium">Carregando processo...</p>
+        <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
+          Carregando processo...
+        </p>
       </div>
     );
   }
@@ -266,10 +271,12 @@ export function ProcessDetailPage() {
   if (!process) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-800">
           <Package className="h-7 w-7 text-slate-300" />
         </div>
-        <p className="text-sm font-medium text-slate-500">Processo nao encontrado.</p>
+        <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+          Processo nao encontrado.
+        </p>
         <button
           onClick={() => navigate('/importacao/processos')}
           className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
@@ -289,12 +296,7 @@ export function ProcessDetailPage() {
         ]}
       />
 
-      <ProcessHeader
-        process={process}
-        processId={id}
-        onBack={handleBack}
-        onEdit={handleEdit}
-      />
+      <ProcessHeader process={process} processId={id} onBack={handleBack} onEdit={handleEdit} />
 
       <ProcessTimeline currentStatus={process.status} followUp={process.followUp} />
 
@@ -303,9 +305,9 @@ export function ProcessDetailPage() {
       <ProcessInfoCard process={process} />
 
       {/* Tabs */}
-      <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm overflow-hidden">
-        <div className="border-b border-slate-100 bg-slate-50/40 px-3 pt-3 sm:px-5 sm:pt-4">
-          <div className="flex gap-1 overflow-x-auto">
+      <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
+        <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/40 px-3 pt-3 sm:px-5 sm:pt-4">
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide">
             {visibleTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -317,8 +319,8 @@ export function ProcessDetailPage() {
                   className={cn(
                     'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive
-                      ? 'bg-white text-primary-700 shadow-sm border border-slate-200/60 border-b-white -mb-px z-10'
-                      : 'text-slate-400 hover:text-slate-600 hover:bg-white/50',
+                      ? 'bg-white dark:bg-slate-800 text-primary-700 dark:text-primary-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60 border-b-white dark:border-b-slate-800 -mb-px z-10'
+                      : 'text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50',
                   )}
                 >
                   <Icon className={cn('h-4 w-4', isActive ? 'text-primary-600' : '')} />

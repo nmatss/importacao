@@ -42,7 +42,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
   if (!tracking) {
     return (
       <div className="flex flex-col items-center justify-center py-12 gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <CalendarDays className="h-6 w-6 text-slate-300" />
         </div>
         <p className="text-sm text-slate-400 font-medium">
@@ -54,15 +54,17 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-800">Acompanhamento (Follow-Up)</h3>
-        <span className="text-sm font-semibold text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          Acompanhamento (Follow-Up)
+        </h3>
+        <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
           Progresso: <span className="text-primary-700">{tracking.overallProgress}%</span>
         </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-3 rounded-full bg-slate-100 overflow-hidden">
+      <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
         <div
           className="h-full rounded-full bg-gradient-to-r from-primary-500 to-emerald-500 transition-all duration-500"
           style={{ width: `${tracking.overallProgress}%` }}
@@ -81,8 +83,8 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
               className={cn(
                 'flex items-center gap-4 rounded-xl border p-4 transition-colors',
                 isCompleted
-                  ? 'border-emerald-200/60 bg-emerald-50/50'
-                  : 'border-slate-200/60 bg-white',
+                  ? 'border-emerald-200/60 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/30'
+                  : 'border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800',
               )}
             >
               <div
@@ -90,7 +92,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
                   'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-all',
                   isCompleted
                     ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm'
-                    : 'bg-slate-100',
+                    : 'bg-slate-100 dark:bg-slate-700',
                 )}
               >
                 {isCompleted ? (
@@ -103,7 +105,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
                 <p
                   className={cn(
                     'text-sm font-semibold',
-                    isCompleted ? 'text-emerald-800' : 'text-slate-500',
+                    isCompleted ? 'text-emerald-800' : 'text-slate-500 dark:text-slate-400',
                   )}
                 >
                   {label}
@@ -121,7 +123,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
 
       {/* LI Deadline */}
       {tracking.liDeadline && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4">
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
           <div className="flex items-center gap-3">
             <Timer className="h-5 w-5 text-amber-600" />
             <div>
@@ -138,14 +140,14 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
 
       {/* Notes */}
       {tracking.notes && (
-        <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+        <div className="rounded-xl border border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 p-4">
           <div className="flex items-center gap-2 mb-2">
             <StickyNote className="h-4 w-4 text-slate-400" />
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               Observacoes
             </p>
           </div>
-          <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
             {tracking.notes}
           </p>
         </div>

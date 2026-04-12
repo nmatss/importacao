@@ -65,8 +65,8 @@ const statusIcon = {
   skipped: {
     Icon: AlertTriangle,
     color: 'text-slate-400',
-    bg: 'bg-slate-50',
-    border: 'border-slate-200',
+    bg: 'bg-slate-50 dark:bg-slate-900',
+    border: 'border-slate-200 dark:border-slate-600',
   },
 };
 
@@ -77,27 +77,33 @@ function CheckRow({ check, index }: { check: ValidationCheck; index: number }) {
   return (
     <tr
       className={cn(
-        'border-b last:border-b-0 transition-colors hover:bg-primary-50/40',
-        index % 2 === 0 ? '' : 'bg-slate-50',
-        check.status === 'failed' && 'bg-danger-50/40',
+        'border-b border-slate-100 dark:border-slate-700 last:border-b-0 transition-colors hover:bg-primary-50/40 dark:hover:bg-primary-950/20',
+        index % 2 === 0 ? '' : 'bg-slate-50 dark:bg-slate-900',
+        check.status === 'failed' && 'bg-danger-50/40 dark:bg-danger-950/20',
       )}
     >
-      <td className="px-5 py-3.5 text-sm font-medium text-slate-900">
+      <td className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
         <div className="flex items-center gap-2">
           <Icon className={cn('h-4 w-4 shrink-0', config.color)} />
           {checkLabel(check.checkName)}
         </div>
       </td>
-      <td className="px-5 py-3.5 text-sm text-slate-600 font-mono">{check.expectedValue ?? '-'}</td>
+      <td className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400 font-mono">
+        {check.expectedValue ?? '-'}
+      </td>
       <td
         className={cn(
-          'px-5 py-3.5 text-sm font-mono',
-          check.status === 'failed' ? 'text-danger-700 font-semibold' : 'text-slate-600',
+          'px-3 py-2.5 sm:px-5 sm:py-3.5 text-sm font-mono',
+          check.status === 'failed'
+            ? 'text-danger-700 font-semibold'
+            : 'text-slate-600 dark:text-slate-400',
         )}
       >
         {check.actualValue ?? '-'}
       </td>
-      <td className="px-5 py-3.5 text-xs text-slate-500">{check.message}</td>
+      <td className="px-3 py-2.5 sm:px-5 sm:py-3.5 text-xs text-slate-500 dark:text-slate-400">
+        {check.message}
+      </td>
     </tr>
   );
 }
@@ -113,10 +119,10 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
   if (!report) {
     return (
       <div className="flex flex-col items-center justify-center py-14 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 border border-primary-100 mb-4">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary-50 dark:bg-primary-950/30 border border-primary-100 dark:border-primary-800 mb-4">
           <FileSearch className="h-7 w-7 text-primary-400" />
         </div>
-        <p className="text-sm font-semibold text-slate-600">
+        <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
           Nenhum relatorio de validacao disponivel
         </p>
         <p className="text-xs text-slate-400 mt-1 mb-4">
@@ -136,7 +142,7 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
   return (
     <div className="space-y-6">
       {/* Summary */}
-      <div className="flex items-center gap-4 text-sm">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
           <CheckCircle className="h-3.5 w-3.5" /> {report.summary.passed} passou
         </span>
@@ -150,27 +156,29 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
       {/* System vs Document checks */}
       {hasSystemChecks && (
-        <div className="rounded-xl border border-primary-200 overflow-hidden">
-          <div className="bg-primary-50 px-4 py-3 border-b border-primary-200">
-            <h4 className="text-sm font-semibold text-primary-900">Documentos vs Sistema</h4>
-            <p className="text-xs text-primary-600 mt-0.5">
+        <div className="rounded-xl border border-primary-200 dark:border-primary-800 overflow-hidden">
+          <div className="bg-primary-50 dark:bg-primary-950/30 px-4 py-3 border-b border-primary-200 dark:border-primary-800">
+            <h4 className="text-sm font-semibold text-primary-900 dark:text-primary-300">
+              Documentos vs Sistema
+            </h4>
+            <p className="text-xs text-primary-600 dark:text-primary-400 mt-0.5">
               Comparacao entre dados extraidos dos documentos e valores cadastrados no sistema
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-primary-50/50">
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
+                <tr className="bg-primary-50/50 dark:bg-primary-950/30">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Verificacao
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Valor Sistema
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Valor Documento
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-400">
                     Mensagem
                   </th>
                 </tr>
@@ -187,27 +195,29 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
       {/* Cross-document checks */}
       {hasCrossChecks && (
-        <div className="rounded-xl border border-slate-200 overflow-hidden">
-          <div className="bg-slate-50 px-4 py-3 border-b border-slate-200">
-            <h4 className="text-sm font-semibold text-slate-900">Cruzamento entre Documentos</h4>
-            <p className="text-xs text-slate-500 mt-0.5">
+        <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+              Cruzamento entre Documentos
+            </h4>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               Comparacao entre Invoice, Packing List e BL
             </p>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead>
-                <tr className="bg-slate-50/50">
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <tr className="bg-slate-50/50 dark:bg-slate-900/50">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Verificacao
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Esperado
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Encontrado
                   </th>
-                  <th className="px-5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  <th className="px-3 py-2 sm:px-5 sm:py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Mensagem
                   </th>
                 </tr>
@@ -223,7 +233,7 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
       )}
 
       {!hasSystemChecks && !hasCrossChecks && (
-        <p className="text-center text-sm text-slate-500 py-4">
+        <p className="text-center text-sm text-slate-500 dark:text-slate-400 py-4">
           Nenhuma validacao executada ainda.
         </p>
       )}
