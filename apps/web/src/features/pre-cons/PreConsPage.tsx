@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload,
   RefreshCw,
@@ -11,6 +11,13 @@ import {
   ChevronUp,
   Search,
   XCircle,
+  X,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  SlidersHorizontal,
+  Calendar,
+  Filter,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
@@ -60,6 +67,13 @@ interface Divergence {
   severity: 'info' | 'warning' | 'critical';
 }
 
+interface PreConsSummary {
+  totalFob: number;
+  totalCbm: number;
+  totalQuantity: number;
+  uniqueProcesses: number;
+}
+
 const fieldLabels: Record<string, string> = {
   totalFobValue: 'Valor FOB Total',
   totalCbm: 'CBM Total',
@@ -87,6 +101,16 @@ const severityConfig = {
   },
 };
 
+const SORT_OPTIONS = [
+  { value: 'processCode', label: 'Processo' },
+  { value: 'supplier', label: 'Fornecedor' },
+  { value: 'etd', label: 'ETD' },
+  { value: 'amount', label: 'Valor' },
+  { value: 'quantity', label: 'Quantidade' },
+] as const;
+
+type SortField = (typeof SORT_OPTIONS)[number]['value'];
+
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 function formatCurrency(value: string | null): string {
@@ -96,12 +120,109 @@ function formatCurrency(value: string | null): string {
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+function formatCompactCurrency(value: number): string {
+  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return value.toLocaleString('pt-BR');
+}
+
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700">
+    <div className="flex items-center gap-3 rounded-2xl border border-danger-100 bg-danger-50 dark:bg-danger-950/30 dark:border-danger-800/50 px-4 py-3 text-sm font-medium text-danger-700 dark:text-danger-400">
       <XCircle className="h-4 w-4 shrink-0" />
       {message}
     </div>
+  );
+}
+
+/** Reusable filter chip */
+function FilterChip({
+  label,
+  value,
+  onRemove,
+}: {
+  label: string;
+  value: string;
+  onRemove: () => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 dark:bg-primary-950/30 text-primary-700 dark:text-primary-300 pl-3 pr-1.5 py-1 text-xs font-medium transition-colors">
+      <span className="text-primary-500 dark:text-primary-400 font-semibold">{label}:</span>
+      <span className="max-w-[120px] truncate">{value}</span>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="flex items-center justify-center h-4 w-4 rounded-full hover:bg-primary-200 dark:hover:bg-primary-800 transition-colors"
+        aria-label={`Remover filtro ${label}`}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+/** Sortable column header */
+function SortableHeader({
+  label,
+  field,
+  currentSort,
+  currentOrder,
+  onSort,
+  align = 'left',
+}: {
+  label: string;
+  field: SortField;
+  currentSort: SortField;
+  currentOrder: 'asc' | 'desc';
+  onSort: (field: SortField) => void;
+  align?: 'left' | 'right';
+}) {
+  const isActive = currentSort === field;
+
+  return (
+    <th
+      className={cn(
+        'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors group',
+        align === 'right' ? 'text-right' : 'text-left',
+        isActive
+          ? 'text-primary-700 dark:text-primary-300'
+          : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300',
+      )}
+      onClick={() => onSort(field)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {isActive ? (
+          currentOrder === 'asc' ? (
+            <ArrowUp className="h-3 w-3 text-primary-500" />
+          ) : (
+            <ArrowDown className="h-3 w-3 text-primary-500" />
+          )
+        ) : (
+          <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity" />
+        )}
+      </span>
+    </th>
+  );
+}
+
+/** Non-sortable column header */
+function StaticHeader({ label, align = 'left' }: { label: string; align?: 'left' | 'right' }) {
+  return (
+    <th
+      className={cn(
+        'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400',
+        align === 'right' ? 'text-right' : 'text-left',
+      )}
+    >
+      {label}
+    </th>
   );
 }
 
@@ -112,10 +233,53 @@ export function PreConsPage() {
   const [uploadResult, setUploadResult] = useState<{ success: boolean; message: string } | null>(
     null,
   );
+
+  // Filter state
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sheetFilter, setSheetFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [etdFrom, setEtdFrom] = useState('');
+  const [etdTo, setEtdTo] = useState('');
+  const [sortBy, setSortBy] = useState<SortField>('processCode');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [logsExpanded, setLogsExpanded] = useState(false);
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Build query string for items
+  const itemsQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set('page', String(page));
+    params.set('limit', '50');
+    if (search) params.set('search', search);
+    if (sheetFilter) params.set('sheetName', sheetFilter);
+    if (supplierFilter) params.set('supplier', supplierFilter);
+    if (etdFrom) params.set('etdFrom', etdFrom);
+    if (etdTo) params.set('etdTo', etdTo);
+    params.set('sortBy', sortBy);
+    params.set('sortOrder', sortOrder);
+    return params.toString();
+  }, [page, search, sheetFilter, supplierFilter, etdFrom, etdTo, sortBy, sortOrder]);
+
+  // Build query string for summary (same filters, no pagination/sort)
+  const summaryQueryString = useMemo(() => {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (sheetFilter) params.set('sheetName', sheetFilter);
+    if (supplierFilter) params.set('supplier', supplierFilter);
+    if (etdFrom) params.set('etdFrom', etdFrom);
+    if (etdTo) params.set('etdTo', etdTo);
+    return params.toString();
+  }, [search, sheetFilter, supplierFilter, etdFrom, etdTo]);
 
   const {
     data: itemsResponse,
@@ -124,14 +288,21 @@ export function PreConsPage() {
   } = useApiQuery<{
     data: PreConsItem[];
     pagination: { total: number; page: number; limit: number; pages: number };
-  }>(
-    ['pre-cons-items', String(page), search, sheetFilter],
-    `/api/pre-cons/items?page=${page}&limit=50${search ? `&processCode=${encodeURIComponent(search)}` : ''}${sheetFilter ? `&sheetName=${encodeURIComponent(sheetFilter)}` : ''}`,
-  );
+  }>(['pre-cons-items', itemsQueryString], `/api/pre-cons/items?${itemsQueryString}`);
 
   const { data: sheetNames, isLoading: loadingSheets } = useApiQuery<string[]>(
     ['pre-cons-sheets'],
     '/api/pre-cons/sheets',
+  );
+
+  const { data: suppliers, isLoading: loadingSuppliers } = useApiQuery<string[]>(
+    ['pre-cons-suppliers'],
+    '/api/pre-cons/suppliers',
+  );
+
+  const { data: summary } = useApiQuery<PreConsSummary>(
+    ['pre-cons-summary', summaryQueryString],
+    `/api/pre-cons/summary?${summaryQueryString}`,
   );
 
   const {
@@ -149,8 +320,33 @@ export function PreConsPage() {
   const items = itemsResponse?.data ?? [];
   const pagination = itemsResponse?.pagination;
 
+  // Check if any filter is active
+  const hasActiveFilters = !!(search || sheetFilter || supplierFilter || etdFrom || etdTo);
+
+  const clearAllFilters = useCallback(() => {
+    setSearchInput('');
+    setSearch('');
+    setSheetFilter('');
+    setSupplierFilter('');
+    setEtdFrom('');
+    setEtdTo('');
+    setPage(1);
+  }, []);
+
+  const handleSort = useCallback(
+    (field: SortField) => {
+      if (sortBy === field) {
+        setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortBy(field);
+        setSortOrder('asc');
+      }
+      setPage(1);
+    },
+    [sortBy],
+  );
+
   async function handleUpload(file: File) {
-    // Client-side validation
     if (!/\.xlsx?$/i.test(file.name)) {
       setUploadResult({
         success: false,
@@ -197,6 +393,8 @@ export function PreConsPage() {
         queryClient.invalidateQueries({ queryKey: ['pre-cons-divergences'] });
         queryClient.invalidateQueries({ queryKey: ['pre-cons-sync-logs'] });
         queryClient.invalidateQueries({ queryKey: ['pre-cons-sheets'] });
+        queryClient.invalidateQueries({ queryKey: ['pre-cons-suppliers'] });
+        queryClient.invalidateQueries({ queryKey: ['pre-cons-summary'] });
       } else {
         setUploadResult({ success: false, message: json.error || 'Erro ao sincronizar' });
       }
@@ -266,8 +464,8 @@ export function PreConsPage() {
           className={cn(
             'flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-medium',
             uploadResult.success
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-              : 'bg-danger-50 border-danger-100 text-danger-700',
+              ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/50 text-emerald-700 dark:text-emerald-400'
+              : 'bg-danger-50 dark:bg-danger-950/30 border-danger-100 dark:border-danger-800/50 text-danger-700 dark:text-danger-400',
           )}
         >
           {uploadResult.success ? (
@@ -279,59 +477,192 @@ export function PreConsPage() {
         </div>
       )}
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 stagger-children">
-        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            <Package className="h-3.5 w-3.5" />
-            Total Itens
-          </div>
-          <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">
-            {loadingItems ? '-' : (pagination?.total ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            Divergencias
-          </div>
-          <p
-            className={cn(
-              'mt-2 text-2xl font-bold',
-              (divergences?.length ?? 0) > 0
-                ? 'text-amber-600'
-                : 'text-slate-900 dark:text-slate-100',
+      {/* ── Filter Bar ──────────────────────────────────────────────────── */}
+      <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 shadow-sm">
+        <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-700/60">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            Filtros
+            {lastSync && (
+              <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                <Clock className="h-3 w-3" />
+                Sync: {formatDate(lastSync.syncedAt)} via{' '}
+                {lastSync.source === 'email' ? 'e-mail' : 'upload'}
+              </span>
             )}
-          >
-            {loadingDivergences ? '-' : divergencesError ? '!' : (divergences?.length ?? 0)}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            <Clock className="h-3.5 w-3.5" />
-            Ultimo Sync
           </div>
-          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-            {loadingLogs ? '-' : lastSync ? formatDate(lastSync.syncedAt) : 'Nunca'}
-          </p>
-          {lastSync && (
-            <p className="text-xs text-slate-400 mt-0.5">
-              {lastSync.source} - {lastSync.fileName}
-            </p>
+        </div>
+
+        <div className="p-4">
+          <div className="flex flex-col lg:flex-row flex-wrap gap-3">
+            {/* Search input */}
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
+              <input
+                type="text"
+                placeholder="Buscar processo, fornecedor, produto, item..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all"
+              />
+            </div>
+
+            {/* Supplier dropdown */}
+            <div className="min-w-[160px]">
+              {loadingSuppliers ? (
+                <div className="h-[38px] w-full rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
+              ) : (
+                <select
+                  value={supplierFilter}
+                  onChange={(e) => {
+                    setSupplierFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all"
+                >
+                  <option value="">Todos fornecedores</option>
+                  {suppliers?.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Sheet dropdown */}
+            <div className="min-w-[140px]">
+              {loadingSheets ? (
+                <div className="h-[38px] w-full rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
+              ) : (sheetNames?.length ?? 0) > 1 ? (
+                <select
+                  value={sheetFilter}
+                  onChange={(e) => {
+                    setSheetFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all"
+                >
+                  <option value="">Todas as abas</option>
+                  {sheetNames!.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
+
+            {/* ETD date range */}
+            <div className="flex items-center gap-2 min-w-[280px]">
+              <div className="relative flex-1">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="date"
+                  value={etdFrom}
+                  onChange={(e) => {
+                    setEtdFrom(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="ETD de"
+                  title="ETD a partir de"
+                  className="w-full pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+              <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">ate</span>
+              <div className="relative flex-1">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                <input
+                  type="date"
+                  value={etdTo}
+                  onChange={(e) => {
+                    setEtdTo(e.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="ETD ate"
+                  title="ETD ate"
+                  className="w-full pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+            </div>
+
+            {/* Sort controls */}
+            <div className="flex items-center gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as SortField);
+                  setPage(1);
+                }}
+                className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all"
+              >
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+                  setPage(1);
+                }}
+                className={cn(
+                  'flex items-center justify-center h-[38px] w-[38px] rounded-lg border transition-all',
+                  'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900',
+                  'text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400',
+                  'hover:border-primary-300 dark:hover:border-primary-600',
+                  'focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none',
+                )}
+                title={sortOrder === 'asc' ? 'Ordenacao crescente' : 'Ordenacao decrescente'}
+              >
+                {sortOrder === 'asc' ? (
+                  <ArrowUp className="h-4 w-4" />
+                ) : (
+                  <ArrowDown className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Active filter chips */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/60">
+              <Filter className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+              {search && (
+                <FilterChip
+                  label="Busca"
+                  value={search}
+                  onRemove={() => {
+                    setSearchInput('');
+                    setSearch('');
+                  }}
+                />
+              )}
+              {supplierFilter && (
+                <FilterChip
+                  label="Fornecedor"
+                  value={supplierFilter}
+                  onRemove={() => setSupplierFilter('')}
+                />
+              )}
+              {sheetFilter && (
+                <FilterChip label="Aba" value={sheetFilter} onRemove={() => setSheetFilter('')} />
+              )}
+              {etdFrom && (
+                <FilterChip label="ETD de" value={etdFrom} onRemove={() => setEtdFrom('')} />
+              )}
+              {etdTo && <FilterChip label="ETD ate" value={etdTo} onRemove={() => setEtdTo('')} />}
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="ml-1 text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-danger-600 dark:hover:text-danger-400 transition-colors underline underline-offset-2"
+              >
+                Limpar filtros
+              </button>
+            </div>
           )}
-        </div>
-        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-            <FileSpreadsheet className="h-3.5 w-3.5" />
-            Fonte
-          </div>
-          <p className="mt-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
-            {lastSync?.source === 'email'
-              ? 'E-mail (auto)'
-              : lastSync?.source === 'upload'
-                ? 'Upload manual'
-                : '-'}
-          </p>
         </div>
       </div>
 
@@ -342,8 +673,8 @@ export function PreConsPage() {
 
       {/* Divergences */}
       {(divergences?.length ?? 0) > 0 && (
-        <div className="rounded-2xl border border-amber-200/80 bg-amber-50/50 p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+        <div className="rounded-2xl border border-amber-200/80 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-5 space-y-3">
+          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             Divergencias Encontradas ({divergences!.length})
           </h3>
@@ -381,69 +712,81 @@ export function PreConsPage() {
         </div>
       )}
 
-      {/* Items table */}
+      {/* ── Items Table ─────────────────────────────────────────────────── */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
+        {/* Table header with inline summary */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 px-4 py-3">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
             Itens Pre-Conferencia
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
-            {loadingSheets ? (
-              <div className="h-8 w-32 rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
-            ) : (sheetNames?.length ?? 0) > 1 ? (
-              <select
-                value={sheetFilter}
-                onChange={(e) => {
-                  setSheetFilter(e.target.value);
-                  setPage(1);
-                }}
-                className="rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all bg-white dark:bg-slate-800"
-              >
-                <option value="">Todas as abas</option>
-                {sheetNames!.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Filtrar por processo..."
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="pl-9 pr-3 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all w-full sm:w-48"
-              />
+          {/* Compact summary stats */}
+          {summary && (
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <Package className="h-3.5 w-3.5 text-primary-500 dark:text-primary-400" />
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {(pagination?.total ?? 0).toLocaleString('pt-BR')}
+                </span>{' '}
+                itens
+              </span>
+              <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+              <span className="flex items-center gap-1.5">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-primary-500 dark:text-primary-400" />
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {summary.uniqueProcesses}
+                </span>{' '}
+                processos
+              </span>
+              <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+              <span>
+                FOB{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {formatCompactCurrency(summary.totalFob)}
+                </span>
+              </span>
+              <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
+              <span>
+                CBM{' '}
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {formatCompactNumber(summary.totalCbm)}
+                </span>
+              </span>
             </div>
-          </div>
+          )}
         </div>
 
         {itemsError ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <XCircle className="h-8 w-8 text-danger-500" />
-            <p className="text-sm text-danger-600 font-medium">Erro ao carregar itens.</p>
+            <p className="text-sm text-danger-600 dark:text-danger-400 font-medium">
+              Erro ao carregar itens.
+            </p>
           </div>
         ) : loadingItems ? (
           <LoadingSpinner className="py-12" />
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
-              <Package className="h-6 w-6 text-slate-300" />
+              <Package className="h-6 w-6 text-slate-300 dark:text-slate-500" />
             </div>
-            <p className="text-sm text-slate-400 font-medium">
-              {search
-                ? 'Nenhum item encontrado para este processo.'
+            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium">
+              {hasActiveFilters
+                ? 'Nenhum item encontrado para os filtros selecionados.'
                 : 'Nenhum dado de Pre-Conferencia importado.'}
             </p>
-            {!search && (
-              <p className="text-xs text-slate-400">
+            {!hasActiveFilters && (
+              <p className="text-xs text-slate-400 dark:text-slate-500">
                 Faca o upload da planilha XLSX ou aguarde o sync automatico por e-mail.
               </p>
+            )}
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearAllFilters}
+                className="text-xs font-medium text-primary-600 dark:text-primary-400 hover:text-primary-700 dark:hover:text-primary-300 underline underline-offset-2 transition-colors"
+              >
+                Limpar filtros
+              </button>
             )}
           </div>
         ) : (
@@ -452,36 +795,48 @@ export function PreConsPage() {
               <table className="min-w-[900px] w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
                 <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Processo
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Fornecedor
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Produto
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Cod. Item
-                    </th>
-                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Qtd
-                    </th>
-                    <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Valor
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      NCM
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      ETD
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      ETA
-                    </th>
-                    <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Aba
-                    </th>
+                    <SortableHeader
+                      label="Processo"
+                      field="processCode"
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <SortableHeader
+                      label="Fornecedor"
+                      field="supplier"
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <StaticHeader label="Produto" />
+                    <StaticHeader label="Cod. Item" />
+                    <SortableHeader
+                      label="Qtd"
+                      field="quantity"
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                      align="right"
+                    />
+                    <SortableHeader
+                      label="Valor"
+                      field="amount"
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                      align="right"
+                    />
+                    <StaticHeader label="NCM" />
+                    <SortableHeader
+                      label="ETD"
+                      field="etd"
+                      currentSort={sortBy}
+                      currentOrder={sortOrder}
+                      onSort={handleSort}
+                    />
+                    <StaticHeader label="ETA" />
+                    <StaticHeader label="Aba" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -490,8 +845,10 @@ export function PreConsPage() {
                       key={item.id}
                       className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
-                      <td className="px-3 py-2 font-semibold text-primary-700">
-                        {item.processCode || <span className="text-slate-300">--</span>}
+                      <td className="px-3 py-2 font-semibold text-primary-700 dark:text-primary-400">
+                        {item.processCode || (
+                          <span className="text-slate-300 dark:text-slate-600">--</span>
+                        )}
                       </td>
                       <td
                         className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[140px] truncate"
@@ -584,7 +941,9 @@ export function PreConsPage() {
           ) : loadingLogs ? (
             <LoadingSpinner className="py-8" />
           ) : (syncLogs?.length ?? 0) === 0 ? (
-            <p className="px-4 pb-4 text-sm text-slate-400">Nenhum sync realizado.</p>
+            <p className="px-4 pb-4 text-sm text-slate-400 dark:text-slate-500">
+              Nenhum sync realizado.
+            </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-[500px] w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
@@ -621,7 +980,7 @@ export function PreConsPage() {
                           className={cn(
                             'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold',
                             log.source === 'email'
-                              ? 'bg-primary-100 text-primary-700'
+                              ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300'
                               : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
                           )}
                         >
@@ -641,7 +1000,9 @@ export function PreConsPage() {
                         <span
                           className={cn(
                             'font-mono',
-                            log.errors > 0 ? 'text-danger-600 font-semibold' : 'text-slate-400',
+                            log.errors > 0
+                              ? 'text-danger-600 dark:text-danger-400 font-semibold'
+                              : 'text-slate-400 dark:text-slate-500',
                           )}
                         >
                           {log.errors}

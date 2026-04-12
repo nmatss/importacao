@@ -51,8 +51,8 @@ export const preConsController = {
         return sendError(res, `Parametros invalidos: ${errors}`, 400);
       }
 
-      const { page, limit, processCode, sheetName } = parsed.data;
-      const result = await preConsService.getAll(page, limit, processCode, sheetName);
+      const { page, limit, ...filters } = parsed.data;
+      const result = await preConsService.getAll(page, limit, filters);
 
       res.json({
         success: true,
@@ -105,6 +105,45 @@ export const preConsController = {
       sendSuccess(res, sheets);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro ao buscar abas';
+      sendError(res, message, 400);
+    }
+  },
+
+  /**
+   * GET /api/pre-cons/suppliers — Distinct supplier names for filter
+   */
+  async getSuppliers(req: Request, res: Response) {
+    try {
+      const suppliers = await preConsService.getSuppliers();
+      sendSuccess(res, suppliers);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar fornecedores';
+      sendError(res, message, 400);
+    }
+  },
+
+  /**
+   * GET /api/pre-cons/summary — Aggregated stats with filters
+   */
+  async getSummary(req: Request, res: Response) {
+    try {
+      const parsed = getPreConsItemsSchema.safeParse(req.query);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => e.message).join('; ');
+        return sendError(res, `Parametros invalidos: ${errors}`, 400);
+      }
+
+      const {
+        page: _page,
+        limit: _limit,
+        sortBy: _sortBy,
+        sortOrder: _sortOrder,
+        ...filters
+      } = parsed.data;
+      const summary = await preConsService.getSummary(filters);
+      sendSuccess(res, summary);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar resumo';
       sendError(res, message, 400);
     }
   },

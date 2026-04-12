@@ -21,6 +21,12 @@ router.get('/process/:processCode', preConsController.getByProcess);
 // Get distinct sheet names for filter
 router.get('/sheets', preConsController.getSheets);
 
+// Get distinct supplier names for filter
+router.get('/suppliers', preConsController.getSuppliers);
+
+// Get aggregated summary stats (respects same filters as items)
+router.get('/summary', preConsController.getSummary);
+
 // Get divergences between Pre-Cons and system data (admin only)
 router.get('/divergences', adminMiddleware, preConsController.getDivergences);
 

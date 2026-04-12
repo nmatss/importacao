@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, ilike, gte, lte, or, asc, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { preConsItems, preConsSyncLog, importProcesses } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -394,19 +394,58 @@ export const preConsService = {
   },
 
   /**
-   * Get all Pre-Cons items with pagination.
+   * Get all Pre-Cons items with pagination, filtering, and sorting.
    */
-  async getAll(page = 1, limit = 50, processCode?: string, sheetName?: string) {
+  async getAll(
+    page = 1,
+    limit = 50,
+    filters: {
+      processCode?: string;
+      sheetName?: string;
+      search?: string;
+      supplier?: string;
+      etdFrom?: string;
+      etdTo?: string;
+      sortBy?: 'processCode' | 'supplier' | 'etd' | 'amount' | 'quantity';
+      sortOrder?: 'asc' | 'desc';
+    } = {},
+  ) {
     const where = [];
-    if (processCode) where.push(eq(preConsItems.processCode, processCode));
-    if (sheetName) where.push(eq(preConsItems.sheetName, sheetName));
+    if (filters.processCode) where.push(eq(preConsItems.processCode, filters.processCode));
+    if (filters.sheetName) where.push(eq(preConsItems.sheetName, filters.sheetName));
+    if (filters.supplier) where.push(eq(preConsItems.supplier, filters.supplier));
+    if (filters.etdFrom) where.push(gte(preConsItems.etd, filters.etdFrom));
+    if (filters.etdTo) where.push(lte(preConsItems.etd, filters.etdTo));
+    if (filters.search) {
+      const pattern = `%${filters.search}%`;
+      where.push(
+        or(
+          ilike(preConsItems.processCode, pattern),
+          ilike(preConsItems.supplier, pattern),
+          ilike(preConsItems.productName, pattern),
+          ilike(preConsItems.itemCode, pattern),
+        )!,
+      );
+    }
     const conditions = where.length > 0 ? and(...where) : undefined;
+
+    // Sorting
+    const sortColumnMap = {
+      processCode: preConsItems.processCode,
+      supplier: preConsItems.supplier,
+      etd: preConsItems.etd,
+      amount: preConsItems.amount,
+      quantity: preConsItems.quantity,
+    } as const;
+    const sortCol = sortColumnMap[filters.sortBy ?? 'processCode'];
+    const orderFn = filters.sortOrder === 'desc' ? desc : asc;
 
     const [data, [{ total }]] = await Promise.all([
       db
         .select()
         .from(preConsItems)
         .where(conditions)
+        .orderBy(orderFn(sortCol))
         .limit(limit)
         .offset((page - 1) * limit),
       db
@@ -424,6 +463,64 @@ export const preConsService = {
   async getSheetNames() {
     const rows = await db.selectDistinct({ sheetName: preConsItems.sheetName }).from(preConsItems);
     return rows.map((r) => r.sheetName).filter(Boolean) as string[];
+  },
+
+  /**
+   * Get distinct supplier names for filter dropdown.
+   */
+  async getSuppliers() {
+    const rows = await db.selectDistinct({ supplier: preConsItems.supplier }).from(preConsItems);
+    return rows.map((r) => r.supplier).filter(Boolean) as string[];
+  },
+
+  /**
+   * Get aggregated summary stats, respecting the same filters as getAll.
+   */
+  async getSummary(
+    filters: {
+      processCode?: string;
+      sheetName?: string;
+      search?: string;
+      supplier?: string;
+      etdFrom?: string;
+      etdTo?: string;
+    } = {},
+  ) {
+    const where = [];
+    if (filters.processCode) where.push(eq(preConsItems.processCode, filters.processCode));
+    if (filters.sheetName) where.push(eq(preConsItems.sheetName, filters.sheetName));
+    if (filters.supplier) where.push(eq(preConsItems.supplier, filters.supplier));
+    if (filters.etdFrom) where.push(gte(preConsItems.etd, filters.etdFrom));
+    if (filters.etdTo) where.push(lte(preConsItems.etd, filters.etdTo));
+    if (filters.search) {
+      const pattern = `%${filters.search}%`;
+      where.push(
+        or(
+          ilike(preConsItems.processCode, pattern),
+          ilike(preConsItems.supplier, pattern),
+          ilike(preConsItems.productName, pattern),
+          ilike(preConsItems.itemCode, pattern),
+        )!,
+      );
+    }
+    const conditions = where.length > 0 ? and(...where) : undefined;
+
+    const [row] = await db
+      .select({
+        totalFob: sql<string>`coalesce(sum(${preConsItems.amount}), 0)`,
+        totalCbm: sql<string>`coalesce(sum(${preConsItems.cbm}), 0)`,
+        totalQuantity: sql<number>`coalesce(sum(${preConsItems.quantity}), 0)::int`,
+        uniqueProcesses: sql<number>`count(distinct ${preConsItems.processCode})::int`,
+      })
+      .from(preConsItems)
+      .where(conditions);
+
+    return {
+      totalFob: Number(row.totalFob),
+      totalCbm: Number(row.totalCbm),
+      totalQuantity: row.totalQuantity,
+      uniqueProcesses: row.uniqueProcesses,
+    };
   },
 
   /**
