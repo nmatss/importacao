@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
@@ -324,25 +324,36 @@ export const documentService = {
       })
       .where(eq(documents.id, documentId));
 
-    // Merge AI extracted data with existing data (avoid overwriting other doc types)
-    // Store FLATTENED data (plain values) in importProcesses for validation/comparison
-    const [currentProcess] = await db
-      .select()
-      .from(importProcesses)
-      .where(eq(importProcesses.id, doc.processId))
-      .limit(1);
-
+    // Merge AI extracted data — atomic at SQL level to eliminate the race
+    // condition Nicolas flagged at 00:14:06 in the 2026-04-10 Odett meeting
+    // ("o sistema pode estar tentando olhar todos os documentos
+    // simultaneamente, gerando confusão"). Odett's typical email arrives
+    // with invoice + PL + BL attachments that are uploaded SEQUENTIALLY but
+    // whose processWithAI calls are fire-and-forget, so the 3 extractions
+    // race to read + merge + write import_processes.aiExtractedData. With a
+    // JS-side `{ ...existingAiData, [type]: flatData }` merge the last
+    // writer wins and the other 2 writes are silently lost — the
+    // auto-validation trigger below then never sees all 3 types and
+    // runAllChecks never fires.
+    //
+    // Fix: use Postgres' atomic JSONB `||` merge operator (shallow merge,
+    // right side wins on key conflicts) and read back the post-merge state
+    // via RETURNING so the validation trigger sees the actual current
+    // state after every write — no matter what order the concurrent
+    // processWithAI calls finish in.
     const flatData = flattenAiData(result.data);
-    const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
-    const mergedAiData = { ...existingAiData, [type]: flatData };
+    const patch = { [type]: flatData };
 
-    await db
+    const [updated] = await db
       .update(importProcesses)
       .set({
-        aiExtractedData: mergedAiData,
+        aiExtractedData: sql`coalesce(${importProcesses.aiExtractedData}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
         updatedAt: new Date(),
       })
-      .where(eq(importProcesses.id, doc.processId));
+      .where(eq(importProcesses.id, doc.processId))
+      .returning();
+
+    const mergedAiData = (updated?.aiExtractedData as Record<string, any>) ?? {};
 
     logger.info(
       { documentId, type, confidence: result.confidenceScore },
@@ -496,21 +507,18 @@ export const documentService = {
       })
       .where(eq(documents.id, doc.id));
 
-    const [currentProcess] = await db
-      .select()
-      .from(importProcesses)
-      .where(eq(importProcesses.id, doc.processId))
-      .limit(1);
-
-    const existingAiData = (currentProcess?.aiExtractedData as Record<string, any>) ?? {};
-    const mergedAiData = {
-      ...existingAiData,
-      espelho: { summary, items },
-    };
+    // Same atomic JSONB merge pattern as processWithAI — see the long
+    // comment there for the full rationale. Espelho extraction runs in
+    // parallel with the AI extractions of the other attachments in the
+    // same email, so a JS-side merge here also races.
+    const espelhoPatch = { espelho: { summary, items } };
 
     await db
       .update(importProcesses)
-      .set({ aiExtractedData: mergedAiData, updatedAt: new Date() })
+      .set({
+        aiExtractedData: sql`coalesce(${importProcesses.aiExtractedData}, '{}'::jsonb) || ${JSON.stringify(espelhoPatch)}::jsonb`,
+        updatedAt: new Date(),
+      })
       .where(eq(importProcesses.id, doc.processId));
 
     logger.info(
