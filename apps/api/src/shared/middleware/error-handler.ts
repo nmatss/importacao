@@ -30,8 +30,14 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
         'Corpo da requisição excede o limite máximo (2MB). Para arquivos, use o endpoint de upload de documentos.',
     });
   }
-  // body-parser: malformed JSON
-  if (bpErr.type === 'entity.parse.failed' || err instanceof SyntaxError) {
+  // body-parser: malformed JSON — match ONLY on body-parser's own `.type`,
+  // do NOT also match `err instanceof SyntaxError`. Any generic SyntaxError
+  // thrown elsewhere in the request lifecycle (e.g. an unwrapped JSON.parse
+  // of a corrupted Redis cache value) would otherwise get mis-labeled as
+  // "JSON inválido no corpo da requisição" which is confusing to the client.
+  // body-parser 1.20.4 always sets .type = 'entity.parse.failed' for
+  // malformed request bodies, so the narrower check is sufficient.
+  if (bpErr.type === 'entity.parse.failed') {
     return res.status(400).json({
       success: false,
       error: 'JSON inválido no corpo da requisição.',

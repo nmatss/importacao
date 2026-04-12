@@ -10,11 +10,31 @@ import {
   users,
 } from '../../shared/database/schema.js';
 import { cache } from '../../shared/cache/redis.js';
+import { logger } from '../../shared/utils/logger.js';
+
+/**
+ * Safe JSON.parse for cache entries: on malformed JSON, logs a warning and
+ * returns null so the caller can treat it as a cache miss and recompute.
+ * Without this wrapper a corrupted Redis value propagates as a SyntaxError
+ * all the way up to the error-handler, which would try to map it to a
+ * request-body parse error and return 400 — totally misleading.
+ */
+function parseCachedOrNull<T>(raw: string, key: string): T | null {
+  try {
+    return JSON.parse(raw) as T;
+  } catch (err) {
+    logger.warn({ err, cacheKey: key }, 'Corrupted cache entry — treating as miss');
+    return null;
+  }
+}
 
 export const dashboardService = {
   async getOverview() {
     const cached = await cache.get('dashboard:overview');
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const parsed = parseCachedOrNull<any>(cached, 'dashboard:overview');
+      if (parsed !== null) return parsed;
+    }
 
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -110,7 +130,10 @@ export const dashboardService = {
 
   async getSla() {
     const cached = await cache.get('dashboard:sla');
-    if (cached) return JSON.parse(cached);
+    if (cached) {
+      const parsed = parseCachedOrNull<any>(cached, 'dashboard:sla');
+      if (parsed !== null) return parsed;
+    }
 
     const [
       docsOverdue,
