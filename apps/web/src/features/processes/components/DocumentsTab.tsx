@@ -9,6 +9,7 @@ import {
   Inbox,
   Loader2,
   AlertCircle,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -19,6 +20,7 @@ import { cn } from '@/shared/lib/utils';
 
 export interface DocumentsTabProps {
   processId: string;
+  aiExtractedData?: Record<string, unknown> | null;
 }
 
 interface EmailStatus {
@@ -28,7 +30,38 @@ interface EmailStatus {
   gmailConfigured?: boolean;
 }
 
-export function DocumentsTab({ processId }: DocumentsTabProps) {
+// Labels for AI/sheet extracted data fields
+const FIELD_LABELS: Record<string, string> = {
+  shipper: 'Embarcador',
+  vessel: 'Navio',
+  voyageMain: 'Viagem',
+  blNumber: 'BL Number',
+  connections: 'Conexoes',
+  transshipPort: 'Porto Descarga',
+  ncms: 'NCMs',
+  statusLi: 'Status LI',
+  diDate: 'Data DI',
+  diDollar: 'Dolar DI',
+  customsValue: 'Valor Aduaneiro',
+  dispatcherRef: 'Ref. Despachante',
+  productSummary: 'Resumo Produtos',
+  cashPaymentDate: 'Data Pagamento',
+  sheetStatus: 'Status Planilha',
+  recinto: 'Recinto',
+  shipowner: 'Armador',
+  freightAgent: 'Agente Frete',
+  originCountry: 'Pais Origem',
+  originCity: 'Cidade Origem',
+  destinationPort: 'Porto Destino',
+  invoiceNumber: 'Nro Invoice',
+  packingListNumber: 'Nro Packing List',
+  consolidation: 'Consolidacao',
+  company: 'Empresa',
+};
+
+const HIDDEN_FIELDS = new Set(['importedAt', 'importedFromSheet']);
+
+export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) {
   const queryClient = useQueryClient();
   const { getToken } = useAuth();
   const [syncing, setSyncing] = useState(false);
@@ -160,6 +193,47 @@ export function DocumentsTab({ processId }: DocumentsTabProps) {
 
       {/* Document list — main content */}
       <DocumentList processId={processId} />
+
+      {/* Sheet-imported data — shown when aiExtractedData exists */}
+      {aiExtractedData && Object.keys(aiExtractedData).length > 0 && (
+        <div className="rounded-2xl border border-cyan-200/60 dark:border-cyan-800/60 bg-gradient-to-r from-cyan-50/50 to-white dark:from-cyan-950/20 dark:to-slate-800 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-cyan-100 dark:border-cyan-800/40">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-900/50">
+              <FileSpreadsheet className="h-4 w-4 text-cyan-600" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Dados Importados da Planilha
+              </p>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Informacoes extraidas do Follow-Up Google Sheets
+                {aiExtractedData.importedAt
+                  ? ` em ${new Date(aiExtractedData.importedAt as string).toLocaleDateString('pt-BR')}`
+                  : ''}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-3 p-5">
+            {Object.entries(aiExtractedData)
+              .filter(([key, val]) => !HIDDEN_FIELDS.has(key) && val != null && val !== '')
+              .map(([key, value]) => (
+                <div key={key} className="min-w-0">
+                  <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    {FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').trim()}
+                  </p>
+                  <p className="mt-0.5 text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-line">
+                    {typeof value === 'number'
+                      ? value.toLocaleString('pt-BR', {
+                          minimumFractionDigits: 2,
+                          maximumFractionDigits: 2,
+                        })
+                      : String(value)}
+                  </p>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* Manual upload — collapsible, open by default */}
       <div className="border-t border-slate-100 dark:border-slate-700 pt-3">

@@ -19,20 +19,34 @@ import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
 // ── Regex-based process code extraction (fast, first pass) ──────────────
 
-function extractProcessCode(text: string): string | null {
+/** Extract ALL process codes from text, sorted by specificity (longest first). */
+function extractAllProcessCodes(text: string): string[] {
   const patterns = [
-    /\b(IMP[-_]?\d{4}[-_]?\d{3,})\b/i,
-    /\b(PU?K(?:ET)?[-_]?\d{3,})\b/i,
-    /\b(IMAG(?:INARIUM)?[-_]?\d{3,})\b/i,
-    /\b([A-Z]{2,10}[-_]\d{4}[-_]\d{2,})\b/i,
-    /\b(\d{4}[-/]\d{5,})\b/,
+    /\b(IMP[-_]?\d{4}[-_]?\d{3,})\b/gi,
+    /\b(PU?K(?:ET)?[-_]?\d{3,}[A-Z]{0,4})\b/gi,
+    /\b(IMAG(?:INARIUM)?[-_]?\d{3,}[A-Z]{0,4})\b/gi,
+    /\b(IM\d{3,}[A-Z]{0,4})\b/gi,
+    /\b([A-Z]{2,10}[-_]\d{4}[-_]\d{2,}[A-Z]{0,4})\b/gi,
+    /\b(\d{4}[-/]\d{5,})\b/g,
   ];
 
+  const seen = new Set<string>();
+  const all: string[] = [];
+
   for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) return match[1].toUpperCase();
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const code = match[1].toUpperCase();
+      if (!seen.has(code)) {
+        seen.add(code);
+        all.push(code);
+      }
+    }
   }
-  return null;
+
+  // Sort by length descending — longer codes are more specific
+  all.sort((a, b) => b.length - a.length);
+  return all;
 }
 
 // ── Document classification (filename-based, fast) ──────────────────────
@@ -440,17 +454,22 @@ export const emailProcessor = {
           continue;
         }
 
-        // ── Step 1: Try regex on subject (fast) ──────────────────────
-        let processCode = extractProcessCode(email.subject);
-        let detectionMethod: 'regex_subject' | 'regex_body' | 'ai' | null = processCode
-          ? 'regex_subject'
-          : null;
+        // ── Step 1: Extract ALL process codes from subject (fast) ────
+        const allCodes = extractAllProcessCodes(email.subject);
+        let detectionMethod: 'regex_subject' | 'regex_body' | 'ai' | null =
+          allCodes.length > 0 ? 'regex_subject' : null;
 
-        // ── Step 2: Try regex on body if subject failed ──────────────
-        if (!processCode && email.body) {
-          processCode = extractProcessCode(email.body.substring(0, 3000));
-          if (processCode) detectionMethod = 'regex_body';
+        // ── Step 2: Also try regex on body for more candidates ───────
+        if (email.body) {
+          const bodyCodes = extractAllProcessCodes(email.body.substring(0, 3000));
+          for (const bc of bodyCodes) {
+            if (!allCodes.includes(bc)) allCodes.push(bc);
+          }
+          if (!detectionMethod && allCodes.length > 0) detectionMethod = 'regex_body';
         }
+
+        // Pick the first candidate for now; Step 6 will try all against DB
+        let processCode = allCodes.length > 0 ? allCodes[0] : null;
 
         // ── Step 3: Regex-based document type & category detection ────
         const regexDocTypes = extractDocumentTypesFromText(
@@ -494,15 +513,36 @@ export const emailProcessor = {
           logger.info({ processCode, method: 'ai' }, 'Process code detected via AI');
         }
 
-        // ── Step 6: Resolve process in DB (with fuzzy matching) ──────
+        // ── Step 6: Resolve process in DB — try ALL candidates ────────
         let processId: number | null = null;
 
-        if (processCode) {
-          const matched = await fuzzyMatchProcessCode(processCode);
+        // Add AI-detected code to candidates if available
+        if (aiAnalysis?.processCode) {
+          const aiCode = aiAnalysis.processCode.toUpperCase();
+          if (!allCodes.includes(aiCode)) allCodes.push(aiCode);
+        }
 
+        // Try each candidate code against the DB, best match first
+        if (allCodes.length > 0) {
+          for (const candidate of allCodes) {
+            const matched = await fuzzyMatchProcessCode(candidate);
+            if (matched) {
+              processId = matched.id;
+              processCode = matched.processCode;
+              logger.info(
+                { candidate, processCode, processId, allCodes },
+                'Process resolved from candidate list',
+              );
+              break;
+            }
+          }
+        }
+
+        if (processCode && !processId) {
+          // None of the candidates matched — fall back to auto-create logic
+          const matched = await fuzzyMatchProcessCode(processCode);
           if (matched) {
             processId = matched.id;
-            // Update processCode to the canonical form from DB
             processCode = matched.processCode;
           } else {
             const autoCreateEnabled = process.env.FOLLOW_UP_AUTO_CREATE !== '0';

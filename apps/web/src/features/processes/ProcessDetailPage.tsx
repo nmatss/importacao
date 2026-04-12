@@ -139,14 +139,16 @@ function TabContent({
   activeTab,
   processId,
   processCode,
+  aiExtractedData,
 }: {
   activeTab: string;
   processId: string;
   processCode: string;
+  aiExtractedData?: Record<string, unknown> | null;
 }) {
   switch (activeTab) {
     case 'documentos':
-      return <DocumentsTab processId={processId} />;
+      return <DocumentsTab processId={processId} aiExtractedData={aiExtractedData} />;
     case 'draft_bl':
       return <DraftBLTab processId={processId} />;
     case 'pre_cons':
@@ -357,7 +359,12 @@ export function ProcessDetailPage() {
 
         {/* Tab content */}
         <div className="p-4 md:p-7">
-          <TabContent activeTab={activeTab} processId={id} processCode={process.processCode} />
+          <TabContent
+            activeTab={activeTab}
+            processId={id}
+            processCode={process.processCode}
+            aiExtractedData={process.aiExtractedData}
+          />
         </div>
       </div>
     </div>
