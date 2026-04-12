@@ -38,6 +38,8 @@ export async function extractDocument(req: Request, res: Response) {
       case 'bl':
         result = await aiService.extractBLData(text);
         break;
+      default:
+        return sendError(res, `Tipo de documento nao suportado: ${type}`, 400);
     }
 
     return sendSuccess(res, result);
@@ -57,13 +59,14 @@ export async function detectAnomalies(req: Request, res: Response) {
 
     let { invoiceData, packingListData, blData } = req.body;
     if (!invoiceData || !packingListData || !blData) {
-      const processDocs = await db.select()
+      const processDocs = await db
+        .select()
         .from(documents)
         .where(eq(documents.processId, processId));
 
-      const invoiceDoc = processDocs.find(d => d.type === 'invoice');
-      const plDoc = processDocs.find(d => d.type === 'packing_list');
-      const blDoc = processDocs.find(d => d.type === 'ohbl');
+      const invoiceDoc = processDocs.find((d) => d.type === 'invoice');
+      const plDoc = processDocs.find((d) => d.type === 'packing_list');
+      const blDoc = processDocs.find((d) => d.type === 'ohbl');
 
       if (!invoiceDoc?.aiParsedData || !plDoc?.aiParsedData || !blDoc?.aiParsedData) {
         return sendError(res, 'Documentos do processo ainda não foram processados pela IA', 400);

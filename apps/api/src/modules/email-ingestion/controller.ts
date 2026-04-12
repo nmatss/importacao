@@ -31,9 +31,17 @@ export const emailIngestionController = {
   async triggerCheck(req: Request, res: Response) {
     try {
       const includeRead = req.query.includeRead === 'true';
-      const after = req.query.after as string | undefined; // e.g. 2025/02/01
-      const before = req.query.before as string | undefined; // e.g. 2025/03/12
-      const rawQuery = req.query.q as string | undefined; // raw Gmail query override
+      const dateRe = /^\d{4}\/\d{2}\/\d{2}$/;
+      const after =
+        typeof req.query.after === 'string' && dateRe.test(req.query.after)
+          ? req.query.after
+          : undefined;
+      const before =
+        typeof req.query.before === 'string' && dateRe.test(req.query.before)
+          ? req.query.before
+          : undefined;
+      const rawQuery =
+        typeof req.query.q === 'string' ? req.query.q.replace(/[{}()|&;$`]/g, '') : undefined;
       const skipSenderFilter = req.query.allSenders === 'true';
       let gmailQuery: string | undefined;
       if (rawQuery) {
