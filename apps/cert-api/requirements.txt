@@ -4,7 +4,7 @@ psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 apscheduler==3.10.4
 gspread==6.2.1
-google-auth==2.38.0
+google-auth==2.49.1
 requests>=2.31.0
 openpyxl>=3.1.0
 slowapi>=0.1.9
