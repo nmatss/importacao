@@ -1,4 +1,4 @@
-import { normalizePort, portsMatch as portsEqual } from '../utils/port-normalize';
+import { normalizePort, portsMatch as portsEqual } from '../utils/port-normalize.js';
 
 interface CheckInput {
   invoiceData?: Record<string, any>;
