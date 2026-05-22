@@ -3,18 +3,36 @@
 // Consumers may use their own local interfaces; functions are generic
 // so callers can override the return type when needed.
 
+export type CertStatusKind =
+  | 'ATIVO'
+  | 'ENCERRADO'
+  | 'SKU_EXCLUIDO'
+  | 'EM_ANDAMENTO'
+  | 'DESCONHECIDO';
+
+export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME' | 'PENDENTE';
+
+export type LicenseStatusKind = 'ATIVO' | 'VENCIDO' | 'NAO_APLICAVEL';
+
+export type ComercializacaoStatusKind = 'LIBERADA' | 'DENTRO_PRAZO' | 'ENCERRADA' | 'NAO_APLICA';
+
 export interface CertProduct {
   sku: string;
   brand: string;
   name?: string;
   description?: string;
   status?: string;
+  sheet_status?: string;
+  certification_type?: string;
+  expected_cert_text?: string;
   last_validation_status?: string | null;
   last_validation_score?: number | null;
   last_validation_url?: string | null;
   last_validation_date?: string | null;
+  last_validation_error?: string | null;
   is_expired?: boolean;
   sale_deadline?: string;
+  sale_deadline_date?: string | null;
   cert_url?: string | null;
   cert_expiry?: string | null;
   last_checked?: string | null;
@@ -22,6 +40,11 @@ export interface CertProduct {
   stock_ecommerce?: number | null;
   stock_total?: number | null;
   stock_detail?: Array<{ source: string; warehouse: string; quantity: number; available: number }>;
+  // Status semânticos derivados (port Verificao_status — sessão 2026-05-22):
+  cert_status?: CertStatusKind | null;
+  site_status?: SiteStatusKind | null;
+  license_status?: LicenseStatusKind | null;
+  comercializacao_status?: ComercializacaoStatusKind | null;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -67,6 +90,14 @@ export interface CertStats {
   expired?: number;
   last_run?: CertLastRun | null;
   by_brand?: CertBrandStats[];
+  // Breakdowns por status semântico derivado (port Verificao_status):
+  by_cert_status?: Array<{ cert_status: CertStatusKind; count: number }>;
+  by_site_status?: Array<{ site_status: SiteStatusKind; count: number }>;
+  by_license_status?: Array<{ license_status: LicenseStatusKind; count: number }>;
+  by_comercializacao_status?: Array<{
+    comercializacao_status: ComercializacaoStatusKind;
+    count: number;
+  }>;
   [key: string]: unknown;
 }
 
@@ -213,6 +244,10 @@ export async function fetchCertProducts(params?: {
   status?: string;
   start_date?: string;
   end_date?: string;
+  cert_status?: string;
+  site_status?: string;
+  license_status?: string;
+  comercializacao_status?: string;
 }): Promise<CertProductsResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
@@ -222,6 +257,11 @@ export async function fetchCertProducts(params?: {
   if (params?.status) query.set('status', params.status);
   if (params?.start_date) query.set('start_date', params.start_date);
   if (params?.end_date) query.set('end_date', params.end_date);
+  if (params?.cert_status) query.set('cert_status', params.cert_status);
+  if (params?.site_status) query.set('site_status', params.site_status);
+  if (params?.license_status) query.set('license_status', params.license_status);
+  if (params?.comercializacao_status)
+    query.set('comercializacao_status', params.comercializacao_status);
   const qs = query.toString();
   return certFetch<CertProductsResponse>(`/api/products${qs ? `?${qs}` : ''}`);
 }

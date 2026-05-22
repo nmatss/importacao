@@ -153,6 +153,35 @@ export default function CertProdutoDetailPage() {
                     <CertStatusBadge status={validation.status} />
                   </>
                 )}
+                {product.cert_status && (
+                  <>
+                    <div className="w-px h-4 bg-slate-200" />
+                    <span className="text-xs text-slate-500 font-medium">Cert.:</span>
+                    <CertStatusBadge status={product.cert_status} />
+                  </>
+                )}
+                {product.site_status && (
+                  <>
+                    <div className="w-px h-4 bg-slate-200" />
+                    <span className="text-xs text-slate-500 font-medium">Site:</span>
+                    <CertStatusBadge status={product.site_status} />
+                  </>
+                )}
+                {product.license_status && product.license_status !== 'NAO_APLICAVEL' && (
+                  <>
+                    <div className="w-px h-4 bg-slate-200" />
+                    <span className="text-xs text-slate-500 font-medium">Lic.:</span>
+                    <CertStatusBadge status={product.license_status} />
+                  </>
+                )}
+                {product.comercializacao_status &&
+                  product.comercializacao_status !== 'NAO_APLICA' && (
+                    <>
+                      <div className="w-px h-4 bg-slate-200" />
+                      <span className="text-xs text-slate-500 font-medium">Comerc.:</span>
+                      <CertStatusBadge status={product.comercializacao_status} />
+                    </>
+                  )}
                 {validation?.score != null && (
                   <>
                     <div className="w-px h-4 bg-slate-200" />

@@ -444,7 +444,7 @@ export default function CertProdutosPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
+            <table className="w-full min-w-[1200px]">
               <thead>
                 <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200/60 dark:border-slate-700/60">
                   <th
@@ -478,6 +478,15 @@ export default function CertProdutosPage() {
                     <span className="flex items-center">
                       Status <SortIcon field="last_validation_status" />
                     </span>
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Cert.
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Site
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Comerc.
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Prazo de Venda
@@ -533,6 +542,27 @@ export default function CertProdutosPage() {
                         <CertStatusBadge status={p.last_validation_status} />
                       ) : p.is_expired ? (
                         <CertStatusBadge status="EXPIRED" />
+                      ) : (
+                        <span className="text-xs text-slate-300 font-medium">--</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {p.cert_status ? (
+                        <CertStatusBadge status={p.cert_status} />
+                      ) : (
+                        <span className="text-xs text-slate-300 font-medium">--</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {p.site_status ? (
+                        <CertStatusBadge status={p.site_status} />
+                      ) : (
+                        <span className="text-xs text-slate-300 font-medium">--</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {p.comercializacao_status ? (
+                        <CertStatusBadge status={p.comercializacao_status} />
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>
                       )}

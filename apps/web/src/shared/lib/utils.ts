@@ -41,6 +41,7 @@ export const statusColors: Record<string, string> = {
 
 export function certStatusColor(status: string): string {
   switch (status) {
+    // Status técnico legacy
     case 'OK':
       return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
     case 'INCONSISTENT':
@@ -52,7 +53,28 @@ export function certStatusColor(status: string): string {
     case 'NO_EXPECTED':
       return 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60';
     case 'EXPIRED':
+    case 'EXPIRING':
       return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
+    // Status derivados (port Verificao_status):
+    case 'ATIVO':
+    case 'CONFORME':
+    case 'LIBERADA':
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
+    case 'ENCERRADO':
+    case 'ENCERRADA':
+    case 'NAO_CONFORME':
+    case 'VENCIDO':
+      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
+    case 'DENTRO_PRAZO':
+    case 'PENDENTE':
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60';
+    case 'EM_ANDAMENTO':
+      return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200/60';
+    case 'SKU_EXCLUIDO':
+    case 'NAO_APLICAVEL':
+    case 'NAO_APLICA':
+    case 'DESCONHECIDO':
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
     default:
       return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
   }
