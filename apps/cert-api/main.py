@@ -39,6 +39,10 @@ from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+# Port de Verificao_status (sessão 2026-05-22): 4 status semânticos derivados
+# por produto (cert_status / site_status / license_status / comercializacao_status).
+from app.services.derivation import compute_status_dimensions
+
 log = logging.getLogger("cert-api")
 logging.basicConfig(level=logging.INFO)
 
@@ -1337,11 +1341,33 @@ def get_stats():
             cur.execute("SELECT COUNT(*) as cnt FROM cert_products WHERE is_expired = TRUE")
             total_expired = cur.fetchone()["cnt"]
 
+            # Status derivados — agrega em Python (não tem colunas no DB).
+            cur.execute("""
+                SELECT sheet_status, is_expired, sale_deadline, certification_type,
+                       expected_cert_text, last_validation_status
+                FROM cert_products
+            """)
+            from collections import Counter as _Counter
+            c_cert: _Counter = _Counter()
+            c_site: _Counter = _Counter()
+            c_license: _Counter = _Counter()
+            c_comerc: _Counter = _Counter()
+            for r in cur.fetchall():
+                dims = compute_status_dimensions(dict(r))
+                c_cert[dims["cert_status"]] += 1
+                c_site[dims["site_status"]] += 1
+                c_license[dims["license_status"]] += 1
+                c_comerc[dims["comercializacao_status"]] += 1
+
             return {
                 "total_products": total,
                 "total_expired": total_expired,
                 "last_run": last_run,
                 "by_brand": by_brand,
+                "by_cert_status": [{"cert_status": k, "count": v} for k, v in sorted(c_cert.items())],
+                "by_site_status": [{"site_status": k, "count": v} for k, v in sorted(c_site.items())],
+                "by_license_status": [{"license_status": k, "count": v} for k, v in sorted(c_license.items())],
+                "by_comercializacao_status": [{"comercializacao_status": k, "count": v} for k, v in sorted(c_comerc.items())],
             }
     except Exception:
         return _empty_stats()
@@ -1406,6 +1432,7 @@ def _serialize_product(r: dict) -> dict:
     for dtfield in ("last_validation_date", "created_at", "updated_at", "sale_deadline_date"):
         if r.get(dtfield):
             r[dtfield] = r[dtfield].isoformat() if hasattr(r[dtfield], 'isoformat') else str(r[dtfield])
+    r.update(compute_status_dimensions(r))
     return r
 
 
@@ -1418,6 +1445,10 @@ def list_products(
     status: str = Query(""),
     start_date: str = Query(""),
     end_date: str = Query(""),
+    cert_status: str = Query(""),
+    site_status: str = Query(""),
+    license_status: str = Query(""),
+    comercializacao_status: str = Query(""),
 ):
     if not DATABASE_URL:
         return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0, "last_validation_date": None}
@@ -1454,15 +1485,40 @@ def list_products(
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
-        cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
-        total = cur.fetchone()["cnt"]
+        # Filtros derivados (cert/site/license/comercializacao) — computados em
+        # Python pós-fetch porque não são colunas do DB.
+        derived_filters = {
+            "cert_status": {s.strip().upper() for s in cert_status.split(",") if s.strip()},
+            "site_status": {s.strip().upper() for s in site_status.split(",") if s.strip()},
+            "license_status": {s.strip().upper() for s in license_status.split(",") if s.strip()},
+            "comercializacao_status": {s.strip().upper() for s in comercializacao_status.split(",") if s.strip()},
+        }
+        has_derived = any(derived_filters.values())
 
-        offset = (page - 1) * per_page
-        cur.execute(
-            f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
-            params + [per_page, offset],
-        )
-        products_raw = [_serialize_product(dict(r)) for r in cur.fetchall()]
+        if has_derived:
+            cur.execute(f"SELECT * FROM cert_products {where} ORDER BY sku", params)
+            all_rows = [_serialize_product(dict(r)) for r in cur.fetchall()]
+            filtered = []
+            for p in all_rows:
+                ok = True
+                for key, allowed in derived_filters.items():
+                    if allowed and (p.get(key) or "").upper() not in allowed:
+                        ok = False
+                        break
+                if ok:
+                    filtered.append(p)
+            total = len(filtered)
+            offset = (page - 1) * per_page
+            products_raw = filtered[offset:offset + per_page]
+        else:
+            cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+            total = cur.fetchone()["cnt"]
+            offset = (page - 1) * per_page
+            cur.execute(
+                f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
+                params + [per_page, offset],
+            )
+            products_raw = [_serialize_product(dict(r)) for r in cur.fetchall()]
 
         # Enrich with stock data
         if products_raw:
