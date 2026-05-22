@@ -57,6 +57,29 @@ export const documentController = {
     }
   },
 
+  async getFile(req: Request, res: Response) {
+    try {
+      const resource = await documentService.getFileResource(Number(req.params.id));
+      const wantsDownload = req.query.download === '1' || req.query.download === 'true';
+
+      if (resource.kind === 'drive') {
+        // Redirect to Google Drive — falls back when local file is missing
+        const viewerUrl = `https://drive.google.com/file/d/${resource.driveFileId}/view`;
+        return res.redirect(302, viewerUrl);
+      }
+
+      res.setHeader('Content-Type', resource.mimeType);
+      const safeName = encodeURIComponent(resource.filename ?? `documento-${req.params.id}`);
+      const disposition = wantsDownload ? 'attachment' : 'inline';
+      res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${safeName}`);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.sendFile(resource.absolutePath);
+    } catch (error: any) {
+      const status = error.statusCode || 404;
+      sendError(res, error.message, status);
+    }
+  },
+
   async reprocess(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
@@ -82,6 +105,16 @@ export const documentController = {
   async comparison(req: Request, res: Response) {
     try {
       const result = await documentService.getComparison(Number(req.params.processId));
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async proformasAggregate(req: Request, res: Response) {
+    try {
+      const result = await documentService.getProformasAggregate(Number(req.params.processId));
       sendSuccess(res, result);
     } catch (error: any) {
       const status = error.statusCode || 400;

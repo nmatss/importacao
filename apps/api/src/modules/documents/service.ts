@@ -1,4 +1,4 @@
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, and } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
@@ -21,6 +21,28 @@ import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import { normalizePort } from '../validation/utils/port-normalize.js';
+import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
+import { extractPartyParts } from '../validation/utils/party-extract.js';
+import { itemCodesMatch, cleanItemCodesInAiData } from '../validation/utils/item-code-normalize.js';
+import { compareDates } from '../validation/utils/date-compare.js';
+import { buildEspelhoFromAiData } from './utils/build-espelho.js';
+
+/**
+ * Convert an XLSX buffer to plain CSV-style text — used as input to the
+ * Espelho AI fallback when the deterministic parser fails. Mirrors the
+ * same XLSX path used by extractText() but operates directly on a buffer
+ * (no filesystem hop).
+ */
+function extractTextFromXlsxBuffer(buffer: Buffer): string {
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  let text = '';
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    text += `--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}\n`;
+  }
+  return text;
+}
 
 function standardizeDocumentName(
   type: string,
@@ -250,6 +272,9 @@ export const documentService = {
       case 'invoice':
         result = await aiService.extractInvoiceData(text, extractionOpts);
         break;
+      case 'proforma_invoice':
+        result = await aiService.extractProformaData(text, extractionOpts);
+        break;
       case 'packing_list':
         result = await aiService.extractPackingListData(text, extractionOpts);
         break;
@@ -312,6 +337,20 @@ export const documentService = {
           .catch((err) => logger.error({ err }, 'Failed to create skip-extraction alert'));
         return;
       }
+    }
+
+    // Defensive cleanup: strip column-bleed noise from itemCodes BEFORE
+    // persisting. The prompts already instruct the AI not to concatenate
+    // COLLECTION/SEASON/etc. into itemCode, but Nicolas reported real cases
+    // where the AI joined columns ("ele tá juntando essa coluna de coleção
+    // como código do item"). The cleanup is deterministic — applies only
+    // when a canonical PI-style code is unambiguously embedded in noise.
+    // Operator kill switch: set AUTO_CLEAN_ITEM_CODES=0 to disable.
+    if (
+      process.env.AUTO_CLEAN_ITEM_CODES !== '0' &&
+      (type === 'invoice' || type === 'packing_list' || type === 'proforma_invoice')
+    ) {
+      cleanItemCodesInAiData(result.data as Record<string, any>);
     }
 
     await db
@@ -424,6 +463,15 @@ export const documentService = {
       }
     }
 
+    // Proforma cross-reference: lookup preConsItems by piNumber + alert on mismatches.
+    // The proforma is pre-shipment, so it should NOT count toward documents_received
+    // or trigger validation; it's recorded for audit + Pre-Cons linkage only.
+    if (type === 'proforma_invoice' && result.data) {
+      await this.crossReferenceProforma(doc, result.data).catch((err) =>
+        logger.error({ err, documentId: doc.id }, 'Proforma cross-reference failed'),
+      );
+    }
+
     // Upload to Drive with standardized name after AI extraction
     if (type === 'invoice' || type === 'certificate') {
       const [proc] = await db
@@ -452,6 +500,268 @@ export const documentService = {
       } catch (valErr) {
         logger.error({ err: valErr, processId: doc.processId }, 'Auto-validation failed');
       }
+
+      // Auto-generate espelho from invoice + PL + BL data (deterministic,
+      // no AI). Nicolas (2026-05-21): "primeiro que ele não tá criando
+      // sozinho". Only fills when there's no operator-uploaded espelho
+      // and no prior auto-build (preserves manual edits).
+      // Operator kill switch: set AUTO_GENERATE_ESPELHO=0 to disable.
+      if (process.env.AUTO_GENERATE_ESPELHO !== '0') {
+        try {
+          await this.autoGenerateEspelhoIfMissing(doc.processId);
+        } catch (espErr) {
+          logger.error({ err: espErr, processId: doc.processId }, 'Auto-espelho generation failed');
+        }
+      }
+    }
+  },
+
+  /**
+   * Builds an espelho-style summary+items aggregation from the AI-extracted
+   * Invoice + Packing List + BL data, with no LLM in the path. Called after
+   * all 3 docs have been extracted. Writes into importProcesses.aiExtractedData.espelho
+   * via atomic JSONB merge — same merge primitive used by processWithAI so
+   * concurrent espelho/processWithAI writes do not stomp each other.
+   * Skips when an operator-uploaded espelho document exists OR when an
+   * auto-built espelho is already present (the user can force a rebuild via
+   * the regenerate endpoint — outside scope here).
+   */
+  async autoGenerateEspelhoIfMissing(processId: number) {
+    const [processRow] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!processRow) return;
+
+    const existingProcessAi = (processRow.aiExtractedData as Record<string, any>) ?? {};
+    if (existingProcessAi?.espelho?.items?.length || existingProcessAi?.espelho?.summary) {
+      // Already populated (either by manual upload or a previous auto-build).
+      return;
+    }
+
+    const espelhoDocs = await db
+      .select({ id: documents.id })
+      .from(documents)
+      .where(and(eq(documents.processId, processId), eq(documents.type, 'espelho')))
+      .limit(1);
+    if (espelhoDocs.length > 0) {
+      // Operator uploaded a real espelho — don't override.
+      return;
+    }
+
+    const inv = existingProcessAi.invoice as Record<string, any> | undefined;
+    const pl = existingProcessAi.packing_list as Record<string, any> | undefined;
+    const bl = existingProcessAi.ohbl as Record<string, any> | undefined;
+    if (!inv || !pl || !bl) return;
+
+    const { summary, items: espelhoItems } = buildEspelhoFromAiData(inv, pl, bl);
+
+    const patch = { espelho: { summary, items: espelhoItems } };
+    // Write guard: only update if no espelho exists yet (atomic). Prevents
+    // two concurrent extractions from both inserting + emitting duplicate
+    // `espelho_auto_generated` timeline events.
+    const written = await db
+      .update(importProcesses)
+      .set({
+        aiExtractedData: sql`coalesce(${importProcesses.aiExtractedData}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(
+        sql`${importProcesses.id} = ${processId}
+            AND (${importProcesses.aiExtractedData} IS NULL
+                 OR ${importProcesses.aiExtractedData} -> 'espelho' IS NULL)`,
+      )
+      .returning({ id: importProcesses.id });
+
+    if (written.length === 0) {
+      // Another extraction beat us to it — no-op, don't emit a duplicate event.
+      logger.info({ processId }, 'Espelho already present (concurrent write) — skipping event');
+      return;
+    }
+
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'espelho_auto_generated',
+        title: `Espelho gerado automaticamente (${espelhoItems.length} itens)`,
+        metadata: { source: 'auto_deterministic', itemCount: espelhoItems.length },
+      },
+      null,
+    );
+
+    logger.info(
+      { processId, itemCount: espelhoItems.length },
+      'Espelho auto-generated from invoice + PL + BL',
+    );
+  },
+
+  /**
+   * Aggregate view of all Proforma Invoices attached to a process.
+   * Each PI groups its own items. Used by the Proformas tab/section in the UI
+   * (Nicolas, 2026-05-21: "tinha alguns processos que tinha várias PIs").
+   */
+  async getProformasAggregate(processId: number) {
+    const proformaDocs = await db
+      .select()
+      .from(documents)
+      .where(and(eq(documents.processId, processId), eq(documents.type, 'proforma_invoice')));
+
+    type ProformaSummary = {
+      documentId: number;
+      filename: string;
+      uploadedAt: Date | null;
+      confidence: number | null;
+      piNumber: string | null;
+      invoiceDate: string | null;
+      validUntil: string | null;
+      currency: string | null;
+      totalFobValue: number | null;
+      paymentTerms: Record<string, any> | null;
+      itemCount: number;
+      items: Array<Record<string, any>>;
+      preConsLinked: boolean;
+    };
+
+    const summaries: ProformaSummary[] = [];
+    for (const doc of proformaDocs) {
+      const flat = doc.aiParsedData ? flattenAiData(doc.aiParsedData as Record<string, any>) : null;
+      const piNumber = flat?.piNumber ?? null;
+      const items = Array.isArray(flat?.items) ? (flat!.items as Array<Record<string, any>>) : [];
+
+      let preConsLinked = false;
+      if (piNumber) {
+        const { preConsItems } = await import('../../shared/database/schema.js');
+        const rows = await db
+          .select({ id: preConsItems.id })
+          .from(preConsItems)
+          .where(eq(preConsItems.piNumber, piNumber))
+          .limit(1);
+        preConsLinked = rows.length > 0;
+      }
+
+      summaries.push({
+        documentId: doc.id,
+        filename: doc.originalFilename,
+        uploadedAt: doc.createdAt,
+        confidence: doc.confidenceScore ? Number(doc.confidenceScore) : null,
+        piNumber,
+        invoiceDate: flat?.invoiceDate ?? null,
+        validUntil: flat?.validUntil ?? null,
+        currency: flat?.currency ?? null,
+        totalFobValue: flat?.totalFobValue ?? null,
+        paymentTerms: flat?.paymentTerms ?? null,
+        itemCount: items.length,
+        items,
+        preConsLinked,
+      });
+    }
+
+    summaries.sort((a, b) => {
+      const at = a.uploadedAt ? a.uploadedAt.getTime() : 0;
+      const bt = b.uploadedAt ? b.uploadedAt.getTime() : 0;
+      return at - bt;
+    });
+
+    const totals = summaries.reduce(
+      (acc, s) => {
+        acc.itemCount += s.itemCount;
+        if (typeof s.totalFobValue === 'number') acc.totalFobValue += s.totalFobValue;
+        return acc;
+      },
+      { itemCount: 0, totalFobValue: 0 },
+    );
+
+    return {
+      processId,
+      proformaCount: summaries.length,
+      totals,
+      proformas: summaries,
+    };
+  },
+
+  async crossReferenceProforma(doc: typeof documents.$inferSelect, aiData: Record<string, any>) {
+    const { preConsItems } = await import('../../shared/database/schema.js');
+    const flat = flattenAiData(aiData);
+    const piNumber: string | null = (flat as any).piNumber ?? null;
+
+    const [proc] = await db
+      .select({
+        id: importProcesses.id,
+        processCode: importProcesses.processCode,
+        status: importProcesses.status,
+      })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, doc.processId))
+      .limit(1);
+
+    if (!proc) return;
+
+    // Record timeline event for proforma receipt — always
+    await recordProcessEvent(
+      doc.processId,
+      {
+        eventType: 'document_uploaded',
+        title: `Proforma Invoice recebida${piNumber ? ` (PI ${piNumber})` : ''}`,
+        metadata: { type: 'proforma_invoice', documentId: doc.id, piNumber },
+      },
+      null,
+    );
+
+    // Without a piNumber we can't cross-reference Pre-Cons
+    if (!piNumber) {
+      alertService
+        .create({
+          processId: doc.processId,
+          severity: 'warning',
+          title: 'Proforma sem numero PI identificavel',
+          message: `A Proforma anexada ao processo ${proc.processCode} nao teve numero PI extraido. Revise manualmente para confirmar a correlacao com a planilha Pre-Cons.`,
+          processCode: proc.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create proforma-no-pi alert'));
+      return;
+    }
+
+    const preConRows = await db
+      .select({
+        processCode: preConsItems.processCode,
+        piNumber: preConsItems.piNumber,
+      })
+      .from(preConsItems)
+      .where(eq(preConsItems.piNumber, piNumber))
+      .limit(5);
+
+    if (preConRows.length === 0) {
+      alertService
+        .create({
+          processId: doc.processId,
+          severity: 'warning',
+          title: 'PI nao encontrada no Pre-Cons',
+          message: `PI ${piNumber} extraida da Proforma nao bate com nenhuma linha do Pre-Cons (anexada ao processo ${proc.processCode}). Pode ser que o Pre-Cons ainda nao tenha sido sincronizado, ou a PI seja de outro processo.`,
+          processCode: proc.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create proforma-no-precon alert'));
+      return;
+    }
+
+    // Check if any matching Pre-Cons row points to a different processCode
+    const mismatched = preConRows.filter((r) => r.processCode !== proc.processCode);
+    if (mismatched.length > 0) {
+      const expectedCodes = [...new Set(mismatched.map((r) => r.processCode))].join(', ');
+      alertService
+        .create({
+          processId: doc.processId,
+          severity: 'critical',
+          title: 'Proforma anexada ao processo errado',
+          message: `PI ${piNumber} esta vinculada no Pre-Cons aos processos: ${expectedCodes}. Foi anexada por engano ao processo ${proc.processCode}. Mova o documento para o processo correto.`,
+          processCode: proc.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create proforma-mismatch alert'));
+    } else {
+      logger.info(
+        { processId: doc.processId, piNumber, processCode: proc.processCode },
+        'Proforma cross-reference OK',
+      );
     }
   },
 
@@ -464,6 +774,66 @@ export const documentService = {
         { documentId: doc.id, processId: doc.processId, error: parsed.error },
         'Espelho parse failed — formato não reconhecido',
       );
+
+      // AI fallback (Nicolas 2026-05-21: "religar IA do espelho"). Disabled
+      // by default for privacy — only safe when AI_PROVIDER=vertex (Google
+      // contractually does not use Vertex data for training). Operator
+      // enables via ESPELHO_AI_FALLBACK=1 after configuring Vertex.
+      if (process.env.ESPELHO_AI_FALLBACK === '1') {
+        try {
+          const xlsxText = extractTextFromXlsxBuffer(buffer);
+          if (xlsxText.trim().length > 0) {
+            const result = await aiService.extractEspelhoData(xlsxText);
+            const flat = flattenAiData(result.data);
+            const items = Array.isArray((flat as any).items) ? (flat as any).items : [];
+            const summary: Record<string, any> = { ...flat };
+            delete summary.items;
+            summary.generatedBy = 'ai_fallback';
+            summary.generatedAt = new Date().toISOString();
+
+            await db
+              .update(documents)
+              .set({
+                aiParsedData: { summary, items } as Record<string, unknown>,
+                confidenceScore: String(result.confidenceScore.toFixed(4)),
+                isProcessed: true,
+                updatedAt: new Date(),
+              })
+              .where(eq(documents.id, doc.id));
+
+            const espelhoPatch = { espelho: { summary, items } };
+            await db
+              .update(importProcesses)
+              .set({
+                aiExtractedData: sql`coalesce(${importProcesses.aiExtractedData}, '{}'::jsonb) || ${JSON.stringify(espelhoPatch)}::jsonb`,
+                updatedAt: new Date(),
+              })
+              .where(eq(importProcesses.id, doc.processId));
+
+            await recordProcessEvent(
+              doc.processId,
+              {
+                eventType: 'espelho_ai_fallback',
+                title: `Espelho extraído via IA (confiança ${(result.confidenceScore * 100).toFixed(0)}%)`,
+                metadata: { source: 'ai_fallback', itemCount: items.length },
+              },
+              null,
+            );
+
+            logger.info(
+              { documentId: doc.id, processId: doc.processId, itemCount: items.length },
+              'Espelho extracted via AI fallback after deterministic parser failed',
+            );
+            return;
+          }
+        } catch (aiErr) {
+          logger.error(
+            { err: aiErr, documentId: doc.id, processId: doc.processId },
+            'Espelho AI fallback failed — alerting operator',
+          );
+        }
+      }
+
       await db
         .update(documents)
         .set({
@@ -715,6 +1085,39 @@ export const documentService = {
     return { source: 'manual' as const };
   },
 
+  async getFileResource(id: number) {
+    const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
+    if (!doc) throw new NotFoundError('Documento', id);
+
+    const absolutePath = path.isAbsolute(doc.storagePath)
+      ? doc.storagePath
+      : path.resolve(process.cwd(), doc.storagePath);
+
+    // Confirm the file exists on disk; surface a 404 if it doesn't
+    try {
+      await fs.access(absolutePath);
+    } catch {
+      if (doc.driveFileId) {
+        return {
+          kind: 'drive' as const,
+          driveFileId: doc.driveFileId,
+          filename: doc.originalFilename,
+          mimeType: doc.mimeType ?? 'application/octet-stream',
+          processId: doc.processId,
+        };
+      }
+      throw new NotFoundError('Arquivo do documento', id);
+    }
+
+    return {
+      kind: 'local' as const,
+      absolutePath,
+      filename: doc.originalFilename,
+      mimeType: doc.mimeType ?? 'application/octet-stream',
+      processId: doc.processId,
+    };
+  },
+
   async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
@@ -791,12 +1194,16 @@ export const documentService = {
   },
 
   async getComparison(processId: number) {
-    const docs = await db.select().from(documents).where(eq(documents.processId, processId));
+    const [docs, processRow] = await Promise.all([
+      db.select().from(documents).where(eq(documents.processId, processId)),
+      db.select().from(importProcesses).where(eq(importProcesses.id, processId)).limit(1),
+    ]);
 
     const invoiceDoc = docs.find((d) => d.type === 'invoice');
     const plDoc = docs.find((d) => d.type === 'packing_list');
     const blDoc = docs.find((d) => d.type === 'ohbl');
     const draftBlDoc = docs.find((d) => d.type === 'draft_bl');
+    const espelhoDoc = docs.find((d) => d.type === 'espelho');
 
     // Flatten { value, confidence } structures to plain values for comparison
     const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
@@ -809,85 +1216,232 @@ export const documentService = {
     const bl = rawBl ? flattenAiData(rawBl) : null;
     const draftBl = rawDraftBl ? flattenAiData(rawDraftBl) : null;
 
-    // Build aggregate field comparison
-    const aggregateFields = [
+    // Espelho data lives in importProcesses.aiExtractedData.espelho (atomic merge target).
+    // Fallback: read from the espelho document's aiParsedData if process column is empty.
+    const processAiData = (processRow[0]?.aiExtractedData as Record<string, any>) ?? null;
+    const espelhoFromProcess = processAiData?.espelho as
+      | { summary?: Record<string, any>; items?: any[] }
+      | undefined;
+    const espelhoFromDoc = espelhoDoc?.aiParsedData as
+      | { summary?: Record<string, any>; items?: any[] }
+      | undefined;
+    const espelhoSummary = espelhoFromProcess?.summary ?? espelhoFromDoc?.summary ?? null;
+    const espelhoItems = espelhoFromProcess?.items ?? espelhoFromDoc?.items ?? [];
+
+    // Pre-extract structured party parts from each document
+    const invExporter = extractPartyParts(inv?.exporterName);
+    const plExporter = extractPartyParts(pl?.exporterName);
+    const blShipper = extractPartyParts(bl?.shipper ?? bl?.shipperName);
+    const invImporter = extractPartyParts(inv?.importerName);
+    const plImporter = extractPartyParts(pl?.importerName);
+    const blConsignee = extractPartyParts(bl?.consignee ?? bl?.consigneeName);
+
+    // Build aggregate field comparison — `kind` drives comparison semantics
+    type Kind = 'string' | 'numeric' | 'port' | 'date' | 'name';
+    // Criticality flags which fields are mandatory for customs clearance
+    // (Nicolas, 2026-05-21: "se for a parte do endereço do exportador ou
+    // alguma outra coisa assim, que não seja da parte aduaneira, talvez a
+    // gente consiga relevar"). Defaults are conservative — endereços,
+    // pesos/CBM totals e moeda do frete são "secondary" (avisos, não erros).
+    type Criticality = 'critical' | 'secondary' | 'info';
+    interface AggregateRow {
+      label: string;
+      inv?: unknown;
+      pl?: unknown;
+      bl?: unknown;
+      espelho?: unknown;
+      kind?: Kind;
+      criticality?: Criticality;
+    }
+
+    const aggregateFields: AggregateRow[] = [
       {
         label: 'Exportador / Shipper',
-        inv: inv?.exporterName,
-        pl: pl?.exporterName,
-        bl: bl?.shipper ?? bl?.shipperName,
+        inv: invExporter.name || inv?.exporterName,
+        pl: plExporter.name || pl?.exporterName,
+        bl: blShipper.name || (bl?.shipper ?? bl?.shipperName),
+        espelho: espelhoSummary?.shippingLine,
+        kind: 'name',
+      },
+      {
+        label: 'Exportador — CNPJ / Tax ID',
+        inv: invExporter.taxId || inv?.exporterTaxId,
+        pl: plExporter.taxId || pl?.exporterTaxId,
+        bl: blShipper.taxId,
+        espelho: null,
+        criticality: 'secondary',
+      },
+      {
+        label: 'Exportador — Endereço',
+        inv: invExporter.address || inv?.exporterAddress,
+        pl: plExporter.address || pl?.exporterAddress,
+        bl: blShipper.address,
+        espelho: null,
+        kind: 'name', // fuzzy compare
+        criticality: 'secondary',
       },
       {
         label: 'Importador / Consignee',
-        inv: inv?.importerName,
-        pl: pl?.importerName,
-        bl: bl?.consignee ?? bl?.consigneeName,
+        inv: invImporter.name || inv?.importerName,
+        pl: plImporter.name || pl?.importerName,
+        bl: blConsignee.name || (bl?.consignee ?? bl?.consigneeName),
+        espelho: espelhoSummary?.importerName,
+        kind: 'name',
       },
       {
-        label: 'Invoice Number',
+        label: 'Importador — CNPJ',
+        inv: invImporter.taxId || inv?.importerCnpj,
+        pl: plImporter.taxId || pl?.importerCnpj,
+        bl: blConsignee.taxId,
+        espelho: espelhoSummary?.importerCnpj,
+      },
+      {
+        label: 'Importador — Endereço',
+        inv: invImporter.address || inv?.importerAddress,
+        pl: plImporter.address || pl?.importerAddress,
+        bl: blConsignee.address,
+        espelho: espelhoSummary?.importerAddress,
+        kind: 'name',
+        criticality: 'secondary',
+      },
+      {
+        label: 'Invoice Number / Order Ref',
         inv: inv?.invoiceNumber,
         pl: pl?.packingListNumber,
+        bl: bl?.customerReference,
+      },
+      {
+        label: 'BL Number (shipping)',
+        inv: null,
+        pl: null,
         bl: bl?.blNumber,
       },
       { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
       { label: 'Moeda', inv: inv?.currency, pl: null, bl: bl?.freightCurrency },
-      { label: 'Porto Embarque', inv: inv?.portOfLoading, pl: null, bl: bl?.portOfLoading },
-      { label: 'Porto Destino', inv: inv?.portOfDischarge, pl: null, bl: bl?.portOfDischarge },
-      { label: 'Total FOB (USD)', inv: inv?.totalFobValue, pl: null, bl: null },
-      { label: 'Frete', inv: null, pl: null, bl: bl?.freightValue },
-      { label: 'Total Caixas', inv: inv?.totalBoxes, pl: pl?.totalBoxes, bl: bl?.totalBoxes },
-      { label: 'Peso Liquido (kg)', inv: inv?.totalNetWeight, pl: pl?.totalNetWeight, bl: null },
+      {
+        label: 'Porto Embarque',
+        inv: inv?.portOfLoading,
+        pl: pl?.portOfLoading,
+        bl: bl?.portOfLoading,
+        kind: 'port',
+      },
+      {
+        label: 'Porto Destino',
+        inv: inv?.portOfDischarge,
+        pl: pl?.portOfDischarge,
+        bl: bl?.portOfDischarge,
+        kind: 'port',
+      },
+      {
+        label: 'Total FOB (USD)',
+        inv: inv?.totalFobValue,
+        pl: null,
+        bl: null,
+        espelho: espelhoSummary?.totalAmountUsd,
+        kind: 'numeric',
+      },
+      {
+        label: 'Frete',
+        inv: null,
+        pl: null,
+        bl: bl?.freightValue,
+        kind: 'numeric',
+        criticality: 'info',
+      },
+      {
+        label: 'Total Caixas',
+        inv: inv?.totalBoxes,
+        pl: pl?.totalBoxes,
+        bl: bl?.totalBoxes,
+        espelho: espelhoSummary?.totalBoxes,
+        kind: 'numeric',
+      },
+      {
+        label: 'Peso Liquido (kg)',
+        inv: inv?.totalNetWeight,
+        pl: pl?.totalNetWeight,
+        bl: null,
+        espelho: espelhoSummary?.totalNetWeight,
+        kind: 'numeric',
+        criticality: 'secondary',
+      },
       {
         label: 'Peso Bruto (kg)',
         inv: inv?.totalGrossWeight,
         pl: pl?.totalGrossWeight,
         bl: bl?.totalGrossWeight,
+        espelho: espelhoSummary?.totalGrossWeight,
+        kind: 'numeric',
+        criticality: 'secondary',
       },
-      { label: 'CBM (m3)', inv: inv?.totalCbm, pl: pl?.totalCbm, bl: bl?.totalCbm },
-      { label: 'ETD / Shipped On Board', inv: null, pl: null, bl: bl?.shipmentDate ?? bl?.etd },
-      { label: 'ETA', inv: null, pl: null, bl: bl?.eta },
-      { label: 'Container', inv: null, pl: null, bl: bl?.containerNumber },
-      { label: 'Navio', inv: null, pl: null, bl: bl?.vesselName },
+      {
+        label: 'CBM (m3)',
+        inv: inv?.totalCbm,
+        pl: pl?.totalCbm,
+        bl: bl?.totalCbm,
+        espelho: espelhoSummary?.totalCbm,
+        kind: 'numeric',
+        criticality: 'secondary',
+      },
+      {
+        label: 'ETD / Shipped On Board',
+        inv: inv?.invoiceDate ?? inv?.etd ?? inv?.shipmentDate,
+        pl: pl?.packingListDate ?? (pl as any)?.date ?? pl?.shipmentDate,
+        bl: bl?.shipmentDate ?? bl?.etd,
+        espelho: null,
+        kind: 'date',
+      },
+      { label: 'ETA', inv: null, pl: null, bl: bl?.eta, kind: 'date', criticality: 'info' },
+      { label: 'Container', inv: null, pl: null, bl: bl?.containerNumber, criticality: 'info' },
+      { label: 'Navio', inv: null, pl: null, bl: bl?.vesselName, criticality: 'info' },
     ];
 
-    // Compute match status for each field
+    // Compute match status for each field — supports 4 docs (inv/pl/bl/espelho).
+    // For 'secondary' criticality, a hard divergence is downgraded to warning
+    // (per Nicolas: "endereço do exportador… talvez a gente consiga relevar").
     const aggregateComparison = aggregateFields.map((f) => {
-      const values = [f.inv, f.pl, f.bl].filter((v) => v != null && v !== '');
-      const allSame =
-        values.length <= 1 ||
-        values.every((v) => {
-          const s1 = String(values[0]).trim().toLowerCase();
-          const s2 = String(v).trim().toLowerCase();
-          if (s1 === s2) return true;
-          const n1 = parseFloat(s1),
-            n2 = parseFloat(s2);
-          if (!isNaN(n1) && !isNaN(n2)) return Math.abs(n1 - n2) < 0.5;
-          return false;
-        });
-
+      const rawValues = [f.inv, f.pl, f.bl, f.espelho];
+      const values = rawValues.filter((v) => v != null && v !== '');
+      let status = computeRowStatus(values, f.kind ?? 'string');
+      const criticality: Criticality = f.criticality ?? 'critical';
+      if (criticality === 'secondary' && status === 'divergent') status = 'warning';
       return {
         label: f.label,
-        invoice: f.inv != null ? String(f.inv) : null,
-        packingList: f.pl != null ? String(f.pl) : null,
-        bl: f.bl != null ? String(f.bl) : null,
-        status: values.length === 0 ? 'empty' : allSame ? 'match' : 'divergent',
+        invoice: f.inv != null && f.inv !== '' ? String(f.inv) : null,
+        packingList: f.pl != null && f.pl !== '' ? String(f.pl) : null,
+        bl: f.bl != null && f.bl !== '' ? String(f.bl) : null,
+        espelho: f.espelho != null && f.espelho !== '' ? String(f.espelho) : null,
+        status,
+        criticality,
       };
     });
 
-    // Build item-level comparison
+    // Build item-level comparison — normalize item codes (PI7752Y vs PI 7752Y, etc.)
     const invItems = inv?.items ?? [];
     const plItems = pl?.items ?? [];
 
-    const itemComparison = invItems.map((invItem: any) => {
-      const plMatch = plItems.find(
-        (plItem: any) =>
-          plItem.itemCode === invItem.itemCode ||
-          (plItem.description &&
-            invItem.description &&
-            plItem.description
-              .toLowerCase()
-              .includes(invItem.description.toLowerCase().slice(0, 20))),
+    const findPlMatch = (invItem: any) =>
+      plItems.find((plItem: any) => {
+        if (itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)) {
+          return true;
+        }
+        const plDesc = plItem.description ?? plItem.descricao;
+        const invDesc = invItem.description ?? invItem.descricao;
+        return Boolean(
+          plDesc &&
+          invDesc &&
+          String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
+        );
+      });
+
+    const findEspelhoMatch = (invItem: any) =>
+      espelhoItems.find((espItem: any) =>
+        itemCodesMatch(espItem.codigo ?? espItem.itemCode, invItem.itemCode ?? invItem.codigo),
       );
+
+    const itemComparison = invItems.map((invItem: any) => {
+      const plMatch = findPlMatch(invItem);
+      const espelhoMatch = findEspelhoMatch(invItem);
 
       return {
         itemCode: invItem.itemCode ?? invItem.codigo,
@@ -895,16 +1449,24 @@ export const documentService = {
         ncm: invItem.ncmCode ?? invItem.ncm,
         invoiceQty: invItem.quantity,
         plQty: plMatch?.quantity ?? null,
+        espelhoQty: espelhoMatch?.qty ?? null,
         invoiceUnitPrice: invItem.unitPrice,
         invoiceTotal: invItem.totalPrice,
+        espelhoUnitPrice: espelhoMatch?.unitPrice ?? null,
+        espelhoTotal: espelhoMatch?.amountUsd ?? null,
         invoiceBoxes: invItem.boxQuantity ?? null,
         plBoxes: plMatch?.boxQuantity ?? null,
+        espelhoBoxes: espelhoMatch?.caixasPorRef ?? null,
         invoiceNetWeight: invItem.netWeight ?? null,
         plNetWeight: plMatch?.netWeight ?? null,
+        espelhoNetWeight: espelhoMatch?.pesoLiquidoTotal ?? null,
         invoiceGrossWeight: invItem.grossWeight ?? null,
         plGrossWeight: plMatch?.grossWeight ?? null,
+        espelhoGrossWeight: espelhoMatch?.pesoBrutoTotal ?? null,
+        isFreeOfCharge: Boolean(invItem.isFreeOfCharge),
         qtyMatch: plMatch ? plMatch.quantity === invItem.quantity : null,
         matched: !!plMatch,
+        espelhoMatched: !!espelhoMatch,
       };
     });
 
@@ -912,15 +1474,20 @@ export const documentService = {
     const unmatchedPlItems = plItems
       .filter(
         (plItem: any) =>
-          !invItems.some(
-            (invItem: any) =>
-              invItem.itemCode === plItem.itemCode ||
-              (invItem.description &&
-                plItem.description &&
-                invItem.description
-                  .toLowerCase()
-                  .includes(plItem.description.toLowerCase().slice(0, 20))),
-          ),
+          !invItems.some((invItem: any) => {
+            if (
+              itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)
+            ) {
+              return true;
+            }
+            const plDesc = plItem.description ?? plItem.descricao;
+            const invDesc = invItem.description ?? invItem.descricao;
+            return Boolean(
+              invDesc &&
+              plDesc &&
+              String(invDesc).toLowerCase().includes(String(plDesc).toLowerCase().slice(0, 20)),
+            );
+          }),
       )
       .map((item: any) => ({
         itemCode: item.itemCode ?? item.codigo,
@@ -937,6 +1504,7 @@ export const documentService = {
       hasPackingList: !!pl,
       hasBl: !!bl,
       hasDraftBl: !!draftBl,
+      hasEspelho: !!espelhoSummary || espelhoItems.length > 0,
       aggregateComparison,
       itemComparison,
       unmatchedPlItems,
@@ -945,9 +1513,65 @@ export const documentService = {
       plConfidence: plDoc?.confidenceScore,
       blConfidence: blDoc?.confidenceScore,
       draftBlConfidence: draftBlDoc?.confidenceScore,
+      espelhoConfidence: espelhoDoc?.confidenceScore ?? (espelhoSummary ? 0.99 : null),
     };
   },
 };
+
+type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
+
+function computeRowStatus(values: unknown[], kind: string): RowStatus {
+  if (values.length === 0) return 'empty';
+  if (values.length === 1) return 'match';
+
+  if (kind === 'date') {
+    return compareDates(values) as RowStatus;
+  }
+
+  if (kind === 'port') {
+    const norm = values.map((v) => normalizePort(v));
+    const base = norm[0];
+    const allEqual = norm.every((n) => n === base || n.startsWith(base) || base.startsWith(n));
+    return allEqual ? 'match' : 'divergent';
+  }
+
+  if (kind === 'name') {
+    // Compare normalized company names; tolerate punctuation/suffix differences.
+    const norm = values.map((v) => normalizeCompanyName(v));
+    const base = norm[0];
+    if (!base) return 'empty';
+    const allEqual = norm.every((n) => n === base);
+    if (allEqual) return 'match';
+    // Soft tolerance: prefix match counts as warning, not divergent
+    const allPrefix = norm.every((n) => n.startsWith(base) || base.startsWith(n));
+    return allPrefix ? 'warning' : 'divergent';
+  }
+
+  if (kind === 'numeric') {
+    const nums = values.map((v) => parseFloat(String(v).replace(',', '.')));
+    if (nums.some((n) => isNaN(n))) return 'divergent';
+    const max = Math.max(...nums);
+    const min = Math.min(...nums);
+    const diff = max - min;
+    const denom = Math.max(Math.abs(max), 1);
+    if (diff < 0.5 || diff / denom < 0.005) return 'match';
+    if (diff / denom < 0.02) return 'warning';
+    return 'divergent';
+  }
+
+  // Default string comparison
+  const norm = values.map((v) => String(v).trim().toLowerCase());
+  const base = norm[0];
+  if (norm.every((n) => n === base)) return 'match';
+  // Numeric fallback for cases where the field happens to be numeric
+  const nums = norm.map((n) => parseFloat(n));
+  if (nums.every((n) => !isNaN(n))) {
+    const max = Math.max(...nums);
+    const min = Math.min(...nums);
+    return max - min < 0.5 ? 'match' : 'divergent';
+  }
+  return 'divergent';
+}
 
 interface DraftBlRevision {
   field: string;

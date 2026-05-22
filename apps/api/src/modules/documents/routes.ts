@@ -14,8 +14,10 @@ const uploadLimiter = createRateLimiter(20, 60_000);
 router.post('/upload', uploadLimiter, upload.single('file'), documentController.upload);
 router.get('/process/:processId', documentController.getByProcess);
 router.get('/process/:processId/comparison', documentController.comparison);
+router.get('/process/:processId/proformas', documentController.proformasAggregate);
 router.get('/:id', documentController.getById);
 router.get('/:id/source', documentController.getSource);
+router.get('/:id/file', documentController.getFile);
 router.post('/:id/reprocess', documentController.reprocess);
 router.delete('/:id', documentController.delete);
 

@@ -12,6 +12,7 @@ export const PROCESS_STATUSES = [
 
 export const DOCUMENT_TYPES = [
   { value: 'invoice', label: 'Fatura Comercial (Invoice)' },
+  { value: 'proforma_invoice', label: 'Proforma Invoice' },
   { value: 'packing_list', label: 'Packing List' },
   { value: 'ohbl', label: 'Conhecimento de Embarque (BL)' },
   { value: 'draft_bl', label: 'Draft BL (Rascunho)' },

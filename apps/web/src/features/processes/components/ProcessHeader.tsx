@@ -1,4 +1,14 @@
-import { ArrowLeft, Edit, ExternalLink, AlertTriangle, BadgeCheck } from 'lucide-react';
+import {
+  ArrowLeft,
+  Edit,
+  ExternalLink,
+  AlertTriangle,
+  BadgeCheck,
+  Lock,
+  Unlock,
+} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import type { ImportProcess } from '@/shared/types';
@@ -57,6 +67,27 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
     total: process.documents?.length ?? 0,
     processed: process.documents?.filter((d) => d.isProcessed).length ?? 0,
   };
+  const queryClient = useQueryClient();
+
+  const handleUnlock = async () => {
+    const confirm = window.confirm(
+      `Destravar o processo ${process.processCode}? Aprovação do Vimbar permanece registrada no histórico, mas o sistema voltará a aceitar edições automáticas.`,
+    );
+    if (!confirm) return;
+    const token = localStorage.getItem('importacao_token');
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    try {
+      const res = await fetch(`${baseUrl}/api/processes/${processId}/unlock`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error(`Falha ao destravar (${res.status})`);
+      toast.success('Processo destravado');
+      queryClient.invalidateQueries({ queryKey: ['process', processId] });
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao destravar');
+    }
+  };
 
   return (
     <>
@@ -83,6 +114,23 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
                 <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 dark:bg-amber-900/50 border border-amber-200 dark:border-amber-700 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
                   <AlertTriangle className="h-3 w-3" />
                   {process.correctionStatus}
+                </span>
+              )}
+              {process.lockedAt && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                  title={`Travado em ${formatDate(process.lockedAt)} (${process.lockedReason ?? 'sem motivo'})`}
+                >
+                  <Lock className="h-3 w-3" />
+                  Travado
+                </span>
+              )}
+              {process.previousCodes && process.previousCodes.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-mono text-slate-500 dark:text-slate-400"
+                  title={`Códigos anteriores: ${process.previousCodes.join(', ')}`}
+                >
+                  ex.: {process.previousCodes[process.previousCodes.length - 1]}
                 </span>
               )}
             </div>
@@ -143,11 +191,27 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
           )}
           <button
             onClick={onEdit}
-            className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all shadow-sm"
+            disabled={!!process.lockedAt}
+            title={process.lockedAt ? 'Processo travado — destrave para editar' : undefined}
+            className={cn(
+              'inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all shadow-sm',
+              process.lockedAt
+                ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300',
+            )}
           >
             <Edit className="h-4 w-4" />
             Editar
           </button>
+          {process.lockedAt && (
+            <button
+              onClick={handleUnlock}
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm"
+            >
+              <Unlock className="h-4 w-4" />
+              Destravar
+            </button>
+          )}
         </div>
       </div>
 

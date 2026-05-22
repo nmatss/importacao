@@ -420,6 +420,47 @@ export const googleDriveService = {
     return fileId;
   },
 
+  /**
+   * Find the most-recently-modified xlsx with "pre-cons"/"precons" in the
+   * name inside the configured folder. Folder ID comes from
+   * GOOGLE_DRIVE_PRE_CONS_FOLDER_ID. Returns null when nothing matches.
+   */
+  async findLatestPreConsXlsx(): Promise<{
+    id: string;
+    name: string;
+    modifiedTime: string | null;
+  } | null> {
+    const folderId = process.env.GOOGLE_DRIVE_PRE_CONS_FOLDER_ID;
+    if (!folderId) return null;
+    const drive = getDriveClient();
+    const response = await withTimeout(
+      drive.files.list({
+        q: `'${escapeDriveQuery(folderId)}' in parents and trashed = false and (mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType = 'application/vnd.ms-excel')`,
+        fields: 'files(id, name, modifiedTime, mimeType)',
+        orderBy: 'modifiedTime desc',
+        pageSize: 25,
+      }),
+      'findLatestPreConsXlsx',
+    );
+    const candidates = (response.data.files ?? []).filter((f) => /pre.?cons/i.test(f.name ?? ''));
+    const best = candidates[0] ?? response.data.files?.[0];
+    if (!best?.id) return null;
+    return {
+      id: best.id,
+      name: best.name ?? 'pre-cons.xlsx',
+      modifiedTime: best.modifiedTime ?? null,
+    };
+  },
+
+  async downloadFileBuffer(fileId: string): Promise<Buffer> {
+    const drive = getDriveClient();
+    const response = await withTimeout(
+      drive.files.get({ fileId, alt: 'media' }, { responseType: 'arraybuffer' }),
+      `downloadFileBuffer(${fileId})`,
+    );
+    return Buffer.from(response.data as ArrayBuffer);
+  },
+
   async listProcessFiles(folderId: string): Promise<drive_v3.Schema$File[]> {
     const drive = getDriveClient();
     const allFiles: drive_v3.Schema$File[] = [];

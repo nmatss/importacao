@@ -37,8 +37,10 @@ Responda com JSON estrito neste formato:
   "invoiceDate": { "value": "", "confidence": 0.0 },
   "exporterName": { "value": "", "confidence": 0.0 },
   "exporterAddress": { "value": "", "confidence": 0.0 },
+  "exporterTaxId": { "value": "", "confidence": 0.0 },
   "importerName": { "value": "", "confidence": 0.0 },
   "importerAddress": { "value": "", "confidence": 0.0 },
+  "importerCnpj": { "value": "", "confidence": 0.0 },
   "incoterm": { "value": "", "confidence": 0.0 },
   "currency": { "value": "", "confidence": 0.0 },
   "portOfLoading": { "value": "", "confidence": 0.0 },
@@ -54,7 +56,8 @@ Responda com JSON estrito neste formato:
       "totalPrice": { "value": 0.0, "confidence": 0.0 },
       "ncmCode": { "value": "", "confidence": 0.0 },
       "unitType": { "value": "", "confidence": 0.0 },
-      "manufacturer": { "value": "", "confidence": 0.0 }
+      "manufacturer": { "value": "", "confidence": 0.0 },
+      "isFreeOfCharge": { "value": false, "confidence": 0.0 }
     }
   ],
   "manufacturerName": { "value": "", "confidence": 0.0 },
@@ -78,6 +81,9 @@ REGRAS:
 - paymentTerms: "30% deposit, 70% balance within 30 days" → depositPercent: 30, balancePercent: 70, paymentDays: 30
 - itemCode: somente o codigo real do item. NAO inclua palavras que descrevem EMBALAGEM ("WHITE BOX", "BROWN BOX", "POLYBAG", "POLY BAG", "GIFT BOX", "COLOR BOX") como prefixo do codigo. Se o layout do PDF colocar a coluna de embalagem colada ao codigo, separe os valores.
 - Se todos os item codes comecarem com a MESMA letra isolada (ex.: todos comecam com "W"), isso provavelmente e ruido da coluna ao lado — retorne os codigos sem esse prefixo.
+- NUNCA concatene valores de outras colunas no itemCode. Colunas comuns coladas ao codigo em PDFs com layout compacto: COLECAO/COLLECTION/SEASON/TEMP, MARCA/BRAND, ESTILO/STYLE, REFERENCIA do fornecedor. Exemplo: linha "FALL/24 PI7752Y BLOUSE..." -> itemCode="PI7752Y" (NAO "FALL/24 PI7752Y"). O codigo do item segue padrao tipico: 2 letras + 4-6 digitos + opcional 1 letra (PI7752Y, AC2285Y, PKT123).
+- exporterTaxId: VAT/Tax ID do exportador (fora do Brasil, ex.: registro chines de 18 digitos, EIN, etc.). importerCnpj: CNPJ brasileiro do importador no formato 00.000.000/0000-00 quando possivel.
+- isFreeOfCharge: TRUE quando o item e gratuito — sinais: unitPrice = 0, descricao contem "FREE OF CHARGE", "FOC", "complimentary", "sample", "amostra", "brinde". Quando true, o item NAO entra na soma do totalFobValue declarado.
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

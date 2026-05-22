@@ -2,11 +2,13 @@ import { logger } from '../../shared/utils/logger.js';
 import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
 import { logAIRequest } from './governance.js';
 import { invoiceResponseSchema } from './schemas/invoice-response.js';
+import { proformaResponseSchema } from './schemas/proforma-response.js';
 import { packingListResponseSchema } from './schemas/packing-list-response.js';
 import { blResponseSchema } from './schemas/bl-response.js';
 import { draftBLResponseSchema } from './schemas/draft-bl-response.js';
 import { emailAnalysisResponseSchema } from './schemas/email-analysis-response.js';
 import { buildInvoicePrompt } from './prompts/invoice.js';
+import { buildProformaPrompt } from './prompts/proforma.js';
 import { buildPackingListPrompt } from './prompts/packing-list.js';
 import { buildBLPrompt } from './prompts/bl.js';
 import { buildAnomalyPrompt } from './prompts/anomaly.js';
@@ -15,8 +17,20 @@ import { buildEmailAnalysisPrompt } from './prompts/email-analysis.js';
 import { buildCorrectionPrompt } from './prompts/correction.js';
 import { buildCertificatePrompt } from './prompts/certificate.js';
 import { buildDraftBLPrompt } from './prompts/draft-bl.js';
+import { buildEspelhoPrompt } from './prompts/espelho.js';
 import { certificateResponseSchema } from './schemas/certificate-response.js';
+import { espelhoResponseSchema } from './schemas/espelho-response.js';
 import type { ZodType } from 'zod';
+import { OpenRouterProvider } from './providers/openrouter.js';
+import { VertexAIProvider } from './providers/vertex.js';
+import type { AIProvider, ChatOptions } from './providers/types.js';
+import { assertBudgetAvailable, logUsage, AIBudgetExceededError } from './cost-tracker.js';
+import { EXTRACTION_SCHEMAS } from './extraction-schemas.js';
+
+export { AIBudgetExceededError };
+
+/** When set, the chat() call uses structured-output mode (responseSchema). */
+const USE_STRUCTURED_OUTPUT = process.env.AI_STRUCTURED_OUTPUT !== '0';
 
 interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -69,6 +83,8 @@ const PROMPT_VERSIONS: Record<string, string> = {
   correction_email: 'v1.0',
   certificate_extraction: 'v1.0',
   draft_bl_extraction: 'v1.0',
+  proforma_extraction: 'v1.0',
+  espelho_extraction: 'v1.0',
 };
 
 /**
@@ -157,12 +173,12 @@ export function flattenAiData(data: Record<string, any>): Record<string, any> {
 }
 
 class AIService {
-  private baseUrl: string;
-  private apiKey: string;
+  private provider: AIProvider;
 
   constructor() {
-    this.baseUrl = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
-    this.apiKey = process.env.OPENROUTER_API_KEY || '';
+    const providerName = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
+    this.provider = providerName === 'vertex' ? new VertexAIProvider() : new OpenRouterProvider();
+    logger.info({ provider: this.provider.name }, 'AIService initialized');
   }
 
   /**
@@ -193,8 +209,14 @@ class AIService {
     messages: OpenRouterMessage[],
     jsonMode = true,
     context = 'unknown',
+    responseSchema?: Record<string, unknown>,
   ): Promise<string> {
     const promptVersion = PROMPT_VERSIONS[context] || 'v1.0';
+
+    // Budget gate: when the monthly cap is in effect (AI_MONTHLY_BUDGET_USD),
+    // refuse the call before it goes out. The error is treated by callers as
+    // "extraction failed" — same path as a low-confidence response.
+    await assertBudgetAvailable();
 
     // Build fallback chain starting from the requested model position
     const startIdx = MODEL_FALLBACK_CHAIN.indexOf(model);
@@ -217,10 +239,15 @@ class AIService {
 
       const attemptStart = Date.now();
       try {
-        const content = await withRetry(
+        const result = await withRetry(
           () =>
             withTimeout(
-              (signal) => this.callOpenRouter(currentModel, messages, jsonMode, signal),
+              (signal) =>
+                this.provider.callModel(currentModel, messages, {
+                  jsonMode,
+                  responseSchema,
+                  signal,
+                } satisfies ChatOptions),
               90_000,
               `${currentModel}/${context}`,
             ),
@@ -236,12 +263,47 @@ class AIService {
           status: 'success',
           context: attemptContext,
         });
-        logger.info({ model: currentModel, context, isRetry }, 'AI model responded successfully');
+        // Best-effort persist of usage. Failure logs internally, never throws.
+        await logUsage({
+          provider: this.provider.name,
+          model: currentModel,
+          context: attemptContext,
+          inputTokens: result.usage.inputTokens,
+          outputTokens: result.usage.outputTokens,
+        });
+        logger.info(
+          {
+            model: currentModel,
+            context,
+            isRetry,
+            inputTokens: result.usage.inputTokens,
+            outputTokens: result.usage.outputTokens,
+          },
+          'AI model responded successfully',
+        );
 
-        return content;
+        return result.content;
       } catch (err: any) {
+        if (err instanceof AIBudgetExceededError) {
+          // Budget exhausted — no point trying other models in the chain.
+          throw err;
+        }
         lastError = err;
         const latencyMs = Date.now() - attemptStart;
+        // Some failures still consume tokens (timeouts after generation,
+        // partial responses). Persist usage if the error carries it so the
+        // budget cap doesn't drift below reality.
+        const errUsage = err?.usage as { inputTokens?: number; outputTokens?: number } | undefined;
+        if (errUsage && (errUsage.inputTokens || errUsage.outputTokens)) {
+          await logUsage({
+            provider: this.provider.name,
+            model: currentModel,
+            context: `${attemptContext}:error`,
+            inputTokens: errUsage.inputTokens ?? 0,
+            outputTokens: errUsage.outputTokens ?? 0,
+            status: 'error',
+          });
+        }
         logAIRequest({
           model: currentModel,
           promptVersion,
@@ -261,53 +323,55 @@ class AIService {
     throw lastError;
   }
 
-  private async callOpenRouter(
-    model: string,
-    messages: OpenRouterMessage[],
-    jsonMode: boolean,
-    signal?: AbortSignal,
-  ): Promise<string> {
-    const url = `${this.baseUrl}/chat/completions`;
-
-    const body = {
-      model,
-      messages,
-      temperature: 0,
-      response_format: { type: jsonMode ? 'json_object' : 'text' },
-    };
-
-    logger.debug({ model, messageCount: messages.length }, 'Sending request to OpenRouter');
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-        'HTTP-Referer': 'importacao-system',
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      logger.error({ status: response.status, error: errorText, model }, 'OpenRouter API error');
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+  /**
+   * Wraps an extraction call with optional model-upgrade-on-low-confidence.
+   * When the primary model returns confidence below threshold, retry with the
+   * upgrade model and keep whichever response scored higher — BUT only when
+   * the upgrade beats the primary by a meaningful margin (default 5pp). This
+   * prevents paying for Pro when Pro returns ~the same confidence as Flash.
+   * Controlled by AI_UPGRADE_ON_LOW_CONFIDENCE (default ON) — set to "0" to
+   * disable. Margin tunable via AI_UPGRADE_MIN_DELTA (default 0.05).
+   */
+  private async extractWithUpgrade<T extends ExtractionResult>(
+    label: string,
+    primary: string,
+    upgrade: string,
+    runOnce: (model: string) => Promise<T>,
+  ): Promise<T> {
+    const first = await runOnce(primary);
+    if (process.env.AI_UPGRADE_ON_LOW_CONFIDENCE === '0') return first;
+    const threshold = Number(process.env.AI_UPGRADE_CONFIDENCE_THRESHOLD ?? '0.7');
+    const minDelta = Number(process.env.AI_UPGRADE_MIN_DELTA ?? '0.05');
+    if (first.confidenceScore >= threshold) return first;
+    try {
+      logger.info(
+        { label, primary, upgrade, primaryConfidence: first.confidenceScore, threshold },
+        'Low confidence — re-extracting with upgrade model',
+      );
+      const second = await runOnce(upgrade);
+      // Short-circuit waste: only adopt the upgrade when it improves by >=
+      // minDelta. Otherwise the extra cost bought us nothing and we keep
+      // the primary result.
+      if (second.confidenceScore - first.confidenceScore >= minDelta) {
+        return second;
+      }
+      logger.info(
+        {
+          label,
+          primary,
+          upgrade,
+          primaryConfidence: first.confidenceScore,
+          upgradeConfidence: second.confidenceScore,
+          minDelta,
+        },
+        'Upgrade did not improve confidence by minDelta — keeping primary result',
+      );
+      return first;
+    } catch (err) {
+      // Upgrade attempt failed (budget? timeout?) — keep the primary result.
+      logger.warn({ err, label, upgrade }, 'Upgrade extraction failed; returning primary result');
+      return first;
     }
-
-    const result = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
-      usage?: { prompt_tokens?: number; completion_tokens?: number };
-    };
-
-    const content = result.choices?.[0]?.message?.content;
-    if (!content) {
-      logger.error({ result }, 'Empty response from OpenRouter');
-      throw new Error('Empty response from OpenRouter API');
-    }
-
-    logger.debug({ model, responseLength: content.length }, 'Received response from OpenRouter');
-    return content;
   }
 
   private calculateConfidence(data: Record<string, any>): {
@@ -389,28 +453,88 @@ class AIService {
       );
     }
     const messages = msgs;
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'invoice_extraction');
-    const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
-    const dataAsRecord = data as Record<string, any>;
-    if (Array.isArray(dataAsRecord.items)) {
-      stripSpuriousItemPrefix(dataAsRecord.items);
-    }
-    const { score, lowConfidenceFields } = this.calculateConfidence(dataAsRecord);
-
-    logger.info(
-      {
-        confidenceScore: score,
-        lowConfidenceCount: lowConfidenceFields.length,
-        hasImage: !!imageOpts,
+    return this.extractWithUpgrade(
+      'invoice',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          messages,
+          true,
+          'invoice_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.invoice : undefined,
+        );
+        const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
+        const dataAsRecord = data as Record<string, any>;
+        if (Array.isArray(dataAsRecord.items)) {
+          stripSpuriousItemPrefix(dataAsRecord.items);
+        }
+        const { score, lowConfidenceFields } = this.calculateConfidence(dataAsRecord);
+        logger.info(
+          {
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'Invoice data extracted',
+        );
+        return {
+          data: data as Record<string, any>,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        };
       },
-      'Invoice data extracted',
     );
+  }
 
-    return {
-      data: data as Record<string, any>,
-      confidenceScore: score,
-      fieldsWithLowConfidence: lowConfidenceFields,
-    };
+  async extractProformaData(
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildProformaPrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = msgs;
+    return this.extractWithUpgrade(
+      'proforma',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          messages,
+          true,
+          'proforma_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.proforma : undefined,
+        );
+        const data = this.zodParse(response, 'proforma extraction', proformaResponseSchema);
+        const dataAsRecord = data as Record<string, any>;
+        if (Array.isArray(dataAsRecord.items)) {
+          stripSpuriousItemPrefix(dataAsRecord.items);
+        }
+        const { score, lowConfidenceFields } = this.calculateConfidence(dataAsRecord);
+        logger.info(
+          {
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'Proforma invoice data extracted',
+        );
+        return {
+          data: data as Record<string, any>,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        };
+      },
+    );
   }
 
   async extractPackingListData(
@@ -425,24 +549,36 @@ class AIService {
       );
     }
     const messages = msgs;
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'packing_list_extraction');
-    const data = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
-    const dataAsRecord = data as Record<string, any>;
-    if (Array.isArray(dataAsRecord.items)) {
-      stripSpuriousItemPrefix(dataAsRecord.items);
-    }
-    const { score, lowConfidenceFields } = this.calculateConfidence(data);
-
-    logger.info(
-      {
-        confidenceScore: score,
-        lowConfidenceCount: lowConfidenceFields.length,
-        hasImage: !!imageOpts,
+    return this.extractWithUpgrade(
+      'packing_list',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          messages,
+          true,
+          'packing_list_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.packing_list : undefined,
+        );
+        const data = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
+        const dataAsRecord = data as Record<string, any>;
+        if (Array.isArray(dataAsRecord.items)) {
+          stripSpuriousItemPrefix(dataAsRecord.items);
+        }
+        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+        logger.info(
+          {
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'Packing list data extracted',
+        );
+        return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
       },
-      'Packing list data extracted',
     );
-
-    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
   async extractBLData(text: string, imageOpts?: ImageExtractionOpts): Promise<ExtractionResult> {
@@ -454,20 +590,27 @@ class AIService {
       );
     }
     const messages = msgs;
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'bl_extraction');
-    const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
-    const { score, lowConfidenceFields } = this.calculateConfidence(data);
-
-    logger.info(
-      {
-        confidenceScore: score,
-        lowConfidenceCount: lowConfidenceFields.length,
-        hasImage: !!imageOpts,
-      },
-      'Bill of Lading data extracted',
-    );
-
-    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    return this.extractWithUpgrade('bl', 'gemini-2.5-flash', 'gemini-2.5-pro', async (model) => {
+      const response = await this.chat(
+        model,
+        messages,
+        true,
+        'bl_extraction',
+        USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.bl : undefined,
+      );
+      const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
+      const { score, lowConfidenceFields } = this.calculateConfidence(data);
+      logger.info(
+        {
+          model,
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+          hasImage: !!imageOpts,
+        },
+        'Bill of Lading data extracted',
+      );
+      return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    });
   }
 
   async extractDraftBLData(
@@ -482,7 +625,13 @@ class AIService {
       );
     }
     const messages = msgs;
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'draft_bl_extraction');
+    const response = await this.chat(
+      'gemini-2.5-flash',
+      messages,
+      true,
+      'draft_bl_extraction',
+      USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.draft_bl : undefined,
+    );
     const data = this.zodParse(response, 'draft bill of lading extraction', draftBLResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -498,6 +647,44 @@ class AIService {
     return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
   }
 
+  /**
+   * AI fallback for Espelho extraction. Only used when the deterministic
+   * XLSX parser (tryParseEspelhoBuffer) fails because the layout differs
+   * from the known format. Disabled by default — set ESPELHO_AI_FALLBACK=1
+   * to enable, and only do so when AI_PROVIDER=vertex (privacy: espelho
+   * carries sensitive Pre-Cons-linked data).
+   */
+  async extractEspelhoData(text: string): Promise<ExtractionResult> {
+    const msgs: OpenRouterMessage[] = buildEspelhoPrompt(text) as OpenRouterMessage[];
+    return this.extractWithUpgrade(
+      'espelho',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          msgs,
+          true,
+          'espelho_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.espelho : undefined,
+        );
+        const data = this.zodParse(response, 'espelho extraction', espelhoResponseSchema);
+        const { score, lowConfidenceFields } = this.calculateConfidence(
+          data as Record<string, any>,
+        );
+        logger.info(
+          { model, confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
+          'Espelho data extracted via AI fallback',
+        );
+        return {
+          data: data as Record<string, any>,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        };
+      },
+    );
+  }
+
   async extractCertificateData(
     text: string,
     imageOpts?: ImageExtractionOpts,
@@ -510,7 +697,13 @@ class AIService {
       );
     }
     const messages = msgs;
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'certificate_extraction');
+    const response = await this.chat(
+      'gemini-2.5-flash',
+      messages,
+      true,
+      'certificate_extraction',
+      USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.certificate : undefined,
+    );
     const data = this.zodParse(response, 'certificate extraction', certificateResponseSchema);
     const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
@@ -560,7 +753,13 @@ class AIService {
   ): Promise<EmailAnalysisResult> {
     const truncatedBody = body.substring(0, 2000);
     const messages = buildEmailAnalysisPrompt(subject, truncatedBody, fromAddress);
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'email_analysis');
+    const response = await this.chat(
+      'gemini-2.5-flash',
+      messages,
+      true,
+      'email_analysis',
+      USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.email_analysis : undefined,
+    );
     const result = this.zodParse(response, 'email analysis', emailAnalysisResponseSchema);
 
     logger.info(

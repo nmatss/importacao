@@ -382,8 +382,20 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
   );
 }
 
-function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
-  if (!draftDoc || draftDoc.aiProcessingStatus !== 'completed' || !draftDoc.aiParsedData) {
+function AIExtractedData({
+  draftDoc,
+  ohblDoc,
+}: {
+  draftDoc: Document | null;
+  ohblDoc: Document | null;
+}) {
+  // Default to OHBL (final) when available; allow operator to toggle back to draft.
+  const hasFinal =
+    !!ohblDoc && ohblDoc.aiProcessingStatus === 'completed' && !!ohblDoc.aiParsedData;
+  const [showDraft, setShowDraft] = useState(false);
+  const activeDoc = hasFinal && !showDraft ? ohblDoc : draftDoc;
+
+  if (!activeDoc || activeDoc.aiProcessingStatus !== 'completed' || !activeDoc.aiParsedData) {
     return (
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
@@ -391,9 +403,9 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
           Dados Extraidos pela IA
         </h3>
         <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-4 py-8 text-center">
-          {!draftDoc ? (
+          {!activeDoc ? (
             <p className="text-sm text-slate-400">Envie um Draft BL para ver os dados extraidos</p>
-          ) : draftDoc.aiProcessingStatus === 'processing' ? (
+          ) : activeDoc.aiProcessingStatus === 'processing' ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-6 w-6 text-violet-400 animate-spin" />
               <p className="text-sm text-slate-400">Processando com IA...</p>
@@ -406,17 +418,42 @@ function AIExtractedData({ draftDoc }: { draftDoc: Document | null }) {
     );
   }
 
-  const data = draftDoc.aiParsedData;
+  const data = activeDoc.aiParsedData;
+  const isShowingFinal = activeDoc === ohblDoc;
+  const finalDate = ohblDoc?.uploadedAt
+    ? new Date(ohblDoc.uploadedAt).toLocaleDateString('pt-BR')
+    : null;
   const woodDeclaration = getFieldValue(data, 'woodDeclaration');
   const freeTime = getFieldValue(data, 'freeTime');
   const ncmList = getFieldValue(data, 'ncmList');
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-        <Info className="h-4 w-4 text-violet-500" />
-        Dados Extraidos pela IA
-      </h3>
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+          <Info className="h-4 w-4 text-violet-500" />
+          Dados Extraidos pela IA
+        </h3>
+        {hasFinal && (
+          <span
+            className={cn(
+              'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+              isShowingFinal ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700',
+            )}
+          >
+            {isShowingFinal ? `BL Final · atualizado ${finalDate ?? ''}` : 'Versao do Draft'}
+          </span>
+        )}
+        {hasFinal && (
+          <button
+            onClick={() => setShowDraft((v) => !v)}
+            className="ml-auto inline-flex items-center gap-1 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700"
+          >
+            <GitCompareArrows className="h-3 w-3" />
+            {showDraft ? 'Ver dados do BL Final' : 'Ver dados do Draft'}
+          </button>
+        )}
+      </div>
 
       {/* Critical warnings */}
       {woodDeclaration === false && (
@@ -773,6 +810,124 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
   );
 }
 
+// ── Section E: Draft BL vs BL Final (Revisado) ─────────────────────────
+
+interface DraftBlRevision {
+  field: string;
+  label: string;
+  draftValue: string | null;
+  finalValue: string | null;
+  isRevised: boolean;
+}
+
+interface ComparisonData {
+  hasDraftBl?: boolean;
+  hasBl?: boolean;
+  draftBlRevisions?: DraftBlRevision[];
+}
+
+function DraftVsFinalSection({
+  processId,
+  hasOhbl,
+  ohblDate,
+}: {
+  processId: string;
+  hasOhbl: boolean;
+  ohblDate: string | null;
+}) {
+  const { data } = useApiQuery<ComparisonData>(
+    ['doc-comparison', processId, 'draft-vs-final'],
+    `/api/documents/process/${processId}/comparison`,
+    { enabled: hasOhbl, staleTime: 30_000 },
+  );
+
+  if (!hasOhbl) {
+    return (
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+          <GitCompareArrows className="h-4 w-4 text-violet-500" />
+          Draft BL vs BL Final
+        </h3>
+        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-4 py-6 text-center">
+          <p className="text-sm text-slate-400">
+            O BL Final (OHBL) ainda nao chegou — comparativo aparecera aqui assim que for emitido.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const revisions = data?.draftBlRevisions ?? [];
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+          <GitCompareArrows className="h-4 w-4 text-violet-500" />
+          Draft BL vs BL Final
+        </h3>
+        {ohblDate && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+            BL Final emitido {ohblDate}
+          </span>
+        )}
+        {revisions.length > 0 && (
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+            {revisions.length} campo(s) revisado(s)
+          </span>
+        )}
+      </div>
+
+      {revisions.length === 0 ? (
+        <div className="rounded-lg border border-emerald-100 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700">
+          <Check className="inline h-4 w-4 mr-1" /> Nenhum campo divergente entre o Draft e o BL
+          Final.
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-lg border border-violet-200 dark:border-violet-800">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="bg-violet-50/50 dark:bg-violet-950/20">
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
+                  Campo
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Draft BL
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
+                  BL Final
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {revisions.map((rev, i) => (
+                <tr key={i} className="border-b last:border-b-0">
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                        Revisado
+                      </span>
+                      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                        {rev.label}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-mono text-slate-500 dark:text-slate-400 line-through">
+                    {rev.draftValue ?? '—'}
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-mono text-emerald-700 font-semibold">
+                    {rev.finalValue ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main Component ─────────────────────────────────────────────────────
 
 export function DraftBLTab({ processId }: DraftBLTabProps) {
@@ -785,7 +940,7 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
         if (!docs) return false;
         const hasDraftProcessing = docs.some(
           (d) =>
-            d.documentType === 'draft_bl' &&
+            (d.documentType === 'draft_bl' || d.documentType === 'ohbl') &&
             (d.aiProcessingStatus === 'processing' || d.aiProcessingStatus === 'pending'),
         );
         return hasDraftProcessing ? 5000 : false;
@@ -803,28 +958,88 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
   // First draft_bl is the original, shown in sections A and C
   const draftDoc = allDraftDocs.length > 0 ? allDraftDocs[0] : null;
 
+  // OHBL (final BL) — when present, Section C swaps to its data
+  const ohblDoc =
+    (documents ?? [])
+      .filter((d) => d.documentType === 'ohbl')
+      .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0] ??
+    null;
+
+  const ohblDate = ohblDoc?.uploadedAt
+    ? new Date(ohblDoc.uploadedAt).toLocaleDateString('pt-BR')
+    : null;
+
+  // Once the OHBL (final BL) has arrived, the draft + revisado history becomes
+  // background context — Nicolas's words (2026-05-21 meeting): "quando eu subir
+  // o BL original aqui ele precisa começar a considerar só o que tá no BL
+  // original. Daí draft e revisado desaparecem pra gente."
+  const hasFinal = !!ohblDoc;
+
   return (
     <div className="space-y-6">
-      {/* Section A: Upload / View Draft */}
-      <DraftUploadSection draftDoc={draftDoc} processId={processId} />
+      {hasFinal && (
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
+          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
+            BL Final (OHBL) recebido em {ohblDate}. Os dados exibidos abaixo agora refletem o BL
+            Final. O histórico do draft fica disponível em "Histórico do Draft".
+          </p>
+        </div>
+      )}
 
-      {/* Divider */}
-      <div className="border-t border-slate-100 dark:border-slate-700" />
+      {!hasFinal && (
+        <>
+          {/* Section A: Upload / View Draft */}
+          <DraftUploadSection draftDoc={draftDoc} processId={processId} />
 
-      {/* Section B: Conference Checklist */}
-      <ConferenceChecklist processId={processId} />
+          {/* Divider */}
+          <div className="border-t border-slate-100 dark:border-slate-700" />
 
-      {/* Divider */}
-      <div className="border-t border-slate-100 dark:border-slate-700" />
+          {/* Section B: Conference Checklist */}
+          <ConferenceChecklist processId={processId} />
 
-      {/* Section C: AI Extracted Data */}
-      <AIExtractedData draftDoc={draftDoc} />
+          {/* Divider */}
+          <div className="border-t border-slate-100 dark:border-slate-700" />
+        </>
+      )}
 
-      {/* Divider */}
-      <div className="border-t border-slate-100 dark:border-slate-700" />
+      {/* Section C: AI Extracted Data — swaps to OHBL when emitted */}
+      <AIExtractedData draftDoc={draftDoc} ohblDoc={ohblDoc} />
 
-      {/* Section D: Documento Revisado */}
-      <RevisadoSection draftDocs={allDraftDocs} processId={processId} />
+      {/* Section E: Draft BL vs BL Final (always when OHBL present) */}
+      {hasFinal && (
+        <>
+          <div className="border-t border-slate-100 dark:border-slate-700" />
+          <DraftVsFinalSection processId={processId} hasOhbl={hasFinal} ohblDate={ohblDate} />
+        </>
+      )}
+
+      {/* Section D: Documento Revisado (Draft mais antigo vs Draft mais novo) */}
+      {!hasFinal && allDraftDocs.length > 1 && (
+        <>
+          <div className="border-t border-slate-100 dark:border-slate-700" />
+          <RevisadoSection draftDocs={allDraftDocs} processId={processId} />
+        </>
+      )}
+
+      {/* Collapsible: Histórico do Draft (only after OHBL) */}
+      {hasFinal && (
+        <details className="rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/30">
+          <summary className="cursor-pointer px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+            Histórico do Draft (upload, checklist, revisões anteriores)
+          </summary>
+          <div className="space-y-6 px-4 py-4">
+            <DraftUploadSection draftDoc={draftDoc} processId={processId} />
+            <div className="border-t border-slate-100 dark:border-slate-700" />
+            <ConferenceChecklist processId={processId} />
+            {allDraftDocs.length > 1 && (
+              <>
+                <div className="border-t border-slate-100 dark:border-slate-700" />
+                <RevisadoSection draftDocs={allDraftDocs} processId={processId} />
+              </>
+            )}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

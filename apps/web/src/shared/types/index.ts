@@ -73,6 +73,9 @@ export interface ImportProcess {
   hasCertification: boolean;
   hasFreeOfCharge: boolean;
   correctionStatus: string | null;
+  previousCodes?: string[] | null;
+  lockedAt?: string | null;
+  lockedReason?: string | null;
   paymentTerms: Record<string, unknown> | null;
   aiExtractedData: AiExtractedData | null;
   notes: string | null;

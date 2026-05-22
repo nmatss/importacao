@@ -12,6 +12,9 @@ router.use(authMiddleware);
 // Upload and sync Pre-Cons XLSX (admin only)
 router.post('/sync', adminMiddleware, upload.single('file'), preConsController.sync);
 
+// Pull-and-sync from Drive folder (admin only — designed for cron/scheduler)
+router.post('/sync-from-drive', adminMiddleware, preConsController.syncFromDrive);
+
 // List Pre-Cons items (with optional processCode filter)
 router.get('/items', validate(getPreConsItemsSchema, 'query'), preConsController.getItems);
 

@@ -12,6 +12,8 @@ import {
   Upload,
   Loader2,
   AlertTriangle,
+  Eye,
+  Download,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -46,6 +48,7 @@ const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)
 
 const TYPE_COLORS: Record<string, string> = {
   invoice: 'bg-primary-50 text-primary-700 border-primary-200',
+  proforma_invoice: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
   packing_list: 'bg-amber-50 text-amber-700 border-amber-200',
   ohbl: 'bg-violet-50 text-violet-700 border-violet-200',
   draft_bl: 'bg-violet-50 text-violet-700 border-violet-200',
@@ -143,6 +146,43 @@ export function DocumentList({ processId }: DocumentListProps) {
       }
     } catch {
       // ignore
+    }
+  };
+
+  const openOrDownload = async (
+    docId: number,
+    filename: string | undefined,
+    mode: 'open' | 'download',
+  ) => {
+    const token = localStorage.getItem('importacao_token');
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    try {
+      const url = `${baseUrl}/api/documents/${docId}/file${mode === 'download' ? '?download=1' : ''}`;
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        // Allow redirect to Google Drive when the local file is missing
+        redirect: 'follow',
+      });
+      if (res.redirected && res.url) {
+        window.open(res.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (!res.ok) throw new Error(`Falha ao abrir documento (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      if (mode === 'download') {
+        const a = window.document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename || `documento-${docId}`;
+        window.document.body.appendChild(a);
+        a.click();
+        a.remove();
+      } else {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      }
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao acessar documento');
     }
   };
 
@@ -327,6 +367,30 @@ export function DocumentList({ processId }: DocumentListProps) {
                           ) : (
                             <Mail className="h-3.5 w-3.5" />
                           )}
+                        </button>
+
+                        {/* Open document inline */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openOrDownload(doc.id, doc.fileName, 'open');
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
+                          title="Abrir documento"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                        </button>
+
+                        {/* Download document */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openOrDownload(doc.id, doc.fileName, 'download');
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
+                          title="Baixar documento"
+                        >
+                          <Download className="h-3.5 w-3.5" />
                         </button>
 
                         {/* Drive link */}

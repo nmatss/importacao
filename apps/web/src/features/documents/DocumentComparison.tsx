@@ -1,22 +1,20 @@
-import {
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Minus,
-  FileText,
-  Package,
-  History,
-} from 'lucide-react';
+import { CheckCircle, XCircle, AlertTriangle, Minus, FileText, Package } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+
+type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
+
+type Criticality = 'critical' | 'secondary' | 'info';
 
 interface AggregateField {
   label: string;
   invoice: string | null;
   packingList: string | null;
   bl: string | null;
-  status: 'match' | 'divergent' | 'empty';
+  espelho: string | null;
+  status: RowStatus;
+  criticality?: Criticality;
 }
 
 interface ItemComparison {
@@ -25,16 +23,24 @@ interface ItemComparison {
   ncm: string;
   invoiceQty: number;
   plQty: number | null;
+  espelhoQty: number | null;
   invoiceUnitPrice: number;
   invoiceTotal: number;
+  espelhoUnitPrice: number | null;
+  espelhoTotal: number | null;
   invoiceBoxes: number | null;
   plBoxes: number | null;
+  espelhoBoxes: number | null;
   invoiceNetWeight: number | null;
   plNetWeight: number | null;
+  espelhoNetWeight: number | null;
   invoiceGrossWeight: number | null;
   plGrossWeight: number | null;
+  espelhoGrossWeight: number | null;
+  isFreeOfCharge?: boolean;
   qtyMatch: boolean | null;
   matched: boolean;
+  espelhoMatched: boolean;
 }
 
 interface UnmatchedItem {
@@ -57,6 +63,7 @@ interface ComparisonData {
   hasPackingList: boolean;
   hasBl: boolean;
   hasDraftBl?: boolean;
+  hasEspelho?: boolean;
   aggregateComparison: AggregateField[];
   itemComparison: ItemComparison[];
   unmatchedPlItems: UnmatchedItem[];
@@ -65,6 +72,7 @@ interface ComparisonData {
   plConfidence: number | null;
   blConfidence: number | null;
   draftBlConfidence?: number | null;
+  espelhoConfidence?: number | null;
 }
 
 function DocBadge({
@@ -105,13 +113,7 @@ function DocBadge({
   );
 }
 
-function StatusCell({
-  value,
-  status,
-}: {
-  value: string | null;
-  status?: 'match' | 'divergent' | 'empty';
-}) {
+function StatusCell({ value, status }: { value: string | null; status?: RowStatus }) {
   if (!value)
     return <td className="px-3 py-2.5 text-sm text-slate-300 dark:text-slate-600 font-mono">-</td>;
   return (
@@ -120,7 +122,9 @@ function StatusCell({
         'px-3 py-2.5 text-sm font-mono',
         status === 'divergent'
           ? 'text-danger-700 dark:text-danger-400 font-semibold bg-danger-50/50 dark:bg-danger-950/30'
-          : 'text-slate-700 dark:text-slate-300',
+          : status === 'warning'
+            ? 'text-amber-700 dark:text-amber-400 font-medium bg-amber-50/40 dark:bg-amber-950/20'
+            : 'text-slate-700 dark:text-slate-300',
       )}
     >
       {value}
@@ -146,6 +150,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
   }
 
   const divergentCount = data.aggregateComparison.filter((f) => f.status === 'divergent').length;
+  const warningCount = data.aggregateComparison.filter((f) => f.status === 'warning').length;
   const matchCount = data.aggregateComparison.filter((f) => f.status === 'match').length;
 
   return (
@@ -162,6 +167,11 @@ export function DocumentComparison({ processId }: { processId: string }) {
         {data.hasDraftBl && (
           <DocBadge label="Draft BL" available={true} confidence={data.draftBlConfidence ?? null} />
         )}
+        <DocBadge
+          label="Espelho"
+          available={!!data.hasEspelho}
+          confidence={data.espelhoConfidence ?? null}
+        />
       </div>
 
       {/* Summary badges */}
@@ -169,6 +179,11 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
           <CheckCircle className="h-3.5 w-3.5" /> {matchCount} campos ok
         </span>
+        {warningCount > 0 && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700">
+            <AlertTriangle className="h-3.5 w-3.5" /> {warningCount} atençao
+          </span>
+        )}
         {divergentCount > 0 && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700">
             <XCircle className="h-3.5 w-3.5" /> {divergentCount} divergencias
@@ -181,7 +196,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary-600" />
-            Comparativo Geral - Invoice vs Packing List vs BL
+            Comparativo Geral — Invoice vs Packing List vs BL vs Espelho
           </h4>
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
@@ -201,6 +216,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
                   BL
                 </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-cyan-500">
+                  Espelho
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -211,23 +229,49 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     key={i}
                     className={cn(
                       'border-b last:border-b-0',
-                      field.status === 'divergent' ? 'bg-danger-50/30 dark:bg-danger-950/20' : '',
+                      field.status === 'divergent'
+                        ? 'bg-danger-50/30 dark:bg-danger-950/20'
+                        : field.status === 'warning'
+                          ? 'bg-amber-50/30 dark:bg-amber-950/20'
+                          : '',
                     )}
                   >
                     <td className="px-3 py-2.5">
                       {field.status === 'match' && (
                         <CheckCircle className="h-4 w-4 text-emerald-500" />
                       )}
+                      {field.status === 'warning' && (
+                        <AlertTriangle className="h-4 w-4 text-amber-500" />
+                      )}
                       {field.status === 'divergent' && (
                         <XCircle className="h-4 w-4 text-danger-500" />
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">
-                      {field.label}
+                      <div className="flex items-center gap-1.5">
+                        <span>{field.label}</span>
+                        {field.criticality === 'secondary' && (
+                          <span
+                            title="Campo secundário — divergência registrada como aviso, não como erro"
+                            className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-600 dark:text-slate-400"
+                          >
+                            secundário
+                          </span>
+                        )}
+                        {field.criticality === 'info' && (
+                          <span
+                            title="Campo informativo — não é comparado entre documentos"
+                            className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-500"
+                          >
+                            info
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <StatusCell value={field.invoice} status={field.status} />
                     <StatusCell value={field.packingList} status={field.status} />
                     <StatusCell value={field.bl} status={field.status} />
+                    <StatusCell value={field.espelho} status={field.status} />
                   </tr>
                 ))}
             </tbody>
@@ -235,71 +279,20 @@ export function DocumentComparison({ processId }: { processId: string }) {
         </div>
       </div>
 
-      {/* Draft BL vs Final BL revisions */}
-      {data.draftBlRevisions && data.draftBlRevisions.length > 0 && (
-        <div className="rounded-xl border border-violet-200 dark:border-violet-800 bg-violet-50/20 dark:bg-violet-950/10 overflow-hidden">
-          <div className="bg-violet-50 dark:bg-violet-950/30 px-4 py-3 border-b border-violet-200 dark:border-violet-800 flex items-center gap-2">
-            <History className="h-4 w-4 text-violet-600" />
-            <h4 className="text-sm font-semibold text-violet-900">
-              Revisado — Draft BL vs BL Final
-            </h4>
-            <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
-              {data.draftBlRevisions.length} campo(s) alterado(s)
-            </span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-violet-50/50 dark:bg-violet-950/20">
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
-                    Campo
-                  </th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Draft BL
-                  </th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-emerald-500">
-                    BL Final
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.draftBlRevisions.map((rev, i) => (
-                  <tr key={i} className="border-b last:border-b-0">
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-                          Revisado
-                        </span>
-                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                          {rev.label}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-sm font-mono text-slate-500 dark:text-slate-400 line-through">
-                      {rev.draftValue ?? '—'}
-                    </td>
-                    <td className="px-3 py-2.5 text-sm font-mono text-emerald-700 font-semibold">
-                      {rev.finalValue ?? '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
       {/* Item-level comparison */}
       {data.itemComparison.length > 0 && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
               <Package className="h-4 w-4 text-violet-600" />
-              Comparativo por Item - Invoice vs Packing List
+              Comparativo por Item — Invoice vs Packing List vs Espelho
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {data.itemComparison.filter((i) => i.matched).length} de {data.itemComparison.length}{' '}
               itens encontrados no Packing List
+              {data.hasEspelho
+                ? ` · ${data.itemComparison.filter((i) => i.espelhoMatched).length} no Espelho`
+                : ''}
             </p>
           </div>
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
@@ -321,6 +314,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-violet-500">
                     Qtd PL
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-cyan-500">
+                    Qtd Espelho
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Unit Price
@@ -353,7 +349,14 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       )}
                     </td>
                     <td className="px-3 py-2 font-mono text-slate-700 dark:text-slate-300">
-                      {item.itemCode || '-'}
+                      <div className="flex items-center gap-1.5">
+                        {item.itemCode || '-'}
+                        {item.isFreeOfCharge && (
+                          <span className="inline-flex items-center rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700">
+                            FOC
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[200px] truncate">
                       {item.description || '-'}
@@ -373,6 +376,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       )}
                     >
                       {item.plQty ?? '-'}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-cyan-700">
+                      {item.espelhoQty ?? '-'}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
                       {item.invoiceUnitPrice != null

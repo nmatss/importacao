@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { aiService } from './service.js';
+import { getUsageSummary } from './cost-tracker.js';
 import { documentService } from '../documents/service.js';
 import { processService } from '../processes/service.js';
 import { db } from '../../shared/database/connection.js';
@@ -124,5 +125,20 @@ export async function validateNcm(req: Request, res: Response) {
   } catch (error) {
     logger.error({ error }, 'Error validating NCM');
     return sendError(res, 'Erro ao validar NCM', 500);
+  }
+}
+
+/**
+ * GET /api/ai/usage — admin-only. Exposes the current month's AI spend
+ * (USD), budget cap, % used, and per-model breakdown. Surfaced by the
+ * 80%-threshold alert so the operator has a place to look.
+ */
+export async function getAIUsage(_req: Request, res: Response) {
+  try {
+    const summary = await getUsageSummary();
+    return sendSuccess(res, summary);
+  } catch (error) {
+    logger.error({ error }, 'Error fetching AI usage summary');
+    return sendError(res, 'Erro ao buscar consumo de IA', 500);
   }
 }

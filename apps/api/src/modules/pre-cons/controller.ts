@@ -9,6 +9,22 @@ const ALLOWED_EXTENSIONS = /\.xlsx?$/i;
 
 export const preConsController = {
   /**
+   * POST /api/pre-cons/sync-from-drive — Pull latest xlsx from Google Drive
+   * folder (GOOGLE_DRIVE_PRE_CONS_FOLDER_ID) and run sync. Designed to be
+   * called by a cron job. Returns { skipped: true, reason } when nothing
+   * was processable.
+   */
+  async syncFromDrive(_req: Request, res: Response) {
+    try {
+      const result = await preConsService.syncFromDrive();
+      sendSuccess(res, result, 200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao sincronizar via Drive';
+      sendError(res, message, 500);
+    }
+  },
+
+  /**
    * POST /api/pre-cons/sync — Upload XLSX and sync Pre-Cons data
    */
   async sync(req: Request, res: Response) {

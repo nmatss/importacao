@@ -299,6 +299,30 @@ export const preConsService = {
   },
 
   /**
+   * Fetch the latest Pre-Cons xlsx from Google Drive (folder configured by
+   * GOOGLE_DRIVE_PRE_CONS_FOLDER_ID) and run the same sync pipeline used by
+   * upload + email paths. Idempotent: a 1-day-stale Drive file is still
+   * picked up. Returns null when Drive isn't configured or no xlsx found.
+   */
+  async syncFromDrive() {
+    const { googleDriveService } = await import('../integrations/google-drive.service.js');
+    if (!(await googleDriveService.isConfigured())) {
+      return { skipped: true as const, reason: 'drive_not_configured' };
+    }
+    const latest = await googleDriveService.findLatestPreConsXlsx();
+    if (!latest) {
+      return { skipped: true as const, reason: 'no_xlsx_in_folder' };
+    }
+    const buffer = await googleDriveService.downloadFileBuffer(latest.id);
+    const result = await this.syncFromXLSX(buffer, latest.name, 'drive');
+    return {
+      skipped: false as const,
+      driveFile: { id: latest.id, name: latest.name, modifiedTime: latest.modifiedTime },
+      ...result,
+    };
+  },
+
+  /**
    * Compare Pre-Cons items with existing import processes to find divergences.
    */
   async findDivergences() {

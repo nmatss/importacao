@@ -1,3 +1,5 @@
+import { normalizePort, portsMatch as portsEqual } from '../utils/port-normalize';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -15,19 +17,18 @@ interface CheckResult {
   message: string;
 }
 
-function normalize(value: unknown): string {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase();
-}
-
 export default function portsMatch(input: CheckInput): CheckResult {
   const checkName = 'ports-match';
 
-  const invPortOfLoading = normalize(input.invoiceData?.portOfLoading);
-  const blPortOfLoading = normalize(input.blData?.portOfLoading);
-  const invPortOfDischarge = normalize(input.invoiceData?.portOfDischarge);
-  const blPortOfDischarge = normalize(input.blData?.portOfDischarge);
+  const invPolRaw = input.invoiceData?.portOfLoading;
+  const blPolRaw = input.blData?.portOfLoading;
+  const invPodRaw = input.invoiceData?.portOfDischarge;
+  const blPodRaw = input.blData?.portOfDischarge;
+
+  const invPortOfLoading = normalizePort(invPolRaw);
+  const blPortOfLoading = normalizePort(blPolRaw);
+  const invPortOfDischarge = normalizePort(invPodRaw);
+  const blPortOfDischarge = normalizePort(blPodRaw);
 
   if (!invPortOfLoading && !blPortOfLoading) {
     return {
@@ -40,12 +41,12 @@ export default function portsMatch(input: CheckInput): CheckResult {
 
   const issues: string[] = [];
 
-  if (invPortOfLoading && blPortOfLoading && invPortOfLoading !== blPortOfLoading) {
-    issues.push(`Porto de embarque: INV="${invPortOfLoading}" vs BL="${blPortOfLoading}"`);
+  if (invPortOfLoading && blPortOfLoading && !portsEqual(invPolRaw, blPolRaw)) {
+    issues.push(`Porto de embarque: INV="${invPolRaw}" vs BL="${blPolRaw}"`);
   }
 
-  if (invPortOfDischarge && blPortOfDischarge && invPortOfDischarge !== blPortOfDischarge) {
-    issues.push(`Porto de descarga: INV="${invPortOfDischarge}" vs BL="${blPortOfDischarge}"`);
+  if (invPortOfDischarge && blPortOfDischarge && !portsEqual(invPodRaw, blPodRaw)) {
+    issues.push(`Porto de descarga: INV="${invPodRaw}" vs BL="${blPodRaw}"`);
   }
 
   if (issues.length > 0) {

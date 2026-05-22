@@ -38,13 +38,33 @@ export default function fobCalculation(input: CheckInput): CheckResult {
     };
   }
 
+  const FOC_DESCRIPTION_RE = /\b(foc|free\s*of\s*charge|complimentary|sample|amostra|brinde)\b/i;
+
+  const isFreeOfCharge = (item: Record<string, any>): boolean => {
+    if (item.isFreeOfCharge === true) return true;
+    const unitPrice = Number(item.unitPrice ?? 0);
+    if (unitPrice === 0 && Number(item.quantity ?? 0) > 0) return true;
+    const desc = String(item.description ?? '');
+    if (FOC_DESCRIPTION_RE.test(desc)) return true;
+    return false;
+  };
+
+  let focCount = 0;
+  let focQuantity = 0;
   const calculatedTotal = items.reduce((sum, item) => {
+    if (isFreeOfCharge(item)) {
+      focCount++;
+      focQuantity += Number(item.quantity ?? 0);
+      return sum;
+    }
     const unitPrice = Number(item.unitPrice ?? 0);
     const quantity = Number(item.quantity ?? 0);
     return sum + unitPrice * quantity;
   }, 0);
 
   const difference = Math.abs(calculatedTotal - totalFob);
+  const focNote =
+    focCount > 0 ? ` (${focCount} item(s) FOC, qty ${focQuantity} — nao somados)` : '';
 
   // Use proportional tolerance: max(1.00, 0.1% of total) to handle floating-point accumulation
   const tolerance = Math.max(1.0, totalFob * 0.001);
@@ -55,7 +75,7 @@ export default function fobCalculation(input: CheckInput): CheckResult {
       expectedValue: totalFob.toFixed(2),
       actualValue: calculatedTotal.toFixed(2),
       documentsCompared: 'INV',
-      message: 'Calculo FOB confere com o valor total.',
+      message: `Calculo FOB confere com o valor total${focNote}.`,
     };
   }
 
@@ -65,6 +85,6 @@ export default function fobCalculation(input: CheckInput): CheckResult {
     expectedValue: totalFob.toFixed(2),
     actualValue: calculatedTotal.toFixed(2),
     documentsCompared: 'INV',
-    message: `Divergencia no calculo FOB: soma dos itens = ${calculatedTotal.toFixed(2)}, total declarado = ${totalFob.toFixed(2)} (diferenca: ${difference.toFixed(2)}).`,
+    message: `Divergencia no calculo FOB: soma dos itens = ${calculatedTotal.toFixed(2)}, total declarado = ${totalFob.toFixed(2)} (diferenca: ${difference.toFixed(2)})${focNote}.`,
   };
 }

@@ -91,6 +91,16 @@ function classifyDocument(filename: string): string {
     lower.includes('conhecimento') ||
     lower.includes('ohbl');
 
+  // 0. proforma invoice — MUST come before commercial invoice match.
+  // Proformas are pre-shipment estimates and should not pollute the Comparativo
+  // (which compares actual shipment values across Invoice / PL / BL / Espelho).
+  const hasProformaSignal =
+    lower.includes('proforma') ||
+    lower.includes('pro-forma') ||
+    lower.includes('pro forma') ||
+    /\bpi[-_\s]?\d{3,}/.test(lower);
+  if (hasProformaSignal) return 'proforma_invoice';
+
   // 1. invoice — wide keyword base (INV token is Uni.co standard)
   if (
     lower.includes('invoice') ||
@@ -174,6 +184,11 @@ function classifyDocumentWithContext(
     invoice: 'invoice',
     fatura: 'invoice',
     commercial_invoice: 'invoice',
+    proforma: 'proforma_invoice',
+    proforma_invoice: 'proforma_invoice',
+    pro_forma: 'proforma_invoice',
+    pro_forma_invoice: 'proforma_invoice',
+    fatura_pro_forma: 'proforma_invoice',
     packing_list: 'packing_list',
     packing: 'packing_list',
     romaneio: 'packing_list',
@@ -225,7 +240,13 @@ function extractDocumentTypesFromText(text: string): string[] {
   const lower = text.toLowerCase();
   const types: string[] = [];
 
-  if (/\b(invoice|fatura|commercial\s+invoice)\b/.test(lower)) types.push('invoice');
+  // Proforma MUST be checked before "invoice" to win the type assignment.
+  if (/\b(proforma|pro[\s-]?forma)(\s+invoice)?\b/.test(lower)) types.push('proforma_invoice');
+  if (
+    /\b(invoice|fatura|commercial\s+invoice)\b/.test(lower) &&
+    !types.includes('proforma_invoice')
+  )
+    types.push('invoice');
   if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
   // Draft BL BEFORE final BL so a body mentioning "draft BL" is detected.
   if (/\b(draft\s+bl|draft\s+bill|rascunho\s+(do\s+)?bl|bl\s+draft|preliminary\s+bl)\b/.test(lower))
@@ -664,6 +685,55 @@ export const emailProcessor = {
             'KIOM email processed (no attachments)',
           );
           continue;
+        }
+
+        // ── Step 6.7: Detect Vimbar approval — lock the process ──────
+        // Nicolas (2026-05-21): "A partir da aprovação aqui não é pra ter
+        // mais mudança." The freight agent's approval email closes the
+        // process for further automated edits. Subject "é sempre o mesmo
+        // assunto" — we match on "vimbar" + an approval signal.
+        // Operator kill switch: set VIMBAR_AUTO_LOCK=0 to disable.
+        // Sender safety: require sender domain to match VIMBAR_SENDER_DOMAINS
+        // (comma-separated). Without this, any external sender could lock
+        // a process by including the right keywords.
+        if (processId && process.env.VIMBAR_AUTO_LOCK !== '0') {
+          const VIMBAR_RE = /\bvimbar\b/i;
+          const APPROVAL_RE = /\b(aprov|approv|liberad|libera[cç][aã]o)/i;
+          const haystack = `${email.subject ?? ''}\n${email.body ?? ''}`;
+          const isVimbarApproval = VIMBAR_RE.test(haystack) && APPROVAL_RE.test(haystack);
+
+          const allowedDomains = (process.env.VIMBAR_SENDER_DOMAINS ?? '')
+            .split(',')
+            .map((d) => d.trim().toLowerCase())
+            .filter(Boolean);
+          const senderLower = (email.from ?? '').toLowerCase();
+          const senderAllowed =
+            allowedDomains.length === 0
+              ? false /* fail-closed when no allowlist configured */
+              : allowedDomains.some(
+                  (d) => senderLower.includes(`@${d}`) || senderLower.endsWith(`.${d}`),
+                );
+
+          if (isVimbarApproval && senderAllowed) {
+            try {
+              const { processService } = await import('../processes/service.js');
+              await processService.lock(processId, 'vimbar_approval', null);
+              logger.info(
+                { processId, processCode, subject: email.subject, sender: senderLower },
+                'Process locked via Vimbar approval email',
+              );
+            } catch (lockErr) {
+              logger.error(
+                { err: lockErr, processId, processCode },
+                'Failed to lock process after Vimbar approval',
+              );
+            }
+          } else if (isVimbarApproval && !senderAllowed) {
+            logger.warn(
+              { processId, processCode, sender: senderLower, allowedDomains },
+              'Vimbar keywords detected but sender domain not in VIMBAR_SENDER_DOMAINS allowlist — lock skipped',
+            );
+          }
         }
 
         // ── Step 6.8: Detect Pre-Cons spreadsheet ─────────────────────

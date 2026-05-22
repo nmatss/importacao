@@ -53,6 +53,46 @@ export const processController = {
     }
   },
 
+  async rename(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id ?? null;
+      const { newProcessCode, reason } = req.body as { newProcessCode: string; reason?: string };
+      const process = await processService.rename(
+        Number(req.params.id),
+        newProcessCode,
+        reason,
+        userId,
+      );
+      sendSuccess(res, process);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async lock(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id ?? null;
+      const reason = (req.body?.reason as string | undefined) ?? 'manual';
+      const process = await processService.lock(Number(req.params.id), reason, userId);
+      sendSuccess(res, process);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async unlock(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id ?? null;
+      const process = await processService.unlock(Number(req.params.id), userId);
+      sendSuccess(res, process);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async update(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;

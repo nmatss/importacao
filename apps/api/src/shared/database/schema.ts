@@ -34,6 +34,7 @@ export const brandEnum = pgEnum('brand', ['puket', 'imaginarium']);
 
 export const documentTypeEnum = pgEnum('document_type', [
   'invoice',
+  'proforma_invoice',
   'packing_list',
   'ohbl',
   'draft_bl',
@@ -124,6 +125,15 @@ export const importProcesses = pgTable(
     documentStage: varchar('document_stage', { length: 30 }).default('pre_con'),
     aiExtractedData: jsonb('ai_extracted_data'),
     notes: text('notes'),
+    // Pre-Cons às vezes troca a referência de um processo (209 vira 208) ou
+    // remove e devolve com outro código. previousCodes mantém o histórico
+    // pra busca, audit e prevenção de duplicata. Adicionado 2026-05-22.
+    previousCodes: jsonb('previous_codes').default([]),
+    // Lock pós-aprovação Vimbar (email do agente de cargas). Quando setado,
+    // o processo não aceita mais alterações via API (exceto unlock manual).
+    // Reason fica em lockedReason (ex: 'vimbar_approval', 'manual').
+    lockedAt: timestamp('locked_at'),
+    lockedReason: varchar('locked_reason', { length: 50 }),
     createdBy: integer('created_by').references(() => users.id),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
@@ -608,6 +618,34 @@ export type ProcessEvent = typeof processEvents.$inferSelect;
 export type NewProcessEvent = typeof processEvents.$inferInsert;
 
 // ── Pre-Cons Items (KIOM Pre-Conference) ─────────────────────────────
+
+/**
+ * Per-call AI usage event — drives the monthly cost budget cap.
+ * Provider, model, token counts and computed USD cost are appended on every
+ * successful chat completion. A SUM(cost_usd) over the current month feeds
+ * the budget gate (see ai/cost-tracker.ts).
+ */
+export const aiUsageLog = pgTable(
+  'ai_usage_log',
+  {
+    id: serial('id').primaryKey(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    provider: varchar('provider', { length: 20 }).notNull(),
+    model: varchar('model', { length: 100 }).notNull(),
+    context: varchar('context', { length: 100 }),
+    inputTokens: integer('input_tokens').default(0),
+    outputTokens: integer('output_tokens').default(0),
+    costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).default('0'),
+    status: varchar('status', { length: 20 }).default('success'),
+  },
+  (table) => [
+    index('ai_usage_log_created_at_idx').on(table.createdAt),
+    index('ai_usage_log_provider_idx').on(table.provider),
+  ],
+);
+
+export type AiUsageLog = typeof aiUsageLog.$inferSelect;
+export type NewAiUsageLog = typeof aiUsageLog.$inferInsert;
 
 export const preConsItems = pgTable(
   'pre_cons_items',

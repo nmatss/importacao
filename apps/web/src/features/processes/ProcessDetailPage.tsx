@@ -38,6 +38,7 @@ import { DocumentChecklistTab } from './components/DocumentChecklistTab';
 import { DraftBLTab } from './components/DraftBLTab';
 import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
 import { PreConsTab } from './components/PreConsTab';
+import { ProformasTab } from './components/ProformasTab';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ import { PreConsTab } from './components/PreConsTab';
 const CORE_TABS = [
   { key: 'draft_bl', label: 'Draft BL', icon: FileSearch },
   { key: 'pre_cons', label: 'Pre-Cons', icon: ClipboardList },
+  { key: 'proformas', label: 'Proformas', icon: FileText },
   { key: 'documentos', label: 'Documentos', icon: FileText },
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
@@ -153,6 +155,8 @@ function TabContent({
       return <DraftBLTab processId={processId} />;
     case 'pre_cons':
       return <PreConsTab processId={processId} processCode={processCode} />;
+    case 'proformas':
+      return <ProformasTab processId={processId} />;
     case 'comparativo':
       return <ComparisonTab processId={processId} />;
     case 'checklist':

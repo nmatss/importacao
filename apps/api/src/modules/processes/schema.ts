@@ -33,6 +33,17 @@ export const createFromPreConsSchema = z.object({
 });
 export type CreateFromPreConsInput = z.infer<typeof createFromPreConsSchema>;
 
+export const renameProcessSchema = z.object({
+  newProcessCode: z.string().min(1).max(50),
+  reason: z.string().max(500).optional(),
+});
+export type RenameProcessInput = z.infer<typeof renameProcessSchema>;
+
+export const lockProcessSchema = z.object({
+  reason: z.string().max(50).default('manual'),
+});
+export type LockProcessInput = z.infer<typeof lockProcessSchema>;
+
 export const updateProcessSchema = z.object({
   processCode: z.string().min(1).max(50).optional(),
   brand: z.enum(['puket', 'imaginarium']).optional(),

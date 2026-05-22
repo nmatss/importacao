@@ -109,6 +109,8 @@ describe('processService', () => {
       const mockProcess = { id: 1, status: 'draft' };
       const updatedProcess = { id: 1, status: 'documents_received' };
 
+      // assertNotLocked select — empty (not locked)
+      queryQueue.push(createResolvedChain([]));
       // select current process
       queryQueue.push(createResolvedChain([mockProcess]));
       // update and return
@@ -130,11 +132,13 @@ describe('processService', () => {
     it('should throw InvalidTransitionError for invalid transitions (e.g. completed -> draft)', async () => {
       const mockProcess = { id: 1, status: 'completed' };
 
+      // assertNotLocked select
+      queryQueue.push(createResolvedChain([]));
       queryQueue.push(createResolvedChain([mockProcess]));
 
-      await expect(
-        processService.updateStatus(1, 'draft', 1),
-      ).rejects.toThrow('Transicao invalida');
+      await expect(processService.updateStatus(1, 'draft', 1)).rejects.toThrow(
+        'Transicao invalida',
+      );
     });
   });
 
@@ -142,6 +146,8 @@ describe('processService', () => {
     it('should update fields and log audit', async () => {
       const updatedProcess = { id: 1, processCode: 'IMP-001', notes: 'updated' };
 
+      // assertNotLocked select
+      queryQueue.push(createResolvedChain([]));
       queryQueue.push(createResolvedChain([updatedProcess]));
 
       const result = await processService.update(1, { notes: 'updated' } as any, 3);
@@ -158,11 +164,111 @@ describe('processService', () => {
     });
   });
 
+  describe('lock() / unlock() / rename()', () => {
+    it('lock() sets lockedAt and returns updated process', async () => {
+      const current = { id: 7, lockedAt: null };
+      const locked = { id: 7, lockedAt: new Date(), lockedReason: 'vimbar_approval' };
+      queryQueue.push(createResolvedChain([current])); // select current
+      queryQueue.push(createResolvedChain([locked])); // update returning
+
+      const result = await processService.lock(7, 'vimbar_approval', null);
+      expect(result).toEqual(locked);
+      expect(auditService.log).toHaveBeenCalledWith(
+        null,
+        'lock',
+        'process',
+        7,
+        { reason: 'vimbar_approval' },
+        null,
+      );
+    });
+
+    it('lock() is idempotent when process is already locked', async () => {
+      const current = { id: 7, lockedAt: new Date() };
+      queryQueue.push(createResolvedChain([current]));
+
+      const result = await processService.lock(7, 'manual', null);
+      expect(result).toEqual(current);
+    });
+
+    it('assertNotLocked() throws 423 when process is locked', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          { lockedAt: new Date('2026-05-22'), lockedReason: 'vimbar_approval' },
+        ]),
+      );
+
+      try {
+        await processService.assertNotLocked(7);
+        expect.fail('expected throw');
+      } catch (err: any) {
+        expect(err.statusCode).toBe(423);
+        expect(err.message).toMatch(/travado/);
+      }
+    });
+
+    it('rename() rejects with 409 when target code already exists (unique violation)', async () => {
+      // assertNotLocked (not locked)
+      queryQueue.push(createResolvedChain([]));
+      // tx SELECT current
+      txQueue.push(createResolvedChain([{ id: 1, processCode: 'IM001', previousCodes: [] }]));
+      // tx UPDATE throws unique violation
+      const failChain = createResolvedChain([]);
+      const original = failChain.then.bind(failChain);
+      failChain.then = function (onFulfilled: any, onRejected?: any) {
+        const err: any = new Error('duplicate key value violates unique constraint');
+        err.code = '23505';
+        return Promise.reject(err).then(onFulfilled, onRejected);
+      };
+      // Restore the original then for chained calls before .returning(); we
+      // only want the final await to reject. Use a wrapper that delays:
+      void original;
+      txQueue.push(failChain);
+
+      try {
+        await processService.rename(1, 'IM002', 'precons_change', null);
+        expect.fail('expected throw');
+      } catch (err: any) {
+        expect(err.statusCode).toBe(409);
+      }
+    });
+
+    it('rename() appends to previousCodes and audit-logs', async () => {
+      const current = { id: 1, processCode: 'IM001', previousCodes: [] };
+      const renamed = { id: 1, processCode: 'IM002', previousCodes: ['IM001'] };
+      queryQueue.push(createResolvedChain([])); // assertNotLocked
+      txQueue.push(createResolvedChain([current])); // tx select current
+      txQueue.push(createResolvedChain([renamed])); // tx update returning
+
+      const result = await processService.rename(1, 'IM002', 'precons_change', 9);
+      expect(result).toEqual(renamed);
+      expect(auditService.log).toHaveBeenCalledWith(
+        9,
+        'rename',
+        'process',
+        1,
+        { from: 'IM001', to: 'IM002', reason: 'precons_change' },
+        null,
+      );
+    });
+
+    it('rename() is a no-op (returns current) when only case differs', async () => {
+      const current = { id: 1, processCode: 'IM001', previousCodes: [] };
+      queryQueue.push(createResolvedChain([])); // assertNotLocked
+      txQueue.push(createResolvedChain([current])); // tx select current
+
+      const result = await processService.rename(1, 'im001', undefined, null);
+      expect(result).toEqual(current);
+    });
+  });
+
   describe('delete()', () => {
     it('should set status to cancelled', async () => {
       const mockProcess = { id: 1, status: 'draft' };
       const cancelledProcess = { id: 1 };
 
+      // assertNotLocked select
+      queryQueue.push(createResolvedChain([]));
       // select current
       queryQueue.push(createResolvedChain([mockProcess]));
       // update returning
@@ -171,14 +277,7 @@ describe('processService', () => {
       const result = await processService.delete(1, 2);
 
       expect(result).toEqual(cancelledProcess);
-      expect(auditService.log).toHaveBeenCalledWith(
-        2,
-        'delete',
-        'process',
-        1,
-        null,
-        null,
-      );
+      expect(auditService.log).toHaveBeenCalledWith(2, 'delete', 'process', 1, null, null);
     });
   });
 });

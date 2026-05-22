@@ -54,6 +54,8 @@ interface Process {
   totalNetWeight: string | null;
   totalGrossWeight: string | null;
   shipmentDate: string | null;
+  lockedAt?: string | null;
+  lockedReason?: string | null;
 }
 
 export function ProcessEditPage() {
@@ -155,6 +157,18 @@ export function ProcessEditPage() {
           <p className="text-sm text-slate-600 dark:text-slate-400">{process.processCode}</p>
         </div>
       </div>
+
+      {process.lockedAt && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30 px-4 py-3 flex items-start gap-3">
+          <span className="text-amber-700 dark:text-amber-400 text-sm">
+            <strong>Processo travado</strong> em{' '}
+            {new Date(process.lockedAt).toLocaleDateString('pt-BR')}
+            {process.lockedReason ? ` (motivo: ${process.lockedReason})` : ''}. A API rejeitará
+            alterações enquanto o processo estiver travado — destrave pelo botão no cabeçalho antes
+            de salvar.
+          </span>
+        </div>
+      )}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Main Fields */}

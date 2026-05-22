@@ -202,8 +202,36 @@ notify "SUCCESS" "Deployed ${LOCAL_SHA:0:12} to ${SERVER}"
 # ---------------------------------------------------------------------------
 cat << 'MIGRATIONS_NOTE'
 
-REMINDER: Manually apply ALTER TYPE migrations if needed:
-  docker cp apps/api/drizzle/0007_draft_bl.sql importacao-postgres:/tmp/
-  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0007_draft_bl.sql
+REMINDER: Apply pending SQL migrations manually if not already done:
+
+  # 0011 (ALTER TYPE — MUST be manual, can't run in transaction)
+  docker cp apps/api/drizzle/0011_proforma_invoice.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0011_proforma_invoice.sql
+
+  # 0012 (ADD COLUMN — process lock + rename)
+  docker cp apps/api/drizzle/0012_process_rename_and_lock.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0012_process_rename_and_lock.sql
+
+  # 0013 (CREATE TABLE — AI usage log, drives monthly budget cap)
+  docker cp apps/api/drizzle/0013_ai_usage_log.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0013_ai_usage_log.sql
+
+  # OR run them all at once:
+  /opt/importacao/scripts/apply-pending-migrations.sh
+
+NEW ENV VARS (set in .env.production before restarting API):
+  AI_PROVIDER=openrouter                          # 'vertex' to switch when ready
+  AI_MONTHLY_BUDGET_USD=200                       # ≈ R$ 1000
+  AI_UPGRADE_ON_LOW_CONFIDENCE=1                  # default ON
+  AI_UPGRADE_CONFIDENCE_THRESHOLD=0.7
+  AI_UPGRADE_MIN_DELTA=0.05
+  VIMBAR_AUTO_LOCK=1
+  VIMBAR_SENDER_DOMAINS=                          # CSV — EMPTY = lock disabled (fail-closed)
+  AUTO_GENERATE_ESPELHO=1
+  AUTO_CLEAN_ITEM_CODES=1
+  GOOGLE_DRIVE_PRE_CONS_FOLDER_ID=                # ID of Drive folder with Pre-Cons xlsx
+  # Vertex-only (leave blank until you wire it):
+  # GOOGLE_VERTEX_PROJECT=
+  # GOOGLE_VERTEX_LOCATION=us-central1
 
 MIGRATIONS_NOTE
