@@ -10,7 +10,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -19,6 +19,15 @@ interface CheckResult {
 
 export default function portsMatch(input: CheckInput): CheckResult {
   const checkName = 'ports-match';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV vs BL',
+      message: 'aguardando INV',
+    };
+  }
 
   const invPolRaw = input.invoiceData?.portOfLoading;
   const blPolRaw = input.blData?.portOfLoading;

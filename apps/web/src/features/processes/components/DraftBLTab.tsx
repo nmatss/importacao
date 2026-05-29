@@ -85,6 +85,16 @@ function getFieldConfidence(data: Record<string, any> | undefined, key: string):
   return null;
 }
 
+// Formats an extracted date field. Accepts ISO/parsable dates (rendered pt-BR)
+// and falls back to the raw string when the IA returned a free-form date.
+function formatDateValue(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  const str = String(value);
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) return d.toLocaleDateString('pt-BR');
+  return str;
+}
+
 function formatTimestamp(ts: string | null): string | null {
   if (!ts) return null;
   const d = new Date(ts);
@@ -420,9 +430,20 @@ function AIExtractedData({
 
   const data = activeDoc.aiParsedData;
   const isShowingFinal = activeDoc === ohblDoc;
-  const finalDate = ohblDoc?.uploadedAt
+  // Prefer the extracted issue date (data de emissão) of the BL Final; fall back
+  // honestly to the upload date when the document didn't carry an issue date.
+  const ohblIssueDate = ohblDoc?.aiParsedData
+    ? formatDateValue(getFieldValue(ohblDoc.aiParsedData, 'issueDate'))
+    : null;
+  const finalUploadDate = ohblDoc?.uploadedAt
     ? new Date(ohblDoc.uploadedAt).toLocaleDateString('pt-BR')
     : null;
+  // Label honestly: "emitido" only when we truly have the issue date; otherwise "recebido em".
+  const finalDateBadge = ohblIssueDate
+    ? `BL Final · emitido ${ohblIssueDate}`
+    : finalUploadDate
+      ? `BL Final · recebido em ${finalUploadDate}`
+      : 'BL Final';
   const woodDeclaration = getFieldValue(data, 'woodDeclaration');
   const freeTime = getFieldValue(data, 'freeTime');
   const ncmList = getFieldValue(data, 'ncmList');
@@ -441,7 +462,7 @@ function AIExtractedData({
               isShowingFinal ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700',
             )}
           >
-            {isShowingFinal ? `BL Final · atualizado ${finalDate ?? ''}` : 'Versao do Draft'}
+            {isShowingFinal ? finalDateBadge : 'Versao do Draft'}
           </span>
         )}
         {hasFinal && (
@@ -588,15 +609,62 @@ function AIExtractedData({
 
       {/* Cargo description */}
       {getFieldValue(data, 'cargoDescription') && (
-        <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
-            Descricao da Carga
-          </p>
-          <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap line-clamp-6">
-            {getFieldValue(data, 'cargoDescription')}
-          </p>
-        </div>
+        <CargoDescription text={String(getFieldValue(data, 'cargoDescription'))} />
       )}
+    </div>
+  );
+}
+
+// Expand/collapse cargo-description text so long descriptions are never silently
+// truncated. Reused inside comparison-table cells (Sections D and E) where every
+// other field truncates but the cargo description must stay fully legible.
+function ExpandableCargoText({
+  text,
+  className,
+  clampLines = 6,
+}: {
+  text: string;
+  className?: string;
+  clampLines?: 4 | 6;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  // Only offer a toggle when the text is long enough to be clamped.
+  const isLong = text.length > 280 || text.split('\n').length > clampLines;
+
+  return (
+    <div>
+      <p
+        className={cn(
+          'whitespace-pre-wrap',
+          isLong && !expanded && (clampLines === 4 ? 'line-clamp-4' : 'line-clamp-6'),
+          className,
+        )}
+      >
+        {text}
+      </p>
+      {isLong && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700"
+        >
+          <ChevronDown className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')} />
+          {expanded ? 'Ver menos' : 'Ver mais'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// Cargo description block (Section C) — full-width card wrapper around the
+// shared expand/collapse text.
+function CargoDescription({ text }: { text: string }) {
+  return (
+    <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+        Descricao da Carga
+      </p>
+      <ExpandableCargoText text={text} className="text-xs text-slate-600 dark:text-slate-400" />
     </div>
   );
 }
@@ -743,46 +811,65 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {differences.map((diff) => (
-                      <tr
-                        key={diff.key}
-                        className={cn(
-                          diff.changed
-                            ? 'bg-amber-50/50 dark:bg-amber-950/30'
-                            : 'bg-white dark:bg-slate-800',
-                        )}
-                      >
-                        <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300">
-                          {diff.label}
-                        </td>
-                        <td className="px-3 py-2 text-slate-600 dark:text-slate-400 max-w-[150px] truncate">
-                          {diff.draftValue}
-                        </td>
-                        <td
+                    {differences.map((diff) => {
+                      // Cargo description must stay fully legible: use the shared
+                      // expand/collapse instead of truncating like the other fields.
+                      const isCargo = diff.key === 'cargoDescription';
+                      return (
+                        <tr
+                          key={diff.key}
                           className={cn(
-                            'px-3 py-2 max-w-[150px] truncate',
                             diff.changed
-                              ? 'text-amber-700 font-medium'
-                              : 'text-slate-600 dark:text-slate-400',
+                              ? 'bg-amber-50/50 dark:bg-amber-950/30'
+                              : 'bg-white dark:bg-slate-800',
                           )}
                         >
-                          {diff.revisadoValue}
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          {diff.changed ? (
-                            <span className="inline-flex items-center gap-1 text-amber-600">
-                              <X className="h-3 w-3" />
-                              Alterado
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-emerald-600">
-                              <Check className="h-3 w-3" />
-                              OK
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
+                          <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-300 align-top">
+                            {diff.label}
+                          </td>
+                          <td
+                            className={cn(
+                              'px-3 py-2 text-slate-600 dark:text-slate-400 align-top',
+                              isCargo ? 'max-w-[260px]' : 'max-w-[150px] truncate',
+                            )}
+                          >
+                            {isCargo && diff.draftValue !== '--' ? (
+                              <ExpandableCargoText text={diff.draftValue} clampLines={4} />
+                            ) : (
+                              diff.draftValue
+                            )}
+                          </td>
+                          <td
+                            className={cn(
+                              'px-3 py-2 align-top',
+                              isCargo ? 'max-w-[260px]' : 'max-w-[150px] truncate',
+                              diff.changed
+                                ? 'text-amber-700 font-medium'
+                                : 'text-slate-600 dark:text-slate-400',
+                            )}
+                          >
+                            {isCargo && diff.revisadoValue !== '--' ? (
+                              <ExpandableCargoText text={diff.revisadoValue} clampLines={4} />
+                            ) : (
+                              diff.revisadoValue
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-center align-top">
+                            {diff.changed ? (
+                              <span className="inline-flex items-center gap-1 text-amber-600">
+                                <X className="h-3 w-3" />
+                                Alterado
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-emerald-600">
+                                <Check className="h-3 w-3" />
+                                OK
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -829,11 +916,13 @@ interface ComparisonData {
 function DraftVsFinalSection({
   processId,
   hasOhbl,
-  ohblDate,
+  ohblDateLabel,
 }: {
   processId: string;
   hasOhbl: boolean;
-  ohblDate: string | null;
+  // Pre-built, honest label: "emitido <data>" only with a real issue date,
+  // otherwise "recebido em <upload>".
+  ohblDateLabel: string | null;
 }) {
   const { data } = useApiQuery<ComparisonData>(
     ['doc-comparison', processId, 'draft-vs-final'],
@@ -866,9 +955,9 @@ function DraftVsFinalSection({
           <GitCompareArrows className="h-4 w-4 text-violet-500" />
           Draft BL vs BL Final
         </h3>
-        {ohblDate && (
+        {ohblDateLabel && (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
-            BL Final emitido {ohblDate}
+            {ohblDateLabel}
           </span>
         )}
         {revisions.length > 0 && (
@@ -900,26 +989,43 @@ function DraftVsFinalSection({
               </tr>
             </thead>
             <tbody>
-              {revisions.map((rev, i) => (
-                <tr key={i} className="border-b last:border-b-0">
-                  <td className="px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
-                        Revisado
-                      </span>
-                      <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {rev.label}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5 text-sm font-mono text-slate-500 dark:text-slate-400 line-through">
-                    {rev.draftValue ?? '—'}
-                  </td>
-                  <td className="px-3 py-2.5 text-sm font-mono text-emerald-700 font-semibold">
-                    {rev.finalValue ?? '—'}
-                  </td>
-                </tr>
-              ))}
+              {revisions.map((rev, i) => {
+                // Cargo description stays fully legible via expand/collapse; other
+                // fields keep their compact single-line rendering.
+                const isCargo = rev.field === 'cargoDescription';
+                return (
+                  <tr key={i} className="border-b last:border-b-0">
+                    <td className="px-3 py-2.5 align-top">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                          Revisado
+                        </span>
+                        <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                          {rev.label}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 align-top text-sm font-mono text-slate-500 dark:text-slate-400">
+                      {isCargo && rev.draftValue ? (
+                        <ExpandableCargoText
+                          text={rev.draftValue}
+                          clampLines={4}
+                          className="line-through"
+                        />
+                      ) : (
+                        <span className="line-through">{rev.draftValue ?? '—'}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 align-top text-sm font-mono text-emerald-700 font-semibold">
+                      {isCargo && rev.finalValue ? (
+                        <ExpandableCargoText text={rev.finalValue} clampLines={4} />
+                      ) : (
+                        (rev.finalValue ?? '—')
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -965,9 +1071,19 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
       .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())[0] ??
     null;
 
-  const ohblDate = ohblDoc?.uploadedAt
+  const ohblUploadDate = ohblDoc?.uploadedAt
     ? new Date(ohblDoc.uploadedAt).toLocaleDateString('pt-BR')
     : null;
+  // Real issue date (data de emissão) when the IA extracted it from the BL Final.
+  const ohblIssueDate = ohblDoc?.aiParsedData
+    ? formatDateValue(getFieldValue(ohblDoc.aiParsedData, 'issueDate'))
+    : null;
+  // Honest badge label: "emitido" only with a true issue date, else "recebido em".
+  const ohblDateLabel = ohblIssueDate
+    ? `BL Final emitido ${ohblIssueDate}`
+    : ohblUploadDate
+      ? `BL Final recebido em ${ohblUploadDate}`
+      : null;
 
   // Once the OHBL (final BL) has arrived, the draft + revisado history becomes
   // background context — Nicolas's words (2026-05-21 meeting): "quando eu subir
@@ -980,8 +1096,11 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
       {hasFinal && (
         <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 px-4 py-3">
           <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-            BL Final (OHBL) recebido em {ohblDate}. Os dados exibidos abaixo agora refletem o BL
-            Final. O histórico do draft fica disponível em "Histórico do Draft".
+            {ohblIssueDate
+              ? `BL Final (OHBL) emitido em ${ohblIssueDate}.`
+              : `BL Final (OHBL) recebido em ${ohblUploadDate}.`}{' '}
+            Os dados exibidos abaixo agora refletem o BL Final. O histórico do draft fica disponível
+            em "Histórico do Draft".
           </p>
         </div>
       )}
@@ -1009,7 +1128,11 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
       {hasFinal && (
         <>
           <div className="border-t border-slate-100 dark:border-slate-700" />
-          <DraftVsFinalSection processId={processId} hasOhbl={hasFinal} ohblDate={ohblDate} />
+          <DraftVsFinalSection
+            processId={processId}
+            hasOhbl={hasFinal}
+            ohblDateLabel={ohblDateLabel}
+          />
         </>
       )}
 

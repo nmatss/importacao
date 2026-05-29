@@ -1,4 +1,5 @@
 import type React from 'react';
+import { useState } from 'react';
 import { cn } from '@/shared/lib/utils';
 
 interface AiExtractionSummaryProps {
@@ -39,6 +40,7 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
   },
   ohbl: {
     blNumber: 'Nº BL',
+    issueDate: 'Data Emissão',
     shipper: 'Shipper',
     consignee: 'Consignee',
     vesselName: 'Navio',
@@ -55,6 +57,8 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     totalCbm: 'CBM (m³)',
     freightValue: 'Frete',
     freightCurrency: 'Moeda Frete',
+    freeTime: 'Free Time (dias)',
+    woodDeclaration: 'Declaração Madeira',
   },
   draft_bl: {
     blNumber: 'Nº BL',
@@ -97,7 +101,17 @@ const PRIORITY_FIELDS: Record<string, string[]> = {
     'incoterm',
   ],
   packing_list: ['packingListNumber', 'exporterName', 'totalBoxes', 'totalGrossWeight', 'totalCbm'],
-  ohbl: ['blNumber', 'vesselName', 'containerNumber', 'shipmentDate', 'eta', 'portOfDischarge'],
+  ohbl: [
+    'blNumber',
+    'vesselName',
+    'containerNumber',
+    'shipmentDate',
+    'eta',
+    'portOfDischarge',
+    // Wood declaration is a mandatory compliance field on the BL Final too — keep
+    // it in the highlighted grid, not buried among the secondary fields.
+    'woodDeclaration',
+  ],
   draft_bl: ['blNumber', 'vesselName', 'containerNumber', 'freeTime', 'woodDeclaration', 'eta'],
   certificate: ['certificateType', 'certificateNumber', 'issuingAuthority', 'expirationDate'],
 };
@@ -133,6 +147,36 @@ function formatValue(val: unknown, key: string): string {
     return JSON.stringify(val);
   }
   return String(val);
+}
+
+// Dedicated cargo description block with expand/collapse so the full description
+// is available without polluting the compact summary grid.
+function CargoDescriptionBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = text.length > 200 || text.split('\n').length > 4;
+
+  return (
+    <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-3 py-2">
+      <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">Descrição da Carga</p>
+      <p
+        className={cn(
+          'text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap',
+          isLong && !expanded && 'line-clamp-4',
+        )}
+      >
+        {text}
+      </p>
+      {isLong ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[11px] font-medium text-violet-600 hover:text-violet-700"
+        >
+          {expanded ? 'Ver menos' : 'Ver mais'}
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
 function FieldConfidence({ confidence }: { confidence: number | null }) {
@@ -196,6 +240,7 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
   const items = data.items as Record<string, unknown>[] | undefined;
   const ncmList = data.ncmList as unknown;
+  const cargoDescription = extractValue(data.cargoDescription).value;
   const hasNoData = allEntries.every(([, val]) => {
     const { value } = extractValue(val);
     return value === null || value === '' || value === 0;
@@ -272,7 +317,12 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
         </div>
       ) : null}
 
-      {/* NCM list (Draft BL) */}
+      {/* Cargo description — dedicated block (was filtered out of the summary) */}
+      {cargoDescription != null && cargoDescription !== '' ? (
+        <CargoDescriptionBlock text={String(cargoDescription)} />
+      ) : null}
+
+      {/* NCM list — shown as a dedicated highlight for both Draft BL and BL Final (ohbl) */}
       {ncmList != null ? (
         <div className="text-xs text-slate-500 dark:text-slate-400">
           <span className="font-medium">NCMs:</span>{' '}

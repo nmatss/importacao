@@ -216,6 +216,10 @@ REMINDER: Apply pending SQL migrations manually if not already done:
   docker cp apps/api/drizzle/0013_ai_usage_log.sql importacao-postgres:/tmp/
   docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0013_ai_usage_log.sql
 
+  # 0014 (ADD COLUMN — validation_results.resolution_note, justificativa do aceite manual)
+  docker cp apps/api/drizzle/0014_validation_resolution_note.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0014_validation_resolution_note.sql
+
   # OR run them all at once:
   /opt/importacao/scripts/apply-pending-migrations.sh
 

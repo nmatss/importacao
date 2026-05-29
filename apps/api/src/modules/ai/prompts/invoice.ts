@@ -84,6 +84,7 @@ REGRAS:
 - NUNCA concatene valores de outras colunas no itemCode. Colunas comuns coladas ao codigo em PDFs com layout compacto: COLECAO/COLLECTION/SEASON/TEMP, MARCA/BRAND, ESTILO/STYLE, REFERENCIA do fornecedor. Exemplo: linha "FALL/24 PI7752Y BLOUSE..." -> itemCode="PI7752Y" (NAO "FALL/24 PI7752Y"). O codigo do item segue padrao tipico: 2 letras + 4-6 digitos + opcional 1 letra (PI7752Y, AC2285Y, PKT123).
 - exporterTaxId: VAT/Tax ID do exportador (fora do Brasil, ex.: registro chines de 18 digitos, EIN, etc.). importerCnpj: CNPJ brasileiro do importador no formato 00.000.000/0000-00 quando possivel.
 - isFreeOfCharge: TRUE quando o item e gratuito — sinais: unitPrice = 0, descricao contem "FREE OF CHARGE", "FOC", "complimentary", "sample", "amostra", "brinde". Quando true, o item NAO entra na soma do totalFobValue declarado.
+- SEPARE quantidade de faturamento: quantity = NUMERO de unidades (QTY/QUANTITY/PCS/PAR/SET); unitPrice e totalPrice = VALORES em dinheiro (UNIT PRICE/AMOUNT/TOTAL/USD). NUNCA troque os dois: nao coloque preco/amount em quantity nem quantidade em unitPrice/totalPrice. Em layout compacto, use o cabecalho da coluna para decidir.
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

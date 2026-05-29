@@ -223,42 +223,46 @@ export const preConsService = {
       return { ...logEntry, divergences: [] };
     }
 
-    // Full refresh: delete all existing items, then insert new ones
-    await db.delete(preConsItems);
-
-    // Batch insert (chunks of 100)
+    // Full refresh: delete all existing items, then insert new ones.
+    // Wrapped in a single transaction so a bad file can't wipe the table
+    // without repopulating it (all-or-nothing, idempotent).
     let created = 0;
-    for (let i = 0; i < rows.length; i += 100) {
-      const chunk = rows.slice(i, i + 100).map((row) => ({
-        processCode: row.processCode,
-        orderDescription: row.orderDescription,
-        etd: row.etd,
-        collection: row.collection,
-        portOfLoading: row.portOfLoading,
-        supplier: row.supplier,
-        productName: row.productName,
-        itemCode: row.itemCode,
-        quantity: row.quantity,
-        agreedPrice: row.agreedPrice != null ? String(row.agreedPrice) : null,
-        ncmCode: row.ncmCode,
-        requiresReorder: row.requiresReorder,
-        requiresImportLicense: row.requiresImportLicense,
-        amount: row.amount != null ? String(row.amount) : null,
-        ableFactor: row.ableFactor != null ? String(row.ableFactor) : null,
-        cbm: row.cbm != null ? String(row.cbm) : null,
-        cargoReadyDate: row.cargoReadyDate,
-        eta: row.eta,
-        dcEta: row.dcEta,
-        piNumber: row.piNumber,
-        ean13: row.ean13,
-        color: row.color,
-        sheetName: row.sheetName,
-        syncedAt: new Date(),
-      }));
+    await db.transaction(async (tx) => {
+      await tx.delete(preConsItems);
 
-      await db.insert(preConsItems).values(chunk);
-      created += chunk.length;
-    }
+      // Batch insert (chunks of 100)
+      for (let i = 0; i < rows.length; i += 100) {
+        const chunk = rows.slice(i, i + 100).map((row) => ({
+          processCode: row.processCode,
+          orderDescription: row.orderDescription,
+          etd: row.etd,
+          collection: row.collection,
+          portOfLoading: row.portOfLoading,
+          supplier: row.supplier,
+          productName: row.productName,
+          itemCode: row.itemCode,
+          quantity: row.quantity,
+          agreedPrice: row.agreedPrice != null ? String(row.agreedPrice) : null,
+          ncmCode: row.ncmCode,
+          requiresReorder: row.requiresReorder,
+          requiresImportLicense: row.requiresImportLicense,
+          amount: row.amount != null ? String(row.amount) : null,
+          ableFactor: row.ableFactor != null ? String(row.ableFactor) : null,
+          cbm: row.cbm != null ? String(row.cbm) : null,
+          cargoReadyDate: row.cargoReadyDate,
+          eta: row.eta,
+          dcEta: row.dcEta,
+          piNumber: row.piNumber,
+          ean13: row.ean13,
+          color: row.color,
+          sheetName: row.sheetName,
+          syncedAt: new Date(),
+        }));
+
+        await tx.insert(preConsItems).values(chunk);
+        created += chunk.length;
+      }
+    });
 
     // Find divergences: compare Pre-Cons with existing processes
     const divergences = await this.findDivergences();

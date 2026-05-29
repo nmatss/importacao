@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -22,9 +22,9 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
   if (!invoice) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       documentsCompared: 'INV',
-      message: 'Dados da invoice indisponiveis para verificar informacoes do fabricante.',
+      message: 'aguardando INV',
     };
   }
 

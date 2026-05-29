@@ -85,6 +85,7 @@ export const validationService = {
         passed: results.filter((r) => r.status === 'passed').length,
         failed: results.filter((r) => r.status === 'failed').length,
         warnings: results.filter((r) => r.status === 'warning').length,
+        skipped: results.filter((r) => r.status === 'skipped').length,
       },
       'Validation checks completed',
     );
@@ -176,13 +177,14 @@ export const validationService = {
     const passed = results.filter((r) => r.status === 'passed').length;
     const failed = results.filter((r) => r.status === 'failed').length;
     const warnings = results.filter((r) => r.status === 'warning').length;
+    const skipped = results.filter((r) => r.status === 'skipped').length;
 
     await recordProcessEvent(
       processId,
       {
         eventType: 'validation_run',
         title: `Validacao executada: ${passed}/${results.length} aprovadas`,
-        metadata: { passed, failed, warnings, total: results.length },
+        metadata: { passed, failed, warnings, skipped, total: results.length },
       },
       userId,
     );
@@ -327,24 +329,140 @@ export const validationService = {
     return db.select().from(validationResults).where(eq(validationResults.processId, processId));
   },
 
-  async resolveManually(resultId: number, userId: number) {
+  async resolveManually(resultId: number, userId: number, resolutionNote: string) {
+    const note = (resolutionNote ?? '').trim();
+    if (!note) {
+      throw new Error('Justificativa (resolutionNote) e obrigatoria');
+    }
+
+    // Load the current row so we can snapshot the divergent value at the moment
+    // of resolution and recompute the aggregate status afterwards.
+    const [current] = await db
+      .select()
+      .from(validationResults)
+      .where(eq(validationResults.id, resultId))
+      .limit(1);
+
+    if (!current) {
+      throw new NotFoundError('Resultado de validação', resultId);
+    }
+
     const [updated] = await db
       .update(validationResults)
       .set({
         resolvedManually: true,
         resolvedBy: userId,
         resolvedAt: new Date(),
+        resolutionNote: note,
+        updatedAt: new Date(),
       })
       .where(eq(validationResults.id, resultId))
       .returning();
 
     if (!updated) {
-      throw new Error('Resultado de validação não encontrado');
+      throw new NotFoundError('Resultado de validação', resultId);
     }
 
-    await auditService.log(userId, 'manual_resolution', 'validation', resultId, null, null);
-    logger.info({ resultId, userId }, 'Validation result resolved manually');
+    await auditService.log(
+      userId,
+      'manual_resolution',
+      'validation',
+      resultId,
+      {
+        processId: current.processId,
+        checkName: current.checkName,
+        previousStatus: current.status,
+        divergentValue: current.actualValue ?? null,
+        expectedValue: current.expectedValue ?? null,
+        resolutionNote: note,
+      },
+      null,
+    );
+    logger.info(
+      { resultId, userId, processId: current.processId, checkName: current.checkName },
+      'Validation result resolved manually',
+    );
+
+    // Recompute aggregate status: if every failed check for this process is now
+    // resolved manually, promote the process out of pending_correction.
+    await this.recomputeProcessStatus(current.processId, userId);
+
     return updated;
+  },
+
+  /**
+   * Recomputes whether a process still has unresolved failures. When all
+   * 'failed' checks are resolvedManually, clears pending_correction and
+   * promotes the process to 'validated' (and moves it out of the correction
+   * folder, mirroring runAllChecks). Skipped/warning never block promotion.
+   */
+  async recomputeProcessStatus(processId: number, userId: number | null = null) {
+    const results = await db
+      .select()
+      .from(validationResults)
+      .where(eq(validationResults.processId, processId));
+
+    const failed = results.filter((r) => r.status === 'failed');
+    const unresolvedFailed = failed.filter((r) => !r.resolvedManually);
+
+    // Nothing failed, or still has unresolved failures → no promotion.
+    if (failed.length === 0 || unresolvedFailed.length > 0) {
+      return;
+    }
+
+    const [process] = await db
+      .select()
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId));
+
+    if (!process) return;
+
+    // Only promote if the process is still in a pre-validated state.
+    if (process.status !== 'validating') {
+      return;
+    }
+
+    try {
+      assertTransition(process.status as ProcessStatus, 'validated');
+    } catch (err) {
+      logger.warn(
+        { processId, from: process.status },
+        'Cannot transition to validated after manual resolution',
+      );
+      return;
+    }
+
+    await db
+      .update(importProcesses)
+      .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
+      .where(eq(importProcesses.id, processId));
+
+    if (process.correctionStatus === 'pending_correction') {
+      try {
+        const { googleDriveService } = await import('../integrations/google-drive.service.js');
+        await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+      } catch (err) {
+        logger.error(
+          { err, processId },
+          'Failed to move from correction folder after manual resolution',
+        );
+      }
+    }
+
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'validation_run',
+        title: 'Processo validado: todas as falhas resolvidas manualmente',
+        metadata: { resolvedManually: failed.length },
+      },
+      userId,
+    );
+
+    logger.info(
+      { processId, resolvedFailed: failed.length },
+      'Process promoted to validated after manual resolution of all failures',
+    );
   },
 
   async runAnomalyDetection(processId: number) {
@@ -389,6 +507,7 @@ export const validationService = {
           passed: results.filter((r) => r.status === 'passed').length,
           failed: results.filter((r) => r.status === 'failed').length,
           warnings: results.filter((r) => r.status === 'warning').length,
+          skipped: results.filter((r) => r.status === 'skipped').length,
         },
         crossDocumentChecks: results.filter((r) => !r.documentsCompared.includes('Sistema')),
         systemChecks: results.filter((r) => r.documentsCompared.includes('Sistema')),
@@ -446,6 +565,7 @@ export const validationService = {
         passed: results.filter((r) => r.status === 'passed').length,
         failed: results.filter((r) => r.status === 'failed').length,
         warnings: results.filter((r) => r.status === 'warning').length,
+        skipped: results.filter((r) => r.status === 'skipped').length,
       },
       crossDocumentChecks: results.filter((r) => r.dataSource === 'cross_document'),
       systemChecks: results.filter((r) => r.dataSource === 'system_vs_document'),

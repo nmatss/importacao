@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -19,6 +19,15 @@ const TOLERANCE = 0.5;
 
 export default function netWeightMatch(input: CheckInput): CheckResult {
   const checkName = 'net-weight-match';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV vs PL',
+      message: 'aguardando INV',
+    };
+  }
 
   const invNetWeight =
     input.invoiceData?.totalNetWeight != null ? Number(input.invoiceData.totalNetWeight) : null;

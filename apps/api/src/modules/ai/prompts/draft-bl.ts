@@ -20,6 +20,7 @@ CONTEXTO DO NEGOCIO:
 - Armadores: EVERGREEN, CMA CGM, MSC, Maersk, Hapag-Lloyd, ONE, Cosco, OOCL
 
 ATENCAO ESPECIAL PARA DRAFT BL:
+- issueDate = DATA DE EMISSAO do BL ("Place and Date of Issue", "Date of Issue", "Issued on", "Data de Emissao"). NAO confunda com shipmentDate/ETD/ETA.
 - Procure por declaracao de MADEIRA (wood, wooden, fumigation, ISPM15, heat treatment)
 - woodDeclaration = true se houver QUALQUER mencao a madeira/fumigacao/ISPM15
 - Extraia TODOS os codigos NCM encontrados na descricao da carga (formato XXXX.XX.XX)
@@ -53,6 +54,7 @@ Responda com JSON estrito:
   "etd": { "value": "", "confidence": 0.0 },
   "eta": { "value": "", "confidence": 0.0 },
   "shipmentDate": { "value": "", "confidence": 0.0 },
+  "issueDate": { "value": "", "confidence": 0.0 },
   "containerNumber": { "value": "", "confidence": 0.0 },
   "sealNumber": { "value": "", "confidence": 0.0 },
   "totalBoxes": { "value": 0, "confidence": 0.0 },
@@ -72,6 +74,7 @@ REGRAS:
 - ETD = Estimated Time of Departure, ETA = Estimated Time of Arrival
 - Pesos em KG, CBM em metros cubicos
 - Se frete = "PREPAID" ou "COLLECT", coloque freightValue: null e freightCurrency com o texto
+- issueDate: data de emissao do BL em ISO 8601, ou null se nao constar
 - freeTime: numero inteiro de dias, ou null se nao mencionado
 - woodDeclaration: true se qualquer mencao a madeira/wood/fumigation/ISPM15
 - ncmList: array de strings com codigos NCM encontrados (ex: ["6109.10.00", "6110.20.10"])

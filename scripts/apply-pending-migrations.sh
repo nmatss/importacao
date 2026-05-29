@@ -33,5 +33,6 @@ apply() {
 apply 0011_proforma_invoice.sql
 apply 0012_process_rename_and_lock.sql
 apply 0013_ai_usage_log.sql
+apply 0014_validation_resolution_note.sql
 
 echo "[$(date '+%H:%M:%S')] done — pending migrations applied"

@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -17,6 +17,16 @@ interface CheckResult {
 
 export default function fobCalculation(input: CheckInput): CheckResult {
   const checkName = 'fob-calculation';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV',
+      message: 'aguardando INV',
+    };
+  }
+
   const items = input.invoiceData?.items as Array<Record<string, any>> | undefined;
   const totalFob = Number(input.invoiceData?.totalFobValue ?? input.invoiceData?.totalValue ?? 0);
 

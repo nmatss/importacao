@@ -218,6 +218,7 @@ export const validationResults = pgTable(
     resolvedManually: boolean('resolved_manually').default(false),
     resolvedBy: integer('resolved_by').references(() => users.id),
     resolvedAt: timestamp('resolved_at'),
+    resolutionNote: text('resolution_note'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },

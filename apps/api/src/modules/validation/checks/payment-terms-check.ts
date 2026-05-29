@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -17,6 +17,15 @@ interface CheckResult {
 
 export default function paymentTermsCheck(input: CheckInput): CheckResult {
   const checkName = 'payment-terms-check';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV',
+      message: 'aguardando INV',
+    };
+  }
 
   const invPaymentTerms = input.invoiceData?.paymentTerms as Record<string, any> | undefined;
 

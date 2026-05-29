@@ -19,15 +19,23 @@ import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
 // ── Regex-based process code extraction (fast, first pass) ──────────────
 
-/** Extract ALL process codes from text, sorted by specificity (longest first). */
+/**
+ * Extract ALL process codes from text, sorted by specificity (longest first).
+ *
+ * Patterns are restricted to the REAL Uni.co process-code formats (Imaginarium
+ * "IM" + 7 dígitos + sufixo, Puket "PK" + 7 dígitos + sufixo, mais IMP-AAAA-NNN
+ * e IMAGINARIUM-…). Os antigos catch-alls genéricos (LETRAS-AAAA-NNN e
+ * AAAA/NNNNN) foram removidos porque capturavam números de PI (PI-2024-042),
+ * de invoice (INV-2025-00123), NCM, telefones e datas como se fossem código de
+ * processo (UAT Odett #1). O gate final continua sendo o fuzzyMatchProcessCode
+ * contra o banco — nada vira processo só por casar o regex.
+ */
 function extractAllProcessCodes(text: string): string[] {
   const patterns = [
     /\b(IMP[-_]?\d{4}[-_]?\d{3,})\b/gi,
-    /\b(PU?K(?:ET)?[-_]?\d{3,}[A-Z]{0,4})\b/gi,
-    /\b(IMAG(?:INARIUM)?[-_]?\d{3,}[A-Z]{0,4})\b/gi,
-    /\b(IM\d{3,}[A-Z]{0,4})\b/gi,
-    /\b([A-Z]{2,10}[-_]\d{4}[-_]\d{2,}[A-Z]{0,4})\b/gi,
-    /\b(\d{4}[-/]\d{5,})\b/g,
+    /\b(PU?K(?:ET)?[-_]?\d{6,8}[A-Z]{0,4})\b/gi,
+    /\b(IMAG(?:INARIUM)?[-_]?\d{6,8}[A-Z]{0,4})\b/gi,
+    /\b(IM\d{6,8}[A-Z]{0,4})\b/gi,
   ];
 
   const seen = new Set<string>();
@@ -47,6 +55,17 @@ function extractAllProcessCodes(text: string): string[] {
   // Sort by length descending — longer codes are more specific
   all.sort((a, b) => b.length - a.length);
   return all;
+}
+
+/**
+ * A code is "strong" only if it matches the canonical Uni.co process format
+ * (IM/PK + exactly 7 digits + optional 0–4 letter suffix, e.g. IM0712602NB,
+ * PK2042602NB). Used as the gate for AUTO-CREATING a process: weak candidates
+ * (IMP-AAAA-NNN, fuzzy regex hits, AI guesses) must never spawn a new process
+ * — they degrade to an operator alert instead (UAT Odett #1).
+ */
+function isStrongUnicoCode(code: string): boolean {
+  return /^(?:IM|PK)\d{7}[A-Z]{0,4}$/i.test(code.replace(/[-_\s]/g, ''));
 }
 
 // ── Document classification (filename-based, fast) ──────────────────────
@@ -94,11 +113,11 @@ function classifyDocument(filename: string): string {
   // 0. proforma invoice — MUST come before commercial invoice match.
   // Proformas are pre-shipment estimates and should not pollute the Comparativo
   // (which compares actual shipment values across Invoice / PL / BL / Espelho).
+  // Só classifica como proforma por sinal EXPLÍCITO. Antes, qualquer "PI<dígitos>"
+  // no nome sequestrava Commercial Invoices reais para proforma_invoice (que não
+  // conta para documents_received nem entra no Comparativo) — UAT Odett #7.
   const hasProformaSignal =
-    lower.includes('proforma') ||
-    lower.includes('pro-forma') ||
-    lower.includes('pro forma') ||
-    /\bpi[-_\s]?\d{3,}/.test(lower);
+    lower.includes('proforma') || lower.includes('pro-forma') || lower.includes('pro forma');
   if (hasProformaSignal) return 'proforma_invoice';
 
   // 1. invoice — wide keyword base (INV token is Uni.co standard)
@@ -351,6 +370,23 @@ function escapeLikePattern(str: string): string {
   return str.replace(/[%_\\]/g, '\\$&');
 }
 
+/**
+ * Resolve a candidate code to exactly ONE import process.
+ *
+ * Hardening (UAT Odett #1): the old version did `ilike '%code%'` plus a
+ * per-digit wildcard expansion (`(\d+)` → `%$1%`), so a short candidate like
+ * `0712` casava espuriamente com `IM0712602NB`, e qualquer fragmento numérico
+ * "achava" um processo. Agora:
+ *   1. Exact / case-insensitive match continuam sendo o caminho forte.
+ *   2. O partial-match (substring) só roda para candidatos com comprimento
+ *      normalizado >= 7 (um código Uni.co tem >= 9 chars: IM + 7 dígitos),
+ *      eliminando fragmentos curtos de PI/invoice/NCM.
+ *   3. O wildcard de dígitos foi REMOVIDO.
+ *   4. ORDER BY determinístico (match exato primeiro, depois updatedAt desc)
+ *      para que o resultado não dependa da ordem física das linhas.
+ *   5. AMBIGUIDADE: se o substring casar MAIS DE UM processo, NÃO auto-vincula
+ *      — retorna null para que o operador revise em vez de adivinharmos.
+ */
 async function fuzzyMatchProcessCode(
   code: string,
 ): Promise<{ id: number; processCode: string } | null> {
@@ -362,7 +398,7 @@ async function fuzzyMatchProcessCode(
     .limit(1);
   if (exact) return exact;
 
-  // Try case-insensitive match
+  // Try case-insensitive match (whole-string equality, ilike with no wildcards)
   const [caseInsensitive] = await db
     .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
@@ -370,26 +406,40 @@ async function fuzzyMatchProcessCode(
     .limit(1);
   if (caseInsensitive) return caseInsensitive;
 
-  // Try partial match (code contained in process_code or vice versa)
+  // Partial (substring) match — only for candidates long enough to be specific.
+  // A real Uni.co code normalizes to >= 9 chars; we require >= 7 to allow the
+  // IMP-AAAA-NNN family while rejecting short numeric fragments.
   const normalizedCode = code.replace(/[-_]/g, '').toUpperCase();
+  if (normalizedCode.length < 7) return null;
+
   const escaped = escapeLikePattern(normalizedCode);
-  const [partial] = await db
+  const partialMatches = await db
     .select({ id: importProcesses.id, processCode: importProcesses.processCode })
     .from(importProcesses)
     .where(ilike(importProcesses.processCode, `%${escaped}%`))
-    .limit(1);
-  if (partial) return partial;
+    // Deterministic: exact-on-normalized first, then most-recently-updated.
+    .orderBy(
+      sql`CASE WHEN UPPER(REPLACE(REPLACE(${importProcesses.processCode}, '-', ''), '_', '')) = ${normalizedCode} THEN 0 ELSE 1 END`,
+      desc(importProcesses.updatedAt),
+    )
+    .limit(2);
 
-  // Try matching with wildcards for separator variations (IMP2025001 matches IMP-2025-001)
-  const withWildcards = escaped.replace(/(\d+)/g, '%$1%').replace(/%%/g, '%');
-  const [wildcardMatch] = await db
-    .select({ id: importProcesses.id, processCode: importProcesses.processCode })
-    .from(importProcesses)
-    .where(ilike(importProcesses.processCode, withWildcards))
-    .limit(1);
-  if (wildcardMatch) return wildcardMatch;
+  if (partialMatches.length === 0) return null;
 
-  return null;
+  // Ambiguity guard: more than one candidate process → do NOT auto-link.
+  // A single distinct normalized match is still fine even if it appears twice.
+  if (partialMatches.length > 1) {
+    const distinct = new Set(partialMatches.map((p) => p.id));
+    if (distinct.size > 1) {
+      logger.warn(
+        { code, candidates: partialMatches.map((p) => p.processCode) },
+        'Ambiguous process-code match — refusing to auto-link, flagging for review',
+      );
+      return null;
+    }
+  }
+
+  return partialMatches[0];
 }
 
 // ── AI email analysis (non-blocking) ────────────────────────────────────
@@ -501,12 +551,17 @@ export const emailProcessor = {
           `${email.subject} ${(email.body || '').substring(0, 3000)}`,
         );
 
-        // ── Step 4: AI analysis - SKIP if regex resolved process code
-        //    and all attachments can be classified by filename ─────────
+        // ── Step 4: AI analysis - SKIP only if regex resolved the process
+        //    code AND every attachment classifies by filename. If ANY
+        //    attachment falls into 'other' (e.g. an INV named only with the
+        //    process code, IM0712602NB.pdf), we MUST run the AI so the email
+        //    body can lend the document type — never skip into a silent
+        //    'other' without an extractor (UAT Odett #7a). ─────────
         let aiAnalysis: EmailAnalysisResult | null = null;
-        const allAttachmentsClassified = email.attachments.every(
-          (att) => classifyDocument(att.filename) !== 'other',
+        const hasUnclassifiedAttachment = email.attachments.some(
+          (att) => classifyDocument(att.filename) === 'other',
         );
+        const allAttachmentsClassified = !hasUnclassifiedAttachment;
 
         if (processCode && allAttachmentsClassified) {
           // Regex fully resolved - build a synthetic analysis from regex results
@@ -528,8 +583,21 @@ export const emailProcessor = {
         }
 
         // ── Step 5: Use AI process code if regex failed ──────────────
-        if (!processCode && aiAnalysis?.processCode) {
-          processCode = aiAnalysis.processCode.toUpperCase();
+        // The AI-suggested code is gated through the SAME restricted Uni.co
+        // regex used by the regex pass: an LLM can disobey the prompt and
+        // return a PI/INV/PO/NCM number, which must NEVER enter the candidate
+        // list and substring-match a real process (UAT Odett #1).
+        const aiPlausibleCode = aiAnalysis?.processCode
+          ? (extractAllProcessCodes(aiAnalysis.processCode)[0] ?? null)
+          : null;
+        if (aiAnalysis?.processCode && !aiPlausibleCode) {
+          logger.info(
+            { aiCode: aiAnalysis.processCode },
+            'AI process code ignored — does not match Uni.co format',
+          );
+        }
+        if (!processCode && aiPlausibleCode) {
+          processCode = aiPlausibleCode;
           detectionMethod = 'ai';
           logger.info({ processCode, method: 'ai' }, 'Process code detected via AI');
         }
@@ -537,10 +605,9 @@ export const emailProcessor = {
         // ── Step 6: Resolve process in DB — try ALL candidates ────────
         let processId: number | null = null;
 
-        // Add AI-detected code to candidates if available
-        if (aiAnalysis?.processCode) {
-          const aiCode = aiAnalysis.processCode.toUpperCase();
-          if (!allCodes.includes(aiCode)) allCodes.push(aiCode);
+        // Add AI-detected code to candidates ONLY when it matches the Uni.co format.
+        if (aiPlausibleCode && !allCodes.includes(aiPlausibleCode)) {
+          allCodes.push(aiPlausibleCode);
         }
 
         // Try each candidate code against the DB, best match first
@@ -565,6 +632,29 @@ export const emailProcessor = {
           if (matched) {
             processId = matched.id;
             processCode = matched.processCode;
+          } else if (!isStrongUnicoCode(processCode)) {
+            // Weak candidate (generic/low-confidence code that didn't match the
+            // DB). NÃO criar processo — só códigos no formato forte Uni.co
+            // (IM/PK + 7 dígitos) justificam auto-criação. Anexa como "não
+            // classificado" e alerta o operador (UAT Odett #1).
+            try {
+              await alertService.create({
+                severity: 'warning',
+                title: 'Email recebido com código de processo não reconhecido',
+                message: `O codigo "${processCode}" nao casa nenhum processo existente e nao tem o formato forte Uni.co (IM/PK + 7 digitos), portanto NAO foi criado automaticamente. Revise manualmente. Assunto: ${email.subject}`,
+              });
+            } catch (alertErr) {
+              logger.warn(
+                { err: alertErr, processCode },
+                'Failed to create alert for weak/unmatched process code',
+              );
+            }
+            logger.info(
+              { processCode, allCodes },
+              'Weak process-code candidate — not auto-creating; attachments stay unclassified',
+            );
+            // Leave processId null: attachments are saved locally below and the
+            // log is marked accordingly (Step 9 handles the unlinked case).
           } else {
             const autoCreateEnabled = process.env.FOLLOW_UP_AUTO_CREATE !== '0';
 
@@ -845,8 +935,36 @@ export const emailProcessor = {
           const filePath = path.join(UPLOAD_DIR, safeName);
           await fs.writeFile(filePath, att.content);
 
-          // Use AI-enhanced classification (falls back to filename-only)
-          const docType = classifyDocumentWithContext(att.filename, aiAnalysis);
+          // Use AI-enhanced classification (falls back to filename-only).
+          let docType = classifyDocumentWithContext(att.filename, aiAnalysis);
+
+          // Last-resort guarantee (UAT Odett #7a): an attachment must never be
+          // silently stored as 'other'. If filename + email-context still yield
+          // 'other' but this is the *only* supported attachment and the email
+          // detected exactly one document type, adopt that single type.
+          if (docType === 'other' && aiAnalysis?.documentTypes?.length === 1) {
+            const single = classifyDocumentWithContext('__unknown__.pdf', aiAnalysis);
+            if (single !== 'other') {
+              docType = single;
+              logger.info(
+                { filename: att.filename, docType },
+                "Recovered 'other' attachment via single email document type",
+              );
+            }
+          }
+
+          if (docType === 'other') {
+            // TODO(content-classifier): when an attachment named only with the
+            // process code (e.g. IM0712602NB.pdf) reaches here, neither the
+            // filename nor the email body resolved a type. The robust fix is a
+            // content/IA classifier over the file bytes (aiService has no such
+            // method yet). Until then we degrade safely: keep type 'other' and
+            // log loudly so the operator can reclassify, instead of dropping it.
+            logger.warn(
+              { filename: att.filename, processCode },
+              "Attachment classified as 'other' — no content classifier available; flagged for manual review",
+            );
+          }
 
           // Upload to Sistema Automatico INBOX
           let sistemaFileId: string | undefined;

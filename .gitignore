@@ -12,6 +12,16 @@ certifications.db
 # Unencrypted version must never be committed
 .env.sops.yaml
 
+# Service-account / credential keys — NUNCA commitar
+*-key.json
+*service-account*.json
+*gemini*.json
+*credentials*.json
+gcp-*.json
+
+# Texto extraído de .docx/.xlsx para revisão (derivado — não versionar)
+docs/_extracted/
+
 # Deploy artifacts
 deploy.log
 scripts/deploy.sh.backup

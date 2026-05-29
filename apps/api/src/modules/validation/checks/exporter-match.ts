@@ -15,7 +15,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -24,6 +24,15 @@ interface CheckResult {
 
 export default function exporterMatch(input: CheckInput): CheckResult {
   const checkName = 'exporter-match';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV',
+      message: 'aguardando INV',
+    };
+  }
 
   const rawInv = input.invoiceData?.exporterName;
   const rawPl = input.packingListData?.exporterName;
@@ -45,7 +54,7 @@ export default function exporterMatch(input: CheckInput): CheckResult {
 
   // Compute lowest pairwise similarity — worst case wins.
   let minSim = 1;
-  let worstPair: [typeof entries[number], typeof entries[number]] = [entries[0], entries[1]];
+  let worstPair: [(typeof entries)[number], (typeof entries)[number]] = [entries[0], entries[1]];
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       const sim = companySimilarity(entries[i].raw, entries[j].raw);

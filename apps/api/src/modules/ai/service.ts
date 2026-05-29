@@ -26,6 +26,8 @@ import { VertexAIProvider } from './providers/vertex.js';
 import type { AIProvider, ChatOptions } from './providers/types.js';
 import { assertBudgetAvailable, logUsage, AIBudgetExceededError } from './cost-tracker.js';
 import { EXTRACTION_SCHEMAS } from './extraction-schemas.js';
+import { verifyExtraction } from './harness/index.js';
+import { getVerificationConfig } from './skills/registry.js';
 
 export { AIBudgetExceededError };
 
@@ -68,7 +70,7 @@ interface ExtractionResult {
 
 // ── Model fallback chains ────────────────────────────────────────────
 // Ordered list of models to try — primary first, then fallbacks in order
-const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-pro'];
+const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
 
 // ── Prompt versions (for governance tracking) ────────────────────────
 
@@ -410,6 +412,59 @@ class AIService {
     return { score, lowConfidenceFields };
   }
 
+  /**
+   * Confidence harness — runs deterministic trust checks (grounding / format /
+   * numeric / knowledge) over an extraction and folds the verdict back in:
+   *  - attaches the trust report to data._trust (persisted for audit),
+   *  - unions review fields into the low-confidence list,
+   *  - and, on error findings, caps confidence below the 0.4 review gate so the
+   *    document pipeline routes the extraction to human review.
+   * Grounding is skipped when the source text is too short to verify (scanned /
+   * image-only PDFs), to avoid false hallucination alarms.
+   */
+  private applyHarness(
+    docType: string,
+    result: ExtractionResult,
+    sourceText: string,
+  ): ExtractionResult {
+    const config = getVerificationConfig(docType);
+    if (!config) return result;
+
+    const groundingViable = (sourceText ?? '').replace(/\s/g, '').length >= 50;
+    const effectiveConfig = groundingViable ? config : { ...config, groundedFields: [] };
+
+    const report = verifyExtraction(
+      effectiveConfig,
+      result.data,
+      sourceText ?? '',
+      new Date().toISOString(),
+    );
+    (result.data as Record<string, any>)._trust = report;
+
+    if (report.findings.length > 0) {
+      logger.info(
+        {
+          docType,
+          trust: report.trust,
+          findings: report.findings.length,
+          reviewFields: report.reviewFields,
+          groundingViable,
+        },
+        'AI harness verification',
+      );
+    }
+
+    const fieldsWithLowConfidence = [
+      ...new Set([...result.fieldsWithLowConfidence, ...report.reviewFields]),
+    ];
+    const confidenceScore =
+      report.trust === 'review'
+        ? Math.min(result.confidenceScore, 0.39)
+        : Math.min(result.confidenceScore, report.adjustedConfidence);
+
+    return { ...result, confidenceScore, fieldsWithLowConfidence };
+  }
+
   private safeJsonParse(response: string, context: string): any {
     try {
       return JSON.parse(response);
@@ -480,11 +535,15 @@ class AIService {
           },
           'Invoice data extracted',
         );
-        return {
-          data: data as Record<string, any>,
-          confidenceScore: score,
-          fieldsWithLowConfidence: lowConfidenceFields,
-        };
+        return this.applyHarness(
+          'invoice',
+          {
+            data: data as Record<string, any>,
+            confidenceScore: score,
+            fieldsWithLowConfidence: lowConfidenceFields,
+          },
+          text,
+        );
       },
     );
   }
@@ -576,7 +635,11 @@ class AIService {
           },
           'Packing list data extracted',
         );
-        return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+        return this.applyHarness(
+          'packing_list',
+          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          text,
+        );
       },
     );
   }
@@ -609,7 +672,11 @@ class AIService {
         },
         'Bill of Lading data extracted',
       );
-      return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+      return this.applyHarness(
+        'ohbl',
+        { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+        text,
+      );
     });
   }
 
@@ -644,7 +711,11 @@ class AIService {
       'Draft BL data extracted',
     );
 
-    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    return this.applyHarness(
+      'draft_bl',
+      { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+      text,
+    );
   }
 
   /**

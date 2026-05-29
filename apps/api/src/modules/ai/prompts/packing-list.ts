@@ -30,6 +30,13 @@ REGRA CRITICA — CUBAGEM vs CAIXAS:
 - Nunca confunda os dois. Se o mesmo texto aparecer em colunas proximas (muito comum em PDFs com layout compacto), use o rotulo para decidir.
 - totalBoxes DEVE ser inteiro. totalCbm DEVE ser decimal.
 
+REGRA CRITICA — QUANTIDADE vs FATURAMENTO:
+- O Packing List NAO contem precos nem valores monetarios. Ele descreve UNIDADES e PESOS, nunca dinheiro.
+- quantity = NUMERO de unidades (PCS/PAR/SET/DZ/etc) do item. NUNCA coloque um valor monetario em quantity.
+- IGNORE qualquer coluna de PRECO/VALOR mesmo que apareça no documento: "UNIT PRICE", "AMOUNT", "TOTAL", "FOB", "VALUE", "USD", "PRICE", "$". Esses campos pertencem a Commercial Invoice (INV), NAO ao Packing List.
+- Em PDFs que combinam INV+PL ou com colunas coladas, use o cabecalho para separar QUANTIDADE (QTY/QUANTITY/PCS) de FATURAMENTO (AMOUNT/USD/PRICE). Se a coluna for de dinheiro, descarte — nao a leia como quantity.
+- Sinal de erro a evitar: quantity com casas decimais que parecem preço (ex: 25.50) — quantidade de PCS costuma ser inteiro.
+
 Extraia os campos abaixo com confidence 0.0-1.0.
 
 Responda com JSON estrito:

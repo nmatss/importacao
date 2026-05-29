@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -17,6 +17,17 @@ interface CheckResult {
 
 export default function incotermCheck(input: CheckInput): CheckResult {
   const checkName = 'incoterm-check';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      expectedValue: 'FOB',
+      documentsCompared: 'INV',
+      message: 'aguardando INV',
+    };
+  }
+
   const incoterm = String(input.invoiceData?.incoterm ?? '')
     .trim()
     .toUpperCase();

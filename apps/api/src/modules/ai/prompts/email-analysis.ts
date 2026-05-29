@@ -17,10 +17,10 @@ A empresa gerencia processos de importacao com codigos como:
 - PK + 7 digitos (ex: PK2042602NB) — marca Puket
 - IM + 7 digitos (ex: IM2042601NB) — marca Imaginarium
 - IMP-XXXX-XXX (ex: IMP-2025-001)
-- PUKET-XXX ou PK-XXX
-- IMAG-XXX ou IMAGINARIUM-XXX
-- Codigos genericos: LETRAS-DIGITOS-DIGITOS (ex: BR-2025-12345)
-- Referencias numericas: YYYY/NNNNN (ex: 2025/00123)
+
+ATENCAO: SOMENTE estes formatos sao codigos de PROCESSO. NAO trate numeros de
+PI/proforma (PI-2024-042), de invoice (INV-2025-00123), PO, NCM, telefones nem
+datas como codigo de processo — se nao casar um dos formatos acima, retorne null.
 
 FORNECEDORES COMUNS:
 - KIOM INDUSTRY CO., LTD (China) — fornecedor principal

@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -39,6 +39,15 @@ function normalizeDate(value: string): string {
 
 export default function datesMatch(input: CheckInput): CheckResult {
   const checkName = 'dates-match';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV vs BL',
+      message: 'aguardando INV',
+    };
+  }
 
   const invEtdRaw = normalize(
     input.invoiceData?.invoiceDate ?? input.invoiceData?.etd ?? input.invoiceData?.shipmentDate,

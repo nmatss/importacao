@@ -3,7 +3,12 @@ import { validationController } from './controller.js';
 import { authMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
-import { processIdParamSchema, resultIdParamSchema, updateCorrectionSchema } from './schema.js';
+import {
+  processIdParamSchema,
+  resultIdParamSchema,
+  resolveManuallySchema,
+  updateCorrectionSchema,
+} from './schema.js';
 
 const router = Router();
 
@@ -32,6 +37,7 @@ router.get(
 router.patch(
   '/results/:id/resolve',
   validate(resultIdParamSchema, 'params'),
+  validate(resolveManuallySchema),
   validationController.resolveManually,
 );
 router.post(

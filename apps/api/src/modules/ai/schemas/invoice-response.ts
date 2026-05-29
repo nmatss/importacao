@@ -17,6 +17,8 @@ const invoiceItemSchema = z.object({
   ncmCode: confidenceField(z.string()).optional(),
   unitType: confidenceField(z.string()).optional(),
   manufacturer: confidenceField(z.string()).optional(),
+  // Item gratuito (FOC/sample/brinde) — não entra na soma do totalFobValue.
+  isFreeOfCharge: confidenceField(z.boolean()).optional(),
 });
 
 const paymentTermsValue = z.object({
@@ -31,8 +33,10 @@ export const invoiceResponseSchema = z.object({
   invoiceDate: confidenceField(z.string()),
   exporterName: confidenceField(z.string()),
   exporterAddress: confidenceField(z.string()),
+  exporterTaxId: confidenceField(z.string()).optional(),
   importerName: confidenceField(z.string()),
   importerAddress: confidenceField(z.string()),
+  importerCnpj: confidenceField(z.string()).optional(),
   incoterm: confidenceField(z.string()),
   currency: confidenceField(z.string()),
   portOfLoading: confidenceField(z.string()),
