@@ -224,7 +224,8 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
   // Separate priority fields from secondary
   const allEntries = Object.entries(data).filter(
-    ([key]) => key !== 'items' && key !== 'ncmList' && key !== 'cargoDescription',
+    ([key]) =>
+      key !== 'items' && key !== 'ncmList' && key !== 'cargoDescription' && !key.startsWith('_'), // meta do harness (_trust) não é campo exibível
   );
 
   const priorityEntries = priority

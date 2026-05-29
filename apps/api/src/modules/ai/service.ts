@@ -157,6 +157,9 @@ function stripSpuriousItemPrefix(items: any[]): void {
 export function flattenAiData(data: Record<string, any>): Record<string, any> {
   const result: Record<string, any> = {};
   for (const [key, val] of Object.entries(data)) {
+    // Campos meta (ex.: _trust do harness) não são dados extraídos — não devem
+    // poluir validação/comparativo/UI.
+    if (key.startsWith('_')) continue;
     if (key === 'items' && Array.isArray(val)) {
       result[key] = val.map((item: Record<string, any>) => {
         const flatItem: Record<string, any> = {};
