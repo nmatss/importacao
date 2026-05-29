@@ -96,8 +96,9 @@ function buildColumnMap(headerRow: any[]): Map<number, string> {
 // Sheets to skip (not item-level data)
 const SKIP_SHEETS = new Set(['beg test', 'pkt - st']);
 
-// Parse the Pre_Cons XLSX and return normalized rows
-function parsePreConsXLSX(buffer: Buffer): {
+// Parse the Pre_Cons XLSX and return normalized rows.
+// Exported for unit testing (pure: workbook in → normalized rows out, no DB).
+export function parsePreConsXLSX(buffer: Buffer): {
   rows: Array<Record<string, any>>;
   sheets: string[];
   errors: string[];

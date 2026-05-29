@@ -5,9 +5,37 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-05-29 — Camada de confiança da IA + UAT Odett
+
+### Added
+
+- **Provider Vertex AI** ativado em runtime (privacidade por contrato) + teto de custo mensal (R$150 ≈ USD 26); KB copiada para `dist/` no build
+- **Harness de confiança da IA** (`ai/harness/`): grounding anti-alucinação, validadores de formato (NCM, container ISO 6346 com check-digit, CNPJ, USD), consistência numérica e validação contra a base de conhecimento; gate força revisão humana em erro
+- **Skills por documento** (`ai/skills/`) = schema + receita de verificação
+- **Base de conhecimento** (`ai/knowledge/`): NCMs, portos, fornecedores, armadores, tarifas, EAN Puket (extraída da planilha Follow Up)
+- Migration `0014` (`validation_results.resolution_note`) registrada em `apply-pending-migrations.sh` + `deploy.sh`
+- Job de sync da Pre-Cons no scheduler (aguarda `GOOGLE_DRIVE_PRE_CONS_FOLDER_ID`)
+- Docs: `AI-HARNESS.md`, `REVISAO-100.md`, `ODETT-STATUS.md`; testes novos (harness, processor-codes, parse-precons, flatten-ai-data)
+
+### Fixed (UAT Odett IM0712602NB)
+
+- #1 códigos de processo: regex restrito ao formato Uni.co + gate do código sugerido pela IA (não captura mais PI/INV/NCM)
+- #2 BL: `issueDate` (data de emissão real) em vez da data de upload rotulada como "emitido"
+- #3 descrição da carga expansível nas tabelas comparativas
+- #4 declaração de madeira detectada no BL Final
+- #7 INV lida: schema alinhado ao prompt + classificação por conteúdo + gate degradável (`hasRelevantData`)
+- #8 PL não mistura quantidade com faturamento (regra + check de quantidade inteira)
+- #9 checklist de validação com status `skipped` (despoluída)
+- #10 "resolver manualmente" exige justificativa + recomputa status
+- Pre-Cons: delete em transação (arquivo ruim não zera a tabela); parser validado contra dados reais
+- CI: vuln HIGH `tmp` (Path Traversal) resolvida via `npm audit fix`
+
+---
+
 ## [Unreleased] — 2026-04-05
 
 ### Added
+
 - Cert-API refactored from 2938-line monolith into modular structure (`app/`)
 - pytest test suite for cert-api (test_cert_service, test_health, test_stock, test_routes)
 - `pyproject.toml` for cert-api with uv-compatible dependency management
@@ -23,11 +51,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.5.0] — 2026-04-03 (6cb6f75)
 
 ### Added
+
 - `animate-fade-in` to SettingsPage
 - Premium UI polish: shimmer skeletons, Apple cubic-bezier transitions, micro-interactions
 - All MEDIUM pentest findings fixed (rate limiting, security headers, XSS)
 
 ### Fixed
+
 - XSS: DOMPurify.sanitize() on all dangerouslySetInnerHTML
 - SMTP: TLS rejectUnauthorized=true in production + CRLF injection sanitization
 - Auth: password minimum 8 chars, failed login audit logging
@@ -37,8 +67,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.4.0] — 2026-04-03 (14ff181)
 
 ### Added
+
 - Enterprise design system v2: semantic color tokens, Inter font, sidebar navy
-- Banned raw color classes (blue-*, red-*, gray-*) — replaced with semantic tokens
+- Banned raw color classes (blue-_, red-_, gray-\*) — replaced with semantic tokens
 - Shimmer loading skeletons, layered card shadows, stagger-children animations
 
 ---
@@ -46,11 +77,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.3.0] — 2026-03-xx (4516f33)
 
 ### Added
+
 - Pre-Cons module: automatic sync via email + manual upload
 - Support for 10+ document formats: Word, TIFF, CSV, HTML, EML, BMP
 - Professional AI summaries for extraction results (PT-BR)
 
 ### Fixed
+
 - Pre-cons parser: safe number parsing to avoid NaN in database
 - Pre-cons quantities rounded to integer (KIOM data has decimals)
 - AI comparison using raw { value, confidence } instead of flat values
@@ -60,6 +93,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.2.0] — 2026-03-xx (3eabd97)
 
 ### Added
+
 - Process timeline/event history (`process_events` table, migration 0009)
 - Email signatures CRUD (up to 4 per user, `email_signatures` table, migration 0008)
 - Draft BL: upload + 10-item checklist + AI extraction + comparison view
@@ -70,12 +104,14 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.1.0] — 2026-03-xx (b463c74)
 
 ### Added
+
 - Cert-API stock integration: WMS Oracle + ERP SQL Server (Puket, Imaginarium)
 - Licenciados (LPCO tracking) from Google Sheets
 - Validation schedules with cron expressions and APScheduler
 - cert_stock table with WMS storage areas and e-commerce stock
 
 ### Changed
+
 - Certification comparison: ecommerce_description takes priority over certification_type
 
 ---
@@ -83,6 +119,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [2.0.0] — 2026-03-xx (5b90a34)
 
 ### Added
+
 - First complete delivery: document validation + certification + stock
 - Cert-API microservice (Python FastAPI) for VTEX certification validation
 - Google Sheets integration for certification data (Imaginarium, Puket, Puket Escolares)
@@ -95,6 +132,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.5.0] — 2026-02-xx (1c2902d)
 
 ### Added
+
 - Complete QA pass: security, performance, visual, DX improvements
 - Mobile responsiveness across 15 files
 - AI multimodal support for scanned PDFs and images
@@ -104,6 +142,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [1.0.0] — 2026-01-xx (c67760c)
 
 ### Added
+
 - Initial technical architecture and execution plan
 - Express API with Drizzle ORM and PostgreSQL
 - React + Vite frontend with Tailwind CSS
