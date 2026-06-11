@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bookmark, BookmarkCheck, Trash2, Plus, X, ChevronDown } from 'lucide-react';
+import { Bookmark, Trash2, Plus, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/shared/lib/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────

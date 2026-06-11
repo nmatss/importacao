@@ -9,52 +9,51 @@ interface Alert {
   processCode?: string;
 }
 
-function severityColor(severity: string): string {
-  switch (severity) {
-    case 'critical': return '#DC2626';
-    case 'warning': return '#D97706';
-    default: return '#2563EB';
-  }
-}
-
 function severityEmoji(severity: string): string {
   switch (severity) {
-    case 'critical': return '🔴';
-    case 'warning': return '🟡';
-    default: return '🔵';
+    case 'critical':
+      return '🔴';
+    case 'warning':
+      return '🟡';
+    default:
+      return '🔵';
   }
 }
 
 export function formatGoogleChatCard(alert: Alert) {
   return {
-    cards: [{
-      header: {
-        title: `${severityEmoji(alert.severity)} ${alert.title}`,
-        subtitle: alert.processCode ? `Processo: ${alert.processCode}` : 'Sistema de Importação',
-        imageStyle: 'AVATAR',
-      },
-      sections: [{
-        widgets: [
+    cards: [
+      {
+        header: {
+          title: `${severityEmoji(alert.severity)} ${alert.title}`,
+          subtitle: alert.processCode ? `Processo: ${alert.processCode}` : 'Sistema de Importação',
+          imageStyle: 'AVATAR',
+        },
+        sections: [
           {
-            textParagraph: {
-              text: alert.message,
-            },
-          },
-          {
-            keyValue: {
-              topLabel: 'Severidade',
-              content: alert.severity.toUpperCase(),
-            },
-          },
-          {
-            keyValue: {
-              topLabel: 'Data/Hora',
-              content: new Date().toLocaleString('pt-BR'),
-            },
+            widgets: [
+              {
+                textParagraph: {
+                  text: alert.message,
+                },
+              },
+              {
+                keyValue: {
+                  topLabel: 'Severidade',
+                  content: alert.severity.toUpperCase(),
+                },
+              },
+              {
+                keyValue: {
+                  topLabel: 'Data/Hora',
+                  content: new Date().toLocaleString('pt-BR'),
+                },
+              },
+            ],
           },
         ],
-      }],
-    }],
+      },
+    ],
   };
 }
 

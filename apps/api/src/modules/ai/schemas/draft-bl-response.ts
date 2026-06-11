@@ -19,6 +19,8 @@ export const draftBLResponseSchema = z.object({
   etd: confidenceField(z.string()),
   eta: confidenceField(z.string()),
   shipmentDate: confidenceField(z.string()),
+  // Data de EMISSÃO do BL ("Place and Date of Issue") — distinta de upload/atualização.
+  issueDate: confidenceField(z.string()).optional(),
   containerNumber: confidenceField(z.string()),
   sealNumber: confidenceField(z.string()),
   totalBoxes: confidenceField(z.number()),

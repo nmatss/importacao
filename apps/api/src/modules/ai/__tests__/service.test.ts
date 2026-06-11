@@ -6,12 +6,15 @@ import { describe, it, expect } from 'vitest';
 function safeJsonParse(response: string, context: string): any {
   try {
     return JSON.parse(response);
-  } catch (err) {
+  } catch {
     throw new Error(`Failed to parse AI response for ${context}: invalid JSON`);
   }
 }
 
-function calculateConfidence(data: Record<string, any>): { score: number; lowConfidenceFields: string[] } {
+function calculateConfidence(data: Record<string, any>): {
+  score: number;
+  lowConfidenceFields: string[];
+} {
   const lowConfidenceFields: string[] = [];
   let totalConfidence = 0;
   let fieldCount = 0;

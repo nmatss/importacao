@@ -305,11 +305,10 @@ export function PreConsPage() {
     `/api/pre-cons/summary?${summaryQueryString}`,
   );
 
-  const {
-    data: divergences,
-    isLoading: loadingDivergences,
-    isError: divergencesError,
-  } = useApiQuery<Divergence[]>(['pre-cons-divergences'], '/api/pre-cons/divergences');
+  const { data: divergences, isError: divergencesError } = useApiQuery<Divergence[]>(
+    ['pre-cons-divergences'],
+    '/api/pre-cons/divergences',
+  );
 
   const {
     data: syncLogs,

@@ -34,14 +34,45 @@ export const validationController = {
     }
   },
 
+  async getValidationHistory(req: Request, res: Response) {
+    try {
+      // Mounted under /processes/:id/validation-history (and accepts
+      // :processId when reused under /validation routes).
+      const processId = Number(req.params.id ?? req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const page = Number(req.query.page) || 1;
+      const pageSize = Number(req.query.pageSize) || 10;
+      const history = await validationService.getValidationHistory(processId, page, pageSize);
+      sendSuccess(res, history);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async resolveManually(req: Request, res: Response) {
     try {
       const resultId = Number(req.params.id);
       if (isNaN(resultId) || resultId <= 0) {
         return sendError(res, 'ID do resultado invalido', 400);
       }
+      // Aceita camelCase (resolutionNote) e snake_case (resolution_note, o que o
+      // front envia). NÃO usa req.body.resolution como nota — esse campo carrega
+      // só a AÇÃO ('manual'), não a justificativa; aceitá-lo furaria a obrigação.
+      const rawNote =
+        typeof req.body?.resolutionNote === 'string'
+          ? req.body.resolutionNote
+          : typeof req.body?.resolution_note === 'string'
+            ? req.body.resolution_note
+            : '';
+      const resolutionNote = rawNote.trim();
+      if (!resolutionNote) {
+        return sendError(res, 'Justificativa (resolutionNote) e obrigatoria', 400);
+      }
       const userId = (req as AuthenticatedRequest).user.id;
-      const result = await validationService.resolveManually(resultId, userId);
+      const result = await validationService.resolveManually(resultId, userId, resolutionNote);
       sendSuccess(res, result);
     } catch (error: any) {
       const status = error.statusCode || 400;

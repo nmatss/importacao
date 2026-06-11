@@ -218,6 +218,7 @@ export const validationResults = pgTable(
     resolvedManually: boolean('resolved_manually').default(false),
     resolvedBy: integer('resolved_by').references(() => users.id),
     resolvedAt: timestamp('resolved_at'),
+    resolutionNote: text('resolution_note'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },
@@ -701,3 +702,63 @@ export const preConsSyncLog = pgTable('pre_cons_sync_log', {
 export type PreConsItem = typeof preConsItems.$inferSelect;
 export type NewPreConsItem = typeof preConsItems.$inferInsert;
 export type PreConsSyncLog = typeof preConsSyncLog.$inferSelect;
+
+// ── Validation & Extraction History (append-only, regulatory audit) ──
+// Backlog #12 (docs/REVISAO-100.md): validation_results is deleted and
+// recreated on every run and ai_parsed_data is zeroed on reprocess — these
+// tables keep an immutable snapshot of what was there before each rewrite.
+
+/**
+ * Snapshot of validation_results taken immediately BEFORE each
+ * delete+recreate cycle in validationService.runAllChecks. One row per
+ * check of the previous run; run_at carries the moment the previous run
+ * was recorded (created_at of the live row), so rows sharing the same
+ * run_at form one historical run.
+ */
+export const validationResultHistory = pgTable(
+  'validation_result_history',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    runAt: timestamp('run_at', { withTimezone: true }).defaultNow().notNull(),
+    checkName: varchar('check_name', { length: 100 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull(),
+    message: text('message'),
+    details: jsonb('details'),
+    resolvedManually: boolean('resolved_manually').default(false),
+    resolutionNote: text('resolution_note'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    index('validation_result_history_process_id_idx').on(table.processId),
+    index('validation_result_history_process_run_idx').on(table.processId, table.runAt),
+  ],
+);
+
+export type ValidationResultHistory = typeof validationResultHistory.$inferSelect;
+export type NewValidationResultHistory = typeof validationResultHistory.$inferInsert;
+
+/**
+ * Snapshot of documents.ai_parsed_data archived BEFORE it is zeroed
+ * (reason 'reprocess') or overwritten by a new extraction over an already
+ * extracted document (reason 'reextract').
+ */
+export const documentExtractionHistory = pgTable(
+  'document_extraction_history',
+  {
+    id: serial('id').primaryKey(),
+    documentId: integer('document_id')
+      .references(() => documents.id, { onDelete: 'cascade' })
+      .notNull(),
+    aiParsedData: jsonb('ai_parsed_data'),
+    confidence: numeric('confidence', { precision: 5, scale: 4 }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }).defaultNow().notNull(),
+    reason: text('reason').default('reprocess').notNull(),
+  },
+  (table) => [index('document_extraction_history_document_id_idx').on(table.documentId)],
+);
+
+export type DocumentExtractionHistory = typeof documentExtractionHistory.$inferSelect;
+export type NewDocumentExtractionHistory = typeof documentExtractionHistory.$inferInsert;

@@ -66,9 +66,9 @@ describe('exporter-match check', () => {
     expect(result.message).toContain('insuficientes');
   });
 
-  it('should warn with no input data', () => {
+  it('should skip with no invoice data', () => {
     const result = exporterMatch({});
-    expect(result.status).toBe('warning');
+    expect(result.status).toBe('skipped');
   });
 
   it('should use shipperName from BL data', () => {

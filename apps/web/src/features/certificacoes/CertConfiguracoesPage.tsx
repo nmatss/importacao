@@ -1,19 +1,7 @@
 import { useEffect, useState } from 'react';
 import { fetchCertStats, checkCertApiHealth } from '@/shared/lib/cert-api-client';
 import { cn } from '@/shared/lib/utils';
-import {
-  CheckCircle2,
-  XCircle,
-  Database,
-  Globe,
-  Cpu,
-  Zap,
-  Loader2,
-  Radio,
-  Clock,
-  Info,
-  ArrowRight,
-} from 'lucide-react';
+import { Database, Globe, Cpu, Zap, Loader2, Radio, Clock, Info, ArrowRight } from 'lucide-react';
 
 export default function CertConfiguracoesPage() {
   const [stats, setStats] = useState<any>(null);

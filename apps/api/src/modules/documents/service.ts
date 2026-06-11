@@ -7,6 +7,7 @@ import mammoth from 'mammoth';
 import { db } from '../../shared/database/connection.js';
 import {
   documents,
+  documentExtractionHistory,
   importProcesses,
   followUpTracking,
   emailIngestionLogs,
@@ -248,9 +249,46 @@ export const documentService = {
     };
   },
 
+  /**
+   * Archives the current ai_parsed_data of a document into
+   * document_extraction_history BEFORE it gets zeroed (reason 'reprocess')
+   * or overwritten by a new extraction (reason 'reextract'). Append-only —
+   * regulatory audit, backlog #12. No-op when there is nothing to archive.
+   */
+  async archiveExtraction(
+    doc: { id: number; aiParsedData: unknown; confidenceScore: string | null },
+    reason: 'reprocess' | 'reextract',
+  ) {
+    if (doc.aiParsedData == null) return;
+    await db.insert(documentExtractionHistory).values({
+      documentId: doc.id,
+      aiParsedData: doc.aiParsedData,
+      confidence: doc.confidenceScore ?? null,
+      reason,
+    });
+    logger.info({ documentId: doc.id, reason }, 'Previous AI extraction archived to history');
+  },
+
+  /** Historical (archived) extractions of a document, newest first. */
+  async getExtractionHistory(documentId: number) {
+    return db
+      .select()
+      .from(documentExtractionHistory)
+      .where(eq(documentExtractionHistory.documentId, documentId))
+      .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
+  },
+
   async processWithAI(documentId: number, type: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
+
+    // Re-extraction over an already extracted document overwrites
+    // aiParsedData — archive the previous value first (audit, backlog #12).
+    // In the reprocess() flow aiParsedData was already archived ('reprocess')
+    // and zeroed before this call, so this is a no-op there.
+    if (doc.isProcessed && doc.aiParsedData != null) {
+      await this.archiveExtraction(doc, 'reextract');
+    }
 
     // Espelho (xlsx) — deterministic parser; no AI round-trip.
     if (type === 'espelho') {
@@ -399,7 +437,20 @@ export const documentService = {
       'AI extraction completed',
     );
 
-    // Confidence score gate: alert on low-confidence extractions
+    // Confidence score gate: alert on low-confidence extractions.
+    //
+    // Backlog #7(d): the previous behaviour was an `return` whenever the score
+    // dropped below 0.4. That early-return had two harmful side effects flagged
+    // by Nicolas: (1) the document type was NOT re-written / kept reprocessable,
+    // and (2) the WHOLE process gate (auto-validation + auto-espelho for the
+    // OTHER documents) was silently aborted just because one attachment came in
+    // weak. We now keep the alert, mark the document so the operator can
+    // reclassify/retry, but ALWAYS fall through to the degradable gate below so
+    // the remaining documents are not held hostage by one low-confidence
+    // extraction. The only thing very-low confidence still suppresses is the
+    // AI-name standardization for the Drive upload (we can't trust the parsed
+    // date when confidence is that low).
+    const veryLowConfidence = result.confidenceScore < 0.4;
     if (result.confidenceScore < 0.6) {
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
@@ -407,11 +458,10 @@ export const documentService = {
         .where(eq(importProcesses.id, doc.processId))
         .limit(1);
 
-      const severity = result.confidenceScore < 0.4 ? 'critical' : 'warning';
-      const title =
-        result.confidenceScore < 0.4
-          ? 'Extração IA com Confiança Muito Baixa'
-          : 'Extração IA com Confiança Baixa';
+      const severity = veryLowConfidence ? 'critical' : 'warning';
+      const title = veryLowConfidence
+        ? 'Extração IA com Confiança Muito Baixa'
+        : 'Extração IA com Confiança Baixa';
 
       alertService
         .create({
@@ -419,22 +469,23 @@ export const documentService = {
           severity,
           title,
           message: `Documento ${type} do processo ${proc?.processCode ?? doc.processId} teve confiança de extração de ${(result.confidenceScore * 100).toFixed(0)}%. ${
-            result.confidenceScore < 0.4
-              ? 'Recomenda-se upload manual ou re-request ao fornecedor. Validação automática será suspensa.'
+            veryLowConfidence
+              ? 'Os dados extraídos NÃO são confiáveis: reclassifique/reenvie o documento ou reprocesse. A validação automática usará os demais documentos disponíveis e tratará este como ausente.'
               : 'Recomenda-se revisão manual dos dados extraídos.'
           } Campos com baixa confiança: ${result.fieldsWithLowConfidence.join(', ') || 'N/A'}.`,
           processCode: proc?.processCode,
         })
         .catch((err) => logger.error({ err }, 'Failed to create low-confidence alert'));
 
-      // Score < 0.4: still upload to Drive but skip validation and downstream processing
-      if (result.confidenceScore < 0.4) {
+      // Very low confidence: skip AI-name standardization for the Drive upload
+      // (parsed date/fields untrustworthy) — upload with the original name so
+      // the file is still archived, then continue to the degradable gate.
+      if (veryLowConfidence) {
         logger.warn(
           { documentId, type, confidence: result.confidenceScore },
-          'Very low confidence - skipping auto-validation trigger',
+          'Very low confidence — uploading with original name and continuing to degradable gate',
         );
 
-        // Upload to Drive with original name (can't trust AI data for standardization)
         if (type === 'invoice' || type === 'certificate') {
           this.uploadToDrive(
             doc.id,
@@ -449,7 +500,6 @@ export const documentService = {
             ),
           );
         }
-        return;
       }
     }
 
@@ -472,8 +522,10 @@ export const documentService = {
       );
     }
 
-    // Upload to Drive with standardized name after AI extraction
-    if (type === 'invoice' || type === 'certificate') {
+    // Upload to Drive with standardized name after AI extraction.
+    // When confidence is very low we already uploaded with the original name
+    // above (can't trust parsed fields for standardization) — don't double-upload.
+    if ((type === 'invoice' || type === 'certificate') && !veryLowConfidence) {
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
         .from(importProcesses)
@@ -488,32 +540,113 @@ export const documentService = {
       }
     }
 
-    // Auto-trigger validation when all 3 doc types have AI data
-    if (mergedAiData.invoice && mergedAiData.packing_list && mergedAiData.ohbl) {
-      try {
-        const { validationService } = await import('../validation/service.js');
-        await validationService.runAllChecks(doc.processId);
-        logger.info(
-          { processId: doc.processId },
-          'Auto-validation triggered after all 3 AI extractions completed',
-        );
-      } catch (valErr) {
-        logger.error({ err: valErr, processId: doc.processId }, 'Auto-validation failed');
-      }
+    // Degradable auto-validation / auto-espelho gate (backlog #7(c)).
+    //
+    // Previously this block required `invoice && packing_list && ohbl` together;
+    // if any was missing (typically the INV, which #7 shows is often
+    // misclassified/low-confidence), NOTHING ran and there was no signal — the
+    // process just sat silently. The new behaviour:
+    //   - When all 3 are present: run full validation + auto-espelho as before.
+    //   - When at least one core doc is present but others are missing: still
+    //     run a PARTIAL validation (runAllChecks already degrades gracefully on
+    //     missing inputs) and raise an EXPLICIT alert naming the missing
+    //     document(s). Auto-espelho stays gated on all 3.
+    // Proforma never participates here (it's pre-shipment); we only consider
+    // the three core customs documents.
+    await this.runDegradableGate(doc.processId, mergedAiData);
+  },
 
+  /**
+   * Backlog #7(c)/(d): degradable gate for auto-validation + auto-espelho.
+   *
+   * Runs whatever is possible from the currently-merged AI data instead of
+   * silently doing nothing when a core document (usually the INV) is missing.
+   * Idempotent: runAllChecks and autoGenerateEspelhoIfMissing are both safe to
+   * re-run, and the explicit "aguardando INV" alert is de-duplicated by
+   * alertService (same processId + title within 24h).
+   */
+  async runDegradableGate(processId: number, mergedAiData: Record<string, any>) {
+    // Boolean(obj) era true para um {} vazio — uma INV classificada mas com
+    // extração vazia contava como "presente" e suprimia o alerta "Aguardando
+    // INV" (UAT Odett #7). Exige pelo menos um campo com valor ou itens.
+    const hasRelevantData = (obj: any): boolean => {
+      if (!obj || typeof obj !== 'object') return false;
+      if (Array.isArray(obj.items) && obj.items.length > 0) return true;
+      return Object.values(obj).some(
+        (f: any) => f && typeof f === 'object' && 'value' in f && f.value != null,
+      );
+    };
+    const hasInvoice = hasRelevantData(mergedAiData.invoice);
+    const hasPackingList = hasRelevantData(mergedAiData.packing_list);
+    const hasBl = hasRelevantData(mergedAiData.ohbl);
+    const allThree = hasInvoice && hasPackingList && hasBl;
+
+    // Nothing core extracted yet (e.g. only a proforma/espelho/cert so far) —
+    // no validation to run, and no alert to raise (the gate hasn't started).
+    if (!hasInvoice && !hasPackingList && !hasBl) return;
+
+    // Always run validation with whatever core docs are present. The checks
+    // degrade on their own when an input is missing, so a partial run still
+    // surfaces the divergences it CAN compute instead of going silent.
+    try {
+      const { validationService } = await import('../validation/service.js');
+      await validationService.runAllChecks(processId);
+      logger.info(
+        { processId, hasInvoice, hasPackingList, hasBl, partial: !allThree },
+        allThree
+          ? 'Auto-validation triggered (all 3 core documents present)'
+          : 'Partial auto-validation triggered (core document(s) missing)',
+      );
+    } catch (valErr) {
+      logger.error({ err: valErr, processId }, 'Auto-validation failed');
+    }
+
+    if (allThree) {
       // Auto-generate espelho from invoice + PL + BL data (deterministic,
       // no AI). Nicolas (2026-05-21): "primeiro que ele não tá criando
       // sozinho". Only fills when there's no operator-uploaded espelho
-      // and no prior auto-build (preserves manual edits).
+      // and no prior auto-build (preserves manual edits). Kept gated on all 3
+      // because the espelho aggregates fields from every core document.
       // Operator kill switch: set AUTO_GENERATE_ESPELHO=0 to disable.
       if (process.env.AUTO_GENERATE_ESPELHO !== '0') {
         try {
-          await this.autoGenerateEspelhoIfMissing(doc.processId);
+          await this.autoGenerateEspelhoIfMissing(processId);
         } catch (espErr) {
-          logger.error({ err: espErr, processId: doc.processId }, 'Auto-espelho generation failed');
+          logger.error({ err: espErr, processId }, 'Auto-espelho generation failed');
         }
       }
+      return;
     }
+
+    // A core document is missing — make it LOUD instead of silent. List exactly
+    // which ones are absent so the operator knows what to chase (typically the
+    // INV, per #7). De-duplicated by alertService within 24h.
+    const missing: string[] = [];
+    if (!hasInvoice) missing.push('Invoice (INV)');
+    if (!hasPackingList) missing.push('Packing List');
+    if (!hasBl) missing.push('BL');
+
+    const [proc] = await db
+      .select({ processCode: importProcesses.processCode })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    alertService
+      .create({
+        processId,
+        severity: 'warning',
+        title: 'Aguardando documento para validar / gerar espelho',
+        message:
+          `O processo ${proc?.processCode ?? processId} ainda não tem ${missing.join(' + ')}. ` +
+          `A validação rodou parcialmente com os documentos disponíveis, mas o espelho automático e a validação completa só são gerados quando Invoice + Packing List + BL estiverem presentes.${
+            !hasInvoice
+              ? ' A Invoice está ausente: verifique se o documento foi classificado corretamente (não como "other"/proforma) ou reprocesse-o.'
+              : ''
+          }`,
+        processCode: proc?.processCode,
+      })
+      .catch((err) => logger.error({ err }, 'Failed to create awaiting-document alert'));
   },
 
   /**
@@ -1121,6 +1254,9 @@ export const documentService = {
   async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
+
+    // Archive the previous extraction BEFORE zeroing it (audit, backlog #12).
+    await this.archiveExtraction(doc, 'reprocess');
 
     await db
       .update(documents)

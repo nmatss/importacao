@@ -24,7 +24,6 @@ import {
   Star,
   Eye,
 } from 'lucide-react';
-import { SubmitButton } from '@/shared/components/SubmitButton';
 import { settingsKeys, userKeys, emailSignatureKeys } from '@/shared/api/query-keys';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';

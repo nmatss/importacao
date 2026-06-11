@@ -1,5 +1,10 @@
 # Diagnóstico Técnico Completo — Sistema de Importação
 
+> ⚠️ **DOCUMENTO HISTÓRICO (2026-03-12).** Grande parte dos achados abaixo já foi
+> corrigida (testes automatizados, CI/CD, error boundaries, security headers,
+> refatoração do ProcessDetailPage, state machine, harness de IA etc.).
+> Para o estado atual, consulte `ODETT-STATUS.md` e o backlog vivo `REVISAO-100.md`.
+
 **Data**: 2026-03-12
 **Método**: Análise direta do código-fonte por 5 agentes especializados (100+ arquivos auditados)
 **Escopo**: Arquitetura, backend, frontend, banco de dados, segurança, IA, jobs, observabilidade, DevEx
@@ -53,18 +58,18 @@ Sistema em produção com cobertura funcional acima da média: 15 módulos backe
 
 ## Principais Riscos (validados no código)
 
-| # | Risco | Severidade | Evidência |
-|---|-------|-----------|-----------|
-| 1 | **Sem state machine formal** — `updateStatus()` aceita qualquer string, cast `as any` | CRÍTICO | `processes/service.ts:99` |
-| 2 | **cert-api sem autenticação e CORS `*`** | CRÍTICO | `main.py:44-49` |
-| 3 | **Containers rodam como root** | ALTO | Todos os Dockerfiles |
-| 4 | **Upload valida MIME do client, não magic bytes** | ALTO | `upload.ts:32-33` |
-| 5 | **Sem timeout em chamadas AI/Odoo** — hang indefinido | ALTO | `ai/service.ts:51`, `odoo.service.ts` |
-| 6 | **Sem validação de schema nas respostas da IA** | ALTO | `ai/service.ts:126-154` |
-| 7 | **`dangerouslySetInnerHTML` com conteúdo gerado por IA** | ALTO | `ValidationChecklist.tsx:476` |
-| 8 | **xlsx carregado de CDN externa, não npm** — supply chain | ALTO | `package.json:34` |
-| 9 | **Sem error boundaries no React** — crash = tela branca | ALTO | Nenhum `ErrorBoundary` encontrado |
-| 10 | **God methods** — `runAllChecks()` 188 linhas, 8 side effects | MÉDIO | `validation/service.ts:16-203` |
+| #   | Risco                                                                                 | Severidade | Evidência                             |
+| --- | ------------------------------------------------------------------------------------- | ---------- | ------------------------------------- |
+| 1   | **Sem state machine formal** — `updateStatus()` aceita qualquer string, cast `as any` | CRÍTICO    | `processes/service.ts:99`             |
+| 2   | **cert-api sem autenticação e CORS `*`**                                              | CRÍTICO    | `main.py:44-49`                       |
+| 3   | **Containers rodam como root**                                                        | ALTO       | Todos os Dockerfiles                  |
+| 4   | **Upload valida MIME do client, não magic bytes**                                     | ALTO       | `upload.ts:32-33`                     |
+| 5   | **Sem timeout em chamadas AI/Odoo** — hang indefinido                                 | ALTO       | `ai/service.ts:51`, `odoo.service.ts` |
+| 6   | **Sem validação de schema nas respostas da IA**                                       | ALTO       | `ai/service.ts:126-154`               |
+| 7   | **`dangerouslySetInnerHTML` com conteúdo gerado por IA**                              | ALTO       | `ValidationChecklist.tsx:476`         |
+| 8   | **xlsx carregado de CDN externa, não npm** — supply chain                             | ALTO       | `package.json:34`                     |
+| 9   | **Sem error boundaries no React** — crash = tela branca                               | ALTO       | Nenhum `ErrorBoundary` encontrado     |
+| 10  | **God methods** — `runAllChecks()` 188 linhas, 8 side effects                         | MÉDIO      | `validation/service.ts:16-203`        |
 
 ## Principais Oportunidades
 
@@ -82,6 +87,7 @@ Sistema em produção com cobertura funcional acima da média: 15 módulos backe
 ## 2.1 Arquitetura e Design
 
 ### Pontos Fortes
+
 - Sem dependências circulares — uso inteligente de `import()` dinâmico para evitar ciclos
 - `audit` como cross-cutting concern universal — correto
 - `dashboard/service.ts` sem imports de módulos — queries puras contra schema
@@ -122,6 +128,7 @@ dashboard/service.ts       --> (apenas shared DB schema)
 ## 2.2 Banco de Dados
 
 ### Pontos Fortes
+
 - 15 tabelas com enums tipados — modelo coerente
 - `follow_up_tracking` com 7 marcos explícitos + progress %
 - `processCode` com unique constraint
@@ -149,25 +156,25 @@ dashboard/service.ts       --> (apenas shared DB schema)
 
 ### Índices Compostos Necessários
 
-| Índice | Query beneficiada | Arquivo |
-|---|---|---|
-| `(status, brand)` | `processService.list()` | `processes/service.ts:9-34` |
-| `(status, updated_at)` | Dashboard + stalled-process job | `dashboard/service.ts:16-18` |
-| `(process_id, status, resolved_manually)` em validation_results | Dashboard `withDivergences` | `dashboard/service.ts:119-134` |
-| `(payment_deadline)` em currency_exchanges | Dashboard `upcomingPayments` | `dashboard/service.ts:194-208` |
-| trigram GIN em `process_code` | ILIKE com `%search%` | `processes/service.ts:18` |
-| `(process_id, type)` em documents | Validação + listagem | `validation/service.ts:37-41` |
-| `(severity)`, `(acknowledged)` em alerts | Filtros de alertas | |
-| `(entity_type, entity_id)` em audit_logs | Filtros de auditoria | `audit/service.ts:40-72` |
+| Índice                                                          | Query beneficiada               | Arquivo                        |
+| --------------------------------------------------------------- | ------------------------------- | ------------------------------ |
+| `(status, brand)`                                               | `processService.list()`         | `processes/service.ts:9-34`    |
+| `(status, updated_at)`                                          | Dashboard + stalled-process job | `dashboard/service.ts:16-18`   |
+| `(process_id, status, resolved_manually)` em validation_results | Dashboard `withDivergences`     | `dashboard/service.ts:119-134` |
+| `(payment_deadline)` em currency_exchanges                      | Dashboard `upcomingPayments`    | `dashboard/service.ts:194-208` |
+| trigram GIN em `process_code`                                   | ILIKE com `%search%`            | `processes/service.ts:18`      |
+| `(process_id, type)` em documents                               | Validação + listagem            | `validation/service.ts:37-41`  |
+| `(severity)`, `(acknowledged)` em alerts                        | Filtros de alertas              |                                |
+| `(entity_type, entity_id)` em audit_logs                        | Filtros de auditoria            | `audit/service.ts:40-72`       |
 
 ### JSONB que Deveria Ser Normalizado
 
-| Campo | Problema | Recomendação |
-|---|---|---|
-| `espelhos.generated_data` | Acessado via `as any` cast | Normalizar em colunas: `file_path`, `filename`, `item_count` |
-| `email_ingestion_logs.processed_attachments` | Esconde relação documents↔emails sem FK | Join table `email_attachment_documents` |
-| `import_processes.ai_extracted_data` | Duplica dados de `documents.ai_parsed_data` | Remover duplicação |
-| `import_processes.payment_terms` | Dados estruturados simples | Colunas: `payment_deposit_percent`, `payment_balance_percent` |
+| Campo                                        | Problema                                    | Recomendação                                                  |
+| -------------------------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
+| `espelhos.generated_data`                    | Acessado via `as any` cast                  | Normalizar em colunas: `file_path`, `filename`, `item_count`  |
+| `email_ingestion_logs.processed_attachments` | Esconde relação documents↔emails sem FK     | Join table `email_attachment_documents`                       |
+| `import_processes.ai_extracted_data`         | Duplica dados de `documents.ai_parsed_data` | Remover duplicação                                            |
+| `import_processes.payment_terms`             | Dados estruturados simples                  | Colunas: `payment_deposit_percent`, `payment_balance_percent` |
 
 ### Versionamento Ausente
 
@@ -177,13 +184,13 @@ dashboard/service.ts       --> (apenas shared DB schema)
 
 ### Timestamps Faltando
 
-| Tabela | Falta |
-|---|---|
-| `validation_results` | `updated_at` |
-| `communications` | `updated_at` |
-| `espelhos` | `updated_at` |
+| Tabela                 | Falta        |
+| ---------------------- | ------------ |
+| `validation_results`   | `updated_at` |
+| `communications`       | `updated_at` |
+| `espelhos`             | `updated_at` |
 | `email_ingestion_logs` | `updated_at` |
-| `system_settings` | `created_at` |
+| `system_settings`      | `created_at` |
 
 ### Performance de Queries
 
@@ -205,6 +212,7 @@ dashboard/service.ts       --> (apenas shared DB schema)
 ## 2.3 Backend e APIs
 
 ### Pontos Fortes
+
 - Controllers thin em todos os módulos — zero lógica de negócio
 - `sendSuccess/sendError/sendPaginated` uniformes
 - ZodError tratado globalmente com detalhes por campo
@@ -215,15 +223,15 @@ dashboard/service.ts       --> (apenas shared DB schema)
 
 **Não existe state machine formal.** Status transitions estão espalhados em 4 arquivos sem guards.
 
-| Arquivo | Linha | Transição |
-|---|---|---|
-| `documents/service.ts` | 67 | `* -> documents_received` |
-| `validation/service.ts` | 61 | `* -> validating` |
-| `validation/service.ts` | 110, 121 | `* -> validated` |
-| `espelhos/service.ts` | 101 | `* -> espelho_generated` |
-| `espelhos/service.ts` | 407 | `* -> sent_to_fenicia` |
-| `processes/service.ts` | 99 | `* -> (qualquer string)` via `as any` |
-| `processes/service.ts` | 110 | `* -> cancelled` |
+| Arquivo                 | Linha    | Transição                             |
+| ----------------------- | -------- | ------------------------------------- |
+| `documents/service.ts`  | 67       | `* -> documents_received`             |
+| `validation/service.ts` | 61       | `* -> validating`                     |
+| `validation/service.ts` | 110, 121 | `* -> validated`                      |
+| `espelhos/service.ts`   | 101      | `* -> espelho_generated`              |
+| `espelhos/service.ts`   | 407      | `* -> sent_to_fenicia`                |
+| `processes/service.ts`  | 99       | `* -> (qualquer string)` via `as any` |
+| `processes/service.ts`  | 110      | `* -> cancelled`                      |
 
 **`processService.updateStatus()` aceita qualquer string como status com cast `as any`.** Possível ir de `draft` direto para `completed` ou setar `"banana"` como status. Nenhuma transição é validada.
 
@@ -261,28 +269,30 @@ dashboard/service.ts       --> (apenas shared DB schema)
 ## 2.4 Jobs e Cron
 
 ### Pontos Fortes
+
 - 4 jobs bem definidos com timezone correto (America/Sao_Paulo)
 - Email dedup funcional (via DB `messageId`)
 - Alert dedup funcional (via `hasDuplicateRecent` 24h)
 
 ### Problemas
 
-| Problema | Impacto |
-|---|---|
-| Sem tabela `job_runs` | Zero visibilidade sobre execução |
-| Erros logados mas nunca alertados | Job failure silencioso |
-| Sem retry automático | Falha transiente espera próximo schedule |
-| Lock in-memory (boolean) | Não sobrevive restart |
-| Deadline/stalled sem concurrency control | Overlap possível |
-| Stalled-process é N+1 | Performance degradada |
-| Sem trigger manual para deadline/stalled | Debugging difícil |
-| cert-api: state in-memory | Restart perde runs em andamento |
+| Problema                                 | Impacto                                  |
+| ---------------------------------------- | ---------------------------------------- |
+| Sem tabela `job_runs`                    | Zero visibilidade sobre execução         |
+| Erros logados mas nunca alertados        | Job failure silencioso                   |
+| Sem retry automático                     | Falha transiente espera próximo schedule |
+| Lock in-memory (boolean)                 | Não sobrevive restart                    |
+| Deadline/stalled sem concurrency control | Overlap possível                         |
+| Stalled-process é N+1                    | Performance degradada                    |
+| Sem trigger manual para deadline/stalled | Debugging difícil                        |
+| cert-api: state in-memory                | Restart perde runs em andamento          |
 
 ---
 
 ## 2.5 IA no Sistema
 
 ### Pontos Fortes
+
 - Prompts organizados em arquivos separados (`ai/prompts/*.ts`)
 - Fallback graceful no email ingestion — AI failure não bloqueia
 - Confidence score calculado por campo
@@ -290,24 +300,25 @@ dashboard/service.ts       --> (apenas shared DB schema)
 
 ### Problemas
 
-| Finding | Severidade | Local |
-|---|---|---|
-| **Sem timeout no fetch** | ALTO | `ai/service.ts:51` |
-| **Sem validação de schema na resposta** | ALTO | `ai/service.ts:126-154` |
-| **Sem cost tracking** | MÉDIO | (ausente) |
-| **Sem fallback entre modelos** | MÉDIO | Model down = feature down |
-| **Prompts não versionados** | MÉDIO | Sem version ID |
-| **Confidence self-assessed** | MÉDIO | AI atribui própria confiança |
-| **AI roda em todo email** | MÉDIO | Mesmo quando regex resolve |
-| **NCM prompt hardcoded inline** | BAIXO | `ai/service.ts:230-255` |
-| **Sem logging de input/output** | BAIXO | Só `messageCount` + `responseLength` |
-| **Sem rate limiting outbound** | MÉDIO | Burst pode bater rate limit do OpenRouter |
+| Finding                                 | Severidade | Local                                     |
+| --------------------------------------- | ---------- | ----------------------------------------- |
+| **Sem timeout no fetch**                | ALTO       | `ai/service.ts:51`                        |
+| **Sem validação de schema na resposta** | ALTO       | `ai/service.ts:126-154`                   |
+| **Sem cost tracking**                   | MÉDIO      | (ausente)                                 |
+| **Sem fallback entre modelos**          | MÉDIO      | Model down = feature down                 |
+| **Prompts não versionados**             | MÉDIO      | Sem version ID                            |
+| **Confidence self-assessed**            | MÉDIO      | AI atribui própria confiança              |
+| **AI roda em todo email**               | MÉDIO      | Mesmo quando regex resolve                |
+| **NCM prompt hardcoded inline**         | BAIXO      | `ai/service.ts:230-255`                   |
+| **Sem logging de input/output**         | BAIXO      | Só `messageCount` + `responseLength`      |
+| **Sem rate limiting outbound**          | MÉDIO      | Burst pode bater rate limit do OpenRouter |
 
 ---
 
 ## 2.6 Gestão Documental
 
 ### Problemas
+
 - Sem versionamento — reprocessar sobrescreve `ai_parsed_data`
 - Sem deduplicação por hash — mesmo PDF 2x = 2 registros
 - Deleção não cascadeia para `ai_extracted_data` do processo
@@ -327,6 +338,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 ## 2.7 Espelhos
 
 ### Problemas
+
 - Race condition na version (sem unique constraint)
 - `generated_data` JSONB acessado via `as any`
 - Sem guard para gerar em processo completado/cancelado
@@ -337,6 +349,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 ## 2.8 Emails, Comunicações e Alertas
 
 ### Problemas
+
 - AI roda em todo email mesmo quando regex resolve — custo desnecessário
 - Drive file move fire-and-forget com `catch(() => {})` — falha silenciosa
 - SMTP síncrono — request espera envio
@@ -349,6 +362,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 ## 2.9 Frontend e UX
 
 ### Pontos Fortes
+
 - React Query com config global sensata (retry:1, staleTime:30s)
 - AuthContext bem estruturado com `useCallback`
 - Portal com health check das APIs
@@ -356,22 +370,23 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 
 ### Problemas
 
-| Finding | Severidade | Local |
-|---|---|---|
-| **Zero error boundaries** — crash = tela branca | ALTO | Nenhum `ErrorBoundary` |
-| **`dangerouslySetInnerHTML` com conteúdo AI** — XSS | ALTO | `ValidationChecklist.tsx:476` |
-| **ProcessDetailPage: 1.175 linhas** | ALTO | God component |
-| **`alert()` para feedback** | MÉDIO | ValidationChecklist, EspelhoPreview, Settings |
-| **40+ usos de `any`** | MÉDIO | cert-api, error catches |
-| **Sem lazy loading módulo importação** | MÉDIO | Bundle eager |
-| **Sem types compartilhados** | MÉDIO | Interfaces inline duplicadas |
-| **Zero `useMemo`/`React.memo`** | MÉDIO | Re-renders desnecessários |
-| **11 `useState` em ValidationChecklist** | MÉDIO | Pede `useReducer` |
-| **Acessibilidade pobre** | BAIXO | Sem focus trap, htmlFor, aria-labels |
-| **`window.location.href` no 401** | BAIXO | Bypassa React Router |
-| **Schemas zod duplicados** Create/Edit | BAIXO | DRY violation |
+| Finding                                             | Severidade | Local                                         |
+| --------------------------------------------------- | ---------- | --------------------------------------------- |
+| **Zero error boundaries** — crash = tela branca     | ALTO       | Nenhum `ErrorBoundary`                        |
+| **`dangerouslySetInnerHTML` com conteúdo AI** — XSS | ALTO       | `ValidationChecklist.tsx:476`                 |
+| **ProcessDetailPage: 1.175 linhas**                 | ALTO       | God component                                 |
+| **`alert()` para feedback**                         | MÉDIO      | ValidationChecklist, EspelhoPreview, Settings |
+| **40+ usos de `any`**                               | MÉDIO      | cert-api, error catches                       |
+| **Sem lazy loading módulo importação**              | MÉDIO      | Bundle eager                                  |
+| **Sem types compartilhados**                        | MÉDIO      | Interfaces inline duplicadas                  |
+| **Zero `useMemo`/`React.memo`**                     | MÉDIO      | Re-renders desnecessários                     |
+| **11 `useState` em ValidationChecklist**            | MÉDIO      | Pede `useReducer`                             |
+| **Acessibilidade pobre**                            | BAIXO      | Sem focus trap, htmlFor, aria-labels          |
+| **`window.location.href` no 401**                   | BAIXO      | Bypassa React Router                          |
+| **Schemas zod duplicados** Create/Edit              | BAIXO      | DRY violation                                 |
 
 ### Outros achados
+
 - **cert-api-client sem auth** — `cert-api-client.ts:3`
 - **SSE silently fails** — `cert-api-client.ts:79-81`
 - **Sem token refresh** — JWT expira = login imediato
@@ -385,25 +400,26 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 
 ### Findings Críticos/Altos
 
-| # | Finding | Severidade | Local |
-|---|---------|-----------|-------|
-| 1 | **cert-api: zero auth + CORS `*`** | CRÍTICO | `main.py:44-49` |
-| 2 | **Containers rodam como root** | ALTO | Todos Dockerfiles |
-| 3 | **Upload: MIME-only, sem magic bytes** | ALTO | `upload.ts:32-33` |
-| 4 | **Endpoints sem Zod validation** | ALTO | espelhos, follow-up, settings, AI |
-| 5 | **`/auth/google` sem rate limiting** | ALTO | `auth/routes.ts:11` |
-| 6 | **xlsx de CDN externa** — supply chain | ALTO | `package.json:34` |
-| 7 | **Sem security headers** (helmet/CSP/HSTS) | ALTO | `app.ts` |
-| 8 | **DB password default em prod compose** | MÉDIO | `docker-compose.prod.yml:8` |
-| 9 | **Postgres exposto porta 5450** | MÉDIO | `docker-compose.prod.yml:10` |
-| 10 | **JWT sem algorithm explícito** | MÉDIO | `auth/service.ts:33-36` |
-| 11 | **Password policy: 6 chars mínimo** | MÉDIO | `auth/schema.ts:11` |
-| 12 | **Seed com senha hardcoded** | MÉDIO | `seed.ts:8` |
-| 13 | **Docker images não pinadas** | MÉDIO | Todos Dockerfiles |
-| 14 | **Sem network isolation** entre containers | MÉDIO | `docker-compose.prod.yml` |
-| 15 | **Sem resource limits** (CPU/memory) | MÉDIO | `docker-compose.prod.yml` |
+| #   | Finding                                    | Severidade | Local                             |
+| --- | ------------------------------------------ | ---------- | --------------------------------- |
+| 1   | **cert-api: zero auth + CORS `*`**         | CRÍTICO    | `main.py:44-49`                   |
+| 2   | **Containers rodam como root**             | ALTO       | Todos Dockerfiles                 |
+| 3   | **Upload: MIME-only, sem magic bytes**     | ALTO       | `upload.ts:32-33`                 |
+| 4   | **Endpoints sem Zod validation**           | ALTO       | espelhos, follow-up, settings, AI |
+| 5   | **`/auth/google` sem rate limiting**       | ALTO       | `auth/routes.ts:11`               |
+| 6   | **xlsx de CDN externa** — supply chain     | ALTO       | `package.json:34`                 |
+| 7   | **Sem security headers** (helmet/CSP/HSTS) | ALTO       | `app.ts`                          |
+| 8   | **DB password default em prod compose**    | MÉDIO      | `docker-compose.prod.yml:8`       |
+| 9   | **Postgres exposto porta 5450**            | MÉDIO      | `docker-compose.prod.yml:10`      |
+| 10  | **JWT sem algorithm explícito**            | MÉDIO      | `auth/service.ts:33-36`           |
+| 11  | **Password policy: 6 chars mínimo**        | MÉDIO      | `auth/schema.ts:11`               |
+| 12  | **Seed com senha hardcoded**               | MÉDIO      | `seed.ts:8`                       |
+| 13  | **Docker images não pinadas**              | MÉDIO      | Todos Dockerfiles                 |
+| 14  | **Sem network isolation** entre containers | MÉDIO      | `docker-compose.prod.yml`         |
+| 15  | **Sem resource limits** (CPU/memory)       | MÉDIO      | `docker-compose.prod.yml`         |
 
 ### Positivos
+
 - SQL injection: Drizzle ORM usado consistentemente, zero SQL raw concatenado
 - Filenames com UUID: sem path traversal
 - CORS na API principal: configurável por env var
@@ -416,11 +432,13 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 ## 2.11 Observabilidade
 
 ### Estado Atual
+
 - Pino logger com structured JSON — bom
 - Audit logs em operações críticas — bom
 - `/health` retorna apenas timestamp — insuficiente
 
 ### Ausente
+
 - Correlation ID / request ID
 - Métricas (Prometheus/etc)
 - Tracing distribuído
@@ -434,12 +452,14 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 ## 2.12 DevEx e Qualidade
 
 ### Estado Atual
+
 - Monorepo npm workspaces funcional
 - TypeScript compilação limpa
 - Docker Compose dev e prod separados
 - Scripts operacionais existentes
 
 ### Ausente
+
 - **Zero testes automatizados**
 - Sem CI/CD pipeline
 - Sem contratos compartilhados frontend/backend
@@ -451,6 +471,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 # 3. Lista Completa de Oportunidades
 
 ## Arquitetura (8)
+
 1. State machine formal para processo
 2. Event emitter / outbox para desacoplar side effects
 3. Fila de trabalho para operações assíncronas
@@ -461,6 +482,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 8. Circuit breaker para integrações
 
 ## Banco de Dados (13)
+
 9. ON DELETE CASCADE em FKs de children
 10. Transação na criação processo + follow_up
 11. Unique constraint em espelhos version
@@ -476,6 +498,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 21. Remover duplicação ai_extracted_data
 
 ## Backend (12)
+
 22. Custom error classes
 23. Zod em todos os endpoints com body
 24. Promise.all no dashboard
@@ -490,6 +513,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 33. Correlation ID em requests
 
 ## IA (8)
+
 34. AbortController com timeout 60s
 35. Zod validation de respostas AI
 36. Tabela ai_requests para rastreabilidade
@@ -500,6 +524,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 41. Human-in-the-loop para confidence < 0.7
 
 ## Jobs (6)
+
 42. Tabela job_runs
 43. Advisory lock para concorrência
 44. Trigger manual para todos os jobs
@@ -508,6 +533,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 47. Cleanup de runs orphanadas (cert-api)
 
 ## Frontend (12)
+
 48. Error boundaries global + por feature
 49. DOMPurify em dangerouslySetInnerHTML
 50. Quebrar ProcessDetailPage
@@ -522,6 +548,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 59. Token refresh flow
 
 ## Segurança (10)
+
 60. Auth no cert-api
 61. USER não-root nos Dockerfiles
 62. helmet() no Express
@@ -534,6 +561,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 69. Pin Docker images por digest
 
 ## Observabilidade (5)
+
 70. Correlation ID
 71. Health check rico com dependências
 72. Métricas básicas
@@ -541,6 +569,7 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 74. Runbooks para incidentes comuns
 
 ## DevEx (5)
+
 75. Pacote shared de types
 76. Testes unitários
 77. Testes de integração
@@ -555,26 +584,27 @@ upload → persist metadata → queue → parse PDF/Excel → AI extraction
 
 Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 
-| # | Ação | Esforço | Impacto |
-|---|------|---------|---------|
-| 1 | `Promise.all()` nas 8 queries de `getSla()` e 6 de `getOverview()` | 30min | Dashboard 4-8x mais rápido |
-| 2 | `AbortController` com timeout 60s nas chamadas AI e Odoo | 1h | Elimina hangs indefinidos |
-| 3 | Error boundary global no React (`App.tsx`) | 1h | Elimina tela branca em crash |
-| 4 | `helmet()` no Express | 15min | Security headers em toda API |
-| 5 | Toast system (sonner/react-hot-toast) substituindo `alert()` | 2h | UX profissional |
-| 6 | Rate limiting em `/auth/google` | 15min | Fecha vetor de brute-force |
-| 7 | DOMPurify antes de `dangerouslySetInnerHTML` | 30min | Fecha XSS |
-| 8 | Correlation ID via middleware | 1h | Rastreabilidade de requests |
-| 9 | Zod validation em endpoints sem schema | 2h | Input validation completa |
-| 10 | `USER node` nos Dockerfiles | 15min | Containers não-root |
-| 11 | Skip AI quando regex resolve + filename classifica | 1h | Redução de custo AI |
-| 12 | Unique constraint em `espelhos(process_id, version, is_partial)` | 15min | Elimina race condition |
+| #   | Ação                                                               | Esforço | Impacto                      |
+| --- | ------------------------------------------------------------------ | ------- | ---------------------------- |
+| 1   | `Promise.all()` nas 8 queries de `getSla()` e 6 de `getOverview()` | 30min   | Dashboard 4-8x mais rápido   |
+| 2   | `AbortController` com timeout 60s nas chamadas AI e Odoo           | 1h      | Elimina hangs indefinidos    |
+| 3   | Error boundary global no React (`App.tsx`)                         | 1h      | Elimina tela branca em crash |
+| 4   | `helmet()` no Express                                              | 15min   | Security headers em toda API |
+| 5   | Toast system (sonner/react-hot-toast) substituindo `alert()`       | 2h      | UX profissional              |
+| 6   | Rate limiting em `/auth/google`                                    | 15min   | Fecha vetor de brute-force   |
+| 7   | DOMPurify antes de `dangerouslySetInnerHTML`                       | 30min   | Fecha XSS                    |
+| 8   | Correlation ID via middleware                                      | 1h      | Rastreabilidade de requests  |
+| 9   | Zod validation em endpoints sem schema                             | 2h      | Input validation completa    |
+| 10  | `USER node` nos Dockerfiles                                        | 15min   | Containers não-root          |
+| 11  | Skip AI quando regex resolve + filename classifica                 | 1h      | Redução de custo AI          |
+| 12  | Unique constraint em `espelhos(process_id, version, is_partial)`   | 15min   | Elimina race condition       |
 
 ---
 
 # 5. Melhorias Estruturais
 
 ## Médio Prazo (1-4 semanas)
+
 - **State machine formal** — módulo dedicado com transições, guards, hooks, eventos
 - **Custom error classes** + error handler refatorado
 - **Tabela `job_runs`** + advisory locks + alerting
@@ -586,6 +616,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 - **Shared types package** entre api e web
 
 ## Longo Prazo (1-3 meses)
+
 - **Event system / outbox** para desacoplar side effects
 - **Fila de trabalho** (BullMQ/pg-boss) para operações assíncronas
 - **Pipeline documental** (upload → parse → AI → validate → index)
@@ -599,32 +630,32 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 
 # 6. Matriz Impacto x Esforço
 
-| Iniciativa | Impacto | Esforço | Risco | Prioridade |
-|---|---|---|---|---|
-| State machine formal | **ALTO** | MÉDIO | BAIXO | **P0** |
-| Timeouts AI/Odoo | **ALTO** | BAIXO | BAIXO | **P0** |
-| Error boundaries React | **ALTO** | BAIXO | BAIXO | **P0** |
-| Auth no cert-api | **ALTO** | BAIXO | BAIXO | **P0** |
-| helmet() + security headers | **ALTO** | BAIXO | BAIXO | **P0** |
-| Promise.all no dashboard | ALTO | BAIXO | BAIXO | **P0** |
-| Zod em todos endpoints | ALTO | BAIXO | BAIXO | **P0** |
-| Custom error classes | ALTO | MÉDIO | BAIXO | **P1** |
-| Tabela job_runs | ALTO | MÉDIO | BAIXO | **P1** |
-| Redis rate limiting | ALTO | MÉDIO | BAIXO | **P1** |
-| Validation_runs + versioning | ALTO | MÉDIO | BAIXO | **P1** |
-| Shared types package | MÉDIO | MÉDIO | BAIXO | **P1** |
-| Quebrar ProcessDetailPage | MÉDIO | MÉDIO | BAIXO | **P1** |
-| Índices compostos no DB | ALTO | BAIXO | BAIXO | **P1** |
-| ON DELETE CASCADE | MÉDIO | BAIXO | MÉDIO | **P1** |
-| Event system / outbox | **ALTO** | ALTO | MÉDIO | **P2** |
-| Fila de trabalho (BullMQ) | ALTO | ALTO | MÉDIO | **P2** |
-| AI governance completa | ALTO | ALTO | BAIXO | **P2** |
-| Pipeline documental async | ALTO | ALTO | MÉDIO | **P2** |
-| Cockpit operacional | ALTO | ALTO | BAIXO | **P2** |
-| Testes em camadas | ALTO | ALTO | BAIXO | **P2** |
-| CI/CD pipeline | MÉDIO | ALTO | BAIXO | **P3** |
-| Observabilidade completa | MÉDIO | ALTO | BAIXO | **P3** |
-| Modularização bounded context | MÉDIO | ALTO | MÉDIO | **P3** |
+| Iniciativa                    | Impacto  | Esforço | Risco | Prioridade |
+| ----------------------------- | -------- | ------- | ----- | ---------- |
+| State machine formal          | **ALTO** | MÉDIO   | BAIXO | **P0**     |
+| Timeouts AI/Odoo              | **ALTO** | BAIXO   | BAIXO | **P0**     |
+| Error boundaries React        | **ALTO** | BAIXO   | BAIXO | **P0**     |
+| Auth no cert-api              | **ALTO** | BAIXO   | BAIXO | **P0**     |
+| helmet() + security headers   | **ALTO** | BAIXO   | BAIXO | **P0**     |
+| Promise.all no dashboard      | ALTO     | BAIXO   | BAIXO | **P0**     |
+| Zod em todos endpoints        | ALTO     | BAIXO   | BAIXO | **P0**     |
+| Custom error classes          | ALTO     | MÉDIO   | BAIXO | **P1**     |
+| Tabela job_runs               | ALTO     | MÉDIO   | BAIXO | **P1**     |
+| Redis rate limiting           | ALTO     | MÉDIO   | BAIXO | **P1**     |
+| Validation_runs + versioning  | ALTO     | MÉDIO   | BAIXO | **P1**     |
+| Shared types package          | MÉDIO    | MÉDIO   | BAIXO | **P1**     |
+| Quebrar ProcessDetailPage     | MÉDIO    | MÉDIO   | BAIXO | **P1**     |
+| Índices compostos no DB       | ALTO     | BAIXO   | BAIXO | **P1**     |
+| ON DELETE CASCADE             | MÉDIO    | BAIXO   | MÉDIO | **P1**     |
+| Event system / outbox         | **ALTO** | ALTO    | MÉDIO | **P2**     |
+| Fila de trabalho (BullMQ)     | ALTO     | ALTO    | MÉDIO | **P2**     |
+| AI governance completa        | ALTO     | ALTO    | BAIXO | **P2**     |
+| Pipeline documental async     | ALTO     | ALTO    | MÉDIO | **P2**     |
+| Cockpit operacional           | ALTO     | ALTO    | BAIXO | **P2**     |
+| Testes em camadas             | ALTO     | ALTO    | BAIXO | **P2**     |
+| CI/CD pipeline                | MÉDIO    | ALTO    | BAIXO | **P3**     |
+| Observabilidade completa      | MÉDIO    | ALTO    | BAIXO | **P3**     |
+| Modularização bounded context | MÉDIO    | ALTO    | MÉDIO | **P3**     |
 
 ---
 
@@ -633,6 +664,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 ## Fase 1 — Hardening (0–30 dias)
 
 ### Semana 1-2: Segurança + Resiliência
+
 - [ ] `helmet()` no Express
 - [ ] Auth no cert-api (JWT ou API key + CORS restrito)
 - [ ] `USER node` nos Dockerfiles
@@ -644,6 +676,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 - [ ] Remover xlsx de CDN, instalar do npm
 
 ### Semana 3-4: Performance + Observabilidade
+
 - [ ] `Promise.all()` no dashboard (getSla + getOverview)
 - [ ] Índices compostos prioritários (status+brand, status+updated_at, trigram GIN)
 - [ ] Correlation ID middleware
@@ -655,6 +688,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 ## Fase 2 — Governança (30–90 dias)
 
 ### Mês 2: Core Domain
+
 - [ ] State machine formal para processo
 - [ ] Custom error classes (NotFoundError, ValidationError, IntegrationError)
 - [ ] Tabela `validation_runs` — historicizar em vez de deletar
@@ -664,6 +698,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 - [ ] Transação na criação processo + follow_up
 
 ### Mês 3: Frontend + Types
+
 - [ ] Shared types package (`packages/types`)
 - [ ] Quebrar ProcessDetailPage em 6-8 componentes
 - [ ] Lazy loading em todo módulo importação
@@ -675,6 +710,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 ## Fase 3 — Escala (90–180 dias)
 
 ### Mês 4-5: Async + Events
+
 - [ ] Event emitter / outbox pattern
 - [ ] Fila de trabalho (BullMQ ou pg-boss)
 - [ ] Pipeline documental assíncrono
@@ -682,6 +718,7 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 - [ ] Drive/Sheets sync via fila
 
 ### Mês 5-6: Produto + IA + Qualidade
+
 - [ ] Cockpit operacional (inbox de pendências, ações do dia)
 - [ ] AI governance: tabela ai_requests, prompt versioning, cost tracking, fallback chain
 - [ ] Testes unitários para state machine, validações, parsers
@@ -694,18 +731,18 @@ Melhorias de baixo esforço e alto impacto, executáveis em ~1.5 dias:
 
 # 8. Top 10 Recomendações
 
-| # | Recomendação | Justificativa |
-|---|---|---|
-| **1** | **State machine formal para processo** | `updateStatus()` aceita qualquer string com `as any`. Maior risco de integridade. Sem isso, qualquer bug pode colocar processo em estado impossível. |
-| **2** | **Timeouts em todas as chamadas externas** | Fetch sem timeout para OpenRouter e XML-RPC para Odoo podem travar indefinidamente. Request travado nunca retorna. |
-| **3** | **Auth no cert-api + fechar CORS** | Qualquer pessoa na rede acessa todos os endpoints. Zero autenticação + CORS `*`. Vetor mais aberto. |
-| **4** | **Error boundaries + toast system** | Erro de render crasha app inteiro (tela branca). Feedback via `alert()`. Duas mudanças simples que transformam a experiência. |
-| **5** | **Zod em todos endpoints + custom errors** | ~15 endpoints aceitam `req.body` cru. Erros detectados por string matching em português. |
-| **6** | **Promise.all no dashboard + índices** | 14 queries sequenciais. Índices ausentes. Paralelizar + indexar = 5-10x mais rápido. |
-| **7** | **Tabela `job_runs` + correlation ID** | Não há como saber se job rodou, quanto durou, ou se falhou. Requests sem ID. Debugging cego. |
-| **8** | **Versionamento de documentos e validações** | Reprocessar sobrescreve dados. Validação deleta resultados. Zero histórico em operação regulatória. |
-| **9** | **Security hardening: helmet, não-root, magic-byte** | Três mudanças de 15 min cada que eliminam vetores reais de ataque. |
-| **10** | **Event system para desacoplar side effects** | `runAllChecks()` tem 8 side effects em 188 linhas. Falha no meio = estado parcial. Eventos tornam cada operação atômica. |
+| #      | Recomendação                                         | Justificativa                                                                                                                                        |
+| ------ | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1**  | **State machine formal para processo**               | `updateStatus()` aceita qualquer string com `as any`. Maior risco de integridade. Sem isso, qualquer bug pode colocar processo em estado impossível. |
+| **2**  | **Timeouts em todas as chamadas externas**           | Fetch sem timeout para OpenRouter e XML-RPC para Odoo podem travar indefinidamente. Request travado nunca retorna.                                   |
+| **3**  | **Auth no cert-api + fechar CORS**                   | Qualquer pessoa na rede acessa todos os endpoints. Zero autenticação + CORS `*`. Vetor mais aberto.                                                  |
+| **4**  | **Error boundaries + toast system**                  | Erro de render crasha app inteiro (tela branca). Feedback via `alert()`. Duas mudanças simples que transformam a experiência.                        |
+| **5**  | **Zod em todos endpoints + custom errors**           | ~15 endpoints aceitam `req.body` cru. Erros detectados por string matching em português.                                                             |
+| **6**  | **Promise.all no dashboard + índices**               | 14 queries sequenciais. Índices ausentes. Paralelizar + indexar = 5-10x mais rápido.                                                                 |
+| **7**  | **Tabela `job_runs` + correlation ID**               | Não há como saber se job rodou, quanto durou, ou se falhou. Requests sem ID. Debugging cego.                                                         |
+| **8**  | **Versionamento de documentos e validações**         | Reprocessar sobrescreve dados. Validação deleta resultados. Zero histórico em operação regulatória.                                                  |
+| **9**  | **Security hardening: helmet, não-root, magic-byte** | Três mudanças de 15 min cada que eliminam vetores reais de ataque.                                                                                   |
+| **10** | **Event system para desacoplar side effects**        | `runAllChecks()` tem 8 side effects em 188 linhas. Falha no meio = estado parcial. Eventos tornam cada operação atômica.                             |
 
 ---
 
@@ -726,15 +763,15 @@ src/shared/state-machine/
 
 ```typescript
 const TRANSITIONS = {
-  draft:                ['documents_received', 'cancelled'],
-  documents_received:   ['validating', 'cancelled'],
-  validating:           ['validated', 'documents_received', 'cancelled'],
-  validated:            ['espelho_generated', 'cancelled'],
-  espelho_generated:    ['sent_to_fenicia', 'cancelled'],
-  sent_to_fenicia:      ['li_pending', 'completed', 'cancelled'],
-  li_pending:           ['completed', 'cancelled'],
-  completed:            [],
-  cancelled:            ['draft'],  // reabrir
+  draft: ['documents_received', 'cancelled'],
+  documents_received: ['validating', 'cancelled'],
+  validating: ['validated', 'documents_received', 'cancelled'],
+  validated: ['espelho_generated', 'cancelled'],
+  espelho_generated: ['sent_to_fenicia', 'cancelled'],
+  sent_to_fenicia: ['li_pending', 'completed', 'cancelled'],
+  li_pending: ['completed', 'cancelled'],
+  completed: [],
+  cancelled: ['draft'], // reabrir
 };
 ```
 
@@ -743,13 +780,16 @@ const TRANSITIONS = {
 ```typescript
 const GUARDS = {
   'documents_received -> validating': (process) =>
-    process.documents.filter(d => ['invoice','packing_list','ohbl'].includes(d.type)).length >= 3,
+    process.documents.filter((d) => ['invoice', 'packing_list', 'ohbl'].includes(d.type)).length >=
+    3,
   'validated -> espelho_generated': (process) =>
-    process.validationResults.filter(r => r.status === 'failed' && !r.resolvedManually).length === 0,
+    process.validationResults.filter((r) => r.status === 'failed' && !r.resolvedManually).length ===
+    0,
 };
 ```
 
 **Migração:**
+
 - Substituir todos os `.set({ status })` por `stateMachine.transition(processId, newStatus)`
 - Logar transições em `audit_logs` automaticamente
 - Emitir evento `process.status.changed` em cada transição
@@ -800,14 +840,14 @@ src/shared/events/
 
 **Eventos definidos:**
 
-| Evento | Emitido por | Handlers |
-|---|---|---|
-| `document.uploaded` | documents/orchestrator | AI extraction, Drive upload, Sheets sync |
-| `document.parsed` | AI handler | Status update, validation trigger |
-| `validation.completed` | validation/orchestrator | Alerts, email drafts, Chat, Drive |
-| `process.status.changed` | state-machine | Audit, follow-up, Sheets sync |
-| `espelho.generated` | espelhos/service | Drive upload, status update |
-| `alert.created` | alerts/service | Google Chat webhook |
+| Evento                   | Emitido por             | Handlers                                 |
+| ------------------------ | ----------------------- | ---------------------------------------- |
+| `document.uploaded`      | documents/orchestrator  | AI extraction, Drive upload, Sheets sync |
+| `document.parsed`        | AI handler              | Status update, validation trigger        |
+| `validation.completed`   | validation/orchestrator | Alerts, email drafts, Chat, Drive        |
+| `process.status.changed` | state-machine           | Audit, follow-up, Sheets sync            |
+| `espelho.generated`      | espelhos/service        | Drive upload, status update              |
+| `alert.created`          | alerts/service          | Google Chat webhook                      |
 
 ---
 
@@ -845,27 +885,27 @@ CREATE INDEX idx_job_runs_name_status ON job_runs(job_name, status);
 // Health check rico
 app.get('/health/ready', async (req, res) => {
   const checks = await Promise.allSettled([
-    db.execute(sql`SELECT 1`),           // postgres
+    db.execute(sql`SELECT 1`), // postgres
     fetch(OPENROUTER_URL, { signal: AbortSignal.timeout(5000) }), // AI
-    driveService.isConfigured(),          // Google Drive
-    sheetsService.isConfigured(),         // Google Sheets
+    driveService.isConfigured(), // Google Drive
+    sheetsService.isConfigured(), // Google Sheets
   ]);
   const results = { postgres, openrouter, drive, sheets };
-  const healthy = checks.every(c => c.status === 'fulfilled');
+  const healthy = checks.every((c) => c.status === 'fulfilled');
   res.status(healthy ? 200 : 503).json({ status: healthy ? 'ready' : 'degraded', checks: results });
 });
 ```
 
 ### Semana 2: Resiliência
 
-| Integração | Timeout | Retries | Ação em falha |
-|---|---|---|---|
-| OpenRouter AI | 60s | 1 (modelo alternativo) | Log + flag `needs_review` |
-| Google Drive | 30s | 2 (exponential backoff) | Log + continua sem Drive |
-| Google Sheets | 30s | 2 | Log + continua sem sync |
-| Odoo XML-RPC | 15s | 1 (re-auth + retry) | Log + skip check |
-| SMTP | 30s | 0 (via fila futura) | Mark `failed` + alert |
-| Google Chat | 10s | 1 | Log + continua |
+| Integração    | Timeout | Retries                 | Ação em falha             |
+| ------------- | ------- | ----------------------- | ------------------------- |
+| OpenRouter AI | 60s     | 1 (modelo alternativo)  | Log + flag `needs_review` |
+| Google Drive  | 30s     | 2 (exponential backoff) | Log + continua sem Drive  |
+| Google Sheets | 30s     | 2                       | Log + continua sem sync   |
+| Odoo XML-RPC  | 15s     | 1 (re-auth + retry)     | Log + skip check          |
+| SMTP          | 30s     | 0 (via fila futura)     | Mark `failed` + alert     |
+| Google Chat   | 10s     | 1                       | Log + continua            |
 
 ```typescript
 // Odoo session re-auth
@@ -897,14 +937,14 @@ async function rateLimiter(key, maxAttempts, windowSec) {
 }
 ```
 
-| Endpoint | Limite | Janela |
-|---|---|---|
-| `/auth/login` | 5 | 15 min |
-| `/auth/google` | 10 | 15 min |
-| `/ai/*` | 30 | 1 min |
-| `/documents/upload` | 10 | 1 min |
-| `/settings/*` | 30 | 1 min |
-| `/*` (global) | 200 | 1 min |
+| Endpoint            | Limite | Janela |
+| ------------------- | ------ | ------ |
+| `/auth/login`       | 5      | 15 min |
+| `/auth/google`      | 10     | 15 min |
+| `/ai/*`             | 30     | 1 min  |
+| `/documents/upload` | 10     | 1 min  |
+| `/settings/*`       | 30     | 1 min  |
+| `/*` (global)       | 200    | 1 min  |
 
 ### Semana 4: Monitoramento
 
@@ -949,9 +989,9 @@ CREATE INDEX idx_ai_requests_created ON ai_requests(created_at);
 ```typescript
 // Fallback chain
 const FALLBACK_CHAIN = {
-  'extract': ['google/gemini-2.0-flash-001', 'anthropic/claude-sonnet-4', null],
-  'anomaly': ['anthropic/claude-sonnet-4', 'google/gemini-2.0-flash-001', null],
-  'email':   ['google/gemini-2.0-flash-001', null],
+  extract: ['google/gemini-2.0-flash-001', 'anthropic/claude-sonnet-4', null],
+  anomaly: ['anthropic/claude-sonnet-4', 'google/gemini-2.0-flash-001', null],
+  email: ['google/gemini-2.0-flash-001', null],
 };
 
 async function callWithFallback(type, prompt, input) {
@@ -1009,7 +1049,9 @@ CREATE TABLE ai_review_queue (
 // Error boundary global
 class AppErrorBoundary extends React.Component {
   state = { hasError: false, error: null };
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
   render() {
     if (this.state.hasError) return <ErrorFallback error={this.state.error} />;
     return this.props.children;
@@ -1086,30 +1128,30 @@ features/processes/
 
 ## Arquitetura
 
-| App | Stack | Porta Dev | Porta Prod |
-|-----|-------|-----------|------------|
-| `apps/api` | Express + Drizzle + PostgreSQL | 3001 | 3050 |
-| `apps/web` | React + Vite + Tailwind | 8080 | 8085 |
-| `apps/cert-api` | Python FastAPI | 8002 | 8002 |
+| App             | Stack                          | Porta Dev | Porta Prod |
+| --------------- | ------------------------------ | --------- | ---------- |
+| `apps/api`      | Express + Drizzle + PostgreSQL | 3001      | 3050       |
+| `apps/web`      | React + Vite + Tailwind        | 8080      | 8085       |
+| `apps/cert-api` | Python FastAPI                 | 8002      | 8002       |
 
 ## Integrações Externas
 
-| Serviço | Uso | Timeout atual |
-|---------|-----|---------------|
-| OpenRouter AI | Extração, anomalias, drafts | Nenhum |
-| Google Drive | Upload documentos/espelhos | Default SDK |
-| Google Sheets | Sync bidirecional Follow-Up | Default SDK |
-| Google Groups | Controle de acesso | Default SDK |
-| Gmail API / IMAP | Ingestão automática | Default SDK |
-| Google Chat | Webhooks de alertas | Default SDK |
-| Odoo XML-RPC | Validação de produtos | Nenhum |
-| Nodemailer SMTP | Envio de emails | Default |
+| Serviço          | Uso                         | Timeout atual |
+| ---------------- | --------------------------- | ------------- |
+| OpenRouter AI    | Extração, anomalias, drafts | Nenhum        |
+| Google Drive     | Upload documentos/espelhos  | Default SDK   |
+| Google Sheets    | Sync bidirecional Follow-Up | Default SDK   |
+| Google Groups    | Controle de acesso          | Default SDK   |
+| Gmail API / IMAP | Ingestão automática         | Default SDK   |
+| Google Chat      | Webhooks de alertas         | Default SDK   |
+| Odoo XML-RPC     | Validação de produtos       | Nenhum        |
+| Nodemailer SMTP  | Envio de emails             | Default       |
 
 ## Jobs Agendados
 
-| Job | Horário | Status |
-|-----|---------|--------|
-| Deadline Check | 08:00 diário | Sem lock, sem alerting |
-| Stalled Process | 09:00 diário | N+1, sem lock |
-| Email Check | */5 min | Lock in-memory |
-| Email Double-Check | 22:00 seg-sex | Lock compartilhado |
+| Job                | Horário       | Status                 |
+| ------------------ | ------------- | ---------------------- |
+| Deadline Check     | 08:00 diário  | Sem lock, sem alerting |
+| Stalled Process    | 09:00 diário  | N+1, sem lock          |
+| Email Check        | \*/5 min      | Lock in-memory         |
+| Email Double-Check | 22:00 seg-sex | Lock compartilhado     |

@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -17,6 +17,16 @@ interface CheckResult {
 
 export default function ncmBlDescription(input: CheckInput): CheckResult {
   const checkName = 'ncm-bl-description';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV x BL',
+      message: 'aguardando INV',
+    };
+  }
+
   const items = input.invoiceData?.items as Array<Record<string, any>> | undefined;
   const cargoDescription = input.blData?.cargoDescription ?? '';
 
@@ -75,9 +85,13 @@ export default function ncmBlDescription(input: CheckInput): CheckResult {
     };
   }
 
+  // NOTE: compara prefixo NCM numerico (4 digitos) contra o texto livre da
+  // descricao de carga do BL — o BL raramente cita NCM, entao a ausencia e
+  // estrutural e nao indica erro documental real. Rebaixado de 'failed' para
+  // 'warning' para nao disparar correcao/alerta critico indevido (#9).
   return {
     checkName,
-    status: 'failed',
+    status: 'warning',
     expectedValue: [...ncmPrefixes].join(', '),
     actualValue: `Ausentes: ${missingPrefixes.join(', ')}`,
     documentsCompared: 'INV x BL',

@@ -1,3 +1,5 @@
+import { normalizeItemCode } from '../utils/item-code-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -8,7 +10,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -39,6 +41,15 @@ function fuzzyMatch(a: string, b: string): boolean {
 export default function itemLevelMatch(input: CheckInput): CheckResult {
   const checkName = 'item-level-match';
 
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV vs PL',
+      message: 'aguardando INV',
+    };
+  }
+
   const invItems = input.invoiceData?.items as Array<Record<string, any>> | undefined;
   const plItems = input.packingListData?.items as Array<Record<string, any>> | undefined;
 
@@ -54,16 +65,17 @@ export default function itemLevelMatch(input: CheckInput): CheckResult {
   const issues: string[] = [];
   const warnings: string[] = [];
 
-  // Build maps by itemCode
+  // Build maps by normalized itemCode (uppercase, no separators) so cosmetic
+  // differences like "PI 7752Y" / "pi-7752y" / "PI.7752Y" do not flag failed.
   const invMap = new Map<string, Record<string, any>>();
   for (const item of invItems) {
-    const code = String(item.itemCode ?? item.code ?? '').trim();
+    const code = normalizeItemCode(item.itemCode ?? item.code);
     if (code) invMap.set(code, item);
   }
 
   const plMap = new Map<string, Record<string, any>>();
   for (const item of plItems) {
-    const code = String(item.itemCode ?? item.code ?? '').trim();
+    const code = normalizeItemCode(item.itemCode ?? item.code);
     if (code) plMap.set(code, item);
   }
 

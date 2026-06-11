@@ -1,11 +1,10 @@
-import { eq, sql, count, desc, and, gte, lte, ne, isNull } from 'drizzle-orm';
+import { eq, sql, count, desc, and, gte, ne } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   importProcesses,
   alerts,
   followUpTracking,
   validationResults,
-  espelhos,
   currencyExchanges,
   users,
 } from '../../shared/database/schema.js';

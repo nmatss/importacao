@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
+const { mockDb, queryQueue, txQueue } = createMockDb();
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -33,6 +33,10 @@ vi.mock('../../../shared/utils/logger.js', () => ({
 
 vi.mock('../../../shared/state-machine/process-states.js', () => ({
   assertTransition: vi.fn(),
+}));
+
+vi.mock('../../../shared/utils/process-events.js', () => ({
+  recordProcessEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock allChecks to return predictable results
@@ -81,22 +85,23 @@ describe('validationService', () => {
 
   describe('runAllChecks()', () => {
     it('should throw error for invalid processId', async () => {
-      await expect(validationService.runAllChecks(NaN)).rejects.toThrow(
-        'ID do processo invalido',
-      );
+      await expect(validationService.runAllChecks(NaN)).rejects.toThrow('ID do processo invalido');
     });
 
     it('should throw NotFoundError for non-existent process', async () => {
       // select process returns empty
       queryQueue.push(createResolvedChain([]));
 
-      await expect(validationService.runAllChecks(999)).rejects.toThrow(
-        'nao encontrado',
-      );
+      await expect(validationService.runAllChecks(999)).rejects.toThrow('nao encontrado');
     });
 
     it('should run all checks and store results', async () => {
-      const mockProcess = { id: 1, processCode: 'IMP-001', status: 'documents_received', correctionStatus: null };
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
 
       // 1. select process
       queryQueue.push(createResolvedChain([mockProcess]));
@@ -130,16 +135,21 @@ describe('validationService', () => {
     });
 
     it('should set status to validated when no failures', async () => {
-      const mockProcess = { id: 1, processCode: 'IMP-001', status: 'documents_received', correctionStatus: null };
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
 
       queryQueue.push(createResolvedChain([mockProcess])); // process
-      queryQueue.push(createResolvedChain([]));             // docs
-      queryQueue.push(createResolvedChain([]));             // followUp
-      queryQueue.push(createResolvedChain(undefined));      // update to validating
-      txQueue.push(createResolvedChain(undefined));         // tx delete
-      txQueue.push(createResolvedChain(undefined));         // tx insert
-      queryQueue.push(createResolvedChain(undefined));      // update to validated
-      queryQueue.push(createResolvedChain(undefined));      // update followUp
+      queryQueue.push(createResolvedChain([])); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update to validated
+      queryQueue.push(createResolvedChain(undefined)); // update followUp
 
       const results = await validationService.runAllChecks(1);
 
@@ -152,15 +162,20 @@ describe('validationService', () => {
       (allChecks as any).length = 0;
       (allChecks as any).push(mockFailingCheck);
 
-      const mockProcess = { id: 1, processCode: 'IMP-001', status: 'documents_received', correctionStatus: null };
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
 
       queryQueue.push(createResolvedChain([mockProcess])); // process
-      queryQueue.push(createResolvedChain([]));             // docs
-      queryQueue.push(createResolvedChain([]));             // followUp
-      queryQueue.push(createResolvedChain(undefined));      // update to validating
-      txQueue.push(createResolvedChain(undefined));         // tx delete
-      txQueue.push(createResolvedChain(undefined));         // tx insert
-      queryQueue.push(createResolvedChain(undefined));      // update correctionStatus
+      queryQueue.push(createResolvedChain([])); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update correctionStatus
 
       const results = await validationService.runAllChecks(1);
 
@@ -191,17 +206,41 @@ describe('validationService', () => {
   });
 
   describe('resolveManually()', () => {
-    it('should update result and log audit', async () => {
-      const mockUpdated = {
+    it('should require a resolution note', async () => {
+      await expect(validationService.resolveManually(5, 3, '   ')).rejects.toThrow('obrigatoria');
+    });
+
+    it('should snapshot divergent value, store note and log detailed audit', async () => {
+      const mockCurrent = {
         id: 5,
+        processId: 1,
+        checkName: 'fob-value-match',
+        status: 'failed',
+        actualValue: '900',
+        expectedValue: '1000',
+        resolvedManually: false,
+      };
+      const mockUpdated = {
+        ...mockCurrent,
         resolvedManually: true,
         resolvedBy: 3,
         resolvedAt: new Date(),
+        resolutionNote: 'Conferido manualmente',
       };
 
+      // 1. select current row
+      queryQueue.push(createResolvedChain([mockCurrent]));
+      // 2. update + returning
       queryQueue.push(createResolvedChain([mockUpdated]));
+      // 3. recompute: select all results (still has another unresolved failed → no promotion)
+      queryQueue.push(
+        createResolvedChain([
+          mockUpdated,
+          { id: 6, processId: 1, status: 'failed', resolvedManually: false },
+        ]),
+      );
 
-      const result = await validationService.resolveManually(5, 3);
+      const result = await validationService.resolveManually(5, 3, 'Conferido manualmente');
 
       expect(result).toEqual(mockUpdated);
       expect(auditService.log).toHaveBeenCalledWith(
@@ -209,9 +248,53 @@ describe('validationService', () => {
         'manual_resolution',
         'validation',
         5,
-        null,
+        expect.objectContaining({
+          processId: 1,
+          checkName: 'fob-value-match',
+          divergentValue: '900',
+          resolutionNote: 'Conferido manualmente',
+        }),
         null,
       );
+    });
+
+    it('should promote process to validated when all failed checks are resolved', async () => {
+      const mockCurrent = {
+        id: 5,
+        processId: 1,
+        checkName: 'fob-value-match',
+        status: 'failed',
+        actualValue: '900',
+        expectedValue: '1000',
+        resolvedManually: false,
+      };
+      const mockUpdated = { ...mockCurrent, resolvedManually: true, resolvedBy: 3 };
+
+      // 1. select current row
+      queryQueue.push(createResolvedChain([mockCurrent]));
+      // 2. update + returning
+      queryQueue.push(createResolvedChain([mockUpdated]));
+      // 3. recompute: select all results (only failed is now resolved)
+      queryQueue.push(createResolvedChain([mockUpdated]));
+      // 4. select process (status validating, pending_correction)
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            processCode: 'IMP-001',
+            brand: 'X',
+            status: 'validating',
+            correctionStatus: 'pending_correction',
+          },
+        ]),
+      );
+      // 5. update process to validated
+      queryQueue.push(createResolvedChain(undefined));
+
+      await validationService.resolveManually(5, 3, 'Conferido manualmente');
+
+      // process update (to validated) was issued
+      expect(mockDb.update).toHaveBeenCalled();
     });
   });
 });

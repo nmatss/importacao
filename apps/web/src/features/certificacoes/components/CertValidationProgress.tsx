@@ -18,6 +18,10 @@ export function CertValidationProgress({
   const [status, setStatus] = useState<'running' | 'complete' | 'error'>('running');
   const logRef = useRef<HTMLDivElement>(null);
 
+  // Latest-ref: mantém o callback atualizado sem reabrir o stream SSE a cada render.
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     if (!runId) return;
 
@@ -31,7 +35,7 @@ export function CertValidationProgress({
         setEvents((prev) => [...prev, data]);
       } else if (data.type === 'complete') {
         setStatus('complete');
-        onComplete?.(data.summary);
+        onCompleteRef.current?.(data.summary);
       } else if (data.type === 'error') {
         setStatus('error');
       }

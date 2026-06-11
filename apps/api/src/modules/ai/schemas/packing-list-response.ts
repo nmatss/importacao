@@ -8,6 +8,8 @@ const confidenceField = <T extends z.ZodTypeAny>(valueSchema: T) =>
 
 const packingListItemSchema = z.object({
   itemCode: confidenceField(z.string()),
+  // EAN/GTIN barcode (8/12/13/14 digits) — only when printed on the document.
+  ean: confidenceField(z.string()).optional(),
   description: confidenceField(z.string()),
   color: confidenceField(z.string()).optional(),
   size: confidenceField(z.string()).optional(),

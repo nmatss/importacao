@@ -1,4 +1,4 @@
-import { and, eq, ne, sql, isNotNull } from 'drizzle-orm';
+import { and, eq, ne, isNotNull } from 'drizzle-orm';
 import { db } from '../shared/database/connection.js';
 import { importProcesses, currencyExchanges } from '../shared/database/schema.js';
 import { alertService } from '../modules/alerts/service.js';
@@ -8,13 +8,17 @@ export async function checkDeadlines() {
   logger.info('Running deadline check job');
 
   // Check LI deadlines
-  const liProcesses = await db.select().from(importProcesses)
-    .where(and(
-      eq(importProcesses.hasLiItems, true),
-      ne(importProcesses.status, 'completed'),
-      ne(importProcesses.status, 'cancelled'),
-      isNotNull(importProcesses.shipmentDate),
-    ));
+  const liProcesses = await db
+    .select()
+    .from(importProcesses)
+    .where(
+      and(
+        eq(importProcesses.hasLiItems, true),
+        ne(importProcesses.status, 'completed'),
+        ne(importProcesses.status, 'cancelled'),
+        isNotNull(importProcesses.shipmentDate),
+      ),
+    );
 
   const now = new Date();
 
@@ -51,7 +55,9 @@ export async function checkDeadlines() {
   }
 
   // Check currency exchange payment deadlines
-  const exchanges = await db.select().from(currencyExchanges)
+  const exchanges = await db
+    .select()
+    .from(currencyExchanges)
     .where(isNotNull(currencyExchanges.paymentDeadline));
 
   for (const exchange of exchanges) {

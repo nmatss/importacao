@@ -3,8 +3,10 @@ import { checkDeadlines } from './deadline-check.js';
 import { checkStalledProcesses } from './stalled-process.js';
 import { checkEmails, doubleCheckEmails } from './email-check.js';
 import { runLogisticSync } from './logistic-sync.js';
+import { runFinancialCheck } from './financial-check.js';
 import { logger } from '../shared/utils/logger.js';
 import { alertService } from '../modules/alerts/service.js';
+import { preConsService } from '../modules/pre-cons/service.js';
 
 async function handleCronError(jobName: string, error: unknown): Promise<void> {
   const errorMessage = error instanceof Error ? error.message : String(error);
@@ -32,6 +34,19 @@ export function startScheduler() {
         await checkDeadlines();
       } catch (error) {
         await handleCronError('deadline-check', error);
+      }
+    },
+    tz,
+  );
+
+  // Daily at 8:30 AM - Financial check (invoice baixa, seguro, demurrage)
+  cron.schedule(
+    '30 8 * * *',
+    async () => {
+      try {
+        await runFinancialCheck();
+      } catch (error) {
+        await handleCronError('financial-check', error);
       }
     },
     tz,
@@ -90,7 +105,23 @@ export function startScheduler() {
     tz,
   );
 
+  // Every 6 hours - Sync Pre-Cons spreadsheet from Google Drive (no-op when unconfigured)
+  cron.schedule(
+    '0 */6 * * *',
+    async () => {
+      try {
+        const result = await preConsService.syncFromDrive();
+        if (result.skipped) {
+          logger.info({ reason: result.reason }, 'Pre-Cons drive sync skipped');
+        }
+      } catch (error) {
+        await handleCronError('pre-cons-drive-sync', error);
+      }
+    },
+    tz,
+  );
+
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
   );
 }

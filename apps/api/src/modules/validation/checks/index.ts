@@ -36,7 +36,7 @@ export interface CheckInput {
 
 export interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;

@@ -112,7 +112,7 @@ export const alertService = {
             .where(eq(alerts.id, alert.id));
         }
       }
-    } catch (error) {
+    } catch {
       logger.error({ alertId: alert.id }, 'Failed to send alert to Google Chat');
     }
 
@@ -138,6 +138,26 @@ export const alertService = {
           eq(alerts.processId, processId),
           eq(alerts.title, title),
           sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
+        ),
+      )
+      .limit(1);
+    return !!existing;
+  },
+
+  /**
+   * Dedupe forte para jobs recorrentes: existe alerta NÃO reconhecido com o
+   * mesmo título para o processo (sem janela de tempo)? Evita recriar o mesmo
+   * alerta a cada execução diária enquanto ninguém o trata.
+   */
+  async hasActiveAlert(processId: number, title: string): Promise<boolean> {
+    const [existing] = await db
+      .select({ id: alerts.id })
+      .from(alerts)
+      .where(
+        and(
+          eq(alerts.processId, processId),
+          eq(alerts.title, title),
+          eq(alerts.acknowledged, false),
         ),
       )
       .limit(1);

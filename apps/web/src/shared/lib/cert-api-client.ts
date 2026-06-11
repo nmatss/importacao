@@ -227,7 +227,14 @@ async function certFetch<T = unknown>(path: string, options?: RequestInit): Prom
     },
   });
   if (!res.ok) {
-    throw new Error(`Erro na API: ${res.status} ${res.statusText}`);
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.clone().json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // keep status text
+    }
+    throw new Error(`Erro na API: ${detail}`);
   }
   return res.json();
 }
@@ -415,6 +422,106 @@ export function exportCertProductsExcel(params?: { brand?: string; status?: stri
   if (params?.status) query.set('status', params.status);
   const qs = query.toString();
   return `${CERT_BASE}/api/reports/export${qs ? `?${qs}` : ''}`;
+}
+
+// ---------- Certificates (cadastro + escrita no Linx) ----------
+
+export type LinxStatus = 'pending' | 'applied' | 'disabled' | 'error';
+
+export interface CertCertificate {
+  id: string;
+  sku: string;
+  brand: string;
+  produto_codigo?: string | null;
+  validade_certificado?: string | null;
+  vencimento_licenciamento?: string | null;
+  numero_certificado?: string | null;
+  ocp?: string | null;
+  orgao_certificador?: string | null;
+  pdf_filename?: string | null;
+  linx_status: LinxStatus;
+  linx_error?: string | null;
+  linx_detail?: Array<{ field: string; prop: string; valor?: string; action: string }> | null;
+  linx_applied_at?: string | null;
+  created_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: unknown;
+}
+
+export interface CertCertificatesResponse {
+  items: CertCertificate[];
+  total: number;
+  page: number;
+  per_page: number;
+  total_pages: number;
+}
+
+export interface CreateCertificateInput {
+  sku: string;
+  brand: string;
+  validade_certificado?: string;
+  vencimento_licenciamento?: string;
+  numero_certificado?: string;
+  ocp?: string;
+  orgao_certificador?: string;
+  created_by?: string;
+  pdf?: File | null;
+}
+
+export async function createCertificate(input: CreateCertificateInput): Promise<CertCertificate> {
+  const fd = new FormData();
+  fd.set('sku', input.sku);
+  fd.set('brand', input.brand);
+  if (input.validade_certificado) fd.set('validade_certificado', input.validade_certificado);
+  if (input.vencimento_licenciamento)
+    fd.set('vencimento_licenciamento', input.vencimento_licenciamento);
+  if (input.numero_certificado) fd.set('numero_certificado', input.numero_certificado);
+  if (input.ocp) fd.set('ocp', input.ocp);
+  if (input.orgao_certificador) fd.set('orgao_certificador', input.orgao_certificador);
+  if (input.created_by) fd.set('created_by', input.created_by);
+  if (input.pdf) fd.set('pdf', input.pdf);
+
+  // multipart: let the browser set the Content-Type boundary (do not use certFetch)
+  const res = await fetch(`${CERT_BASE}/api/certificates`, { method: 'POST', body: fd });
+  if (!res.ok) {
+    let detail = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = String(body.detail);
+    } catch {
+      // ignore — keep status text
+    }
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+export async function fetchCertificates(params?: {
+  page?: number;
+  per_page?: number;
+  sku?: string;
+  brand?: string;
+  linx_status?: string;
+}): Promise<CertCertificatesResponse> {
+  const query = new URLSearchParams();
+  if (params?.page) query.set('page', String(params.page));
+  if (params?.per_page) query.set('per_page', String(params.per_page));
+  if (params?.sku) query.set('sku', params.sku);
+  if (params?.brand) query.set('brand', params.brand);
+  if (params?.linx_status) query.set('linx_status', params.linx_status);
+  const qs = query.toString();
+  return certFetch<CertCertificatesResponse>(`/api/certificates${qs ? `?${qs}` : ''}`);
+}
+
+export async function retryCertificateLinx(id: string): Promise<CertCertificate> {
+  return certFetch<CertCertificate>(`/api/certificates/${encodeURIComponent(id)}/retry-linx`, {
+    method: 'POST',
+  });
+}
+
+export function getCertificatePdfUrl(id: string): string {
+  return `${CERT_BASE}/api/certificates/${encodeURIComponent(id)}/pdf`;
 }
 
 // ---------- Reports ----------

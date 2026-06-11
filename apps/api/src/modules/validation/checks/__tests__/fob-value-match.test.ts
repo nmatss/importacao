@@ -49,9 +49,9 @@ describe('fob-calculation check', () => {
     expect(result.status).toBe('warning');
   });
 
-  it('should warn when invoice data is missing', () => {
+  it('should skip when invoice data is missing', () => {
     const result = fobCalculation({});
-    expect(result.status).toBe('warning');
+    expect(result.status).toBe('skipped');
   });
 
   it('should pass within proportional tolerance for large values', () => {

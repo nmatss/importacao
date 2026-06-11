@@ -8,6 +8,8 @@ const confidenceField = <T extends z.ZodTypeAny>(valueSchema: T) =>
 
 const invoiceItemSchema = z.object({
   itemCode: confidenceField(z.string()),
+  // EAN/GTIN barcode (8/12/13/14 digits) — only when printed on the document.
+  ean: confidenceField(z.string()).optional(),
   description: confidenceField(z.string()),
   color: confidenceField(z.string()).optional(),
   size: confidenceField(z.string()).optional(),
@@ -17,6 +19,8 @@ const invoiceItemSchema = z.object({
   ncmCode: confidenceField(z.string()).optional(),
   unitType: confidenceField(z.string()).optional(),
   manufacturer: confidenceField(z.string()).optional(),
+  // Item gratuito (FOC/sample/brinde) — não entra na soma do totalFobValue.
+  isFreeOfCharge: confidenceField(z.boolean()).optional(),
 });
 
 const paymentTermsValue = z.object({
@@ -31,8 +35,10 @@ export const invoiceResponseSchema = z.object({
   invoiceDate: confidenceField(z.string()),
   exporterName: confidenceField(z.string()),
   exporterAddress: confidenceField(z.string()),
+  exporterTaxId: confidenceField(z.string()).optional(),
   importerName: confidenceField(z.string()),
   importerAddress: confidenceField(z.string()),
+  importerCnpj: confidenceField(z.string()).optional(),
   incoterm: confidenceField(z.string()),
   currency: confidenceField(z.string()),
   portOfLoading: confidenceField(z.string()),

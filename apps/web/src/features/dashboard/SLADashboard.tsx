@@ -9,13 +9,11 @@ import {
   Clock,
   Users,
   Banknote,
-  ChevronDown,
   ArrowUpDown,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 
 // ── Types ───────────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -45,6 +45,16 @@ function detectUnitType(description: string): string {
 
 export default function unitTypeValidation(input: CheckInput): CheckResult {
   const checkName = 'unit-type-validation';
+
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV',
+      message: 'aguardando INV',
+    };
+  }
+
   const invoiceItems = input.invoiceData?.items as Array<Record<string, any>> | undefined;
 
   if (!invoiceItems || invoiceItems.length === 0) {

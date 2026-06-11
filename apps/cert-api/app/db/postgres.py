@@ -172,6 +172,40 @@ def ensure_tables() -> None:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS cert_stock_sku_idx ON cert_stock(sku)")
 
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS cert_certificates (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                sku TEXT NOT NULL,
+                brand TEXT NOT NULL DEFAULT '',
+                produto_codigo TEXT,
+                validade_certificado DATE,
+                vencimento_licenciamento DATE,
+                numero_certificado TEXT,
+                ocp TEXT,
+                orgao_certificador TEXT,
+                pdf_filename TEXT,
+                linx_status TEXT NOT NULL DEFAULT 'pending',
+                linx_error TEXT,
+                linx_detail JSONB,
+                linx_applied_at TIMESTAMPTZ,
+                created_by TEXT,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS cert_certificates_sku_idx ON cert_certificates(sku)"
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS cert_certificates_created_idx "
+            "ON cert_certificates(created_at DESC)"
+        )
+        # Reprocessos em massa (Reenviar ao Linx) filtram por marca + situacao do Linx
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS cert_certificates_brand_linx_idx "
+            "ON cert_certificates(brand, linx_status)"
+        )
+
     # Column migrations for existing deployments
     for col, coltype in [
         ("certification_type", "TEXT DEFAULT ''"),

@@ -207,6 +207,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
   const [filter, setFilter] = useState<'all' | 'failed' | 'warning' | 'passed'>('all');
+  // Manual-resolution inline form: which check is being resolved + its note.
+  const [resolveTarget, setResolveTarget] = useState<number | null>(null);
+  const [resolveNote, setResolveNote] = useState('');
+  const [resolvingId, setResolvingId] = useState<number | null>(null);
 
   const { data: emailSignatures } = useApiQuery<EmailSignatureOption[]>(
     ['email-signatures'],
@@ -226,10 +230,19 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     `/api/validation/${processId}`,
   );
 
+  // Skipped checks are blocked by a missing source document — they are not
+  // errors and are surfaced in a separate collapsible section, never in the
+  // main list, to keep the checklist readable.
+  const skippedChecks = useMemo(
+    () => checks?.filter((c) => c.status === 'skipped') ?? [],
+    [checks],
+  );
+
   const filteredChecks = useMemo(() => {
     if (!checks) return [];
-    if (filter === 'all') return checks;
-    return checks.filter((c) => c.status === filter);
+    const visible = checks.filter((c) => c.status !== 'skipped');
+    if (filter === 'all') return visible;
+    return visible.filter((c) => c.status === filter);
   }, [checks, filter]);
 
   const failedCount = useMemo(
@@ -269,13 +282,28 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     }
   }, [processId]);
 
+  // Manual resolution is an audited override/acceptance of the divergence — it
+  // does NOT re-validate. A justification (resolution_note) is mandatory.
   const resolveManually = useCallback(
-    async (resultId: number) => {
+    async (resultId: number, resolutionNote: string) => {
+      const note = resolutionNote.trim();
+      if (!note) {
+        toast.error('Informe uma justificativa para o aceite manual.');
+        return;
+      }
+      setResolvingId(resultId);
       try {
-        await api.patch(`/api/validation/results/${resultId}/resolve`, { resolution: 'manual' });
+        await api.patch(`/api/validation/results/${resultId}/resolve`, {
+          resolution: 'manual',
+          resolution_note: note,
+        });
         queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+        setResolveTarget(null);
+        setResolveNote('');
       } catch (err: unknown) {
         toast.error(getErrorMessage(err));
+      } finally {
+        setResolvingId(null);
       }
     },
     [processId, queryClient],
@@ -342,7 +370,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     return <LoadingSpinner className="py-8" />;
   }
 
-  const totalCount = checks?.length ?? 0;
+  // Total of actionable checks (skipped are excluded — blocked, not failures).
+  const totalCount = checks?.filter((c) => c.status !== 'skipped').length ?? 0;
+  const skippedCount = skippedChecks.length;
   const progressPct = totalCount > 0 ? (passedCount / totalCount) * 100 : 0;
   const progressColor =
     progressPct > 80 ? 'bg-emerald-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-danger-500';
@@ -519,15 +549,65 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                         )}
                       </div>
                     )}
-                    {check.status === 'failed' && !check.resolvedManually && (
-                      <button
-                        onClick={() => resolveManually(check.id)}
-                        className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
-                      >
-                        <Wrench className="h-3 w-3" />
-                        Resolver Manualmente
-                      </button>
-                    )}
+                    {check.status === 'failed' &&
+                      !check.resolvedManually &&
+                      (resolveTarget === check.id ? (
+                        <div className="mt-2 space-y-2">
+                          <label className="flex items-center gap-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                            Justificativa do aceite manual
+                            <span className="text-danger-500">*</span>
+                            <span
+                              className="cursor-help text-slate-400"
+                              title="Aceite manual da divergencia — registra um override auditado. NAO revalida nem corrige os dados; apenas suprime o alerta com justificativa."
+                            >
+                              (?)
+                            </span>
+                          </label>
+                          <textarea
+                            value={resolveNote}
+                            onChange={(e) => setResolveNote(e.target.value)}
+                            rows={2}
+                            autoFocus
+                            placeholder="Ex.: divergencia aceita — peso confere com PL fisico conferido em 28/05."
+                            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => resolveManually(check.id, resolveNote)}
+                              disabled={resolvingId === check.id || !resolveNote.trim()}
+                              className="inline-flex items-center gap-1 rounded-md bg-primary-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-primary-700 disabled:opacity-50"
+                            >
+                              {resolvingId === check.id ? (
+                                <LoadingSpinner size="sm" />
+                              ) : (
+                                <Wrench className="h-3 w-3" />
+                              )}
+                              Confirmar aceite
+                            </button>
+                            <button
+                              onClick={() => {
+                                setResolveTarget(null);
+                                setResolveNote('');
+                              }}
+                              className="text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setResolveTarget(check.id);
+                            setResolveNote('');
+                          }}
+                          title="Aceite manual da divergencia — nao revalida"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+                        >
+                          <Wrench className="h-3 w-3" />
+                          Resolver Manualmente
+                        </button>
+                      ))}
                   </div>
                 </div>
               </div>
@@ -538,6 +618,44 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
           Nenhuma validacao executada ainda. Clique em "Executar Validacao" para iniciar.
         </p>
+      )}
+
+      {/* Skipped checks — blocked by a missing source document (collapsible) */}
+      {skippedCount > 0 && (
+        <details className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/60 dark:bg-slate-900/40">
+          <summary className="flex cursor-pointer items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800">
+            <Minus className="h-4 w-4 text-slate-400" />
+            Bloqueados por documento ausente
+            <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+              {skippedCount}
+            </span>
+            <span className="ml-auto text-[11px] font-normal text-slate-400">
+              Nao contam como erro
+            </span>
+          </summary>
+          <div className="grid grid-cols-1 gap-2 px-4 pb-4 pt-1 sm:grid-cols-2">
+            {skippedChecks.map((check) => (
+              <div
+                key={check.id}
+                className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 p-3"
+              >
+                <div className="flex items-start gap-2.5">
+                  <Minus className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      {checkLabel(check.checkName)}
+                    </p>
+                    {check.message && (
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                        {check.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Anomalies */}

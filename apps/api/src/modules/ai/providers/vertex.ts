@@ -26,13 +26,17 @@ const authState: VertexAuthState = { client: null };
 function getAuthClient(): { getAccessToken: () => Promise<string | null | undefined> } {
   if (authState.client) return authState.client;
 
-  // Reuse the Drive service-account credentials (Nicolas's setup uses a
-  // single GCP SA for Drive + Vertex).
-  const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  // Prefer a dedicated Vertex/Gemini service account (least privilege: this SA
+  // only needs roles/aiplatform.user). Falls back to the Drive SA so existing
+  // single-SA setups keep working unchanged.
+  const clientEmail =
+    process.env.GOOGLE_VERTEX_CLIENT_EMAIL || process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
+  const privateKey = (
+    process.env.GOOGLE_VERTEX_PRIVATE_KEY || process.env.GOOGLE_DRIVE_PRIVATE_KEY
+  )?.replace(/\\n/g, '\n');
   if (!clientEmail || !privateKey) {
     throw new Error(
-      'Vertex provider: GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY not configured (reuses Drive SA).',
+      'Vertex provider: set GOOGLE_VERTEX_CLIENT_EMAIL / GOOGLE_VERTEX_PRIVATE_KEY (or reuse GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY).',
     );
   }
   const client = new googleAuth.GoogleAuth({

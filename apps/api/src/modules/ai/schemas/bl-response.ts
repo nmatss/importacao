@@ -19,6 +19,8 @@ export const blResponseSchema = z.object({
   etd: confidenceField(z.string()),
   eta: confidenceField(z.string()),
   shipmentDate: confidenceField(z.string()),
+  // Data de EMISSÃO do BL ("Place and Date of Issue") — distinta de upload/atualização.
+  issueDate: confidenceField(z.string()).optional(),
   containerNumber: confidenceField(z.string()),
   sealNumber: confidenceField(z.string()),
   totalBoxes: confidenceField(z.number()),
@@ -28,6 +30,10 @@ export const blResponseSchema = z.object({
   freightCurrency: confidenceField(z.string()),
   containerType: confidenceField(z.string()).optional(),
   cargoDescription: confidenceField(z.string()),
+  // Espelham o Draft BL para que o BL Final também valide madeira/NCM/free time.
+  freeTime: confidenceField(z.number()).optional(),
+  woodDeclaration: confidenceField(z.boolean()).optional(),
+  ncmList: confidenceField(z.array(z.string())).optional(),
 });
 
 export type BLResponse = z.infer<typeof blResponseSchema>;

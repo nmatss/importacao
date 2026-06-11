@@ -39,9 +39,9 @@ describe('net-weight-match check', () => {
     expect(result.message).toContain('apenas um documento');
   });
 
-  it('should handle missing input gracefully', () => {
+  it('should skip when invoice data is missing', () => {
     const result = netWeightMatch({});
-    expect(result.status).toBe('warning');
+    expect(result.status).toBe('skipped');
   });
 
   it('should pass when weights are exactly equal', () => {

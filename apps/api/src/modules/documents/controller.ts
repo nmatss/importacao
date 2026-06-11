@@ -57,6 +57,20 @@ export const documentController = {
     }
   },
 
+  async getExtractionHistory(req: Request, res: Response) {
+    try {
+      const documentId = Number(req.params.id);
+      if (isNaN(documentId) || documentId <= 0) {
+        return sendError(res, 'ID do documento invalido', 400);
+      }
+      const history = await documentService.getExtractionHistory(documentId);
+      sendSuccess(res, history);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async getFile(req: Request, res: Response) {
     try {
       const resource = await documentService.getFileResource(Number(req.params.id));

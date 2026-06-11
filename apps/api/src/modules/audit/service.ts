@@ -1,4 +1,4 @@
-import { eq, desc, and, gte, lte, count, sql } from 'drizzle-orm';
+import { eq, desc, and, gte, lte, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { auditLogs, users } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';

@@ -1,7 +1,6 @@
 import { FileText, Paperclip, AlertTriangle, Inbox, User } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDateTime } from '@/shared/lib/utils';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { EmailLog } from '@/shared/types';
 

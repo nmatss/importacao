@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildEspelhoFromAiData } from '../utils/build-espelho.js';
+import { createEanIndex } from '../../espelhos/ean-lookup.js';
 
 describe('buildEspelhoFromAiData', () => {
   const inv = {
@@ -106,5 +107,118 @@ describe('buildEspelhoFromAiData', () => {
     const result = buildEspelhoFromAiData({ ...inv, items: [] }, pl, bl);
     expect(result.items).toHaveLength(0);
     expect(result.summary.totalBoxes).toBe(314);
+  });
+
+  describe('EAN-anchored join (groundwork #9)', () => {
+    const emptyIndex = createEanIndex([]);
+
+    it('joins by EAN when both sides have a valid one, even with diverging item codes', () => {
+      const invEan = {
+        ...inv,
+        items: [
+          {
+            itemCode: '10604232', // INV uses internal code...
+            ean: '7909692093303',
+            quantity: 100,
+            unitPrice: 5.5,
+            totalPrice: 550,
+          },
+        ],
+      };
+      const plEan = {
+        ...pl,
+        items: [
+          {
+            itemCode: 'MEIA-ESPORTE-34-39', // ...PL uses a free-form reference
+            ean: '7909 6920 93303', // formatted differently — must still match
+            boxQuantity: 77,
+            netWeight: 12,
+            grossWeight: 14,
+          },
+        ],
+      };
+      const { items } = buildEspelhoFromAiData(invEan, plEan, bl, { eanIndex: emptyIndex });
+      expect(items[0].caixasPorRef).toBe(77); // joined via EAN, not itemCode
+      expect(items[0].pesoLiquidoTotal).toBe(12);
+      expect(items[0].ean).toBe('7909692093303');
+      expect(items[0].eanSource).toBe('document');
+    });
+
+    it('treats an EAN with a bad check digit as absent and falls back to itemCode join', () => {
+      const invBad = {
+        ...inv,
+        items: [
+          {
+            itemCode: 'PI7752Y',
+            ean: '7909692093304', // invalid check digit — must not be used or emitted
+            quantity: 100,
+            unitPrice: 5.5,
+            totalPrice: 550,
+          },
+        ],
+      };
+      const { items } = buildEspelhoFromAiData(invBad, pl, bl, { eanIndex: emptyIndex });
+      expect(items[0].caixasPorRef).toBe(50); // matched 'PI 7752Y' via normalized code
+      expect(items[0].ean).toBe(null);
+      expect(items[0].eanSource).toBe(null);
+    });
+
+    it('inherits the EAN from the PL side when the invoice has none', () => {
+      const plWithEan = {
+        ...pl,
+        items: [{ ...pl.items[0], ean: '7891276565590' }, pl.items[1]],
+      };
+      const { items } = buildEspelhoFromAiData(inv, plWithEan, bl, { eanIndex: emptyIndex });
+      const pi = items.find((i) => i.codigo === 'PI7752Y')!;
+      expect(pi.ean).toBe('7891276565590');
+      expect(pi.eanSource).toBe('document');
+    });
+
+    it('enriches missing EAN from the Base EAN KB (eanSource: kb), never guessing ambiguous ones', () => {
+      const kbIndex = createEanIndex([
+        { ean: '7909692093303', product: '10604232', grade: '34 A 39', color: '100' },
+        { ean: '7909692093310', product: '10604232', grade: '40 A 44', color: '100' },
+        { ean: '96385074', product: 'AC2285Y', grade: null, color: null },
+      ]);
+      const invKb = {
+        ...inv,
+        items: [
+          { itemCode: 'AC2285Y', quantity: 50, unitPrice: 3.0, totalPrice: 150 }, // single EAN in KB
+          { itemCode: '10604232', quantity: 10, unitPrice: 1.0, totalPrice: 10 }, // ambiguous in KB
+          { itemCode: '10604232', size: '40 A 44', quantity: 5, unitPrice: 1.0, totalPrice: 5 },
+        ],
+      };
+      const { items } = buildEspelhoFromAiData(invKb, { items: [] }, bl, { eanIndex: kbIndex });
+
+      expect(items[0].ean).toBe('96385074');
+      expect(items[0].eanSource).toBe('kb');
+
+      expect(items[1].ean).toBe(null); // two KB candidates, no size → no guess
+      expect(items[1].eanSource).toBe(null);
+
+      expect(items[2].ean).toBe('7909692093310'); // disambiguated by size/grade
+      expect(items[2].eanSource).toBe('kb');
+    });
+
+    it('prefers the document EAN over the KB when both exist', () => {
+      const kbIndex = createEanIndex([
+        { ean: '96385074', product: 'PI7752Y', grade: null, color: null },
+      ]);
+      const invDoc = {
+        ...inv,
+        items: [
+          {
+            itemCode: 'PI7752Y',
+            ean: '7891276565590',
+            quantity: 100,
+            unitPrice: 5.5,
+            totalPrice: 550,
+          },
+        ],
+      };
+      const { items } = buildEspelhoFromAiData(invDoc, pl, bl, { eanIndex: kbIndex });
+      expect(items[0].ean).toBe('7891276565590');
+      expect(items[0].eanSource).toBe('document');
+    });
   });
 });

@@ -6,7 +6,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.config import CORS_ORIGINS, DATABASE_URL, SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY
-from app.routes import certifications, health, reports, schedules, stock
+from app.routes import certificates, certifications, health, reports, schedules, stock
 from app.routes.schedules import load_schedules_into_scheduler, scheduler
 from app.utils.auth import verify_api_key
 from app.utils.logging import log
@@ -29,6 +29,7 @@ app.add_middleware(
 
 app.include_router(health.router)
 app.include_router(certifications.router)
+app.include_router(certificates.router)
 app.include_router(schedules.router)
 app.include_router(stock.router)
 app.include_router(reports.router)

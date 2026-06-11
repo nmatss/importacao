@@ -21,6 +21,11 @@ CONTEXTO DO NEGOCIO:
 
 ATENCAO ESPECIAL:
 - "Shipped on Board" ou "On Board Date" = data real de embarque (shipmentDate)
+- issueDate = DATA DE EMISSAO do BL ("Place and Date of Issue", "Date of Issue", "Issued on", "Data de Emissao"). NAO confunda com shipmentDate/ETD/ETA nem com a data em que o arquivo foi recebido.
+- Procure por declaracao de MADEIRA (wood, wooden, fumigation, ISPM15, heat treatment) — comum em descricao da carga e marcas de embalagem
+- woodDeclaration = true se houver QUALQUER mencao a madeira/fumigacao/ISPM15
+- Extraia TODOS os codigos NCM encontrados na descricao da carga (formato XXXX.XX.XX) em ncmList
+- freeTime = numero de dias de free time mencionados no documento (ou null)
 - Container number: formato ISO 6346 = 4 letras + 7 numeros (ex: TCLU1234567)
 - Se houver mais de 1 container, liste todos separados por virgula
 - BL pode ser PDF escaneado (imagem) — extraia todo texto visivel
@@ -50,6 +55,7 @@ Responda com JSON estrito:
   "etd": { "value": "", "confidence": 0.0 },
   "eta": { "value": "", "confidence": 0.0 },
   "shipmentDate": { "value": "", "confidence": 0.0 },
+  "issueDate": { "value": "", "confidence": 0.0 },
   "containerNumber": { "value": "", "confidence": 0.0 },
   "sealNumber": { "value": "", "confidence": 0.0 },
   "totalBoxes": { "value": 0, "confidence": 0.0 },
@@ -58,7 +64,10 @@ Responda com JSON estrito:
   "freightValue": { "value": 0.0, "confidence": 0.0 },
   "freightCurrency": { "value": "", "confidence": 0.0 },
   "containerType": { "value": "", "confidence": 0.0 },
-  "cargoDescription": { "value": "", "confidence": 0.0 }
+  "cargoDescription": { "value": "", "confidence": 0.0 },
+  "freeTime": { "value": null, "confidence": 0.0 },
+  "woodDeclaration": { "value": false, "confidence": 0.0 },
+  "ncmList": { "value": [], "confidence": 0.0 }
 }
 
 REGRAS:
@@ -68,6 +77,10 @@ REGRAS:
 - Pesos em KG, CBM em metros cubicos
 - Se frete = "PREPAID" ou "COLLECT", coloque freightValue: null e freightCurrency com o texto
 - containerType: tipo do container (ex: "40HQ", "40NOR", "20GP", "LCL") — extrair do campo de container ou descricao
+- issueDate: data de emissao do BL em ISO 8601, ou null se nao constar
+- freeTime: numero inteiro de dias, ou null se nao mencionado
+- woodDeclaration: true se qualquer mencao a madeira/wood/fumigation/ISPM15
+- ncmList: array de strings com codigos NCM encontrados (ex: ["6109.10.00", "6110.20.10"])
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

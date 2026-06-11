@@ -155,6 +155,15 @@ ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
 success "Containers started."
 
 # ---------------------------------------------------------------------------
+# Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
+# ---------------------------------------------------------------------------
+info "[4.5/6] Applying pending SQL migrations..."
+ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/apply-pending-migrations.sh" 2>&1 || {
+  warn "Migrations falharam — rode manualmente: ${DEPLOY_DIR}/scripts/apply-pending-migrations.sh"
+  notify "WARN" "Deploy ${LOCAL_SHA:0:12}: migrations falharam, aplicar manualmente"
+}
+
+# ---------------------------------------------------------------------------
 # Health check loop
 # ---------------------------------------------------------------------------
 info "[5/6] Waiting for health check: ${HEALTH_ENDPOINT}"
@@ -202,7 +211,8 @@ notify "SUCCESS" "Deployed ${LOCAL_SHA:0:12} to ${SERVER}"
 # ---------------------------------------------------------------------------
 cat << 'MIGRATIONS_NOTE'
 
-REMINDER: Apply pending SQL migrations manually if not already done:
+NOTE: migrations já rodam automaticamente no passo [4.5/6]. O manual abaixo
+fica como fallback caso aquele passo tenha falhado:
 
   # 0011 (ALTER TYPE — MUST be manual, can't run in transaction)
   docker cp apps/api/drizzle/0011_proforma_invoice.sql importacao-postgres:/tmp/
@@ -215,6 +225,14 @@ REMINDER: Apply pending SQL migrations manually if not already done:
   # 0013 (CREATE TABLE — AI usage log, drives monthly budget cap)
   docker cp apps/api/drizzle/0013_ai_usage_log.sql importacao-postgres:/tmp/
   docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0013_ai_usage_log.sql
+
+  # 0014 (ADD COLUMN — validation_results.resolution_note, justificativa do aceite manual)
+  docker cp apps/api/drizzle/0014_validation_resolution_note.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0014_validation_resolution_note.sql
+
+  # 0015 (CREATE TABLE — historização de validações e extrações, auditoria regulatória)
+  docker cp apps/api/drizzle/0015_validation_history.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0015_validation_history.sql
 
   # OR run them all at once:
   /opt/importacao/scripts/apply-pending-migrations.sh
@@ -229,7 +247,9 @@ NEW ENV VARS (set in .env.production before restarting API):
   VIMBAR_SENDER_DOMAINS=                          # CSV — EMPTY = lock disabled (fail-closed)
   AUTO_GENERATE_ESPELHO=1
   AUTO_CLEAN_ITEM_CODES=1
-  GOOGLE_DRIVE_PRE_CONS_FOLDER_ID=                # ID of Drive folder with Pre-Cons xlsx
+  # Pasta criada em 2026-06-11 na área de importação do Drive ("Pre-Cons (sync
+  # portal importação)"); compartilhar com a SA n8n-automacao@n8n-grupo-unico
+  GOOGLE_DRIVE_PRE_CONS_FOLDER_ID=1OJmEV1GTI7vC0B-Uxb-btgQRMDu0530B
   # Vertex-only (leave blank until you wire it):
   # GOOGLE_VERTEX_PROJECT=
   # GOOGLE_VERTEX_LOCATION=us-central1

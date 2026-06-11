@@ -55,9 +55,9 @@ describe('ports-match check', () => {
     expect(result.status).toBe('passed');
   });
 
-  it('should handle missing input data', () => {
+  it('should skip when invoice data is missing', () => {
     const result = portsMatch({});
-    expect(result.status).toBe('warning');
+    expect(result.status).toBe('skipped');
   });
 
   it('should handle whitespace in port names', () => {
