@@ -4,6 +4,7 @@ import {
   LayoutDashboard,
   PlayCircle,
   Package,
+  FilePlus2,
   FileBarChart,
   CalendarClock,
   Settings,
@@ -13,7 +14,6 @@ import {
   ChevronLeft,
   ArrowLeft,
   Search,
-  ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
@@ -27,6 +27,7 @@ const navSections = [
       { to: '/certificacoes', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       { to: '/certificacoes/validacao', label: 'Validação', icon: PlayCircle },
       { to: '/certificacoes/produtos', label: 'Produtos', icon: Package },
+      { to: '/certificacoes/cadastro', label: 'Cadastrar Certificado', icon: FilePlus2 },
     ],
   },
   {

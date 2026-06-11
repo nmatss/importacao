@@ -27,6 +27,9 @@ deploy.log
 scripts/deploy.sh.backup
 .claude/worktrees/
 
+# Uploaded certificate PDFs (cert-api runtime data)
+apps/cert-api/certs/
+
 # Python bytecode (cert-api)
 __pycache__/
 *.py[cod]

@@ -1,0 +1,405 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import {
+  FilePlus2,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Loader2,
+  Upload,
+  RefreshCw,
+  FileText,
+} from 'lucide-react';
+import { SubmitButton } from '@/shared/components/SubmitButton';
+import { cn } from '@/shared/lib/utils';
+import {
+  createCertificate,
+  fetchCertificates,
+  retryCertificateLinx,
+  getCertificatePdfUrl,
+  type CertCertificate,
+  type LinxStatus,
+} from '@/shared/lib/cert-api-client';
+
+const BRANDS = [
+  { value: 'imaginarium', label: 'Imaginarium' },
+  { value: 'puket', label: 'Puket' },
+  { value: 'puket_escolares', label: 'Puket Escolares' },
+];
+
+const ORGAOS = ['INMETRO', 'ANATEL', 'ANVISA', 'Outro'];
+
+const LINX_BADGE: Record<LinxStatus, { label: string; cls: string }> = {
+  applied: {
+    label: 'Gravado no Linx',
+    cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  },
+  pending: {
+    label: 'Pendente',
+    cls: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+  },
+  disabled: {
+    label: 'Não gravado (Linx off)',
+    cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  },
+  error: {
+    label: 'Erro no Linx',
+    cls: 'bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300',
+  },
+};
+
+function LinxBadge({ status }: { status: LinxStatus }) {
+  const b = LINX_BADGE[status] ?? LINX_BADGE.pending;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium',
+        b.cls,
+      )}
+    >
+      {b.label}
+    </span>
+  );
+}
+
+const inputCls =
+  'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none';
+const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1';
+
+export default function CertCadastroPage() {
+  const [brand, setBrand] = useState('imaginarium');
+  const [sku, setSku] = useState('');
+  const [validade, setValidade] = useState('');
+  const [vencimento, setVencimento] = useState('');
+  const [numero, setNumero] = useState('');
+  const [ocp, setOcp] = useState('');
+  const [orgao, setOrgao] = useState('');
+  const [pdf, setPdf] = useState<File | null>(null);
+
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<CertCertificate | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const [recent, setRecent] = useState<CertCertificate[]>([]);
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
+  // e o converte para dd/mm/AAAA somente na escrita do Linx (_format_date).
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const hasPastDate =
+    (validade !== '' && validade < todayIso) || (vencimento !== '' && vencimento < todayIso);
+
+  async function loadRecent() {
+    try {
+      const data = await fetchCertificates({ per_page: 10 });
+      setRecent(data.items);
+    } catch {
+      // silencioso — lista é complementar
+    }
+  }
+
+  useEffect(() => {
+    loadRecent();
+  }, []);
+
+  function resetForm() {
+    setSku('');
+    setValidade('');
+    setVencimento('');
+    setNumero('');
+    setOcp('');
+    setOrgao('');
+    setPdf(null);
+  }
+
+  async function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setResult(null);
+
+    if (!sku.trim()) {
+      setError('Informe o SKU do produto.');
+      return;
+    }
+    if (!validade && !vencimento) {
+      setError(
+        'Informe ao menos uma data (validade do certificado ou vencimento do licenciamento).',
+      );
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const created = await createCertificate({
+        sku: sku.trim(),
+        brand,
+        validade_certificado: validade || undefined,
+        vencimento_licenciamento: vencimento || undefined,
+        numero_certificado: numero || undefined,
+        ocp: ocp || undefined,
+        orgao_certificador: orgao || undefined,
+        pdf,
+      });
+      setResult(created);
+      resetForm();
+      loadRecent();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao cadastrar certificado.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleRetry(id: string) {
+    setRetrying(id);
+    try {
+      const updated = await retryCertificateLinx(id);
+      setRecent((prev) => prev.map((c) => (c.id === id ? updated : c)));
+      if (result?.id === id) setResult(updated);
+    } catch {
+      // mantém estado anterior
+    } finally {
+      setRetrying(null);
+    }
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+          <FilePlus2 className="h-5 w-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+            Cadastrar Certificado
+          </h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Registra validade do certificado e vencimento do licenciamento e grava as propriedades
+            no Linx do produto.
+          </p>
+        </div>
+      </div>
+
+      {/* Resultado */}
+      {result && (
+        <div
+          className={cn(
+            'rounded-xl border p-4 text-sm',
+            result.linx_status === 'applied'
+              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-900/20'
+              : result.linx_status === 'error'
+                ? 'border-danger-200 bg-danger-50 dark:border-danger-900/50 dark:bg-danger-900/20'
+                : 'border-amber-200 bg-amber-50 dark:border-amber-900/50 dark:bg-amber-900/20',
+          )}
+        >
+          <div className="flex items-start gap-2">
+            {result.linx_status === 'applied' ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+            ) : (
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            )}
+            <div className="space-y-1">
+              <p className="font-medium text-slate-800 dark:text-slate-100">
+                Certificado salvo (SKU {result.sku}). <LinxBadge status={result.linx_status} />
+              </p>
+              {result.produto_codigo && (
+                <p className="text-slate-600 dark:text-slate-300">
+                  Produto no Linx: <code className="font-mono">{result.produto_codigo}</code>
+                </p>
+              )}
+              {result.linx_error && (
+                <p className="text-danger-700 dark:text-danger-300">{result.linx_error}</p>
+              )}
+              {result.linx_detail && result.linx_detail.length > 0 && (
+                <ul className="mt-1 list-disc pl-5 text-xs text-slate-600 dark:text-slate-300">
+                  {result.linx_detail.map((d, i) => (
+                    <li key={i}>
+                      {d.field} (prop {d.prop}){d.valor ? ` = ${d.valor}` : ''} → {d.action}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-danger-200 bg-danger-50 p-4 text-sm text-danger-700 dark:border-danger-900/50 dark:bg-danger-900/20 dark:text-danger-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {/* Formulário */}
+      <form
+        onSubmit={handleSubmit}
+        className="space-y-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className={labelCls}>Marca / Loja *</label>
+            <select className={inputCls} value={brand} onChange={(e) => setBrand(e.target.value)}>
+              {BRANDS.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>SKU do produto *</label>
+            <input
+              className={inputCls}
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              placeholder="Ex.: 12345 ou produto+cor+tamanho"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Validade do Certificado</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={validade}
+              onChange={(e) => setValidade(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Vencimento do Licenciamento</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={vencimento}
+              onChange={(e) => setVencimento(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Nº do Certificado</label>
+            <input
+              className={inputCls}
+              value={numero}
+              onChange={(e) => setNumero(e.target.value)}
+              placeholder="Ex.: 006083/2024"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>OCP / Organismo</label>
+            <input
+              className={inputCls}
+              value={ocp}
+              onChange={(e) => setOcp(e.target.value)}
+              placeholder="Ex.: OCP 0004"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>Órgão certificador</label>
+            <select className={inputCls} value={orgao} onChange={(e) => setOrgao(e.target.value)}>
+              <option value="">—</option>
+              {ORGAOS.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>PDF do certificado</label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-slate-300 px-3 py-2 text-sm text-slate-500 hover:border-emerald-400 dark:border-slate-700 dark:text-slate-400">
+              <Upload className="h-4 w-4" />
+              <span className="truncate">{pdf ? pdf.name : 'Selecionar PDF…'}</span>
+              <input
+                type="file"
+                accept="application/pdf"
+                className="hidden"
+                onChange={(e) => setPdf(e.target.files?.[0] ?? null)}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="space-y-1">
+            <p className="text-xs text-slate-400">
+              * campos obrigatórios. Informe ao menos uma data.
+            </p>
+            {hasPastDate && (
+              <p className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                Atenção: há data no passado — o certificado será gravado como já vencido.
+              </p>
+            )}
+          </div>
+          <SubmitButton loading={submitting}>
+            {submitting ? 'Salvando…' : 'Cadastrar e gravar no Linx'}
+          </SubmitButton>
+        </div>
+      </form>
+
+      {/* Recentes */}
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+            Certificados recentes
+          </h3>
+          <button
+            onClick={loadRecent}
+            className="text-slate-400 hover:text-emerald-600"
+            title="Atualizar"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
+        {recent.length === 0 ? (
+          <p className="px-5 py-6 text-center text-sm text-slate-400">
+            Nenhum certificado cadastrado ainda.
+          </p>
+        ) : (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {recent.map((c) => (
+              <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
+                <span className="font-medium text-slate-800 dark:text-slate-100">{c.sku}</span>
+                <span className="text-xs text-slate-400">{c.brand}</span>
+                {c.validade_certificado && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Cert: {c.validade_certificado}
+                  </span>
+                )}
+                {c.vencimento_licenciamento && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Lic: {c.vencimento_licenciamento}
+                  </span>
+                )}
+                <LinxBadge status={c.linx_status} />
+                <div className="ml-auto flex items-center gap-3">
+                  {c.pdf_filename && (
+                    <a
+                      href={getCertificatePdfUrl(c.id)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+                    >
+                      <FileText className="h-3.5 w-3.5" /> PDF
+                    </a>
+                  )}
+                  {(c.linx_status === 'error' || c.linx_status === 'disabled') && (
+                    <button
+                      onClick={() => handleRetry(c.id)}
+                      disabled={retrying === c.id}
+                      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 disabled:opacity-50"
+                    >
+                      {retrying === c.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      )}
+                      Reenviar ao Linx
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

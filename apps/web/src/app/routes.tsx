@@ -74,6 +74,7 @@ const PreConsPage = lazy(() =>
 const CertDashboardPage = lazy(() => import('@/features/certificacoes/CertDashboardPage'));
 const CertValidacaoPage = lazy(() => import('@/features/certificacoes/CertValidacaoPage'));
 const CertProdutosPage = lazy(() => import('@/features/certificacoes/CertProdutosPage'));
+const CertCadastroPage = lazy(() => import('@/features/certificacoes/CertCadastroPage'));
 const CertProdutoDetailPage = lazy(() => import('@/features/certificacoes/CertProdutoDetailPage'));
 const CertRelatoriosPage = lazy(() => import('@/features/certificacoes/CertRelatoriosPage'));
 const CertRelatorioDetailPage = lazy(
@@ -167,6 +168,7 @@ export function AppRoutes() {
                   <Route path="/validacao" element={<CertValidacaoPage />} />
                   <Route path="/produtos" element={<CertProdutosPage />} />
                   <Route path="/produtos/:sku" element={<CertProdutoDetailPage />} />
+                  <Route path="/cadastro" element={<CertCadastroPage />} />
                   <Route path="/relatorios" element={<CertRelatoriosPage />} />
                   <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
                   <Route path="/agendamentos" element={<CertAgendamentosPage />} />

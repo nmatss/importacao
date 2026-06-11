@@ -15,6 +15,10 @@ DATABASE_URL: str = os.environ.get("DATABASE_URL", "")
 REPORTS_DIR: Path = Path(os.environ.get("REPORTS_DIR", Path(__file__).parent.parent / "reports"))
 REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Directory where uploaded certificate PDFs are stored.
+CERTS_DIR: Path = Path(os.environ.get("CERTS_DIR", Path(__file__).parent.parent / "certs"))
+CERTS_DIR.mkdir(parents=True, exist_ok=True)
+
 # --- Google Sheets ---
 SHEETS_CLIENT_EMAIL: str = (
     os.environ.get("GOOGLE_SHEETS_CLIENT_EMAIL", "")
@@ -61,6 +65,54 @@ ERP_IMG_HOST: str = os.environ.get("ERP_IMG_HOST", "db02.grupounico.com")
 ERP_IMG_DB: str = os.environ.get("ERP_IMG_DB", "Grupo_Imaginarium")
 ERP_MSSQL_USER: str = os.environ.get("ERP_MSSQL_USER", "nicolas.matsuda")
 ERP_MSSQL_PASS: str = os.environ.get("ERP_MSSQL_PASS", "")
+
+# --- Linx ERP write (product properties) ---
+# Master switch. Stays OFF until the PROP_PRODUTOS/PROPRIEDADE column names below
+# are confirmed against production via sql/linx_discovery.sql. While OFF, certificates
+# are saved in the portal (Postgres) but NOT written to Linx (linx_status='disabled').
+LINX_WRITE_ENABLED: bool = os.environ.get("LINX_WRITE_ENABLED", "false").lower() == "true"
+
+# Per-brand Linx connection + the PROPRIEDADE codes for each cert field.
+# Codes confirmed by the user (UAT): Puket 00224/00225, Imaginarium 00106/00107.
+LINX_BRANDS: dict[str, dict[str, str]] = {
+    "imaginarium": {
+        "host": ERP_IMG_HOST,
+        "db": ERP_IMG_DB,
+        "prop_validade_certificado": "00106",
+        "prop_vencimento_licenciamento": "00107",
+    },
+    "puket": {
+        "host": ERP_PUKET_HOST,
+        "db": ERP_PUKET_DB,
+        "prop_validade_certificado": "00224",
+        "prop_vencimento_licenciamento": "00225",
+    },
+    "puket escolares": {
+        "host": ERP_PUKET_HOST,
+        "db": ERP_PUKET_DB,
+        "prop_validade_certificado": "00224",
+        "prop_vencimento_licenciamento": "00225",
+    },
+}
+
+# PROP_PRODUTOS / PROPRIEDADE physical schema. Defaults are best-guess Linx names;
+# CONFIRM/OVERRIDE via env after running sql/linx_discovery.sql. Identifiers are
+# validated against ^[A-Za-z0-9_]+$ before being interpolated into SQL (see sqlserver.py).
+LINX_SCHEMA: dict[str, str] = {
+    # Tabela que liga produto <-> propriedade <-> valor
+    "prop_table": os.environ.get("LINX_PROP_TABLE", "PROP_PRODUTOS"),
+    "prop_col_produto": os.environ.get("LINX_PROP_COL_PRODUTO", "PRODUTO"),
+    "prop_col_propriedade": os.environ.get("LINX_PROP_COL_PROPRIEDADE", "PROPRIEDADE"),
+    "prop_col_valor": os.environ.get("LINX_PROP_COL_VALOR", "VALOR_PROPRIEDADE"),
+    # Resolucao SKU -> codigo de produto "pai". Quando o SKU do portal ja e o
+    # codigo do produto no Linx, deixe LINX_SKU_IS_PRODUTO=true e o resolver e no-op.
+    "sku_is_produto": os.environ.get("LINX_SKU_IS_PRODUTO", "false"),
+    "produto_table": os.environ.get("LINX_PRODUTO_TABLE", "PRODUTOS"),
+    "produto_col_codigo": os.environ.get("LINX_PRODUTO_COL_CODIGO", "PRODUTO"),
+    "produto_col_sku": os.environ.get("LINX_PRODUTO_COL_SKU", ""),
+    # Formato em que a data e gravada no VALOR_PROPRIEDADE (campo texto no Linx).
+    "date_format": os.environ.get("LINX_DATE_FORMAT", "%d/%m/%Y"),
+}
 
 # --- CORS ---
 _cors_origins_env: str = os.environ.get("CORS_ORIGINS", "")
