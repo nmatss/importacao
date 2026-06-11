@@ -13,7 +13,7 @@ from app.db.sqlserver import (
     resolve_produto_codigo,
     upsert_produto_propriedade,
 )
-from app.utils.logging import log
+from app.utils.logging import log, log_safe
 
 
 def _format_date(value: str | date | datetime | None) -> str:
@@ -132,12 +132,16 @@ def write_certificate_to_linx(
                 {"field": field, "prop": prop_code, "valor": valor, "action": action}
             )
             log.info(
-                f"Linx {cfg['db']}: produto={produto} prop={prop_code} -> {valor} ({action})"
+                f"Linx {cfg['db']}: produto={log_safe(produto)} prop={prop_code} "
+                f"-> {log_safe(valor)} ({action})"
             )
     except Exception as e:
         result["status"] = "error"
         result["error"] = f"Falha ao gravar propriedade no Linx: {e}"
-        log.error(f"Linx write failed for sku={sku} brand={brand}: {e}", exc_info=True)
+        log.error(
+            f"Linx write failed for sku={log_safe(sku)} brand={log_safe(brand)}: {e}",
+            exc_info=True,
+        )
         return result
 
     result["status"] = "applied"
