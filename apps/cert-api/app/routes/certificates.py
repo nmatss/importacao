@@ -12,7 +12,7 @@ from slowapi.util import get_remote_address
 from app.config import CERTS_DIR, DATABASE_URL
 from app.db.postgres import db
 from app.services.linx_service import write_certificate_to_linx
-from app.utils.logging import log, log_safe
+from app.utils.logging import log
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -153,10 +153,11 @@ def create_certificate(
         cur.execute("SELECT * FROM cert_certificates WHERE id=%s", [cert_id])
         row = _serialize(dict(cur.fetchone()))
 
-    log.info(
-        f"Certificate {cert_id} saved (sku={log_safe(sku)}, brand={log_safe(brand)}, "
-        f"linx={linx['status']})"
-    )
+    # replace inline de CR/LF (anti log-injection) — o CodeQL só reconhece o
+    # sanitizador aplicado diretamente na variável, não via helper
+    sku_log = sku.replace("\r", " ").replace("\n", " ")
+    brand_log = brand.replace("\r", " ").replace("\n", " ")
+    log.info(f"Certificate {cert_id} saved (sku={sku_log}, brand={brand_log}, linx={linx['status']})")
     return row
 
 

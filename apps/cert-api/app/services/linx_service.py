@@ -13,7 +13,7 @@ from app.db.sqlserver import (
     resolve_produto_codigo,
     upsert_produto_propriedade,
 )
-from app.utils.logging import log, log_safe
+from app.utils.logging import log
 
 
 def _format_date(value: str | date | datetime | None) -> str:
@@ -131,17 +131,19 @@ def write_certificate_to_linx(
             result["details"].append(
                 {"field": field, "prop": prop_code, "valor": valor, "action": action}
             )
+            # replace inline de CR/LF (anti log-injection) — o CodeQL só reconhece
+            # o sanitizador aplicado diretamente na variável, não via helper
+            produto_log = produto.replace("\r", " ").replace("\n", " ")
+            valor_log = valor.replace("\r", " ").replace("\n", " ")
             log.info(
-                f"Linx {cfg['db']}: produto={log_safe(produto)} prop={prop_code} "
-                f"-> {log_safe(valor)} ({action})"
+                f"Linx {cfg['db']}: produto={produto_log} prop={prop_code} -> {valor_log} ({action})"
             )
     except Exception as e:
         result["status"] = "error"
         result["error"] = f"Falha ao gravar propriedade no Linx: {e}"
-        log.error(
-            f"Linx write failed for sku={log_safe(sku)} brand={log_safe(brand)}: {e}",
-            exc_info=True,
-        )
+        sku_log = sku.replace("\r", " ").replace("\n", " ")
+        brand_log = brand.replace("\r", " ").replace("\n", " ")
+        log.error(f"Linx write failed for sku={sku_log} brand={brand_log}: {e}", exc_info=True)
         return result
 
     result["status"] = "applied"
