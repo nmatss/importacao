@@ -1,8 +1,10 @@
 # Status da entrega — UAT Odett + Camada de Confiança da IA
 
-**Data:** 2026-05-29 · **PR:** [#58](https://github.com/nmatss/importacao/pull/58) · **Branch:** `feat/ai-harness-uat-odett`
+**Data:** 2026-05-29 · **PR:** [#58](https://github.com/nmatss/importacao/pull/58) (**merged em 2026-06-11**) · **EM PRODUÇÃO desde 2026-06-11** (SHA `96a695c`, migrations 0011→0015 aplicadas, health verde)
 
-Verificação: `tsc --noEmit` limpo (api+web) · **289 testes** verdes · `npm audit --audit-level=high` limpo · CI do PR todo verde.
+Verificação: `tsc --noEmit` limpo (api+web) · **344 testes api + 26 web + 86 cert-api** verdes · `npm audit --audit-level=high` limpo · CI todo verde incluindo CodeQL · lint 0 warnings (gate `--max-warnings=0` agora bloqueante).
+
+> **Adições de 2026-06-11 no mesmo PR:** cadastro de certificado + escrita gated no Linx (`docs/CERT-LINX-WRITE.md`); hardening (CI sem `|| true`, SMTP TLS, login fail-closed); **Parte A**: motor financeiro (`modules/financial/`, job 08:30 com alertas Invoice<US$20k / Seguro>US$150k / demurrage), historização de validações e extrações (migration `0015`), espelho com join por EAN + Base EAN Puket (layout XLSX inalterado). Detalhe no `CHANGELOG.md` e status por item no `REVISAO-100.md`.
 
 ## 1. Os 10 pontos da UAT (processo IM0712602NB)
 
@@ -33,8 +35,11 @@ Detalhe completo em [`AI-HARNESS.md`](./AI-HARNESS.md).
 - **Revisão 100%** (14 agentes) → gap analysis em [`REVISAO-100.md`](./REVISAO-100.md).
 - **Revisão adversarial 10×** (16 agentes) que tentou refutar cada ponto — achou furos reais (deploy-breakers + lógica), **todos corrigidos** (KB→dist, arquivos rastreados, `Boolean({})`, gate do código da IA, quantidade decimal, vuln HIGH `tmp` no CI).
 
-## 4. Pendente — depende de input/decisão do negócio
+## 4. Pendente após o deploy de 2026-06-11 — ações de negócio/infra
 
-1. **Deploy** (no servidor): `scripts/apply-pending-migrations.sh` + `.env` de produção com `AI_PROVIDER=vertex` e as `GOOGLE_VERTEX_*`.
-2. **Dados a plugar** (código pronto): `GOOGLE_DRIVE_PRE_CONS_FOLDER_ID` (pasta do Drive), **EAN Imaginarium** (aba `#REF!` na origem), tarifas/câmbio, CNPJs dos importadores.
-3. **Itens maiores de "Parte A"** (decisão de negócio): motor financeiro (numerário/aduaneiro/demurrage), layout do espelho ancorado em EAN, historização de validações.
+1. ~~Deploy~~ ✅ **feito em 2026-06-11** — migrations automáticas no `deploy.sh` (passo 4.5); `.env` de produção já tem `GOOGLE_VERTEX_PROJECT/LOCATION`, `AI_MONTHLY_BUDGET_USD=26` e `GOOGLE_DRIVE_PRE_CONS_FOLDER_ID`.
+2. **Ligar o Vertex** (privacidade): a SA `n8n-automacao@n8n-grupo-unico` recebeu **403** no teste real (`aiplatform.endpoints.predict`) — falta, no Console GCP do projeto `n8n-grupo-unico`: (a) habilitar `aiplatform.googleapis.com`, (b) conceder `roles/aiplatform.user` à SA, (c) descomentar `AI_PROVIDER=vertex` no `.env` do servidor e reiniciar a api. Até lá a extração segue no OpenRouter.
+3. **Pre-Cons**: pasta criada no Drive — **"Pre-Cons (sync portal importação)"** (`1OJmEV1GTI7vC0B-Uxb-btgQRMDu0530B`). Falta **compartilhar com a SA** `n8n-automacao@n8n-grupo-unico.iam.gserviceaccount.com` (leitor) e o time passar a soltar as Pre-Cons semanais lá (cron de 6h já agendado em produção).
+4. **Linx (certificados)**: rodar a descoberta — `docker exec importacao-cert-api python scripts/linx_discovery.py puket [SKU]` e `… imaginarium` — preencher `LINX_PROP_COL_*`/`LINX_PRODUTO_COL_SKU` e ligar `LINX_WRITE_ENABLED=true`.
+5. **Dados a plugar**: EAN Imaginarium (aba `#REF!` na origem), tarifa diária de demurrage por terminal (Premissas), câmbio em `currency_exchanges` (motor financeiro converte para BRL só com taxa), CNPJs dos importadores.
+6. **Itens maiores restantes**: layout do espelho ancorado em EAN (alinhar com a Odett antes de mudar o XLSX), `NODE_ENV=development` no servidor (corrigir para `production` em janela controlada), TLS no compose, SOPS (age key).

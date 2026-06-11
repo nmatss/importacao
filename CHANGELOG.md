@@ -5,7 +5,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] — 2026-06-11 — Parte A: motor financeiro + historização + EAN no espelho
+## [2026-06-11] — Parte A: motor financeiro + historização + EAN no espelho
+
+> **Em produção desde 2026-06-11** (PR #58 merged, SHA `96a695c`, migrations 0011→0015 aplicadas). Esta seção e as duas seguintes (2026-06-01 e 2026-05-29) compõem essa entrega.
 
 ### Added
 
