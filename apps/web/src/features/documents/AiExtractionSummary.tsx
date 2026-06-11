@@ -218,7 +218,7 @@ function renderSecondaryFields(
   );
 }
 
-export function AiExtractionSummary({ documentType, data, confidence }: AiExtractionSummaryProps) {
+export function AiExtractionSummary({ documentType, data }: AiExtractionSummaryProps) {
   const labels = FIELD_LABELS[documentType] || FIELD_LABELS.invoice;
   const priority = PRIORITY_FIELDS[documentType] || [];
 

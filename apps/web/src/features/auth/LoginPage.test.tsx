@@ -6,7 +6,7 @@ import { MockAuthProvider } from '@/test/mocks/auth';
 
 // Google OAuth is browser-only; mock it
 vi.mock('@react-oauth/google', () => ({
-  GoogleLogin: ({ onSuccess, onError }: { onSuccess: (r: { credential: string }) => void; onError: () => void }) => (
+  GoogleLogin: ({ onSuccess }: { onSuccess: (r: { credential: string }) => void }) => (
     <button
       data-testid="google-login-btn"
       onClick={() => onSuccess({ credential: 'mock-credential' })}

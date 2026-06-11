@@ -395,6 +395,24 @@ bash scripts/backup-db.sh
 
 Backups salvos em `/backups/importacao/` com retenção de 7 dias.
 
+## Documentacao
+
+Por onde começar, em ordem sugerida para quem chega agora:
+
+1. [`docs/ONBOARDING.md`](docs/ONBOARDING.md) — setup de desenvolvimento
+2. [`docs/_extracted/manual-sistema-grupounico.md`](docs/_extracted/manual-sistema-grupounico.md) — manual funcional do sistema
+3. [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — operação e troubleshooting · [`docs/DR.md`](docs/DR.md) — disaster recovery
+4. [`docs/adr/`](docs/adr/) — decisões de arquitetura (monorepo, Drizzle, JWT, cert-api, design system)
+
+Estado e backlog da entrega:
+
+- [`docs/ODETT-STATUS.md`](docs/ODETT-STATUS.md) — status da UAT da Odett + camada de confiança da IA
+- [`docs/REVISAO-100.md`](docs/REVISAO-100.md) — gap analysis e backlog vivo da "Parte A 100%"
+- [`docs/AI-HARNESS.md`](docs/AI-HARNESS.md) — harness de confiança da IA (Vertex, skills, knowledge base)
+- [`docs/CERT-LINX-WRITE.md`](docs/CERT-LINX-WRITE.md) — cadastro de certificado + escrita no Linx (gated por `LINX_WRITE_ENABLED`)
+- [`docs/SECRETS.md`](docs/SECRETS.md) · [`docs/TLS.md`](docs/TLS.md) — segredos e TLS
+- [`docs/diagnostico-tecnico-completo.md`](docs/diagnostico-tecnico-completo.md) — diagnóstico histórico (2026-03), mantido para referência
+
 ## Licenca
 
 Projeto privado - Grupo Uni.co. Todos os direitos reservados.

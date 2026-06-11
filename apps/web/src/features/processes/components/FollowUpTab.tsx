@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   FileText,
   ClipboardCheck,
@@ -13,7 +12,6 @@ import {
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatDateTime } from '@/shared/lib/utils';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { FollowUpTracking } from '@/shared/types';
 

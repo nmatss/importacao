@@ -424,7 +424,7 @@ export const validationService = {
 
     try {
       assertTransition(process.status as ProcessStatus, 'validated');
-    } catch (err) {
+    } catch {
       logger.warn(
         { processId, from: process.status },
         'Cannot transition to validated after manual resolution',

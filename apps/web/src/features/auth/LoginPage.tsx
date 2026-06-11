@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { Ship, FileCheck, BarChart3, Shield, ArrowRight } from 'lucide-react';
+import { Ship, FileCheck, BarChart3, Shield } from 'lucide-react';
 
 const features = [
   { icon: Ship, label: 'Gestão de Importações', desc: 'Controle completo dos processos' },

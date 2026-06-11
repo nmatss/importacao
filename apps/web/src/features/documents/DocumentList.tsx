@@ -19,7 +19,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { AiExtractionSummary } from './AiExtractionSummary';

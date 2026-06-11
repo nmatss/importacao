@@ -1,7 +1,6 @@
 import { DollarSign } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import type { CurrencyExchange, CurrencyTotals } from '@/shared/types';
 

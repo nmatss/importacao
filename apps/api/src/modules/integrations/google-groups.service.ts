@@ -5,6 +5,7 @@ const GOOGLE_DRIVE_CLIENT_EMAIL = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
 const GOOGLE_DRIVE_PRIVATE_KEY = (process.env.GOOGLE_DRIVE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
 const GOOGLE_ADMIN_EMAIL = process.env.GOOGLE_ADMIN_EMAIL || '';
 const GOOGLE_GROUP_ALLOWED = process.env.GOOGLE_GROUP_ALLOWED || '';
+const GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET = process.env.GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET === 'true';
 
 const SCOPE = 'https://www.googleapis.com/auth/admin.directory.group.member.readonly';
 
@@ -14,7 +15,9 @@ function getClient(): JWT {
   if (jwtClient) return jwtClient;
 
   if (!GOOGLE_DRIVE_CLIENT_EMAIL || !GOOGLE_DRIVE_PRIVATE_KEY || !GOOGLE_ADMIN_EMAIL) {
-    throw new Error('Google Groups: missing credentials (GOOGLE_DRIVE_CLIENT_EMAIL, GOOGLE_DRIVE_PRIVATE_KEY, GOOGLE_ADMIN_EMAIL)');
+    throw new Error(
+      'Google Groups: missing credentials (GOOGLE_DRIVE_CLIENT_EMAIL, GOOGLE_DRIVE_PRIVATE_KEY, GOOGLE_ADMIN_EMAIL)',
+    );
   }
 
   jwtClient = new JWT({
@@ -29,8 +32,19 @@ function getClient(): JWT {
 
 async function isAllowed(userEmail: string): Promise<boolean> {
   if (!GOOGLE_GROUP_ALLOWED) {
-    logger.warn('Google Groups: GOOGLE_GROUP_ALLOWED not configured, allowing all domain users');
-    return true;
+    // Fail-closed: sem grupo configurado ninguém entra. O allow-all antigo só
+    // permanece atrás de opt-in explícito, para não virar porta aberta por
+    // omissão de configuração.
+    if (GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET) {
+      logger.warn(
+        'Google Groups: GOOGLE_GROUP_ALLOWED not configured; GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET=true, allowing all domain users',
+      );
+      return true;
+    }
+    logger.error(
+      'Google Groups: GOOGLE_GROUP_ALLOWED not configured — denying login (fail-closed). Set GOOGLE_GROUP_ALLOWED or, explicitly, GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET=true.',
+    );
+    return false;
   }
 
   const client = getClient();

@@ -20,7 +20,7 @@ jobs:
       - name: Typecheck API
         run: npx -w apps/api tsc --noEmit
       - name: Lint API
-        run: npx -w apps/api eslint src --max-warnings=0 || true
+        run: npx -w apps/api eslint src --max-warnings=0
 
   lint-web:
     name: Lint & Typecheck Web
@@ -35,7 +35,7 @@ jobs:
       - name: Typecheck Web
         run: npx -w apps/web tsc --noEmit
       - name: Lint Web
-        run: npx -w apps/web eslint src --max-warnings=0 || true
+        run: npx -w apps/web eslint src --max-warnings=0
 
   lint-python:
     name: Lint Python (ruff)
@@ -107,9 +107,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install dependencies
-        run: pip install pytest pytest-cov -r apps/cert-api/requirements.txt || true
+        run: pip install pytest pytest-cov pytest-mock pytest-asyncio httpx -r apps/cert-api/requirements.txt
       - name: Run pytest
-        run: pytest apps/cert-api/ --tb=short -q || true
+        run: pytest apps/cert-api/ --tb=short -q
 
   security-scan:
     name: Security Audit

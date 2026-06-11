@@ -23,7 +23,6 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { DRAFT_BL_CHECKS } from '@/shared/lib/constants';
-import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 

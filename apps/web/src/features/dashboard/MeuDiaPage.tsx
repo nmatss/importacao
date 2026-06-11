@@ -9,12 +9,10 @@ import {
   FileWarning,
   DollarSign,
   Bell,
-  Loader2,
   Target,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency } from '@/shared/lib/utils';
-import { StatusBadge } from '@/shared/components/StatusBadge';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -225,11 +223,6 @@ export function MeuDiaPage() {
       return priorityOrder[a.priority] - priorityOrder[b.priority];
     });
   }, [slaData]);
-
-  const criticalAlerts = useMemo(() => {
-    if (!Array.isArray(alerts)) return [];
-    return alerts.filter((a) => a.severity === 'critical').slice(0, 5);
-  }, [alerts]);
 
   const today = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long',

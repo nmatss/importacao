@@ -76,12 +76,20 @@ async function handleEmailSend(data: EmailSendJob): Promise<void> {
   const pass = process.env.SMTP_PASS;
   const hasAuth = user && pass && user !== 'noreply@grupounico.com';
 
+  // Verificação de certificado segue a mesma política do communications/service.ts;
+  // SMTP_TLS_REJECT_UNAUTHORIZED=false é o único caminho para aceitar cert
+  // self-signed (relay interno) — decisão explícita de operação, não default.
+  const rejectUnauthorized =
+    process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false'
+      ? false
+      : process.env.NODE_ENV === 'production';
+
   const transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port,
     secure,
     ...(hasAuth ? { auth: { user, pass } } : {}),
-    tls: { rejectUnauthorized: false },
+    tls: { rejectUnauthorized },
     ignoreTLS: !secure,
   });
   await transporter.sendMail({

@@ -112,7 +112,7 @@ export const alertService = {
             .where(eq(alerts.id, alert.id));
         }
       }
-    } catch (error) {
+    } catch {
       logger.error({ alertId: alert.id }, 'Failed to send alert to Google Chat');
     }
 

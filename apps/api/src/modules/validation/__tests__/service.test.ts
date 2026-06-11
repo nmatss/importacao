@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
+const { mockDb, queryQueue, txQueue } = createMockDb();
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
