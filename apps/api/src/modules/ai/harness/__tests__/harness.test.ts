@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { isValidNcm, isValidContainerIso6346, isIsoDate, isValidCnpj, isUsd } from '../format.js';
+import {
+  isValidNcm,
+  isValidContainerIso6346,
+  isIsoDate,
+  isValidCnpj,
+  isUsd,
+  isValidGtin,
+  normalizeGtin,
+} from '../format.js';
 import { appearsInSource, normalizeForGrounding } from '../grounding.js';
 import { verifyExtraction } from '../index.js';
 import { getVerificationConfig } from '../../skills/registry.js';
@@ -37,6 +45,25 @@ describe('format validators', () => {
     expect(isUsd('USD')).toBe(true);
     expect(isUsd('us$')).toBe(true);
     expect(isUsd('BRL')).toBe(false);
+  });
+
+  it('validates GTIN/EAN check digit (8/12/13/14 digits)', () => {
+    expect(isValidGtin('7909692093303')).toBe(true); // EAN-13 from Base EAN Puket
+    expect(isValidGtin('7909692093304')).toBe(false); // wrong check digit
+    expect(isValidGtin('96385074')).toBe(true); // EAN-8
+    expect(isValidGtin('036000291452')).toBe(true); // UPC-A (12 digits)
+    expect(isValidGtin('07909692093303')).toBe(true); // GTIN-14 (leading zero)
+    expect(isValidGtin('276079')).toBe(false); // bad length (real KB noise)
+    expect(isValidGtin('ABC9692093303')).toBe(false); // non-numeric
+  });
+
+  it('normalizes GTIN to bare digits, rejecting invalid ones', () => {
+    expect(normalizeGtin('790 9692 093303')).toBe('7909692093303');
+    expect(normalizeGtin('7909692-093303')).toBe('7909692093303');
+    expect(normalizeGtin('7909692093304')).toBe(null); // bad check digit → absent
+    expect(normalizeGtin('')).toBe(null);
+    expect(normalizeGtin(null)).toBe(null);
+    expect(normalizeGtin(undefined)).toBe(null);
   });
 });
 

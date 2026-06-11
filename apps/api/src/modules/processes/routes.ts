@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { processController } from './controller.js';
+import { validationController } from '../validation/controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import {
@@ -20,6 +21,8 @@ router.get('/', processController.list);
 router.get('/stats', processController.getStats);
 router.get('/:id', processController.getById);
 router.get('/:id/events', processController.getEvents);
+// Append-only audit trail of past validation runs (backlog #12)
+router.get('/:id/validation-history', validationController.getValidationHistory);
 router.post('/', validate(createProcessSchema), processController.create);
 router.post(
   '/from-pre-cons',

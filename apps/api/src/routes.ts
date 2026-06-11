@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRoutes } from './modules/auth/routes.js';
 import { processRoutes } from './modules/processes/routes.js';
+import { financialRoutes } from './modules/financial/routes.js';
 import { documentRoutes } from './modules/documents/routes.js';
 import { validationRoutes } from './modules/validation/routes.js';
 import { espelhoRoutes } from './modules/espelhos/routes.js';
@@ -26,6 +27,8 @@ apiRouter.get('/health', (_req, res) => {
 
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/processes', processRoutes);
+// Motor financeiro: /processes/:id/financials (módulo separado, mesmo prefixo)
+apiRouter.use('/processes', financialRoutes);
 apiRouter.use('/documents', documentRoutes);
 apiRouter.use('/validation', validationRoutes);
 apiRouter.use('/espelhos', espelhoRoutes);

@@ -183,12 +183,16 @@
 
 ### #9 [HIGH/grande] Espelho real: layout ancorado em EAN + Base EAN + join por EAN (não só itemCode)
 
+> **Status 2026-06-11: PARCIAL.** Encanamento pronto — extração de `ean` por item (INV/PL), validador GTIN, join por EAN com fallback itemCode, enriquecimento via Base EAN Puket. **Falta:** layout do XLSX ancorado em EAN (alinhar com a Odett antes) e Base EAN Imaginarium (aba `#REF!` na origem).
+
 - área: espelhos+ai
 - files: apps/api/src/modules/espelhos/templates/puket.template.ts:19-34, imaginarium.template.ts; documents/utils/build-espelho.ts:20-49; ai/prompts/invoice.ts+packing-list.ts (extrair EAN); espelhos/service.ts:128-147
 - depende: 1
 - risco: Requer ingestão da Base EAN; mudança de layout do XLSX impacta despachante — alinhar com Odett antes.
 
 ### #10 [MEDIUM/grande] Motor financeiro: Valor Aduaneiro/Numerário/%numerário + alerta Invoice baixa + alerta Seguro + demurrage
+
+> **Status 2026-06-11: FEITO (núcleo).** `modules/financial/` + job diário com os 3 alertas. **Falta:** custo/dia de demurrage por terminal (Premissas não tem tarifa diária PORTONAVE/APM/Itapoá/LOCALFRIO — só alerta de prazo) e taxa USD depende da tabela `currency_exchanges` alimentada.
 
 - área: processes+domínio
 - files: novo serviço em modules/processes; tabela de Premissas (tarifas); jobs/deadline-check.ts (seguro+demurrage); schema.ts
@@ -202,6 +206,8 @@
 - risco: SA precisa de role aiplatform.user e Vertex API habilitada; sem isso a 1ª extração estoura. Rotacionar a private key exposta em claro no .env.
 
 ### #12 [MEDIUM/médio] Historizar validation_results e extrações por run (auditoria regulatória)
+
+> **Status 2026-06-11: FEITO.** Migration `0015`: `validation_result_history` (snapshot antes do delete+recreate) + `document_extraction_history` (aiParsedData arquivado antes de reprocess/re-extração) + endpoints de leitura. Definir retenção segue em aberto.
 
 - área: validation+documents
 - files: apps/api/src/modules/validation/service.ts:93-110; documents/service.ts:1125-1128; schema.ts (run_id/append-only)

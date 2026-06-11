@@ -17,6 +17,8 @@ router.get('/process/:processId/comparison', documentController.comparison);
 router.get('/process/:processId/proformas', documentController.proformasAggregate);
 router.get('/:id', documentController.getById);
 router.get('/:id/source', documentController.getSource);
+// Append-only audit trail of archived AI extractions (backlog #12)
+router.get('/:id/extraction-history', documentController.getExtractionHistory);
 router.get('/:id/file', documentController.getFile);
 router.post('/:id/reprocess', documentController.reprocess);
 router.delete('/:id', documentController.delete);

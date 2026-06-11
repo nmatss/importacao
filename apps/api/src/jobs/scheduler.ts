@@ -3,6 +3,7 @@ import { checkDeadlines } from './deadline-check.js';
 import { checkStalledProcesses } from './stalled-process.js';
 import { checkEmails, doubleCheckEmails } from './email-check.js';
 import { runLogisticSync } from './logistic-sync.js';
+import { runFinancialCheck } from './financial-check.js';
 import { logger } from '../shared/utils/logger.js';
 import { alertService } from '../modules/alerts/service.js';
 import { preConsService } from '../modules/pre-cons/service.js';
@@ -33,6 +34,19 @@ export function startScheduler() {
         await checkDeadlines();
       } catch (error) {
         await handleCronError('deadline-check', error);
+      }
+    },
+    tz,
+  );
+
+  // Daily at 8:30 AM - Financial check (invoice baixa, seguro, demurrage)
+  cron.schedule(
+    '30 8 * * *',
+    async () => {
+      try {
+        await runFinancialCheck();
+      } catch (error) {
+        await handleCronError('financial-check', error);
       }
     },
     tz,
@@ -108,6 +122,6 @@ export function startScheduler() {
   );
 
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
   );
 }

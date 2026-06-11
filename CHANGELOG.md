@@ -5,6 +5,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-11 — Parte A: motor financeiro + historização + EAN no espelho
+
+### Added
+
+- **Motor financeiro** (`modules/financial/`): Valor Aduaneiro = (FOB+frete+seguro)×USD, Numerário = aduaneiro×0,6 + `%numerário` persistidos nas colunas existentes; `GET /api/processes/:id/financials` e `POST …/financials/recompute`; job diário (08:30) com alertas de **Invoice baixa** (<USD 20k), **Seguro/apólice** (>USD 150k → "ACIONAR SEGURADORA") e **demurrage** (free time ≤7 dias/vencido), com dedupe de alertas ativos
+- **Historização para auditoria regulatória** (migration `0015`): `validation_result_history` (snapshot append-only de cada run de validação, antes do delete+recreate) e `document_extraction_history` (aiParsedData arquivado antes de reprocess/re-extração); `GET /api/processes/:id/validation-history` e `GET /api/documents/:id/extraction-history`
+- **Espelho ancorado em EAN (groundwork)**: extração de `ean` por item na INV e no PL (com regra anti-alucinação), validador GTIN (check digit) no harness, join PL×INV por EAN com fallback para itemCode, enriquecimento via base EAN Puket (`ai/knowledge/ean.json`, só quando o candidato é único) com `eanSource: document|kb`. Layout do XLSX do espelho **inalterado** (pende alinhamento com a Odett)
+- `scripts/linx_discovery.py` no cert-api: descoberta de schema do Linx via CLI (`docker exec importacao-cert-api python scripts/linx_discovery.py puket`), sem SSMS
+
+### Changed
+
+- `deploy.sh` aplica as migrations pendentes automaticamente (passo 4.5) via `apply-pending-migrations.sh` (0011→0015)
+- Pasta do Drive para a sync da Pre-Cons criada ("Pre-Cons (sync portal importação)", ID `1OJmEV1GTI7vC0B-Uxb-btgQRMDu0530B`) — falta compartilhar com a SA e setar `GOOGLE_DRIVE_PRE_CONS_FOLDER_ID`
+
+---
+
 ## [Unreleased] — 2026-06-01 — Cadastro de certificado + escrita no Linx (PROP_PRODUTOS)
 
 ### Added

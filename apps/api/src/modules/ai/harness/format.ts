@@ -39,6 +39,36 @@ export function isValidContainerIso6346(raw: string): boolean {
   return check === Number(s[10]);
 }
 
+/**
+ * GTIN/EAN barcode (GTIN-8/12/13/14): digits only with a mod-10 check digit.
+ * Validates the check digit — catches OCR/hallucination errors, same spirit
+ * as isValidContainerIso6346 above.
+ */
+export function isValidGtin(raw: string): boolean {
+  const s = raw.replace(/[\s\-.]/g, '');
+  if (!/^\d+$/.test(s)) return false;
+  if (![8, 12, 13, 14].includes(s.length)) return false;
+  // Mod-10: weights alternate 3,1,3,... starting from the digit next to the
+  // check digit (rightmost), per GS1 spec.
+  let sum = 0;
+  for (let i = s.length - 2, w = 3; i >= 0; i--, w = 4 - w) {
+    sum += Number(s[i]) * w;
+  }
+  const check = (10 - (sum % 10)) % 10;
+  return check === Number(s[s.length - 1]);
+}
+
+/**
+ * Normalize a GTIN/EAN to bare digits. Returns null when the value is not a
+ * valid GTIN (wrong length or bad check digit) — invalid EANs must be treated
+ * as absent, never used for joins.
+ */
+export function normalizeGtin(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).replace(/[\s\-.]/g, '');
+  return isValidGtin(s) ? s : null;
+}
+
 /** Strict ISO-8601 date (YYYY-MM-DD) that is also a real calendar date. */
 export function isIsoDate(raw: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;

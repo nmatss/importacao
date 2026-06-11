@@ -34,6 +34,24 @@ export const validationController = {
     }
   },
 
+  async getValidationHistory(req: Request, res: Response) {
+    try {
+      // Mounted under /processes/:id/validation-history (and accepts
+      // :processId when reused under /validation routes).
+      const processId = Number(req.params.id ?? req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const page = Number(req.query.page) || 1;
+      const pageSize = Number(req.query.pageSize) || 10;
+      const history = await validationService.getValidationHistory(processId, page, pageSize);
+      sendSuccess(res, history);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async resolveManually(req: Request, res: Response) {
     try {
       const resultId = Number(req.params.id);

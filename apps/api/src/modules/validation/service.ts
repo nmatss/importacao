@@ -1,12 +1,14 @@
-import { eq } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   validationResults,
+  validationResultHistory,
   documents,
   importProcesses,
   followUpTracking,
   documentCorrections,
 } from '../../shared/database/schema.js';
+import type { ValidationResult } from '../../shared/database/schema.js';
 import { allChecks } from './checks/index.js';
 import type { CheckInput, CheckResult } from './checks/index.js';
 import { aiService, flattenAiData } from '../ai/service.js';
@@ -90,8 +92,41 @@ export const validationService = {
       'Validation checks completed',
     );
 
-    // 6. Atomic: delete old results + insert new ones in a transaction
+    // 6. Atomic: snapshot previous results to history, then delete old
+    // results + insert new ones — all in one transaction. The history
+    // snapshot (append-only, regulatory audit — backlog #12) preserves what
+    // the live table is about to lose; the live table behavior is unchanged.
     await db.transaction(async (tx) => {
+      const previousRaw = await tx
+        .select()
+        .from(validationResults)
+        .where(eq(validationResults.processId, processId));
+      const previous: ValidationResult[] = Array.isArray(previousRaw) ? previousRaw : [];
+
+      if (previous.length > 0) {
+        const now = new Date();
+        await tx.insert(validationResultHistory).values(
+          previous.map((r) => ({
+            processId,
+            // run_at = moment the previous run was recorded, when available.
+            runAt: r.createdAt ?? now,
+            checkName: r.checkName,
+            status: r.status as string,
+            message: r.message,
+            details: {
+              expectedValue: r.expectedValue ?? null,
+              actualValue: r.actualValue ?? null,
+              documentsCompared: r.documentsCompared ?? null,
+              dataSource: r.dataSource ?? null,
+              resolvedBy: r.resolvedBy ?? null,
+              resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
+            },
+            resolvedManually: r.resolvedManually ?? false,
+            resolutionNote: r.resolutionNote ?? null,
+          })),
+        );
+      }
+
       await tx.delete(validationResults).where(eq(validationResults.processId, processId));
 
       await tx.insert(validationResults).values(
@@ -327,6 +362,53 @@ export const validationService = {
 
   async getResults(processId: number) {
     return db.select().from(validationResults).where(eq(validationResults.processId, processId));
+  },
+
+  /**
+   * Historical validation runs for a process (append-only snapshots taken
+   * before each delete+recreate). Rows are grouped by run_at — each group is
+   * one run — and pagination is applied over runs (newest first).
+   */
+  async getValidationHistory(processId: number, page = 1, pageSize = 10) {
+    const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
+    const safePageSize =
+      Number.isFinite(pageSize) && pageSize > 0 ? Math.min(Math.floor(pageSize), 50) : 10;
+
+    const rows = await db
+      .select()
+      .from(validationResultHistory)
+      .where(eq(validationResultHistory.processId, processId))
+      .orderBy(desc(validationResultHistory.runAt), validationResultHistory.checkName);
+
+    // Group by run_at (ISO string key keeps grouping stable across rows)
+    const runMap = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const key = row.runAt ? new Date(row.runAt).toISOString() : 'unknown';
+      const group = runMap.get(key);
+      if (group) {
+        group.push(row);
+      } else {
+        runMap.set(key, [row]);
+      }
+    }
+
+    const allRuns = Array.from(runMap.entries()).map(([runAt, results]) => ({
+      runAt,
+      total: results.length,
+      passed: results.filter((r) => r.status === 'passed').length,
+      failed: results.filter((r) => r.status === 'failed').length,
+      warnings: results.filter((r) => r.status === 'warning').length,
+      skipped: results.filter((r) => r.status === 'skipped').length,
+      results,
+    }));
+
+    const start = (safePage - 1) * safePageSize;
+    return {
+      page: safePage,
+      pageSize: safePageSize,
+      totalRuns: allRuns.length,
+      runs: allRuns.slice(start, start + safePageSize),
+    };
   },
 
   async resolveManually(resultId: number, userId: number, resolutionNote: string) {

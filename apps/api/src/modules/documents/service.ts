@@ -7,6 +7,7 @@ import mammoth from 'mammoth';
 import { db } from '../../shared/database/connection.js';
 import {
   documents,
+  documentExtractionHistory,
   importProcesses,
   followUpTracking,
   emailIngestionLogs,
@@ -248,9 +249,46 @@ export const documentService = {
     };
   },
 
+  /**
+   * Archives the current ai_parsed_data of a document into
+   * document_extraction_history BEFORE it gets zeroed (reason 'reprocess')
+   * or overwritten by a new extraction (reason 'reextract'). Append-only —
+   * regulatory audit, backlog #12. No-op when there is nothing to archive.
+   */
+  async archiveExtraction(
+    doc: { id: number; aiParsedData: unknown; confidenceScore: string | null },
+    reason: 'reprocess' | 'reextract',
+  ) {
+    if (doc.aiParsedData == null) return;
+    await db.insert(documentExtractionHistory).values({
+      documentId: doc.id,
+      aiParsedData: doc.aiParsedData,
+      confidence: doc.confidenceScore ?? null,
+      reason,
+    });
+    logger.info({ documentId: doc.id, reason }, 'Previous AI extraction archived to history');
+  },
+
+  /** Historical (archived) extractions of a document, newest first. */
+  async getExtractionHistory(documentId: number) {
+    return db
+      .select()
+      .from(documentExtractionHistory)
+      .where(eq(documentExtractionHistory.documentId, documentId))
+      .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
+  },
+
   async processWithAI(documentId: number, type: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
+
+    // Re-extraction over an already extracted document overwrites
+    // aiParsedData — archive the previous value first (audit, backlog #12).
+    // In the reprocess() flow aiParsedData was already archived ('reprocess')
+    // and zeroed before this call, so this is a no-op there.
+    if (doc.isProcessed && doc.aiParsedData != null) {
+      await this.archiveExtraction(doc, 'reextract');
+    }
 
     // Espelho (xlsx) — deterministic parser; no AI round-trip.
     if (type === 'espelho') {
@@ -1216,6 +1254,9 @@ export const documentService = {
   async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
+
+    // Archive the previous extraction BEFORE zeroing it (audit, backlog #12).
+    await this.archiveExtraction(doc, 'reprocess');
 
     await db
       .update(documents)
