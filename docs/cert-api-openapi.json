@@ -530,6 +530,278 @@
         }
       }
     },
+    "/api/certificates": {
+      "post": {
+        "summary": "Create Certificate",
+        "description": "Register a new certificate and auto-write its dates to Linx.\n\nAccepts multipart/form-data (so the certificate PDF can be uploaded). The\nrecord is always saved in Postgres first; the Linx upsert then runs and its\noutcome is stored on the same row (linx_status / linx_error / linx_detail).\n\nReturns:\n    The created certificate record (serialized), including the Linx result.\n\nRaises:\n    HTTPException: 400 on invalid input, 500 if the database is unavailable.",
+        "operationId": "create_certificate_api_certificates_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_certificate_api_certificates_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Create Certificate Api Certificates Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "List Certificates",
+        "description": "List registered certificates with optional filters.\n\nReturns:\n    Paginated dict with items, total, page, per_page, total_pages.",
+        "operationId": "list_certificates_api_certificates_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Per Page"
+            }
+          },
+          {
+            "name": "sku",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Sku"
+            }
+          },
+          {
+            "name": "brand",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Brand"
+            }
+          },
+          {
+            "name": "linx_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Linx Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response List Certificates Api Certificates Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/certificates/{cert_id}": {
+      "get": {
+        "summary": "Get Certificate",
+        "description": "Get a single certificate by id.\n\nRaises:\n    HTTPException: 404 if not found.",
+        "operationId": "get_certificate_api_certificates__cert_id__get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Get Certificate Api Certificates  Cert Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/certificates/{cert_id}/pdf": {
+      "get": {
+        "summary": "Download Certificate Pdf",
+        "description": "Download the PDF attached to a certificate.\n\nRaises:\n    HTTPException: 404 if the certificate or its PDF is missing.",
+        "operationId": "download_certificate_pdf_api_certificates__cert_id__pdf_get",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/certificates/{cert_id}/retry-linx": {
+      "post": {
+        "summary": "Retry Linx",
+        "description": "Retry the Linx upsert for a previously saved certificate.\n\nUseful after enabling LINX_WRITE_ENABLED or fixing the schema config.\n\nRaises:\n    HTTPException: 404 if not found, 500 if DB unavailable.",
+        "operationId": "retry_linx_api_certificates__cert_id__retry_linx_post",
+        "security": [
+          {
+            "APIKeyHeader": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cert_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Cert Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Retry Linx Api Certificates  Cert Id  Retry Linx Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/schedules": {
       "get": {
         "summary": "List Schedules",
@@ -1302,6 +1574,63 @@
   },
   "components": {
     "schemas": {
+      "Body_create_certificate_api_certificates_post": {
+        "properties": {
+          "sku": {
+            "type": "string",
+            "title": "Sku"
+          },
+          "brand": {
+            "type": "string",
+            "title": "Brand"
+          },
+          "validade_certificado": {
+            "type": "string",
+            "title": "Validade Certificado",
+            "default": ""
+          },
+          "vencimento_licenciamento": {
+            "type": "string",
+            "title": "Vencimento Licenciamento",
+            "default": ""
+          },
+          "numero_certificado": {
+            "type": "string",
+            "title": "Numero Certificado",
+            "default": ""
+          },
+          "ocp": {
+            "type": "string",
+            "title": "Ocp",
+            "default": ""
+          },
+          "orgao_certificador": {
+            "type": "string",
+            "title": "Orgao Certificador",
+            "default": ""
+          },
+          "created_by": {
+            "type": "string",
+            "title": "Created By",
+            "default": ""
+          },
+          "pdf": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "binary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pdf"
+          }
+        },
+        "type": "object",
+        "required": ["sku", "brand"],
+        "title": "Body_create_certificate_api_certificates_post"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -1350,10 +1679,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "name",
-          "cron"
-        ],
+        "required": ["name", "cron"],
         "title": "ScheduleCreate",
         "description": "Request body for creating a schedule."
       },
@@ -1474,11 +1800,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "loc",
-          "msg",
-          "type"
-        ],
+        "required": ["loc", "msg", "type"],
         "title": "ValidationError"
       },
       "VerifyRequest": {
@@ -1493,10 +1815,7 @@
           }
         },
         "type": "object",
-        "required": [
-          "sku",
-          "brand"
-        ],
+        "required": ["sku", "brand"],
         "title": "VerifyRequest",
         "description": "Request body for single-product verification."
       }

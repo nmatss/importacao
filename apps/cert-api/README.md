@@ -32,12 +32,15 @@ app/
     schemas.py      # Pydantic request/response models
 sql/
   linx_discovery.sql # Read-only schema discovery for PROP_PRODUTOS/PROPRIEDADE (go-live step)
+scripts/
+  linx_discovery.py  # Same discovery as a CLI (no SSMS): docker exec importacao-cert-api python scripts/linx_discovery.py puket [SKU]
 tests/
   conftest.py       # Fixtures: mock_oracle_conn, mock_sqlserver_conn, test_client
   test_cert_service.py
   test_health.py
   test_stock.py
   test_routes.py
+  test_certificates_routes.py # Certificate routes: auth, input validation, forged PDF, happy path, retry
   test_linx_service.py # Linx write logic: date formatting, fail-closed, brand resolution, SQL ident guard
 main.py.legacy      # Original 2938-line monolith kept for reference
 ```
@@ -77,52 +80,61 @@ pytest tests/ -v
 
 ## Endpoints
 
-| Method | Path                          | Description                                |
-| ------ | ----------------------------- | ------------------------------------------ |
-| GET    | /api/health                   | Liveness (no auth required)                |
-| GET    | /api/ready                    | Readiness (checks DB)                      |
-| GET    | /api/stats                    | Cert validation summary                    |
-| GET    | /api/products                 | List products (paginated + stock enriched) |
-| GET    | /api/products/{sku}           | Single product detail                      |
-| POST   | /api/products/verify          | Real-time VTEX verification                |
-| GET    | /api/expired                  | List expired certifications                |
-| POST   | /api/validate                 | Start batch validation run                 |
-| GET    | /api/validate/{run_id}        | Get run status                             |
-| GET    | /api/validate/{run_id}/stream | SSE progress stream                        |
-| GET    | /api/schedules                | List cron schedules                        |
-| POST   | /api/schedules                | Create schedule                            |
-| PUT    | /api/schedules/{id}           | Update schedule                            |
-| DELETE | /api/schedules/{id}           | Delete schedule                            |
-| POST   | /api/schedules/{id}/run       | Run schedule now                           |
-| GET    | /api/schedules/{id}/history   | Schedule run history                       |
-| POST   | /api/sync-sheets              | Trigger Google Sheets sync                 |
-| POST   | /api/sync-stock               | Trigger WMS + ERP stock sync               |
-| GET    | /api/stock/{sku}              | Stock by SKU                               |
-| POST   | /api/sync-licenciados         | Sync licenciados sheet                     |
-| GET    | /api/licenciados              | List licenciados (paginated)               |
-| GET    | /api/licenciados/{code}       | Licenciados by process code                |
-| POST   | /api/reports/export           | Export products Excel                      |
-| POST   | /api/reports/export-stock     | Export stock Excel                         |
-| GET    | /api/reports                  | List report files                          |
-| GET    | /api/reports/{filename}       | Download report                            |
+| Method | Path                              | Description                                                 |
+| ------ | --------------------------------- | ----------------------------------------------------------- |
+| GET    | /api/health                       | Liveness (no auth required)                                 |
+| GET    | /api/ready                        | Readiness (checks DB)                                       |
+| GET    | /api/stats                        | Cert validation summary                                     |
+| GET    | /api/products                     | List products (paginated + stock enriched)                  |
+| GET    | /api/products/{sku}               | Single product detail                                       |
+| POST   | /api/products/verify              | Real-time VTEX verification                                 |
+| GET    | /api/expired                      | List expired certifications                                 |
+| POST   | /api/validate                     | Start batch validation run                                  |
+| GET    | /api/validate/{run_id}            | Get run status                                              |
+| GET    | /api/validate/{run_id}/stream     | SSE progress stream                                         |
+| GET    | /api/schedules                    | List cron schedules                                         |
+| POST   | /api/schedules                    | Create schedule                                             |
+| PUT    | /api/schedules/{id}               | Update schedule                                             |
+| DELETE | /api/schedules/{id}               | Delete schedule                                             |
+| POST   | /api/schedules/{id}/run           | Run schedule now                                            |
+| GET    | /api/schedules/{id}/history       | Schedule run history                                        |
+| POST   | /api/sync-sheets                  | Trigger Google Sheets sync                                  |
+| POST   | /api/sync-stock                   | Trigger WMS + ERP stock sync                                |
+| GET    | /api/stock/{sku}                  | Stock by SKU                                                |
+| POST   | /api/sync-licenciados             | Sync licenciados sheet                                      |
+| GET    | /api/licenciados                  | List licenciados (paginated)                                |
+| GET    | /api/licenciados/{code}           | Licenciados by process code                                 |
+| POST   | /api/certificates                 | Register certificate (multipart + PDF) + auto-write to Linx |
+| GET    | /api/certificates                 | List certificates (filters: sku, brand, linx_status)        |
+| GET    | /api/certificates/{id}            | Certificate detail                                          |
+| GET    | /api/certificates/{id}/pdf        | Download certificate PDF                                    |
+| POST   | /api/certificates/{id}/retry-linx | Retry the Linx upsert                                       |
+| POST   | /api/reports/export               | Export products Excel                                       |
+| POST   | /api/reports/export-stock         | Export stock Excel                                          |
+| GET    | /api/reports                      | List report files                                           |
+| GET    | /api/reports/{filename}           | Download report                                             |
 
 ## Environment Variables
 
-| Variable                           | Description                                     |
-| ---------------------------------- | ----------------------------------------------- |
-| CERT_API_KEY                       | API key for X-API-Key header (empty = disabled) |
-| DATABASE_URL                       | PostgreSQL connection string                    |
-| GOOGLE_SHEETS_CLIENT_EMAIL         | Service account email                           |
-| GOOGLE_SHEETS_PRIVATE_KEY          | Service account private key                     |
-| GOOGLE_SHEETS_SPREADSHEET_ID       | Spreadsheet ID                                  |
-| VTEX_PUKET_DOMAIN                  | Puket VTEX domain (default: www.puket.com.br)   |
-| VTEX_IMAGINARIUM_DOMAIN            | Imaginarium VTEX domain                         |
-| VTEX_REQUEST_DELAY                 | Seconds between VTEX requests (default: 1.5)    |
-| WMS_ORACLE_HOST/PORT/SID/USER/PASS | Oracle WMS credentials                          |
-| ERP_PUKET_HOST/DB, ERP_IMG_HOST/DB | SQL Server ERP connection                       |
-| ERP_MSSQL_USER/PASS                | SQL Server credentials                          |
-| CORS_ORIGINS                       | Comma-separated allowed origins                 |
-| REPORTS_DIR                        | Path to store generated reports                 |
+| Variable                                   | Description                                          |
+| ------------------------------------------ | ---------------------------------------------------- |
+| CERT_API_KEY                               | API key for X-API-Key header (empty = disabled)      |
+| DATABASE_URL                               | PostgreSQL connection string                         |
+| GOOGLE_SHEETS_CLIENT_EMAIL                 | Service account email                                |
+| GOOGLE_SHEETS_PRIVATE_KEY                  | Service account private key                          |
+| GOOGLE_SHEETS_SPREADSHEET_ID               | Spreadsheet ID                                       |
+| VTEX_PUKET_DOMAIN                          | Puket VTEX domain (default: www.puket.com.br)        |
+| VTEX_IMAGINARIUM_DOMAIN                    | Imaginarium VTEX domain                              |
+| VTEX_REQUEST_DELAY                         | Seconds between VTEX requests (default: 1.5)         |
+| WMS_ORACLE_HOST/PORT/SID/USER/PASS         | Oracle WMS credentials                               |
+| ERP_PUKET_HOST/DB, ERP_IMG_HOST/DB         | SQL Server ERP connection                            |
+| ERP_MSSQL_USER/PASS                        | SQL Server credentials                               |
+| CORS_ORIGINS                               | Comma-separated allowed origins                      |
+| REPORTS_DIR                                | Path to store generated reports                      |
+| LINX_WRITE_ENABLED                         | Gate da escrita no Linx (default false, fail-closed) |
+| LINX_PROP_COL_PRODUTO/PROPRIEDADE/VALOR    | Colunas reais de PROP_PRODUTOS (via descoberta)      |
+| LINX_PRODUTO_COL_SKU / LINX_SKU_IS_PRODUTO | Resolução SKU→produto (fail-closed sem config)       |
+| LINX_DATE_FORMAT                           | Formato da data gravada (default %d/%m/%Y)           |
 
 ## Docker
 

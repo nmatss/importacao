@@ -88,36 +88,38 @@ Acesse: `http://localhost:8085`
 
 ### Gestao de Importacoes (API + Web)
 
-| Modulo                    | Descricao                                                         |
-| ------------------------- | ----------------------------------------------------------------- |
-| **Dashboard Operacional** | Visao geral de processos, metricas, SLA e alertas                 |
-| **Dashboard Executivo**   | KPIs estrategicos, graficos por marca, timeline de volume         |
-| **Meu Dia**               | Cockpit pessoal com tarefas pendentes, alertas e LIs urgentes     |
-| **Processos**             | CRUD completo com workflow de status (state machine)              |
-| **Documentos**            | Upload com validacao magic-byte, gestao e comparacao side-by-side |
-| **Validacao**             | 27 checks automatizados com IA (OpenRouter) e governance          |
-| **Espelhos**              | Geracao de espelhos com templates por marca                       |
-| **LI Tracking**           | Rastreamento de Licencas de Importacao                            |
-| **Desembaraco**           | Acompanhamento de desembaraco aduaneiro                           |
-| **Numerario**             | Controle de numerario                                             |
-| **Cambio**                | Controle de taxas de cambio e prazos                              |
-| **Comunicacoes**          | Emails via SMTP/Gmail API com drafts e auto-correcao              |
-| **Follow-up**             | Rastreamento com sync bidirecional Google Sheets                  |
-| **Alertas**               | Sistema de alertas (info, warning, critical)                      |
-| **Email Ingestion**       | Importacao automatica via IMAP com classificacao AI               |
-| **Auditoria**             | Log completo de acoes dos usuarios                                |
-| **Configuracoes**         | Parametros gerais, SMTP, integracoes                              |
+| Modulo                    | Descricao                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| **Dashboard Operacional** | Visao geral de processos, metricas, SLA e alertas                                                               |
+| **Dashboard Executivo**   | KPIs estrategicos, graficos por marca, timeline de volume                                                       |
+| **Meu Dia**               | Cockpit pessoal com tarefas pendentes, alertas e LIs urgentes                                                   |
+| **Processos**             | CRUD completo com workflow de status (state machine)                                                            |
+| **Documentos**            | Upload com validacao magic-byte, gestao e comparacao side-by-side                                               |
+| **Validacao**             | 27+ checks automatizados (status `skipped` por doc ausente, aceite manual com justificativa, historico por run) |
+| **Espelhos**              | Geracao de espelhos com templates por marca (join por EAN com fallback itemCode)                                |
+| **Financeiro**            | Valor aduaneiro, numerario (x0,6) e %numerario; alertas de invoice baixa, seguro e demurrage (job diario 08:30) |
+| **LI Tracking**           | Rastreamento de Licencas de Importacao                                                                          |
+| **Desembaraco**           | Acompanhamento de desembaraco aduaneiro                                                                         |
+| **Numerario**             | Controle de numerario                                                                                           |
+| **Cambio**                | Controle de taxas de cambio e prazos                                                                            |
+| **Comunicacoes**          | Emails via SMTP/Gmail API com drafts e auto-correcao                                                            |
+| **Follow-up**             | Rastreamento com sync bidirecional Google Sheets                                                                |
+| **Alertas**               | Sistema de alertas (info, warning, critical)                                                                    |
+| **Email Ingestion**       | Importacao automatica via IMAP com classificacao AI                                                             |
+| **Auditoria**             | Log completo de acoes dos usuarios                                                                              |
+| **Configuracoes**         | Parametros gerais, SMTP, integracoes                                                                            |
 
 ### Validacao de Certificacoes (Cert API + Web)
 
-| Pagina            | Descricao                                                      |
-| ----------------- | -------------------------------------------------------------- |
-| **Dashboard**     | Estatisticas gerais, grafico por marca, produtos com problemas |
-| **Validacao**     | Execucao de validacao em tempo real com progresso via SSE      |
-| **Produtos**      | Listagem completa com filtros, busca e verificacao individual  |
-| **Relatorios**    | Historico de relatorios gerados com download CSV               |
-| **Agendamentos**  | Configuracao de cron jobs com APScheduler                      |
-| **Configuracoes** | Status do sistema, teste de conexao, informacoes               |
+| Pagina                    | Descricao                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Dashboard**             | Estatisticas gerais, grafico por marca, produtos com problemas                                                 |
+| **Validacao**             | Execucao de validacao em tempo real com progresso via SSE                                                      |
+| **Produtos**              | Listagem completa com filtros, busca e verificacao individual                                                  |
+| **Relatorios**            | Historico de relatorios gerados com download CSV                                                               |
+| **Agendamentos**          | Configuracao de cron jobs com APScheduler                                                                      |
+| **Cadastrar Certificado** | Formulario de cadastro (datas, OCP, PDF) + escrita gated no Linx PROP_PRODUTOS — ver `docs/CERT-LINX-WRITE.md` |
+| **Configuracoes**         | Status do sistema, teste de conexao, informacoes                                                               |
 
 #### Marcas e Lojas Monitoradas
 
@@ -406,6 +408,7 @@ Por onde começar, em ordem sugerida para quem chega agora:
 
 Estado e backlog da entrega:
 
+- [`docs/ENTREGA-2026-06-11.md`](docs/ENTREGA-2026-06-11.md) — registro consolidado da entrega em produção (UAT + harness + cert-Linx + hardening + Parte A + deploy)
 - [`docs/ODETT-STATUS.md`](docs/ODETT-STATUS.md) — status da UAT da Odett + camada de confiança da IA
 - [`docs/REVISAO-100.md`](docs/REVISAO-100.md) — gap analysis e backlog vivo da "Parte A 100%"
 - [`docs/AI-HARNESS.md`](docs/AI-HARNESS.md) — harness de confiança da IA (Vertex, skills, knowledge base)
