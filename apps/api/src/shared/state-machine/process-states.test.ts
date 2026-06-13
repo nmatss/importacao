@@ -1,12 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { TRANSITIONS, canTransition, getAllowedTransitions, assertTransition } from './process-states.js';
+import {
+  TRANSITIONS,
+  canTransition,
+  getAllowedTransitions,
+  assertTransition,
+} from './process-states.js';
 import type { ProcessStatus } from './process-states.js';
 
 describe('TRANSITIONS matrix', () => {
   it('should have entries for all ProcessStatus values', () => {
     const allStatuses: ProcessStatus[] = [
-      'draft', 'documents_received', 'validating', 'validated',
-      'espelho_generated', 'sent_to_fenicia', 'li_pending', 'completed', 'cancelled',
+      'draft',
+      'documents_received',
+      'validating',
+      'validated',
+      'espelho_generated',
+      'sent_to_fenicia',
+      'li_pending',
+      'completed',
+      'cancelled',
     ];
     for (const status of allStatuses) {
       expect(TRANSITIONS).toHaveProperty(status);
@@ -24,8 +36,13 @@ describe('TRANSITIONS matrix', () => {
 
   it('should allow cancellation from any active state', () => {
     const activeStates: ProcessStatus[] = [
-      'draft', 'documents_received', 'validating', 'validated',
-      'espelho_generated', 'sent_to_fenicia', 'li_pending',
+      'draft',
+      'documents_received',
+      'validating',
+      'validated',
+      'espelho_generated',
+      'sent_to_fenicia',
+      'li_pending',
     ];
     for (const state of activeStates) {
       expect(canTransition(state, 'cancelled')).toBe(true);
@@ -35,6 +52,13 @@ describe('TRANSITIONS matrix', () => {
   it('should allow re-validation from validated and espelho_generated', () => {
     expect(canTransition('validated', 'validating')).toBe(true);
     expect(canTransition('espelho_generated', 'validating')).toBe(true);
+  });
+
+  it('should allow idempotent re-validation from validating (no 400 on retry)', () => {
+    // A run that failed mid-flight can leave the process stuck in 'validating';
+    // re-running validation must not raise InvalidTransitionError.
+    expect(canTransition('validating', 'validating')).toBe(true);
+    expect(() => assertTransition('validating', 'validating')).not.toThrow();
   });
 
   it('should block illegal jumps', () => {
@@ -53,8 +77,13 @@ describe('getAllowedTransitions', () => {
 
   it('should include cancelled for all non-terminal states', () => {
     const nonTerminal: ProcessStatus[] = [
-      'draft', 'documents_received', 'validating', 'validated',
-      'espelho_generated', 'sent_to_fenicia', 'li_pending',
+      'draft',
+      'documents_received',
+      'validating',
+      'validated',
+      'espelho_generated',
+      'sent_to_fenicia',
+      'li_pending',
     ];
     for (const state of nonTerminal) {
       expect(getAllowedTransitions(state)).toContain('cancelled');

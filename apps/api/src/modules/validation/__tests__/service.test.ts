@@ -187,6 +187,37 @@ describe('validationService', () => {
         }),
       );
     });
+
+    it('should not leave the process stuck in validating when a check throws', async () => {
+      // A check that rejects mid-run must not leave the process in 'validating';
+      // the run should revert the status to the originating state and re-throw.
+      const throwingCheck = vi.fn().mockRejectedValue(new Error('check exploded'));
+      (allChecks as any).length = 0;
+      (allChecks as any).push(throwingCheck);
+
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(createResolvedChain([])); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      // check throws here → catch block runs:
+      queryQueue.push(createResolvedChain([{ id: 1, status: 'validating' }])); // re-select current
+      const revertChain = createResolvedChain(undefined); // update back to origin
+      queryQueue.push(revertChain);
+
+      await expect(validationService.runAllChecks(1)).rejects.toThrow('check exploded');
+
+      // The status was reverted to the originating state, not left as 'validating'.
+      expect(revertChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'documents_received' }),
+      );
+    });
   });
 
   describe('getResults()', () => {

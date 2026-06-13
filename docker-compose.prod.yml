@@ -95,6 +95,9 @@ services:
       GOOGLE_GROUP_ALLOWED: ${GOOGLE_GROUP_ALLOWED:-}
       GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET: ${GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET:-false}
       REDIS_URL: redis://redis:6379
+      # Sentry (observability). Empty DSN keeps Sentry disabled (see shared/observability/sentry.ts).
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      APP_VERSION: ${APP_VERSION:-dev}
     volumes:
       - uploads:/app/uploads
     depends_on:
@@ -209,6 +212,7 @@ services:
       - "9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
       - prometheusdata:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'

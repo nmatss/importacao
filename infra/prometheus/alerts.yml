@@ -1,0 +1,59 @@
+groups:
+  - name: importacao-api
+    rules:
+      # ── Disponibilidade ──────────────────────────────────────────────
+      # `up` é sintetizado pelo Prometheus para cada target do scrape.
+      # 0 = target inalcançável (api caiu, crash-loop, rede, etc.).
+      - alert: ApiTargetDown
+        expr: up{job="importacao-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API fora do ar (target down)"
+          description: "O target {{ $labels.instance }} (job {{ $labels.job }}) está inalcançável há mais de 2 minutos."
+
+      # ── Taxa de erro 5xx ─────────────────────────────────────────────
+      # http_requests_total tem o label status_code; mede a fração de 5xx
+      # sobre o total nos últimos 5m. Dispara acima de 5%.
+      - alert: ApiHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+            /
+          clamp_min(sum(rate(http_requests_total[5m])), 1) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Alta taxa de erros 5xx na API"
+          description: "Mais de 5% das requisições retornaram 5xx nos últimos 5 minutos (valor atual: {{ $value | humanizePercentage }})."
+
+      # ── Latência p95 ─────────────────────────────────────────────────
+      # http_request_duration_seconds é um histograma; p95 derivado dos
+      # buckets numa janela de 5m. Dispara se p95 > 2s.
+      - alert: ApiHighLatencyP95
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latência p95 alta na API"
+          description: "O p95 de latência das requisições está acima de 2s há mais de 10 minutos (valor atual: {{ $value | humanizeDuration }})."
+
+      # ── Fila travada ─────────────────────────────────────────────────
+      # queue_jobs_active é um gauge de jobs ATUALMENTE ativos por fila.
+      # Não há métrica de backlog/throughput exposta, então usamos um
+      # proxy conservador: jobs ativos presos (>0) por muito tempo, sem
+      # variação, sugere worker travado em vez de fila saudável.
+      - alert: QueueJobsStuck
+        expr: min_over_time(queue_jobs_active[30m]) > 0
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Fila possivelmente travada"
+          description: "A fila {{ $labels.queue_name }} manteve jobs ativos (>0) sem cair a zero por 30 minutos — possível worker travado."

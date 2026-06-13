@@ -18,7 +18,10 @@ export type ProcessStatus =
 export const TRANSITIONS: Record<ProcessStatus, ProcessStatus[]> = {
   draft: ['documents_received', 'validating', 'cancelled'],
   documents_received: ['validating', 'cancelled'],
-  validating: ['validated', 'draft', 'cancelled'],
+  // 'validating' -> 'validating' makes re-running validation idempotent:
+  // a previous run that failed mid-flight (and left the process stuck in
+  // 'validating') can be retried without an InvalidTransitionError.
+  validating: ['validated', 'validating', 'draft', 'cancelled'],
   validated: ['espelho_generated', 'validating', 'cancelled'],
   espelho_generated: ['sent_to_fenicia', 'validating', 'cancelled'],
   sent_to_fenicia: ['li_pending', 'completed', 'cancelled'],
