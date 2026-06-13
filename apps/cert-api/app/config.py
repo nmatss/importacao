@@ -114,6 +114,41 @@ LINX_SCHEMA: dict[str, str] = {
     "date_format": os.environ.get("LINX_DATE_FORMAT", "%d/%m/%Y"),
 }
 
+
+def validate_linx_config() -> None:
+    """Fail-fast guard for the Linx write go-live.
+
+    Quando LINX_WRITE_ENABLED=true, toda coluna em que o upsert se apoia precisa
+    estar configurada. Isso impede subir o cert-api com uma config parcial que
+    gravaria na coluna errada do ERP ou falharia a resolucao de SKU em todo
+    request. No-op enquanto LINX_WRITE_ENABLED=false (estado atual de producao).
+    Chamado no startup (app/main.py).
+    """
+    if not LINX_WRITE_ENABLED:
+        return
+
+    missing: list[str] = []
+    if not LINX_SCHEMA["prop_table"]:
+        missing.append("LINX_PROP_TABLE")
+    if not LINX_SCHEMA["prop_col_produto"]:
+        missing.append("LINX_PROP_COL_PRODUTO")
+    if not LINX_SCHEMA["prop_col_propriedade"]:
+        missing.append("LINX_PROP_COL_PROPRIEDADE")
+    if not LINX_SCHEMA["prop_col_valor"]:
+        missing.append("LINX_PROP_COL_VALOR")
+
+    sku_is_produto = LINX_SCHEMA["sku_is_produto"].lower() == "true"
+    if not sku_is_produto and not LINX_SCHEMA["produto_col_sku"]:
+        missing.append("LINX_PRODUTO_COL_SKU (ou LINX_SKU_IS_PRODUTO=true)")
+
+    if missing:
+        raise RuntimeError(
+            "LINX_WRITE_ENABLED=true mas a configuracao de schema do Linx esta "
+            "incompleta. Defina: " + ", ".join(missing) + ". "
+            "Rode apps/cert-api/sql/linx_discovery.sql para descobrir os nomes reais "
+            "das colunas de PROP_PRODUTOS/PRODUTOS antes de ligar a escrita."
+        )
+
 # --- CORS ---
 _cors_origins_env: str = os.environ.get("CORS_ORIGINS", "")
 CORS_ORIGINS: list[str] = (

@@ -726,7 +726,9 @@ class AIService {
    * XLSX parser (tryParseEspelhoBuffer) fails because the layout differs
    * from the known format. Disabled by default — set ESPELHO_AI_FALLBACK=1
    * to enable, and only do so when AI_PROVIDER=vertex (privacy: espelho
-   * carries sensitive Pre-Cons-linked data).
+   * carries sensitive Pre-Cons-linked data). Mantém-se bloqueado até o Vertex
+   * estar ativo em produção (IAM — issue #60): só ligue após a extração via
+   * Vertex ser confirmada, nunca apontando para a Developer API.
    */
   async extractEspelhoData(text: string): Promise<ExtractionResult> {
     const msgs: OpenRouterMessage[] = buildEspelhoPrompt(text) as OpenRouterMessage[];

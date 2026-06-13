@@ -26,6 +26,15 @@ async function handleCronError(jobName: string, error: unknown): Promise<void> {
 export function startScheduler() {
   const tz = { timezone: 'America/Sao_Paulo' };
 
+  // Pre-Cons drive sync só roda se a pasta do Drive estiver configurada (e
+  // compartilhada com a SA). Avisa no boot quando ausente para não passar
+  // despercebido que a sync semanal está silenciosamente desligada.
+  if (!process.env.GOOGLE_DRIVE_PRE_CONS_FOLDER_ID) {
+    logger.warn(
+      'GOOGLE_DRIVE_PRE_CONS_FOLDER_ID não configurado: a sync de Pre-Cons do Drive (*/6h) será pulada',
+    );
+  }
+
   // Daily at 8:00 AM - Check deadlines (LI + currency)
   cron.schedule(
     '0 8 * * *',
