@@ -4,6 +4,7 @@ import { Banknote, Search, DollarSign, Percent, Calculator } from 'lucide-react'
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { formatDate, formatCurrency, cn } from '@/shared/lib/utils';
 
 interface ProcessItem {
@@ -35,7 +36,12 @@ export function NumerarioPage() {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
 
-  const { data: processResponse, isLoading } = useApiQuery<{
+  const {
+    data: processResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{
     data: ProcessItem[];
     pagination: unknown;
   }>(['processes-numerario'], '/api/processes?limit=100');
@@ -100,6 +106,10 @@ export function NumerarioPage() {
     return <LoadingSpinner className="py-24" size="lg" />;
   }
 
+  if (error) {
+    return <ErrorState message="Erro ao carregar numerario." onRetry={() => refetch()} />;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -146,24 +156,34 @@ export function NumerarioPage() {
 
       {/* Search */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
-        <div className="max-w-xs">
-          <label
-            htmlFor="numerario-search"
-            className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
-          >
-            Processo
-          </label>
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              id="numerario-search"
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar processo..."
-              className="w-full rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-            />
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="max-w-xs flex-1 min-w-[180px]">
+            <label
+              htmlFor="numerario-search"
+              className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
+            >
+              Processo
+            </label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                id="numerario-search"
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar processo..."
+                className="w-full rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+              />
+            </div>
           </div>
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 

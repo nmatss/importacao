@@ -7,10 +7,12 @@ import {
   Lock,
   Unlock,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import type { ImportProcess } from '@/shared/types';
 
 export interface ProcessHeaderProps {
@@ -68,12 +70,10 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
     processed: process.documents?.filter((d) => d.isProcessed).length ?? 0,
   };
   const queryClient = useQueryClient();
+  const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
 
   const handleUnlock = async () => {
-    const confirm = window.confirm(
-      `Destravar o processo ${process.processCode}? Aprovação do Vimbar permanece registrada no histórico, mas o sistema voltará a aceitar edições automáticas.`,
-    );
-    if (!confirm) return;
+    setShowUnlockConfirm(false);
     const token = localStorage.getItem('importacao_token');
     const baseUrl = import.meta.env.VITE_API_URL || '';
     try {
@@ -205,7 +205,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
           </button>
           {process.lockedAt && (
             <button
-              onClick={handleUnlock}
+              onClick={() => setShowUnlockConfirm(true)}
               className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm"
             >
               <Unlock className="h-4 w-4" />
@@ -217,6 +217,16 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
 
       {/* Flags */}
       <ProcessFlags process={process} />
+
+      <ConfirmDialog
+        isOpen={showUnlockConfirm}
+        variant="danger"
+        title="Destravar processo"
+        message={`Destravar o processo ${process.processCode}? Aprovação do Vimbar permanece registrada no histórico, mas o sistema voltará a aceitar edições automáticas.`}
+        confirmLabel="Destravar"
+        onConfirm={handleUnlock}
+        onCancel={() => setShowUnlockConfirm(false)}
+      />
     </>
   );
 }

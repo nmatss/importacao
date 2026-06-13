@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, queryQueue } = createMockDb();
+const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -90,15 +90,16 @@ describe('document extraction history (backlog #12)', () => {
         .mockResolvedValue(undefined as never);
       vi.spyOn(documentService, 'getById').mockResolvedValue(mockDoc as never);
 
-      queryQueue.push(createResolvedChain([mockDoc])); // select document
-      const historyInsertChain = createResolvedChain(undefined); // insert history
-      queryQueue.push(historyInsertChain);
-      queryQueue.push(createResolvedChain(undefined)); // update doc (zero aiParsedData)
+      queryQueue.push(createResolvedChain([mockDoc])); // select document (outside tx)
+      const historyInsertChain = createResolvedChain(undefined); // insert history (in tx)
+      txQueue.push(historyInsertChain);
+      txQueue.push(createResolvedChain(undefined)); // update doc (zero aiParsedData) (in tx)
 
       await documentService.reprocess(7, 1);
 
       // Snapshot was written with the PREVIOUS data, confidence and reason
-      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+      // (archive + zero now run atomically inside db.transaction -> mockTx).
+      expect(mockTx.insert).toHaveBeenCalledTimes(1);
       expect(historyInsertChain.values).toHaveBeenCalledWith(
         expect.objectContaining({
           documentId: 7,
@@ -109,8 +110,8 @@ describe('document extraction history (backlog #12)', () => {
       );
 
       // ...BEFORE the update that zeroes the live column
-      const insertOrder = mockDb.insert.mock.invocationCallOrder[0];
-      const updateOrder = mockDb.update.mock.invocationCallOrder[0];
+      const insertOrder = mockTx.insert.mock.invocationCallOrder[0];
+      const updateOrder = mockTx.update.mock.invocationCallOrder[0];
       expect(insertOrder).toBeLessThan(updateOrder);
 
       // Re-extraction is still triggered
@@ -122,13 +123,15 @@ describe('document extraction history (backlog #12)', () => {
       vi.spyOn(documentService, 'getById').mockResolvedValue(mockDoc as never);
 
       const emptyDoc = { ...mockDoc, aiParsedData: null, confidenceScore: null };
-      queryQueue.push(createResolvedChain([emptyDoc])); // select document
-      queryQueue.push(createResolvedChain(undefined)); // update doc
+      queryQueue.push(createResolvedChain([emptyDoc])); // select document (outside tx)
+      txQueue.push(createResolvedChain(undefined)); // update doc (in tx)
 
       await documentService.reprocess(7, 1);
 
-      expect(mockDb.insert).not.toHaveBeenCalled();
-      expect(mockDb.update).toHaveBeenCalled();
+      // archive (insert) is skipped when there was no prior extraction; the
+      // zeroing update still runs, both inside db.transaction -> mockTx.
+      expect(mockTx.insert).not.toHaveBeenCalled();
+      expect(mockTx.update).toHaveBeenCalled();
     });
   });
 

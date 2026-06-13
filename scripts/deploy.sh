@@ -129,6 +129,7 @@ rsync -avz --delete \
   --exclude 'uploads' \
   --exclude '.git' \
   --exclude '__pycache__' \
+  --exclude '.venv' \
   --exclude '*.db' \
   --exclude 'reports/' \
   --exclude 'apps/cert-api/__pycache__' \

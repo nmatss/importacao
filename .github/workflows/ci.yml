@@ -78,6 +78,9 @@ jobs:
         run: npm test -w apps/api -- --coverage
         env:
           DATABASE_URL: postgres://test:test@localhost:5432/importacao_test
+      # NOTE: e2e (test:e2e) NÃO entram no CI ainda — a suíte está quebrada hoje
+      # (9/44 falham: token de auth inválido → 401). Reabilitar após corrigir o
+      # setup de auth dos e2e (test/e2e/setup.ts). Ver roadmap de auditoria.
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
@@ -127,7 +130,7 @@ jobs:
   build-docker:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: [lint-api, lint-web, test-api, security-scan]
+    needs: [lint-api, lint-web, lint-python, test-api, test-web, test-python, security-scan]
     steps:
       - uses: actions/checkout@v4
       - name: Set up Docker Buildx

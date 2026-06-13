@@ -1255,13 +1255,35 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
 
-    // Archive the previous extraction BEFORE zeroing it (audit, backlog #12).
-    await this.archiveExtraction(doc, 'reprocess');
+    // Atomic: archive the previous extraction BEFORE zeroing it (audit,
+    // backlog #12) and zero the fields in one transaction, mirroring the
+    // history-snapshot + mutate pattern in validation.runAllChecks. Prevents a
+    // partial state where the history insert succeeds but the zeroing fails (or
+    // vice-versa), losing or duplicating the archived extraction.
+    await db.transaction(async (tx) => {
+      if (doc.aiParsedData != null) {
+        await tx.insert(documentExtractionHistory).values({
+          documentId: doc.id,
+          aiParsedData: doc.aiParsedData,
+          confidence: doc.confidenceScore ?? null,
+          reason: 'reprocess',
+        });
+        logger.info(
+          { documentId: doc.id, reason: 'reprocess' },
+          'Previous AI extraction archived to history',
+        );
+      }
 
-    await db
-      .update(documents)
-      .set({ isProcessed: false, aiParsedData: null, confidenceScore: null, updatedAt: new Date() })
-      .where(eq(documents.id, documentId));
+      await tx
+        .update(documents)
+        .set({
+          isProcessed: false,
+          aiParsedData: null,
+          confidenceScore: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, documentId));
+    });
 
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 

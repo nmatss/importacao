@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Navigate } from 'react-router-dom';
+import { useMemo, useEffect, useCallback } from 'react';
+import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   ClipboardCheck,
@@ -19,6 +19,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { Breadcrumbs } from '@/shared/components/Breadcrumbs';
 import type { ImportProcess, EmailLog, CurrencyExchange, CurrencyTotals } from '@/shared/types';
 
@@ -185,13 +186,33 @@ function TabContent({
 export function ProcessDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<string>('documentos');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') ?? 'documentos';
 
-  const { data: process, isLoading } = useApiQuery<ImportProcess>(
-    ['process', id!],
-    `/api/processes/${id}`,
-    { enabled: !!id },
+  const setActiveTab = useCallback(
+    (key: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (key === 'documentos') {
+            next.delete('tab');
+          } else {
+            next.set('tab', key);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
   );
+
+  const {
+    data: process,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<ImportProcess>(['process', id!], `/api/processes/${id}`, { enabled: !!id });
 
   // Lightweight queries for tab indicators
   const { data: validationChecks } = useApiQuery<ValidationCheck[]>(
@@ -249,9 +270,9 @@ export function ProcessDetailPage() {
     if (!visibleKeys.has(activeTab)) {
       setActiveTab('documentos');
     }
-  }, [visibleTabs, activeTab]);
+  }, [visibleTabs, activeTab, setActiveTab]);
 
-  const handleTabChange = useCallback((key: string) => setActiveTab(key), []);
+  const handleTabChange = useCallback((key: string) => setActiveTab(key), [setActiveTab]);
   const handleBack = useCallback(() => navigate('/importacao/processos'), [navigate]);
   const handleEdit = useCallback(
     () => navigate(`/importacao/processos/${id}/editar`),
@@ -272,6 +293,10 @@ export function ProcessDetailPage() {
         </p>
       </div>
     );
+  }
+
+  if (error) {
+    return <ErrorState message="Erro ao carregar processo." onRetry={() => refetch()} />;
   }
 
   if (!process) {

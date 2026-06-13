@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { toast } from 'sonner';
 import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { useApiMutation } from '@/shared/hooks/useApi';
@@ -47,6 +48,7 @@ export function ProcessCreatePage() {
 
   const mutation = useApiMutation<{ id: string }, ProcessFormData>('/api/processes', 'post', {
     onSuccess: (data) => {
+      toast.success('Processo criado com sucesso');
       navigate(`/importacao/processos/${data.id}`);
     },
   });
@@ -95,10 +97,11 @@ export function ProcessCreatePage() {
 
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>
+              <label htmlFor="processCode" className={labelClass}>
                 Codigo do Processo <span className="text-danger-500">*</span>
               </label>
               <input
+                id="processCode"
                 {...register('processCode')}
                 placeholder="Ex: IMP-2024-001"
                 className={inputClass}
@@ -107,10 +110,10 @@ export function ProcessCreatePage() {
             </div>
 
             <div>
-              <label className={labelClass}>
+              <label htmlFor="brand" className={labelClass}>
                 Marca <span className="text-danger-500">*</span>
               </label>
-              <select {...register('brand')} className={inputClass}>
+              <select id="brand" {...register('brand')} className={inputClass}>
                 <option value="">Selecione a marca...</option>
                 <option value="puket">Puket</option>
                 <option value="imaginarium">Imaginarium</option>
@@ -119,13 +122,23 @@ export function ProcessCreatePage() {
             </div>
 
             <div>
-              <label className={labelClass}>Incoterm</label>
-              <input {...register('incoterm')} placeholder="FOB" className={inputClass} />
+              <label htmlFor="incoterm" className={labelClass}>
+                Incoterm
+              </label>
+              <input
+                id="incoterm"
+                {...register('incoterm')}
+                placeholder="FOB"
+                className={inputClass}
+              />
             </div>
 
             <div>
-              <label className={labelClass}>Porto de Embarque</label>
+              <label htmlFor="portOfLoading" className={labelClass}>
+                Porto de Embarque
+              </label>
               <input
+                id="portOfLoading"
                 {...register('portOfLoading')}
                 placeholder="Ex: Shanghai"
                 className={inputClass}
@@ -133,8 +146,11 @@ export function ProcessCreatePage() {
             </div>
 
             <div>
-              <label className={labelClass}>Porto de Destino</label>
+              <label htmlFor="portOfDischarge" className={labelClass}>
+                Porto de Destino
+              </label>
               <input
+                id="portOfDischarge"
                 {...register('portOfDischarge')}
                 placeholder="Ex: Santos"
                 className={inputClass}
@@ -142,13 +158,17 @@ export function ProcessCreatePage() {
             </div>
 
             <div>
-              <label className={labelClass}>ETD</label>
-              <input type="date" {...register('etd')} className={inputClass} />
+              <label htmlFor="etd" className={labelClass}>
+                ETD
+              </label>
+              <input type="date" id="etd" {...register('etd')} className={inputClass} />
             </div>
 
             <div>
-              <label className={labelClass}>ETA</label>
-              <input type="date" {...register('eta')} className={inputClass} />
+              <label htmlFor="eta" className={labelClass}>
+                ETA
+              </label>
+              <input type="date" id="eta" {...register('eta')} className={inputClass} />
             </div>
           </div>
         </div>
@@ -163,16 +183,22 @@ export function ProcessCreatePage() {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
-              <label className={labelClass}>Nome</label>
+              <label htmlFor="exporterName" className={labelClass}>
+                Nome
+              </label>
               <input
+                id="exporterName"
                 {...register('exporterName')}
                 placeholder="Nome do exportador"
                 className={inputClass}
               />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelClass}>Endereco</label>
+              <label htmlFor="exporterAddress" className={labelClass}>
+                Endereco
+              </label>
               <textarea
+                id="exporterAddress"
                 {...register('exporterAddress')}
                 rows={2}
                 placeholder="Endereco completo do exportador"
@@ -192,16 +218,22 @@ export function ProcessCreatePage() {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div className="sm:col-span-1">
-              <label className={labelClass}>Nome</label>
+              <label htmlFor="importerName" className={labelClass}>
+                Nome
+              </label>
               <input
+                id="importerName"
                 {...register('importerName')}
                 placeholder="Nome do importador"
                 className={inputClass}
               />
             </div>
             <div className="sm:col-span-2">
-              <label className={labelClass}>Endereco</label>
+              <label htmlFor="importerAddress" className={labelClass}>
+                Endereco
+              </label>
               <textarea
+                id="importerAddress"
                 {...register('importerAddress')}
                 rows={2}
                 placeholder="Endereco completo do importador"
@@ -223,72 +255,104 @@ export function ProcessCreatePage() {
           </div>
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <div>
-              <label className={labelClass}>Valor FOB USD</label>
+              <label htmlFor="totalFobValue" className={labelClass}>
+                Valor FOB USD
+              </label>
               <input
                 type="number"
                 step="0.01"
+                id="totalFobValue"
                 {...register('totalFobValue')}
                 placeholder="0.00"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Valor Frete USD</label>
+              <label htmlFor="freightValue" className={labelClass}>
+                Valor Frete USD
+              </label>
               <input
                 type="number"
                 step="0.01"
+                id="freightValue"
                 {...register('freightValue')}
                 placeholder="0.00"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Tipo Container</label>
-              <input {...register('containerType')} placeholder="Ex: 40HC" className={inputClass} />
+              <label htmlFor="containerType" className={labelClass}>
+                Tipo Container
+              </label>
+              <input
+                id="containerType"
+                {...register('containerType')}
+                placeholder="Ex: 40HC"
+                className={inputClass}
+              />
             </div>
             <div>
-              <label className={labelClass}>Quantidade Caixas</label>
+              <label htmlFor="totalBoxes" className={labelClass}>
+                Quantidade Caixas
+              </label>
               <input
                 type="number"
                 step="1"
+                id="totalBoxes"
                 {...register('totalBoxes')}
                 placeholder="0"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Peso Liquido kg</label>
+              <label htmlFor="totalNetWeight" className={labelClass}>
+                Peso Liquido kg
+              </label>
               <input
                 type="number"
                 step="0.01"
+                id="totalNetWeight"
                 {...register('totalNetWeight')}
                 placeholder="0.00"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Peso Bruto kg</label>
+              <label htmlFor="totalGrossWeight" className={labelClass}>
+                Peso Bruto kg
+              </label>
               <input
                 type="number"
                 step="0.01"
+                id="totalGrossWeight"
                 {...register('totalGrossWeight')}
                 placeholder="0.00"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>CBM m3</label>
+              <label htmlFor="totalCbm" className={labelClass}>
+                CBM m3
+              </label>
               <input
                 type="number"
                 step="0.01"
+                id="totalCbm"
                 {...register('totalCbm')}
                 placeholder="0.00"
                 className={inputClass}
               />
             </div>
             <div>
-              <label className={labelClass}>Data Embarque</label>
-              <input type="date" {...register('shipmentDate')} className={inputClass} />
+              <label htmlFor="shipmentDate" className={labelClass}>
+                Data Embarque
+              </label>
+              <input
+                type="date"
+                id="shipmentDate"
+                {...register('shipmentDate')}
+                className={inputClass}
+              />
             </div>
           </div>
         </div>
@@ -303,7 +367,11 @@ export function ProcessCreatePage() {
               Observacoes
             </h3>
           </div>
+          <label htmlFor="notes" className="sr-only">
+            Observacoes
+          </label>
           <textarea
+            id="notes"
             {...register('notes')}
             rows={4}
             placeholder="Observacoes adicionais sobre o processo..."

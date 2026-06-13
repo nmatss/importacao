@@ -4,6 +4,7 @@ import { Anchor, Search, Package, CheckCircle2, Clock, AlertTriangle } from 'luc
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { formatDate, cn } from '@/shared/lib/utils';
 
 interface ProcessItem {
@@ -53,7 +54,12 @@ export function DesembaracoPage() {
   const [filter, setFilter] = useState<ClearanceFilter>('all');
   const [search, setSearch] = useState('');
 
-  const { data: processResponse, isLoading } = useApiQuery<{
+  const {
+    data: processResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{
     data: ProcessItem[];
     pagination: unknown;
   }>(['processes-desembaraco'], '/api/processes?limit=100');
@@ -135,6 +141,12 @@ export function DesembaracoPage() {
 
   if (isLoading) {
     return <LoadingSpinner className="py-24" size="lg" />;
+  }
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar processos de desembaraco." onRetry={() => refetch()} />
+    );
   }
 
   return (
@@ -226,6 +238,18 @@ export function DesembaracoPage() {
               ))}
             </div>
           </div>
+
+          {(filter !== 'all' || search) && (
+            <button
+              onClick={() => {
+                setFilter('all');
+                setSearch('');
+              }}
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 
