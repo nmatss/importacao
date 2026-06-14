@@ -71,128 +71,163 @@ export const validationService = {
     };
 
     // 4. Update process status to 'validating'
-    assertTransition(process.status as ProcessStatus, 'validating');
+    // Capture the originating status so we can roll back if the run fails
+    // mid-flight — otherwise the process would stay stuck in 'validating'.
+    const originStatus = process.status as ProcessStatus;
+    assertTransition(originStatus, 'validating');
     await db
       .update(importProcesses)
       .set({ status: 'validating', updatedAt: new Date() })
       .where(eq(importProcesses.id, processId));
 
-    // 5. Run all checks (supports async checks like Odoo)
-    const results: CheckResult[] = await Promise.all(allChecks.map((check) => check(checkInput)));
+    let results: CheckResult[];
+    try {
+      // 5. Run all checks (supports async checks like Odoo)
+      results = await Promise.all(allChecks.map((check) => check(checkInput)));
 
-    logger.info(
-      {
-        processId,
-        total: results.length,
-        passed: results.filter((r) => r.status === 'passed').length,
-        failed: results.filter((r) => r.status === 'failed').length,
-        warnings: results.filter((r) => r.status === 'warning').length,
-        skipped: results.filter((r) => r.status === 'skipped').length,
-      },
-      'Validation checks completed',
-    );
+      logger.info(
+        {
+          processId,
+          total: results.length,
+          passed: results.filter((r) => r.status === 'passed').length,
+          failed: results.filter((r) => r.status === 'failed').length,
+          warnings: results.filter((r) => r.status === 'warning').length,
+          skipped: results.filter((r) => r.status === 'skipped').length,
+        },
+        'Validation checks completed',
+      );
 
-    // 6. Atomic: snapshot previous results to history, then delete old
-    // results + insert new ones — all in one transaction. The history
-    // snapshot (append-only, regulatory audit — backlog #12) preserves what
-    // the live table is about to lose; the live table behavior is unchanged.
-    await db.transaction(async (tx) => {
-      const previousRaw = await tx
-        .select()
-        .from(validationResults)
-        .where(eq(validationResults.processId, processId));
-      const previous: ValidationResult[] = Array.isArray(previousRaw) ? previousRaw : [];
+      // 6. Atomic: snapshot previous results to history, then delete old
+      // results + insert new ones — all in one transaction. The history
+      // snapshot (append-only, regulatory audit — backlog #12) preserves what
+      // the live table is about to lose; the live table behavior is unchanged.
+      await db.transaction(async (tx) => {
+        const previousRaw = await tx
+          .select()
+          .from(validationResults)
+          .where(eq(validationResults.processId, processId));
+        const previous: ValidationResult[] = Array.isArray(previousRaw) ? previousRaw : [];
 
-      if (previous.length > 0) {
-        const now = new Date();
-        await tx.insert(validationResultHistory).values(
-          previous.map((r) => ({
+        if (previous.length > 0) {
+          const now = new Date();
+          await tx.insert(validationResultHistory).values(
+            previous.map((r) => ({
+              processId,
+              // run_at = moment the previous run was recorded, when available.
+              runAt: r.createdAt ?? now,
+              checkName: r.checkName,
+              status: r.status as string,
+              message: r.message,
+              details: {
+                expectedValue: r.expectedValue ?? null,
+                actualValue: r.actualValue ?? null,
+                documentsCompared: r.documentsCompared ?? null,
+                dataSource: r.dataSource ?? null,
+                resolvedBy: r.resolvedBy ?? null,
+                resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
+              },
+              resolvedManually: r.resolvedManually ?? false,
+              resolutionNote: r.resolutionNote ?? null,
+            })),
+          );
+        }
+
+        await tx.delete(validationResults).where(eq(validationResults.processId, processId));
+
+        await tx.insert(validationResults).values(
+          results.map((r) => ({
             processId,
-            // run_at = moment the previous run was recorded, when available.
-            runAt: r.createdAt ?? now,
             checkName: r.checkName,
-            status: r.status as string,
+            status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
+            expectedValue: r.expectedValue ?? null,
+            actualValue: r.actualValue ?? null,
+            documentsCompared: r.documentsCompared,
             message: r.message,
-            details: {
-              expectedValue: r.expectedValue ?? null,
-              actualValue: r.actualValue ?? null,
-              documentsCompared: r.documentsCompared ?? null,
-              dataSource: r.dataSource ?? null,
-              resolvedBy: r.resolvedBy ?? null,
-              resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
-            },
-            resolvedManually: r.resolvedManually ?? false,
-            resolutionNote: r.resolutionNote ?? null,
+            dataSource: r.documentsCompared.includes('Sistema')
+              ? 'system_vs_document'
+              : 'cross_document',
           })),
         );
-      }
+      });
 
-      await tx.delete(validationResults).where(eq(validationResults.processId, processId));
-
-      await tx.insert(validationResults).values(
-        results.map((r) => ({
-          processId,
-          checkName: r.checkName,
-          status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
-          expectedValue: r.expectedValue ?? null,
-          actualValue: r.actualValue ?? null,
-          documentsCompared: r.documentsCompared,
-          message: r.message,
-          dataSource: r.documentsCompared.includes('Sistema')
-            ? 'system_vs_document'
-            : 'cross_document',
-        })),
+      // Upload validation report to Drive Sistema Automatico
+      this.uploadValidationReportToDrive(process.processCode, results).catch((err) =>
+        logger.error({ err, processId }, 'Failed to upload validation report to Drive'),
       );
-    });
 
-    // Upload validation report to Drive Sistema Automatico
-    this.uploadValidationReportToDrive(process.processCode, results).catch((err) =>
-      logger.error({ err, processId }, 'Failed to upload validation report to Drive'),
-    );
+      // 7. Update process status based on results + correction status
+      const hasFailed = results.some((r) => r.status === 'failed');
+      if (!hasFailed) {
+        // If was pending correction, clear it and move back from correction folder
+        if (process.correctionStatus === 'pending_correction') {
+          assertTransition('validating' as ProcessStatus, 'validated');
+          await db
+            .update(importProcesses)
+            .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
+            .where(eq(importProcesses.id, processId));
 
-    // 7. Update process status based on results + correction status
-    const hasFailed = results.some((r) => r.status === 'failed');
-    if (!hasFailed) {
-      // If was pending correction, clear it and move back from correction folder
-      if (process.correctionStatus === 'pending_correction') {
-        assertTransition('validating' as ProcessStatus, 'validated');
+          try {
+            const { googleDriveService } = await import('../integrations/google-drive.service.js');
+            await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+          } catch (err) {
+            logger.error({ err, processId }, 'Failed to move from correction folder');
+          }
+        } else {
+          assertTransition('validating' as ProcessStatus, 'validated');
+          await db
+            .update(importProcesses)
+            .set({ status: 'validated', updatedAt: new Date() })
+            .where(eq(importProcesses.id, processId));
+        }
+
+        // Update pre-inspection milestone in DB
+        await db
+          .update(followUpTracking)
+          .set({ preInspectionAt: new Date(), updatedAt: new Date() })
+          .where(eq(followUpTracking.processId, processId));
+      } else {
+        // Mark as pending correction and move to correction folder
         await db
           .update(importProcesses)
-          .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
+          .set({ correctionStatus: 'pending_correction', updatedAt: new Date() })
           .where(eq(importProcesses.id, processId));
 
         try {
           const { googleDriveService } = await import('../integrations/google-drive.service.js');
-          await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+          await googleDriveService.moveToCorrection(process.processCode, process.brand);
         } catch (err) {
-          logger.error({ err, processId }, 'Failed to move from correction folder');
+          logger.error({ err, processId }, 'Failed to move to correction folder');
         }
-      } else {
-        assertTransition('validating' as ProcessStatus, 'validated');
-        await db
-          .update(importProcesses)
-          .set({ status: 'validated', updatedAt: new Date() })
-          .where(eq(importProcesses.id, processId));
       }
-
-      // Update pre-inspection milestone in DB
-      await db
-        .update(followUpTracking)
-        .set({ preInspectionAt: new Date(), updatedAt: new Date() })
-        .where(eq(followUpTracking.processId, processId));
-    } else {
-      // Mark as pending correction and move to correction folder
-      await db
-        .update(importProcesses)
-        .set({ correctionStatus: 'pending_correction', updatedAt: new Date() })
-        .where(eq(importProcesses.id, processId));
-
+    } catch (err) {
+      // The run failed mid-flight after we moved the process into
+      // 'validating'. Roll the status back to where it came from so the
+      // process is not left stuck in 'validating' (which previously required
+      // a manual exit). Re-running validation is idempotent, but we still
+      // restore the originating state for correctness. Re-throw afterwards so
+      // the caller surfaces the original failure.
       try {
-        const { googleDriveService } = await import('../integrations/google-drive.service.js');
-        await googleDriveService.moveToCorrection(process.processCode, process.brand);
-      } catch (err) {
-        logger.error({ err, processId }, 'Failed to move to correction folder');
+        const [current] = await db
+          .select()
+          .from(importProcesses)
+          .where(eq(importProcesses.id, processId));
+        if (current && current.status === 'validating') {
+          await db
+            .update(importProcesses)
+            .set({ status: originStatus, updatedAt: new Date() })
+            .where(eq(importProcesses.id, processId));
+          logger.warn(
+            { processId, from: 'validating', to: originStatus, err },
+            'Validation run failed; reverted process status',
+          );
+        }
+      } catch (revertErr) {
+        logger.error(
+          { err: revertErr, processId },
+          'Failed to revert process status after validation error',
+        );
       }
+      throw err;
     }
 
     await auditService.log(

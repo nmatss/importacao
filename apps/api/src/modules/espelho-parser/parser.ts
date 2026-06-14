@@ -240,24 +240,75 @@ function buildColumnMap(headerRow: Row): Map<number, keyof EspelhoItem> {
   return map;
 }
 
-function toNumber(cell: unknown): number | null {
-  if (cell === null || cell === undefined) return null;
-  if (typeof cell === 'number') {
-    return Number.isFinite(cell) ? cell : null;
+/**
+ * Locale-aware numeric parser.
+ *
+ * Handles Brazilian (1.234,56) and US/English (1,234.56) formats by deciding
+ * which of ',' / '.' is the decimal separator based on which appears LAST in
+ * the string (the trailing one is decimal; the other is grouping). When only
+ * one separator is present:
+ *   - only ',' -> treated as decimal (BR: '1234,56' -> 1234.56)
+ *   - only '.' -> treated as decimal (default: '1234.56' -> 1234.56)
+ * Currency symbols (R$, USD, $) and whitespace are stripped first. Negatives
+ * are preserved. Empty / unparseable input returns null.
+ */
+export function parseLocaleNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
   }
-  const str = String(cell).trim();
-  if (str === '') return null;
 
-  // Strip currency markers and thousand separators
-  const cleaned = str
+  // Strip currency markers and whitespace.
+  let str = String(value)
     .replace(/R\$/gi, '')
     .replace(/USD/gi, '')
+    .replace(/\$/g, '')
     .replace(/\s+/g, '')
-    .replace(/,/g, '');
+    .trim();
 
-  if (cleaned === '') return null;
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : null;
+  if (str === '') return null;
+
+  // Capture and strip a leading sign.
+  let sign = 1;
+  if (str.startsWith('-')) {
+    sign = -1;
+    str = str.slice(1);
+  } else if (str.startsWith('+')) {
+    str = str.slice(1);
+  }
+
+  if (str === '') return null;
+
+  const hasComma = str.includes(',');
+  const hasDot = str.includes('.');
+
+  let normalized: string;
+  if (hasComma && hasDot) {
+    // The separator that appears LAST is the decimal; the other is grouping.
+    const lastComma = str.lastIndexOf(',');
+    const lastDot = str.lastIndexOf('.');
+    if (lastComma > lastDot) {
+      // ',' is decimal, '.' is grouping -> e.g. 1.234,56
+      normalized = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // '.' is decimal, ',' is grouping -> e.g. 1,234.56
+      normalized = str.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    // Only comma present -> decimal separator (e.g. 1234,56).
+    normalized = str.replace(',', '.');
+  } else {
+    // Only dot (or no separator) -> already decimal-compatible.
+    normalized = str;
+  }
+
+  if (normalized === '' || normalized === '.') return null;
+  const n = Number(normalized);
+  return Number.isFinite(n) ? sign * n : null;
+}
+
+function toNumber(cell: unknown): number | null {
+  return parseLocaleNumber(cell);
 }
 
 function toCodeString(cell: unknown): string | null {
