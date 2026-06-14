@@ -28,12 +28,24 @@ import type { AIProvider, ChatOptions } from './providers/types.js';
 import { assertBudgetAvailable, logUsage, AIBudgetExceededError } from './cost-tracker.js';
 import { EXTRACTION_SCHEMAS } from './extraction-schemas.js';
 import { verifyExtraction } from './harness/index.js';
-import { getVerificationConfig } from './skills/registry.js';
+import { getVerificationConfig, getSkill } from './skills/registry.js';
+import { assembleSpecialistMessages } from './skills/assemble.js';
+import { retrieveContext } from './rag/retriever.js';
 
 export { AIBudgetExceededError };
 
 /** When set, the chat() call uses structured-output mode (responseSchema). */
 const USE_STRUCTURED_OUTPUT = process.env.AI_STRUCTURED_OUTPUT !== '0';
+
+/** Whether extraction builds the prompt from the specialist skill (constitution
+ *  + domain rules + RAG + few-shot + fenced document) instead of the legacy
+ *  ai/prompts/* builders. Read at call time (hot-toggle + testable). Default OFF
+ *  → zero change to the live path; flipping it on is the security prerequisite
+ *  before using a small local VLM, and it is provider-agnostic so it can be
+ *  validated on the fast provider first. */
+function useSpecialistPrompts(): boolean {
+  return process.env.AI_USE_SPECIALIST === '1';
+}
 
 interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -285,7 +297,7 @@ class AIService {
                   responseSchema,
                   signal,
                 } satisfies ChatOptions),
-              90_000,
+              this.chatTimeoutMs(),
               `${currentModel}/${context}`,
             ),
           { attempts: 2, baseDelayMs: 1000, maxDelayMs: 5000, shouldRetry: isRetryableAiError },
@@ -457,6 +469,45 @@ class AIService {
    * Grounding is skipped when the source text is too short to verify (scanned /
    * image-only PDFs), to avoid false hallucination alarms.
    */
+  /**
+   * Build the messages for an extraction. With AI_USE_SPECIALIST on and a skill
+   * registered for `registryKey`, uses the secure specialist assembly
+   * (constitution + RAG + few-shot + fenced/neutralized document, with the
+   * prompt-injection defense). Otherwise returns the legacy messages unchanged.
+   * IMPORTANT: `registryKey` is the registry/skill key (e.g. 'proforma_invoice',
+   * 'ohbl'), NOT the extractWithUpgrade log label ('proforma', 'bl').
+   */
+  private buildExtractionMessages(
+    registryKey: string,
+    legacyMessages: OpenRouterMessage[],
+    text: string,
+    imageOpts?: ImageExtractionOpts,
+  ): OpenRouterMessage[] {
+    if (!useSpecialistPrompts()) return legacyMessages;
+    const skill = getSkill(registryKey);
+    if (!skill) return legacyMessages;
+    const ragSnippets = retrieveContext(text, skill.retrieval);
+    return assembleSpecialistMessages(
+      skill,
+      {
+        documentText: text,
+        imageBase64: imageOpts?.imageBase64,
+        imageMimeType: imageOpts?.imageMimeType,
+      },
+      ragSnippets,
+    ) as OpenRouterMessage[];
+  }
+
+  /** Per-provider request timeout for a single model call. The local VLM on CPU
+   *  is far slower than a hosted API, and extraction already runs off the HTTP
+   *  request (fire-and-forget / queue), so it gets a much larger ceiling. */
+  private chatTimeoutMs(): number {
+    if (this.provider.name === 'ialocal') {
+      return Number(process.env.AI_LOCAL_CHAT_TIMEOUT_MS) || 360_000;
+    }
+    return Number(process.env.AI_CHAT_TIMEOUT_MS) || 90_000;
+  }
+
   private applyHarness(
     docType: string,
     result: ExtractionResult,
@@ -542,7 +593,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('invoice', msgs, text, imageOpts);
     return this.extractWithUpgrade(
       'invoice',
       'gemini-2.5-flash',
@@ -594,7 +645,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('proforma_invoice', msgs, text, imageOpts);
     return this.extractWithUpgrade(
       'proforma',
       'gemini-2.5-flash',
@@ -648,7 +699,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('packing_list', msgs, text, imageOpts);
     return this.extractWithUpgrade(
       'packing_list',
       'gemini-2.5-flash',
@@ -693,7 +744,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('ohbl', msgs, text, imageOpts);
     return this.extractWithUpgrade('bl', 'gemini-2.5-flash', 'gemini-2.5-pro', async (model) => {
       const response = await this.chat(
         model,
@@ -732,7 +783,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('draft_bl', msgs, text, imageOpts);
     const response = await this.chat(
       'gemini-2.5-flash',
       messages,
@@ -769,6 +820,7 @@ class AIService {
    */
   async extractEspelhoData(text: string): Promise<ExtractionResult> {
     const msgs: OpenRouterMessage[] = buildEspelhoPrompt(text) as OpenRouterMessage[];
+    const messages = this.buildExtractionMessages('espelho', msgs, text);
     return this.extractWithUpgrade(
       'espelho',
       'gemini-2.5-flash',
@@ -776,7 +828,7 @@ class AIService {
       async (model) => {
         const response = await this.chat(
           model,
-          msgs,
+          messages,
           true,
           'espelho_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.espelho : undefined,
@@ -813,7 +865,7 @@ class AIService {
         imageOpts,
       );
     }
-    const messages = msgs;
+    const messages = this.buildExtractionMessages('certificate', msgs, text, imageOpts);
     const response = await this.chat(
       'gemini-2.5-flash',
       messages,

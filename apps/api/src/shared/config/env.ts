@@ -41,6 +41,13 @@ const envSchema = z
     IA_LOCAL_API_KEY: z.string().optional(),
     IA_LOCAL_MODEL: z.string().optional(),
     IA_LOCAL_EMBED_MODEL: z.string().optional(),
+    // Specialist prompt pipeline (constitution + skills + RAG + injection
+    // defense). Default off — flip on after validating on the fast provider.
+    AI_USE_SPECIALIST: z.enum(['0', '1']).optional(),
+    // Per-model-call timeouts. The local VLM on CPU is slow; extraction runs off
+    // the HTTP request, so it gets a much larger ceiling.
+    AI_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+    AI_LOCAL_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
 
     // Vertex AI (Google self-hosted provider). Credentials fall back to GOOGLE_DRIVE_* if unset.
     GOOGLE_VERTEX_PROJECT: z.string().optional(),

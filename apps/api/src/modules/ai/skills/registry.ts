@@ -88,7 +88,7 @@ function plQuantityIntegerCheck(data: Record<string, any>): HarnessFinding | nul
 // ── Invoice ──────────────────────────────────────────────────────────
 const INVOICE_DOMAIN_RULES = `Documento: Commercial Invoice (fatura comercial do fornecedor estrangeiro).
 - invoiceNumber: nº da fatura no topo ("Invoice No."). invoiceDate: data de EMISSÃO (não a de embarque).
-- exporter*: o vendedor/shipper estrangeiro. importer*: o comprador brasileiro (ex.: Puket/Imaginarium/Grupo Uni.co); importerCnpj com 14 dígitos.
+- exporter*: o vendedor/shipper estrangeiro (China, Índia, Bangladesh, Hong Kong, Paraguai... — não assuma China). importer*: o comprador brasileiro (ex.: Puket/Imaginarium/Grupo Uni.co); importerCnpj com 14 dígitos.
 - incoterm: FOB/CFR/CIF/EXW. currency: quase sempre USD.
 - items[]: cada linha é um SKU. itemCode é o código do produto — CUIDADO com letra de outra coluna colada no código (ex.: "W7765Y" vindo de "WHITE BOX" deve ser "7765Y"). quantity é INTEIRA (peças/pares); unitPrice × quantity = totalPrice. ncmCode com 8 dígitos. ean só se impresso (8/12/13/14 díg).
 - isFreeOfCharge=true em amostra/FOC/brinde: esses itens NÃO entram no totalFobValue.
@@ -114,7 +114,7 @@ const INVOICE_FEWSHOT = `{
 }`;
 
 // ── Packing List ─────────────────────────────────────────────────────
-const PL_DOMAIN_RULES = `Documento: Packing List / Romaneio de embarque (acompanha a Commercial Invoice; fornecedor asiático -> importador BR Puket/Imaginarium/Grupo Uni.co). NUNCA contém preço/valor monetário — só unidades, caixas (cartons) e pesos.
+const PL_DOMAIN_RULES = `Documento: Packing List / Romaneio de embarque (acompanha a Commercial Invoice; fornecedor estrangeiro — China, Índia, Bangladesh, Hong Kong, Paraguai... -> importador BR Puket/Imaginarium/Grupo Uni.co). NUNCA contém preço/valor monetário — só unidades, caixas (cartons) e pesos.
 - packingListNumber: nº do PL no topo ("Packing List No.", "P/L No."). Pode coincidir com o invoiceNumber — ainda assim grounde no texto, não invente.
 - invoiceNumber (opcional): nº da Commercial Invoice referenciada.
 - date: data do PL em ISO 8601. Prefira a data de EMISSÃO; não confunda com embarque/ETD. Atenção a BR (DD/MM) vs intl (MM/DD).
@@ -223,7 +223,7 @@ const PROFORMA_DOMAIN_RULES = `Documento: Proforma Invoice (estimativa PRÉ-EMBA
 - piNumber: número da Proforma (ex.: PIK10056) — CHAVE de ligação com a planilha Pre-Cons; sempre extrair. invoiceNumber (opcional) SÓ se houver um "Invoice No." SEPARADO impresso; não duplique o piNumber.
 - invoiceDate: emissão (não embarque/ETD nem validade). validUntil: validade da cotação. Ambas ISO 8601.
 - exporter*: vendedor estrangeiro; exporterTaxId é registro fiscal estrangeiro (não CNPJ). importer*: comprador BR (Puket/Imaginarium/IMB TEXTIL); importerCnpj 14 dígitos.
-- incoterm: FOB/CFR/CIF/EXW. currency: ISO 4217, quase sempre USD. portOfLoading no exterior, portOfDischarge no Brasil (Santos).
+- incoterm: FOB/CFR/CIF/EXW. currency: ISO 4217, quase sempre USD. portOfLoading no exterior. portOfDischarge no Brasil: predominam portos de Santa Catarina (Navegantes/Itajaí/Itapoá/Imbituba); também Santos/Paranaguá e aéreo (Guarulhos/Navegantes). NÃO assuma Santos por padrão — leia o documento.
 - items[]: itemCode = código do produto (cuidado com letra de outra coluna; "W7765Y" -> 7765Y, cor WHITE vai em color). quantity INTEIRA. unitPrice × quantity = totalPrice. ncmCode 8 dígitos. unitType (PCS/PAIR/SET/CTN).
 - isFreeOfCharge=true quando unitPrice=0 ou "FOC"/"amostra"/"brinde"; itens FOC NÃO entram em totalFobValue.
 - totalFobValue = soma dos totalPrice NÃO-FOC. paymentTerms = {depositPercent, balancePercent, paymentDays, description}. totalNetWeight <= totalGrossWeight; totalBoxes inteiro.`;
