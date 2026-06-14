@@ -18,6 +18,7 @@ import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import { logger } from '../../shared/utils/logger.js';
 import { deriveLogisticStatus, isForwardTransition } from './logistic-auto-advance.js';
 
 export const processService = {
@@ -92,8 +93,8 @@ export const processService = {
   },
 
   async create(input: CreateProcessInput, userId: number) {
-    return db.transaction(async (tx) => {
-      const [process] = await tx
+    const process = await db.transaction(async (tx) => {
+      const [created] = await tx
         .insert(importProcesses)
         .values({
           processCode: input.processCode,
@@ -114,9 +115,15 @@ export const processService = {
         .returning();
 
       await tx.insert(followUpTracking).values({
-        processId: process.id,
+        processId: created.id,
       });
 
+      return created;
+    });
+
+    // Audit log AFTER commit (best-effort) — must not reference an entity that
+    // could be rolled back, and a logging failure must not undo the create.
+    try {
       auditService.log(
         userId,
         'create',
@@ -125,9 +132,11 @@ export const processService = {
         { processCode: input.processCode },
         null,
       );
+    } catch (err) {
+      logger.error({ err, processId: process.id }, 'Failed to write create audit log');
+    }
 
-      return process;
-    });
+    return process;
   },
 
   async createFromPreCons(input: CreateFromPreConsInput, userId: number) {

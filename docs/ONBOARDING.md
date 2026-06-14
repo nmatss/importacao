@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Docker Desktop (or Docker + Docker Compose v2)
-- Node.js 20+ and npm
+- Node.js 22+ and npm
 - Python 3.12 (for cert-api local dev)
 - Git
 
@@ -29,25 +29,30 @@ cp .env.example .env
 
 ```bash
 docker compose up -d
-# This starts: postgres, api (port 3001), web (port 8080), cert-api (port 8000)
+# This starts: postgres, api (port 3001), web (port 8080), cert-api (host port 8002)
 ```
 
 ### 4. Access the application
 
 - Web UI: http://localhost:8080
 - API: http://localhost:3001
-- Cert-API: http://localhost:8000/api/health
+- Cert-API: http://localhost:8002/api/health
 
 ### 5. Create first admin user
 
 ```bash
-# Connect to the API container and run the seed
-docker compose exec api node scripts/seed-admin.js
-# Or POST directly:
-curl -X POST http://localhost:3001/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"Admin123!","name":"Admin"}'
+# Run the seed (creates the default admin + base system settings)
+npm run db:seed
+# Or inside the API container:
+docker compose exec api npm run db:seed
 ```
+
+The seed creates a default admin user:
+
+- Email: `admin@importacao.com`
+- Password: `admin123`
+
+Change this password immediately after first login.
 
 ---
 
@@ -70,7 +75,7 @@ importacao/
 - Entry point: `src/index.ts`
 - Routes: `src/modules/<domain>/routes.ts`
 - DB migrations: `drizzle/migrations/` (apply with `npm run db:migrate`)
-- Tests: `npm test` (jest)
+- Tests: `npm test` (Vitest)
 
 ### apps/web
 
@@ -89,13 +94,13 @@ importacao/
 ## Running Tests
 
 ```bash
-# API tests
+# API tests (Vitest)
 cd apps/api && npm test
 
-# Web tests (if configured)
+# Web tests (Vitest)
 cd apps/web && npm test
 
-# Cert-API tests
+# Cert-API tests (pytest)
 cd apps/cert-api
 pip install pytest pytest-asyncio pytest-mock httpx
 pytest tests/ -v

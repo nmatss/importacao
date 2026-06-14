@@ -60,7 +60,10 @@ export const alertService = {
     message: string;
     processCode?: string;
   }) {
-    // Skip duplicate alerts (same processId + title within 24h)
+    // Skip duplicate alerts (same processId + title within 24h). When there is
+    // no processId (e.g. recurring cron failures like logistic-sync), dedupe by
+    // title alone within the window so a failing job does not create ~48
+    // identical alerts/day (alert storm).
     const isDuplicate = await this.hasDuplicateRecent(data.processId, data.title);
     if (isDuplicate) {
       const [existing] = await db
@@ -68,7 +71,9 @@ export const alertService = {
         .from(alerts)
         .where(
           and(
-            eq(alerts.processId, data.processId!),
+            data.processId
+              ? eq(alerts.processId, data.processId)
+              : sql`${alerts.processId} IS NULL`,
             eq(alerts.title, data.title),
             sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
           ),
@@ -129,13 +134,15 @@ export const alertService = {
   },
 
   async hasDuplicateRecent(processId: number | undefined, title: string): Promise<boolean> {
-    if (!processId) return false;
+    // Dedupe by processId + title when a process is set; otherwise (cron alerts
+    // with no processId) dedupe by title alone, matching only rows where
+    // processId IS NULL, so recurring job failures collapse into one alert.
     const [existing] = await db
       .select({ id: alerts.id })
       .from(alerts)
       .where(
         and(
-          eq(alerts.processId, processId),
+          processId ? eq(alerts.processId, processId) : sql`${alerts.processId} IS NULL`,
           eq(alerts.title, title),
           sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
         ),

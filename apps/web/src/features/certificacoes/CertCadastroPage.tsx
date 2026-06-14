@@ -237,8 +237,15 @@ export default function CertCadastroPage() {
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <label className={labelCls}>Marca / Loja *</label>
-            <select className={inputCls} value={brand} onChange={(e) => setBrand(e.target.value)}>
+            <label htmlFor="cert-brand" className={labelCls}>
+              Marca / Loja *
+            </label>
+            <select
+              id="cert-brand"
+              className={inputCls}
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+            >
               {BRANDS.map((b) => (
                 <option key={b.value} value={b.value}>
                   {b.label}
@@ -247,8 +254,11 @@ export default function CertCadastroPage() {
             </select>
           </div>
           <div>
-            <label className={labelCls}>SKU do produto *</label>
+            <label htmlFor="cert-sku" className={labelCls}>
+              SKU do produto *
+            </label>
             <input
+              id="cert-sku"
               className={inputCls}
               value={sku}
               onChange={(e) => setSku(e.target.value)}
@@ -256,8 +266,11 @@ export default function CertCadastroPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Validade do Certificado</label>
+            <label htmlFor="cert-validade" className={labelCls}>
+              Validade do Certificado
+            </label>
             <input
+              id="cert-validade"
               type="date"
               className={inputCls}
               value={validade}
@@ -265,8 +278,11 @@ export default function CertCadastroPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Vencimento do Licenciamento</label>
+            <label htmlFor="cert-vencimento" className={labelCls}>
+              Vencimento do Licenciamento
+            </label>
             <input
+              id="cert-vencimento"
               type="date"
               className={inputCls}
               value={vencimento}
@@ -274,8 +290,11 @@ export default function CertCadastroPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Nº do Certificado</label>
+            <label htmlFor="cert-numero" className={labelCls}>
+              Nº do Certificado
+            </label>
             <input
+              id="cert-numero"
               className={inputCls}
               value={numero}
               onChange={(e) => setNumero(e.target.value)}
@@ -283,8 +302,11 @@ export default function CertCadastroPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>OCP / Organismo</label>
+            <label htmlFor="cert-ocp" className={labelCls}>
+              OCP / Organismo
+            </label>
             <input
+              id="cert-ocp"
               className={inputCls}
               value={ocp}
               onChange={(e) => setOcp(e.target.value)}
@@ -292,8 +314,15 @@ export default function CertCadastroPage() {
             />
           </div>
           <div>
-            <label className={labelCls}>Órgão certificador</label>
-            <select className={inputCls} value={orgao} onChange={(e) => setOrgao(e.target.value)}>
+            <label htmlFor="cert-orgao" className={labelCls}>
+              Órgão certificador
+            </label>
+            <select
+              id="cert-orgao"
+              className={inputCls}
+              value={orgao}
+              onChange={(e) => setOrgao(e.target.value)}
+            >
               <option value="">—</option>
               {ORGAOS.map((o) => (
                 <option key={o} value={o}>

@@ -5,6 +5,10 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Senha obrigatória'),
 });
 
+export const googleLoginSchema = z.object({
+  credential: z.string().min(1, 'Token Google não fornecido'),
+});
+
 export const createUserSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
@@ -21,5 +25,6 @@ export const updateUserSchema = z.object({
 });
 
 export type LoginInput = z.infer<typeof loginSchema>;
+export type GoogleLoginInput = z.infer<typeof googleLoginSchema>;
 export type CreateUserInput = z.infer<typeof createUserSchema>;
 export type UpdateUserInput = z.infer<typeof updateUserSchema>;

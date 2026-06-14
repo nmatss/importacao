@@ -3,9 +3,11 @@ import { useParams, useNavigate, Navigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { toast } from 'sonner';
 import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 const processSchema = z.object({
   processCode: z.string().min(1, 'Codigo do processo e obrigatorio'),
@@ -62,11 +64,12 @@ export function ProcessEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { data: process, isLoading } = useApiQuery<Process>(
-    ['process', id!],
-    `/api/processes/${id}`,
-    { enabled: !!id },
-  );
+  const {
+    data: process,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<Process>(['process', id!], `/api/processes/${id}`, { enabled: !!id });
 
   const {
     register,
@@ -106,6 +109,7 @@ export function ProcessEditPage() {
 
   const mutation = useApiMutation<Process, ProcessFormData>(`/api/processes/${id}`, 'put', {
     onSuccess: () => {
+      toast.success('Processo atualizado com sucesso');
       navigate(`/importacao/processos/${id}`);
     },
   });
@@ -118,6 +122,10 @@ export function ProcessEditPage() {
 
   if (isLoading) {
     return <LoadingSpinner size="lg" className="py-24" />;
+  }
+
+  if (error) {
+    return <ErrorState message="Erro ao carregar processo." onRetry={() => refetch()} />;
   }
 
   if (!process) {

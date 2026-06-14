@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   FileCheck,
@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { PageSkeleton } from '@/shared/components/Skeleton';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { formatDate, cn } from '@/shared/lib/utils';
 
@@ -114,10 +115,16 @@ export function LiTrackingPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [orgaoFilter, setOrgaoFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [page, setPage] = useState(1);
   const limit = 25;
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const queryParams = useMemo(() => {
     const p = new URLSearchParams();
@@ -125,17 +132,22 @@ export function LiTrackingPage() {
     p.set('limit', String(limit));
     if (statusFilter) p.set('status', statusFilter);
     if (orgaoFilter) p.set('orgao', orgaoFilter);
-    if (search) p.set('processCode', search);
+    if (debouncedSearch) p.set('processCode', debouncedSearch);
     if (startDate) p.set('startDate', startDate);
     if (endDate) p.set('endDate', endDate);
     return p;
-  }, [page, limit, statusFilter, orgaoFilter, search, startDate, endDate]);
+  }, [page, limit, statusFilter, orgaoFilter, debouncedSearch, startDate, endDate]);
 
-  const { data: liResponse, isLoading } = useApiQuery<{
+  const {
+    data: liResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{
     data: LiItem[];
     pagination: { page: number; pages: number; total: number };
   }>(
-    ['li-tracking', String(page), statusFilter, orgaoFilter, search, startDate, endDate],
+    ['li-tracking', String(page), statusFilter, orgaoFilter, debouncedSearch, startDate, endDate],
     `/api/li-tracking?${queryParams.toString()}`,
   );
   const liData = liResponse?.data;
@@ -161,6 +173,12 @@ export function LiTrackingPage() {
 
   if (isLoading) {
     return <PageSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar licencas de importacao." onRetry={() => refetch()} />
+    );
   }
 
   return (
@@ -314,6 +332,22 @@ export function LiTrackingPage() {
               label=""
             />
           </div>
+
+          {(statusFilter || orgaoFilter || search || startDate || endDate) && (
+            <button
+              onClick={() => {
+                setStatusFilter('');
+                setOrgaoFilter('');
+                setSearch('');
+                setStartDate('');
+                setEndDate('');
+                setPage(1);
+              }}
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+            >
+              Limpar filtros
+            </button>
+          )}
         </div>
       </div>
 

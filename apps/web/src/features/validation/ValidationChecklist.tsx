@@ -22,6 +22,8 @@ import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { SubmitButton } from '@/shared/components/SubmitButton';
+import { ErrorState } from '@/shared/components/ErrorState';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EmailSignatureOption {
@@ -206,6 +208,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   } = state;
 
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
   const [filter, setFilter] = useState<'all' | 'failed' | 'warning' | 'passed'>('all');
   // Manual-resolution inline form: which check is being resolved + its note.
   const [resolveTarget, setResolveTarget] = useState<number | null>(null);
@@ -225,10 +228,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     }
   }, [emailSignatures, selectedSignatureId]);
 
-  const { data: checks, isLoading } = useApiQuery<ValidationCheck[]>(
-    ['validation', processId],
-    `/api/validation/${processId}`,
-  );
+  const {
+    data: checks,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<ValidationCheck[]>(['validation', processId], `/api/validation/${processId}`);
 
   // Skipped checks are blocked by a missing source document — they are not
   // errors and are surfaced in a separate collapsible section, never in the
@@ -344,7 +349,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   const sendEmail = async () => {
     if (!draft) return;
-    if (!confirm('Deseja realmente enviar este e-mail de correcao?')) return;
+    setShowSendConfirm(false);
     dispatch({ type: 'SET_SENDING', payload: true });
     try {
       // Save any edits first
@@ -368,6 +373,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   if (isLoading) {
     return <LoadingSpinner className="py-8" />;
+  }
+
+  if (error) {
+    return <ErrorState message="Erro ao carregar validacoes." onRetry={() => refetch()} />;
   }
 
   // Total of actionable checks (skipped are excluded — blocked, not failures).
@@ -849,7 +858,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               </button>
               <SubmitButton
                 type="button"
-                onClick={sendEmail}
+                onClick={() => setShowSendConfirm(true)}
                 loading={sending}
                 disabled={sending}
                 variant="danger"
@@ -861,6 +870,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={showSendConfirm}
+        variant="danger"
+        title="Enviar e-mail de correcao"
+        message="Deseja realmente enviar este e-mail de correcao ao fornecedor?"
+        confirmLabel="Enviar"
+        onConfirm={sendEmail}
+        onCancel={() => setShowSendConfirm(false)}
+      />
     </div>
   );
 }
