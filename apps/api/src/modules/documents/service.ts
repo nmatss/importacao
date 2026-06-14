@@ -12,7 +12,7 @@ import {
   followUpTracking,
   emailIngestionLogs,
 } from '../../shared/database/schema.js';
-import { aiService, flattenAiData } from '../ai/service.js';
+import { aiService, flattenAiData, AIBudgetExceededError } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { tryParseEspelhoBuffer } from '../espelho-parser/parser.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
@@ -306,75 +306,147 @@ export const documentService = {
     const text = extracted.text;
 
     let result;
-    switch (type) {
-      case 'invoice':
-        result = await aiService.extractInvoiceData(text, extractionOpts);
-        break;
-      case 'proforma_invoice':
-        result = await aiService.extractProformaData(text, extractionOpts);
-        break;
-      case 'packing_list':
-        result = await aiService.extractPackingListData(text, extractionOpts);
-        break;
-      case 'ohbl':
-        result = await aiService.extractBLData(text, extractionOpts);
-        break;
-      case 'draft_bl':
-        result = await aiService.extractDraftBLData(text, extractionOpts);
-        break;
-      case 'certificate':
-        result = await aiService.extractCertificateData(text, extractionOpts);
-        break;
-      default: {
-        // Do NOT silent-drop — previously `li` and `other` fell through here
-        // with no side effects, which hid documents forever from the pipeline.
-        // Now we mark the document as processed so the UI stops spinning,
-        // store a structured note, and raise a warning alert so the operator
-        // can either pick a correct type manually or investigate.
-        logger.warn(
-          { documentId: doc.id, processId: doc.processId, type },
-          'Document type has no AI extractor — marking processed without extraction',
-        );
-        await db
-          .update(documents)
-          .set({
-            aiParsedData: {
-              skipped: true,
-              reason:
+    try {
+      switch (type) {
+        case 'invoice':
+          result = await aiService.extractInvoiceData(text, extractionOpts);
+          break;
+        case 'proforma_invoice':
+          result = await aiService.extractProformaData(text, extractionOpts);
+          break;
+        case 'packing_list':
+          result = await aiService.extractPackingListData(text, extractionOpts);
+          break;
+        case 'ohbl':
+          result = await aiService.extractBLData(text, extractionOpts);
+          break;
+        case 'draft_bl':
+          result = await aiService.extractDraftBLData(text, extractionOpts);
+          break;
+        case 'certificate':
+          result = await aiService.extractCertificateData(text, extractionOpts);
+          break;
+        default: {
+          // Do NOT silent-drop — previously `li` and `other` fell through here
+          // with no side effects, which hid documents forever from the pipeline.
+          // Now we mark the document as processed so the UI stops spinning,
+          // store a structured note, and raise a warning alert so the operator
+          // can either pick a correct type manually or investigate.
+          logger.warn(
+            { documentId: doc.id, processId: doc.processId, type },
+            'Document type has no AI extractor — marking processed without extraction',
+          );
+          await db
+            .update(documents)
+            .set({
+              aiParsedData: {
+                skipped: true,
+                reason:
+                  type === 'li'
+                    ? 'Licença de Importação (LI) — extração automática ainda não implementada'
+                    : 'Tipo de documento sem extractor dedicado — revisar manualmente',
+                type,
+              } as Record<string, unknown>,
+              confidenceScore: '0',
+              isProcessed: true,
+              updatedAt: new Date(),
+            })
+            .where(eq(documents.id, documentId));
+
+          const [proc] = await db
+            .select({ processCode: importProcesses.processCode })
+            .from(importProcesses)
+            .where(eq(importProcesses.id, doc.processId))
+            .limit(1);
+
+          alertService
+            .create({
+              processId: doc.processId,
+              severity: 'warning',
+              title:
                 type === 'li'
-                  ? 'Licença de Importação (LI) — extração automática ainda não implementada'
-                  : 'Tipo de documento sem extractor dedicado — revisar manualmente',
-              type,
-            } as Record<string, unknown>,
-            confidenceScore: '0',
-            isProcessed: true,
-            updatedAt: new Date(),
-          })
-          .where(eq(documents.id, documentId));
-
-        const [proc] = await db
-          .select({ processCode: importProcesses.processCode })
-          .from(importProcesses)
-          .where(eq(importProcesses.id, doc.processId))
-          .limit(1);
-
-        alertService
-          .create({
-            processId: doc.processId,
-            severity: 'warning',
-            title:
-              type === 'li'
-                ? 'LI recebida — extração não disponível'
-                : 'Documento sem extractor automático',
-            message:
-              type === 'li'
-                ? `Uma Licença de Importação foi armazenada no processo ${proc?.processCode ?? doc.processId}. A extração automática de LI ainda não está implementada — revise o documento manualmente.`
-                : `Documento do tipo "${type}" no processo ${proc?.processCode ?? doc.processId} foi armazenado mas não tem extractor automático. Revisar classificação manual via UI.`,
-            processCode: proc?.processCode,
-          })
-          .catch((err) => logger.error({ err }, 'Failed to create skip-extraction alert'));
-        return;
+                  ? 'LI recebida — extração não disponível'
+                  : 'Documento sem extractor automático',
+              message:
+                type === 'li'
+                  ? `Uma Licença de Importação foi armazenada no processo ${proc?.processCode ?? doc.processId}. A extração automática de LI ainda não está implementada — revise o documento manualmente.`
+                  : `Documento do tipo "${type}" no processo ${proc?.processCode ?? doc.processId} foi armazenado mas não tem extractor automático. Revisar classificação manual via UI.`,
+              processCode: proc?.processCode,
+            })
+            .catch((err) => logger.error({ err }, 'Failed to create skip-extraction alert'));
+          return;
+        }
       }
+    } catch (extractionError) {
+      // Extraction THREW — the AI call failed hard (monthly budget exhausted,
+      // or every model in the fallback chain failed). Previously this bubbled
+      // out of processWithAI and the document stayed isProcessed=false /
+      // aiParsedData=null forever: the UI spinner never stopped and the
+      // degradable gate (auto-validation / auto-espelho for the OTHER
+      // documents) never fired. Now we mark the document as processed-with-
+      // failure so the spinner stops and the doc remains reprocessable, raise
+      // a CRITICAL alert, and fall through to the degradable gate so the rest
+      // of the process is not held hostage by one failed extraction.
+      const isBudget = extractionError instanceof AIBudgetExceededError;
+      const reason = isBudget
+        ? 'Orçamento mensal de IA esgotado — extração não executada'
+        : extractionError instanceof Error
+          ? extractionError.message
+          : 'Falha desconhecida na extração de IA';
+
+      logger.error(
+        { err: extractionError, documentId, type, isBudget },
+        'AI extraction failed — marking document as processed-with-failure',
+      );
+
+      await db
+        .update(documents)
+        .set({
+          aiParsedData: {
+            extractionFailed: true,
+            reason,
+            budgetExceeded: isBudget,
+            type,
+          } as Record<string, unknown>,
+          confidenceScore: '0',
+          isProcessed: true,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, documentId));
+
+      const [proc] = await db
+        .select({ processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
+
+      await alertService
+        .create({
+          processId: doc.processId,
+          severity: 'critical',
+          title: isBudget
+            ? 'Extração de IA bloqueada — orçamento mensal esgotado'
+            : 'Falha na extração de IA',
+          message: isBudget
+            ? `O documento ${type} do processo ${proc?.processCode ?? doc.processId} não pôde ser extraído porque o orçamento mensal de IA foi esgotado. Ajuste AI_MONTHLY_BUDGET_USD ou aguarde o próximo mês e reprocesse o documento.`
+            : `O documento ${type} do processo ${proc?.processCode ?? doc.processId} falhou na extração automática (${reason}). Reprocesse o documento ou revise-o manualmente.`,
+          processCode: proc?.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create extraction-failed alert'));
+
+      // Degradable: try to advance the rest of the process with whatever was
+      // already extracted from the other documents (mergedAiData comes from the
+      // process row, not this failed doc).
+      const [processRow] = await db
+        .select({ aiExtractedData: importProcesses.aiExtractedData })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
+      await this.runDegradableGate(
+        doc.processId,
+        (processRow?.aiExtractedData as Record<string, any>) ?? {},
+      );
+      return;
     }
 
     // Defensive cleanup: strip column-bleed noise from itemCodes BEFORE
@@ -912,7 +984,21 @@ export const documentService = {
       // by default for privacy — only safe when AI_PROVIDER=vertex (Google
       // contractually does not use Vertex data for training). Operator
       // enables via ESPELHO_AI_FALLBACK=1 after configuring Vertex.
-      if (process.env.ESPELHO_AI_FALLBACK === '1') {
+      //
+      // HARD GUARD: the espelho carries sensitive Pre-Cons-linked data, so the
+      // fallback MUST only run when the provider is Vertex. If the flag is on
+      // but the provider is still OpenRouter (the default), running the
+      // fallback would ship that data to a provider with no no-training
+      // guarantee — refuse and warn instead of leaking.
+      const espelhoFallbackEnabled = process.env.ESPELHO_AI_FALLBACK === '1';
+      const aiProvider = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
+      if (espelhoFallbackEnabled && aiProvider !== 'vertex') {
+        logger.warn(
+          { documentId: doc.id, processId: doc.processId, aiProvider },
+          'ESPELHO_AI_FALLBACK is enabled but AI_PROVIDER is not "vertex" — refusing to run espelho AI fallback (sensitive Pre-Cons data must not leave Vertex)',
+        );
+      }
+      if (espelhoFallbackEnabled && aiProvider === 'vertex') {
         try {
           const xlsxText = extractTextFromXlsxBuffer(buffer);
           if (xlsxText.trim().length > 0) {

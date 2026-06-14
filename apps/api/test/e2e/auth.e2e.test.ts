@@ -8,12 +8,8 @@ let skipReason: string | null = null;
 
 beforeAll(async () => {
   try {
+    // setupE2EDatabase() sets DATABASE_URL/JWT_SECRET/NODE_ENV/REDIS_URL.
     ctx = await setupE2EDatabase();
-    // Set env for app to connect to test container
-    process.env.DATABASE_URL = ctx.connectionString;
-    process.env.JWT_SECRET = 'test-jwt-secret-for-e2e-tests';
-    process.env.NODE_ENV = 'test';
-    process.env.REDIS_URL = '';
   } catch (err) {
     skipReason = `Docker unavailable or setup failed: ${(err as Error).message}`;
   }

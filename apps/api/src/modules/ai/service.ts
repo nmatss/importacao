@@ -72,6 +72,26 @@ interface ExtractionResult {
 // Ordered list of models to try — primary first, then fallbacks in order
 const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
 
+/**
+ * Decides whether an AI provider error is worth re-attempting inside
+ * withRetry. Retrying a 4xx (bad request / forbidden / not found) just burns
+ * the budget on a call that will fail identically every time, so those — and
+ * an exhausted monthly budget — are NOT retried. Everything else (5xx,
+ * timeouts, transient network errors, empty responses) IS retried.
+ *
+ * The provider classes throw plain `Error`s whose message embeds the HTTP
+ * status (e.g. "OpenRouter API error: 403 - ...", "Vertex API error: 404 -
+ * ..."), so we match on that. AIBudgetExceededError is also classified as
+ * non-retryable.
+ */
+export function isRetryableAiError(err: unknown): boolean {
+  if (err instanceof AIBudgetExceededError) return false;
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  // Matches "... error: 400 - ...", "... error: 403 - ...", "... error: 404 - ..."
+  if (/\berror:\s*(400|403|404)\b/.test(message)) return false;
+  return true;
+}
+
 // ── Prompt versions (for governance tracking) ────────────────────────
 
 const PROMPT_VERSIONS: Record<string, string> = {
@@ -256,7 +276,7 @@ class AIService {
               90_000,
               `${currentModel}/${context}`,
             ),
-          { attempts: 2, baseDelayMs: 1000, maxDelayMs: 5000 },
+          { attempts: 2, baseDelayMs: 1000, maxDelayMs: 5000, shouldRetry: isRetryableAiError },
           `ai:${currentModel}`,
         );
 

@@ -6,6 +6,14 @@ export interface RetryOptions {
   attempts: number;
   baseDelayMs: number;
   maxDelayMs?: number;
+  /**
+   * Optional predicate to decide whether a given error is worth retrying.
+   * When provided and it returns `false`, withRetry rethrows immediately
+   * instead of consuming the remaining attempts (and budget/cost). When
+   * omitted, every error is retried — preserving the original behaviour for
+   * all existing callers that don't pass it.
+   */
+  shouldRetry?: (err: unknown) => boolean;
 }
 
 /**
@@ -16,7 +24,7 @@ export async function withRetry<T>(
   opts: RetryOptions,
   label?: string,
 ): Promise<T> {
-  const { attempts, baseDelayMs, maxDelayMs = 30_000 } = opts;
+  const { attempts, baseDelayMs, maxDelayMs = 30_000, shouldRetry } = opts;
   let lastError: Error | unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -24,6 +32,10 @@ export async function withRetry<T>(
       return await fn();
     } catch (err) {
       lastError = err;
+      // Non-retryable error (e.g. 4xx / budget exhausted): don't waste the
+      // remaining attempts. Rethrow now. Only applies when a predicate is
+      // supplied — default callers keep retrying everything.
+      if (shouldRetry && !shouldRetry(err)) throw err;
       if (attempt === attempts) break;
 
       // Exponential backoff with full jitter
@@ -63,7 +75,9 @@ export async function withTimeout<T>(
   } catch (err) {
     clearTimeout(timer);
     if (controller.signal.aborted) {
-      const timeoutErr = new Error(`Operation timed out after ${ms}ms${label ? ` [${label}]` : ''}`);
+      const timeoutErr = new Error(
+        `Operation timed out after ${ms}ms${label ? ` [${label}]` : ''}`,
+      );
       (timeoutErr as any).code = 'ETIMEDOUT';
       throw timeoutErr;
     }
@@ -144,7 +158,11 @@ export class CircuitBreaker<T = unknown> {
       this.state = 'open';
       this.nextAttemptAt = Date.now() + this.resetAfterMs;
       logger.warn(
-        { label, failureCount: this.failureCount, resetAt: new Date(this.nextAttemptAt).toISOString() },
+        {
+          label,
+          failureCount: this.failureCount,
+          resetAt: new Date(this.nextAttemptAt).toISOString(),
+        },
         'CircuitBreaker opened',
       );
     }

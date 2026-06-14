@@ -78,9 +78,12 @@ jobs:
         run: npm test -w apps/api -- --coverage
         env:
           DATABASE_URL: postgres://test:test@localhost:5432/importacao_test
-      # NOTE: e2e (test:e2e) NÃO entram no CI ainda — a suíte está quebrada hoje
-      # (9/44 falham: token de auth inválido → 401). Reabilitar após corrigir o
-      # setup de auth dos e2e (test/e2e/setup.ts). Ver roadmap de auditoria.
+      # e2e usa Testcontainers (sobe seu próprio Postgres efêmero via Docker,
+      # disponível por padrão no runner ubuntu-latest) e injeta DATABASE_URL/
+      # JWT_SECRET a partir do container em test/e2e/setup.ts — por isso não
+      # depende do serviço postgres acima nem de env adicional.
+      - name: Run API e2e tests
+        run: npm run test:e2e -w apps/api
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:

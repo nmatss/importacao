@@ -144,6 +144,10 @@ services:
       CERT_API_KEY: ${CERT_API_KEY:-}
     volumes:
       - cert-reports:/app/reports
+      # Certificate PDFs (INMETRO/ANVISA evidence) live in CERTS_DIR=/app/certs
+      # (apps/cert-api/app/config.py). Without this named volume they are lost on
+      # container restart.
+      - cert-certs:/app/certs
     depends_on:
       postgres:
         condition: service_healthy
@@ -227,6 +231,32 @@ services:
           memory: 256M
           cpus: '0.5'
 
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: importacao-alertmanager
+    restart: unless-stopped
+    # Internal only: Prometheus reaches it at alertmanager:9093 over the default
+    # compose network. No host port published (no public exposure).
+    expose:
+      - "9093"
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanagerdata:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+    environment:
+      # Bridge/adapter URL that reformats Alertmanager's native webhook payload
+      # into the target chat format (see alertmanager.yml comment). Empty by default.
+      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-}
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
   grafana:
     image: grafana/grafana:11.2.2
     container_name: importacao-grafana
@@ -252,7 +282,9 @@ volumes:
   redisdata:
   uploads:
   cert-reports:
+  cert-certs:
   prometheusdata:
   grafanadata:
+  alertmanagerdata:
   letsencrypt:
   certbot-webroot:
