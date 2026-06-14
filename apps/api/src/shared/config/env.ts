@@ -28,11 +28,19 @@ const envSchema = z
     GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
     GOOGLE_SHEETS_FOLLOW_UP_ID: z.string().optional(),
 
-    // AI (OpenRouter / Vertex)
-    AI_PROVIDER: z.enum(['vertex', 'openrouter']).default('openrouter'),
+    // AI (OpenRouter / Vertex / IA_LOCAL)
+    AI_PROVIDER: z.enum(['vertex', 'openrouter', 'ialocal']).default('openrouter'),
     AI_MONTHLY_BUDGET_USD: z.coerce.number().nonnegative().default(200),
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_BASE_URL: z.string().url().optional(),
+
+    // IA_LOCAL — self-hosted, on-prem AI platform (Ollama behind a bearer
+    // gateway, OpenAI-compatible). The local model is free, so it never
+    // consumes AI_MONTHLY_BUDGET_USD.
+    IA_LOCAL_BASE_URL: z.string().url().optional(),
+    IA_LOCAL_API_KEY: z.string().optional(),
+    IA_LOCAL_MODEL: z.string().optional(),
+    IA_LOCAL_EMBED_MODEL: z.string().optional(),
 
     // Vertex AI (Google self-hosted provider). Credentials fall back to GOOGLE_DRIVE_* if unset.
     GOOGLE_VERTEX_PROJECT: z.string().optional(),
@@ -76,6 +84,25 @@ const envSchema = z
           path: ['GOOGLE_VERTEX_CLIENT_EMAIL'],
           message:
             'credenciais Vertex ausentes: defina GOOGLE_VERTEX_CLIENT_EMAIL/GOOGLE_VERTEX_PRIVATE_KEY ou reutilize GOOGLE_DRIVE_CLIENT_EMAIL/GOOGLE_DRIVE_PRIVATE_KEY',
+        });
+      }
+    }
+
+    // Fail-fast when IA_LOCAL is the selected provider: it needs the gateway
+    // URL and bearer token, otherwise every extraction would 401/connect-fail.
+    if (env.AI_PROVIDER === 'ialocal') {
+      if (!env.IA_LOCAL_BASE_URL) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['IA_LOCAL_BASE_URL'],
+          message: 'obrigatório quando AI_PROVIDER=ialocal (ex.: http://ia-local-gateway:8443/v1)',
+        });
+      }
+      if (!env.IA_LOCAL_API_KEY) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['IA_LOCAL_API_KEY'],
+          message: 'obrigatório quando AI_PROVIDER=ialocal (bearer do gateway IA_LOCAL)',
         });
       }
     }

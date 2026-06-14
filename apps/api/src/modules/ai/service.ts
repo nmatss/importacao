@@ -23,6 +23,7 @@ import { espelhoResponseSchema } from './schemas/espelho-response.js';
 import type { ZodType } from 'zod';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { VertexAIProvider } from './providers/vertex.js';
+import { IALocalProvider } from './providers/ialocal.js';
 import type { AIProvider, ChatOptions } from './providers/types.js';
 import { assertBudgetAvailable, logUsage, AIBudgetExceededError } from './cost-tracker.js';
 import { EXTRACTION_SCHEMAS } from './extraction-schemas.js';
@@ -202,7 +203,12 @@ class AIService {
 
   constructor() {
     const providerName = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
-    this.provider = providerName === 'vertex' ? new VertexAIProvider() : new OpenRouterProvider();
+    this.provider =
+      providerName === 'vertex'
+        ? new VertexAIProvider()
+        : providerName === 'ialocal'
+          ? new IALocalProvider()
+          : new OpenRouterProvider();
     logger.info({ provider: this.provider.name }, 'AIService initialized');
   }
 
@@ -245,8 +251,14 @@ class AIService {
 
     // Build fallback chain starting from the requested model position
     const startIdx = MODEL_FALLBACK_CHAIN.indexOf(model);
-    const modelsToTry =
+    const rawChain =
       startIdx >= 0 ? MODEL_FALLBACK_CHAIN.slice(startIdx) : [model, ...MODEL_FALLBACK_CHAIN];
+    // IA_LOCAL serves a single model, so every Gemini alias in the chain maps
+    // to the same local model. Collapse to one entry — retrying an identical
+    // (slow, CPU-bound) local inference is pure waste — and use the real local
+    // model name so cost tracking prices it at 0 (it's not a paid model).
+    const modelsToTry =
+      this.provider.name === 'ialocal' ? [this.provider.normalizeModel(rawChain[0])] : rawChain;
 
     let lastError: Error | unknown;
 
@@ -610,11 +622,17 @@ class AIService {
           },
           'Proforma invoice data extracted',
         );
-        return {
-          data: data as Record<string, any>,
-          confidenceScore: score,
-          fieldsWithLowConfidence: lowConfidenceFields,
-        };
+        // Registry key is 'proforma_invoice' (NOT 'proforma'/the extract label) —
+        // a wrong key makes getVerificationConfig return null = silent no-op.
+        return this.applyHarness(
+          'proforma_invoice',
+          {
+            data: data as Record<string, any>,
+            confidenceScore: score,
+            fieldsWithLowConfidence: lowConfidenceFields,
+          },
+          text,
+        );
       },
     );
   }
@@ -745,10 +763,9 @@ class AIService {
    * AI fallback for Espelho extraction. Only used when the deterministic
    * XLSX parser (tryParseEspelhoBuffer) fails because the layout differs
    * from the known format. Disabled by default — set ESPELHO_AI_FALLBACK=1
-   * to enable, and only do so when AI_PROVIDER=vertex (privacy: espelho
-   * carries sensitive Pre-Cons-linked data). Mantém-se bloqueado até o Vertex
-   * estar ativo em produção (IAM — issue #60): só ligue após a extração via
-   * Vertex ser confirmada, nunca apontando para a Developer API.
+   * to enable, and only do so on a private provider (AI_PROVIDER=vertex or
+   * ialocal): the espelho carries sensitive Pre-Cons-linked data that must not
+   * leave the perimeter. Never point this at the Gemini Developer API.
    */
   async extractEspelhoData(text: string): Promise<ExtractionResult> {
     const msgs: OpenRouterMessage[] = buildEspelhoPrompt(text) as OpenRouterMessage[];
@@ -772,11 +789,15 @@ class AIService {
           { model, confidenceScore: score, lowConfidenceCount: lowConfidenceFields.length },
           'Espelho data extracted via AI fallback',
         );
-        return {
-          data: data as Record<string, any>,
-          confidenceScore: score,
-          fieldsWithLowConfidence: lowConfidenceFields,
-        };
+        return this.applyHarness(
+          'espelho',
+          {
+            data: data as Record<string, any>,
+            confidenceScore: score,
+            fieldsWithLowConfidence: lowConfidenceFields,
+          },
+          text,
+        );
       },
     );
   }
@@ -812,7 +833,11 @@ class AIService {
       'Certificate data extracted',
     );
 
-    return { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields };
+    return this.applyHarness(
+      'certificate',
+      { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+      text,
+    );
   }
 
   async detectAnomalies(

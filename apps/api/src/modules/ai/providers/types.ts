@@ -1,7 +1,7 @@
 /**
  * Common provider abstraction for AI chat completions. Concrete providers
- * (OpenRouter, Vertex AI) implement this and the AIService delegates based
- * on the AI_PROVIDER env var.
+ * (OpenRouter, Vertex AI, IA_LOCAL) implement this and the AIService delegates
+ * based on the AI_PROVIDER env var.
  */
 
 export interface ChatMessage {
@@ -28,7 +28,7 @@ export interface ChatResponse {
 }
 
 export interface AIProvider {
-  readonly name: 'openrouter' | 'vertex';
+  readonly name: 'openrouter' | 'vertex' | 'ialocal';
   /**
    * Normalize a generic model id for the concrete provider.
    * Example: 'gemini-2.5-flash' → 'google/gemini-2.5-flash' for OpenRouter,

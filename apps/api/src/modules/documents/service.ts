@@ -981,24 +981,26 @@ export const documentService = {
       );
 
       // AI fallback (Nicolas 2026-05-21: "religar IA do espelho"). Disabled
-      // by default for privacy — only safe when AI_PROVIDER=vertex (Google
-      // contractually does not use Vertex data for training). Operator
-      // enables via ESPELHO_AI_FALLBACK=1 after configuring Vertex.
+      // by default for privacy — only safe with a provider that keeps the data
+      // private: Vertex (Google contractually does not train on Vertex data)
+      // or IA_LOCAL (100% on-prem, no egress). Operator enables via
+      // ESPELHO_AI_FALLBACK=1 after configuring one of those.
       //
       // HARD GUARD: the espelho carries sensitive Pre-Cons-linked data, so the
-      // fallback MUST only run when the provider is Vertex. If the flag is on
-      // but the provider is still OpenRouter (the default), running the
-      // fallback would ship that data to a provider with no no-training
-      // guarantee — refuse and warn instead of leaking.
+      // fallback MUST only run on a private provider. If the flag is on but the
+      // provider is still OpenRouter (the default), running the fallback would
+      // ship that data to a provider with no no-training guarantee — refuse and
+      // warn instead of leaking.
       const espelhoFallbackEnabled = process.env.ESPELHO_AI_FALLBACK === '1';
       const aiProvider = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
-      if (espelhoFallbackEnabled && aiProvider !== 'vertex') {
+      const isPrivateProvider = aiProvider === 'vertex' || aiProvider === 'ialocal';
+      if (espelhoFallbackEnabled && !isPrivateProvider) {
         logger.warn(
           { documentId: doc.id, processId: doc.processId, aiProvider },
-          'ESPELHO_AI_FALLBACK is enabled but AI_PROVIDER is not "vertex" — refusing to run espelho AI fallback (sensitive Pre-Cons data must not leave Vertex)',
+          'ESPELHO_AI_FALLBACK is enabled but AI_PROVIDER is not a private provider (vertex|ialocal) — refusing to run espelho AI fallback (sensitive Pre-Cons data must not leave the perimeter)',
         );
       }
-      if (espelhoFallbackEnabled && aiProvider === 'vertex') {
+      if (espelhoFallbackEnabled && isPrivateProvider) {
         try {
           const xlsxText = extractTextFromXlsxBuffer(buffer);
           if (xlsxText.trim().length > 0) {
