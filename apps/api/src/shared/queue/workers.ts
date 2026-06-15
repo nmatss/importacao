@@ -51,7 +51,7 @@ function wrapWorker<T extends object>(
   return async (jobs: PgBoss.Job<T>[]) => {
     for (const job of jobs) {
       const startTime = Date.now();
-      logger.info({ jobId: job.id, jobName, data: job.data }, `Job started: ${jobName}`);
+      logger.info({ jobId: job.id, jobName }, `Job started: ${jobName}`);
 
       try {
         await handler(job.data);

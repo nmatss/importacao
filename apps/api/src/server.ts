@@ -6,6 +6,8 @@ import { getEnv } from './shared/config/env.js';
 import { app } from './app.js';
 import { logger } from './shared/utils/logger.js';
 import { startScheduler } from './jobs/scheduler.js';
+import { initQueue, stopQueue } from './shared/queue/index.js';
+import { registerWorkers } from './shared/queue/workers.js';
 
 // Validate env vars at startup — fail-fast if invalid
 const env = getEnv();
@@ -15,10 +17,17 @@ const PORT = env.API_PORT;
 // ── Startup checks for critical environment variables ──────────────
 function checkEnvVars() {
   const warnings: string[] = [];
+  const aiProvider = env.AI_PROVIDER;
+
+  if (aiProvider === 'ialocal' && (!env.IA_LOCAL_BASE_URL || !env.IA_LOCAL_API_KEY)) {
+    warnings.push(
+      'IA_LOCAL não configurado — defina IA_LOCAL_BASE_URL e IA_LOCAL_API_KEY para extração local',
+    );
+  }
 
   if (
-    !process.env.OPENROUTER_API_KEY ||
-    process.env.OPENROUTER_API_KEY === 'your-openrouter-api-key'
+    aiProvider === 'openrouter' &&
+    (!env.OPENROUTER_API_KEY || env.OPENROUTER_API_KEY === 'your-openrouter-api-key')
   ) {
     warnings.push(
       'OPENROUTER_API_KEY não configurada — extração IA, anomalias e geração de emails com IA não funcionarão',
@@ -58,6 +67,14 @@ const server = app.listen(PORT, () => {
   if (process.env.NODE_ENV !== 'test') {
     startScheduler();
     logger.info('Scheduler started');
+
+    void initQueue()
+      .then(async (boss) => {
+        await registerWorkers(boss);
+      })
+      .catch((err) => {
+        logger.error({ err }, 'Queue workers failed to start');
+      });
   }
 });
 
@@ -66,7 +83,9 @@ const shutdown = (signal: string) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);
   server.close(() => {
     logger.info('HTTP server closed');
-    process.exit(0);
+    void stopQueue()
+      .catch((err) => logger.error({ err }, 'Failed to stop job queue'))
+      .finally(() => process.exit(0));
   });
 
   // Force close after 10 seconds

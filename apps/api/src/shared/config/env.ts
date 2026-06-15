@@ -28,8 +28,9 @@ const envSchema = z
     GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
     GOOGLE_SHEETS_FOLLOW_UP_ID: z.string().optional(),
 
-    // AI (OpenRouter / Vertex / IA_LOCAL)
-    AI_PROVIDER: z.enum(['vertex', 'openrouter', 'ialocal']).default('openrouter'),
+    // AI (IA_LOCAL by default; external providers require explicit opt-in)
+    AI_PROVIDER: z.enum(['vertex', 'openrouter', 'ialocal']).default('ialocal'),
+    AI_ALLOW_EXTERNAL: z.enum(['true', 'false']).default('false'),
     AI_MONTHLY_BUDGET_USD: z.coerce.number().nonnegative().default(200),
     OPENROUTER_API_KEY: z.string().optional(),
     OPENROUTER_BASE_URL: z.string().url().optional(),
@@ -37,13 +38,16 @@ const envSchema = z
     // IA_LOCAL — self-hosted, on-prem AI platform (Ollama behind a bearer
     // gateway, OpenAI-compatible). The local model is free, so it never
     // consumes AI_MONTHLY_BUDGET_USD.
-    IA_LOCAL_BASE_URL: z.string().url().optional(),
+    IA_LOCAL_BASE_URL: z.string().url().default('http://ia-local-gateway:8443/v1'),
     IA_LOCAL_API_KEY: z.string().optional(),
-    IA_LOCAL_MODEL: z.string().optional(),
-    IA_LOCAL_EMBED_MODEL: z.string().optional(),
+    IA_LOCAL_MODEL: z.string().default('unico-docintel'),
+    IA_LOCAL_EMBED_MODEL: z.string().default('bge-m3'),
+    IA_LOCAL_ALLOWED_HOSTS: z.string().default('ia-local-gateway'),
+    IA_LOCAL_NUM_PREDICT: z.coerce.number().int().positive().optional(),
+    IA_LOCAL_NUM_CTX: z.coerce.number().int().positive().optional(),
     // Specialist prompt pipeline (constitution + skills + RAG + injection
-    // defense). Default off — flip on after validating on the fast provider.
-    AI_USE_SPECIALIST: z.enum(['0', '1']).optional(),
+    // defense). Default on for the local DocIntel provider.
+    AI_USE_SPECIALIST: z.enum(['0', '1']).default('1'),
     // Per-model-call timeouts. The local VLM on CPU is slow; extraction runs off
     // the HTTP request, so it gets a much larger ceiling.
     AI_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
@@ -73,6 +77,23 @@ const envSchema = z
     ISA_EMAIL: z.string().email().optional(),
   })
   .superRefine((env, ctx) => {
+    const usesExternalProvider = env.AI_PROVIDER === 'vertex' || env.AI_PROVIDER === 'openrouter';
+    if (usesExternalProvider && env.AI_ALLOW_EXTERNAL !== 'true') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['AI_ALLOW_EXTERNAL'],
+        message: `obrigatório definir AI_ALLOW_EXTERNAL=true para usar AI_PROVIDER=${env.AI_PROVIDER}`,
+      });
+    }
+
+    if (env.AI_PROVIDER === 'openrouter' && !env.OPENROUTER_API_KEY) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['OPENROUTER_API_KEY'],
+        message: 'obrigatório quando AI_PROVIDER=openrouter',
+      });
+    }
+
     // Fail-fast when Vertex is the selected AI provider: it requires a project,
     // and credentials must resolve (either GOOGLE_VERTEX_* or the GOOGLE_DRIVE_* fallback).
     if (env.AI_PROVIDER === 'vertex') {

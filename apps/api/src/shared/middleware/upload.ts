@@ -35,16 +35,41 @@ const ALLOWED_MIMES = new Set([
 
 // MIME types that file-type cannot detect (XML-based or text-based formats)
 const SKIP_MAGIC_CHECK = new Set([
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/msword',
   'text/plain',
   'text/csv',
   'text/html',
   'message/rfc822',
   'application/vnd.ms-outlook',
 ]);
+
+const EXTENSION_MIME_ALIASES: Record<string, Set<string>> = {
+  '.pdf': new Set(['application/pdf']),
+  '.xlsx': new Set([
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/zip',
+  ]),
+  '.xls': new Set(['application/vnd.ms-excel', 'application/x-cfb']),
+  '.docx': new Set([
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/zip',
+  ]),
+  '.doc': new Set(['application/msword', 'application/x-cfb']),
+  '.jpg': new Set(['image/jpeg']),
+  '.jpeg': new Set(['image/jpeg']),
+  '.png': new Set(['image/png']),
+  '.gif': new Set(['image/gif']),
+  '.webp': new Set(['image/webp']),
+  '.tif': new Set(['image/tiff']),
+  '.tiff': new Set(['image/tiff']),
+  '.bmp': new Set(['image/bmp']),
+};
+
+function isDetectedMimeAllowed(file: Express.Multer.File, detectedMime: string): boolean {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const aliases = EXTENSION_MIME_ALIASES[ext];
+
+  return detectedMime === file.mimetype || Boolean(aliases?.has(detectedMime));
+}
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -125,18 +150,21 @@ export async function validateMagicBytes(
   }
 
   for (const file of files) {
-    if (SKIP_MAGIC_CHECK.has(file.mimetype)) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const hasMagicAlias = Boolean(EXTENSION_MIME_ALIASES[ext]);
+
+    if (SKIP_MAGIC_CHECK.has(file.mimetype) && !hasMagicAlias) {
       continue;
     }
 
     const detected = await fileTypeFromFile(file.path);
 
-    if (detected && detected.mime !== file.mimetype) {
+    if (!detected || !isDetectedMimeAllowed(file, detected.mime)) {
       // Clean up the rejected file
       await fs.unlink(file.path).catch(() => {});
       res.status(400).json({
         success: false,
-        error: `File "${file.originalname}" magic bytes (${detected.mime}) do not match declared MIME type (${file.mimetype}).`,
+        error: `Tipo de arquivo incompatível para "${file.originalname}".`,
       });
       return;
     }
