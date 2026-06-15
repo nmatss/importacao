@@ -555,11 +555,6 @@ def validate_single_product(
         "verified_at": now.isoformat(),
     }
 
-    if is_expired and sale_deadline_date:
-        result["status"] = "EXPIRED"
-        result["error"] = f"Certificado vencido - prazo final venda: {sale_deadline_date}"
-        return result
-
     if not expected_cert and not ecommerce_description:
         result["status"] = "NO_EXPECTED"
         return result
@@ -585,6 +580,11 @@ def validate_single_product(
     result["url"] = build_product_url(vtex_product)
     actual_cert = extract_cert_text_from_vtex(vtex_product)
     result["actual_cert_text"] = actual_cert if actual_cert else None
+
+    if is_expired and sale_deadline_date:
+        result["status"] = "EXPIRED"
+        result["error"] = f"Certificado vencido - prazo final venda: {sale_deadline_date}"
+        return result
 
     status, score = compare_cert_texts(expected_cert, actual_cert, ecommerce_description)
     result["status"] = status
