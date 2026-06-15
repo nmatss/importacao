@@ -114,6 +114,7 @@ describe('eval over the real skill gold few-shot (self-consistency)', () => {
       'proforma_invoice',
       'espelho',
       'certificate',
+      'li',
     ]) {
       const gold = JSON.parse(getSkill(docType)!.fewShot![0].json);
       const s = scoreExtraction(gold, gold);

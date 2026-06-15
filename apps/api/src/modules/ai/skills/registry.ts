@@ -18,7 +18,9 @@ import { draftBLResponseSchema } from '../schemas/draft-bl-response.js';
 import { proformaResponseSchema } from '../schemas/proforma-response.js';
 import { espelhoResponseSchema } from '../schemas/espelho-response.js';
 import { certificateResponseSchema } from '../schemas/certificate-response.js';
-import { approxEqual, fieldNum, finding } from '../harness/numeric.js';
+import { liResponseSchema } from '../schemas/li-response.js';
+import { approxEqual, fieldNum, fieldVal, finding } from '../harness/numeric.js';
+import { cbmCeilingForContainer, isKnownCarrier } from '../harness/premises.js';
 import type { HarnessFinding, VerificationConfig } from '../harness/types.js';
 import type { ExtractionSkill } from './types.js';
 
@@ -79,6 +81,108 @@ function plQuantityIntegerCheck(data: Record<string, any>): HarnessFinding | nul
     }
   }
   return null;
+}
+
+/**
+ * Σ(item.unitPrice × item.quantity) ≈ totalValue declarado na LI. A LI não traz
+ * totalPrice por item (é licença, não fatura), então o valor por linha é
+ * derivado de unitPrice × quantity quando o unitPrice está impresso.
+ */
+function liTotalsCheck(data: Record<string, any>): HarnessFinding | null {
+  const total = fieldNum(data, 'totalValue');
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (total == null || items.length === 0) return null;
+  let sum = 0;
+  let counted = false;
+  for (const it of items) {
+    const q = it?.quantity?.value;
+    const up = it?.unitPrice?.value;
+    if (
+      typeof q === 'number' &&
+      typeof up === 'number' &&
+      Number.isFinite(q) &&
+      Number.isFinite(up)
+    ) {
+      sum += q * up;
+      counted = true;
+    }
+  }
+  if (!counted) return null;
+  return approxEqual(sum, total, 0.02)
+    ? null
+    : finding(
+        'totalValue',
+        `soma dos itens (${sum.toFixed(2)}) diverge do valor total declarado (${total.toFixed(2)})`,
+        'warning',
+      );
+}
+
+/** deferralDate (deferimento) nunca pode ser anterior ao registrationDate. */
+function liDeferralAfterRegistrationCheck(data: Record<string, any>): HarnessFinding | null {
+  const reg = data?.registrationDate?.value;
+  const def = data?.deferralDate?.value;
+  if (typeof reg !== 'string' || typeof def !== 'string') return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reg) || !/^\d{4}-\d{2}-\d{2}$/.test(def)) return null;
+  return def >= reg
+    ? null
+    : finding(
+        'deferralDate',
+        `data de deferimento (${def}) anterior ao registro (${reg})`,
+        'warning',
+      );
+}
+
+/**
+ * totalCbm não pode exceder a capacidade física do containerType (premissas
+ * cbmByContainer). Regra DO NOSSO AMBIENTE: 40HQ ~76m³ real, 20GP ~33m³ real.
+ * Flagga se totalCbm > teto 'real' + margem (default 5%). Degrada a null quando
+ * não há containerType (ex.: draft_bl/espelho), tipo não tabelado (LCL/Aéreo)
+ * ou KB ausente — nunca falso alarme.
+ */
+function cbmVsContainerCheck(data: Record<string, any>, marginPct = 0.05): HarnessFinding | null {
+  const cbm = fieldNum(data, 'totalCbm');
+  if (cbm == null || cbm <= 0) return null;
+  const ctype = fieldVal(data, 'containerType');
+  if (typeof ctype !== 'string' || !ctype.trim()) return null; // sem tipo: no-op
+  const cap = cbmCeilingForContainer(ctype);
+  if (!cap) return null; // tipo não tabelado / KB ausente: não refuta
+  const ceiling = cap.ceiling * (1 + marginPct);
+  return cbm <= ceiling
+    ? null
+    : finding(
+        'totalCbm',
+        `CBM ${cbm.toFixed(1)} excede a capacidade do ${ctype} ` +
+          `(${cap.basis} ${cap.ceiling.toFixed(1)} m³ +${(marginPct * 100).toFixed(0)}% = ` +
+          `${ceiling.toFixed(1)}) — confira containerType/totalCbm`,
+        'warning',
+      );
+}
+
+/**
+ * shippingLine/carrier deve ser um armador conhecido do nosso ambiente
+ * (carriers.json: HPL=Hapag-Lloyd, HMM, MOL, YML, MAERSK, MSC, ONE...).
+ * Aceita sigla ou nome. Flagga se não reconhecido. Degrada se KB vazio.
+ */
+function carrierKnownCheck(data: Record<string, any>): HarnessFinding | null {
+  const field =
+    data.shippingLine != null
+      ? 'shippingLine'
+      : data.carrier != null
+        ? 'carrier'
+        : data.shippingline != null
+          ? 'shippingline'
+          : null;
+  if (!field) return null;
+  const v = fieldVal(data, field);
+  if (typeof v !== 'string' || !v.trim()) return null;
+  return isKnownCarrier(v)
+    ? null
+    : finding(
+        field,
+        `armador "${v}" não reconhecido na lista de shipping lines do ambiente ` +
+          `(carriers.json) — confira a grafia ou cadastre`,
+        'warning',
+      );
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -302,6 +406,35 @@ const CERT_FEWSHOT = `{
   "observations": { "value": null, "confidence": 0 }
 }`;
 
+// ── Licença de Importação (LI / Siscomex) ────────────────────────────
+const LI_DOMAIN_RULES = `Documento: Licença de Importação (LI) — licença administrativa registrada no Siscomex (Portal Único / módulo LI ou LPCO). É um ATO DE GOVERNO, não uma fatura nem um BL; se o documento for invoice/BL/certificado, é misclassificação -> retorne tudo null/0. A LI autoriza a importação por NCM e é deferida pelos órgãos ANUENTES.
+- liNumber: nº da LI no Siscomex ("LI nº", "Licença de Importação", normalmente AA/NNNNNNN-D, ex.: 26/1234567-8). Copie LITERAL; é a chave do processo. Não confunda com o nº da DI/DUIMP nem com o nº da invoice.
+- registrationDate: data de REGISTRO da LI (quando foi registrada no Siscomex). deferralDate: data de DEFERIMENTO (quando o(s) anuente(s) deferiram/aprovaram). Ambas ISO 8601 (YYYY-MM-DD). deferralDate >= registrationDate; LI ainda não deferida -> deferralDate null.
+- status: situação da LI. Normalize para um de "pending"/"requested"/"submitted"/"deferred"/"expired"/"cancelled" (enum li_status). "EM ANÁLISE"/"AGUARDANDO" -> "submitted"; "DEFERIDA"/"DEFERIDO" -> "deferred"; "INDEFERIDA"/"CANCELADA" -> "cancelled"; "VENCIDA"/"EXPIRADA" -> "expired".
+- importerName: IMPORTADOR brasileiro (UNI.CO COMERCIO S/A, PUKET, Imaginarium). importerCnpj: 14 dígitos, só números, com dígitos verificadores VÁLIDOS (o harness valida — não fabrique). exporterName: exportador/fabricante estrangeiro (China, Índia, Bangladesh...). NÃO troque importador e exportador.
+- items[]: cada linha = um destaque/adição por NCM. ncmCode 8 dígitos (formato XXXX.XX.XX). description = descrição da mercadoria. quantity = quantidade na unidade estatística (INTEIRA quando peças/pares). unitPrice (opcional) só se impresso por item; a LI muitas vezes traz só o valor total.
+- totalValue: valor total declarado da licença (condição VMLE/VMLD ou valor aduaneiro). currency: ISO 4217, quase sempre USD em importação internacional. incoterm (opcional): FOB/CFR/CIF/EXW se constar.
+- anuentes: lista dos ÓRGÃOS ANUENTES que deferem a LI (ex.: "INMETRO", "ANVISA", "DECEX", "MAPA", "IBAMA", "Polícia Federal", "Exército", "ANEEL"). Liste os nomes como aparecem; sem anuente explícito -> null. NÃO invente órgão.
+- Campo ausente -> {value:null, confidence:0}. Extraia TODOS os itens. Não invente dados não impressos.`;
+
+const LI_FEWSHOT = `{
+  "liNumber": { "value": "26/1234567-8", "confidence": 0.97 },
+  "registrationDate": { "value": "2026-03-10", "confidence": 0.95 },
+  "deferralDate": { "value": "2026-03-18", "confidence": 0.92 },
+  "status": { "value": "deferred", "confidence": 0.95 },
+  "importerName": { "value": "UNI.CO COMERCIO S/A", "confidence": 0.96 },
+  "importerCnpj": { "value": "11222333000181", "confidence": 0.93 },
+  "exporterName": { "value": "ZHUJI QINGTAI SOCKS CO., LTD.", "confidence": 0.94 },
+  "items": [
+    { "ncmCode": { "value": "61159500", "confidence": 0.9 }, "description": { "value": "MEIA INFANTIL DE ALGODAO", "confidence": 0.92 }, "quantity": { "value": 1200, "confidence": 0.94 }, "unitPrice": { "value": 0.85, "confidence": 0.9 } },
+    { "ncmCode": { "value": "95030099", "confidence": 0.88 }, "description": { "value": "BRINQUEDO DE PELUCIA", "confidence": 0.9 }, "quantity": { "value": 500, "confidence": 0.93 }, "unitPrice": { "value": 1.10, "confidence": 0.89 } }
+  ],
+  "totalValue": { "value": 1570, "confidence": 0.94 },
+  "currency": { "value": "USD", "confidence": 0.99 },
+  "incoterm": { "value": "FOB", "confidence": 0.95 },
+  "anuentes": { "value": ["INMETRO", "DECEX"], "confidence": 0.88 }
+}`;
+
 const SKILLS: Record<string, ExtractionSkill> = {
   invoice: {
     type: 'invoice',
@@ -369,7 +502,7 @@ const SKILLS: Record<string, ExtractionSkill> = {
       },
     ],
     retrieval: { namespaces: ['parties', 'ports', 'carriers', 'ncms'], k: 5 },
-    verification: BL_VERIFICATION_BASE,
+    verification: { ...BL_VERIFICATION_BASE, numericChecks: [cbmVsContainerCheck] },
   },
   draft_bl: {
     type: 'draft_bl',
@@ -387,6 +520,7 @@ const SKILLS: Record<string, ExtractionSkill> = {
     verification: {
       ...BL_VERIFICATION_BASE,
       groundedFields: ['blNumber', 'customerReference', 'containerNumber', 'sealNumber'],
+      numericChecks: [cbmVsContainerCheck],
     },
   },
   proforma_invoice: {
@@ -431,7 +565,7 @@ const SKILLS: Record<string, ExtractionSkill> = {
       ncmFields: ['items[].ncm'],
       cnpjFields: ['importerCnpj'],
       // qty (não 'quantity') -> plQuantityIntegerCheck não se aplica aqui.
-      numericChecks: [netLeGrossCheck],
+      numericChecks: [netLeGrossCheck, carrierKnownCheck],
     },
   },
   certificate: {
@@ -453,6 +587,29 @@ const SKILLS: Record<string, ExtractionSkill> = {
       dateFields: ['issueDate', 'expirationDate'],
       supplierFields: ['exporterName'],
       numericChecks: [plQuantityIntegerCheck],
+    },
+  },
+  li: {
+    type: 'li',
+    label: 'Licença de Importação (LI)',
+    schema: liResponseSchema,
+    domainRules: LI_DOMAIN_RULES,
+    fewShot: [
+      {
+        description:
+          'LI Siscomex DEFERIDA (status normalizado), deferimento >= registro, importador BR com CNPJ válido, 2 itens por NCM 8 díg (catálogo conhecido), valor total = Σ(unitPrice×qty)=1570, moeda USD, anuentes INMETRO/DECEX, datas ISO.',
+        json: LI_FEWSHOT,
+      },
+    ],
+    retrieval: { namespaces: ['ncms', 'parties', 'premissas'], k: 5 },
+    verification: {
+      groundedFields: ['liNumber', 'importerName', 'exporterName', 'items[].ncmCode'],
+      ncmFields: ['items[].ncmCode'],
+      dateFields: ['registrationDate', 'deferralDate'],
+      cnpjFields: ['importerCnpj'],
+      usdCurrencyFields: ['currency'],
+      supplierFields: ['exporterName'],
+      numericChecks: [liTotalsCheck, liDeferralAfterRegistrationCheck, plQuantityIntegerCheck],
     },
   },
 };

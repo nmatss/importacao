@@ -22,6 +22,7 @@ const WIRING_KEYS = [
   'draft_bl',
   'espelho',
   'certificate',
+  'li',
 ];
 
 describe('extraction wiring composition', () => {

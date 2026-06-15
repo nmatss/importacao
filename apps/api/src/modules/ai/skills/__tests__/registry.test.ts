@@ -11,6 +11,7 @@ const SPECIALIST_DOC_TYPES = [
   'proforma_invoice',
   'espelho',
   'certificate',
+  'li',
 ];
 
 describe('specialist skill registry', () => {
