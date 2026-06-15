@@ -11,9 +11,10 @@ export const resultIdParamSchema = z.object({
 export const resolveManuallySchema = z
   .object({
     resolutionNote: z.string().trim().min(1, 'Justificativa e obrigatoria').max(5000).optional(),
+    resolution_note: z.string().trim().min(1, 'Justificativa e obrigatoria').max(5000).optional(),
     resolution: z.string().trim().min(1).max(5000).optional(),
   })
-  .refine((data) => !!(data.resolutionNote || data.resolution), {
+  .refine((data) => !!(data.resolutionNote || data.resolution_note), {
     message: 'Justificativa (resolutionNote) e obrigatoria',
     path: ['resolutionNote'],
   });

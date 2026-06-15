@@ -69,6 +69,25 @@ describe('fob-calculation check', () => {
     expect(result.status).toBe('passed');
   });
 
+  it('should warn when FOC/discount explains the invoice item sum difference', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 24312.52,
+        items: [
+          { unitPrice: 24312.52, quantity: 1, totalPrice: 24312.52 },
+          { description: 'FREE OF CHARGE DISCOUNT', unitPrice: 266.4, quantity: 1, totalPrice: 0 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.actualValue).toBe('24578.92');
+    expect(result.expectedValue).toBe('24312.52');
+    expect(result.message).toContain(
+      'Diferença explicada por item FOC/desconto identificado na Invoice',
+    );
+  });
+
   it('should handle null/undefined item fields gracefully', () => {
     const result = fobCalculation({
       invoiceData: {

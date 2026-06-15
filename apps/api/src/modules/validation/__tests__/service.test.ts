@@ -2,6 +2,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, queryQueue, txQueue } = createMockDb();
+const aiServiceMocks = vi.hoisted(() => ({
+  detectAnomalies: vi.fn(),
+  flattenAiData: vi.fn((data: Record<string, unknown>) => data),
+}));
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -24,7 +28,8 @@ vi.mock('../../communications/templates/kiom-correction.js', () => ({
 }));
 
 vi.mock('../../ai/service.js', () => ({
-  aiService: { detectAnomalies: vi.fn().mockResolvedValue({ anomalies: [] }) },
+  aiService: { detectAnomalies: aiServiceMocks.detectAnomalies },
+  flattenAiData: aiServiceMocks.flattenAiData,
 }));
 
 vi.mock('../../../shared/utils/logger.js', () => ({
@@ -78,6 +83,9 @@ describe('validationService', () => {
     vi.clearAllMocks();
     queryQueue.length = 0;
     txQueue.length = 0;
+    aiServiceMocks.detectAnomalies.mockReset();
+    aiServiceMocks.detectAnomalies.mockResolvedValue({ anomalies: [] });
+    aiServiceMocks.flattenAiData.mockImplementation((data: Record<string, unknown>) => data);
     // Reset allChecks to default passing check
     (allChecks as any).length = 0;
     (allChecks as any).push(mockPassingCheck);
@@ -233,6 +241,51 @@ describe('validationService', () => {
 
       expect(results).toEqual(mockResults);
       expect(results).toHaveLength(2);
+    });
+  });
+
+  describe('runAnomalyDetection()', () => {
+    it('should pass flattened document data to the configured AI service', async () => {
+      const anomalyResult = {
+        anomalies: [
+          { field: 'totalFobValue', description: 'Divergencia sintetica', severity: 'high' },
+        ],
+      };
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce(anomalyResult);
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001', totalFobValue: 100 } },
+          { type: 'packing_list', aiParsedData: { totalItems: 1 } },
+          { type: 'ohbl', aiParsedData: { blNumber: 'BL-001' } },
+        ]),
+      );
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result).toEqual(anomalyResult);
+      expect(aiServiceMocks.detectAnomalies).toHaveBeenCalledWith(
+        { invoiceNumber: 'INV-001', totalFobValue: 100 },
+        { totalItems: 1 },
+        { blNumber: 'BL-001' },
+      );
+    });
+
+    it('should return a controlled integration error when AI anomaly detection fails', async () => {
+      aiServiceMocks.detectAnomalies.mockRejectedValueOnce(new Error('raw provider detail'));
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
+          { type: 'packing_list', aiParsedData: {} },
+          { type: 'ohbl', aiParsedData: {} },
+        ]),
+      );
+
+      await expect(validationService.runAnomalyDetection(261)).rejects.toMatchObject({
+        statusCode: 502,
+        code: 'INTEGRATION_ERROR',
+        message:
+          'IA: deteccao de anomalias indisponivel; verifique o provider configurado e tente novamente',
+      });
     });
   });
 

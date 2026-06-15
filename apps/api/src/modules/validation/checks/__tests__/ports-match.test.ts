@@ -9,7 +9,7 @@ describe('ports-match check', () => {
     });
     expect(result.status).toBe('passed');
     expect(result.checkName).toBe('ports-match');
-    expect(result.documentsCompared).toBe('INV vs BL');
+    expect(result.documentsCompared).toBe('INV vs PL vs BL');
   });
 
   it('should pass with case-insensitive matching', () => {
@@ -65,6 +65,16 @@ describe('ports-match check', () => {
       invoiceData: { portOfLoading: '  Shanghai  ', portOfDischarge: '  Santos  ' },
       blData: { portOfLoading: 'Shanghai', portOfDischarge: 'Santos' },
     });
+    expect(result.status).toBe('passed');
+  });
+
+  it('should normalize country suffixes across INV, PL and BL', () => {
+    const result = portsMatch({
+      invoiceData: { portOfLoading: 'NINGBO', portOfDischarge: 'ITAPOA' },
+      packingListData: { portOfLoading: 'NINGBO, CHINA', portOfDischarge: 'ITAPOA, BRAZIL' },
+      blData: { portOfLoading: 'Ningbo China', portOfDischarge: 'Itapoa Brazil' },
+    });
+
     expect(result.status).toBe('passed');
   });
 });

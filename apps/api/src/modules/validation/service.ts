@@ -19,7 +19,7 @@ import { communicationService } from '../communications/service.js';
 import { kiomCorrectionTemplate } from '../communications/templates/kiom-correction.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
-import { NotFoundError } from '../../shared/errors/index.js';
+import { IntegrationError, NotFoundError } from '../../shared/errors/index.js';
 import { getErrorTypesFromChecks } from './error-type-mapping.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
@@ -600,7 +600,22 @@ export const validationService = {
 
     logger.info({ processId }, 'Running AI anomaly detection');
 
-    const result = await aiService.detectAnomalies(invoiceData, packingListData, blData);
+    let result: { anomalies: Array<{ field: string; description: string; severity: string }> };
+    try {
+      result = await aiService.detectAnomalies(invoiceData, packingListData, blData);
+    } catch (err) {
+      logger.warn(
+        {
+          processId,
+          errorName: err instanceof Error ? err.name : typeof err,
+        },
+        'AI anomaly detection unavailable',
+      );
+      throw new IntegrationError(
+        'IA',
+        'deteccao de anomalias indisponivel; verifique o provider configurado e tente novamente',
+      );
+    }
 
     logger.info(
       { processId, anomalyCount: result.anomalies.length },

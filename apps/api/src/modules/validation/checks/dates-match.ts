@@ -1,3 +1,5 @@
+import { compareDates } from '../utils/date-compare.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -52,40 +54,69 @@ export default function datesMatch(input: CheckInput): CheckResult {
   const invEtdRaw = normalize(
     input.invoiceData?.invoiceDate ?? input.invoiceData?.etd ?? input.invoiceData?.shipmentDate,
   );
+  const plDateRaw = normalize(
+    input.packingListData?.shipmentDate ??
+      input.packingListData?.etd ??
+      input.packingListData?.invoiceDate ??
+      input.packingListData?.date,
+  );
   const blShippedRaw = normalize(
     input.blData?.shipmentDate ?? input.blData?.shippedOnBoardDate ?? input.blData?.etd,
   );
   const invEtd = normalizeDate(invEtdRaw);
+  const plDate = normalizeDate(plDateRaw);
   const blShippedOnBoard = normalizeDate(blShippedRaw);
+  const present = [
+    { label: 'INV', value: invEtd },
+    { label: 'PL', value: plDate },
+    { label: 'BL', value: blShippedOnBoard },
+  ].filter((entry) => entry.value);
 
-  if (!invEtd && !blShippedOnBoard) {
+  if (present.length === 0) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'INV vs BL',
+      documentsCompared: 'INV vs PL vs BL',
       message: 'Nenhuma data de ETD ou embarque encontrada nos documentos.',
     };
   }
 
-  if (!invEtd || !blShippedOnBoard) {
+  if (present.length === 1) {
     return {
       checkName,
       status: 'warning',
       expectedValue: invEtd || undefined,
-      actualValue: blShippedOnBoard || undefined,
-      documentsCompared: 'INV vs BL',
-      message: 'Data encontrada em apenas um documento, impossivel comparar.',
+      actualValue: plDate || blShippedOnBoard || undefined,
+      documentsCompared: 'INV vs PL vs BL',
+      message: `Data encontrada apenas em ${present[0].label}, impossivel comparar.`,
     };
   }
 
-  if (invEtd === blShippedOnBoard) {
+  const status = compareDates(
+    present.map((entry) => entry.value),
+    { matchDays: 10, warnDays: 30 },
+  );
+  const actualValue = present.map((entry) => `${entry.label}=${entry.value}`).join('; ');
+
+  if (status === 'match') {
     return {
       checkName,
       status: 'passed',
       expectedValue: invEtd,
-      actualValue: blShippedOnBoard,
-      documentsCompared: 'INV vs BL',
-      message: 'Data de ETD / embarque confere entre a invoice e o BL.',
+      actualValue,
+      documentsCompared: 'INV vs PL vs BL',
+      message: 'Datas de ETD / embarque estao dentro da tolerancia operacional.',
+    };
+  }
+
+  if (status === 'warning') {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: invEtd,
+      actualValue,
+      documentsCompared: 'INV vs PL vs BL',
+      message: 'Datas de ETD / embarque divergem pouco; revisar se necessario.',
     };
   }
 
@@ -93,8 +124,8 @@ export default function datesMatch(input: CheckInput): CheckResult {
     checkName,
     status: 'failed',
     expectedValue: invEtd,
-    actualValue: blShippedOnBoard,
-    documentsCompared: 'INV vs BL',
-    message: `Divergencia de datas: INV="${invEtd}" vs BL="${blShippedOnBoard}".`,
+    actualValue,
+    documentsCompared: 'INV vs PL vs BL',
+    message: `Divergencia relevante de datas: ${actualValue}.`,
   };
 }

@@ -24,47 +24,71 @@ export default function portsMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'skipped',
-      documentsCompared: 'INV vs BL',
+      documentsCompared: 'INV vs PL vs BL',
       message: 'aguardando INV',
     };
   }
 
   const invPolRaw = input.invoiceData?.portOfLoading;
+  const plPolRaw = input.packingListData?.portOfLoading;
   const blPolRaw = input.blData?.portOfLoading;
   const invPodRaw = input.invoiceData?.portOfDischarge;
+  const plPodRaw = input.packingListData?.portOfDischarge;
   const blPodRaw = input.blData?.portOfDischarge;
 
   const invPortOfLoading = normalizePort(invPolRaw);
+  const plPortOfLoading = normalizePort(plPolRaw);
   const blPortOfLoading = normalizePort(blPolRaw);
   const invPortOfDischarge = normalizePort(invPodRaw);
+  const plPortOfDischarge = normalizePort(plPodRaw);
   const blPortOfDischarge = normalizePort(blPodRaw);
 
-  if (!invPortOfLoading && !blPortOfLoading) {
+  if (!invPortOfLoading && !plPortOfLoading && !blPortOfLoading) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'INV vs BL',
+      documentsCompared: 'INV vs PL vs BL',
       message: 'Porto de embarque nao encontrado em nenhum documento.',
     };
   }
 
   const issues: string[] = [];
+  const loadingEntries = [
+    { label: 'INV', raw: invPolRaw, normalized: invPortOfLoading },
+    { label: 'PL', raw: plPolRaw, normalized: plPortOfLoading },
+    { label: 'BL', raw: blPolRaw, normalized: blPortOfLoading },
+  ].filter((entry) => entry.normalized);
+  const dischargeEntries = [
+    { label: 'INV', raw: invPodRaw, normalized: invPortOfDischarge },
+    { label: 'PL', raw: plPodRaw, normalized: plPortOfDischarge },
+    { label: 'BL', raw: blPodRaw, normalized: blPortOfDischarge },
+  ].filter((entry) => entry.normalized);
 
-  if (invPortOfLoading && blPortOfLoading && !portsEqual(invPolRaw, blPolRaw)) {
-    issues.push(`Porto de embarque: INV="${invPolRaw}" vs BL="${blPolRaw}"`);
+  const baseLoading = loadingEntries[0];
+  for (const entry of loadingEntries.slice(1)) {
+    if (!portsEqual(baseLoading.raw, entry.raw)) {
+      issues.push(
+        `Porto de embarque: ${baseLoading.label}="${baseLoading.raw}" vs ${entry.label}="${entry.raw}"`,
+      );
+    }
   }
 
-  if (invPortOfDischarge && blPortOfDischarge && !portsEqual(invPodRaw, blPodRaw)) {
-    issues.push(`Porto de descarga: INV="${invPodRaw}" vs BL="${blPodRaw}"`);
+  const baseDischarge = dischargeEntries[0];
+  for (const entry of dischargeEntries.slice(1)) {
+    if (!portsEqual(baseDischarge.raw, entry.raw)) {
+      issues.push(
+        `Porto de descarga: ${baseDischarge.label}="${baseDischarge.raw}" vs ${entry.label}="${entry.raw}"`,
+      );
+    }
   }
 
   if (issues.length > 0) {
     return {
       checkName,
       status: 'failed',
-      expectedValue: `Loading: ${invPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || blPortOfDischarge}`,
+      expectedValue: `Loading: ${invPortOfLoading || plPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || plPortOfDischarge || blPortOfDischarge}`,
       actualValue: issues.join('; '),
-      documentsCompared: 'INV vs BL',
+      documentsCompared: 'INV vs PL vs BL',
       message: `Divergencia nos portos: ${issues.join('; ')}`,
     };
   }
@@ -72,9 +96,9 @@ export default function portsMatch(input: CheckInput): CheckResult {
   return {
     checkName,
     status: 'passed',
-    expectedValue: `Loading: ${invPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || blPortOfDischarge}`,
-    actualValue: `Loading: ${blPortOfLoading || invPortOfLoading}, Discharge: ${blPortOfDischarge || invPortOfDischarge}`,
-    documentsCompared: 'INV vs BL',
-    message: 'Portos conferem entre a invoice e o conhecimento de embarque.',
+    expectedValue: `Loading: ${invPortOfLoading || plPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || plPortOfDischarge || blPortOfDischarge}`,
+    actualValue: `Loading: ${[invPortOfLoading, plPortOfLoading, blPortOfLoading].filter(Boolean).join(' / ')}, Discharge: ${[invPortOfDischarge, plPortOfDischarge, blPortOfDischarge].filter(Boolean).join(' / ')}`,
+    documentsCompared: 'INV vs PL vs BL',
+    message: 'Portos conferem entre os documentos disponiveis.',
   };
 }

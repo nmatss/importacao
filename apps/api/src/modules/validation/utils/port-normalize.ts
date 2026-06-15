@@ -1,5 +1,8 @@
-const COUNTRY_SUFFIX_RE =
+const COUNTRY_SUFFIX_WITH_SEPARATOR_RE =
   /[,;-]\s*(china|brazil|brasil|usa|united\s*states|hong\s*kong|singapore|vietnam|argentina|chile|portugal|spain|espanha|italy|italia|germany|alemanha|france|france|uk|united\s*kingdom)\b.*$/i;
+
+const COUNTRY_SUFFIX_WITH_SPACE_RE =
+  /\s+(china|brazil|brasil|usa|united\s*states|hong\s*kong|singapore|vietnam|argentina|chile|portugal|spain|espanha|italy|italia|germany|alemanha|france|france|uk|united\s*kingdom)\b.*$/i;
 
 const TRAILING_NOISE_RE = /[\s,;-]+$/;
 
@@ -7,7 +10,8 @@ export function normalizePort(value: unknown): string {
   return String(value ?? '')
     .trim()
     .toLowerCase()
-    .replace(COUNTRY_SUFFIX_RE, '')
+    .replace(COUNTRY_SUFFIX_WITH_SEPARATOR_RE, '')
+    .replace(COUNTRY_SUFFIX_WITH_SPACE_RE, '')
     .replace(TRAILING_NOISE_RE, '')
     .replace(/\s+/g, ' ')
     .trim();
