@@ -25,6 +25,42 @@ describe('withRetry', () => {
     await expect(withRetry(fn, { attempts: 3, baseDelayMs: 1 })).rejects.toThrow('always fails');
     expect(fn).toHaveBeenCalledTimes(3);
   });
+
+  it('should NOT retry when shouldRetry returns false', async () => {
+    const fn = vi.fn().mockRejectedValue(new Error('non-retryable'));
+    await expect(
+      withRetry(fn, { attempts: 3, baseDelayMs: 1, shouldRetry: () => false }),
+    ).rejects.toThrow('non-retryable');
+    // Called exactly once — the predicate short-circuited the remaining attempts.
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('should keep retrying when shouldRetry returns true', async () => {
+    const fn = vi.fn().mockRejectedValueOnce(new Error('fail1')).mockResolvedValue('ok');
+    const result = await withRetry(fn, {
+      attempts: 3,
+      baseDelayMs: 1,
+      shouldRetry: () => true,
+    });
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it('should pass the error to the shouldRetry predicate', async () => {
+    const err = new Error('classify-me');
+    const predicate = vi.fn().mockReturnValue(false);
+    const fn = vi.fn().mockRejectedValue(err);
+    await expect(
+      withRetry(fn, { attempts: 3, baseDelayMs: 1, shouldRetry: predicate }),
+    ).rejects.toThrow('classify-me');
+    expect(predicate).toHaveBeenCalledWith(err);
+  });
+
+  it('retries everything by default when shouldRetry is omitted (no behaviour change)', async () => {
+    const fn = vi.fn().mockRejectedValue(new Error('boom'));
+    await expect(withRetry(fn, { attempts: 2, baseDelayMs: 1 })).rejects.toThrow('boom');
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('withTimeout', () => {

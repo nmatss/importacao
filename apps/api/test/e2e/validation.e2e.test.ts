@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
-import { setupE2EDatabase, type E2EContext } from './setup.js';
+import { setupE2EDatabase, signTestToken, E2E_ANALYST, type E2EContext } from './setup.js';
 
 let ctx: E2EContext;
 let skipReason: string | null = null;
@@ -10,11 +9,7 @@ let authToken: string;
 beforeAll(async () => {
   try {
     ctx = await setupE2EDatabase();
-    process.env.DATABASE_URL = ctx.connectionString;
-    process.env.JWT_SECRET = 'test-jwt-secret-e2e';
-    process.env.NODE_ENV = 'test';
-    process.env.REDIS_URL = '';
-    authToken = jwt.sign({ id: 1, email: 'test@test.com', role: 'analyst' }, 'test-jwt-secret-e2e');
+    authToken = signTestToken(E2E_ANALYST);
   } catch (err) {
     skipReason = `Docker unavailable or setup failed: ${(err as Error).message}`;
   }

@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Zero-downtime deploy with automatic rollback
+# deploy.sh — Production deploy with automatic CODE rollback on health failure
+# Note: rsync-based deploy (the server is NOT a git repo). Rollback restores the
+# previous CODE from an on-server snapshot; it does NOT roll back database
+# migrations (forward-only). Not zero-downtime: api/web are rebuilt in place.
 # =============================================================================
 # Usage: bash scripts/deploy.sh [server-ip]
 #
@@ -85,9 +88,10 @@ if [[ "${LOCAL_SHA}" != "${REMOTE_SHA}" ]]; then
 fi
 info "Local master is up to date."
 
-# 4. Save current SHA for rollback
-PREV_SHA="${LOCAL_SHA}"
-info "Current SHA: ${PREV_SHA:0:12}"
+# 4. SHA being deployed (rollback restores code from an on-server snapshot,
+#    not from a SHA — the server is not a git repo).
+DEPLOY_SHA="${LOCAL_SHA}"
+info "Deploying SHA: ${DEPLOY_SHA:0:12}"
 
 # 5. User confirmation
 echo ""
@@ -95,7 +99,7 @@ echo "  Server   : ${SERVER}"
 echo "  User     : ${DEPLOY_USER}"
 echo "  Dir      : ${DEPLOY_DIR}"
 echo "  Compose  : ${COMPOSE_FILE}"
-echo "  SHA      : ${PREV_SHA:0:12}"
+echo "  SHA      : ${DEPLOY_SHA:0:12}"
 echo ""
 read -r -p "Proceed with production deployment? [y/N] " CONFIRM
 if [[ "${CONFIRM}" != "y" && "${CONFIRM}" != "Y" ]]; then
@@ -119,6 +123,24 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Snapshot current release for rollback (rsync model — server has no .git)
+# ---------------------------------------------------------------------------
+ROLLBACK_DIR="${DEPLOY_DIR}.rollback"
+ROLLBACK_READY=0
+info "Snapshotting current release to ${ROLLBACK_DIR} for rollback..."
+if ssh "${DEPLOY_USER}@${SERVER}" "test -d ${DEPLOY_DIR}"; then
+  # cp -al = fast hardlink copy; fall back to a full copy if hardlinks fail.
+  if ssh "${DEPLOY_USER}@${SERVER}" "rm -rf ${ROLLBACK_DIR} && { cp -al ${DEPLOY_DIR} ${ROLLBACK_DIR} 2>/dev/null || cp -a ${DEPLOY_DIR} ${ROLLBACK_DIR}; }"; then
+    ROLLBACK_READY=1
+    success "Snapshot ready (previous release preserved)."
+  else
+    warn "Could not snapshot current release — AUTOMATIC ROLLBACK WILL BE UNAVAILABLE."
+  fi
+else
+  warn "Remote dir does not exist yet (first deploy) — no rollback snapshot."
+fi
+
+# ---------------------------------------------------------------------------
 # Sync code
 # ---------------------------------------------------------------------------
 info "[2/6] Syncing code to ${SERVER}:${DEPLOY_DIR}..."
@@ -129,6 +151,7 @@ rsync -avz --delete \
   --exclude 'uploads' \
   --exclude '.git' \
   --exclude '__pycache__' \
+  --exclude '.venv' \
   --exclude '*.db' \
   --exclude 'reports/' \
   --exclude 'apps/cert-api/__pycache__' \
@@ -181,19 +204,50 @@ done
 
 if [[ "${HEALTHY}" -ne 1 ]]; then
   error "Health check failed after ${HEALTH_RETRIES} attempts."
-  error "Initiating automatic rollback to ${PREV_SHA:0:12}..."
 
-  # Rollback: re-sync previous SHA and rebuild
-  ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && git checkout ${PREV_SHA} 2>/dev/null || true"
-  ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-    docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web" || true
+  if [[ "${ROLLBACK_READY}" -eq 1 ]]; then
+    error "Rolling CODE back to the previous release from snapshot..."
+    # Restore previous code from the snapshot, preserving live .env/secrets.
+    ssh "${DEPLOY_USER}@${SERVER}" "rsync -a --delete --exclude '.env' ${ROLLBACK_DIR}/ ${DEPLOY_DIR}/" || \
+      error "Snapshot restore command failed — release may be inconsistent."
+    ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
+      docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web" || true
 
-  notify "ROLLBACK" "Health check failed — rolled back to ${PREV_SHA:0:12}"
-  error "Rolled back to ${PREV_SHA:0:12}. Check container logs."
+    # Re-check health so we report the TRUTH, not a hopeful message.
+    RB_OK=0
+    RB_ATTEMPT=0
+    until [[ ${RB_ATTEMPT} -ge ${HEALTH_RETRIES} ]]; do
+      RB_ATTEMPT=$((RB_ATTEMPT + 1))
+      if ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${HEALTH_ENDPOINT}'" > /dev/null 2>&1; then
+        RB_OK=1; break
+      fi
+      sleep "${HEALTH_INTERVAL}"
+    done
+
+    if [[ "${RB_OK}" -eq 1 ]]; then
+      warn "Rolled back to the previous release — health is GREEN again."
+      notify "ROLLBACK" "Health failed on ${LOCAL_SHA:0:12} — rolled back to previous release (healthy)"
+    else
+      error "Rollback applied but health is STILL failing — MANUAL INTERVENTION REQUIRED."
+      notify "ROLLBACK-FAILED" "Health failed AND rollback unhealthy on ${SERVER} — manual intervention"
+    fi
+  else
+    error "No rollback snapshot available — leaving the current (failed) release in place."
+    error "MANUAL INTERVENTION REQUIRED on ${SERVER}:${DEPLOY_DIR}."
+    notify "FAILED" "Health failed on ${LOCAL_SHA:0:12} and no rollback snapshot — manual intervention on ${SERVER}"
+  fi
+
+  warn "Database migrations are forward-only and were NOT rolled back — verify schema/data state."
   exit 1
 fi
 
 success "Health check passed."
+
+# Deploy succeeded — drop the rollback snapshot to reclaim space.
+if [[ "${ROLLBACK_READY}" -eq 1 ]]; then
+  ssh "${DEPLOY_USER}@${SERVER}" "rm -rf ${ROLLBACK_DIR}" 2>/dev/null || \
+    warn "Could not remove rollback snapshot ${ROLLBACK_DIR} — remove it manually."
+fi
 
 # ---------------------------------------------------------------------------
 # Final status

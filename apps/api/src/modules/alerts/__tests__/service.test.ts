@@ -82,7 +82,7 @@ describe('alertService', () => {
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
 
-    it('should skip duplicate check when processId is undefined', async () => {
+    it('dedupes by title alone when processId is undefined (no duplicate found)', async () => {
       const input = {
         severity: 'critical' as const,
         title: 'System Alert',
@@ -91,7 +91,8 @@ describe('alertService', () => {
 
       const mockAlert = { id: 2, ...input, acknowledged: false };
 
-      // hasDuplicateRecent returns false (no processId) — no query needed
+      // hasDuplicateRecent select (processId IS NULL + title) — no duplicate
+      queryQueue.push(createResolvedChain([]));
       // insert alert returning
       queryQueue.push(createResolvedChain([mockAlert]));
       // select systemSettings for webhook
@@ -100,6 +101,27 @@ describe('alertService', () => {
       const result = await alertService.create(input);
 
       expect(result).toEqual(mockAlert);
+    });
+
+    it('collapses a recurring cron alert (no processId, same title) into the existing one', async () => {
+      const input = {
+        severity: 'critical' as const,
+        title: 'Falha no job: logistic-sync',
+        message: 'Job falhou de novo',
+      };
+
+      const existing = { id: 9, ...input, acknowledged: false };
+
+      // hasDuplicateRecent select -> a recent row with NULL processId + same title exists
+      queryQueue.push(createResolvedChain([{ id: 9 }]));
+      // create() then re-selects and returns the existing alert (no insert)
+      queryQueue.push(createResolvedChain([existing]));
+
+      const result = await alertService.create(input);
+
+      expect(result).toEqual(existing);
+      // no new row inserted — the storm is collapsed
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });
 

@@ -5,7 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.config import CORS_ORIGINS, DATABASE_URL, SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY
+from app.config import (
+    CORS_ORIGINS,
+    DATABASE_URL,
+    SHEETS_CLIENT_EMAIL,
+    SHEETS_PRIVATE_KEY,
+    validate_linx_config,
+)
 from app.routes import certificates, certifications, health, reports, schedules, stock
 from app.routes.schedules import load_schedules_into_scheduler, scheduler
 from app.utils.auth import verify_api_key
@@ -38,6 +44,9 @@ app.include_router(reports.router)
 @app.on_event("startup")
 def startup() -> None:
     """Initialize DB tables, sync sheets, and start APScheduler on app startup."""
+    # Fail-fast: nao servir requests com escrita no Linx ligada e config parcial.
+    validate_linx_config()
+
     if DATABASE_URL:
         from app.db.postgres import ensure_tables
         try:

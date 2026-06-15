@@ -20,6 +20,7 @@ ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose restart api"
 ```
 
 Common causes:
+
 - OOM killed: check `docker stats` or `dmesg | grep oom`
 - Port conflict: verify `127.0.0.1:3050` is not in use by another process
 - DB connection pool exhausted: check `cert_products` query count in postgres
@@ -38,16 +39,25 @@ ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose restart postgres"
 ```
 
 If postgres won't start, check disk space:
+
 ```bash
 ssh nicolas@192.168.168.124 "df -h"
 ```
 
-### Gemini / AI timeout
+### AI extraction timeout
 
-The AI extraction uses Google AI Studio with a 90s timeout. If it times out:
-1. Check the `.env` for `GEMINI_API_KEY` validity.
-2. Try a smaller document (AI extraction may fail on very large PDFs).
-3. The feature degrades gracefully — manual data entry still works.
+The AI extraction provider is selected via `AI_PROVIDER` in `.env`
+(`vertex` — Google Vertex AI, default for sensitive documents — or `openrouter`).
+If extraction times out or fails:
+
+1. Check the `.env` for the active provider's credentials:
+   - `AI_PROVIDER=vertex`: `GOOGLE_VERTEX_PROJECT`, `GOOGLE_VERTEX_LOCATION`,
+     `GOOGLE_VERTEX_CLIENT_EMAIL`, `GOOGLE_VERTEX_PRIVATE_KEY`.
+   - `AI_PROVIDER=openrouter`: `OPENROUTER_API_KEY` (and `OPENROUTER_BASE_URL`).
+2. Check the monthly spend cap `AI_MONTHLY_BUDGET_USD` — requests are blocked
+   once the budget is exhausted.
+3. Try a smaller document (AI extraction may fail on very large PDFs).
+4. The feature degrades gracefully — manual data entry still works.
 
 ### Deploy failed
 
@@ -83,6 +93,7 @@ ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose build && docker c
 ```
 
 To roll back only the API without rebuilding everything:
+
 ```bash
 ssh nicolas@192.168.168.124 "cd ~/importacao && git checkout <commit_hash> -- apps/api/"
 ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose build api && docker compose restart api"
@@ -113,6 +124,7 @@ ssh nicolas@192.168.168.124 "gunzip -c /tmp/backup_20260101.sql.gz | docker comp
 **Warning**: Resetting `JWT_SECRET` immediately invalidates ALL active user sessions. All users will be logged out.
 
 If you must rotate:
+
 1. Generate a new secret: `openssl rand -base64 48`
 2. Update `JWT_SECRET` in the `.env` file on the server.
 3. Restart the API: `docker compose restart api`
@@ -124,10 +136,10 @@ There is no way to rotate JWT_SECRET without invalidating existing tokens unless
 
 ## Contacts — Critical Incidents
 
-| Incident | Contact |
-|----------|---------|
-| Production server down | Nicolas Matsuda (admin) |
-| Database corruption | Nicolas Matsuda |
-| Oracle WMS unreachable | TI Grupo Unico |
+| Incident                  | Contact                                      |
+| ------------------------- | -------------------------------------------- |
+| Production server down    | Nicolas Matsuda (admin)                      |
+| Database corruption       | Nicolas Matsuda                              |
+| Oracle WMS unreachable    | TI Grupo Unico                               |
 | Google API quota exceeded | Nicolas Matsuda (check Google Cloud Console) |
-| Email delivery failure | TI (check mta.imgnet.com.br relay) |
+| Email delivery failure    | TI (check mta.imgnet.com.br relay)           |

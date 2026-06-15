@@ -68,9 +68,15 @@ app.get(
 
     // Allow if token matches
     if (expectedToken && providedToken === expectedToken) return next();
-    // Allow if IP is in allow-list (defaults to localhost only)
+    // Allow if IP is in allow-list (defaults to localhost only). Compare by
+    // normalized equality — the previous endsWith() was too loose (e.g. a
+    // client IP ending in "1" would match "::1", and "10.0.0.1" would match a
+    // trailing ".1"). Normalize the IPv4-mapped IPv6 prefix so 127.0.0.1 and
+    // ::ffff:127.0.0.1 are treated as the same address.
+    const normalizeIp = (ip: string) => ip.replace(/^::ffff:/, '');
     const defaultAllow = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
-    if ([...defaultAllow, ...allowedIps].some((ip) => clientIp === ip || clientIp.endsWith(ip)))
+    const normalizedClient = normalizeIp(clientIp);
+    if ([...defaultAllow, ...allowedIps].some((ip) => normalizeIp(ip) === normalizedClient))
       return next();
 
     res.status(401).json({ success: false, error: 'Unauthorized' });

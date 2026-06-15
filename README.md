@@ -221,7 +221,7 @@ Copie `.env.example` para `.env` e configure:
 | **Odoo**        | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD`                           |
 | **Redis**       | `REDIS_URL`                                                                   |
 
-Em producao, secrets sao gerenciados via **HashiCorp Vault** (`secret/importacao`).
+Em producao, secrets sao gerenciados via **SOPS + age** (arquivo `.env.sops.yaml`, regras em `.sops.yaml`); ver `docs/SECRETS.md`. HashiCorp Vault permanece como metodo legado.
 
 ## Banco de Dados
 
@@ -263,19 +263,25 @@ npm run test:watch -w apps/api
 npm run test:coverage -w apps/api
 ```
 
-**171 testes** em 23 arquivos:
+Arquivos de teste por servico: **API ~49** (Vitest), **Web 5** (Vitest), **Cert API 6** (pytest).
 
 - **Unitarios**: state machine, validation checks, AI service, date utils
 - **Integracao**: process, validation, document, espelho, dashboard services
 - **Snapshot**: templates Excel (Puket/Imaginarium), templates email (3 tipos)
+- **Cert API (pytest)**: health, rotas de certificados, cert service, linx service, stock, rotas gerais
 
 ## CI/CD
 
-GitHub Actions pipeline (`.github/workflows/ci.yml`):
+GitHub Actions pipeline (`.github/workflows/ci.yml`), Node 22:
 
-1. **lint-and-typecheck** — `tsc --noEmit` para API e Web
-2. **test** — Vitest com PostgreSQL 16 service container
-3. **build** — Build de producao de API e Web (apos testes passarem)
+1. **lint-api** — typecheck (`tsc --noEmit`) + ESLint da API
+2. **lint-web** — typecheck (`tsc --noEmit`) + ESLint do Web
+3. **lint-python** — `ruff check apps/cert-api/`
+4. **test-api** — Vitest (unit) com PostgreSQL 16 service container (gera coverage)
+5. **test-web** — Vitest do Web
+6. **test-python** — pytest do cert-api
+7. **security-scan** — `npm audit --audit-level=high` (bloqueante)
+8. **build-docker** — build das imagens API/Web + scan Trivy (CRITICAL/HIGH) e SBOM (syft); roda apos todos os lints/testes/audit passarem
 
 ## Deploy em Producao
 
@@ -289,7 +295,7 @@ O script:
 
 1. Verifica compilacao TypeScript (API + Web)
 2. Sincroniza codigo via rsync
-3. Gera `.env` a partir do HashiCorp Vault
+3. Gera `.env` via `scripts/generate-env-from-vault.sh` (modo padrao SOPS + age; HashiCorp Vault como fallback legado)
 4. Build Docker images (no-cache)
 5. Deploy com force-recreate
 6. Verifica saude dos containers

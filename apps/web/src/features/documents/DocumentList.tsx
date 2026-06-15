@@ -21,6 +21,7 @@ import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { AiExtractionSummary } from './AiExtractionSummary';
 
 interface Document {
@@ -115,20 +116,21 @@ export function DocumentList({ processId }: DocumentListProps) {
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
 
   // Auto-refresh every 5s while any doc is still processing
-  const { data: documents, isLoading } = useApiQuery<Document[]>(
-    ['documents', processId],
-    `/api/documents/process/${processId}`,
-    {
-      refetchInterval: (query) => {
-        const docs = query.state.data;
-        if (!docs) return false;
-        const hasProcessing = docs.some(
-          (d) => d.aiProcessingStatus === 'processing' || d.aiProcessingStatus === 'pending',
-        );
-        return hasProcessing ? 5000 : false;
-      },
+  const {
+    data: documents,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<Document[]>(['documents', processId], `/api/documents/process/${processId}`, {
+    refetchInterval: (query) => {
+      const docs = query.state.data;
+      if (!docs) return false;
+      const hasProcessing = docs.some(
+        (d) => d.aiProcessingStatus === 'processing' || d.aiProcessingStatus === 'pending',
+      );
+      return hasProcessing ? 5000 : false;
     },
-  );
+  });
 
   const fetchSource = async (docId: number) => {
     if (sources[docId]) return;
@@ -221,6 +223,10 @@ export function DocumentList({ processId }: DocumentListProps) {
   };
 
   if (isLoading) return <TableSkeleton />;
+
+  if (error) {
+    return <ErrorState message="Erro ao carregar documentos." onRetry={() => refetch()} />;
+  }
 
   if (!documents || documents.length === 0) {
     return (
@@ -350,7 +356,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             fetchSource(doc.id);
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Ver origem"
                         >
                           {source ? (
@@ -374,7 +380,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             openOrDownload(doc.id, doc.fileName, 'open');
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Abrir documento"
                         >
                           <Eye className="h-3.5 w-3.5" />
@@ -386,7 +392,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             openOrDownload(doc.id, doc.fileName, 'download');
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Baixar documento"
                         >
                           <Download className="h-3.5 w-3.5" />
@@ -413,7 +419,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                               e.stopPropagation();
                               setExpandedId(expanded ? null : doc.id);
                             }}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                             title="Ver dados extraídos"
                           >
                             {expanded ? (
@@ -430,7 +436,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             handleReprocess(doc.id);
                           }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Reprocessar IA"
                         >
                           <RefreshCw className="h-3.5 w-3.5" />

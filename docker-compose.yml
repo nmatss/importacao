@@ -38,7 +38,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       API_PORT: 3001
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       GOOGLE_DRIVE_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
@@ -109,6 +109,10 @@ services:
       ERP_MSSQL_PASS: "${ERP_MSSQL_PASS:-}"
     volumes:
       - cert-reports:/app/reports
+      # Certificate PDFs (INMETRO/ANVISA evidence) live in CERTS_DIR=/app/certs
+      # (apps/cert-api/app/config.py). Without this named volume they are lost on
+      # container restart.
+      - cert-certs:/app/certs
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,3 +151,4 @@ volumes:
   redisdata:
   uploads:
   cert-reports:
+  cert-certs:

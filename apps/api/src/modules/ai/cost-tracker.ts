@@ -82,7 +82,7 @@ export async function assertBudgetAvailable(): Promise<void> {
  * we never want logging to break the extraction itself.
  */
 export async function logUsage(params: {
-  provider: 'openrouter' | 'vertex';
+  provider: 'openrouter' | 'vertex' | 'ialocal';
   model: string;
   context: string;
   inputTokens: number;
