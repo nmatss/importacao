@@ -520,7 +520,8 @@ const SKILLS: Record<string, ExtractionSkill> = {
     verification: {
       ...BL_VERIFICATION_BASE,
       groundedFields: ['blNumber', 'customerReference', 'containerNumber', 'sealNumber'],
-      numericChecks: [cbmVsContainerCheck],
+      // No cbmVsContainerCheck: draftBLResponseSchema has no containerType, so
+      // the check would be a silent no-op (it only runs on ohbl, which has it).
     },
   },
   proforma_invoice: {

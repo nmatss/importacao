@@ -117,13 +117,12 @@ Invoice. Defesas, em profundidade:
 5. **Perímetro:** IA_LOCAL é on-prem, sem egress; gateway com bearer, fail-closed.
    Dado sensível não sai. (Mesma tese que motivava o Vertex, sem API paga.)
 
-> ⚠️ **Estado atual:** as Camadas 1–3 (constituição, skills, assemble, RAG)
-> estão **construídas e testadas, mas ainda NÃO ligadas** ao caminho de
-> extração — `ai/service.ts` ainda monta os prompts via `ai/prompts/*`. Logo, a
-> defesa anti-injeção em profundidade descrita acima só passa a valer nos
-> providers de produção **após o wiring** (ver "O que falta"). Até lá, vale só a
-> constituição embutida no modelo `unico-docintel` (Camada 0), quando ele for o
-> provider ativo.
+> ⚠️ **Estado atual:** as Camadas 1–4 estão **construídas, testadas e LIGADAS** ao
+> `ai/service.ts` atrás da flag **`AI_USE_SPECIALIST`** (default OFF → caminho
+> legado `ai/prompts/*`; rollback instantâneo). A defesa anti-injeção em
+> profundidade passa a valer **quando a flag está ON** — o que ainda **não foi
+> ativado em produção** (exige deploy da branch + a flag). Ligar a flag é também
+> ganho de segurança. Ver o runbook em [`ENTREGA-DOCINTEL-2026-06-14.md`](./ENTREGA-DOCINTEL-2026-06-14.md).
 
 ## Receita — adicionar uma nova especialidade
 
@@ -141,37 +140,30 @@ Nada de tocar no modelo ou no pipeline — a skill é declarativa e auditável.
 
 ## Estado atual / o que falta
 
-**Feito e verificado** (branch `chore/auditoria-rodada-2`, neste repo): provider
-`ialocal` (seam OpenAI-compatible); `embeddings.ts` (fundação semântica, ainda
-não ligada); RAG lexical in-memory `rag/retriever.ts`; harness de avaliação
-`eval/`; constituição + tipos de skill especialista + `assemble.ts`; **as 7 skills
-populadas e verificadas** (invoice, packing_list, ohbl, draft_bl, proforma_invoice,
-espelho, certificate — domainRules + few-shot gold validado contra schema +
-verifyExtraction + retrieval + verification). Typecheck 0, lint 0, suíte de IA
-verde (rode `npx vitest run src/modules/ai`).
+**Feito, testado e commitado** (branch `chore/auditoria-rodada-2`): provider
+`ialocal`; RAG lexical in-memory `rag/retriever.ts` (+ `embeddings.ts` como
+fundação semântica); harness de avaliação `eval/`; constituição + `assemble.ts`
+(wirado no `service.ts` atrás de `AI_USE_SPECIALIST`); **as 8 skills**
+(invoice, packing_list, ohbl, draft_bl, proforma_invoice, espelho, certificate,
+**li**) com domainRules + few-shot gold validado contra schema E harness +
+retrieval + verification; cross-checks de ambiente (CBM×container, carrier).
+**460 testes verdes + 1 skipped (validate-live), typecheck 0, lint 0.**
 
-> No **repo IA_LOCAL (separado, não neste checkout):** o modelo especialista —
-> `models/unico-docintel/Modelfile` (FROM `qwen3-vl`) + `scripts/build-docintel.sh`.
+> ⚠️ A skill **`li` é LATENTE**: completa/testada no registry, mas sem `extractLIData`
+> nem roteamento (`type==='li'` ainda é marcado "não implementado"). As outras 7 são
+> alcançáveis pelo pipeline. Timeout do `chat()`: 90s (hosted) / 360s (`ialocal`).
 
-**Falta (ordem revisada — medir antes de investir em infra):**
+> No **repo IA_LOCAL (separado):** `models/unico-docintel/Modelfile` (FROM
+> `qwen3-vl`, `/no_think`) + `scripts/build-docintel.sh`.
 
-1. **Fase 0 (gate de viabilidade):** subir `qwen3-vl:4b`+`bge-m3` e **medir no
-   Xeon** acurácia E latência. Gate quantitativo de PARAR/SEGUIR (ex.: ">= X% de
-   campos certos no IM0712602NB E p95 < 90s/página" — o timeout do `chat()` é
-   90s). Se CPU não der, decidir OCR-texto + LLM pequeno em vez de VLM (muda a
-   Camada 0).
-2. **Wiring (atrás de flag, doc-a-doc, A/B):** ligar `assemble.ts`/`getSkill` no
-   `ai/service.ts` começando por `invoice`. Cuidados: escolher UMA fonte de
-   verdade por doc-type (não rodar `prompts/*` e `assemble` juntos); confirmar
-   que a saída sob `assemble` mantém o envelope `{value,confidence}` que
-   `stripSpuriousItemPrefix`/harness/flatten assumem.
-3. **Eval/baseline (movido p/ ANTES do RAG):** harness de avaliação em docs reais
-   vs `gemini-2.5-flash`, logo após o wiring de invoice — sem baseline não dá p/
-   provar que RAG melhora nem que o local empata.
-4. **RAG in-memory:** `cosineSimilarity` sobre os JSON do KB (sem pgvector);
-   medir o delta no eval. Cercar os snippets. pgvector só se um KB crescer.
-5. **Promoção + operação:** circuit-breaker keyed por health (fallback automático
-   p/ OpenRouter/Vertex se IA_LOCAL cair, não só "até passar nos gates");
-   versionamento de prompt/skill (`PROMPT_VERSIONS` hoje tudo v1.0, não cobre as
-   skills novas); métrica de latência/timeout por doc-type no painel (KPI que
-   decide a promoção).
+**Veredito Fase 0 (medido em prod):** `unico-docintel` (qwen3-vl:4b) no Xeon AVX1
+sem GPU = **0,18 tok/s → inviável**. Extração local on-prem precisa de **GPU**;
+caminho atual = pipeline no **provider rápido** (`AI_USE_SPECIALIST=1`).
+**Registro completo + runbook: [`ENTREGA-DOCINTEL-2026-06-14.md`](./ENTREGA-DOCINTEL-2026-06-14.md).**
+
+**Falta (decisões humanas + débito):** (1) **GPU** p/ extração local; (2) deploy
+do PR #73 + ligar `AI_USE_SPECIALIST=1` (runbook na entrega); (3) verificar o
+provider/chave de extração de prod (a `OPENROUTER_API_KEY` do servidor tem 39
+chars — suspeita). Débito p/ GPU-day: fila pg-boss + estado `extracting` +
+concorrência 1; skill `email_analysis` (schema flat); CNPJs reais e re-extração
+do EAN; `PROMPT_VERSIONS` por skill; TLS interno se virar multi-host.
