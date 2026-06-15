@@ -1,6 +1,7 @@
 """Tests for certification comparison logic."""
 
 
+import app.services.cert_service as cert_service
 from app.services.cert_service import (
     compare_cert_texts,
     compare_ecommerce_description,
@@ -11,7 +12,6 @@ from app.services.cert_service import (
     strip_html,
 )
 from app.services.derivation import compute_status_dimensions
-import app.services.cert_service as cert_service
 
 
 class TestStripHtml:
