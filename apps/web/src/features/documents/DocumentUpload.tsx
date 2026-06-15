@@ -48,7 +48,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
   const [error, setError] = useState<string | null>(null);
 
   const upload = useCallback(
-    async (file: File) => {
+    async (file: File, overrideDocType?: string) => {
       setState('uploading');
       setProgress(0);
       setError(null);
@@ -56,7 +56,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('documentType', docType);
+      formData.append('documentType', overrideDocType || docType);
       formData.append('processId', processId);
 
       try {
@@ -115,7 +115,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
     if (detected !== 'other') {
       setDocType(detected);
     }
-    upload(file);
+    upload(file, detected !== 'other' ? detected : docType);
   };
 
   const handleDrop = (e: React.DragEvent) => {

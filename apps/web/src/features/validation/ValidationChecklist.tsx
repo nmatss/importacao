@@ -43,6 +43,7 @@ interface ValidationCheck {
   resolvedBy?: string | null;
   resolvedAt?: string | null;
   resolvedManually?: boolean;
+  resolutionNote?: string | null;
 }
 
 interface AnomalyDetectionResult {
@@ -209,7 +210,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
   const [showSendConfirm, setShowSendConfirm] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'failed' | 'warning' | 'passed'>('all');
+  const [filter, setFilter] = useState<'all' | 'failed' | 'warning' | 'passed' | 'accepted'>('all');
   // Manual-resolution inline form: which check is being resolved + its note.
   const [resolveTarget, setResolveTarget] = useState<number | null>(null);
   const [resolveNote, setResolveNote] = useState('');
@@ -247,6 +248,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     if (!checks) return [];
     const visible = checks.filter((c) => c.status !== 'skipped');
     if (filter === 'all') return visible;
+    if (filter === 'accepted') return visible.filter((c) => c.resolvedManually);
     return visible.filter((c) => c.status === filter);
   }, [checks, filter]);
 
@@ -260,6 +262,10 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   );
   const passedCount = useMemo(
     () => checks?.filter((c) => c.status === 'passed').length ?? 0,
+    [checks],
+  );
+  const acceptedCount = useMemo(
+    () => checks?.filter((c) => c.resolvedManually).length ?? 0,
     [checks],
   );
 
@@ -303,6 +309,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           resolution_note: note,
         });
         queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+        queryClient.invalidateQueries({ queryKey: ['validation-report', processId] });
+        queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] });
+        queryClient.invalidateQueries({ queryKey: ['process-events', processId] });
         setResolveTarget(null);
         setResolveNote('');
       } catch (err: unknown) {
@@ -412,8 +421,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           {[
             { key: 'all' as const, label: 'Todos', count: totalCount },
             { key: 'failed' as const, label: 'Falhas', count: failedCount },
-            { key: 'warning' as const, label: 'Avisos', count: warningCount },
-            { key: 'passed' as const, label: 'Aprovados', count: passedCount },
+            { key: 'warning' as const, label: 'Atencoes', count: warningCount },
+            { key: 'accepted' as const, label: 'Aceitos', count: acceptedCount },
+            { key: 'passed' as const, label: 'Conformes', count: passedCount },
           ].map(({ key, label, count }) => (
             <button
               key={key}
@@ -449,7 +459,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {running ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4" />}
-          Executar Validacao
+          Executar validacao
         </button>
         <button
           onClick={detectAnomalies}
@@ -457,7 +467,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors"
         >
           {detectingAnomalies ? <LoadingSpinner size="sm" /> : <Brain className="h-4 w-4" />}
-          Detectar Anomalias (IA)
+          Analisar divergencias
         </button>
 
         {/* Generate Correction Email - only show when there are failures */}
@@ -469,16 +479,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               className="inline-flex items-center gap-2 rounded-lg border border-danger-300 bg-danger-50 px-4 py-2 text-sm font-medium text-danger-700 hover:bg-danger-100 disabled:opacity-50 transition-colors"
             >
               {generatingDraft ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
-              Gerar E-mail Correcao
+              Gerar e-mail correcao
             </button>
             <button
               onClick={() => generateCorrectionDraft(true)}
               disabled={generatingDraft}
               className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50 transition-colors"
-              title="Gerar com IA (texto mais elaborado)"
+              title="Gerar e-mail detalhado"
             >
               {generatingDraft ? <LoadingSpinner size="sm" /> : <Sparkles className="h-4 w-4" />}
-              Gerar com IA
+              Gerar e-mail detalhado
             </button>
           </div>
         )}
@@ -543,7 +553,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     {check.resolvedManually && check.resolvedBy && (
                       <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700">
                         <Wrench className="h-3 w-3" />
-                        Resolvido por {check.resolvedBy}
+                        Aceito por {check.resolvedBy}
                         {check.resolvedAt && (
                           <span className="text-primary-500">
                             em{' '}
@@ -577,7 +587,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                             onChange={(e) => setResolveNote(e.target.value)}
                             rows={2}
                             autoFocus
-                            placeholder="Ex.: divergencia aceita — peso confere com PL fisico conferido em 28/05."
+                            placeholder="Ex.: divergencia aceita; peso confere com PL fisico conferido em 28/05."
                             className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                           />
                           <div className="flex items-center gap-2">
@@ -614,7 +624,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                           className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
                         >
                           <Wrench className="h-3 w-3" />
-                          Resolver Manualmente
+                          Aceitar
                         </button>
                       ))}
                   </div>

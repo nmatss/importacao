@@ -2,7 +2,6 @@ import { useMemo, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, Navigate, useSearchParams } from 'react-router-dom';
 import {
   FileText,
-  ClipboardCheck,
   FileSpreadsheet,
   DollarSign,
   CalendarDays,
@@ -29,7 +28,6 @@ import { LogisticStatusBar, buildLogisticProps } from './components/LogisticStat
 import { ProcessInfoCard } from './components/ProcessInfoCard';
 import { DocumentsTab } from './components/DocumentsTab';
 import { ComparisonTab } from './components/ComparisonTab';
-import { ValidationTab } from './components/ValidationTab';
 import { EspelhoTab } from './components/EspelhoTab';
 import { CambiosTab } from './components/CambiosTab';
 import { FollowUpTab } from './components/FollowUpTab';
@@ -51,7 +49,6 @@ const CORE_TABS = [
   { key: 'documentos', label: 'Documentos', icon: FileText },
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
-  { key: 'validacao', label: 'Validacao', icon: ClipboardCheck },
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
   { key: 'comunicacoes', label: 'Comunicacoes', icon: MessageSquare },
   { key: 'emails', label: 'Emails', icon: Mail },
@@ -92,7 +89,7 @@ function TabIndicator({
   validationChecks: ValidationCheck[] | undefined;
   emailCount: number;
 }) {
-  if (tabKey === 'validacao') {
+  if (tabKey === 'comparativo') {
     const failedCount = validationChecks?.filter((c) => c.status === 'failed').length ?? 0;
     if (failedCount > 0) {
       return (
@@ -162,8 +159,6 @@ function TabContent({
       return <ComparisonTab processId={processId} />;
     case 'checklist':
       return <DocumentChecklistTab processId={processId} />;
-    case 'validacao':
-      return <ValidationTab processId={processId} />;
     case 'espelho':
       return <EspelhoTab processId={processId} />;
     case 'cambios':
@@ -268,7 +263,7 @@ export function ProcessDetailPage() {
   useEffect(() => {
     const visibleKeys = new Set(visibleTabs.map((t) => t.key));
     if (!visibleKeys.has(activeTab)) {
-      setActiveTab('documentos');
+      setActiveTab(activeTab === 'validacao' ? 'comparativo' : 'documentos');
     }
   }, [visibleTabs, activeTab, setActiveTab]);
 

@@ -57,6 +57,7 @@ export function certStatusColor(status: string): string {
       return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
     // Status derivados (port Verificao_status):
     case 'ATIVO':
+    case 'VALIDO':
     case 'CONFORME':
     case 'LIBERADA':
       return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
