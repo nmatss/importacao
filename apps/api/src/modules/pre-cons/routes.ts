@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { preConsController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
-import { upload } from '../../shared/middleware/upload.js';
+import { upload, validateMagicBytes } from '../../shared/middleware/upload.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { getPreConsItemsSchema } from './schema.js';
 
@@ -10,7 +10,13 @@ const router = Router();
 router.use(authMiddleware);
 
 // Upload and sync Pre-Cons XLSX (admin only)
-router.post('/sync', adminMiddleware, upload.single('file'), preConsController.sync);
+router.post(
+  '/sync',
+  adminMiddleware,
+  upload.single('file'),
+  validateMagicBytes,
+  preConsController.sync,
+);
 
 // Pull-and-sync from Drive folder (admin only — designed for cron/scheduler)
 router.post('/sync-from-drive', adminMiddleware, preConsController.syncFromDrive);

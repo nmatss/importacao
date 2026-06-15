@@ -5,7 +5,7 @@ que o time fiscal (Carla) pediu na reunião:
 
     cert_status            ATIVO | ENCERRADO | SKU_EXCLUIDO | EM_ANDAMENTO | DESCONHECIDO
     site_status            CONFORME | NAO_CONFORME | PENDENTE
-    license_status         ATIVO | VENCIDO | NAO_APLICAVEL
+    license_status         VALIDO | VENCIDO | NAO_APLICAVEL
     comercializacao_status LIBERADA | DENTRO_PRAZO | ENCERRADA | NAO_APLICA
 
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
@@ -25,7 +25,7 @@ REGULATED_KEYWORDS = (
 
 CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO", "SKU_EXCLUIDO", "EM_ANDAMENTO", "DESCONHECIDO"}
 SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME", "PENDENTE"}
-LICENSE_STATUS_VALUES = {"ATIVO", "VENCIDO", "NAO_APLICAVEL"}
+LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL"}
 COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA"}
 
 
@@ -71,7 +71,7 @@ def derive_cert_status(
         return _fallback_from_expiration(is_expired, sale_deadline_raw)
 
     if "exclu" in s:
-        return "SKU_EXCLUIDO"
+        return "ENCERRADO"
     if "andamento" in s:
         return "EM_ANDAMENTO"
     if s == "ativo" or "finalizad" in s or s == "expiring":
@@ -168,17 +168,19 @@ def derive_site_status(
 def derive_license_status(
     certification_type: str | None,
     is_expired: bool | None,
+    sale_deadline_raw: str | None,
 ) -> str:
     """Status de licenciamento.
 
-    Versão simplificada — usa `is_expired` como proxy de licença vencida.
-    Pode ser refinada quando o time popular `Validade da Certificação` real.
+    Usa o prazo de venda quando disponível; `is_expired` permanece como
+    fallback para cadastros antigos que ainda não têm prazo estruturado.
     """
     if not _is_regulated(certification_type):
         return "NAO_APLICAVEL"
-    if is_expired:
+    deadline = _norm(sale_deadline_raw)
+    if "vencido" in deadline or is_expired:
         return "VENCIDO"
-    return "ATIVO"
+    return "VALIDO"
 
 
 def derive_comercializacao_status(
@@ -218,7 +220,7 @@ def compute_status_dimensions(row: dict) -> dict[str, str]:
 
     cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw)
     ss = derive_site_status(last_vs, cs, expected_cert_text, certification_type)
-    ls = derive_license_status(certification_type, is_expired)
+    ls = derive_license_status(certification_type, is_expired, sale_deadline_raw)
     cms = derive_comercializacao_status(cs, sale_deadline_raw, sheet_status)
     return {
         "cert_status": cs,

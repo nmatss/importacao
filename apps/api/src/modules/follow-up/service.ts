@@ -6,6 +6,7 @@ import { googleSheetsService } from '../integrations/google-sheets.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { processService } from '../processes/service.js';
+import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 const TRACKING_STEPS = [
   'documentsReceivedAt',
@@ -25,6 +26,24 @@ const TRACKING_STEPS = [
   'liApprovedAt',
 ] as const;
 
+const TRACKING_STEP_LABELS: Record<(typeof TRACKING_STEPS)[number], string> = {
+  documentsReceivedAt: 'Documentos recebidos',
+  preInspectionAt: 'Pre-inspecao',
+  savedToFolderAt: 'Salvo na pasta',
+  ncmVerifiedAt: 'NCM verificado',
+  ncmBlCheckedAt: 'NCM BL conferido',
+  freightBlCheckedAt: 'Frete BL conferido',
+  espelhoBuiltAt: 'Espelho montado',
+  invoiceSentFeniciaAt: 'Invoice enviada Fenicia',
+  espelhoGeneratedAt: 'Espelho gerado',
+  signaturesCollectedAt: 'Assinaturas coletadas',
+  signedDocsSentAt: 'Documentos assinados enviados',
+  sentToFeniciaAt: 'Enviado para Fenicia',
+  diDraftAt: 'Rascunho DI',
+  liSubmittedAt: 'LI protocolada',
+  liApprovedAt: 'LI aprovada',
+};
+
 function calculateProgress(tracking: Partial<FollowUpTracking>): number {
   const stepWeight = Math.floor(100 / TRACKING_STEPS.length);
   let progress = 0;
@@ -36,6 +55,35 @@ function calculateProgress(tracking: Partial<FollowUpTracking>): number {
   }
 
   return Math.min(progress, 100);
+}
+
+async function recordChecklistEvent(
+  processId: number,
+  step: (typeof TRACKING_STEPS)[number],
+  previousStatus: 'pendente' | 'feito',
+  newStatus: 'pendente' | 'feito',
+  completedAt: Date | null,
+  userId: number | null,
+) {
+  if (previousStatus === newStatus) return;
+
+  const label = TRACKING_STEP_LABELS[step];
+  await recordProcessEvent(
+    processId,
+    {
+      eventType: 'checklist_step_changed',
+      title: `Checklist: ${label} ${newStatus}`,
+      description: `${label}: ${previousStatus} -> ${newStatus}`,
+      metadata: {
+        step,
+        item: label,
+        previousStatus,
+        newStatus,
+        completedAt: completedAt?.toISOString() ?? null,
+      },
+    },
+    userId,
+  );
 }
 
 export const followUpService = {
@@ -145,12 +193,18 @@ export const followUpService = {
     return tracking;
   },
 
-  async updateStep(processId: number, step: string, completedAt: Date | null) {
+  async updateStep(
+    processId: number,
+    step: string,
+    completedAt: Date | null,
+    userId: number | null = null,
+  ) {
     // Validate step name
     const validSteps = TRACKING_STEPS as readonly string[];
     if (!validSteps.includes(step)) {
       throw new Error(`Passo invalido: ${step}. Passos validos: ${validSteps.join(', ')}`);
     }
+    const typedStep = step as (typeof TRACKING_STEPS)[number];
 
     // Check if tracking exists, create if not
     const [existing] = await db
@@ -158,6 +212,9 @@ export const followUpService = {
       .from(followUpTracking)
       .where(eq(followUpTracking.processId, processId))
       .limit(1);
+
+    const previousStatus = existing?.[typedStep] ? 'feito' : 'pendente';
+    const newStatus = completedAt ? 'feito' : 'pendente';
 
     if (!existing) {
       const [created] = await db
@@ -170,6 +227,14 @@ export const followUpService = {
         .set({ overallProgress: progress })
         .where(eq(followUpTracking.processId, processId))
         .returning();
+      await recordChecklistEvent(
+        processId,
+        typedStep,
+        previousStatus,
+        newStatus,
+        completedAt,
+        userId,
+      );
       return updated;
     }
 
@@ -191,6 +256,15 @@ export const followUpService = {
       .catch((err) =>
         logger.error({ err, processId }, 'advanceLogisticStatus failed after follow-up updateStep'),
       );
+
+    await recordChecklistEvent(
+      processId,
+      typedStep,
+      previousStatus,
+      newStatus,
+      completedAt,
+      userId,
+    );
 
     return final;
   },

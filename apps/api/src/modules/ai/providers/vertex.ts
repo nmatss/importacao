@@ -164,12 +164,9 @@ export class VertexAIProvider implements AIProvider {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(
-        { status: response.status, error: errorText, model: fullModel },
-        'Vertex API error',
-      );
-      throw new Error(`Vertex API error: ${response.status} - ${errorText}`);
+      await response.text().catch(() => '');
+      logger.error({ status: response.status, model: fullModel }, 'Vertex API error');
+      throw new Error(`Vertex API error: ${response.status}`);
     }
 
     const result = (await response.json()) as {
@@ -180,7 +177,7 @@ export class VertexAIProvider implements AIProvider {
     const textParts = result.candidates?.[0]?.content?.parts ?? [];
     const content = textParts.map((p) => p.text ?? '').join('');
     if (!content) {
-      logger.error({ result }, 'Empty response from Vertex');
+      logger.error({ model: fullModel }, 'Empty response from Vertex');
       throw new Error('Empty response from Vertex API');
     }
 

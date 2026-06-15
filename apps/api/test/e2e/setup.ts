@@ -88,6 +88,14 @@ export async function setupE2EDatabase(): Promise<E2EContext> {
   process.env.JWT_SECRET = E2E_JWT_SECRET;
   process.env.NODE_ENV = 'test';
   process.env.REDIS_URL = '';
+  process.env.AI_PROVIDER = 'ialocal';
+  process.env.AI_ALLOW_EXTERNAL = 'false';
+  process.env.AI_USE_SPECIALIST = '1';
+  process.env.IA_LOCAL_BASE_URL = 'http://ia-local-gateway:8443/v1';
+  process.env.IA_LOCAL_API_KEY = 'test-ia-local-token';
+  process.env.IA_LOCAL_MODEL = 'unico-docintel';
+  process.env.IA_LOCAL_EMBED_MODEL = 'bge-m3';
+  process.env.IA_LOCAL_ALLOWED_HOSTS = 'ia-local-gateway';
 
   const cleanup = async () => {
     await container.stop();

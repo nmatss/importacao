@@ -228,7 +228,11 @@ export function DocumentList({ processId }: DocumentListProps) {
     return <ErrorState message="Erro ao carregar documentos." onRetry={() => refetch()} />;
   }
 
-  if (!documents || documents.length === 0) {
+  const visibleDocuments = (documents ?? []).filter(
+    (doc) => doc.documentType !== 'proforma_invoice',
+  );
+
+  if (!visibleDocuments || visibleDocuments.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 py-10 text-slate-400">
         <FileText className="h-8 w-8" />
@@ -238,7 +242,7 @@ export function DocumentList({ processId }: DocumentListProps) {
   }
 
   // Group by document type
-  const grouped = documents.reduce(
+  const grouped = visibleDocuments.reduce(
     (acc, doc) => {
       const key = doc.documentType || 'other';
       if (!acc[key]) acc[key] = [];
@@ -266,8 +270,8 @@ export function DocumentList({ processId }: DocumentListProps) {
   );
 
   // Status summary
-  const totalDocs = documents.length;
-  const completedDocs = documents.filter((d) => d.aiProcessingStatus === 'completed').length;
+  const totalDocs = visibleDocuments.length;
+  const completedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'completed').length;
   const hasAll3 = !!grouped['invoice'] && !!grouped['packing_list'] && !!grouped['ohbl'];
 
   return (

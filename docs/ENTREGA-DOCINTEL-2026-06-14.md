@@ -149,3 +149,38 @@ de docs). Revisão final 1000% antes do push.
   `parties.json`; **re-extrair a base EAN** (Puket truncada em 2000/24827; Imaginarium 0%).
 - `PROMPT_VERSIONS` por skill (hoje tudo `v1.0`) para rastrear A/B no `ai_usage_log`.
 - TLS interno (`tls internal` no Caddy) **se/quando** a topologia deixar de ser single-host.
+
+## 11. Status pós-deploy (2026-06-14) + 🔴 achado de privacidade
+
+**DEPLOYADO.** PR #73 mergeado em `master` (`9e1999a`) e `deploy.sh` rodado: **health
+verde, sem rollback, todos os containers healthy.** Prod (192.168.168.124) agora tem
+rodada-2 + DocIntel. `AI_USE_SPECIALIST` **OFF** (pipeline dormante — comportamento de
+extração inalterado); `GOOGLE_GROUP_ALLOWED` setado (login ok); `.env` preservado (a
+geração via Vault falhou de forma não-bloqueante).
+
+**🔴 Achado de privacidade (pré-existente — NÃO causado pelo deploy):** a extração de
+produção **funciona, mas via Gemini DEVELOPER API**, não Vertex:
+
+```
+AI_PROVIDER          = (vazio → openrouter)
+OPENROUTER_BASE_URL  = https://generativelanguage.googleapis.com/v1beta/openai
+OPENROUTER_API_KEY   = AIzaSy…   (chave da Gemini Developer API)
+```
+
+Isto **contradiz a decisão de privacidade do projeto** (ver `IA-ESPECIALISTA.md` /
+memória): documento sensível (Invoice, CNPJ, BL) **deve** ir via **Vertex AI**
+(`aiplatform.googleapis.com`, garantia contratual de **não-treino**), **não** pela
+Developer API (que **treina nos dados** no tier free). Hoje os documentos vão para a
+Developer API. `ai_usage_log` está vazio (`count=0`) — extração talvez não exercitada
+recentemente, ou `logUsage` não grava (investigar à parte). Relacionado à **issue #60**
+(Vertex IAM).
+
+### Próximos passos (decisões humanas, priorizadas)
+
+1. **Privacidade (mais importante):** migrar a extração para **Vertex** (`AI_PROVIDER=vertex`
+   - credenciais + liberar API/role no GCP — issue #60). Enquanto não, dado sensível segue
+     na Developer API.
+2. **Ligar o pipeline especialista** (`AI_USE_SPECIALIST=1` + restart api): ativa 8 skills +
+   RAG + harness + **defesa anti-injeção** sobre o provider atual. Recomenda-se **validar
+   antes** (`OPENROUTER_API_KEY=<gemini> OPENROUTER_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai npx vitest run validate-live`)
+   e, idealmente, resolver a privacidade (1) primeiro.

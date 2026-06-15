@@ -292,7 +292,13 @@ fica como fallback caso aquele passo tenha falhado:
   /opt/importacao/scripts/apply-pending-migrations.sh
 
 NEW ENV VARS (set in .env.production before restarting API):
-  AI_PROVIDER=openrouter                          # 'vertex' to switch when ready
+  AI_PROVIDER=ialocal
+  AI_ALLOW_EXTERNAL=false                         # set true only for explicit external-provider opt-in
+  AI_USE_SPECIALIST=1
+  IA_LOCAL_BASE_URL=http://ia-local-gateway:8443/v1
+  IA_LOCAL_API_KEY=<gateway-token>
+  IA_LOCAL_MODEL=unico-docintel
+  IA_LOCAL_EMBED_MODEL=bge-m3
   AI_MONTHLY_BUDGET_USD=200                       # ≈ R$ 1000
   AI_UPGRADE_ON_LOW_CONFIDENCE=1                  # default ON
   AI_UPGRADE_CONFIDENCE_THRESHOLD=0.7

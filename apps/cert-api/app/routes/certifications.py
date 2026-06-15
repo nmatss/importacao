@@ -21,6 +21,7 @@ from app.config import (
 from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
+from app.services.derivation import compute_status_dimensions
 from app.services.erp_service import sync_sheets_to_db
 from app.utils.logging import log
 
@@ -68,6 +69,7 @@ def _serialize_product(r: dict) -> dict:
     for dtfield in ("last_validation_date", "created_at", "updated_at", "sale_deadline_date"):
         if r.get(dtfield):
             r[dtfield] = r[dtfield].isoformat() if hasattr(r[dtfield], "isoformat") else str(r[dtfield])
+    r.update(compute_status_dimensions(r))
     return r
 
 
@@ -431,7 +433,8 @@ def list_products(
                 f"""
                 SELECT sku, source, warehouse,
                     COALESCE(SUM(quantity), 0) as qty,
-                    COALESCE(SUM(available), 0) as avail
+                    COALESCE(SUM(available), 0) as avail,
+                    MAX(synced_at) as synced_at
                 FROM cert_stock WHERE sku IN ({placeholders})
                 GROUP BY sku, source, warehouse
                 """,
@@ -443,7 +446,13 @@ def list_products(
                 sk = sr["sku"]
                 if sk not in stock_map:
                     stock_map[sk] = {"stock_cd": 0, "stock_ecommerce": 0, "stock_total": 0, "stock_detail": []}
-                entry = {"source": sr["source"], "warehouse": sr["warehouse"], "quantity": sr["qty"], "available": sr["avail"]}
+                entry = {
+                    "source": sr["source"],
+                    "warehouse": sr["warehouse"],
+                    "quantity": sr["qty"],
+                    "available": sr["avail"],
+                    "synced_at": sr["synced_at"].isoformat() if sr["synced_at"] else None,
+                }
                 stock_map[sk]["stock_detail"].append(entry)
                 if sr["source"] == "wms_biguacu":
                     stock_map[sk]["stock_cd"] += sr["avail"] or sr["qty"] or 0

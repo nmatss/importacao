@@ -20,6 +20,7 @@ const STATUS_LABELS: Record<string, string> = {
   NAO_CONFORME: 'Não Conforme',
   PENDENTE: 'Pendente',
   // License status (derivado)
+  VALIDO: 'Válido',
   VENCIDO: 'Vencido',
   NAO_APLICAVEL: 'N/A',
   // Comercialização (derivado)
@@ -32,6 +33,7 @@ const STATUS_LABELS: Record<string, string> = {
 const DOT_COLORS: Record<string, string> = {
   OK: 'bg-emerald-500',
   ATIVO: 'bg-emerald-500',
+  VALIDO: 'bg-emerald-500',
   CONFORME: 'bg-emerald-500',
   LIBERADA: 'bg-emerald-500',
   INCONSISTENT: 'bg-amber-500',

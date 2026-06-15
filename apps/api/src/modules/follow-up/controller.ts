@@ -66,7 +66,12 @@ export const followUpController = {
         return sendError(res, 'Campo "step" e obrigatorio', 400);
       }
       const value = completedAt === null ? null : completedAt ? new Date(completedAt) : new Date();
-      const tracking = await followUpService.updateStep(processId, step, value);
+      const tracking = await followUpService.updateStep(
+        processId,
+        step,
+        value,
+        req.user?.id ?? null,
+      );
       sendSuccess(res, tracking);
     } catch (error: any) {
       const status = error.statusCode || 400;

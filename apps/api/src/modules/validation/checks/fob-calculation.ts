@@ -48,12 +48,14 @@ export default function fobCalculation(input: CheckInput): CheckResult {
     };
   }
 
-  const FOC_DESCRIPTION_RE = /\b(foc|free\s*of\s*charge|complimentary|sample|amostra|brinde)\b/i;
+  const FOC_DESCRIPTION_RE =
+    /\b(foc|free\s*of\s*charge|complimentary|sample|amostra|brinde|discount|desconto|bonificacao|bonificado)\b/i;
 
   const isFreeOfCharge = (item: Record<string, any>): boolean => {
     if (item.isFreeOfCharge === true) return true;
     const unitPrice = Number(item.unitPrice ?? 0);
-    if (unitPrice === 0 && Number(item.quantity ?? 0) > 0) return true;
+    const totalPrice = Number(item.totalPrice ?? item.amount ?? item.total ?? NaN);
+    if ((unitPrice === 0 || totalPrice === 0) && Number(item.quantity ?? 0) > 0) return true;
     const desc = String(item.description ?? '');
     if (FOC_DESCRIPTION_RE.test(desc)) return true;
     return false;
@@ -61,6 +63,11 @@ export default function fobCalculation(input: CheckInput): CheckResult {
 
   let focCount = 0;
   let focQuantity = 0;
+  const rawItemTotal = items.reduce((sum, item) => {
+    const unitPrice = Number(item.unitPrice ?? 0);
+    const quantity = Number(item.quantity ?? 0);
+    return sum + unitPrice * quantity;
+  }, 0);
   const calculatedTotal = items.reduce((sum, item) => {
     if (isFreeOfCharge(item)) {
       focCount++;
@@ -69,6 +76,8 @@ export default function fobCalculation(input: CheckInput): CheckResult {
     }
     const unitPrice = Number(item.unitPrice ?? 0);
     const quantity = Number(item.quantity ?? 0);
+    const totalPrice = Number(item.totalPrice ?? item.amount ?? item.total ?? NaN);
+    if (Number.isFinite(totalPrice)) return sum + totalPrice;
     return sum + unitPrice * quantity;
   }, 0);
 
@@ -79,6 +88,17 @@ export default function fobCalculation(input: CheckInput): CheckResult {
   // Use proportional tolerance: max(1.00, 0.1% of total) to handle floating-point accumulation
   const tolerance = Math.max(1.0, totalFob * 0.001);
   if (difference <= tolerance) {
+    const rawDifference = Math.abs(rawItemTotal - totalFob);
+    if (focCount > 0 && rawDifference > tolerance) {
+      return {
+        checkName,
+        status: 'warning',
+        expectedValue: totalFob.toFixed(2),
+        actualValue: rawItemTotal.toFixed(2),
+        documentsCompared: 'INV',
+        message: `Diferença explicada por item FOC/desconto identificado na Invoice: soma dos itens = ${rawItemTotal.toFixed(2)}, total declarado = ${totalFob.toFixed(2)} (diferenca: ${rawDifference.toFixed(2)}). Total ajustado = ${calculatedTotal.toFixed(2)}${focNote}.`,
+      };
+    }
     return {
       checkName,
       status: 'passed',

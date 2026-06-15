@@ -16,6 +16,11 @@ describe('normalizePort', () => {
     expect(normalizePort('Shanghai - China')).toBe('shanghai');
   });
 
+  it('strips country suffix after whitespace only', () => {
+    expect(normalizePort('NINGBO CHINA')).toBe('ningbo');
+    expect(normalizePort('ITAPOA BRAZIL')).toBe('itapoa');
+  });
+
   it('handles multi-word countries', () => {
     expect(normalizePort('Los Angeles, United States')).toBe('los angeles');
     expect(normalizePort('Hong Kong, Hong Kong')).toBe('hong kong');

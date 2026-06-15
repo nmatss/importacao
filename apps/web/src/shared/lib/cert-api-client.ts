@@ -12,7 +12,7 @@ export type CertStatusKind =
 
 export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME' | 'PENDENTE';
 
-export type LicenseStatusKind = 'ATIVO' | 'VENCIDO' | 'NAO_APLICAVEL';
+export type LicenseStatusKind = 'VALIDO' | 'VENCIDO' | 'NAO_APLICAVEL';
 
 export type ComercializacaoStatusKind = 'LIBERADA' | 'DENTRO_PRAZO' | 'ENCERRADA' | 'NAO_APLICA';
 
@@ -39,7 +39,13 @@ export interface CertProduct {
   stock_cd?: number | null;
   stock_ecommerce?: number | null;
   stock_total?: number | null;
-  stock_detail?: Array<{ source: string; warehouse: string; quantity: number; available: number }>;
+  stock_detail?: Array<{
+    source: string;
+    warehouse: string;
+    quantity: number;
+    available: number;
+    synced_at?: string | null;
+  }>;
   // Status semânticos derivados (port Verificao_status — sessão 2026-05-22):
   cert_status?: CertStatusKind | null;
   site_status?: SiteStatusKind | null;

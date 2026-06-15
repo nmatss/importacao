@@ -58,8 +58,17 @@ services:
       NODE_ENV: production
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
-      AI_PROVIDER: ${AI_PROVIDER:-openrouter}
+      AI_PROVIDER: ${AI_PROVIDER:-ialocal}
+      AI_ALLOW_EXTERNAL: ${AI_ALLOW_EXTERNAL:-false}
       AI_MONTHLY_BUDGET_USD: ${AI_MONTHLY_BUDGET_USD:-200}
+      # IA_LOCAL / DocIntel (on-prem) é o provider padrão para documentos sensíveis.
+      IA_LOCAL_BASE_URL: ${IA_LOCAL_BASE_URL:-http://ia-local-gateway:8443/v1}
+      IA_LOCAL_API_KEY: ${IA_LOCAL_API_KEY:-}
+      IA_LOCAL_MODEL: ${IA_LOCAL_MODEL:-unico-docintel}
+      IA_LOCAL_EMBED_MODEL: ${IA_LOCAL_EMBED_MODEL:-bge-m3}
+      IA_LOCAL_ALLOWED_HOSTS: ${IA_LOCAL_ALLOWED_HOSTS:-ia-local-gateway}
+      AI_USE_SPECIALIST: ${AI_USE_SPECIALIST:-1}
+      AI_LOCAL_CHAT_TIMEOUT_MS: ${AI_LOCAL_CHAT_TIMEOUT_MS:-360000}
       GOOGLE_VERTEX_PROJECT: ${GOOGLE_VERTEX_PROJECT:-}
       GOOGLE_VERTEX_LOCATION: ${GOOGLE_VERTEX_LOCATION:-us-central1}
       GOOGLE_VERTEX_CLIENT_EMAIL: ${GOOGLE_VERTEX_CLIENT_EMAIL:-}
@@ -118,6 +127,9 @@ services:
           cpus: '1.0'
     security_opt:
       - no-new-privileges:true
+    networks:
+      - default
+      - ia-local-net
 
   cert-api:
     build:
@@ -288,3 +300,7 @@ volumes:
   alertmanagerdata:
   letsencrypt:
   certbot-webroot:
+
+networks:
+  ia-local-net:
+    external: true

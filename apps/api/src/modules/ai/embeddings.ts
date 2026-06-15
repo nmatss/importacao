@@ -58,11 +58,11 @@ export async function embedTexts(texts: string[], signal?: AbortSignal): Promise
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.error({ status: response.status, error: errorText, model }, 'IA_LOCAL embeddings error');
+    await response.text().catch(() => '');
+    logger.error({ status: response.status, model }, 'IA_LOCAL embeddings error');
     // Same "error: <status>" shape as the chat providers, for consistent
     // retry classification upstream.
-    throw new Error(`IA_LOCAL embeddings error: ${response.status} - ${errorText}`);
+    throw new Error(`IA_LOCAL embeddings error: ${response.status}`);
   }
 
   const result = (await response.json()) as {

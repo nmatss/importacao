@@ -1,6 +1,7 @@
 """Tests for certification comparison logic."""
 
 
+import app.services.cert_service as cert_service
 from app.services.cert_service import (
     compare_cert_texts,
     compare_ecommerce_description,
@@ -10,6 +11,7 @@ from app.services.cert_service import (
     normalize_reg_number,
     strip_html,
 )
+from app.services.derivation import compute_status_dimensions
 
 
 class TestStripHtml:
@@ -136,3 +138,85 @@ class TestCompareCertTexts:
             ecommerce_desc="Registro Inmetro 010208/2024",
         )
         assert status == "OK"
+
+
+class TestValidateSingleProduct:
+    def test_expired_product_not_found_stays_url_not_found(self, monkeypatch):
+        monkeypatch.setattr(cert_service, "get_vtex_config", lambda brand: {"domain": "example.test"})
+        monkeypatch.setattr(cert_service, "vtex_search_product", lambda *args, **kwargs: None)
+
+        result = cert_service.validate_single_product(
+            "050402313",
+            "puket",
+            "INMETRO",
+            product_name="Caneta com LED Dino",
+            is_expired=True,
+            sale_deadline_date="2026-01-01",
+        )
+
+        assert result["status"] == "URL_NOT_FOUND"
+
+    def test_expired_product_found_on_site_is_expired(self, monkeypatch):
+        monkeypatch.setattr(cert_service, "get_vtex_config", lambda brand: {"domain": "example.test"})
+        monkeypatch.setattr(cert_service, "vtex_search_product", lambda *args, **kwargs: {"id": 1})
+        monkeypatch.setattr(cert_service, "build_product_url", lambda product: "https://example.test/p")
+        monkeypatch.setattr(cert_service, "extract_cert_text_from_vtex", lambda product: "Certificado INMETRO")
+
+        result = cert_service.validate_single_product(
+            "050402313",
+            "puket",
+            "INMETRO",
+            product_name="Caneta com LED Dino",
+            is_expired=True,
+            sale_deadline_date="2026-01-01",
+        )
+
+        assert result["status"] == "EXPIRED"
+        assert result["url"] == "https://example.test/p"
+
+
+class TestStatusDerivation:
+    def test_off_site_expired_commercial_ended_is_ecommerce_conforme(self):
+        result = compute_status_dimensions(
+            {
+                "sheet_status": "Encerrado",
+                "is_expired": True,
+                "sale_deadline": "Vencido",
+                "certification_type": "INMETRO",
+                "expected_cert_text": "INMETRO",
+                "last_validation_status": "URL_NOT_FOUND",
+            }
+        )
+
+        assert result["cert_status"] == "ENCERRADO"
+        assert result["site_status"] == "CONFORME"
+        assert result["license_status"] == "VENCIDO"
+
+    def test_excluded_sku_maps_to_certificacao_encerrado(self):
+        result = compute_status_dimensions(
+            {
+                "sheet_status": "SKU excluído",
+                "is_expired": False,
+                "sale_deadline": "Vencido",
+                "certification_type": "INMETRO",
+                "expected_cert_text": "INMETRO",
+                "last_validation_status": "URL_NOT_FOUND",
+            }
+        )
+
+        assert result["cert_status"] == "ENCERRADO"
+        assert result["site_status"] == "CONFORME"
+
+    def test_active_license_maps_to_valido(self):
+        result = compute_status_dimensions(
+            {
+                "sheet_status": "Ativo",
+                "is_expired": False,
+                "sale_deadline": "Fim do lote",
+                "certification_type": "INMETRO",
+                "expected_cert_text": "INMETRO",
+                "last_validation_status": "OK",
+            }
+        )
+
+        assert result["license_status"] == "VALIDO"

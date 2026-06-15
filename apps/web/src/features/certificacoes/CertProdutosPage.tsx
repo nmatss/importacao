@@ -471,25 +471,20 @@ export default function CertProdutosPage() {
                       Marca <SortIcon field="brand" />
                     </span>
                   </th>
-                  <th
-                    className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer select-none hover:text-slate-700 dark:text-slate-300 transition-colors"
-                    onClick={() => handleSort('last_validation_status')}
-                  >
-                    <span className="flex items-center">
-                      Status <SortIcon field="last_validation_status" />
-                    </span>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Status Certificacao
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Cert.
+                    Cert. - Prazo
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Site
+                    Status Ecommerce
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Comerc.
+                    Status Licenciamento
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Prazo de Venda
+                    Licen. - Prazo
                   </th>
                   <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     CD
@@ -538,17 +533,24 @@ export default function CertProdutosPage() {
                       </span>
                     </td>
                     <td className="px-5 py-3.5">
-                      {p.last_validation_status ? (
-                        <CertStatusBadge status={p.last_validation_status} />
-                      ) : p.is_expired ? (
-                        <CertStatusBadge status="EXPIRED" />
+                      {p.cert_status ? (
+                        <CertStatusBadge status={p.cert_status} />
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      {p.cert_status ? (
-                        <CertStatusBadge status={p.cert_status} />
+                      {p.sale_deadline ? (
+                        <span
+                          className={cn(
+                            'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
+                            p.is_expired
+                              ? 'text-pink-700 bg-pink-50'
+                              : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900',
+                          )}
+                        >
+                          {p.sale_deadline}
+                        </span>
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>
                       )}
@@ -561,8 +563,8 @@ export default function CertProdutosPage() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      {p.comercializacao_status ? (
-                        <CertStatusBadge status={p.comercializacao_status} />
+                      {p.license_status ? (
+                        <CertStatusBadge status={p.license_status} />
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>
                       )}
@@ -609,6 +611,11 @@ export default function CertProdutosPage() {
                                   <div key={i} className="flex justify-between gap-4 py-0.5">
                                     <span className="text-slate-300">
                                       {(d.warehouse || '').replace('CD ', '')}
+                                      {d.synced_at && (
+                                        <span className="ml-2 text-slate-500">
+                                          {formatDateTime(d.synced_at)}
+                                        </span>
+                                      )}
                                     </span>
                                     <span className="font-mono font-bold">
                                       {(d.available ?? d.quantity ?? 0).toLocaleString('pt-BR')}

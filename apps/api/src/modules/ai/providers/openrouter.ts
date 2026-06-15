@@ -66,12 +66,9 @@ export class OpenRouterProvider implements AIProvider {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(
-        { status: response.status, error: errorText, model: fullModel },
-        'OpenRouter API error',
-      );
-      throw new Error(`OpenRouter API error: ${response.status} - ${errorText}`);
+      await response.text().catch(() => '');
+      logger.error({ status: response.status, model: fullModel }, 'OpenRouter API error');
+      throw new Error(`OpenRouter API error: ${response.status}`);
     }
 
     const result = (await response.json()) as {
@@ -81,7 +78,7 @@ export class OpenRouterProvider implements AIProvider {
 
     const content = result.choices?.[0]?.message?.content;
     if (!content) {
-      logger.error({ result }, 'Empty response from OpenRouter');
+      logger.error({ model: fullModel }, 'Empty response from OpenRouter');
       throw new Error('Empty response from OpenRouter API');
     }
 

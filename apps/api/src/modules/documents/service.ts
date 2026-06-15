@@ -28,6 +28,8 @@ import { extractPartyParts } from '../validation/utils/party-extract.js';
 import { itemCodesMatch, cleanItemCodesInAiData } from '../validation/utils/item-code-normalize.js';
 import { compareDates } from '../validation/utils/date-compare.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
+import type { AcceptComparisonInput } from './schema.js';
+import { normalizeGtin } from '../ai/harness/format.js';
 
 /**
  * Convert an XLSX buffer to plain CSV-style text — used as input to the
@@ -325,6 +327,9 @@ export const documentService = {
           break;
         case 'certificate':
           result = await aiService.extractCertificateData(text, extractionOpts);
+          break;
+        case 'li':
+          result = await aiService.extractLIData(text, extractionOpts);
           break;
         default: {
           // Do NOT silent-drop — previously `li` and `other` fell through here
@@ -987,20 +992,21 @@ export const documentService = {
       // ESPELHO_AI_FALLBACK=1 after configuring one of those.
       //
       // HARD GUARD: the espelho carries sensitive Pre-Cons-linked data, so the
-      // fallback MUST only run on a private provider. If the flag is on but the
-      // provider is still OpenRouter (the default), running the fallback would
-      // ship that data to a provider with no no-training guarantee — refuse and
-      // warn instead of leaking.
+      // fallback MUST only run on the local provider by default. External
+      // providers require the global AI_ALLOW_EXTERNAL opt-in before sensitive
+      // document data may leave the perimeter.
       const espelhoFallbackEnabled = process.env.ESPELHO_AI_FALLBACK === '1';
-      const aiProvider = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
-      const isPrivateProvider = aiProvider === 'vertex' || aiProvider === 'ialocal';
-      if (espelhoFallbackEnabled && !isPrivateProvider) {
+      const aiProvider = (process.env.AI_PROVIDER || 'ialocal').toLowerCase();
+      const isAllowedProvider =
+        aiProvider === 'ialocal' ||
+        (aiProvider === 'vertex' && process.env.AI_ALLOW_EXTERNAL === 'true');
+      if (espelhoFallbackEnabled && !isAllowedProvider) {
         logger.warn(
           { documentId: doc.id, processId: doc.processId, aiProvider },
-          'ESPELHO_AI_FALLBACK is enabled but AI_PROVIDER is not a private provider (vertex|ialocal) — refusing to run espelho AI fallback (sensitive Pre-Cons data must not leave the perimeter)',
+          'ESPELHO_AI_FALLBACK is enabled but AI provider is not allowed for sensitive espelho fallback',
         );
       }
-      if (espelhoFallbackEnabled && isPrivateProvider) {
+      if (espelhoFallbackEnabled && isAllowedProvider) {
         try {
           const xlsxText = extractTextFromXlsxBuffer(buffer);
           if (xlsxText.trim().length > 0) {
@@ -1439,6 +1445,44 @@ export const documentService = {
     logger.info({ documentId, driveFileId }, 'Document uploaded to Google Drive');
   },
 
+  async acceptComparison(processId: number, input: AcceptComparisonInput, userId?: number | null) {
+    const [processRow] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!processRow) {
+      throw new NotFoundError('Processo', processId);
+    }
+
+    const fieldLabel = input.fieldLabel ?? input.rowKey;
+    const itemSuffix = input.itemCode ? ` item ${input.itemCode}` : '';
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'comparison_acceptance',
+        title: `Aceite no comparativo: ${fieldLabel}${itemSuffix}`,
+        description: input.resolution_note,
+        metadata: {
+          scope: input.scope,
+          rowKey: input.rowKey,
+          fieldLabel,
+          itemCode: input.itemCode ?? null,
+          previousStatus: input.previousStatus ?? null,
+          acceptedAt: new Date().toISOString(),
+        },
+      },
+      userId ?? null,
+    );
+
+    return {
+      accepted: true,
+      rowKey: input.rowKey,
+      scope: input.scope,
+    };
+  },
+
   async getComparison(processId: number) {
     const [docs, processRow] = await Promise.all([
       db.select().from(documents).where(eq(documents.processId, processId)),
@@ -1506,7 +1550,7 @@ export const documentService = {
         inv: invExporter.name || inv?.exporterName,
         pl: plExporter.name || pl?.exporterName,
         bl: blShipper.name || (bl?.shipper ?? bl?.shipperName),
-        espelho: espelhoSummary?.shippingLine,
+        espelho: espelhoSummary?.exporterName ?? processRow[0]?.exporterName,
         kind: 'name',
       },
       {
@@ -1645,13 +1689,14 @@ export const documentService = {
     // Compute match status for each field — supports 4 docs (inv/pl/bl/espelho).
     // For 'secondary' criticality, a hard divergence is downgraded to warning
     // (per Nicolas: "endereço do exportador… talvez a gente consiga relevar").
-    const aggregateComparison = aggregateFields.map((f) => {
+    const aggregateComparison = aggregateFields.map((f, index) => {
       const rawValues = [f.inv, f.pl, f.bl, f.espelho];
       const values = rawValues.filter((v) => v != null && v !== '');
       let status = computeRowStatus(values, f.kind ?? 'string');
       const criticality: Criticality = f.criticality ?? 'critical';
       if (criticality === 'secondary' && status === 'divergent') status = 'warning';
       return {
+        rowKey: comparisonRowKey('aggregate', f.label, index),
         label: f.label,
         invoice: f.inv != null && f.inv !== '' ? String(f.inv) : null,
         packingList: f.pl != null && f.pl !== '' ? String(f.pl) : null,
@@ -1659,6 +1704,7 @@ export const documentService = {
         espelho: f.espelho != null && f.espelho !== '' ? String(f.espelho) : null,
         status,
         criticality,
+        message: aggregateMessage(status, criticality),
       };
     });
 
@@ -1668,6 +1714,9 @@ export const documentService = {
 
     const findPlMatch = (invItem: any) =>
       plItems.find((plItem: any) => {
+        const invEan = normalizeGtin(invItem.ean);
+        const plEan = normalizeGtin(plItem.ean);
+        if (invEan && plEan && invEan === plEan) return true;
         if (itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)) {
           return true;
         }
@@ -1681,21 +1730,54 @@ export const documentService = {
       });
 
     const findEspelhoMatch = (invItem: any) =>
-      espelhoItems.find((espItem: any) =>
-        itemCodesMatch(espItem.codigo ?? espItem.itemCode, invItem.itemCode ?? invItem.codigo),
-      );
+      espelhoItems.find((espItem: any) => {
+        const invEan = normalizeGtin(invItem.ean);
+        const espelhoEan = normalizeGtin(espItem.ean ?? espItem.ean13);
+        if (invEan && espelhoEan && invEan === espelhoEan) return true;
+        return itemCodesMatch(
+          espItem.codigo ?? espItem.itemCode,
+          invItem.itemCode ?? invItem.codigo,
+        );
+      });
 
-    const itemComparison = invItems.map((invItem: any) => {
+    const itemComparison = invItems.map((invItem: any, index: number) => {
       const plMatch = findPlMatch(invItem);
       const espelhoMatch = findEspelhoMatch(invItem);
+      const itemCode = invItem.itemCode ?? invItem.codigo;
+      const invoiceQty = toNumberOrNull(invItem.quantity);
+      const plQty = toNumberOrNull(plMatch?.quantity);
+      const espelhoQty = toNumberOrNull(espelhoMatch?.qty ?? espelhoMatch?.quantity);
+      const isFreeOfCharge = isInvoiceFreeOfCharge(invItem);
+      const quantityDiverges =
+        plQty != null && invoiceQty != null && Math.abs(plQty - invoiceQty) > 0.0001;
+      const espelhoDiverges =
+        espelhoQty != null && invoiceQty != null && Math.abs(espelhoQty - invoiceQty) > 0.0001;
+      const matched = !!plMatch;
+      const espelhoMatched = !!espelhoMatch;
+      const status: RowStatus = isFreeOfCharge
+        ? 'warning'
+        : !matched || (espelhoItems.length > 0 && !espelhoMatched)
+          ? 'warning'
+          : quantityDiverges || espelhoDiverges
+            ? 'divergent'
+            : 'match';
+      const divergence = buildItemDivergence({
+        matched,
+        espelhoMatched,
+        hasEspelho: espelhoItems.length > 0,
+        quantityDiverges,
+        espelhoDiverges,
+        isFreeOfCharge,
+      });
 
       return {
-        itemCode: invItem.itemCode ?? invItem.codigo,
+        rowKey: comparisonRowKey('item', itemCode ?? invItem.description ?? 'sem-codigo', index),
+        itemCode,
         description: invItem.description ?? invItem.descricao,
         ncm: invItem.ncmCode ?? invItem.ncm,
-        invoiceQty: invItem.quantity,
-        plQty: plMatch?.quantity ?? null,
-        espelhoQty: espelhoMatch?.qty ?? null,
+        invoiceQty,
+        plQty,
+        espelhoQty,
         invoiceUnitPrice: invItem.unitPrice,
         invoiceTotal: invItem.totalPrice,
         espelhoUnitPrice: espelhoMatch?.unitPrice ?? null,
@@ -1708,11 +1790,15 @@ export const documentService = {
         espelhoNetWeight: espelhoMatch?.pesoLiquidoTotal ?? null,
         invoiceGrossWeight: invItem.grossWeight ?? null,
         plGrossWeight: plMatch?.grossWeight ?? null,
+        plWeight: plMatch?.grossWeight ?? plMatch?.netWeight ?? null,
         espelhoGrossWeight: espelhoMatch?.pesoBrutoTotal ?? null,
-        isFreeOfCharge: Boolean(invItem.isFreeOfCharge),
-        qtyMatch: plMatch ? plMatch.quantity === invItem.quantity : null,
-        matched: !!plMatch,
-        espelhoMatched: !!espelhoMatch,
+        isFreeOfCharge,
+        qtyMatch: plMatch ? !quantityDiverges : null,
+        matched,
+        espelhoMatched,
+        divergence,
+        status,
+        message: itemComparisonMessage(status, divergence, isFreeOfCharge),
       };
     });
 
@@ -1721,6 +1807,9 @@ export const documentService = {
       .filter(
         (plItem: any) =>
           !invItems.some((invItem: any) => {
+            const invEan = normalizeGtin(invItem.ean);
+            const plEan = normalizeGtin(plItem.ean);
+            if (invEan && plEan && invEan === plEan) return true;
             if (
               itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)
             ) {
@@ -1765,6 +1854,82 @@ export const documentService = {
 };
 
 type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
+
+function comparisonRowKey(scope: 'aggregate' | 'item', value: unknown, index: number): string {
+  const raw = String(value ?? `linha-${index + 1}`)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 120);
+  return `${scope}:${raw || `linha-${index + 1}`}`;
+}
+
+function aggregateMessage(status: RowStatus, criticality: 'critical' | 'secondary' | 'info') {
+  if (status === 'empty') return 'Sem dados extraidos para comparar.';
+  if (status === 'match') return 'Conforme entre os documentos disponiveis.';
+  if (status === 'warning' && criticality === 'secondary') {
+    return 'Divergencia secundaria registrada como atencao.';
+  }
+  if (status === 'warning') return 'Divergencia pequena ou informativa; revisar antes do envio.';
+  return 'Divergencia entre documentos; requer correcao ou aceite.';
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isInvoiceFreeOfCharge(item: Record<string, any>): boolean {
+  const total = toNumberOrNull(item.totalPrice);
+  const unit = toNumberOrNull(item.unitPrice);
+  const marker = String(item.notes ?? item.observations ?? item.description ?? item.descricao ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return (
+    item.isFreeOfCharge === true ||
+    total === 0 ||
+    marker.includes('free of charge') ||
+    marker.includes('foc') ||
+    marker.includes('discount') ||
+    marker.includes('desconto') ||
+    marker.includes('bonificacao') ||
+    marker.includes('bonificado') ||
+    unit === 0
+  );
+}
+
+function buildItemDivergence(input: {
+  matched: boolean;
+  espelhoMatched: boolean;
+  hasEspelho: boolean;
+  quantityDiverges: boolean;
+  espelhoDiverges: boolean;
+  isFreeOfCharge: boolean;
+}): string {
+  if (input.isFreeOfCharge) return 'FOC/desconto identificado na Invoice';
+  if (!input.matched) return 'Item nao localizado no Packing List';
+  if (input.hasEspelho && !input.espelhoMatched) return 'Item nao localizado no Espelho';
+  const divergences: string[] = [];
+  if (input.quantityDiverges) divergences.push('quantidade Invoice x Packing List');
+  if (input.espelhoDiverges) divergences.push('quantidade Invoice x Espelho');
+  return divergences.length > 0 ? divergences.join('; ') : 'Sem divergencia';
+}
+
+function itemComparisonMessage(
+  status: RowStatus,
+  divergence: string,
+  isFreeOfCharge: boolean,
+): string {
+  if (isFreeOfCharge) return 'Diferença explicada por item FOC/desconto identificado na Invoice';
+  if (status === 'match') return 'Item conforme entre os documentos disponiveis.';
+  if (status === 'warning') return `${divergence}; revisar ou aceitar operacionalmente.`;
+  return `${divergence}; requer correcao ou aceite.`;
+}
 
 function computeRowStatus(values: unknown[], kind: string): RowStatus {
   if (values.length === 0) return 'empty';
