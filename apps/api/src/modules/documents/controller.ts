@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
 import { documentService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
-import { uploadDocumentSchema } from './schema.js';
+import { acceptComparisonSchema, uploadDocumentSchema } from './schema.js';
 
 export const documentController = {
   async upload(req: Request, res: Response) {
@@ -119,6 +119,29 @@ export const documentController = {
   async comparison(req: Request, res: Response) {
     try {
       const result = await documentService.getComparison(Number(req.params.processId));
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async acceptComparison(req: Request, res: Response) {
+    try {
+      const parsed = acceptComparisonSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return sendError(res, JSON.stringify(errors), 400);
+      }
+      const userId = req.user?.id ?? null;
+      const result = await documentService.acceptComparison(
+        Number(req.params.processId),
+        parsed.data,
+        userId,
+      );
       sendSuccess(res, result);
     } catch (error: any) {
       const status = error.statusCode || 400;

@@ -82,6 +82,7 @@ describe('processWithAI — extraction failure resilience', () => {
   afterEach(() => {
     delete process.env.ESPELHO_AI_FALLBACK;
     delete process.env.AI_PROVIDER;
+    delete process.env.AI_ALLOW_EXTERNAL;
   });
 
   it('marks document as extractionFailed and raises a critical alert when extraction throws', async () => {
@@ -186,7 +187,7 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
     originalFilename: 'esp.xlsx',
   };
 
-  it('does NOT run the AI fallback when flag is on but provider is not vertex', async () => {
+  it('does NOT run the AI fallback when flag is on but provider is external without opt-in', async () => {
     process.env.ESPELHO_AI_FALLBACK = '1';
     process.env.AI_PROVIDER = 'openrouter';
 
@@ -199,13 +200,13 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
 
     await documentService.processWithAI(9, 'espelho');
 
-    // The sensitive Pre-Cons data must NOT have been sent to a non-vertex provider.
+    // The sensitive Pre-Cons data must NOT leave the perimeter without explicit opt-in.
     expect(extractEspelhoData).not.toHaveBeenCalled();
   });
 
-  it('runs the AI fallback when flag is on AND provider is vertex', async () => {
+  it('runs the AI fallback when flag is on AND provider is ialocal', async () => {
     process.env.ESPELHO_AI_FALLBACK = '1';
-    process.env.AI_PROVIDER = 'vertex';
+    process.env.AI_PROVIDER = 'ialocal';
     extractEspelhoData.mockResolvedValueOnce({
       data: { items: [] },
       confidenceScore: 0.9,
@@ -217,6 +218,25 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
     // update documents with fallback result
     queryQueue.push(createResolvedChain(undefined));
     // update importProcesses (espelho patch)
+    queryQueue.push(createResolvedChain(undefined));
+
+    await documentService.processWithAI(9, 'espelho');
+
+    expect(extractEspelhoData).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs the AI fallback with Vertex only after external-provider opt-in', async () => {
+    process.env.ESPELHO_AI_FALLBACK = '1';
+    process.env.AI_PROVIDER = 'vertex';
+    process.env.AI_ALLOW_EXTERNAL = 'true';
+    extractEspelhoData.mockResolvedValueOnce({
+      data: { items: [] },
+      confidenceScore: 0.9,
+      fieldsWithLowConfidence: [],
+    });
+
+    queryQueue.push(createResolvedChain([espelhoDoc]));
+    queryQueue.push(createResolvedChain(undefined));
     queryQueue.push(createResolvedChain(undefined));
 
     await documentService.processWithAI(9, 'espelho');

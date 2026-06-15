@@ -67,7 +67,8 @@ describe('buildEspelhoFromAiData', () => {
     expect(summary.totalGrossWeight).toBe(5000); // PL beats BL
     expect(summary.totalCbm).toBe(21.557);
     expect(summary.totalAmountUsd).toBe(24578.92);
-    expect(summary.shippingLine).toBe('KIOM GLOBAL LIMITED');
+    expect(summary.exporterName).toBe('KIOM GLOBAL LIMITED');
+    expect(summary.shippingLine).toBeNull();
     expect(summary.vesselName).toBe('COSCO SHIPPING ARGENTINA');
     expect(summary.blNumber).toBe('SHYY26021495A');
     expect(summary.importerCnpj).toBe('00.399.603/0006-12');

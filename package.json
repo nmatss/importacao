@@ -10,6 +10,7 @@
   "scripts": {
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build:api && npm run build:web",
     "build:api": "npm run build -w apps/api",
     "build:web": "npm run build -w apps/web",
     "db:generate": "npm run db:generate -w apps/api",
@@ -23,7 +24,10 @@
     "format": "prettier --write \"apps/**/*.{ts,tsx,js,json,css}\"",
     "format:check": "prettier --check \"apps/**/*.{ts,tsx,js,json,css}\"",
     "typecheck": "npm run -w apps/api typecheck && npm run -w apps/web typecheck",
+    "test": "npm test -w apps/api && npm test -w apps/web",
     "test:watch": "npm test -w apps/api -- --watch",
+    "smoke:ia-local-docintel": "node scripts/smoke-ia-local-docintel.mjs",
+    "smoke:ai-service-docintel": "tsx scripts/smoke-ai-service-docintel.mjs",
     "prepare": "husky"
   },
   "lint-staged": {

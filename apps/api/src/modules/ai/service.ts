@@ -18,9 +18,11 @@ import { buildCorrectionPrompt } from './prompts/correction.js';
 import { buildCertificatePrompt } from './prompts/certificate.js';
 import { buildDraftBLPrompt } from './prompts/draft-bl.js';
 import { buildEspelhoPrompt } from './prompts/espelho.js';
+import { buildLIPrompt } from './prompts/li.js';
 import { certificateResponseSchema } from './schemas/certificate-response.js';
 import { espelhoResponseSchema } from './schemas/espelho-response.js';
-import type { ZodType } from 'zod';
+import { liResponseSchema } from './schemas/li-response.js';
+import { z, type ZodType } from 'zod';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { VertexAIProvider } from './providers/vertex.js';
 import { IALocalProvider } from './providers/ialocal.js';
@@ -31,6 +33,12 @@ import { verifyExtraction } from './harness/index.js';
 import { getVerificationConfig, getSkill } from './skills/registry.js';
 import { assembleSpecialistMessages } from './skills/assemble.js';
 import { retrieveContext } from './rag/retriever.js';
+import {
+  repairInvoiceExtractionFromText,
+  tryParseInvoiceText,
+} from './utils/invoice-text-parser.js';
+import { tryParsePackingListText } from './utils/packing-list-text-parser.js';
+import { tryParseLIText } from './utils/li-text-parser.js';
 
 export { AIBudgetExceededError };
 
@@ -42,7 +50,7 @@ const USE_STRUCTURED_OUTPUT = process.env.AI_STRUCTURED_OUTPUT !== '0';
  *  ai/prompts/* builders. Read at call time (hot-toggle + testable). Default OFF
  *  → zero change to the live path; flipping it on is the security prerequisite
  *  before using a small local VLM, and it is provider-agnostic so it can be
- *  validated on the fast provider first. */
+ *  enabled by default for the local DocIntel provider. */
 function useSpecialistPrompts(): boolean {
   return process.env.AI_USE_SPECIALIST === '1';
 }
@@ -84,6 +92,17 @@ interface ExtractionResult {
 // ── Model fallback chains ────────────────────────────────────────────
 // Ordered list of models to try — primary first, then fallbacks in order
 const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+const LOCAL_DEFAULT_MODEL = 'unico-docintel';
+
+const anomalyDetectionSchema = z.object({
+  anomalies: z.array(
+    z.object({
+      field: z.string(),
+      description: z.string(),
+      severity: z.string(),
+    }),
+  ),
+});
 
 /**
  * Decides whether an AI provider error is worth re-attempting inside
@@ -117,6 +136,7 @@ const PROMPT_VERSIONS: Record<string, string> = {
   ncm_validation: 'v1.0',
   correction_email: 'v1.0',
   certificate_extraction: 'v1.0',
+  li_extraction: 'v1.0',
   draft_bl_extraction: 'v1.0',
   proforma_extraction: 'v1.0',
   espelho_extraction: 'v1.0',
@@ -214,13 +234,24 @@ class AIService {
   private provider: AIProvider;
 
   constructor() {
-    const providerName = (process.env.AI_PROVIDER || 'openrouter').toLowerCase();
-    this.provider =
-      providerName === 'vertex'
-        ? new VertexAIProvider()
-        : providerName === 'ialocal'
-          ? new IALocalProvider()
-          : new OpenRouterProvider();
+    const providerName = (process.env.AI_PROVIDER || 'ialocal').toLowerCase();
+    const externalAllowed = process.env.AI_ALLOW_EXTERNAL === 'true';
+
+    if ((providerName === 'openrouter' || providerName === 'vertex') && !externalAllowed) {
+      throw new Error(
+        `AI provider ${providerName} is external and requires AI_ALLOW_EXTERNAL=true`,
+      );
+    }
+
+    if (providerName === 'vertex') {
+      this.provider = new VertexAIProvider();
+    } else if (providerName === 'ialocal') {
+      this.provider = new IALocalProvider();
+    } else if (providerName === 'openrouter') {
+      this.provider = new OpenRouterProvider();
+    } else {
+      throw new Error(`Unsupported AI_PROVIDER: ${providerName}`);
+    }
     logger.info({ provider: this.provider.name }, 'AIService initialized');
   }
 
@@ -288,6 +319,7 @@ class AIService {
 
       const attemptStart = Date.now();
       try {
+        const retryAttempts = this.provider.name === 'ialocal' ? 1 : 2;
         const result = await withRetry(
           () =>
             withTimeout(
@@ -300,7 +332,12 @@ class AIService {
               this.chatTimeoutMs(),
               `${currentModel}/${context}`,
             ),
-          { attempts: 2, baseDelayMs: 1000, maxDelayMs: 5000, shouldRetry: isRetryableAiError },
+          {
+            attempts: retryAttempts,
+            baseDelayMs: 1000,
+            maxDelayMs: 5000,
+            shouldRetry: isRetryableAiError,
+          },
           `ai:${currentModel}`,
         );
 
@@ -503,9 +540,16 @@ class AIService {
    *  request (fire-and-forget / queue), so it gets a much larger ceiling. */
   private chatTimeoutMs(): number {
     if (this.provider.name === 'ialocal') {
-      return Number(process.env.AI_LOCAL_CHAT_TIMEOUT_MS) || 360_000;
+      return Number(process.env.AI_LOCAL_CHAT_TIMEOUT_MS) || 180_000;
     }
     return Number(process.env.AI_CHAT_TIMEOUT_MS) || 90_000;
+  }
+
+  private analysisModel(): string {
+    if (this.provider.name === 'ialocal') {
+      return process.env.IA_LOCAL_MODEL || LOCAL_DEFAULT_MODEL;
+    }
+    return process.env.AI_ANALYSIS_MODEL || MODEL_FALLBACK_CHAIN[0];
   }
 
   private applyHarness(
@@ -556,7 +600,7 @@ class AIService {
       return JSON.parse(response);
     } catch (err) {
       logger.error(
-        { err, context, rawResponse: response.substring(0, 500) },
+        { err, context, responseLength: response.length },
         'Failed to parse AI JSON response',
       );
       throw new Error(`Failed to parse AI response for ${context}: invalid JSON`);
@@ -581,10 +625,55 @@ class AIService {
     return raw as T;
   }
 
+  private strictZodParse<T>(response: string, context: string, schema: ZodType<T>): T {
+    const raw = this.safeJsonParse(response, context);
+    const result = schema.safeParse(raw);
+    if (result.success) {
+      return result.data;
+    }
+
+    logger.warn(
+      {
+        context,
+        errors: result.error.issues.map((issue) => ({
+          path: issue.path.join('.'),
+          code: issue.code,
+        })),
+        rawKeys: raw && typeof raw === 'object' ? Object.keys(raw) : [],
+      },
+      'AI response contract validation failed',
+    );
+    throw new Error(`AI response for ${context} failed contract validation`);
+  }
+
   async extractInvoiceData(
     text: string,
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
+    const deterministic = tryParseInvoiceText(text);
+    if (deterministic && Array.isArray(deterministic.items) && deterministic.items.length > 0) {
+      stripSpuriousItemPrefix(deterministic.items);
+      const repaired = repairInvoiceExtractionFromText(deterministic, text);
+      const { score, lowConfidenceFields } = this.calculateConfidence(repaired);
+      logger.info(
+        {
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+          itemCount: deterministic.items.length,
+        },
+        'Invoice data extracted by deterministic text parser',
+      );
+      return this.applyHarness(
+        'invoice',
+        {
+          data: repaired,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        },
+        text,
+      );
+    }
+
     const msgs: OpenRouterMessage[] = buildInvoicePrompt(text) as OpenRouterMessage[];
     // Replace user message with multimodal version if image available
     if (imageOpts) {
@@ -606,7 +695,13 @@ class AIService {
           'invoice_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.invoice : undefined,
         );
-        const data = this.zodParse(response, 'invoice extraction', invoiceResponseSchema);
+        const data = repairInvoiceExtractionFromText(
+          this.zodParse(response, 'invoice extraction', invoiceResponseSchema) as Record<
+            string,
+            any
+          >,
+          text,
+        );
         const dataAsRecord = data as Record<string, any>;
         if (Array.isArray(dataAsRecord.items)) {
           stripSpuriousItemPrefix(dataAsRecord.items);
@@ -692,6 +787,29 @@ class AIService {
     text: string,
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
+    const deterministic = tryParsePackingListText(text);
+    if (deterministic && Array.isArray(deterministic.items) && deterministic.items.length > 0) {
+      stripSpuriousItemPrefix(deterministic.items);
+      const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
+      logger.info(
+        {
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+          itemCount: deterministic.items.length,
+        },
+        'Packing list data extracted by deterministic text parser',
+      );
+      return this.applyHarness(
+        'packing_list',
+        {
+          data: deterministic,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        },
+        text,
+      );
+    }
+
     const msgs: OpenRouterMessage[] = buildPackingListPrompt(text) as OpenRouterMessage[];
     if (imageOpts) {
       msgs[msgs.length - 1] = this.buildUserMessage(
@@ -892,14 +1010,77 @@ class AIService {
     );
   }
 
+  async extractLIData(text: string, imageOpts?: ImageExtractionOpts): Promise<ExtractionResult> {
+    const deterministic = tryParseLIText(text);
+    if (deterministic && Array.isArray(deterministic.items) && deterministic.items.length > 0) {
+      const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
+      logger.info(
+        {
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+          itemCount: deterministic.items.length,
+        },
+        'LI data extracted by deterministic text parser',
+      );
+      return this.applyHarness(
+        'li',
+        {
+          data: deterministic,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        },
+        text,
+      );
+    }
+
+    const msgs: OpenRouterMessage[] = buildLIPrompt(text) as OpenRouterMessage[];
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = this.buildExtractionMessages('li', msgs, text, imageOpts);
+    const response = await this.chat(
+      'gemini-2.5-flash',
+      messages,
+      true,
+      'li_extraction',
+      USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.li : undefined,
+    );
+    const data = this.zodParse(response, 'LI extraction', liResponseSchema);
+    const { score, lowConfidenceFields } = this.calculateConfidence(data);
+
+    logger.info(
+      {
+        confidenceScore: score,
+        lowConfidenceCount: lowConfidenceFields.length,
+        hasImage: !!imageOpts,
+      },
+      'LI data extracted',
+    );
+
+    return this.applyHarness(
+      'li',
+      { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+      text,
+    );
+  }
+
   async detectAnomalies(
     invoiceData: Record<string, any>,
     packingListData: Record<string, any>,
     blData: Record<string, any>,
   ): Promise<{ anomalies: Array<{ field: string; description: string; severity: string }> }> {
+    if (this.provider.name === 'ialocal') {
+      const anomalies = detectDeterministicAnomalies(invoiceData, packingListData, blData);
+      logger.info({ anomalyCount: anomalies.length }, 'Deterministic anomaly analysis completed');
+      return { anomalies };
+    }
+
     const messages = buildAnomalyPrompt(invoiceData, packingListData, blData);
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'anomaly_detection');
-    const result = this.safeJsonParse(response, 'anomaly detection');
+    const response = await this.chat(this.analysisModel(), messages, true, 'anomaly_detection');
+    const result = this.strictZodParse(response, 'anomaly detection', anomalyDetectionSchema);
 
     logger.info({ anomalyCount: result.anomalies?.length ?? 0 }, 'Anomaly detection completed');
 
@@ -911,7 +1092,7 @@ class AIService {
     recipientType: 'fenicia' | 'isa',
   ): Promise<{ subject: string; body: string }> {
     const messages = buildEmailPrompt(processData, recipientType);
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'email_draft');
+    const response = await this.chat(this.analysisModel(), messages, true, 'email_draft');
     const result = this.safeJsonParse(response, 'email draft generation');
 
     logger.info({ recipientType }, 'Email draft generated');
@@ -987,7 +1168,7 @@ Rules:
       },
     ];
 
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'ncm_validation');
+    const response = await this.chat(this.analysisModel(), messages, true, 'ncm_validation');
     const result = this.safeJsonParse(response, 'NCM validation');
 
     logger.info({ ncmCode, isValid: result.isValid }, 'NCM validation completed');
@@ -1013,7 +1194,7 @@ Rules:
     }>;
   }): Promise<{ subject: string; body: string }> {
     const messages = buildCorrectionPrompt(context);
-    const response = await this.chat('gemini-2.5-flash', messages, true, 'correction_email');
+    const response = await this.chat(this.analysisModel(), messages, true, 'correction_email');
     const result = this.safeJsonParse(response, 'correction email generation');
 
     logger.info(
@@ -1023,6 +1204,104 @@ Rules:
 
     return { subject: result.subject, body: result.body };
   }
+}
+
+function detectDeterministicAnomalies(
+  invoiceData: Record<string, any>,
+  packingListData: Record<string, any>,
+  blData: Record<string, any>,
+): Array<{ field: string; description: string; severity: string }> {
+  const anomalies: Array<{ field: string; description: string; severity: string }> = [];
+
+  if (!invoiceData?.invoiceNumber) {
+    anomalies.push({
+      field: 'invoiceNumber',
+      description: 'Numero da Invoice ausente nos dados extraidos.',
+      severity: 'medium',
+    });
+  }
+
+  const invoiceItems = Array.isArray(invoiceData?.items) ? invoiceData.items : [];
+  const packingItems = Array.isArray(packingListData?.items) ? packingListData.items : [];
+  const packingByCode = new Map<string, Record<string, any>>();
+  for (const item of packingItems) {
+    const key = normalizeAnomalyItemCode(item.itemCode ?? item.codigo);
+    if (key && !packingByCode.has(key)) packingByCode.set(key, item);
+  }
+
+  for (const item of invoiceItems) {
+    const key = normalizeAnomalyItemCode(item.itemCode ?? item.codigo);
+    if (!key) continue;
+    const packing = packingByCode.get(key);
+    if (!packing) {
+      anomalies.push({
+        field: `items.${key}`,
+        description: 'Item da Invoice nao localizado no Packing List.',
+        severity: 'medium',
+      });
+      continue;
+    }
+    const invoiceQty = numberOrNull(item.quantity);
+    const packingQty = numberOrNull(packing.quantity);
+    if (invoiceQty != null && packingQty != null && Math.abs(invoiceQty - packingQty) > 0.0001) {
+      anomalies.push({
+        field: `items.${key}.quantity`,
+        description: `Quantidade divergente: Invoice=${invoiceQty}, Packing List=${packingQty}.`,
+        severity: 'high',
+      });
+    }
+  }
+
+  const invoicePort = normalizeAnomalyPort(invoiceData?.portOfDischarge);
+  const blPort = normalizeAnomalyPort(blData?.portOfDischarge);
+  if (invoicePort && blPort && invoicePort !== blPort) {
+    anomalies.push({
+      field: 'portOfDischarge',
+      description: 'Porto de destino diverge entre Invoice e BL.',
+      severity: 'medium',
+    });
+  }
+
+  const totalFob = numberOrNull(invoiceData?.totalFobValue);
+  if (totalFob != null && invoiceItems.length > 0) {
+    const itemTotal = invoiceItems.reduce((sum: number, item: Record<string, any>) => {
+      const total = numberOrNull(item.totalPrice);
+      if (total != null) return sum + total;
+      return sum + (numberOrNull(item.unitPrice) ?? 0) * (numberOrNull(item.quantity) ?? 0);
+    }, 0);
+    const diff = Math.abs(itemTotal - totalFob);
+    const tolerance = Math.max(1, totalFob * 0.001);
+    if (diff > tolerance) {
+      anomalies.push({
+        field: 'totalFobValue',
+        description: 'Soma dos itens diverge do FOB total declarado.',
+        severity: 'high',
+      });
+    }
+  }
+
+  return anomalies;
+}
+
+function normalizeAnomalyItemCode(value: unknown): string {
+  return String(value ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function normalizeAnomalyPort(value: unknown): string {
+  return String(value ?? '')
+    .toUpperCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(CHINA|BRAZIL|BRASIL)\b/g, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function numberOrNull(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const parsed = Number(String(value).replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export const aiService = new AIService();

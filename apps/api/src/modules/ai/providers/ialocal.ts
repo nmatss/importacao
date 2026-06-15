@@ -1,6 +1,34 @@
 import { logger } from '../../../shared/utils/logger.js';
 import type { AIProvider, ChatMessage, ChatOptions, ChatResponse } from './types.js';
 
+const DEFAULT_ALLOWED_HOSTS = ['ia-local-gateway', 'localhost', '127.0.0.1', '::1'];
+
+function allowedHosts(): Set<string> {
+  const raw = process.env.IA_LOCAL_ALLOWED_HOSTS || DEFAULT_ALLOWED_HOSTS.join(',');
+  return new Set(
+    raw
+      .split(',')
+      .map((host) => host.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function assertAllowedEndpoint(baseUrl: string): void {
+  if (!baseUrl) return;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error('IA_LOCAL_BASE_URL invalido');
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  if (!allowedHosts().has(host)) {
+    throw new Error('IA_LOCAL_BASE_URL bloqueado por IA_LOCAL_ALLOWED_HOSTS');
+  }
+}
+
 /**
  * IA_LOCAL provider — talks to the Grupo Uni.co self-hosted AI platform
  * (Ollama behind a bearer-auth gateway, exposed as an OpenAI-compatible API).
@@ -24,11 +52,11 @@ export class IALocalProvider implements AIProvider {
     // the importacao API container over the shared network). No default — env
     // validation (env.ts superRefine) requires it when AI_PROVIDER=ialocal.
     this.baseUrl = (process.env.IA_LOCAL_BASE_URL || '').replace(/\/+$/, '');
+    assertAllowedEndpoint(this.baseUrl);
     this.apiKey = process.env.IA_LOCAL_API_KEY || '';
     // The single local model that serves every extraction. Defaults to a small
-    // Specialist build (unico-docintel) when present; else the qwen3 vision
-    // base. Override per hardware (e.g. qwen3-vl:8b on GPU). qwen3 puro é texto.
-    this.model = process.env.IA_LOCAL_MODEL || 'qwen3-vl:4b';
+    // Specialist build. Override per hardware only through IA_LOCAL_MODEL.
+    this.model = process.env.IA_LOCAL_MODEL || 'unico-docintel';
   }
 
   /**
@@ -59,12 +87,20 @@ export class IALocalProvider implements AIProvider {
     // zod-validates, so json_object is the safe, broadly-compatible choice.
     const wantsJson = options.responseSchema != null || options.jsonMode !== false;
     const responseFormat = wantsJson ? { type: 'json_object' } : { type: 'text' };
+    const numPredict = Number(process.env.IA_LOCAL_NUM_PREDICT || '1536');
+    const numCtx = Number(process.env.IA_LOCAL_NUM_CTX || '8192');
 
     const body = {
       model: fullModel,
       messages,
       temperature: 0,
+      stream: false,
       response_format: responseFormat,
+      options: {
+        temperature: 0,
+        ...(Number.isFinite(numPredict) && numPredict > 0 ? { num_predict: numPredict } : {}),
+        ...(Number.isFinite(numCtx) && numCtx > 0 ? { num_ctx: numCtx } : {}),
+      },
     };
 
     const response = await fetch(url, {
@@ -78,14 +114,11 @@ export class IALocalProvider implements AIProvider {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      logger.error(
-        { status: response.status, error: errorText, model: fullModel },
-        'IA_LOCAL API error',
-      );
+      await response.text().catch(() => '');
+      logger.error({ status: response.status, model: fullModel }, 'IA_LOCAL API error');
       // Message format mirrors the other providers so isRetryableAiError() can
       // match the embedded HTTP status (4xx are NOT retried).
-      throw new Error(`IA_LOCAL API error: ${response.status} - ${errorText}`);
+      throw new Error(`IA_LOCAL API error: ${response.status}`);
     }
 
     const result = (await response.json()) as {
@@ -95,7 +128,7 @@ export class IALocalProvider implements AIProvider {
 
     const content = result.choices?.[0]?.message?.content;
     if (!content) {
-      logger.error({ result }, 'Empty response from IA_LOCAL');
+      logger.error({ model: fullModel }, 'Empty response from IA_LOCAL');
       throw new Error('Empty response from IA_LOCAL API');
     }
 

@@ -19,6 +19,7 @@ import { draftBLResponseSchema } from './schemas/draft-bl-response.js';
 import { certificateResponseSchema } from './schemas/certificate-response.js';
 import { emailAnalysisResponseSchema } from './schemas/email-analysis-response.js';
 import { espelhoResponseSchema } from './schemas/espelho-response.js';
+import { liResponseSchema } from './schemas/li-response.js';
 
 /**
  * Convert a Zod schema to a JSON Schema suitable for Gemini structured output.
@@ -59,6 +60,7 @@ export const EXTRACTION_SCHEMAS = {
   bl: toGeminiSchema(blResponseSchema, 'bl'),
   draft_bl: toGeminiSchema(draftBLResponseSchema, 'draft_bl'),
   certificate: toGeminiSchema(certificateResponseSchema, 'certificate'),
+  li: toGeminiSchema(liResponseSchema, 'li'),
   email_analysis: toGeminiSchema(emailAnalysisResponseSchema, 'email_analysis'),
   espelho: toGeminiSchema(espelhoResponseSchema, 'espelho'),
 } as const;
