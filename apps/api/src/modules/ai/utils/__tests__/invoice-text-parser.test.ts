@@ -40,4 +40,21 @@ describe('invoice text parser', () => {
 
     expect(repaired.exporterName.value).toBe('KIOM GLOBAL LIMITED');
   });
+
+  it('repairs exporterName when a generic shipping-line suffix was selected', () => {
+    const repaired = repairInvoiceExtractionFromText(
+      { exporterName: { value: 'GLOBAL SHIPPING LINE', confidence: 0.7 } },
+      invoiceText,
+    );
+
+    expect(repaired.exporterName.value).toBe('KIOM GLOBAL LIMITED');
+  });
+
+  it('leaves a legitimate exporter untouched', () => {
+    const original = { exporterName: { value: 'KIOM GLOBAL LIMITED', confidence: 0.9 } };
+    const repaired = repairInvoiceExtractionFromText(original, invoiceText);
+
+    expect(repaired.exporterName.value).toBe('KIOM GLOBAL LIMITED');
+    expect(repaired.exporterName.confidence).toBe(0.9);
+  });
 });
