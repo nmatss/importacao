@@ -8,7 +8,11 @@ const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.82): Confiden
 const EMPTY_STRING = cf<string>(null, 0);
 const EMPTY_NUMBER = cf<number>(null, 0);
 
-const CARRIER_RE = /\b(COSCO|MAERSK|MSC|HAPAG|LLOYD|EVERGREEN|CMA\s*CGM|ONE\s+LINE|HMM)\b/i;
+// Nomes de armadores/linhas maritimas (carriers) — NUNCA sao o exportador da
+// fatura; pertencem ao Bill of Lading. Usado para corrigir a extracao quando o
+// modelo confunde o nome do navio/armador com o exporterName.
+const CARRIER_RE =
+  /\b(COSCO|MAERSK|MSC|HAPAG[- ]?LLOYD|HAPAG|LLOYD|EVERGREEN|CMA\s*CGM|ONE\s+LINE|HMM|OOCL|YANG\s*MING|ZIM|WAN\s*HAI|APL|PIL)\b|\b(?:SHIPPING\s+LINE|CONTAINER\s+LINE|MARITIME)\b/i;
 const FOC_RE =
   /\b(foc|free\s*of\s*charge|discount|desconto|bonificacao|bonificado|complimentary|sample|brinde|amostra)\b/i;
 
