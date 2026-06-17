@@ -8,8 +8,9 @@ coverage/
 *.tsbuildinfo
 certifications.db
 
-# SOPS encrypted file — commit only when encrypted
-# Unencrypted version must never be committed
+# SOPS encrypted file.
+# Ignored to avoid accidental plaintext adds; the encrypted production file is
+# intentionally tracked with `git add -f .env.sops.yaml`.
 .env.sops.yaml
 
 # Service-account / credential keys — NUNCA commitar

@@ -29,7 +29,8 @@ O script:
 5. Executa backup PostgreSQL obrigatorio.
 6. Cria snapshot de rollback do codigo remoto.
 7. Sincroniza codigo por rsync.
-8. Preserva `.env` remoto.
+8. Gera `.env` remoto via SOPS + age a partir de `.env.sops.yaml`; se falhar,
+   preserva o `.env` existente como fallback operacional.
 9. Aplica migrations pendentes e aborta se falharem.
 10. Rebuilda `api`, `web` e `cert-api`.
 11. Executa health check da API e readiness do `cert-api`.
@@ -64,7 +65,9 @@ Restore testado:
   backup `/home/nicolas/backups/importacao/importacao_2026-06-17_203311.pgdump`.
 - Resultado: restore em banco temporario `importacao_restore_test`, 30 tabelas,
   273 processos, cleanup concluido.
-- Pendencia restante: agendar execucao recorrente e alerta em caso de falha.
+- Execucao recorrente agendada no crontab do servidor: domingos as 03:20, log em
+  `/home/nicolas/importacao/logs/restore-test.log`.
+- Pendencia restante: alerta externo em caso de falha e medicao formal de RTO.
 
 ## Rastreabilidade
 
@@ -82,5 +85,4 @@ O historico detalhado fica no `deploy.log` local e no output do deploy.
 
 ## Warnings Conhecidos
 
-- `.env.sops.yaml` ausente no servidor; script usa `.env` existente.
 - Backup pode avisar volumes nao encontrados.

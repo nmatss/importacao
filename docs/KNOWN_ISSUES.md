@@ -78,7 +78,9 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. Producao recebeu SOPS + age, `.env.sops.yaml`
+  criptografado e `scripts/generate-env-from-vault.sh` passa a gerar `.env` a
+  partir do arquivo criptografado durante o deploy.
 
 ## MEDIO - Delete/Reprocessamento Pode Deixar `aiExtractedData` Obsoleto
 
@@ -156,7 +158,9 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. Producao recebeu SOPS + age, `.env.sops.yaml`
+  criptografado e `scripts/generate-env-from-vault.sh` passa a gerar `.env` a
+  partir do arquivo criptografado durante o deploy.
 
 ## BAIXO - Warning CSS De `@import`
 

@@ -14,6 +14,5 @@
 creation_rules:
   - path_regex: \.env\.sops\.yaml$
     age:
-      # Add admin age public keys here (comma-separated or one per line)
-      # Replace the placeholder with your actual age public key
-      - "age1PLACEHOLDER_REPLACE_WITH_YOUR_AGE_PUBLIC_KEY"
+      # Production server n8n / 192.168.168.124.
+      - "age1zm450szqdhnxsgcdtz4vn7fl60kt3lcgzjfaaasrvzghcw7rmu7s5xnsfr"

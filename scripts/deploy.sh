@@ -162,11 +162,11 @@ rsync -avz --delete \
 success "Code synced."
 
 # ---------------------------------------------------------------------------
-# Generate .env from Vault (non-blocking)
+# Generate .env from SOPS or Vault (non-blocking)
 # ---------------------------------------------------------------------------
-info "[3/6] Generating .env from Vault..."
+info "[3/6] Generating .env from SOPS/Vault..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/generate-env-from-vault.sh" 2>&1 || {
-  warn "Vault env generation failed — using existing .env on server"
+  warn "SOPS/Vault env generation failed — using existing .env on server"
 }
 
 # ---------------------------------------------------------------------------

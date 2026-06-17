@@ -30,10 +30,9 @@ Ultima atualizacao: 2026-06-17
 
 ## DevOps E Operacao
 
-- Resolver `.env.sops.yaml` em producao para reduzir dependencia de `.env` manual.
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
-- Automatizar `scripts/restore-test.sh` com crontab/alerta e medir RTO em execucao
-  recorrente. Restore manual validado em 2026-06-17.
+- Adicionar alerta externo para falha do `scripts/restore-test.sh` e medir RTO em
+  execucao recorrente. Restore manual e cron semanal validados em 2026-06-17.
 - Resolver residuais de `npm audit` moderados sem downgrade inseguro: `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do Sentry, `js-yaml`, `protobufjs` e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e quebrou E2E local em Node 20).
 
 ## Frontend

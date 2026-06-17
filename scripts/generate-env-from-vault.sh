@@ -17,6 +17,8 @@ set -euo pipefail
 
 MODE="${1:---sops}"
 ENV_FILE=".env"
+PATH="${HOME}/bin:${PATH}"
+export PATH
 
 # ---------------------------------------------------------------------------
 # SOPS mode (preferred)
@@ -37,24 +39,50 @@ if [[ "${MODE}" == "--sops" ]]; then
   fi
 
   echo "Decrypting ${SOPS_FILE} -> ${ENV_FILE}..."
-  sops --decrypt "${SOPS_FILE}" | python3 -c "
-import sys
+  python3 - 3< <(sops --decrypt "${SOPS_FILE}") > "${ENV_FILE}" <<'PY'
+import os
+import json
+import re
 
-for line in sys.stdin:
-    line = line.rstrip('\n')
-    if not line or line.startswith('#'):
-        continue
-    if ': ' in line:
-        key, _, val = line.partition(': ')
+key_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def parse_scalar(raw: str) -> str:
+    raw = raw.strip()
+    if raw in {"", "null", "Null", "NULL", "~"}:
+        return ""
+    if raw.startswith("\""):
+        try:
+            return str(json.loads(raw))
+        except json.JSONDecodeError:
+            return raw.strip("\"")
+    if raw.startswith("'") and raw.endswith("'"):
+        return raw[1:-1].replace("''", "'")
+    return raw
+
+
+def encode_env(key: str, value: str) -> str:
+    value = value.replace("\r\n", "\n").replace("\r", "\n")
+    needs_quote = any(c in value for c in [" ", "\n", "\"", "#", ";", "|", "&", "(", ")", "!", "'"])
+    if not needs_quote:
+        return f"{key}={value}"
+    escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+    return f"{key}=\"{escaped}\""
+
+
+with os.fdopen(3) as stream:
+    for line in stream:
+        line = line.rstrip("\n")
+        if not line or line.lstrip().startswith("#") or line.strip() == "---":
+            continue
+        if line.startswith((" ", "\t", "-")) or ":" not in line:
+            continue
+        key, val = line.split(":", 1)
         key = key.strip()
-        val = val.strip().strip('\"')
-        needs_quote = any(c in val for c in [' ', chr(10), '\"', '#', ';', '|', '&'])
-        if needs_quote:
-            escaped = val.replace('\\\\', '\\\\\\\\').replace('\"', '\\\\\"')
-            print(f'{key}=\"{escaped}\"')
-        else:
-            print(f'{key}={val}')
-" > "${ENV_FILE}"
+        if not key_re.match(key):
+            continue
+        print(encode_env(key, parse_scalar(val)))
+PY
 
   chmod 600 "${ENV_FILE}"
   echo "Done. ${ENV_FILE} generated from SOPS (chmod 600)."

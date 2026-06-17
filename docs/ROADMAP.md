@@ -4,11 +4,9 @@ Ultima atualizacao: 2026-06-17
 
 ## P0 - Operacao E Confiabilidade
 
-- Resolver governanca de secrets com `.env.sops.yaml` em producao.
-- Agendar restore test recorrente e alerta de falha. Restore manual validado em
-  2026-06-17 com 30 tabelas e 273 processos restaurados em banco temporario.
 - Criar fixtures reais de validacao INV/PL/OHBL/Draft BL.
 - Formalizar decisao sobre provider de IA para extracao documental.
+- Adicionar alerta externo para falha do restore test recorrente e medir RTO.
 
 ## P1 - Qualidade De Dados E Validacao
 

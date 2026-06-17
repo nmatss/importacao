@@ -66,6 +66,10 @@ Correcoes aplicadas:
 - Restore testado em producao em 2026-06-17 usando
   `importacao_2026-06-17_203311.pgdump`: 30 tabelas e 273 processos restaurados
   em banco temporario, com cleanup concluido.
+- SOPS + age configurado em producao: chave privada somente no servidor, chave
+  publica em `.sops.yaml`, `.env.sops.yaml` criptografado e versionado.
+- Restore test semanal agendado no crontab do servidor aos domingos 03:20, com
+  log em `/home/nicolas/importacao/logs/restore-test.log`.
 
 Testes executados:
 
