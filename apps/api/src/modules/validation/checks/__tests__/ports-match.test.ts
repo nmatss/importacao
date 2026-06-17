@@ -46,13 +46,34 @@ describe('ports-match check', () => {
     expect(result.status).toBe('warning');
   });
 
-  it('should pass when one document has ports and the other does not', () => {
+  it('should pass when one document has complete ports and the other does not', () => {
     const result = portsMatch({
-      invoiceData: { portOfLoading: 'Shanghai' },
+      invoiceData: { portOfLoading: 'Shanghai', portOfDischarge: 'Santos' },
       blData: {},
     });
     // Only INV has port, BL is empty, so no mismatch occurs
     expect(result.status).toBe('passed');
+  });
+
+  it('should warn when discharge port is missing from every document', () => {
+    const result = portsMatch({
+      invoiceData: { portOfLoading: 'Shanghai' },
+      blData: { portOfLoading: 'Shanghai' },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('Porto de descarga nao encontrado');
+  });
+
+  it('should compare PL and BL when invoice ports are empty', () => {
+    const result = portsMatch({
+      invoiceData: {},
+      packingListData: { portOfLoading: 'NINGBO', portOfDischarge: 'ITAPOA' },
+      blData: { portOfLoading: 'SHANGHAI', portOfDischarge: 'ITAPOA' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain('Porto de embarque');
   });
 
   it('should skip when invoice data is missing', () => {

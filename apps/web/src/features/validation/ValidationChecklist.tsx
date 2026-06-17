@@ -40,7 +40,7 @@ interface ValidationCheck {
   expectedValue?: string;
   actualValue?: string;
   message?: string;
-  resolvedBy?: string | null;
+  resolvedBy?: string | number | null;
   resolvedAt?: string | null;
   resolvedManually?: boolean;
   resolutionNote?: string | null;
@@ -54,7 +54,7 @@ interface Anomaly {
   field: string;
   description: string;
   severity: 'high' | 'medium' | 'low';
-  confidence: number;
+  confidence?: number;
 }
 
 interface CorrectionDraft {
@@ -244,42 +244,66 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     [checks],
   );
 
-  const filteredChecks = useMemo(() => {
-    if (!checks) return [];
-    const visible = checks.filter((c) => c.status !== 'skipped');
-    if (filter === 'all') return visible;
-    if (filter === 'accepted') return visible.filter((c) => c.resolvedManually);
-    return visible.filter((c) => c.status === filter);
-  }, [checks, filter]);
-
-  const failedCount = useMemo(
-    () => checks?.filter((c) => c.status === 'failed').length ?? 0,
+  const visibleChecks = useMemo(
+    () => checks?.filter((c) => c.status !== 'skipped') ?? [],
     [checks],
   );
-  const warningCount = useMemo(
-    () => checks?.filter((c) => c.status === 'warning').length ?? 0,
-    [checks],
+
+  const filteredChecks = useMemo(() => {
+    if (filter === 'all') return visibleChecks;
+    if (filter === 'accepted') return visibleChecks.filter((c) => c.resolvedManually);
+    if (filter === 'failed') {
+      return visibleChecks.filter((c) => c.status === 'failed' && !c.resolvedManually);
+    }
+    if (filter === 'warning') {
+      return visibleChecks.filter((c) => c.status === 'warning' && !c.resolvedManually);
+    }
+    return visibleChecks.filter((c) => c.status === filter);
+  }, [filter, visibleChecks]);
+
+  const openFailedCount = useMemo(
+    () => visibleChecks.filter((c) => c.status === 'failed' && !c.resolvedManually).length,
+    [visibleChecks],
+  );
+  const openWarningCount = useMemo(
+    () => visibleChecks.filter((c) => c.status === 'warning' && !c.resolvedManually).length,
+    [visibleChecks],
   );
   const passedCount = useMemo(
-    () => checks?.filter((c) => c.status === 'passed').length ?? 0,
-    [checks],
+    () => visibleChecks.filter((c) => c.status === 'passed').length,
+    [visibleChecks],
   );
   const acceptedCount = useMemo(
-    () => checks?.filter((c) => c.resolvedManually).length ?? 0,
-    [checks],
+    () => visibleChecks.filter((c) => c.resolvedManually).length,
+    [visibleChecks],
   );
+
+  const invalidateValidationContext = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['validation', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['validation-report', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['process-events', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['process', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['communications', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['communications'] }),
+    ]);
+  }, [processId, queryClient]);
 
   const runValidation = useCallback(async () => {
     dispatch({ type: 'SET_RUNNING', payload: true });
     try {
       await api.post(`/api/validation/${processId}/run`);
-      queryClient.invalidateQueries({ queryKey: ['validation', processId] });
+      dispatch({ type: 'SET_ANOMALIES', payload: null });
+      dispatch({ type: 'SET_DRAFT', payload: null });
+      await invalidateValidationContext();
+      toast.success('Validacao executada com sucesso.');
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
       dispatch({ type: 'SET_RUNNING', payload: false });
     }
-  }, [processId, queryClient]);
+  }, [invalidateValidationContext, processId]);
 
   const detectAnomalies = useCallback(async () => {
     dispatch({ type: 'SET_DETECTING_ANOMALIES', payload: true });
@@ -308,22 +332,24 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           resolution: 'manual',
           resolution_note: note,
         });
-        queryClient.invalidateQueries({ queryKey: ['validation', processId] });
-        queryClient.invalidateQueries({ queryKey: ['validation-report', processId] });
-        queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] });
-        queryClient.invalidateQueries({ queryKey: ['process-events', processId] });
+        await invalidateValidationContext();
         setResolveTarget(null);
         setResolveNote('');
+        toast.success('Divergencia aceita com justificativa.');
       } catch (err: unknown) {
         toast.error(getErrorMessage(err));
       } finally {
         setResolvingId(null);
       }
     },
-    [processId, queryClient],
+    [invalidateValidationContext],
   );
 
   const generateCorrectionDraft = async (useAi = false) => {
+    if (openFailedCount === 0) {
+      toast.success('Nao ha falhas abertas para gerar e-mail de correcao.');
+      return;
+    }
     dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
     try {
       const data = await api.post<CorrectionDraft>(
@@ -331,6 +357,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         { useAi },
       );
       dispatch({ type: 'OPEN_DRAFT_MODAL', payload: { draft: data } });
+      queryClient.invalidateQueries({ queryKey: ['communications', processId] });
+      queryClient.invalidateQueries({ queryKey: ['communications'] });
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -389,11 +417,27 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   }
 
   // Total of actionable checks (skipped are excluded — blocked, not failures).
-  const totalCount = checks?.filter((c) => c.status !== 'skipped').length ?? 0;
+  const totalCount = visibleChecks.length;
   const skippedCount = skippedChecks.length;
-  const progressPct = totalCount > 0 ? (passedCount / totalCount) * 100 : 0;
+  const completedCount = passedCount + acceptedCount;
+  const progressPct = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
   const progressColor =
-    progressPct > 80 ? 'bg-emerald-500' : progressPct >= 50 ? 'bg-amber-500' : 'bg-danger-500';
+    openFailedCount > 0
+      ? 'bg-danger-500'
+      : openWarningCount > 0
+        ? 'bg-amber-500'
+        : 'bg-emerald-500';
+
+  const emptyFilterMessage =
+    filter === 'failed'
+      ? 'Nenhuma falha aberta neste processo.'
+      : filter === 'warning'
+        ? 'Nenhuma atencao aberta neste processo.'
+        : filter === 'accepted'
+          ? 'Nenhuma divergencia aceita manualmente neste processo.'
+          : filter === 'passed'
+            ? 'Nenhuma verificacao conforme neste processo.'
+            : 'Nenhuma validacao executada ainda. Clique em "Executar validacao" para iniciar.';
 
   return (
     <div className="space-y-4">
@@ -402,7 +446,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-300">
-              {passedCount} de {totalCount} verificacoes aprovadas
+              {completedCount} de {totalCount} verificacoes aprovadas ou aceitas
             </span>
             <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
           </div>
@@ -420,14 +464,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <div className="flex items-center gap-2">
           {[
             { key: 'all' as const, label: 'Todos', count: totalCount },
-            { key: 'failed' as const, label: 'Falhas', count: failedCount },
-            { key: 'warning' as const, label: 'Atencoes', count: warningCount },
+            { key: 'failed' as const, label: 'Falhas', count: openFailedCount },
+            { key: 'warning' as const, label: 'Atencoes', count: openWarningCount },
             { key: 'accepted' as const, label: 'Aceitos', count: acceptedCount },
             { key: 'passed' as const, label: 'Conformes', count: passedCount },
           ].map(({ key, label, count }) => (
             <button
               key={key}
               onClick={() => setFilter(key)}
+              aria-pressed={filter === key}
+              aria-label={`${label}: ${count}`}
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
                 filter === key
@@ -471,7 +517,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         </button>
 
         {/* Generate Correction Email - only show when there are failures */}
-        {failedCount > 0 && (
+        {openFailedCount > 0 && (
           <div className="flex items-center gap-2">
             <button
               onClick={() => generateCorrectionDraft(false)}
@@ -499,11 +545,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
               <CheckCircle className="h-3 w-3" /> {passedCount}
             </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-2.5 py-1 font-medium text-primary-700">
+              <Wrench className="h-3 w-3" /> {acceptedCount}
+            </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2.5 py-1 font-medium text-danger-700">
-              <XCircle className="h-3 w-3" /> {failedCount}
+              <XCircle className="h-3 w-3" /> {openFailedCount}
             </span>
             <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
-              <AlertTriangle className="h-3 w-3" /> {warningCount}
+              <AlertTriangle className="h-3 w-3" /> {openWarningCount}
             </span>
           </div>
         )}
@@ -513,7 +562,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       {filteredChecks && filteredChecks.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {filteredChecks.map((check) => {
-            const config = statusConfig[check.status] ?? statusConfig.warning;
+            const config = check.resolvedManually
+              ? {
+                  icon: Wrench,
+                  border: 'border-primary-200',
+                  bg: 'bg-primary-50',
+                  iconColor: 'text-primary-500',
+                }
+              : (statusConfig[check.status] ?? statusConfig.warning);
             const Icon = config.icon;
 
             return (
@@ -545,7 +601,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                         {check.actualValue && (
                           <p>
                             <span className="text-slate-500 dark:text-slate-400">Encontrado: </span>
-                            <span className="font-medium text-danger-700">{check.actualValue}</span>
+                            <span
+                              className={cn(
+                                'font-medium',
+                                check.resolvedManually
+                                  ? 'text-slate-800 dark:text-slate-100'
+                                  : 'text-danger-700',
+                              )}
+                            >
+                              {check.actualValue}
+                            </span>
                           </p>
                         )}
                       </div>
@@ -635,7 +700,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         </div>
       ) : (
         <p className="py-6 text-center text-sm text-slate-500 dark:text-slate-400">
-          Nenhuma validacao executada ainda. Clique em "Executar Validacao" para iniciar.
+          {emptyFilterMessage}
         </p>
       )}
 
@@ -707,9 +772,11 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     {anomaly.description}
                   </p>
                 </div>
-                <span className="text-xs text-slate-400">
-                  {(anomaly.confidence * 100).toFixed(0)}%
-                </span>
+                {Number.isFinite(anomaly.confidence) && (
+                  <span className="text-xs text-slate-400">
+                    {((anomaly.confidence ?? 0) * 100).toFixed(0)}%
+                  </span>
+                )}
               </div>
             ))}
           </div>

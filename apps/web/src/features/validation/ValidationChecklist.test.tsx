@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MockAuthProvider } from '@/test/mocks/auth';
@@ -39,16 +39,24 @@ function renderChecklist(
         checkName: string;
         status: 'passed' | 'failed' | 'warning' | 'skipped';
         message?: string;
+        resolvedManually?: boolean;
+        resolvedBy?: string | number | null;
+        resolvedAt?: string | null;
+        expectedValue?: string;
+        actualValue?: string;
       }[]
     | null = null,
 ) {
-  vi.mocked(useApiQuery).mockReturnValue({
-    data: checks,
-    isLoading: false,
-    refetch: mockRefetch,
-    error: null,
-    isError: false,
-  } as unknown as ReturnType<typeof useApiQuery>);
+  vi.mocked(useApiQuery).mockImplementation((queryKey: unknown) => {
+    const key = Array.isArray(queryKey) ? queryKey[0] : null;
+    return {
+      data: key === 'email-signatures' ? [] : checks,
+      isLoading: false,
+      refetch: mockRefetch,
+      error: null,
+      isError: false,
+    } as unknown as ReturnType<typeof useApiQuery>;
+  });
 
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -63,6 +71,10 @@ function renderChecklist(
 }
 
 describe('ValidationChecklist', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   it('renders without crashing when no data', () => {
     renderChecklist(null);
     expect(document.body).toBeTruthy();
@@ -88,5 +100,54 @@ describe('ValidationChecklist', () => {
       { id: 4, checkName: 'check_other', status: 'skipped' },
     ]);
     expect(document.body).toBeTruthy();
+  });
+
+  it('separates accepted failures from open failures and correction actions', () => {
+    renderChecklist([
+      { id: 1, checkName: 'ports-match', status: 'passed' },
+      {
+        id: 2,
+        checkName: 'fob-calculation',
+        status: 'failed',
+        message: 'FOB aceito operacionalmente',
+        resolvedManually: true,
+        resolvedBy: 4,
+        resolvedAt: '2026-06-08T15:41:00.000Z',
+      },
+    ]);
+
+    expect(screen.getByRole('button', { name: /Falhas: 0/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aceitos: 1/i })).toBeInTheDocument();
+    expect(screen.getByText(/2 de 2 verificacoes aprovadas ou aceitas/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /Gerar e-mail correcao/i }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Falhas: 0/i }));
+
+    expect(screen.getByText(/Nenhuma falha aberta neste processo/i)).toBeInTheDocument();
+  });
+
+  it('shows correction actions only for unresolved failures', () => {
+    renderChecklist([
+      { id: 1, checkName: 'ports-match', status: 'passed' },
+      {
+        id: 2,
+        checkName: 'fob-calculation',
+        status: 'failed',
+        message: 'FOB aceito operacionalmente',
+        resolvedManually: true,
+      },
+      {
+        id: 3,
+        checkName: 'gross-weight-match',
+        status: 'failed',
+        message: 'Peso bruto divergente',
+      },
+    ]);
+
+    expect(screen.getByRole('button', { name: /Falhas: 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aceitos: 1/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Gerar e-mail correcao/i })).toBeInTheDocument();
   });
 });

@@ -119,6 +119,41 @@ describe('AI provider selection', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('does not raise deterministic totalFobValue anomaly for explicit FOC items', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('../service.js');
+
+    const result = await mod.aiService.detectAnomalies(
+      {
+        invoiceNumber: 'INV-001',
+        totalFobValue: 1020,
+        items: [
+          { itemCode: 'PI7752Y', quantity: 120, totalPrice: 1020 },
+          {
+            itemCode: 'FOC001',
+            description: 'FREE OF CHARGE DISCOUNT',
+            quantity: 1,
+            unitPrice: 266.4,
+            totalPrice: 0,
+            isFreeOfCharge: true,
+          },
+        ],
+      },
+      {
+        items: [
+          { itemCode: 'PI7752Y', quantity: 120 },
+          { itemCode: 'FOC001', quantity: 1 },
+        ],
+      },
+      {},
+    );
+
+    expect(result.anomalies.some((a) => a.field === 'totalFobValue')).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid anomaly detection response contracts', async () => {
     process.env.AI_PROVIDER = 'openrouter';
     process.env.AI_ALLOW_EXTERNAL = 'true';

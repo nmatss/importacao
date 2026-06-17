@@ -57,4 +57,14 @@ describe('invoice text parser', () => {
     expect(repaired.exporterName.value).toBe('KIOM GLOBAL LIMITED');
     expect(repaired.exporterName.confidence).toBe(0.9);
   });
+
+  it('rejects domestic fiscal documents in BRL', () => {
+    const parsed = tryParseInvoiceText(`DANFE
+NOTA FISCAL ELETRONICA NF-E
+Emitente: EMPRESA BRASILEIRA LTDA
+CNPJ: 11.222.333/0001-81
+Valor Total R$ 1.234,56`);
+
+    expect(parsed).toBeNull();
+  });
 });

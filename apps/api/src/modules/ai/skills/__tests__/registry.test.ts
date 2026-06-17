@@ -57,6 +57,41 @@ describe('specialist skill registry', () => {
     }
   });
 
+  it('invoice/proforma gold examples stay numerically clean only while FOC is marked', () => {
+    for (const docType of ['invoice', 'proforma_invoice']) {
+      const skill = getSkill(docType)!;
+      const config = getVerificationConfig(docType)!;
+      const gold = JSON.parse(skill.fewShot![0].json);
+      const clean = verifyExtraction(
+        config,
+        gold,
+        skill.fewShot![0].json,
+        '2026-06-14T00:00:00.000Z',
+      );
+      expect(clean.findings.filter((f) => f.kind === 'numeric')).toEqual([]);
+
+      const broken = JSON.parse(JSON.stringify(gold));
+      const foc = broken.items.find((item: any) => item.isFreeOfCharge?.value === true);
+      expect(foc).toBeTruthy();
+      const focUnit = foc.unitPrice?.value && foc.unitPrice.value > 0 ? foc.unitPrice.value : 266.4;
+      foc.totalPrice.value =
+        foc.totalPrice?.value && foc.totalPrice.value > 0
+          ? foc.totalPrice.value
+          : focUnit * (foc.quantity?.value ?? 1);
+      foc.isFreeOfCharge.value = false;
+      const flagged = verifyExtraction(
+        config,
+        broken,
+        skill.fewShot![0].json,
+        '2026-06-14T00:00:00.000Z',
+      );
+
+      expect(flagged.findings).toContainEqual(
+        expect.objectContaining({ field: 'totalFobValue', kind: 'numeric' }),
+      );
+    }
+  });
+
   // The decisive gate: run each gold few-shot THROUGH THE HARNESS (using the
   // gold itself as source so grounding is satisfied). If the authoritative
   // example self-flags a format error (bad CNPJ/NCM/container check digit), the

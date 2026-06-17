@@ -52,6 +52,15 @@ export default function portsMatch(input: CheckInput): CheckResult {
     };
   }
 
+  if (!invPortOfDischarge && !plPortOfDischarge && !blPortOfDischarge) {
+    return {
+      checkName,
+      status: 'warning',
+      documentsCompared: 'INV vs PL vs BL',
+      message: 'Porto de descarga nao encontrado em nenhum documento.',
+    };
+  }
+
   const issues: string[] = [];
   const loadingEntries = [
     { label: 'INV', raw: invPolRaw, normalized: invPortOfLoading },

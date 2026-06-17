@@ -88,6 +88,54 @@ describe('fob-calculation check', () => {
     );
   });
 
+  it('should warn when explicit FOC has a positive declared total but is excluded from FOB', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 1020,
+        items: [
+          { unitPrice: 8.5, quantity: 120, totalPrice: 1020 },
+          { isFreeOfCharge: true, quantity: 1, totalPrice: 266.4 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.expectedValue).toBe('1020.00');
+    expect(result.actualValue).toBe('1286.40');
+  });
+
+  it('should warn when a negative discount line reconciles the declared FOB', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 24312.52,
+        items: [
+          { description: 'COMMERCIAL GOODS', quantity: 1, totalPrice: 24578.92 },
+          { description: 'DESCONTO COMERCIAL', quantity: 1, totalPrice: -266.4 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.expectedValue).toBe('24312.52');
+    expect(result.actualValue).toBe('24578.92');
+    expect(result.message).toContain('Total ajustado = 24312.52');
+  });
+
+  it('should identify FOC markers in alternate text fields and zero unit price', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 1020,
+        items: [
+          { unitPrice: 8.5, quantity: 120, totalPrice: 1020 },
+          { descricao: 'AMOSTRA SEM VALOR COMERCIAL', unitPrice: 0, quantity: 3, totalPrice: 0 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('passed');
+    expect(result.message).toContain('FOC');
+  });
+
   it('should handle null/undefined item fields gracefully', () => {
     const result = fobCalculation({
       invoiceData: {

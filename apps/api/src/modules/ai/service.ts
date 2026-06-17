@@ -1265,7 +1265,8 @@ function detectDeterministicAnomalies(
   const totalFob = numberOrNull(invoiceData?.totalFobValue);
   if (totalFob != null && invoiceItems.length > 0) {
     const itemTotal = invoiceItems.reduce((sum: number, item: Record<string, any>) => {
-      const total = numberOrNull(item.totalPrice);
+      if (isAnomalyFreeOfCharge(item)) return sum;
+      const total = numberOrNull(item.totalPrice ?? item.amount ?? item.total ?? item.amountUsd);
       if (total != null) return sum + total;
       return sum + (numberOrNull(item.unitPrice) ?? 0) * (numberOrNull(item.quantity) ?? 0);
     }, 0);
@@ -1299,9 +1300,70 @@ function normalizeAnomalyPort(value: unknown): string {
 }
 
 function numberOrNull(value: unknown): number | null {
+  if (value && typeof value === 'object' && 'value' in value) {
+    return numberOrNull((value as { value: unknown }).value);
+  }
   if (value == null || value === '') return null;
-  const parsed = Number(String(value).replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  let clean = String(value).trim();
+  const isParenthesesNegative = /^\(.*\)$/.test(clean);
+  clean = clean.replace(/[^\d,.-]/g, '');
+  if (!clean || clean === '-' || clean === '.' || clean === ',') return null;
+
+  const lastComma = clean.lastIndexOf(',');
+  const lastDot = clean.lastIndexOf('.');
+  if (lastComma > -1 && lastDot > -1) {
+    const decimal = lastComma > lastDot ? ',' : '.';
+    const thousands = decimal === ',' ? '.' : ',';
+    clean = clean.replace(new RegExp(`\\${thousands}`, 'g'), '');
+    if (decimal === ',') clean = clean.replace(',', '.');
+  } else if (lastComma > -1) {
+    clean = clean.replace(',', '.');
+  }
+
+  const parsed = Number(clean);
+  if (!Number.isFinite(parsed)) return null;
+  return isParenthesesNegative ? -Math.abs(parsed) : parsed;
+}
+
+function isAnomalyFreeOfCharge(item: Record<string, any>): boolean {
+  const total = numberOrNull(item.totalPrice ?? item.amount ?? item.total ?? item.amountUsd);
+  const unit = numberOrNull(item.unitPrice);
+  const quantity = numberOrNull(item.quantity) ?? 0;
+  const marker = [
+    item.description,
+    item.descricao,
+    item.notes,
+    item.observations,
+    item.observacao,
+    item.itemDescription,
+    item.productDescription,
+  ]
+    .filter((value) => value != null)
+    .map(String)
+    .join(' ')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (isTruthyValue(item.isFreeOfCharge) || isTruthyValue(item.isFoc) || isTruthyValue(item.foc)) {
+    return true;
+  }
+  if (
+    /\b(foc|free\s*of\s*charge|complimentary|sample|amostra|brinde|bonificacao|bonificado)\b/i.test(
+      marker,
+    )
+  ) {
+    return true;
+  }
+  if (/\b(discount|desconto)\b/i.test(marker) && (total === 0 || unit === 0)) return true;
+  if (quantity > 0 && (total === 0 || unit === 0)) return true;
+  return false;
+}
+
+function isTruthyValue(value: unknown): boolean {
+  const raw = value && typeof value === 'object' && 'value' in value ? value.value : value;
+  return raw === true || String(raw).trim().toLowerCase() === 'true';
 }
 
 export const aiService = new AIService();

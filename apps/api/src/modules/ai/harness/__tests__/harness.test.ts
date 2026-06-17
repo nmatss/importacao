@@ -131,3 +131,38 @@ describe('packing list quantity integer check (UAT #8)', () => {
     expect(report.findings.some((f) => f.kind === 'numeric')).toBe(false);
   });
 });
+
+describe('invoice total harness', () => {
+  it('excludes explicit FOC items from the declared FOB total', () => {
+    const config = getVerificationConfig('invoice') as VerificationConfig;
+    const data = {
+      totalFobValue: cf(1020),
+      items: [
+        { totalPrice: cf(1020), isFreeOfCharge: cf(false) },
+        { totalPrice: cf(266.4), isFreeOfCharge: cf(true) },
+      ],
+    };
+
+    const report = verifyExtraction(config, data, 'commercial invoice', NOW);
+
+    expect(report.findings.filter((f) => f.kind === 'numeric')).toEqual([]);
+  });
+
+  it('flags the same total when the FOC marker is missing', () => {
+    const config = getVerificationConfig('invoice') as VerificationConfig;
+    const data = {
+      totalFobValue: cf(1020),
+      items: [{ totalPrice: cf(1020) }, { totalPrice: cf(266.4) }],
+    };
+
+    const report = verifyExtraction(config, data, 'commercial invoice', NOW);
+
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        field: 'totalFobValue',
+        kind: 'numeric',
+        severity: 'warning',
+      }),
+    );
+  });
+});

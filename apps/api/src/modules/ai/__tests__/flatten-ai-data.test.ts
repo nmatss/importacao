@@ -16,10 +16,16 @@ describe('flattenAiData', () => {
   it('unwraps confidence fields and item arrays', () => {
     const flat = flattenAiData({
       invoiceNumber: { value: 'INV-1', confidence: 0.9 },
-      items: [{ itemCode: { value: 'ABC123', confidence: 1 } }],
+      items: [
+        {
+          itemCode: { value: 'ABC123', confidence: 1 },
+          isFreeOfCharge: { value: true, confidence: 0.9 },
+        },
+      ],
     });
     expect(flat.invoiceNumber).toBe('INV-1');
     expect(flat.items[0].itemCode).toBe('ABC123');
+    expect(flat.items[0].isFreeOfCharge).toBe(true);
   });
 
   it('drops harness meta (_trust and any _-prefixed key) so it never reaches validation/UI', () => {
