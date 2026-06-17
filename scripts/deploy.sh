@@ -149,6 +149,7 @@ rsync -avz --delete \
   --exclude 'node_modules' \
   --exclude 'dist' \
   --exclude 'uploads' \
+  --exclude 'logs' \
   --exclude '.git' \
   --exclude '__pycache__' \
   --exclude '.venv' \
@@ -159,6 +160,7 @@ rsync -avz --delete \
   --exclude 'apps/cert-api/reports' \
   --exclude 'deploy.log' \
   ./ "${DEPLOY_USER}@${SERVER}:${DEPLOY_DIR}/"
+ssh "${DEPLOY_USER}@${SERVER}" "mkdir -p ${DEPLOY_DIR}/logs"
 success "Code synced."
 
 # ---------------------------------------------------------------------------
