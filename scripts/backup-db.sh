@@ -16,6 +16,7 @@
 #   BACKUP_S3_BUCKET      S3/MinIO bucket (optional, e.g. s3://my-bucket/importacao)
 #   UPLOADS_DIR           Uploads volume path (default: /var/lib/docker/volumes/importacao_uploads/_data)
 #   CERT_REPORTS_DIR      Cert-reports volume path (default: /var/lib/docker/volumes/importacao_cert-reports/_data)
+#   CERT_CERTS_DIR        Cert PDFs volume path (default: /var/lib/docker/volumes/importacao_cert-certs/_data)
 #
 # Remote mode (called by deploy.sh):
 #   backup-db.sh --remote <server> --user <user>
@@ -38,7 +39,7 @@ if [[ "${1:-}" == "--remote" ]]; then
   REMOTE_ENV=""
   for var in BACKUP_LOCAL_DIR RETENTION_DAYS CONTAINER_NAME POSTGRES_DB POSTGRES_USER \
              BACKUP_REMOTE_HOST BACKUP_REMOTE_PATH BACKUP_S3_BUCKET \
-             UPLOADS_DIR CERT_REPORTS_DIR; do
+             UPLOADS_DIR CERT_REPORTS_DIR CERT_CERTS_DIR; do
     if [[ -n "${!var:-}" ]]; then
       REMOTE_ENV+=" ${var}=$(printf '%q' "${!var}")"
     fi
@@ -67,6 +68,7 @@ BACKUP_FILE="${BACKUP_BASE}.pgdump"
 
 UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/docker/volumes/importacao_uploads/_data}"
 CERT_REPORTS_DIR="${CERT_REPORTS_DIR:-/var/lib/docker/volumes/importacao_cert-reports/_data}"
+CERT_CERTS_DIR="${CERT_CERTS_DIR:-/var/lib/docker/volumes/importacao_cert-certs/_data}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -111,12 +113,12 @@ log "Backup integrity OK."
 # ---------------------------------------------------------------------------
 # Volume backups
 # ---------------------------------------------------------------------------
-for vol_name in uploads cert-reports; do
-  if [[ "${vol_name}" == "uploads" ]]; then
-    VOL_DIR="${UPLOADS_DIR}"
-  else
-    VOL_DIR="${CERT_REPORTS_DIR}"
-  fi
+for vol_name in uploads cert-reports cert-certs; do
+  case "${vol_name}" in
+    uploads) VOL_DIR="${UPLOADS_DIR}" ;;
+    cert-reports) VOL_DIR="${CERT_REPORTS_DIR}" ;;
+    cert-certs) VOL_DIR="${CERT_CERTS_DIR}" ;;
+  esac
 
   if [[ -d "${VOL_DIR}" ]]; then
     VOL_ARCHIVE="${BACKUP_LOCAL_DIR}/${BACKUP_BASE}_${vol_name}.tar.gz"

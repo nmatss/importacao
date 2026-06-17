@@ -234,8 +234,8 @@ export function ProcessDetailPage() {
   );
 
   const { data: emailResponse } = useApiQuery<EmailLogsResponse>(
-    ['email-logs', id!],
-    `/api/email-ingestion/logs?limit=50`,
+    ['email-logs', id!, process?.processCode],
+    `/api/email-ingestion/logs?limit=100&processId=${id}`,
     { enabled: !!id && !!process, staleTime: 60_000 },
   );
 
@@ -250,11 +250,9 @@ export function ProcessDetailPage() {
   );
 
   const emailCount = useMemo(() => {
-    if (!emailResponse?.data || !process) return 0;
-    return emailResponse.data.filter(
-      (l) => l.processCode === process.processCode || String(l.processCode) === process.processCode,
-    ).length;
-  }, [emailResponse, process]);
+    if (!emailResponse?.data) return 0;
+    return emailResponse.data.length;
+  }, [emailResponse]);
 
   /** Compute which tabs are visible based on process status and available data. */
   const visibleTabs = useMemo(() => {

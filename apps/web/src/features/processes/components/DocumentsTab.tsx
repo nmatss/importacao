@@ -63,7 +63,7 @@ const HIDDEN_FIELDS = new Set(['importedAt', 'importedFromSheet']);
 
 export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) {
   const queryClient = useQueryClient();
-  const { getToken } = useAuth();
+  const { getToken, user } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [showManualUpload, setShowManualUpload] = useState(true);
   const [countdown, setCountdown] = useState(300);
@@ -95,6 +95,10 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
   );
 
   const triggerEmailSync = async () => {
+    if (user?.role !== 'admin') {
+      toast.error('Busca manual de e-mails restrita a administradores');
+      return;
+    }
     setSyncing(true);
     try {
       const token = getToken();
@@ -168,24 +172,30 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={triggerEmailSync}
-          disabled={syncing}
-          className={cn(
-            'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
-            syncing
-              ? 'bg-primary-100 text-primary-400 cursor-wait'
-              : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm',
-          )}
-        >
-          {syncing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <RefreshCw className="h-4 w-4" />
-          )}
-          {syncing ? 'Buscando...' : 'Buscar e-mails agora'}
-        </button>
+        {user?.role === 'admin' ? (
+          <button
+            type="button"
+            onClick={triggerEmailSync}
+            disabled={syncing}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
+              syncing
+                ? 'bg-primary-100 text-primary-400 cursor-wait'
+                : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm',
+            )}
+          >
+            {syncing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {syncing ? 'Buscando...' : 'Buscar e-mails agora'}
+          </button>
+        ) : (
+          <span className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
+            Busca manual restrita a administradores
+          </span>
+        )}
         <span className="text-xs text-slate-400 font-mono tabular-nums">
           Próxima busca em {Math.floor(countdown / 60)}m {String(countdown % 60).padStart(2, '0')}s
         </span>

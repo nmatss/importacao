@@ -17,6 +17,7 @@ import { aiService } from '../ai/service.js';
 import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
 import { auditService } from '../audit/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import { AppError } from '../../shared/errors/index.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
@@ -65,6 +66,37 @@ function getSmtpTransport() {
       rejectUnauthorized: process.env.NODE_ENV === 'production',
       minVersion: 'TLSv1.2',
     },
+  });
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function allowedRecipientPatterns(): string[] {
+  return [
+    process.env.KIOM_EMAIL,
+    process.env.FENICIA_EMAIL,
+    process.env.ISA_EMAIL,
+    process.env.COMMUNICATION_ALLOWED_RECIPIENTS,
+  ]
+    .flatMap((value) => (value ?? '').split(','))
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function isRecipientAllowed(recipientEmail: string): boolean {
+  const recipient = normalizeEmail(recipientEmail);
+  const patterns = allowedRecipientPatterns();
+  if (patterns.length === 0) return false;
+
+  return patterns.some((pattern) => {
+    if (pattern.startsWith('@')) {
+      const domain = pattern.slice(1);
+      return recipient.endsWith(`@${domain}`) || recipient.endsWith(`.${domain}`);
+    }
+    if (pattern.includes('@')) return recipient === pattern;
+    return recipient.endsWith(`@${pattern}`) || recipient.endsWith(`.${pattern}`);
   });
 }
 
@@ -204,7 +236,7 @@ export const communicationService = {
     return communication;
   },
 
-  async send(id: number, signatureId?: number) {
+  async send(id: number, signatureId?: number, userId?: number | null) {
     const [communication] = await db
       .select()
       .from(communications)
@@ -216,6 +248,14 @@ export const communicationService = {
     if (!communication.recipientEmail) {
       throw new Error(
         'E-mail do destinatário não configurado. Verifique as variáveis KIOM_EMAIL / FENICIA_EMAIL / ISA_EMAIL.',
+      );
+    }
+
+    if (!isRecipientAllowed(communication.recipientEmail)) {
+      throw new AppError(
+        'Destinatário não autorizado para envio. Configure COMMUNICATION_ALLOWED_RECIPIENTS ou use um destinatário operacional previsto.',
+        403,
+        'RECIPIENT_NOT_ALLOWED',
       );
     }
 
@@ -234,11 +274,20 @@ export const communicationService = {
         const [signature] = await db
           .select()
           .from(emailSignatures)
-          .where(eq(emailSignatures.id, signatureId))
+          .where(
+            userId
+              ? and(eq(emailSignatures.id, signatureId), eq(emailSignatures.userId, userId))
+              : eq(emailSignatures.id, signatureId),
+          )
           .limit(1);
-        if (signature) {
-          htmlBody = `${htmlBody}<br/><br/>${signature.signatureHtml}`;
+        if (!signature) {
+          throw new AppError(
+            'Assinatura de e-mail não encontrada para este usuário',
+            404,
+            'SIGNATURE_NOT_FOUND',
+          );
         }
+        htmlBody = `${htmlBody}<br/><br/>${signature.signatureHtml}`;
       }
 
       // Sanitize headers to prevent CRLF injection
@@ -260,7 +309,7 @@ export const communicationService = {
 
       logger.info({ id, to: communication.recipientEmail }, 'E-mail enviado com sucesso');
       await auditService.log(
-        null,
+        userId ?? null,
         'email.sent',
         'communication',
         updated.id,
@@ -277,7 +326,7 @@ export const communicationService = {
             title: `Email enviado para ${communication.recipientEmail}`,
             metadata: { subject: communication.subject, communicationId: updated.id },
           },
-          null,
+          userId ?? null,
         );
       }
 
@@ -289,6 +338,7 @@ export const communicationService = {
         .where(eq(communications.id, id));
 
       logger.error({ id, error: error.message }, 'Falha ao enviar e-mail');
+      if (error?.statusCode) throw error;
       throw new Error(`Falha ao enviar e-mail: ${error.message}`);
     }
   },

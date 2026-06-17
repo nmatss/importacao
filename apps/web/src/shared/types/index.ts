@@ -197,7 +197,13 @@ export interface EmailLog {
   receivedAt: string;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored' | 'reprocessed';
   attachmentsCount: number;
-  processedAttachments: Array<{ filename: string; documentId?: number }> | null;
+  processedAttachments: number;
+  processedAttachmentsCount?: number;
+  processedAttachmentDetails?: Array<{
+    filename: string;
+    type?: string;
+    documentId?: number | null;
+  }>;
   processCode: string | null;
   errorMessage: string | null;
   createdAt: string;

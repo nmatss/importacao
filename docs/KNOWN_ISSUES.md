@@ -99,26 +99,6 @@ Status:
 
 - Aberto.
 
-## MEDIO - Logs De E-mail Ainda Sao Filtrados No Frontend
-
-Descricao:
-
-- A UI busca logs globais de e-mail e filtra por processo no cliente. Se o processo nao estiver entre os registros recentes retornados, contador/aba podem ficar incompletos.
-
-Evidencias:
-
-- `apps/web/src/features/processes/ProcessDetailPage.tsx`
-- `apps/web/src/features/processes/components/EmailsTab.tsx`
-- `apps/api/src/modules/email-ingestion/processor.ts`
-
-Impacto:
-
-- Historico de e-mails por processo pode parecer vazio ou incompleto.
-
-Status:
-
-- Aberto. Criar filtro backend por `processId` ou `processCode`.
-
 ## MEDIO - Datas Misturam Invoice Date E ETD/Shipment Em Alguns Checks
 
 Descricao:

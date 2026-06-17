@@ -52,6 +52,11 @@ interface Communication {
   sentAt: string | null;
 }
 
+type PaginatedCommunications = {
+  data: Communication[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+};
+
 interface EmailDraft {
   subject: string;
   body: string;
@@ -94,6 +99,7 @@ export function CommunicationsPage() {
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   // Fetch signatures
   const { data: signatures } = useApiQuery<EmailSignatureOption[]>(
@@ -195,37 +201,60 @@ export function CommunicationsPage() {
     }
   };
 
-  const handleExportCsv = () => {
-    if (!communications?.length) {
-      toast.error('Nenhum atendimento para exportar com os filtros atuais.');
-      return;
-    }
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const rows: Communication[] = [];
+      let page = 1;
+      let pages = 1;
 
-    downloadCsv('atendimentos-importacao.csv', [
-      [
-        'ID',
-        'Processo',
-        'Destinatário',
-        'E-mail',
-        'Assunto',
-        'Status',
-        'Criado em',
-        'Enviado em',
-        'Mensagem',
-      ],
-      ...communications.map((comm) => [
-        comm.id,
-        comm.processId,
-        comm.recipient,
-        comm.recipientEmail,
-        comm.subject,
-        statusConfig[comm.status]?.label ?? comm.status,
-        comm.createdAt,
-        comm.sentAt || '',
-        comm.body,
-      ]),
-    ]);
-    toast.success('Relatório de atendimentos exportado em CSV.');
+      do {
+        const exportParams = new URLSearchParams(commParams);
+        exportParams.set('page', String(page));
+        exportParams.set('limit', '100');
+        const response = await api.get<PaginatedCommunications>(
+          `/api/communications?${exportParams.toString()}`,
+        );
+        rows.push(...response.data);
+        pages = response.pagination.pages || 1;
+        page += 1;
+      } while (page <= pages);
+
+      if (!rows.length) {
+        toast.error('Nenhum atendimento para exportar com os filtros atuais.');
+        return;
+      }
+
+      downloadCsv('atendimentos-importacao.csv', [
+        [
+          'ID',
+          'Processo',
+          'Destinatário',
+          'E-mail',
+          'Assunto',
+          'Status',
+          'Criado em',
+          'Enviado em',
+          'Mensagem',
+        ],
+        ...rows.map((comm) => [
+          comm.id,
+          comm.processId,
+          comm.recipient,
+          comm.recipientEmail,
+          comm.subject,
+          statusConfig[comm.status]?.label ?? comm.status,
+          comm.createdAt,
+          comm.sentAt || '',
+          comm.body,
+        ]),
+      ]);
+      toast.success(`Relatório de atendimentos exportado em CSV (${rows.length} registros).`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   const applyTemplate = (template: 'fenicia' | 'isa') => {
@@ -265,11 +294,11 @@ export function CommunicationsPage() {
         <button
           type="button"
           onClick={handleExportCsv}
-          disabled={!communications?.length}
+          disabled={exportingCsv || !communications?.length}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
         >
           <FileDown className="h-4 w-4" />
-          Exportar CSV
+          {exportingCsv ? 'Exportando...' : 'Exportar CSV'}
         </button>
       </div>
 
@@ -526,6 +555,8 @@ export function CommunicationsPage() {
                   endDate={endDate}
                   onStartDateChange={setStartDate}
                   onEndDateChange={setEndDate}
+                  label="Período"
+                  showLabel={false}
                 />
               </div>
             </div>

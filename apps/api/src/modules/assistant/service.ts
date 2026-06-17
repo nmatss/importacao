@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   alerts,
@@ -202,7 +202,7 @@ function scoreCandidate(candidate: SourceCandidate, question: string, tokens: st
   ) {
     score += 2;
   }
-  if (candidate.status && sourceNorm.includes(normalize(candidate.status))) {
+  if (candidate.status && questionNorm.includes(normalize(candidate.status))) {
     score += 0.5;
   }
 
@@ -422,7 +422,11 @@ export const assistantService = {
             })
             .from(auditLogs)
             .leftJoin(users, eq(auditLogs.userId, users.id))
-            .where(input.processId ? eq(auditLogs.entityId, input.processId) : undefined)
+            .where(
+              input.processId
+                ? and(eq(auditLogs.entityType, 'process'), eq(auditLogs.entityId, input.processId))
+                : undefined,
+            )
             .orderBy(desc(auditLogs.createdAt))
             .limit(input.processId ? MAX_RECENT_ROWS : 30)
         : Promise.resolve([]),
@@ -668,7 +672,7 @@ export const assistantService = {
       });
 
     const positive = ranked.filter((source) => source.score > 0);
-    const sources = (positive.length > 0 ? positive : ranked).slice(0, input.limit ?? 10);
+    const sources = positive.slice(0, input.limit ?? 10);
     const confidence =
       sources.length === 0 ? 0.15 : Math.min(0.92, 0.35 + Math.min(sources[0].score, 12) / 20);
 

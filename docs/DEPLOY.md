@@ -30,10 +30,11 @@ O script:
 6. Cria snapshot de rollback do codigo remoto.
 7. Sincroniza codigo por rsync.
 8. Preserva `.env` remoto.
-9. Rebuilda `api` e `web`.
-10. Aplica migrations pendentes.
+9. Aplica migrations pendentes e aborta se falharem.
+10. Rebuilda `api` e `web`.
 11. Executa health check.
-12. Faz rollback de codigo se health falhar.
+12. Grava `REVISION` com o SHA implantado.
+13. Faz rollback de codigo se health falhar.
 
 Evidencia:
 
@@ -51,12 +52,19 @@ Pendencia:
 
 - Documentar e testar restore completo em ambiente isolado.
 
-## Deploy Mais Recente Registrado Nesta Memoria
+## Rastreabilidade
 
-- Data: 2026-06-17.
-- SHA: `997aac4`.
-- Resultado: `importacao-api` e `importacao-web` healthy.
-- Health: `/health/ready` OK, DB e Redis OK.
+O deploy grava o SHA completo implantado em:
+
+- `/home/nicolas/importacao/REVISION`
+
+Para conferir:
+
+```bash
+ssh nicolas@192.168.168.124 'cat /home/nicolas/importacao/REVISION'
+```
+
+O historico detalhado fica no `deploy.log` local e no output do deploy.
 
 ## Warnings Conhecidos
 

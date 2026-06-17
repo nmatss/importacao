@@ -74,10 +74,23 @@ app.get(
     // trailing ".1"). Normalize the IPv4-mapped IPv6 prefix so 127.0.0.1 and
     // ::ffff:127.0.0.1 are treated as the same address.
     const normalizeIp = (ip: string) => ip.replace(/^::ffff:/, '');
+    const isPrivateNetworkIp = (ip: string) => {
+      const normalized = normalizeIp(ip);
+      if (/^10\./.test(normalized)) return true;
+      if (/^192\.168\./.test(normalized)) return true;
+      const match = normalized.match(/^172\.(\d{1,2})\./);
+      return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31);
+    };
     const defaultAllow = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
     const normalizedClient = normalizeIp(clientIp);
     if ([...defaultAllow, ...allowedIps].some((ip) => normalizeIp(ip) === normalizedClient))
       return next();
+    if (
+      process.env.METRICS_ALLOW_PRIVATE_NETWORKS === 'true' &&
+      isPrivateNetworkIp(normalizedClient)
+    ) {
+      return next();
+    }
 
     res.status(401).json({ success: false, error: 'Unauthorized' });
   },

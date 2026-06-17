@@ -37,6 +37,7 @@ describe('communicationService', () => {
     vi.clearAllMocks();
     queryQueue.length = 0;
     process.env.SMTP_HOST = 'smtp.test.com';
+    process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
   });
 
   describe('create()', () => {
@@ -163,6 +164,21 @@ describe('communicationService', () => {
       queryQueue.push(createResolvedChain([]));
 
       await expect(communicationService.send(999)).rejects.toThrow('não encontrada');
+    });
+
+    it('should reject recipients outside configured allowlist', async () => {
+      const mockComm = {
+        id: 1,
+        recipientEmail: 'outside@evil.test',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Destinatário não autorizado');
+      expect(mockSendMail).not.toHaveBeenCalled();
     });
 
     it('should mark as failed when sendMail throws', async () => {

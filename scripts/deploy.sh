@@ -170,26 +170,28 @@ ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/generate-env-fr
 }
 
 # ---------------------------------------------------------------------------
+# Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
+# ---------------------------------------------------------------------------
+info "[4/6] Applying pending SQL migrations..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/apply-pending-migrations.sh"; then
+  error "Migrations failed. Deploy aborted before starting the new api/web containers."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: migrations failed"
+  exit 1
+fi
+success "Migrations applied."
+
+# ---------------------------------------------------------------------------
 # Deploy: build + rolling restart (api + web only, no --force-recreate)
 # ---------------------------------------------------------------------------
-info "[4/6] Building and deploying api + web..."
+info "[5/6] Building and deploying api + web..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
   docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web"
 success "Containers started."
 
 # ---------------------------------------------------------------------------
-# Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
-# ---------------------------------------------------------------------------
-info "[4.5/6] Applying pending SQL migrations..."
-ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/apply-pending-migrations.sh" 2>&1 || {
-  warn "Migrations falharam — rode manualmente: ${DEPLOY_DIR}/scripts/apply-pending-migrations.sh"
-  notify "WARN" "Deploy ${LOCAL_SHA:0:12}: migrations falharam, aplicar manualmente"
-}
-
-# ---------------------------------------------------------------------------
 # Health check loop
 # ---------------------------------------------------------------------------
-info "[5/6] Waiting for health check: ${HEALTH_ENDPOINT}"
+info "[6/6] Waiting for health check: ${HEALTH_ENDPOINT}"
 ATTEMPT=0
 HEALTHY=0
 until [[ ${ATTEMPT} -ge ${HEALTH_RETRIES} ]]; do
@@ -242,6 +244,8 @@ if [[ "${HEALTHY}" -ne 1 ]]; then
 fi
 
 success "Health check passed."
+ssh "${DEPLOY_USER}@${SERVER}" "printf '%s\n' '${LOCAL_SHA}' > ${DEPLOY_DIR}/REVISION" 2>/dev/null || \
+  warn "Could not write ${DEPLOY_DIR}/REVISION"
 
 # Deploy succeeded — drop the rollback snapshot to reclaim space.
 if [[ "${ROLLBACK_READY}" -eq 1 ]]; then
@@ -265,7 +269,7 @@ notify "SUCCESS" "Deployed ${LOCAL_SHA:0:12} to ${SERVER}"
 # ---------------------------------------------------------------------------
 cat << 'MIGRATIONS_NOTE'
 
-NOTE: migrations já rodam automaticamente no passo [4.5/6]. O manual abaixo
+NOTE: migrations já rodam automaticamente no passo [4/6]. O manual abaixo
 fica como fallback caso aquele passo tenha falhado:
 
   # 0011 (ALTER TYPE — MUST be manual, can't run in transaction)

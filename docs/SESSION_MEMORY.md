@@ -1,5 +1,50 @@
 # Session Memory
 
+## 2026-06-17 - Revisao Completa Pos-Deploy, Segurança E Operacao
+
+Analise conduzida com subagentes especializados em backend/RAG/seguranca,
+frontend/UX e DevOps/producao.
+
+Correcoes aplicadas:
+
+- Assistente operacional nao usa mais fontes com score zero; pergunta sem
+  evidencia positiva retorna resposta deterministica sem fontes e sem chamada IA.
+- Auditoria no assistente com `processId` filtra `entityType = process`.
+- Comunicacoes validam allowlist de destinatarios antes do envio SMTP.
+- Envio registra `userId` real em auditoria/evento e assinatura e validada pelo
+  usuario autenticado.
+- Ingestao de e-mail usa mailbox normalizado para allowlist e Vimbar, evitando
+  substring no header `From`.
+- Pre-Cons recebido por e-mail passa por limite de tamanho, tipo suportado e
+  magic bytes antes do parser XLSX.
+- Query booleana de ingestao corrige `includeRead=false` e `allSenders=false`.
+- Logs de e-mail aceitam filtro backend por `processId`/`processCode`; detalhe
+  do processo deixou de filtrar apenas os 50 recentes no frontend.
+- Busca manual de e-mails no detalhe de documentos fica restrita visualmente a
+  admins, alinhada ao backend.
+- Exportacao CSV de alertas/atendimentos busca todas as paginas dos filtros
+  ativos.
+- Editor de e-mail de correcao salva/envia o corpo atual mesmo sem blur.
+- Deploy aborta em falha de migration antes de subir api/web novos.
+- Backup inclui volume `cert-certs`.
+- Healthchecks de Docker passam a usar readiness real de API e cert-api.
+- API libera `/metrics` para rede privada Docker apenas com flag explicita.
+
+Testes executados:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test` (API 514 passed / 1 skipped; Web 30 passed)
+- `npm test -w apps/web`
+- `npm run build`
+- `docker compose -f docker-compose.prod.yml config --quiet`
+
+Observacoes:
+
+- Build web manteve o warning conhecido de CSS `@import`.
+- `docker compose config` local avisou `ERP_MSSQL_USER`/`ERP_MSSQL_PASS`
+  ausentes porque o `.env` de producao nao estava carregado.
+
 ## 2026-06-17 - Harness Validacao, FOB, Portos E Deploy
 
 Alteracoes entregues no commit `997aac4`:

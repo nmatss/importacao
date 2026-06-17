@@ -38,6 +38,10 @@ interface Alert {
 }
 
 type AckResponse = Alert;
+type PaginatedAlerts = {
+  data: Alert[];
+  pagination: { page: number; limit: number; total: number; pages: number };
+};
 
 const severityConfig = {
   info: {
@@ -94,6 +98,7 @@ export function AlertsPage() {
   const [ackFilter, setAckFilter] = useState<AckFilter>('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [exportingCsv, setExportingCsv] = useState(false);
 
   const queryParams = new URLSearchParams();
   queryParams.set('limit', '100');
@@ -125,37 +130,58 @@ export function AlertsPage() {
 
   const pendingCount = alerts?.filter((a) => !a.acknowledged).length ?? 0;
 
-  const handleExportCsv = () => {
-    if (!alerts?.length) {
-      toast.error('Nenhum alerta para exportar com os filtros atuais.');
-      return;
-    }
+  const handleExportCsv = async () => {
+    setExportingCsv(true);
+    try {
+      const rows: Alert[] = [];
+      let page = 1;
+      let pages = 1;
 
-    downloadCsv('alertas-importacao.csv', [
-      [
-        'ID',
-        'Processo',
-        'Severidade',
-        'Titulo',
-        'Mensagem',
-        'Status',
-        'Criado em',
-        'Tratado em',
-        'Tratado por',
-      ],
-      ...alerts.map((alert) => [
-        alert.id,
-        alert.processCode || alert.processId || '',
-        severityConfig[alert.severity].label,
-        alert.title,
-        alert.message,
-        alert.acknowledged ? 'Tratado' : 'Pendente',
-        alert.createdAt,
-        alert.acknowledgedAt || '',
-        alert.acknowledgedBy || '',
-      ]),
-    ]);
-    toast.success('Relatório de alertas exportado em CSV.');
+      do {
+        const exportParams = new URLSearchParams(queryParams);
+        exportParams.set('page', String(page));
+        exportParams.set('limit', '100');
+        const response = await api.get<PaginatedAlerts>(`/api/alerts?${exportParams.toString()}`);
+        rows.push(...response.data);
+        pages = response.pagination.pages || 1;
+        page += 1;
+      } while (page <= pages);
+
+      if (!rows.length) {
+        toast.error('Nenhum alerta para exportar com os filtros atuais.');
+        return;
+      }
+
+      downloadCsv('alertas-importacao.csv', [
+        [
+          'ID',
+          'Processo',
+          'Severidade',
+          'Titulo',
+          'Mensagem',
+          'Status',
+          'Criado em',
+          'Tratado em',
+          'Tratado por',
+        ],
+        ...rows.map((alert) => [
+          alert.id,
+          alert.processCode || alert.processId || '',
+          severityConfig[alert.severity].label,
+          alert.title,
+          alert.message,
+          alert.acknowledged ? 'Tratado' : 'Pendente',
+          alert.createdAt,
+          alert.acknowledgedAt || '',
+          alert.acknowledgedBy || '',
+        ]),
+      ]);
+      toast.success(`Relatório de alertas exportado em CSV (${rows.length} registros).`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setExportingCsv(false);
+    }
   };
 
   return (
@@ -174,11 +200,11 @@ export function AlertsPage() {
           <button
             type="button"
             onClick={handleExportCsv}
-            disabled={!alerts?.length}
+            disabled={exportingCsv || !alerts?.length}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
           >
             <FileDown className="h-4 w-4" />
-            Exportar CSV
+            {exportingCsv ? 'Exportando...' : 'Exportar CSV'}
           </button>
           {pendingCount > 0 && (
             <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
@@ -207,6 +233,7 @@ export function AlertsPage() {
                 <button
                   type="button"
                   key={opt.value}
+                  aria-pressed={severityFilter === opt.value}
                   onClick={() => setSeverityFilter(opt.value)}
                   className={cn(
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
@@ -234,7 +261,8 @@ export function AlertsPage() {
               endDate={endDate}
               onStartDateChange={setStartDate}
               onEndDateChange={setEndDate}
-              label=""
+              label="Período"
+              showLabel={false}
             />
           </div>
 
@@ -251,6 +279,7 @@ export function AlertsPage() {
                 <button
                   type="button"
                   key={opt.value}
+                  aria-pressed={ackFilter === opt.value}
                   onClick={() => setAckFilter(opt.value)}
                   className={cn(
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',

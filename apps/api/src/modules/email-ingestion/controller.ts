@@ -20,7 +20,12 @@ export const emailIngestionController = {
       const limit = Number(req.query.limit) || 20;
       const startDate = req.query.startDate as string | undefined;
       const endDate = req.query.endDate as string | undefined;
-      const result = await emailProcessor.getLogs(page, limit, startDate, endDate);
+      const processId = req.query.processId ? Number(req.query.processId) : undefined;
+      const processCode = req.query.processCode as string | undefined;
+      const result = await emailProcessor.getLogs(page, limit, startDate, endDate, {
+        processId,
+        processCode,
+      });
       sendPaginated(res, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
       const status = error.statusCode || 400;
@@ -30,11 +35,11 @@ export const emailIngestionController = {
 
   async triggerCheck(req: Request, res: Response) {
     try {
-      const includeRead = String(req.query.includeRead ?? 'false') === 'true';
+      const includeRead = (req.query.includeRead as unknown) === true;
       const after = typeof req.query.after === 'string' ? req.query.after : undefined;
       const before = typeof req.query.before === 'string' ? req.query.before : undefined;
       const rawQuery = typeof req.query.q === 'string' ? req.query.q : undefined;
-      const skipSenderFilter = String(req.query.allSenders ?? 'false') === 'true';
+      const skipSenderFilter = (req.query.allSenders as unknown) === true;
       let gmailQuery: string | undefined;
       if (rawQuery) {
         gmailQuery = rawQuery;
@@ -71,7 +76,7 @@ export const emailIngestionController = {
 
       const parts = ['has:attachment', `newer_than:${daysBack}d`];
 
-      const skipSenderFilter = String(req.query.allSenders ?? 'false') === 'true';
+      const skipSenderFilter = (req.query.allSenders as unknown) === true;
       if (!skipSenderFilter) {
         const allowedSenders =
           process.env.EMAIL_ALLOWED_SENDERS?.split(',')

@@ -15,11 +15,22 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
+import {
+  extractMailboxAddress,
+  isAllowedSenderFromEnv,
+  isEmailAllowedByPatterns,
+} from './sender-policy.js';
 
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
 const MAX_EMAIL_ATTACHMENT_BYTES =
   Number(process.env.EMAIL_ATTACHMENT_MAX_BYTES) || 50 * 1024 * 1024;
+
+const SUPPORTED_ATTACHMENT_MIMES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+];
 
 const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
   '.pdf': new Set(['application/pdf']),
@@ -30,9 +41,59 @@ const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
   '.xls': new Set(['application/vnd.ms-excel', 'application/x-cfb']),
 };
 
+type EmailAttachment = {
+  filename: string;
+  contentType?: string;
+  content: Buffer;
+  size?: number;
+};
+
 function isDetectedEmailAttachmentAllowed(filename: string, detectedMime: string): boolean {
   const ext = path.extname(filename).toLowerCase();
   return Boolean(EMAIL_ATTACHMENT_EXT_MIME_ALIASES[ext]?.has(detectedMime));
+}
+
+function isSupportedAttachmentByNameOrMime(att: EmailAttachment): boolean {
+  const filename = att.filename.toLowerCase();
+  const contentType = att.contentType?.toLowerCase() ?? '';
+  return (
+    SUPPORTED_ATTACHMENT_MIMES.some((mime) => contentType.includes(mime)) ||
+    filename.endsWith('.pdf') ||
+    filename.endsWith('.xlsx') ||
+    filename.endsWith('.xls')
+  );
+}
+
+async function validateEmailAttachment(att: EmailAttachment): Promise<{
+  ok: boolean;
+  skipReason?: string;
+  detectedMime?: string;
+}> {
+  const attachmentSize = att.content.byteLength;
+  if (attachmentSize > MAX_EMAIL_ATTACHMENT_BYTES) {
+    return {
+      ok: false,
+      skipReason: `Arquivo excede o limite de ${Math.round(MAX_EMAIL_ATTACHMENT_BYTES / 1024 / 1024)} MB`,
+    };
+  }
+
+  if (!isSupportedAttachmentByNameOrMime(att)) {
+    return {
+      ok: false,
+      skipReason: `Tipo de arquivo não suportado: ${att.contentType}`,
+    };
+  }
+
+  const detected = await fileTypeFromBuffer(att.content);
+  if (!detected || !isDetectedEmailAttachmentAllowed(att.filename, detected.mime)) {
+    return {
+      ok: false,
+      detectedMime: detected?.mime,
+      skipReason: 'Tipo de arquivo incompatível com o conteúdo do anexo',
+    };
+  }
+
+  return { ok: true, detectedMime: detected.mime };
 }
 
 // ── Regex-based process code extraction (fast, first pass) ──────────────
@@ -369,17 +430,8 @@ function detectBrand(subject: string, from: string): 'puket' | 'imaginarium' {
 
 // ── Allowed sender filter ───────────────────────────────────────────────
 
-function isAllowedSender(from: string): boolean {
-  const allowedRaw = process.env.EMAIL_ALLOWED_SENDERS;
-  if (!allowedRaw) return true;
-
-  const allowed = allowedRaw
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const fromLower = from.toLowerCase();
-
-  return allowed.some((pattern) => fromLower.includes(pattern));
+export function isAllowedSender(from: string): boolean {
+  return isAllowedSenderFromEnv(from, process.env.EMAIL_ALLOWED_SENDERS);
 }
 
 // ── Fuzzy process code matching against DB ──────────────────────────────
@@ -814,13 +866,11 @@ export const emailProcessor = {
             .split(',')
             .map((d) => d.trim().toLowerCase())
             .filter(Boolean);
-          const senderLower = (email.from ?? '').toLowerCase();
+          const senderLower = extractMailboxAddress(email.from ?? '');
           const senderAllowed =
             allowedDomains.length === 0
               ? false /* fail-closed when no allowlist configured */
-              : allowedDomains.some(
-                  (d) => senderLower.includes(`@${d}`) || senderLower.endsWith(`.${d}`),
-                );
+              : isEmailAllowedByPatterns(senderLower, allowedDomains);
 
           if (isVimbarApproval && senderAllowed) {
             try {
@@ -851,57 +901,73 @@ export const emailProcessor = {
 
         if (isPreCons) {
           const preConsAttachment =
-            email.attachments.find(
-              (att) =>
-                (att.filename.endsWith('.xlsx') || att.filename.endsWith('.xls')) &&
-                /pre.?cons/i.test(att.filename),
-            ) ||
-            email.attachments.find(
-              (att) => att.filename.endsWith('.xlsx') || att.filename.endsWith('.xls'),
-            );
+            email.attachments.find((att) => {
+              const filename = att.filename.toLowerCase();
+              return (
+                (filename.endsWith('.xlsx') || filename.endsWith('.xls')) &&
+                /pre.?cons/i.test(filename)
+              );
+            }) ||
+            email.attachments.find((att) => {
+              const filename = att.filename.toLowerCase();
+              return filename.endsWith('.xlsx') || filename.endsWith('.xls');
+            });
 
           if (preConsAttachment) {
             try {
-              const { preConsService } = await import('../pre-cons/service.js');
-              const result = await preConsService.syncFromXLSX(
-                preConsAttachment.content,
-                preConsAttachment.filename,
-                'email',
-              );
-
-              logger.info(
-                {
-                  messageId: email.messageId,
-                  fileName: preConsAttachment.filename,
-                  totalRows: result.totalRows,
-                  divergences: result.divergences?.length ?? 0,
-                },
-                'Pre-Cons auto-synced from email attachment',
-              );
-
-              await db
-                .update(emailIngestionLogs)
-                .set({
-                  status: 'completed',
-                  processCode: 'PRE_CONS_SYNC',
-                  processedAttachments: {
-                    attachments: [
-                      {
-                        filename: preConsAttachment.filename,
-                        type: 'pre_cons',
-                        status: 'processed',
-                      },
-                    ],
-                    syncResult: {
-                      totalRows: result.totalRows,
-                      created: result.created,
-                      divergences: result.divergences?.length ?? 0,
-                    },
+              const validation = await validateEmailAttachment(preConsAttachment);
+              if (!validation.ok) {
+                logger.warn(
+                  {
+                    filename: preConsAttachment.filename,
+                    contentType: preConsAttachment.contentType,
+                    detectedMime: validation.detectedMime,
+                    skipReason: validation.skipReason,
                   },
-                })
-                .where(eq(emailIngestionLogs.id, logEntry.id));
+                  'Pre-Cons sync skipped: invalid email attachment',
+                );
+              } else {
+                const { preConsService } = await import('../pre-cons/service.js');
+                const result = await preConsService.syncFromXLSX(
+                  preConsAttachment.content,
+                  preConsAttachment.filename,
+                  'email',
+                );
 
-              continue; // Skip normal attachment processing
+                logger.info(
+                  {
+                    messageId: email.messageId,
+                    fileName: preConsAttachment.filename,
+                    totalRows: result.totalRows,
+                    divergences: result.divergences?.length ?? 0,
+                  },
+                  'Pre-Cons auto-synced from email attachment',
+                );
+
+                await db
+                  .update(emailIngestionLogs)
+                  .set({
+                    status: 'completed',
+                    processCode: 'PRE_CONS_SYNC',
+                    processedAttachments: {
+                      attachments: [
+                        {
+                          filename: preConsAttachment.filename,
+                          type: 'pre_cons',
+                          status: 'processed',
+                        },
+                      ],
+                      syncResult: {
+                        totalRows: result.totalRows,
+                        created: result.created,
+                        divergences: result.divergences?.length ?? 0,
+                      },
+                    },
+                  })
+                  .where(eq(emailIngestionLogs.id, logEntry.id));
+
+                continue; // Skip normal attachment processing
+              }
             } catch (preConsErr) {
               logger.error(
                 { err: preConsErr, filename: preConsAttachment.filename },
@@ -920,68 +986,22 @@ export const emailProcessor = {
           documentId?: number;
         }> = [];
 
-        const supportedMimes = [
-          'application/pdf',
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          'application/vnd.ms-excel',
-        ];
-
         for (const att of email.attachments) {
-          const attachmentSize = att.content.byteLength;
-          if (attachmentSize > MAX_EMAIL_ATTACHMENT_BYTES) {
-            logger.warn(
-              {
-                filename: att.filename,
-                size: attachmentSize,
-                maxSize: MAX_EMAIL_ATTACHMENT_BYTES,
-              },
-              'Attachment skipped: exceeds maximum email attachment size',
-            );
-            processedAttachments.push({
-              filename: att.filename,
-              type: 'unsupported',
-              status: 'skipped',
-              skipReason: `Arquivo excede o limite de ${Math.round(MAX_EMAIL_ATTACHMENT_BYTES / 1024 / 1024)} MB`,
-            });
-            continue;
-          }
-
-          // Skip unsupported file types (images, docs, etc.)
-          const isSupported =
-            supportedMimes.some((m) => att.contentType?.includes(m)) ||
-            att.filename.endsWith('.pdf') ||
-            att.filename.endsWith('.xlsx') ||
-            att.filename.endsWith('.xls');
-
-          if (!isSupported) {
-            logger.info(
-              { filename: att.filename, contentType: att.contentType },
-              'Attachment skipped: unsupported file type',
-            );
-            processedAttachments.push({
-              filename: att.filename,
-              type: 'unsupported',
-              status: 'skipped',
-              skipReason: `Tipo de arquivo não suportado: ${att.contentType}`,
-            });
-            continue;
-          }
-
-          const detected = await fileTypeFromBuffer(att.content);
-          if (!detected || !isDetectedEmailAttachmentAllowed(att.filename, detected.mime)) {
+          const validation = await validateEmailAttachment(att);
+          if (!validation.ok) {
             logger.warn(
               {
                 filename: att.filename,
                 contentType: att.contentType,
-                detectedMime: detected?.mime,
+                detectedMime: validation.detectedMime,
               },
-              'Attachment skipped: MIME/extensao incompatível com assinatura do arquivo',
+              'Attachment skipped: unsupported or invalid file type',
             );
             processedAttachments.push({
               filename: att.filename,
               type: 'unsupported',
               status: 'skipped',
-              skipReason: 'Tipo de arquivo incompatível com o conteúdo do anexo',
+              skipReason: validation.skipReason,
             });
             continue;
           }
@@ -1191,10 +1211,22 @@ export const emailProcessor = {
     };
   },
 
-  async getLogs(page = 1, limit = 20, startDate?: string, endDate?: string) {
+  async getLogs(
+    page = 1,
+    limit = 20,
+    startDate?: string,
+    endDate?: string,
+    filters: { processId?: number; processCode?: string } = {},
+  ) {
     const offset = (page - 1) * limit;
     const conditions = [];
 
+    if (filters.processId) {
+      conditions.push(eq(emailIngestionLogs.processId, filters.processId));
+    }
+    if (filters.processCode) {
+      conditions.push(ilike(emailIngestionLogs.processCode, filters.processCode));
+    }
     if (startDate) {
       conditions.push(gte(emailIngestionLogs.receivedAt, new Date(startDate)));
     }
@@ -1245,6 +1277,7 @@ export const emailProcessor = {
       return {
         ...row,
         processedAttachments: processedCount,
+        processedAttachmentsCount: processedCount,
         processedAttachmentDetails: details.length > 0 ? details : undefined,
       };
     });

@@ -49,7 +49,7 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
   const { data: fetchedResponse, isLoading } = useApiQuery<{
     data: EmailLog[];
     pagination: unknown;
-  }>(['email-logs', processId], `/api/email-ingestion/logs?limit=50`, {
+  }>(['email-logs', processId], `/api/email-ingestion/logs?limit=100&processId=${processId}`, {
     enabled: !initialResponse,
     staleTime: 60_000,
   });
@@ -57,11 +57,7 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
 
   if (!initialResponse && isLoading) return <TableSkeleton />;
 
-  // Filter logs related to this process
-  const allLogs = response?.data ?? [];
-  const logs = allLogs.filter(
-    (l) => l.processCode === processCode || String(l.processCode) === processCode,
-  );
+  const logs = response?.data ?? [];
 
   return (
     <div className="space-y-4">
@@ -81,6 +77,7 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
             <p className="text-xs text-slate-400 mt-1">
               E-mails recebidos com referência ao processo aparecem aqui automaticamente.
             </p>
+            <p className="mt-1 text-[11px] text-slate-400">Filtro: {processCode}</p>
           </div>
         </div>
       ) : (
@@ -139,8 +136,9 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                   <div className="mt-2 flex items-start gap-2">
                     <Paperclip className="h-3 w-3 text-slate-400 mt-0.5 shrink-0" />
                     <div className="flex flex-wrap gap-1.5">
-                      {log.processedAttachments && log.processedAttachments.length > 0 ? (
-                        log.processedAttachments.map((att, i) => (
+                      {log.processedAttachmentDetails &&
+                      log.processedAttachmentDetails.length > 0 ? (
+                        log.processedAttachmentDetails.map((att, i) => (
                           <span
                             key={i}
                             className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600/50"

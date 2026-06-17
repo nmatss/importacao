@@ -1,4 +1,4 @@
-import { useReducer, useState, useEffect, useMemo, useCallback } from 'react';
+import { useReducer, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import DOMPurify from 'dompurify';
 import { toast } from 'sonner';
 import {
@@ -215,6 +215,17 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const [resolveTarget, setResolveTarget] = useState<number | null>(null);
   const [resolveNote, setResolveNote] = useState('');
   const [resolvingId, setResolvingId] = useState<number | null>(null);
+  const draftBodyRef = useRef<HTMLDivElement | null>(null);
+  const latestDraftBodyRef = useRef(editBody);
+
+  useEffect(() => {
+    latestDraftBodyRef.current = editBody;
+  }, [editBody]);
+
+  const getCurrentDraftBody = useCallback(
+    () => draftBodyRef.current?.innerHTML ?? latestDraftBodyRef.current,
+    [],
+  );
 
   const { data: emailSignatures } = useApiQuery<EmailSignatureOption[]>(
     ['email-signatures'],
@@ -368,11 +379,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   const saveDraft = async () => {
     if (!draft) return;
+    const currentBody = getCurrentDraftBody();
     dispatch({ type: 'SET_SAVING', payload: true });
     try {
       const updated = await api.patch<CorrectionDraft>(`/api/communications/${draft.id}/draft`, {
         subject: editSubject,
-        body: editBody,
+        body: currentBody,
         recipientEmail: editRecipientEmail,
       });
       dispatch({ type: 'UPDATE_DRAFT', payload: updated });
@@ -387,12 +399,13 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const sendEmail = async () => {
     if (!draft) return;
     setShowSendConfirm(false);
+    const currentBody = getCurrentDraftBody();
     dispatch({ type: 'SET_SENDING', payload: true });
     try {
       // Save any edits first
       await api.patch(`/api/communications/${draft.id}/draft`, {
         subject: editSubject,
-        body: editBody,
+        body: currentBody,
         recipientEmail: editRecipientEmail,
       });
       // Then send (with optional signature)
@@ -865,9 +878,13 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 </label>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                   <div
+                    ref={draftBodyRef}
                     className="p-4 text-sm text-slate-700 dark:text-slate-300 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
                     contentEditable
                     suppressContentEditableWarning
+                    onInput={(e) => {
+                      latestDraftBodyRef.current = e.currentTarget.innerHTML;
+                    }}
                     onBlur={(e) =>
                       dispatch({ type: 'SET_EDIT_BODY', payload: e.currentTarget.innerHTML })
                     }

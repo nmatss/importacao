@@ -6,6 +6,7 @@ interface DateRangeFilterProps {
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
   label?: string;
+  showLabel?: boolean;
 }
 
 export function DateRangeFilter({
@@ -14,13 +15,16 @@ export function DateRangeFilter({
   onStartDateChange,
   onEndDateChange,
   label = 'Período',
+  showLabel = true,
 }: DateRangeFilterProps) {
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Calendar className="w-4 h-4 text-slate-400 flex-shrink-0 hidden sm:block" />
-      <span className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap hidden sm:inline">
-        {label}
-      </span>
+      {showLabel && (
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap hidden sm:inline">
+          {label}
+        </span>
+      )}
       <input
         type="date"
         aria-label={`${label}: data inicial`}

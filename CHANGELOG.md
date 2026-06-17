@@ -41,6 +41,19 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Nomenclatura revisada em telas centrais de importacao: Atendimentos,
   Central de Alertas, auditoria, validacao, LIs, cambios, e-mails, documentos,
   follow-up e dashboards.
+- Assistente operacional deixa de retornar dados recentes quando nao ha fonte
+  com evidencia positiva para a pergunta.
+- Aba de e-mails do processo passou a usar filtro backend por processo, evitando
+  contador e historico parciais.
+- Exportacao CSV de Alertas e Atendimentos passou a buscar todas as paginas dos
+  filtros ativos antes de gerar o relatorio.
+- Editor do e-mail de correcao usa o corpo atual digitado mesmo quando o usuario
+  salva ou envia sem sair do campo.
+- Busca manual de e-mails fica visivel apenas para administradores, alinhada a
+  permissao da API.
+- Deploy passa a abortar se migrations falharem e healthchecks usam readiness
+  real de API/cert-api.
+- Backup inclui o volume `cert-certs` com PDFs/evidencias de certificacao.
 
 ### Security
 
@@ -48,6 +61,16 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Rascunhos legados com `path` de anexo so sao enviados se o caminho bater com documento/espelho autorizado do processo.
 - Trigger, varredura historica e reprocessamento de ingestao de e-mail agora exigem usuario admin.
 - Anexos recebidos por e-mail respeitam limite maximo de 50 MB ou `EMAIL_ATTACHMENT_MAX_BYTES`.
+- Envio de comunicacoes valida allowlist de destinatarios antes do SMTP e registra
+  o usuario real na auditoria/evento.
+- Assinatura de e-mail no envio passa a ser buscada pelo usuario autenticado.
+- Ingestao de e-mails compara remetente pelo mailbox real normalizado, nao por
+  substring no header `From`.
+- Auto-sync de Pre-Cons por e-mail valida tamanho, extensao e magic bytes antes
+  de processar a planilha.
+- Query booleana da ingestao corrige `false` para nao virar `true`.
+- `/metrics` pode ser liberado para redes privadas Docker apenas com
+  `METRICS_ALLOW_PRIVATE_NETWORKS=true`.
 
 ### Verified
 
