@@ -244,6 +244,9 @@ export const communicationService = {
       .limit(1);
 
     if (!communication) throw new Error('Comunicação não encontrada');
+    if (communication.status !== 'draft') {
+      throw new Error('Somente rascunhos podem ser enviados');
+    }
 
     if (!communication.recipientEmail) {
       throw new Error(
@@ -432,6 +435,27 @@ export const communicationService = {
 
     if (failedResults.length === 0) {
       throw new Error('Nenhuma divergencia encontrada para gerar e-mail de correcao');
+    }
+
+    const [existingDraft] = await db
+      .select()
+      .from(communications)
+      .where(
+        and(
+          eq(communications.processId, processId),
+          eq(communications.recipient, 'KIOM'),
+          eq(communications.status, 'draft'),
+        ),
+      )
+      .orderBy(desc(communications.createdAt))
+      .limit(1);
+
+    if (existingDraft) {
+      logger.info(
+        { processId, failedCount: failedResults.length, communicationId: existingDraft.id },
+        'Existing KIOM correction draft reused',
+      );
+      return existingDraft;
     }
 
     // Categorize divergences

@@ -18,8 +18,6 @@ Ultima atualizacao: 2026-06-17
 ## P1 - UX Operacional
 
 - Consolidar aceite do checklist e aceite do comparativo.
-- Melhorar modal de email com focus trap, Escape e leitura robusta do editor.
-- Exibir rascunho existente para evitar duplicidade de emails de correcao.
 - Melhorar acessibilidade restante em ordenacao de tabelas, switches/toggles e filtros visuais.
 
 ## P2 - Dados, DW E Observabilidade

@@ -129,6 +129,7 @@ describe('communicationService', () => {
     it('should send email and mark as sent', async () => {
       const mockComm = {
         id: 1,
+        status: 'draft',
         recipientEmail: 'to@example.com',
         subject: 'Test',
         body: '<p>Content</p>',
@@ -169,6 +170,7 @@ describe('communicationService', () => {
     it('should reject recipients outside configured allowlist', async () => {
       const mockComm = {
         id: 1,
+        status: 'draft',
         recipientEmail: 'outside@evil.test',
         subject: 'Test',
         body: '<p>Content</p>',
@@ -181,9 +183,26 @@ describe('communicationService', () => {
       expect(mockSendMail).not.toHaveBeenCalled();
     });
 
+    it('should not resend a communication that is no longer a draft', async () => {
+      const mockComm = {
+        id: 1,
+        status: 'sent',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Somente rascunhos');
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
     it('should mark as failed when sendMail throws', async () => {
       const mockComm = {
         id: 1,
+        status: 'draft',
         recipientEmail: 'to@example.com',
         subject: 'Test',
         body: '<p>Content</p>',
@@ -204,6 +223,7 @@ describe('communicationService', () => {
       const mockComm = {
         id: 1,
         processId: 10,
+        status: 'draft',
         recipientEmail: 'to@example.com',
         subject: 'Test',
         body: '<p>Content</p>',
@@ -227,6 +247,7 @@ describe('communicationService', () => {
       const mockComm = {
         id: 1,
         processId: 10,
+        status: 'draft',
         recipientEmail: 'to@example.com',
         subject: 'Test',
         body: '<p>Content</p>',
@@ -261,6 +282,74 @@ describe('communicationService', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('generateCorrectionDraft()', () => {
+    it('should reuse the latest open KIOM draft without overwriting operator edits', async () => {
+      const mockProcess = { id: 10, processCode: 'IMP-010', brand: 'puket' };
+      const mockFailure = {
+        id: 1,
+        processId: 10,
+        checkName: 'gross-weight-match',
+        status: 'failed',
+        resolvedManually: false,
+        expectedValue: '100',
+        actualValue: '90',
+        message: 'Peso divergente',
+      };
+      const existingDraft = {
+        id: 77,
+        processId: 10,
+        recipient: 'KIOM',
+        recipientEmail: 'kiom@example.com',
+        subject: 'Editado pelo operador',
+        body: '<p>Texto manual</p>',
+        status: 'draft',
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(createResolvedChain([mockFailure])); // validation results
+      queryQueue.push(createResolvedChain([existingDraft])); // existing KIOM draft
+
+      const result = await communicationService.generateCorrectionDraft(10);
+
+      expect(result).toEqual(existingDraft);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('should create a correction draft when there is no open KIOM draft', async () => {
+      const mockProcess = { id: 10, processCode: 'IMP-010', brand: 'puket' };
+      const mockFailure = {
+        id: 1,
+        processId: 10,
+        checkName: 'gross-weight-match',
+        status: 'failed',
+        resolvedManually: false,
+        expectedValue: '100',
+        actualValue: '90',
+        message: 'Peso divergente',
+      };
+      const createdDraft = {
+        id: 78,
+        processId: 10,
+        recipient: 'KIOM',
+        recipientEmail: '',
+        subject: 'Correção documental necessária - Processo IMP-010',
+        body: '<p>Body</p>',
+        status: 'draft',
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(createResolvedChain([mockFailure])); // validation results
+      queryQueue.push(createResolvedChain([])); // existing KIOM draft
+      queryQueue.push(createResolvedChain([])); // invoice documents
+      queryQueue.push(createResolvedChain([createdDraft])); // insert returning
+
+      const result = await communicationService.generateCorrectionDraft(10);
+
+      expect(result).toEqual(createdDraft);
+      expect(mockDb.insert).toHaveBeenCalled();
     });
   });
 

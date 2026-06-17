@@ -39,8 +39,8 @@ Ultima atualizacao: 2026-06-17
 
 ## Frontend
 
-- Melhorar focus trap/Escape nos modais.
-- Revisar `contentEditable` de email para salvar conteudo atual antes de save/send mesmo sem blur.
+- Melhorar focus trap/Escape nos modais restantes. Modal de e-mail de correcao
+  foi coberto em 2026-06-17.
 - Melhorar ordenacao acessivel nas tabelas de Certificacoes/Produtos com botoes/`aria-sort`.
 - Adicionar estado acessivel (`aria-pressed`, `role="switch"` ou equivalente) aos toggles/filtros visuais restantes.
 - Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como anotacao local.

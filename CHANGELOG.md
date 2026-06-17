@@ -68,6 +68,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Integracao Odoo passou a usar URL, database e usuario salvos em
   `system_settings` com fallback para env, mantendo `ODOO_PASSWORD` somente em
   SOPS/env e selecionando XML-RPC HTTP/HTTPS conforme a URL.
+- Modal do e-mail de correcao agora recebe foco inicial no destinatario, fecha
+  por Escape, mantem Tab dentro do dialogo e devolve foco ao botao de origem.
+- Geracao manual de e-mail de correcao agora reusa rascunho KIOM aberto do
+  processo, preservando edicoes do operador e evitando duplicidade.
+- Envio de comunicacao por API passa a exigir `status=draft`, bloqueando
+  reenvio acidental de e-mail ja enviado.
 
 ### Tests
 
@@ -77,6 +83,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `ohbl` em `runAllChecks` e `runAnomalyDetection`.
 - Cobertura de regressao garante configuracao Odoo por banco/env e selecao
   correta do client XML-RPC HTTP/HTTPS.
+- Cobertura de regressao garante foco/Escape/Tab do modal de e-mail de
+  correcao e salvamento do HTML atual do editor sem depender de blur.
+- Cobertura de regressao garante reuso de rascunho KIOM aberto e bloqueio de
+  reenvio de comunicacao ja enviada.
 
 ### Security
 

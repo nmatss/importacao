@@ -1,5 +1,33 @@
 # Session Memory
 
+## 2026-06-17 - Acessibilidade Do Modal De E-mail De Correcao
+
+Correcoes aplicadas:
+
+- Modal de e-mail de correcao passou a focar o campo de destinatario ao abrir.
+- Escape fecha o modal e devolve foco ao botao que abriu o rascunho.
+- Navegacao por Tab fica contida dentro do dialogo.
+- Campos do rascunho ganharam labels/ids acessiveis e o editor HTML ganhou
+  `role="textbox"` com `aria-multiline`.
+- Geracao manual de e-mail de correcao passou a reutilizar rascunho KIOM aberto
+  do mesmo processo, preservando edicoes humanas.
+- `communicationService.send` passou a bloquear envio quando a comunicacao nao
+  esta mais em `draft`, evitando reenvio acidental por API.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/modules/communications/__tests__/service.test.ts`
+- `npm test -w apps/web -- src/features/validation/ValidationChecklist.test.tsx`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
 ## 2026-06-17 - Odoo Settings DB Com Fallback Env
 
 Correcoes aplicadas:

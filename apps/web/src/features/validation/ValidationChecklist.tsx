@@ -163,6 +163,16 @@ function checklistReducer(state: ChecklistState, action: ChecklistAction): Check
 const checkLabel = (name: string) =>
   VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
 
+const draftModalFocusableSelector = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[contenteditable="true"]',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+
 const statusConfig = {
   passed: {
     icon: CheckCircle,
@@ -216,6 +226,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const [resolveNote, setResolveNote] = useState('');
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const draftBodyRef = useRef<HTMLDivElement | null>(null);
+  const draftModalRef = useRef<HTMLDivElement | null>(null);
+  const draftRecipientEmailRef = useRef<HTMLInputElement | null>(null);
+  const draftModalOpenerRef = useRef<HTMLElement | null>(null);
   const latestDraftBodyRef = useRef(editBody);
 
   useEffect(() => {
@@ -226,6 +239,63 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     () => draftBodyRef.current?.innerHTML ?? latestDraftBodyRef.current,
     [],
   );
+
+  const closeDraftModal = useCallback(() => {
+    dispatch({ type: 'CLOSE_DRAFT_MODAL' });
+    setShowSendConfirm(false);
+    window.setTimeout(() => {
+      draftModalOpenerRef.current?.focus();
+      draftModalOpenerRef.current = null;
+    }, 0);
+  }, []);
+
+  useEffect(() => {
+    if (!showDraftModal || showSendConfirm) return;
+
+    draftRecipientEmailRef.current?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeDraftModal();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+
+      const modal = draftModalRef.current;
+      if (!modal) return;
+
+      const focusable = Array.from(
+        modal.querySelectorAll<HTMLElement>(draftModalFocusableSelector),
+      ).filter((element) => {
+        const disabled = element.getAttribute('aria-disabled') === 'true';
+        const style = window.getComputedStyle(element);
+        return !disabled && style.display !== 'none' && style.visibility !== 'hidden';
+      });
+
+      if (focusable.length === 0) {
+        event.preventDefault();
+        modal.focus();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+
+      if (event.shiftKey && (active === first || active === modal)) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [closeDraftModal, showDraftModal, showSendConfirm]);
 
   const { data: emailSignatures } = useApiQuery<EmailSignatureOption[]>(
     ['email-signatures'],
@@ -361,6 +431,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       toast.success('Não há falhas abertas para gerar e-mail de correção.');
       return;
     }
+    draftModalOpenerRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
     try {
       const data = await api.post<CorrectionDraft>(
@@ -413,7 +485,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         signatureId: selectedSignatureId || undefined,
       });
       toast.success('E-mail enviado com sucesso');
-      dispatch({ type: 'CLOSE_DRAFT_MODAL' });
+      closeDraftModal();
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -809,9 +881,11 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       {showDraftModal && draft && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div
+            ref={draftModalRef}
             role="dialog"
             aria-modal="true"
             aria-labelledby="draft-modal-title"
+            tabIndex={-1}
             className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white dark:bg-slate-800 shadow-xl"
           >
             {/* Header */}
@@ -833,7 +907,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 </div>
               </div>
               <button
-                onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
+                onClick={closeDraftModal}
                 className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 transition-colors"
                 aria-label="Fechar modal"
               >
@@ -845,10 +919,15 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <div className="p-6 space-y-4">
               {/* Recipient Email */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                <label
+                  htmlFor="draft-recipient-email"
+                  className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5"
+                >
                   Destinatário
                 </label>
                 <input
+                  ref={draftRecipientEmailRef}
+                  id="draft-recipient-email"
                   type="email"
                   value={editRecipientEmail}
                   onChange={(e) =>
@@ -860,10 +939,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
               {/* Subject */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                <label
+                  htmlFor="draft-subject"
+                  className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5"
+                >
                   Assunto
                 </label>
                 <input
+                  id="draft-subject"
                   type="text"
                   value={editSubject}
                   onChange={(e) => dispatch({ type: 'SET_EDIT_SUBJECT', payload: e.target.value })}
@@ -873,12 +956,19 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
               {/* Body Preview / Edit */}
               <div>
-                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                <label
+                  htmlFor="draft-body"
+                  className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5"
+                >
                   Corpo do E-mail
                 </label>
                 <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-hidden">
                   <div
                     ref={draftBodyRef}
+                    id="draft-body"
+                    role="textbox"
+                    aria-multiline="true"
+                    aria-label="Corpo do E-mail"
                     className="p-4 text-sm text-slate-700 dark:text-slate-300 min-h-[200px] max-h-[400px] overflow-y-auto prose prose-sm prose-slate max-w-none"
                     contentEditable
                     suppressContentEditableWarning
@@ -937,7 +1027,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             {/* Footer */}
             <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-6 py-4 rounded-b-2xl">
               <button
-                onClick={() => dispatch({ type: 'CLOSE_DRAFT_MODAL' })}
+                onClick={closeDraftModal}
                 className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
               >
                 Cancelar

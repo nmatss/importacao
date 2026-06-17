@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MockAuthProvider } from '@/test/mocks/auth';
@@ -31,6 +31,26 @@ vi.mock('@/shared/hooks/useApi', () => ({
 // Import after mocks are set up
 import { ValidationChecklist } from './ValidationChecklist';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { api } from '@/shared/lib/api-client';
+
+const failedChecks = [
+  {
+    id: 3,
+    checkName: 'gross-weight-match',
+    status: 'failed' as const,
+    message: 'Peso bruto divergente',
+  },
+];
+
+const correctionDraft = {
+  id: 99,
+  processId: 1,
+  recipient: 'KIOM',
+  recipientEmail: 'kiom@example.com',
+  subject: 'Correção documental',
+  body: '<p>Favor corrigir os dados.</p>',
+  status: 'draft',
+};
 
 function renderChecklist(
   checks:
@@ -149,5 +169,70 @@ describe('ValidationChecklist', () => {
     expect(screen.getByRole('button', { name: /Falhas: 1/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aceitos: 1/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Gerar e-mail correcao/i })).toBeInTheDocument();
+  });
+
+  it('focuses the draft modal, closes it with Escape and restores opener focus', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(correctionDraft);
+    renderChecklist(failedChecks);
+
+    const opener = screen.getByRole('button', { name: /Gerar e-mail correcao/i });
+    opener.focus();
+    fireEvent.click(opener);
+
+    expect(await screen.findByRole('dialog', { name: /E-mail de Correcao/i })).toBeInTheDocument();
+    const recipient = screen.getByLabelText(/Destinatário/i);
+    await waitFor(() => expect(recipient).toHaveFocus());
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: /E-mail de Correcao/i })).not.toBeInTheDocument(),
+    );
+    await waitFor(() => expect(opener).toHaveFocus());
+  });
+
+  it('keeps Tab navigation inside the draft modal', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(correctionDraft);
+    renderChecklist(failedChecks);
+
+    fireEvent.click(screen.getByRole('button', { name: /Gerar e-mail correcao/i }));
+
+    await screen.findByRole('dialog', { name: /E-mail de Correcao/i });
+    const recipient = screen.getByLabelText(/Destinatário/i);
+    const closeButton = screen.getByLabelText(/Fechar modal/i);
+    const sendButton = screen.getByRole('button', { name: /Enviar E-mail/i });
+    await waitFor(() => expect(recipient).toHaveFocus());
+
+    closeButton.focus();
+    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    expect(sendButton).toHaveFocus();
+
+    sendButton.focus();
+    fireEvent.keyDown(document, { key: 'Tab' });
+    expect(closeButton).toHaveFocus();
+  });
+
+  it('saves the current draft body HTML even when the editor has not blurred', async () => {
+    vi.mocked(api.post).mockResolvedValueOnce(correctionDraft);
+    vi.mocked(api.patch).mockResolvedValueOnce({
+      ...correctionDraft,
+      body: '<p>Conteúdo ajustado</p>',
+    });
+    renderChecklist(failedChecks);
+
+    fireEvent.click(screen.getByRole('button', { name: /Gerar e-mail correcao/i }));
+
+    const bodyEditor = await screen.findByRole('textbox', { name: /Corpo do E-mail/i });
+    bodyEditor.innerHTML = '<p>Conteúdo ajustado</p>';
+    fireEvent.input(bodyEditor);
+    fireEvent.click(screen.getByRole('button', { name: /Salvar Rascunho/i }));
+
+    await waitFor(() =>
+      expect(api.patch).toHaveBeenCalledWith('/api/communications/99/draft', {
+        subject: 'Correção documental',
+        body: '<p>Conteúdo ajustado</p>',
+        recipientEmail: 'kiom@example.com',
+      }),
+    );
   });
 });
