@@ -1,5 +1,29 @@
 # Session Memory
 
+## 2026-06-17 - Fallback De Draft BL Na Validacao
+
+Correcoes aplicadas:
+
+- `runAllChecks` passou a selecionar `ohbl` como BL preferencial e usar
+  `draft_bl` apenas como fallback quando OHBL ainda nao existe.
+- `runAnomalyDetection` passou a usar a mesma regra, evitando anomalia com BL
+  vazio quando so ha Draft BL.
+- O fallback nao altera o marco operacional de documento final recebido nem
+  libera envio Fenícia/espelho como se OHBL existisse.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/modules/validation/__tests__/service.test.ts`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
 ## 2026-06-17 - Normalizacao De Chave Google Em SOPS
 
 Correcoes aplicadas:

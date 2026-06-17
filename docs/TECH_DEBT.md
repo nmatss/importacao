@@ -10,7 +10,6 @@ Ultima atualizacao: 2026-06-17
   extracoes reais anonimizadas de INV/PL/OHBL/Draft BL quando o negocio liberar
   amostras. Em 2026-06-17 foi adicionada cobertura representativa sem mock de
   `allChecks`.
-- Avaliar Draft BL como fonte parcial/fallback quando OHBL ainda nao existe.
 - Persistir contrato relacional para aceite do comparativo, em vez de depender apenas de evento de timeline.
 - Ao revalidar, definir se aceites manuais devem sobreviver ao novo run quando a divergencia persistir.
 

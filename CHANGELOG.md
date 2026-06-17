@@ -63,11 +63,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Chaves privadas Google vindas do SOPS agora são normalizadas mesmo quando
   chegam com `\n` duplamente escapado, evitando falha `ERR_OSSL_UNSUPPORTED`
   no Gmail/Drive/Sheets/Groups/Vertex.
+- Validacao e deteccao de anomalias agora usam `draft_bl` como fallback parcial
+  quando `ohbl` ainda nao existe, mantendo OHBL como fonte preferencial.
 
 ### Tests
 
 - Fixture representativa INV/PL/OHBL/FUP roda `allChecks` real, sem mock, e
   falha se um conjunto documental coerente produzir status `failed`.
+- Cobertura de regressao garante fallback de `draft_bl` e precedencia de
+  `ohbl` em `runAllChecks` e `runAnomalyDetection`.
 
 ### Security
 

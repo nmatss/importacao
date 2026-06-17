@@ -13,7 +13,6 @@ Ultima atualizacao: 2026-06-17
 
 ## P1 - Qualidade De Dados E Validacao
 
-- Usar Draft BL como fonte parcial/fallback quando OHBL nao existe, se aprovado pelo negocio.
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).
 
 ## P1 - UX Operacional

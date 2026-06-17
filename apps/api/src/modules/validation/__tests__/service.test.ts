@@ -142,6 +142,94 @@ describe('validationService', () => {
       );
     });
 
+    it('should use Draft BL as validation BL data when OHBL is absent', async () => {
+      const check = vi.fn().mockReturnValue({
+        checkName: 'mock-check',
+        status: 'passed',
+        documentsCompared: 'INV vs PL vs BL',
+        message: 'OK',
+      });
+      (allChecks as any).length = 0;
+      (allChecks as any).push(check);
+
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
+          { type: 'packing_list', aiParsedData: { totalPackages: 10 } },
+          {
+            type: 'draft_bl',
+            aiParsedData: { blNumber: 'DRAFT-001', portOfLoading: 'Ningbo' },
+          },
+        ]),
+      ); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      txQueue.push(createResolvedChain([])); // tx select previous
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update to validated
+      queryQueue.push(createResolvedChain(undefined)); // update followUp
+
+      await validationService.runAllChecks(1);
+
+      expect(check).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blData: { blNumber: 'DRAFT-001', portOfLoading: 'Ningbo' },
+        }),
+      );
+    });
+
+    it('should prefer OHBL over Draft BL for validation BL data', async () => {
+      const check = vi.fn().mockReturnValue({
+        checkName: 'mock-check',
+        status: 'passed',
+        documentsCompared: 'INV vs PL vs BL',
+        message: 'OK',
+      });
+      (allChecks as any).length = 0;
+      (allChecks as any).push(check);
+
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
+          { type: 'packing_list', aiParsedData: { totalPackages: 10 } },
+          { type: 'ohbl', aiParsedData: { blNumber: 'FINAL-001' } },
+        ]),
+      ); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      txQueue.push(createResolvedChain([])); // tx select previous
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update to validated
+      queryQueue.push(createResolvedChain(undefined)); // update followUp
+
+      await validationService.runAllChecks(1);
+
+      expect(check).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blData: { blNumber: 'FINAL-001' },
+        }),
+      );
+    });
+
     it('should set status to validated when no failures', async () => {
       const mockProcess = {
         id: 1,
@@ -267,6 +355,49 @@ describe('validationService', () => {
         { invoiceNumber: 'INV-001', totalFobValue: 100 },
         { totalItems: 1 },
         { blNumber: 'BL-001' },
+      );
+    });
+
+    it('should pass Draft BL to anomaly detection when OHBL is absent', async () => {
+      const anomalyResult = { anomalies: [] };
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce(anomalyResult);
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
+          { type: 'packing_list', aiParsedData: { totalItems: 1 } },
+          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
+        ]),
+      );
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result).toEqual(anomalyResult);
+      expect(aiServiceMocks.detectAnomalies).toHaveBeenCalledWith(
+        { invoiceNumber: 'INV-001' },
+        { totalItems: 1 },
+        { blNumber: 'DRAFT-001' },
+      );
+    });
+
+    it('should prefer OHBL over Draft BL for anomaly detection', async () => {
+      const anomalyResult = { anomalies: [] };
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce(anomalyResult);
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
+          { type: 'packing_list', aiParsedData: { totalItems: 1 } },
+          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
+          { type: 'ohbl', aiParsedData: { blNumber: 'FINAL-001' } },
+        ]),
+      );
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result).toEqual(anomalyResult);
+      expect(aiServiceMocks.detectAnomalies).toHaveBeenCalledWith(
+        { invoiceNumber: 'INV-001' },
+        { totalItems: 1 },
+        { blNumber: 'FINAL-001' },
       );
     });
 

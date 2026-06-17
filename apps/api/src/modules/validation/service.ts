@@ -25,6 +25,15 @@ import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
 
+type DocumentWithAiData = {
+  type: string;
+  aiParsedData: unknown;
+};
+
+function findValidationBlDocument<T extends DocumentWithAiData>(docs: T[]): T | undefined {
+  return docs.find((d) => d.type === 'ohbl') ?? docs.find((d) => d.type === 'draft_bl');
+}
+
 export const validationService = {
   async runAllChecks(processId: number, userId: number | null = null): Promise<CheckResult[]> {
     if (!processId || isNaN(processId)) {
@@ -48,7 +57,7 @@ export const validationService = {
 
     const invoiceDoc = docs.find((d) => d.type === 'invoice');
     const packingListDoc = docs.find((d) => d.type === 'packing_list');
-    const blDoc = docs.find((d) => d.type === 'ohbl');
+    const blDoc = findValidationBlDocument(docs);
 
     // Get follow-up data
     const [followUp] = await db
@@ -587,7 +596,7 @@ export const validationService = {
 
     const invoiceDoc = docs.find((d) => d.type === 'invoice');
     const packingListDoc = docs.find((d) => d.type === 'packing_list');
-    const blDoc = docs.find((d) => d.type === 'ohbl');
+    const blDoc = findValidationBlDocument(docs);
 
     const rawInvAnomaly = (invoiceDoc?.aiParsedData as Record<string, any>) ?? {};
     const rawPlAnomaly = (packingListDoc?.aiParsedData as Record<string, any>) ?? {};

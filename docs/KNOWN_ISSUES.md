@@ -65,7 +65,9 @@ Impacto:
 
 Status:
 
-- Aberto. Precisa definir regra operacional para Draft BL como fallback ou trilha separada.
+- Resolvido em 2026-06-17. `runAllChecks` e `runAnomalyDetection` continuam
+  preferindo `ohbl`, mas usam `draft_bl` como fallback parcial quando o OHBL
+  ainda nao existe. Draft BL nao altera o marco de documento final recebido.
 
 ## ALTO - Acao "Enviar Para Fenicia" Do Espelho Nao Envia E-mail
 
