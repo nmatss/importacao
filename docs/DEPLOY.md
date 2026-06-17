@@ -58,9 +58,13 @@ Volumes persistentes sao arquivados via Docker volume mount:
 - `importacao_cert-reports`
 - `importacao_cert-certs`
 
-Pendencia:
+Restore testado:
 
-- Documentar e testar restore completo em ambiente isolado.
+- Em 2026-06-17, `scripts/restore-test.sh` foi executado no servidor usando o
+  backup `/home/nicolas/backups/importacao/importacao_2026-06-17_203311.pgdump`.
+- Resultado: restore em banco temporario `importacao_restore_test`, 30 tabelas,
+  273 processos, cleanup concluido.
+- Pendencia restante: agendar execucao recorrente e alerta em caso de falha.
 
 ## Rastreabilidade
 
@@ -79,5 +83,4 @@ O historico detalhado fica no `deploy.log` local e no output do deploy.
 ## Warnings Conhecidos
 
 - `.env.sops.yaml` ausente no servidor; script usa `.env` existente.
-- Build web emite warning CSS de `@import`.
 - Backup pode avisar volumes nao encontrados.

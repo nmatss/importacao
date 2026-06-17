@@ -1,5 +1,8 @@
 """Cert-API FastAPI application entry point."""
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
@@ -17,32 +20,8 @@ from app.routes.schedules import load_schedules_into_scheduler, scheduler
 from app.utils.auth import verify_api_key
 from app.utils.logging import log
 
-app = FastAPI(
-    title="Cert-API",
-    version="2.0.0",
-    dependencies=[Depends(verify_api_key)],
-)
 
-app.state.limiter = certifications.limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
-)
-
-app.include_router(health.router)
-app.include_router(certifications.router)
-app.include_router(certificates.router)
-app.include_router(schedules.router)
-app.include_router(stock.router)
-app.include_router(reports.router)
-
-
-@app.on_event("startup")
-def startup() -> None:
+def run_startup() -> None:
     """Initialize DB tables, sync sheets, and start APScheduler on app startup."""
     # Fail-fast: nao servir requests com escrita no Linx ligada e config parcial.
     validate_linx_config()
@@ -73,8 +52,7 @@ def startup() -> None:
         log.warning(f"Failed to start scheduler: {e}")
 
 
-@app.on_event("shutdown")
-def shutdown() -> None:
+def run_shutdown() -> None:
     """Shutdown APScheduler and close DB pool on app shutdown."""
     try:
         scheduler.shutdown(wait=False)
@@ -82,3 +60,38 @@ def shutdown() -> None:
         pass
     from app.db.postgres import close_pool
     close_pool()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """FastAPI lifespan hook replacing deprecated startup/shutdown events."""
+    run_startup()
+    try:
+        yield
+    finally:
+        run_shutdown()
+
+
+app = FastAPI(
+    title="Cert-API",
+    version="2.0.0",
+    dependencies=[Depends(verify_api_key)],
+    lifespan=lifespan,
+)
+
+app.state.limiter = certifications.limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
+)
+
+app.include_router(health.router)
+app.include_router(certifications.router)
+app.include_router(certificates.router)
+app.include_router(schedules.router)
+app.include_router(stock.router)
+app.include_router(reports.router)

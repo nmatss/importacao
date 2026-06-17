@@ -174,4 +174,5 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. Imports CSS foram reordenados para deixar regras
+  `@import` antes das demais diretivas.

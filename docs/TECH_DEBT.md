@@ -32,14 +32,14 @@ Ultima atualizacao: 2026-06-17
 
 - Resolver `.env.sops.yaml` em producao para reduzir dependencia de `.env` manual.
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
-- Documentar restore testado e tempo de recuperacao esperado.
+- Automatizar `scripts/restore-test.sh` com crontab/alerta e medir RTO em execucao
+  recorrente. Restore manual validado em 2026-06-17.
 - Resolver residuais de `npm audit` moderados sem downgrade inseguro: `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do Sentry, `js-yaml`, `protobufjs` e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e quebrou E2E local em Node 20).
 
 ## Frontend
 
 - Melhorar focus trap/Escape nos modais.
 - Revisar `contentEditable` de email para salvar conteudo atual antes de save/send mesmo sem blur.
-- Corrigir warning CSS de `@import`.
 - Melhorar ordenacao acessivel nas tabelas de Certificacoes/Produtos com botoes/`aria-sort`.
 - Adicionar estado acessivel (`aria-pressed`, `role="switch"` ou equivalente) aos toggles/filtros visuais restantes.
 - Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como anotacao local.

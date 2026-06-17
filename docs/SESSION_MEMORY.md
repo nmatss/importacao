@@ -63,6 +63,9 @@ Correcoes aplicadas:
 - Healthchecks de Docker passam a usar readiness real de API e cert-api.
 - Deploy recria `cert-api` junto com API/Web e valida readiness do servico.
 - API libera `/metrics` para rede privada Docker apenas com flag explicita.
+- Restore testado em producao em 2026-06-17 usando
+  `importacao_2026-06-17_203311.pgdump`: 30 tabelas e 273 processos restaurados
+  em banco temporario, com cleanup concluido.
 
 Testes executados:
 
