@@ -22,6 +22,32 @@ Status:
 
 - Aberto. Vertex vs IA local permanece decisao de produto/privacidade/custo.
 
+## ALTO - Destinatarios Operacionais De Email Ausentes Em Producao
+
+Descricao:
+
+- Producao sobe com warnings para `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL`
+  ausentes.
+- `communicationService.send` bloqueia envio quando `recipientEmail` esta vazio.
+
+Evidencias:
+
+- Logs pos-deploy de 2026-06-17 em `importacao-api`.
+- `apps/api/src/server.ts`
+- `apps/api/src/modules/communications/service.ts`
+- `docs/STATUS-2026-06-16.md`
+
+Impacto:
+
+- Emails de correcao para KIOM, envio real para Fenícia e fluxo ISA podem gerar
+  rascunhos sem destinatario e falhar no envio ate que os enderecos reais sejam
+  configurados em `.env.sops.yaml`.
+
+Status:
+
+- Aberto. Requer confirmacao dos enderecos operacionais reais antes de atualizar
+  secrets de producao.
+
 ## MEDIO - Validacao Usa `ohbl` Como BL Principal
 
 Descricao:

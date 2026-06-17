@@ -6,6 +6,8 @@ Ultima atualizacao: 2026-06-17
 
 - Adicionar PDFs ou extracoes reais anonimizadas de validacao INV/PL/OHBL/Draft
   BL. Existe fixture representativa sem mock de `allChecks` desde 2026-06-17.
+- Configurar `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL` reais no SOPS de
+  producao.
 - Formalizar decisao sobre provider de IA para extracao documental.
 - Adicionar alerta externo para falha do restore test recorrente e medir RTO.
 

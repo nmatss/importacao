@@ -30,6 +30,10 @@ Pendencia mantida:
 
 - Trocar/complementar a fixture representativa por PDFs ou extracoes reais
   anonimizadas quando o negocio liberar amostras.
+- Pos-deploy de `e72e8930ce91` confirmou API/cert-api healthy, mas logs de
+  startup ainda avisam `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL` ausentes em
+  producao. Pendencia movida para `docs/KNOWN_ISSUES.md`/`docs/ROADMAP.md`
+  porque depende dos enderecos reais do negocio.
 
 ## 2026-06-17 - Hardening Cert-API, Fenicia, AuthZ E Dependencias
 
