@@ -181,11 +181,11 @@ fi
 success "Migrations applied."
 
 # ---------------------------------------------------------------------------
-# Deploy: build + rolling restart (api + web only, no --force-recreate)
+# Deploy: build + restart application services
 # ---------------------------------------------------------------------------
-info "[5/6] Building and deploying api + web..."
+info "[5/6] Building and deploying api + web + cert-api..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-  docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web"
+  docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"
 success "Containers started."
 
 # ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ if [[ "${HEALTHY}" -ne 1 ]]; then
     ssh "${DEPLOY_USER}@${SERVER}" "rsync -a --delete --exclude '.env' ${ROLLBACK_DIR}/ ${DEPLOY_DIR}/" || \
       error "Snapshot restore command failed — release may be inconsistent."
     ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-      docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web" || true
+      docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api" || true
 
     # Re-check health so we report the TRUTH, not a hopeful message.
     RB_OK=0
@@ -244,6 +244,12 @@ if [[ "${HEALTHY}" -ne 1 ]]; then
 fi
 
 success "Health check passed."
+ssh "${DEPLOY_USER}@${SERVER}" "docker exec importacao-cert-api python -c \"import json, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:8000/api/ready', timeout=5)); raise SystemExit(0 if data.get('ready') is True else 1)\"" > /dev/null || {
+  error "cert-api readiness check failed after deploy."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: cert-api readiness failed"
+  exit 1
+}
+success "cert-api readiness passed."
 ssh "${DEPLOY_USER}@${SERVER}" "printf '%s\n' '${LOCAL_SHA}' > ${DEPLOY_DIR}/REVISION" 2>/dev/null || \
   warn "Could not write ${DEPLOY_DIR}/REVISION"
 

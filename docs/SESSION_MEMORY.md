@@ -26,8 +26,10 @@ Correcoes aplicadas:
   ativos.
 - Editor de e-mail de correcao salva/envia o corpo atual mesmo sem blur.
 - Deploy aborta em falha de migration antes de subir api/web novos.
-- Backup inclui volume `cert-certs`.
+- Backup inclui volume `cert-certs` e arquiva volumes persistentes via Docker
+  mount, sem depender de permissao direta em `/var/lib/docker/volumes`.
 - Healthchecks de Docker passam a usar readiness real de API e cert-api.
+- Deploy recria `cert-api` junto com API/Web e valida readiness do servico.
 - API libera `/metrics` para rede privada Docker apenas com flag explicita.
 
 Testes executados:

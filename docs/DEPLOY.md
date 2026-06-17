@@ -31,8 +31,8 @@ O script:
 7. Sincroniza codigo por rsync.
 8. Preserva `.env` remoto.
 9. Aplica migrations pendentes e aborta se falharem.
-10. Rebuilda `api` e `web`.
-11. Executa health check.
+10. Rebuilda `api`, `web` e `cert-api`.
+11. Executa health check da API e readiness do `cert-api`.
 12. Grava `REVISION` com o SHA implantado.
 13. Faz rollback de codigo se health falhar.
 
@@ -47,6 +47,12 @@ Backups sao gerados em:
 - `/home/nicolas/backups/importacao/`
 
 O backup e validado com `pg_restore --list`.
+
+Volumes persistentes sao arquivados via Docker volume mount:
+
+- `importacao_uploads`
+- `importacao_cert-reports`
+- `importacao_cert-certs`
 
 Pendencia:
 

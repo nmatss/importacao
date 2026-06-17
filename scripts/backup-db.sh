@@ -14,9 +14,12 @@
 #   BACKUP_REMOTE_HOST    Remote host for rsync (optional)
 #   BACKUP_REMOTE_PATH    Remote path for rsync (optional)
 #   BACKUP_S3_BUCKET      S3/MinIO bucket (optional, e.g. s3://my-bucket/importacao)
-#   UPLOADS_DIR           Uploads volume path (default: /var/lib/docker/volumes/importacao_uploads/_data)
-#   CERT_REPORTS_DIR      Cert-reports volume path (default: /var/lib/docker/volumes/importacao_cert-reports/_data)
-#   CERT_CERTS_DIR        Cert PDFs volume path (default: /var/lib/docker/volumes/importacao_cert-certs/_data)
+#   UPLOADS_VOLUME        Docker volume for uploads (default: importacao_uploads)
+#   CERT_REPORTS_VOLUME   Docker volume for cert reports (default: importacao_cert-reports)
+#   CERT_CERTS_VOLUME     Docker volume for cert PDFs (default: importacao_cert-certs)
+#   UPLOADS_DIR           Fallback host path for uploads volume
+#   CERT_REPORTS_DIR      Fallback host path for cert reports volume
+#   CERT_CERTS_DIR        Fallback host path for cert PDFs volume
 #
 # Remote mode (called by deploy.sh):
 #   backup-db.sh --remote <server> --user <user>
@@ -39,6 +42,7 @@ if [[ "${1:-}" == "--remote" ]]; then
   REMOTE_ENV=""
   for var in BACKUP_LOCAL_DIR RETENTION_DAYS CONTAINER_NAME POSTGRES_DB POSTGRES_USER \
              BACKUP_REMOTE_HOST BACKUP_REMOTE_PATH BACKUP_S3_BUCKET \
+             UPLOADS_VOLUME CERT_REPORTS_VOLUME CERT_CERTS_VOLUME \
              UPLOADS_DIR CERT_REPORTS_DIR CERT_CERTS_DIR; do
     if [[ -n "${!var:-}" ]]; then
       REMOTE_ENV+=" ${var}=$(printf '%q' "${!var}")"
@@ -69,6 +73,9 @@ BACKUP_FILE="${BACKUP_BASE}.pgdump"
 UPLOADS_DIR="${UPLOADS_DIR:-/var/lib/docker/volumes/importacao_uploads/_data}"
 CERT_REPORTS_DIR="${CERT_REPORTS_DIR:-/var/lib/docker/volumes/importacao_cert-reports/_data}"
 CERT_CERTS_DIR="${CERT_CERTS_DIR:-/var/lib/docker/volumes/importacao_cert-certs/_data}"
+UPLOADS_VOLUME="${UPLOADS_VOLUME:-importacao_uploads}"
+CERT_REPORTS_VOLUME="${CERT_REPORTS_VOLUME:-importacao_cert-reports}"
+CERT_CERTS_VOLUME="${CERT_CERTS_VOLUME:-importacao_cert-certs}"
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -113,22 +120,44 @@ log "Backup integrity OK."
 # ---------------------------------------------------------------------------
 # Volume backups
 # ---------------------------------------------------------------------------
+archive_docker_volume() {
+  local vol_name="$1"
+  local docker_volume="$2"
+  local fallback_dir="$3"
+  local archive_name="${BACKUP_BASE}_${vol_name}.tar.gz"
+  local archive_path="${BACKUP_LOCAL_DIR}/${archive_name}"
+
+  if docker volume inspect "${docker_volume}" > /dev/null 2>&1; then
+    log "Archiving Docker volume ${docker_volume} -> ${archive_path}..."
+    docker run --rm \
+      -v "${docker_volume}:/volume:ro" \
+      -v "${BACKUP_LOCAL_DIR}:/backup" \
+      postgres:16-alpine \
+      tar -czf "/backup/${archive_name}" -C /volume . \
+      || {
+        log "WARNING: Volume archive failed for ${docker_volume}"
+        return
+      }
+    log "Volume archive: $(du -h "${archive_path}" | cut -f1)"
+    return
+  fi
+
+  if [[ -d "${fallback_dir}" ]]; then
+    log "Archiving host volume path ${fallback_dir} -> ${archive_path}..."
+    tar -czf "${archive_path}" -C "$(dirname "${fallback_dir}")" "$(basename "${fallback_dir}")" \
+      || log "WARNING: Volume archive failed for ${fallback_dir}"
+    log "Volume archive: $(du -h "${archive_path}" | cut -f1)"
+  else
+    log "WARNING: Docker volume/path not found, skipping: ${docker_volume} / ${fallback_dir}"
+  fi
+}
+
 for vol_name in uploads cert-reports cert-certs; do
   case "${vol_name}" in
-    uploads) VOL_DIR="${UPLOADS_DIR}" ;;
-    cert-reports) VOL_DIR="${CERT_REPORTS_DIR}" ;;
-    cert-certs) VOL_DIR="${CERT_CERTS_DIR}" ;;
+    uploads) archive_docker_volume "${vol_name}" "${UPLOADS_VOLUME}" "${UPLOADS_DIR}" ;;
+    cert-reports) archive_docker_volume "${vol_name}" "${CERT_REPORTS_VOLUME}" "${CERT_REPORTS_DIR}" ;;
+    cert-certs) archive_docker_volume "${vol_name}" "${CERT_CERTS_VOLUME}" "${CERT_CERTS_DIR}" ;;
   esac
-
-  if [[ -d "${VOL_DIR}" ]]; then
-    VOL_ARCHIVE="${BACKUP_LOCAL_DIR}/${BACKUP_BASE}_${vol_name}.tar.gz"
-    log "Archiving volume ${vol_name} -> ${VOL_ARCHIVE}..."
-    tar -czf "${VOL_ARCHIVE}" -C "$(dirname "${VOL_DIR}")" "$(basename "${VOL_DIR}")" \
-      || log "WARNING: Volume archive failed for ${vol_name}"
-    log "Volume archive: $(du -h "${VOL_ARCHIVE}" | cut -f1)"
-  else
-    log "WARNING: Volume dir not found, skipping: ${VOL_DIR}"
-  fi
 done
 
 # ---------------------------------------------------------------------------
