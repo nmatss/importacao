@@ -44,6 +44,7 @@ Rotas revisadas:
 - Query da ingestao de e-mail agora e validada no local correto (`query`) e com schema coerente com o controller.
 - Anexos recebidos por e-mail passam a respeitar limite maximo configuravel por `EMAIL_ATTACHMENT_MAX_BYTES` ou 50 MB.
 - Testes negativos cobrem anexo legado fora do processo e teste positivo cobre resolucao por documento do processo.
+- Acao "Enviar para Fenicia" do espelho agora cria comunicacao, envia SMTP real com anexos auditaveis e so marca o espelho/processo apos sucesso.
 
 ## Evidencias Principais
 
@@ -65,7 +66,6 @@ Rotas revisadas:
 
 - Definir semantica unica de aceite entre checklist de validacao, comparativo documental e timeline.
 - Ao deletar ou reprocessar documento, limpar/recalcular `aiExtractedData` por tipo e invalidar comparativo/espelho derivado.
-- Corrigir acao "Enviar para Fenicia" do espelho: hoje o fluxo de espelho marca como enviado; precisa decidir se deve enviar e-mail real, criar rascunho ou renomear a acao.
 
 ### P2
 
