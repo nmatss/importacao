@@ -78,9 +78,9 @@ Impacto:
 
 Status:
 
-- Resolvido em 2026-06-17. Producao recebeu SOPS + age, `.env.sops.yaml`
-  criptografado e `scripts/generate-env-from-vault.sh` passa a gerar `.env` a
-  partir do arquivo criptografado durante o deploy.
+- Resolvido em 2026-06-17. `incoterm-check` extrai o codigo base Incoterms
+  2020 e aceita variantes comuns de `FOB`; `currency-check` normaliza variantes
+  comuns de USD como `US$`, `U.S.D.` e `USD DOLLARS`.
 
 ## MEDIO - Delete/Reprocessamento Pode Deixar `aiExtractedData` Obsoleto
 
@@ -118,7 +118,10 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. `dates-match` passou a comparar apenas campos
+  logisticos de embarque/ETD e deixou de usar `invoiceDate` como fallback.
+  Quando a invoice so contem data de emissao, o check registra aviso ou compara
+  os demais documentos sem tratar a emissao como embarque.
 
 ## MEDIO - Odoo Settings DB Vs Env
 

@@ -4,15 +4,14 @@ Ultima atualizacao: 2026-06-17
 
 ## P0 - Operacao E Confiabilidade
 
-- Criar fixtures reais de validacao INV/PL/OHBL/Draft BL.
+- Adicionar PDFs ou extracoes reais anonimizadas de validacao INV/PL/OHBL/Draft
+  BL. Existe fixture representativa sem mock de `allChecks` desde 2026-06-17.
 - Formalizar decisao sobre provider de IA para extracao documental.
 - Adicionar alerta externo para falha do restore test recorrente e medir RTO.
 
 ## P1 - Qualidade De Dados E Validacao
 
 - Usar Draft BL como fonte parcial/fallback quando OHBL nao existe, se aprovado pelo negocio.
-- Melhorar checks de incoterm/moeda para variantes comuns.
-- Separar semanticamente invoice date, ETD e shipment date nos checks.
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).
 - Limpar/recalcular `aiExtractedData` por tipo ao deletar ou reprocessar documentos.
 - Criar endpoint/filtro de logs de e-mail por processo.

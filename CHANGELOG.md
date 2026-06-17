@@ -56,6 +56,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Deploy passa a abortar se migrations falharem e healthchecks usam readiness
   real de API/cert-api.
 - Backup inclui o volume `cert-certs` com PDFs/evidencias de certificacao.
+- Incoterm e moeda da invoice aceitam variantes comerciais comuns sem gerar falso positivo.
+- `dates-match` deixou de tratar `invoiceDate` como data de ETD/embarque.
+
+### Tests
+
+- Fixture representativa INV/PL/OHBL/FUP roda `allChecks` real, sem mock, e
+  falha se um conjunto documental coerente produzir status `failed`.
 
 ### Security
 
@@ -89,6 +96,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Deploy de producao do SHA `997aac4` em `192.168.168.124` com API e Web healthy.
 - Revisao local posterior: `npm run -w apps/web typecheck`, `npm test -w apps/web`, `npm run -w apps/api typecheck`, `npm test -w apps/api`.
 - Revisao completa posterior: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
+- Validacao documental posterior: `npm run typecheck`, `npm run lint`,
+  `npm test`, `npm run build`, `npm audit --audit-level=high` e
+  `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`.
 
 ## [2026-06-11] — Parte A: motor financeiro + historização + EAN no espelho
 

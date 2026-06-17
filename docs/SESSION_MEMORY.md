@@ -1,5 +1,36 @@
 # Session Memory
 
+## 2026-06-17 - Validacao Documental, Datas Logisticas E Fixtures
+
+Correcoes aplicadas:
+
+- `incoterm-check` passou a extrair o codigo base Incoterms 2020 e aceitar
+  variantes comerciais comuns de FOB, como `FOB NINGBO` e `FOB - CHINA`.
+- `currency-check` passou a normalizar variantes comuns de USD, incluindo
+  `US$`, `U.S.D.`, `USD DOLLARS` e `United States Dollars`.
+- `dates-match` passou a comparar apenas campos logisticos de embarque/ETD e
+  deixou de usar `invoiceDate` como fallback para shipment.
+- Adicionada fixture representativa INV/PL/OHBL/FUP que roda `allChecks` real,
+  sem mock, e falha se um conjunto documental coerente produzir `failed`.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/modules/validation/checks/__tests__/dates-match.test.ts src/modules/validation/checks/__tests__/incoterm-currency.test.ts src/modules/validation/checks/__tests__/document-fixture.test.ts`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
+Pendencia mantida:
+
+- Trocar/complementar a fixture representativa por PDFs ou extracoes reais
+  anonimizadas quando o negocio liberar amostras.
+
 ## 2026-06-17 - Hardening Cert-API, Fenicia, AuthZ E Dependencias
 
 Analise continuada com subagentes para cert-api/proxy, AuthZ/Fenicia e

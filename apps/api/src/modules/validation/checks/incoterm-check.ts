@@ -15,6 +15,18 @@ interface CheckResult {
   message: string;
 }
 
+const INCOTERM_RE = /\b(EXW|FCA|FAS|FOB|CFR|CIF|CPT|CIP|DAP|DPU|DDP)\b/;
+
+function normalizeIncoterm(value: unknown): { raw: string; code: string } {
+  const raw = String(value ?? '').trim();
+  const normalized = raw
+    .toUpperCase()
+    .replace(/[\u2013\u2014]/g, '-')
+    .replace(/\s+/g, ' ');
+  const match = normalized.match(INCOTERM_RE);
+  return { raw: normalized, code: match?.[1] ?? normalized };
+}
+
 export default function incotermCheck(input: CheckInput): CheckResult {
   const checkName = 'incoterm-check';
 
@@ -28,11 +40,9 @@ export default function incotermCheck(input: CheckInput): CheckResult {
     };
   }
 
-  const incoterm = String(input.invoiceData?.incoterm ?? '')
-    .trim()
-    .toUpperCase();
+  const incoterm = normalizeIncoterm(input.invoiceData?.incoterm);
 
-  if (!incoterm) {
+  if (!incoterm.raw) {
     return {
       checkName,
       status: 'warning',
@@ -42,14 +52,14 @@ export default function incotermCheck(input: CheckInput): CheckResult {
     };
   }
 
-  if (incoterm === 'FOB') {
+  if (incoterm.code === 'FOB') {
     return {
       checkName,
       status: 'passed',
       expectedValue: 'FOB',
-      actualValue: incoterm,
+      actualValue: incoterm.raw,
       documentsCompared: 'INV',
-      message: 'Incoterm e FOB conforme esperado.',
+      message: 'Incoterm base e FOB conforme esperado.',
     };
   }
 
@@ -57,8 +67,8 @@ export default function incotermCheck(input: CheckInput): CheckResult {
     checkName,
     status: 'failed',
     expectedValue: 'FOB',
-    actualValue: incoterm,
+    actualValue: incoterm.raw,
     documentsCompared: 'INV',
-    message: `Incoterm e ${incoterm}, esperado FOB.`,
+    message: `Incoterm e ${incoterm.raw}, esperado FOB.`,
   };
 }

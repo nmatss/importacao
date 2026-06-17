@@ -1,4 +1,4 @@
-import { compareDates } from '../utils/date-compare.js';
+import { compareDates, parseDate } from '../utils/date-compare.js';
 
 interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -21,22 +21,50 @@ function normalize(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+type DateEntry = {
+  label: string;
+  value: string;
+};
+
+const INVOICE_SHIPMENT_DATE_KEYS = [
+  'shipmentDate',
+  'shippingDate',
+  'dateOfShipment',
+  'shippedOnBoardDate',
+  'onBoardDate',
+  'etd',
+];
+
+const PACKING_LIST_SHIPMENT_DATE_KEYS = [
+  'shipmentDate',
+  'shippingDate',
+  'dateOfShipment',
+  'shippedOnBoardDate',
+  'onBoardDate',
+  'etd',
+];
+
+const BL_SHIPMENT_DATE_KEYS = [
+  'shipmentDate',
+  'shippedOnBoardDate',
+  'dateOfShipment',
+  'onBoardDate',
+  'etd',
+];
+
+function firstDate(source: Record<string, any> | undefined, keys: string[]): string {
+  if (!source) return '';
+  for (const key of keys) {
+    const raw = normalize(source[key]);
+    if (raw) return normalizeDate(raw);
+  }
+  return '';
+}
+
 function normalizeDate(value: string): string {
-  if (!value) return '';
-  // Try parsing as Date to normalize different formats
-  const parsed = new Date(value);
-  if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString().slice(0, 10); // YYYY-MM-DD
-  }
-  // Try DD/MM/YYYY format common in Brazilian documents
-  const brMatch = value.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/);
-  if (brMatch) {
-    const d = new Date(
-      `${brMatch[3]}-${brMatch[2].padStart(2, '0')}-${brMatch[1].padStart(2, '0')}`,
-    );
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  }
-  return value;
+  const parsed = parseDate(value);
+  if (!parsed) return value;
+  return parsed.toISOString().slice(0, 10);
 }
 
 export default function datesMatch(input: CheckInput): CheckResult {
@@ -51,26 +79,25 @@ export default function datesMatch(input: CheckInput): CheckResult {
     };
   }
 
-  const invEtdRaw = normalize(
-    input.invoiceData?.invoiceDate ?? input.invoiceData?.etd ?? input.invoiceData?.shipmentDate,
-  );
-  const plDateRaw = normalize(
-    input.packingListData?.shipmentDate ??
-      input.packingListData?.etd ??
-      input.packingListData?.invoiceDate ??
-      input.packingListData?.date,
-  );
-  const blShippedRaw = normalize(
-    input.blData?.shipmentDate ?? input.blData?.shippedOnBoardDate ?? input.blData?.etd,
-  );
-  const invEtd = normalizeDate(invEtdRaw);
-  const plDate = normalizeDate(plDateRaw);
-  const blShippedOnBoard = normalizeDate(blShippedRaw);
-  const present = [
-    { label: 'INV', value: invEtd },
-    { label: 'PL', value: plDate },
-    { label: 'BL', value: blShippedOnBoard },
+  const invShipment = firstDate(input.invoiceData, INVOICE_SHIPMENT_DATE_KEYS);
+  const plShipment = firstDate(input.packingListData, PACKING_LIST_SHIPMENT_DATE_KEYS);
+  const blShipment = firstDate(input.blData, BL_SHIPMENT_DATE_KEYS);
+  const invoiceDateIgnored = !invShipment && normalize(input.invoiceData?.invoiceDate);
+  const present: DateEntry[] = [
+    { label: 'INV', value: invShipment },
+    { label: 'PL', value: plShipment },
+    { label: 'BL', value: blShipment },
   ].filter((entry) => entry.value);
+
+  if (present.length === 0 && invoiceDateIgnored) {
+    return {
+      checkName,
+      status: 'warning',
+      documentsCompared: 'INV vs PL vs BL',
+      message:
+        'A invoice possui apenas data de emissao; nenhuma data de ETD ou embarque foi encontrada para comparar.',
+    };
+  }
 
   if (present.length === 0) {
     return {
@@ -85,8 +112,8 @@ export default function datesMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: invEtd || undefined,
-      actualValue: plDate || blShippedOnBoard || undefined,
+      expectedValue: present[0].value,
+      actualValue: present[0].value,
       documentsCompared: 'INV vs PL vs BL',
       message: `Data encontrada apenas em ${present[0].label}, impossivel comparar.`,
     };
@@ -97,15 +124,19 @@ export default function datesMatch(input: CheckInput): CheckResult {
     { matchDays: 10, warnDays: 30 },
   );
   const actualValue = present.map((entry) => `${entry.label}=${entry.value}`).join('; ');
+  const expectedValue = present[0].value;
+  const ignoredInvoiceDateNote = invoiceDateIgnored
+    ? ' Data de emissao da invoice nao foi usada como data logistica.'
+    : '';
 
   if (status === 'match') {
     return {
       checkName,
       status: 'passed',
-      expectedValue: invEtd,
+      expectedValue,
       actualValue,
       documentsCompared: 'INV vs PL vs BL',
-      message: 'Datas de ETD / embarque estao dentro da tolerancia operacional.',
+      message: `Datas de ETD / embarque estao dentro da tolerancia operacional.${ignoredInvoiceDateNote}`,
     };
   }
 
@@ -113,17 +144,17 @@ export default function datesMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'warning',
-      expectedValue: invEtd,
+      expectedValue,
       actualValue,
       documentsCompared: 'INV vs PL vs BL',
-      message: 'Datas de ETD / embarque divergem pouco; revisar se necessario.',
+      message: `Datas de ETD / embarque divergem pouco; revisar se necessario.${ignoredInvoiceDateNote}`,
     };
   }
 
   return {
     checkName,
     status: 'failed',
-    expectedValue: invEtd,
+    expectedValue,
     actualValue,
     documentsCompared: 'INV vs PL vs BL',
     message: `Divergencia relevante de datas: ${actualValue}.`,
