@@ -135,6 +135,7 @@ const PROMPT_VERSIONS: Record<string, string> = {
   email_analysis: 'v1.0',
   ncm_validation: 'v1.0',
   correction_email: 'v1.0',
+  operational_assistant: 'v1.0',
   certificate_extraction: 'v1.0',
   li_extraction: 'v1.0',
   draft_bl_extraction: 'v1.0',
@@ -1203,6 +1204,62 @@ Rules:
     );
 
     return { subject: result.subject, body: result.body };
+  }
+
+  async generateOperationalAssistantAnswer(
+    question: string,
+    sources: Array<{
+      type: string;
+      title: string;
+      subtitle?: string;
+      excerpt: string;
+      url?: string;
+    }>,
+  ): Promise<string> {
+    const sourceBlock = sources
+      .slice(0, 12)
+      .map((source, index) =>
+        [
+          `Fonte ${index + 1}`,
+          `Tipo: ${source.type}`,
+          `Título: ${source.title}`,
+          source.subtitle ? `Contexto: ${source.subtitle}` : null,
+          `Trecho: ${source.excerpt}`,
+          source.url ? `URL interna: ${source.url}` : null,
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+      .join('\n\n');
+
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: `Você é o assistente operacional de importação do Grupo Uni.co.
+Responda em português do Brasil, de forma objetiva e acionável.
+Use somente as fontes fornecidas. Não invente dados, datas, valores, responsáveis ou status.
+Quando a evidência estiver incompleta, diga exatamente o que falta conferir.
+Priorize atendimentos, alertas, documentos, validações e status do processo.
+Inclua próximos passos quando houver ação operacional evidente.
+Não exponha chaves, tokens, caminhos internos de arquivo ou segredos.`,
+      },
+      {
+        role: 'user',
+        content: `Pergunta do usuário:
+${question}
+
+Fontes internas recuperadas:
+${sourceBlock}`,
+      },
+    ];
+
+    const response = await this.chat(
+      this.analysisModel(),
+      messages,
+      false,
+      'operational_assistant',
+    );
+    return response.trim();
   }
 }
 

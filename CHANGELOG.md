@@ -5,6 +5,60 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-06-17 - Harness operacional e validacao documental
+
+### Added
+
+- `AGENTS.md` com regras permanentes para agentes: contexto obrigatorio, workflow,
+  seguranca, qualidade, git/deploy e formato de auditoria ampla.
+- `docs/HARNESS_PROMPT.md` com prompt mestre portavel para Codex/Qwen/Llama.
+- Memorias operacionais em `docs/PROJECT_MEMORY.md` e `docs/SESSION_MEMORY.md`.
+- Backlogs vivos em `docs/KNOWN_ISSUES.md`, `docs/TECH_DEBT.md` e `docs/ROADMAP.md`.
+- Documentacao de referencia: `ARCHITECTURE`, `BUSINESS_RULES`, `DATABASE`,
+  `API`, `SECURITY`, `DEPLOY`, `OBSERVABILITY` e `PERFORMANCE`.
+- `docs/ADR/README.md` como compatibilidade para referencias a `docs/ADR/`,
+  mantendo `docs/adr/` como diretorio canonico.
+- Assistente operacional RAG em `/importacao/assistente`, com rota
+  autenticada `POST /api/assistant/query`, fontes internas e fallback
+  deterministico.
+- Exportacao CSV para Central de Alertas e Atendimentos usando os filtros
+  ativos da tela.
+- Utilitario compartilhado `apps/web/src/shared/lib/csv.ts`.
+
+### Fixed
+
+- Checklist de validacao diferencia falhas abertas de aceites manuais.
+- Geracao de email de correcao depende apenas de falhas abertas.
+- FOB reconhece FOC/desconto por campos alternativos, flag explicita, preco zero
+  e desconto negativo.
+- Normalizacao de portos cobre acento, pais/sigla, parenteses e evita prefixo inseguro.
+- Revisao UX/UI remove busca global falsa dos sidebars e inclui `Meu Dia` na navegacao.
+- Titulos e breadcrumbs do detalhe/edicao de processo foram alinhados.
+- Skip link global passou a ter alvo real em Login, Portal, Importacao e Certificacoes.
+- Lista de processos, filtros de data, abas do detalhe, lista de documentos e botoes de layout ganharam melhorias de acessibilidade.
+- Detalhe de processo evita refetch duplicado de e-mails e cambios quando os dados ja foram carregados para indicadores.
+- Card de Informacoes do Processo deixou de repetir bloco bruto de dados extraidos ja disponivel na aba Documentos.
+- Nomenclatura revisada em telas centrais de importacao: Atendimentos,
+  Central de Alertas, auditoria, validacao, LIs, cambios, e-mails, documentos,
+  follow-up e dashboards.
+
+### Security
+
+- Comunicacoes nao aceitam mais anexos com `path` livre vindo da API; envio resolve anexos apenas por documento/espelho do mesmo processo.
+- Rascunhos legados com `path` de anexo so sao enviados se o caminho bater com documento/espelho autorizado do processo.
+- Trigger, varredura historica e reprocessamento de ingestao de e-mail agora exigem usuario admin.
+- Anexos recebidos por e-mail respeitam limite maximo de 50 MB ou `EMAIL_ATTACHMENT_MAX_BYTES`.
+
+### Verified
+
+- `npm run typecheck`
+- `npm test`
+- `npm run lint`
+- `npm run build`
+- Deploy de producao do SHA `997aac4` em `192.168.168.124` com API e Web healthy.
+- Revisao local posterior: `npm run -w apps/web typecheck`, `npm test -w apps/web`, `npm run -w apps/api typecheck`, `npm test -w apps/api`.
+- Revisao completa posterior: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`.
+
 ## [2026-06-11] — Parte A: motor financeiro + historização + EAN no espelho
 
 > **Em produção desde 2026-06-11** (PR #58 merged, SHA `96a695c`, migrations 0011→0015 aplicadas). Esta seção e as duas seguintes (2026-06-01 e 2026-05-29) compõem essa entrega.

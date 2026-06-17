@@ -11,8 +11,6 @@ import {
   Weight,
   CalendarDays,
   StickyNote,
-  Sparkles,
-  Hash,
   FileText,
   Search,
   Stamp,
@@ -143,43 +141,6 @@ function InfoField({
         <p className="mt-0.5 text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
           {value || '\u2014'}
         </p>
-      </div>
-    </div>
-  );
-}
-
-function AiDataSection({ data }: { data: AiExtractedData }) {
-  const fields: Array<{
-    key: string;
-    label: string;
-    icon: React.ComponentType<{ className?: string }>;
-  }> = [
-    { key: 'blNumber', label: 'Numero BL', icon: Hash },
-    { key: 'invoiceNumber', label: 'Numero Invoice', icon: FileText },
-    { key: 'vessel', label: 'Navio', icon: Ship },
-    { key: 'shipowner', label: 'Armador', icon: Anchor },
-    { key: 'freightAgent', label: 'Agente de Carga', icon: Truck },
-    { key: 'originCountry', label: 'Pais Origem', icon: Globe },
-    { key: 'originCity', label: 'Cidade Origem', icon: Globe },
-    { key: 'consolidation', label: 'Consolidacao', icon: Package },
-    { key: 'company', label: 'Empresa', icon: Building },
-  ];
-
-  const populated = fields.filter((f) => data[f.key]);
-  if (populated.length === 0) return null;
-
-  return (
-    <div className="mt-6 rounded-xl border border-primary-100 dark:border-primary-800 bg-primary-50/30 dark:bg-primary-950/30 p-5">
-      <div className="flex items-center gap-2 mb-4">
-        <Sparkles className="h-4 w-4 text-primary-500" />
-        <p className="text-xs font-bold text-primary-700 dark:text-primary-400 uppercase tracking-wider">
-          Dados Extraidos (IA / Planilha)
-        </p>
-      </div>
-      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
-        {populated.map((f) => (
-          <InfoField key={f.key} icon={f.icon} label={f.label} value={String(data[f.key])} />
-        ))}
       </div>
     </div>
   );
@@ -464,9 +425,6 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             </p>
           </div>
         )}
-
-        {/* AI Extracted Data */}
-        {process.aiExtractedData && <AiDataSection data={process.aiExtractedData} />}
       </div>
     </div>
   );

@@ -80,12 +80,12 @@ const PIE_COLORS = [
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Rascunho',
-  documents_received: 'Docs Recebidos',
+  documents_received: 'Docs recebidos',
   validating: 'Validando',
   validated: 'Validado',
-  espelho_generated: 'Espelho Gerado',
-  sent_to_fenicia: 'Enviado Fenicia',
-  li_pending: 'LI Pendente',
+  espelho_generated: 'Espelho gerado',
+  sent_to_fenicia: 'Enviado Fenícia',
+  li_pending: 'LI pendente',
 };
 
 const PIPELINE_COLORS: Record<string, string> = {
@@ -292,10 +292,10 @@ export function ExecutiveDashboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-            Dashboard Executivo
+            Dashboard executivo
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Visao consolidada dos indicadores de importacao
+            Visão consolidada dos indicadores de importação.
           </p>
         </div>
       </div>

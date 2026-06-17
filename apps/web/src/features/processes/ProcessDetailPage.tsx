@@ -50,14 +50,14 @@ const CORE_TABS = [
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
-  { key: 'comunicacoes', label: 'Comunicacoes', icon: MessageSquare },
-  { key: 'emails', label: 'Emails', icon: Mail },
-  { key: 'historico', label: 'Historico', icon: History },
+  { key: 'comunicacoes', label: 'Atendimentos', icon: MessageSquare },
+  { key: 'emails', label: 'E-mails', icon: Mail },
+  { key: 'historico', label: 'Histórico', icon: History },
 ] as const;
 
 /** Tabs shown conditionally based on process status. */
 const CONDITIONAL_TABS = [
-  { key: 'cambios', label: 'Cambios', icon: DollarSign },
+  { key: 'cambios', label: 'Câmbios', icon: DollarSign },
   { key: 'espelho', label: 'Espelho', icon: FileSpreadsheet },
 ] as const;
 
@@ -76,6 +76,13 @@ interface ValidationCheck {
   id: number;
   status: 'passed' | 'failed' | 'warning' | 'skipped';
 }
+
+type EmailLogsResponse = { data: EmailLog[]; pagination: unknown };
+
+type CambiosTotalsResponse = {
+  exchanges: CurrencyExchange[];
+  totals: CurrencyTotals;
+};
 
 /** Small indicator rendered at top-right of a tab label. */
 function TabIndicator({
@@ -140,11 +147,15 @@ function TabContent({
   processId,
   processCode,
   aiExtractedData,
+  emailResponse,
+  cambiosData,
 }: {
   activeTab: string;
   processId: string;
   processCode: string;
   aiExtractedData?: Record<string, unknown> | null;
+  emailResponse?: EmailLogsResponse;
+  cambiosData?: CambiosTotalsResponse;
 }) {
   switch (activeTab) {
     case 'documentos':
@@ -162,13 +173,19 @@ function TabContent({
     case 'espelho':
       return <EspelhoTab processId={processId} />;
     case 'cambios':
-      return <CambiosTab processId={processId} />;
+      return <CambiosTab processId={processId} initialData={cambiosData} />;
     case 'followup':
       return <FollowUpTab processId={processId} />;
     case 'comunicacoes':
       return <ComunicacoesTab processId={processId} />;
     case 'emails':
-      return <EmailsTab processId={processId} processCode={processCode} />;
+      return (
+        <EmailsTab
+          processId={processId}
+          processCode={processCode}
+          initialResponse={emailResponse}
+        />
+      );
     case 'historico':
       return <ProcessTimelineEvents processId={processId} />;
     default:
@@ -216,20 +233,21 @@ export function ProcessDetailPage() {
     { enabled: !!id, staleTime: 60_000 },
   );
 
-  const { data: emailResponse } = useApiQuery<{ data: EmailLog[]; pagination: unknown }>(
+  const { data: emailResponse } = useApiQuery<EmailLogsResponse>(
     ['email-logs', id!],
     `/api/email-ingestion/logs?limit=50`,
     { enabled: !!id && !!process, staleTime: 60_000 },
   );
 
   // Lightweight check for cambios data (cached — CambiosTab won't re-fetch)
-  const { data: cambiosData } = useApiQuery<{
-    exchanges: CurrencyExchange[];
-    totals: CurrencyTotals;
-  }>(['cambios', id!], `/api/currency-exchange/process/${id}/totals`, {
-    enabled: !!id && !!process && process.status !== 'draft',
-    staleTime: 60_000,
-  });
+  const { data: cambiosData } = useApiQuery<CambiosTotalsResponse>(
+    ['cambios', id!],
+    `/api/currency-exchange/process/${id}/totals`,
+    {
+      enabled: !!id && !!process && process.status !== 'draft',
+      staleTime: 60_000,
+    },
+  );
 
   const emailCount = useMemo(() => {
     if (!emailResponse?.data || !process) return 0;
@@ -304,6 +322,7 @@ export function ProcessDetailPage() {
           Processo nao encontrado.
         </p>
         <button
+          type="button"
           onClick={() => navigate('/importacao/processos')}
           className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
         >
@@ -333,13 +352,19 @@ export function ProcessDetailPage() {
       {/* Tabs */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/40 dark:bg-slate-900/40 px-3 pt-3 sm:px-5 sm:pt-4">
-          <div className="flex gap-1 overflow-x-auto scrollbar-hide">
+          <div className="flex gap-1 overflow-x-auto scrollbar-hide" role="tablist">
             {visibleTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
 
               return (
                 <button
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-label={tab.label}
+                  aria-controls="process-tabpanel"
+                  id={`process-tab-${tab.key}`}
                   key={tab.key}
                   onClick={() => handleTabChange(tab.key)}
                   className={cn(
@@ -382,12 +407,19 @@ export function ProcessDetailPage() {
         </div>
 
         {/* Tab content */}
-        <div className="p-4 md:p-7">
+        <div
+          id="process-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`process-tab-${activeTab}`}
+          className="p-4 md:p-7"
+        >
           <TabContent
             activeTab={activeTab}
             processId={id}
             processCode={process.processCode}
             aiExtractedData={process.aiExtractedData}
+            emailResponse={emailResponse}
+            cambiosData={cambiosData}
           />
         </div>
       </div>

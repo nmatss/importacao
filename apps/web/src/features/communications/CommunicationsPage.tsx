@@ -14,10 +14,12 @@ import {
   User,
   AtSign,
   PenTool,
+  FileDown,
 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn, formatDate } from '@/shared/lib/utils';
+import { downloadCsv } from '@/shared/lib/csv';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -163,7 +165,7 @@ export function CommunicationsPage() {
       await api.post(`/api/communications/${draft.id}/send`, {
         signatureId: selectedSignatureId,
       });
-      toast.success('Email enviado com sucesso');
+      toast.success('E-mail enviado com sucesso');
       queryClient.invalidateQueries({ queryKey: ['communications'] });
       setComposer(emptyComposer);
     } catch (err: unknown) {
@@ -193,15 +195,48 @@ export function CommunicationsPage() {
     }
   };
 
+  const handleExportCsv = () => {
+    if (!communications?.length) {
+      toast.error('Nenhum atendimento para exportar com os filtros atuais.');
+      return;
+    }
+
+    downloadCsv('atendimentos-importacao.csv', [
+      [
+        'ID',
+        'Processo',
+        'Destinatário',
+        'E-mail',
+        'Assunto',
+        'Status',
+        'Criado em',
+        'Enviado em',
+        'Mensagem',
+      ],
+      ...communications.map((comm) => [
+        comm.id,
+        comm.processId,
+        comm.recipient,
+        comm.recipientEmail,
+        comm.subject,
+        statusConfig[comm.status]?.label ?? comm.status,
+        comm.createdAt,
+        comm.sentAt || '',
+        comm.body,
+      ]),
+    ]);
+    toast.success('Relatório de atendimentos exportado em CSV.');
+  };
+
   const applyTemplate = (template: 'fenicia' | 'isa') => {
     const templates: Record<string, { subject: string; body: string }> = {
       fenicia: {
-        subject: 'Documentos para Analise - Processo de Importacao',
-        body: `Prezados,\n\nSegue em anexo os documentos referentes ao processo de importacao para analise e providencias.\n\nFicamos no aguardo do retorno.\n\nAtenciosamente,`,
+        subject: 'Documentos para análise - Processo de importação',
+        body: `Prezados,\n\nSegue em anexo os documentos referentes ao processo de importação para análise e providências.\n\nFicamos no aguardo do retorno.\n\nAtenciosamente,`,
       },
       isa: {
-        subject: 'Solicitacao de Documentos - Importacao',
-        body: `Prezada Isa,\n\nGostaramos de solicitar os documentos pendentes referentes ao processo de importacao.\n\nPor gentileza, enviar com a maior brevidade possivel.\n\nAtenciosamente,`,
+        subject: 'Solicitação de documentos - Importação',
+        body: `Prezada Isa,\n\nGostaríamos de solicitar os documentos pendentes referentes ao processo de importação.\n\nPor gentileza, enviar com a maior brevidade possível.\n\nAtenciosamente,`,
       },
     };
     const t = templates[template];
@@ -218,11 +253,24 @@ export function CommunicationsPage() {
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Comunicacoes</h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Compose e gerencie emails para processos de importacao
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Atendimentos e E-mails
+          </h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            Crie, envie e acompanhe interações vinculadas aos processos de importação.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={!communications?.length}
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+        >
+          <FileDown className="h-4 w-4" />
+          Exportar CSV
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:gap-8 xl:grid-cols-5">
@@ -235,7 +283,7 @@ export function CommunicationsPage() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
                   <Mail className="h-4.5 w-4.5 text-white" />
                 </div>
-                Compor Email
+                Novo atendimento por e-mail
               </h3>
             </div>
 
@@ -271,14 +319,14 @@ export function CommunicationsPage() {
                     className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300"
                   >
                     <User className="h-3.5 w-3.5 text-slate-400" />
-                    Destinatario
+                    Destinatário
                   </label>
                   <input
                     id="comm-recipient"
                     type="text"
                     value={composer.recipient}
                     onChange={(e) => setComposer({ ...composer, recipient: e.target.value })}
-                    placeholder="Nome do destinatario"
+                    placeholder="Nome do destinatário"
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   />
                 </div>
@@ -288,7 +336,7 @@ export function CommunicationsPage() {
                     className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-slate-700 dark:text-slate-300"
                   >
                     <AtSign className="h-3.5 w-3.5 text-slate-400" />
-                    Email
+                    E-mail
                   </label>
                   <input
                     id="comm-recipient-email"
@@ -314,7 +362,7 @@ export function CommunicationsPage() {
                   type="text"
                   value={composer.subject}
                   onChange={(e) => setComposer({ ...composer, subject: e.target.value })}
-                  placeholder="Assunto do email"
+                  placeholder="Assunto do e-mail"
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                 />
               </div>
@@ -325,23 +373,23 @@ export function CommunicationsPage() {
                   htmlFor="comm-body"
                   className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300"
                 >
-                  Corpo do Email
+                  Mensagem
                 </label>
                 <textarea
                   id="comm-body"
                   value={composer.body}
                   onChange={(e) => setComposer({ ...composer, body: e.target.value })}
                   rows={5}
-                  placeholder="Escreva o conteudo do email..."
+                  placeholder="Escreva o conteúdo do e-mail..."
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   style={{ minHeight: '120px' }}
                 />
               </div>
 
-              {/* Templates & AI */}
+              {/* Modelos e IA */}
               <div>
                 <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-                  Templates e IA
+                  Modelos e IA
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
                   {/* AI with recipient selector */}
@@ -351,10 +399,11 @@ export function CommunicationsPage() {
                       onChange={(e) => setAiRecipientType(e.target.value as 'fenicia' | 'isa')}
                       className="bg-transparent border-none text-xs font-medium text-violet-600 pl-3 pr-1 py-2 focus:ring-0"
                     >
-                      <option value="fenicia">Fenicia</option>
+                      <option value="fenicia">Fenícia</option>
                       <option value="isa">Isa</option>
                     </select>
                     <button
+                      type="button"
                       onClick={handleGenerateAi}
                       disabled={!composer.processId || generatingAi}
                       className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100/50 disabled:opacity-50 transition-all"
@@ -364,18 +413,20 @@ export function CommunicationsPage() {
                     </button>
                   </div>
                   <button
+                    type="button"
                     onClick={() => applyTemplate('fenicia')}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                   >
                     <FileText className="h-4 w-4 text-slate-400" />
-                    Template Fenicia
+                    Modelo Fenícia
                   </button>
                   <button
+                    type="button"
                     onClick={() => applyTemplate('isa')}
                     className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                   >
                     <FileText className="h-4 w-4 text-slate-400" />
-                    Template Isa
+                    Modelo Isa
                   </button>
                 </div>
               </div>
@@ -390,6 +441,7 @@ export function CommunicationsPage() {
                     {signatures.map((sig) => (
                       <button
                         key={sig.id}
+                        type="button"
                         onClick={() => setSelectedSignatureId(sig.id)}
                         className={cn(
                           'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-all',
@@ -401,7 +453,7 @@ export function CommunicationsPage() {
                         <PenTool className="h-3 w-3" />
                         {sig.name}
                         {sig.isDefault && (
-                          <span className="text-[10px] text-primary-400">(padrao)</span>
+                          <span className="text-[10px] text-primary-400">(padrão)</span>
                         )}
                       </button>
                     ))}
@@ -428,12 +480,13 @@ export function CommunicationsPage() {
               {/* Action Buttons */}
               <div className="flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700 pt-5">
                 <button
+                  type="button"
                   onClick={handleSaveDraft}
                   disabled={!isFormValid || saveDraftMutation.isPending}
                   className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
                 >
                   <Save className="h-4 w-4" />
-                  Salvar Rascunho
+                  Salvar rascunho
                 </button>
                 <SubmitButton
                   type="button"
@@ -442,7 +495,7 @@ export function CommunicationsPage() {
                   disabled={!isFormValid || sending}
                 >
                   <Send className="h-4 w-4" />
-                  Enviar Email
+                  Enviar e-mail
                 </SubmitButton>
               </div>
             </div>
@@ -459,7 +512,7 @@ export function CommunicationsPage() {
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                     <Clock className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                   </div>
-                  Historico
+                  Histórico de atendimentos
                 </h3>
                 {communications?.length ? (
                   <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -480,7 +533,7 @@ export function CommunicationsPage() {
             <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
               {commsError ? (
                 <ErrorState
-                  message="Erro ao carregar comunicacoes."
+                  message="Erro ao carregar atendimentos."
                   onRetry={() => refetchComms()}
                 />
               ) : loadingComms ? (
@@ -488,8 +541,8 @@ export function CommunicationsPage() {
               ) : !communications?.length ? (
                 <EmptyState
                   icon={Mail}
-                  title="Nenhuma comunicacao"
-                  description="As comunicacoes enviadas e rascunhos aparecerao aqui."
+                  title="Nenhum atendimento"
+                  description="Os e-mails enviados e rascunhos aparecem aqui."
                 />
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -499,6 +552,7 @@ export function CommunicationsPage() {
                     return (
                       <div key={comm.id}>
                         <button
+                          type="button"
                           onClick={() => setExpandedId(isExpanded ? null : comm.id)}
                           className="w-full px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
                         >

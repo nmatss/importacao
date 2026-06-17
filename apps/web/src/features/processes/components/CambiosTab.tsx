@@ -6,26 +6,34 @@ import type { CurrencyExchange, CurrencyTotals } from '@/shared/types';
 
 export interface CambiosTabProps {
   processId: string;
-}
-
-export function CambiosTab({ processId }: CambiosTabProps) {
-  const { data, isLoading } = useApiQuery<{
+  initialData?: {
     exchanges: CurrencyExchange[];
     totals: CurrencyTotals;
-  }>(['cambios', processId], `/api/currency-exchange/process/${processId}/totals`);
+  };
+}
 
-  if (isLoading) return <TableSkeleton />;
+export function CambiosTab({ processId, initialData }: CambiosTabProps) {
+  const { data: fetchedData, isLoading } = useApiQuery<{
+    exchanges: CurrencyExchange[];
+    totals: CurrencyTotals;
+  }>(['cambios', processId], `/api/currency-exchange/process/${processId}/totals`, {
+    enabled: !initialData,
+    staleTime: 60_000,
+  });
+  const data = initialData ?? fetchedData;
+
+  if (!initialData && isLoading) return <TableSkeleton />;
 
   const exchanges = data?.exchanges ?? [];
   const totals = data?.totals;
 
-  const typeLabel = (t: string) => (t === 'deposit' ? 'Deposito' : 'Saldo');
+  const typeLabel = (t: string) => (t === 'deposit' ? 'Depósito' : 'Saldo');
   const typeColor = (t: string) =>
     t === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-700';
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Cambios do Processo</h3>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Câmbios do processo</h3>
 
       {/* Totals summary */}
       {totals && (Number(totals.totalBalanceUsd) > 0 || Number(totals.totalDepositUsd) > 0) && (
@@ -48,7 +56,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
           </div>
           <div className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
-              Deposito USD
+              Depósito USD
             </p>
             <p className="mt-1 text-lg font-bold text-amber-800">
               {formatCurrency(totals.totalDepositUsd)}
@@ -56,7 +64,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
           </div>
           <div className="rounded-xl border border-amber-100 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
-              Deposito BRL
+              Depósito BRL
             </p>
             <p className="mt-1 text-lg font-bold text-amber-800">
               {formatCurrency(totals.totalDepositBrl, 'BRL')}
@@ -71,7 +79,7 @@ export function CambiosTab({ processId }: CambiosTabProps) {
             <DollarSign className="h-6 w-6 text-slate-300" />
           </div>
           <p className="text-sm text-slate-400 font-medium">
-            Nenhum cambio registrado para este processo.
+            Nenhum câmbio registrado para este processo.
           </p>
         </div>
       ) : (

@@ -61,9 +61,9 @@ const STATUS_LABELS: Record<string, string> = {
   validating: 'Validando',
   validated: 'Validado',
   espelho_generated: 'Espelho Gerado',
-  sent_to_fenicia: 'Enviado Fenicia',
+  sent_to_fenicia: 'Enviado Fenícia',
   li_pending: 'LI Pendente',
-  completed: 'Concluido',
+  completed: 'Concluído',
   cancelled: 'Cancelado',
 };
 
@@ -100,7 +100,7 @@ const severityConfig: Record<string, { dot: string; bg: string; text: string; la
     dot: 'bg-danger-500',
     bg: 'bg-danger-50 border-danger-100',
     text: 'text-danger-700',
-    label: 'Critico',
+    label: 'Crítico',
   },
   warning: {
     dot: 'bg-amber-500',
@@ -278,7 +278,7 @@ export function DashboardPage() {
             Dashboard
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Visao geral dos processos de importacao
+            Visão geral dos processos de importação
           </p>
         </div>
       </div>
@@ -601,10 +601,10 @@ export function DashboardPage() {
               <Mail className="h-6 w-6 text-slate-300" />
             </div>
             <p className="text-sm text-slate-400 dark:text-slate-500">
-              Nenhum email processado recentemente
+              Nenhum e-mail processado recentemente
             </p>
             <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-1">
-              Emails recebidos aparecerao aqui
+              E-mails recebidos aparecerão aqui
             </p>
           </div>
         ) : (

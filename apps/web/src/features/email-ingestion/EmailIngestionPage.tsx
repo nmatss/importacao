@@ -373,7 +373,7 @@ export function EmailIngestionPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Inbox className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
-              Emails Processados
+              E-mails processados
             </h3>
             {pagination && (
               <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -388,8 +388,8 @@ export function EmailIngestionPage() {
         ) : !logs?.length ? (
           <EmptyState
             icon={Inbox}
-            title="Nenhum email processado"
-            description="Nenhum email foi processado ainda."
+            title="Nenhum e-mail processado"
+            description="Nenhum e-mail foi processado ainda."
           />
         ) : (
           <>

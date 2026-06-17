@@ -118,7 +118,7 @@ describe('ValidationChecklist', () => {
 
     expect(screen.getByRole('button', { name: /Falhas: 0/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aceitos: 1/i })).toBeInTheDocument();
-    expect(screen.getByText(/2 de 2 verificacoes aprovadas ou aceitas/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 de 2 verificações aprovadas ou aceitas/i)).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Gerar e-mail correcao/i }),
     ).not.toBeInTheDocument();

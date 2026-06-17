@@ -86,13 +86,13 @@ function enrichFollowUpData(raw: RawFollowUpProcess[]): FollowUpProcess[] {
 }
 
 const STAGES = [
-  { key: 'docs_received', label: 'Docs Recebidos', color: 'bg-sky-500' },
-  { key: 'pre_inspection', label: 'Pre-Inspecao', color: 'bg-primary-500' },
-  { key: 'ncm_verification', label: 'Verificacao NCM', color: 'bg-violet-500' },
-  { key: 'espelho_generated', label: 'Espelho Gerado', color: 'bg-fuchsia-500' },
-  { key: 'sent_fenicia', label: 'Enviado Fenicia', color: 'bg-amber-500' },
-  { key: 'li_submitted', label: 'LI Submetida', color: 'bg-orange-500' },
-  { key: 'li_approved', label: 'LI Aprovada', color: 'bg-emerald-500' },
+  { key: 'docs_received', label: 'Docs recebidos', color: 'bg-sky-500' },
+  { key: 'pre_inspection', label: 'Pré-inspeção', color: 'bg-primary-500' },
+  { key: 'ncm_verification', label: 'Verificação NCM', color: 'bg-violet-500' },
+  { key: 'espelho_generated', label: 'Espelho gerado', color: 'bg-fuchsia-500' },
+  { key: 'sent_fenicia', label: 'Enviado Fenícia', color: 'bg-amber-500' },
+  { key: 'li_submitted', label: 'LI submetida', color: 'bg-orange-500' },
+  { key: 'li_approved', label: 'LI aprovada', color: 'bg-emerald-500' },
 ] as const;
 
 const statusConfig = {
@@ -143,13 +143,13 @@ function formatStageDate(date: string | null): string {
 }
 
 const STAGE_DATE_LABELS: { key: keyof FollowUpProcess; label: string }[] = [
-  { key: 'documentsReceivedAt', label: 'Docs Recebidos' },
-  { key: 'preInspectionAt', label: 'Pre-Inspecao' },
-  { key: 'ncmVerifiedAt', label: 'NCM Verificado' },
-  { key: 'espelhoGeneratedAt', label: 'Espelho Gerado' },
-  { key: 'sentToFeniciaAt', label: 'Enviado Fenicia' },
-  { key: 'liSubmittedAt', label: 'LI Submetida' },
-  { key: 'liApprovedAt', label: 'LI Aprovada' },
+  { key: 'documentsReceivedAt', label: 'Docs recebidos' },
+  { key: 'preInspectionAt', label: 'Pré-inspeção' },
+  { key: 'ncmVerifiedAt', label: 'NCM verificado' },
+  { key: 'espelhoGeneratedAt', label: 'Espelho gerado' },
+  { key: 'sentToFeniciaAt', label: 'Enviado Fenícia' },
+  { key: 'liSubmittedAt', label: 'LI submetida' },
+  { key: 'liApprovedAt', label: 'LI aprovada' },
 ];
 
 export function FollowUpPage() {

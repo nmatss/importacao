@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authMiddleware } from '../../shared/middleware/auth.js';
+import { adminMiddleware, authMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { emailIngestionController } from './controller.js';
@@ -20,12 +20,19 @@ router.get('/logs', validate(emailLogsQuerySchema, 'query'), emailIngestionContr
 router.post(
   '/trigger',
   triggerPollLimiter,
-  validate(triggerCheckSchema),
+  adminMiddleware,
+  validate(triggerCheckSchema, 'query'),
   emailIngestionController.triggerCheck,
 );
-router.post('/history-scan', validate(historyScanSchema), emailIngestionController.historyScan);
+router.post(
+  '/history-scan',
+  adminMiddleware,
+  validate(historyScanSchema, 'query'),
+  emailIngestionController.historyScan,
+);
 router.post(
   '/reprocess/:logId',
+  adminMiddleware,
   validate(logIdParamSchema, 'params'),
   emailIngestionController.reprocess,
 );

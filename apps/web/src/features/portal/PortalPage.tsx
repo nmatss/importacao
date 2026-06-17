@@ -215,8 +215,10 @@ export function PortalPage() {
                 <UserAvatar name={user.name || 'U'} />
                 <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1" />
                 <button
+                  type="button"
                   onClick={logout}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
+                  aria-label="Sair do sistema"
                 >
                   <LogOut className="h-3.5 w-3.5" />
                   <span className="hidden sm:inline">Sair</span>
@@ -227,7 +229,7 @@ export function PortalPage() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main id="main" role="main" className="mx-auto max-w-6xl px-6 py-8">
         {/* Welcome */}
         <section className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">

@@ -20,8 +20,8 @@ import {
   Wallet,
   BarChart3,
   ClipboardList,
-  Search,
   ChevronRight,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
@@ -32,6 +32,7 @@ const navSections = [
     label: 'Principal',
     items: [
       { to: '/importacao/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/importacao/meu-dia', label: 'Meu Dia', icon: CalendarClock },
       { to: '/importacao/executivo', label: 'Executivo', icon: BarChart3 },
       { to: '/importacao/processos', label: 'Processos', icon: FileBox },
     ],
@@ -50,8 +51,9 @@ const navSections = [
     label: 'Acompanhamento',
     items: [
       { to: '/importacao/follow-up', label: 'Follow-Up', icon: CalendarClock },
-      { to: '/importacao/comunicacoes', label: 'Comunicações', icon: Mail },
-      { to: '/importacao/alertas', label: 'Alertas', icon: Bell },
+      { to: '/importacao/assistente', label: 'Assistente', icon: Bot },
+      { to: '/importacao/comunicacoes', label: 'Atendimentos', icon: Mail },
+      { to: '/importacao/alertas', label: 'Central de Alertas', icon: Bell },
       { to: '/importacao/email-ingestion', label: 'E-mail', icon: Inbox },
     ],
   },
@@ -68,6 +70,7 @@ const allNavItems = navSections.flatMap((s) => s.items);
 
 const pageTitles: Record<string, string> = {
   '/importacao/dashboard': 'Dashboard',
+  '/importacao/meu-dia': 'Meu Dia',
   '/importacao/executivo': 'Dashboard Executivo',
   '/importacao/processos': 'Processos',
   '/importacao/processos/novo': 'Novo Processo',
@@ -77,8 +80,9 @@ const pageTitles: Record<string, string> = {
   '/importacao/desembaraco': 'Desembaraço Aduaneiro',
   '/importacao/numerario': 'Numerário',
   '/importacao/follow-up': 'Follow-Up',
-  '/importacao/comunicacoes': 'Comunicações',
-  '/importacao/alertas': 'Alertas',
+  '/importacao/assistente': 'Assistente Operacional',
+  '/importacao/comunicacoes': 'Atendimentos',
+  '/importacao/alertas': 'Central de Alertas',
   '/importacao/email-ingestion': 'Ingestão de E-mail',
   '/importacao/auditoria': 'Auditoria',
   '/importacao/configuracoes': 'Configurações',
@@ -86,6 +90,7 @@ const pageTitles: Record<string, string> = {
 
 function getPageTitle(pathname: string): string {
   if (pageTitles[pathname]) return pageTitles[pathname];
+  if (pathname.match(/\/processos\/.+\/editar/)) return 'Editar Processo';
   if (pathname.startsWith('/importacao/processos/')) return 'Detalhes do Processo';
   return 'Dashboard';
 }
@@ -107,6 +112,8 @@ function getBreadcrumb(pathname: string): { label: string; href?: string }[] {
   }
   if (pathname.includes('/novo')) {
     crumbs.push({ label: 'Novo' });
+  } else if (pathname.match(/\/processos\/.+\/editar/)) {
+    crumbs.push({ label: 'Editar' });
   } else if (pathname.match(/\/processos\/.+/) && !pathname.includes('/novo')) {
     crumbs.push({ label: 'Detalhes' });
   }
@@ -185,6 +192,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
             </div>
           )}
           <button
+            type="button"
             onClick={() => setMobileOpen(false)}
             className="ml-auto rounded-lg p-1.5 text-sidebar-200/40 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
             aria-label="Fechar menu"
@@ -193,21 +201,8 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Search (collapsed: icon only) */}
-        {!collapsed && (
-          <div className="mx-4 mb-1 mt-1">
-            <div className="flex items-center gap-2 rounded-lg bg-white/5 border border-white/5 px-3 py-2 text-sidebar-200/40">
-              <Search className="h-3.5 w-3.5" />
-              <span className="text-xs">Buscar...</span>
-              <kbd className="ml-auto rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-medium text-sidebar-200/30">
-                ⌘K
-              </kbd>
-            </div>
-          </div>
-        )}
-
         {/* Nav links */}
-        <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           {navSections.map((section) => (
             <div key={section.label}>
               {!collapsed && (
@@ -286,6 +281,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
               </div>
             )}
             <button
+              type="button"
               onClick={() => setCollapsed(!collapsed)}
               className={cn(
                 'hidden lg:flex h-8 w-full items-center justify-center rounded-lg text-sidebar-200/30 hover:bg-white/5 hover:text-white/60 transition-all duration-150',
@@ -309,6 +305,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={() => setMobileOpen(true)}
               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 lg:hidden transition-colors"
               aria-label="Abrir menu"
@@ -357,9 +354,11 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
                 </div>
                 <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block mx-1" />
                 <button
+                  type="button"
                   onClick={logout}
                   className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400 transition-all duration-150"
                   title="Sair"
+                  aria-label="Sair do sistema"
                 >
                   <LogOut className="h-4 w-4" />
                   <span className="hidden sm:inline text-xs font-medium">Sair</span>

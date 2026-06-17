@@ -23,6 +23,7 @@ export function DateRangeFilter({
       </span>
       <input
         type="date"
+        aria-label={`${label}: data inicial`}
         value={startDate}
         onChange={(e) => onStartDateChange(e.target.value)}
         className="w-full sm:w-auto rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
@@ -30,6 +31,7 @@ export function DateRangeFilter({
       <span className="text-xs text-slate-400">até</span>
       <input
         type="date"
+        aria-label={`${label}: data final`}
         value={endDate}
         onChange={(e) => onEndDateChange(e.target.value)}
         className="w-full sm:w-auto rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"

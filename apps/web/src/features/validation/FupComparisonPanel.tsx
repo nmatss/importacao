@@ -123,14 +123,14 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
           <FileSearch className="h-7 w-7 text-primary-400" />
         </div>
         <p className="text-sm font-semibold text-slate-600 dark:text-slate-400">
-          Nenhum relatorio de validacao disponivel
+          Nenhum relatório de validação disponível
         </p>
         <p className="text-xs text-slate-400 mt-1 mb-4">
-          Rode a Validacao primeiro para ver o comparativo.
+          Rode a validação primeiro para ver o comparativo.
         </p>
         <div className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-5 py-2.5 text-sm font-medium text-white cursor-default">
           <Play className="h-4 w-4" />
-          Rode a Validacao primeiro
+          Rode a validação primeiro
         </div>
       </div>
     );
@@ -234,7 +234,7 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
       {!hasSystemChecks && !hasCrossChecks && (
         <p className="text-center text-sm text-slate-500 dark:text-slate-400 py-4">
-          Nenhuma validacao executada ainda.
+          Nenhuma validação executada ainda.
         </p>
       )}
     </div>

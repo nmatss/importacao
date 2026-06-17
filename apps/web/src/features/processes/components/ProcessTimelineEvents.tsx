@@ -129,7 +129,7 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
       <div className="flex items-center gap-2">
         <History className="h-5 w-5 text-slate-400" />
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-          Historico de Eventos
+          Histórico de eventos
         </h3>
         <span className="text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">
           {events.length}

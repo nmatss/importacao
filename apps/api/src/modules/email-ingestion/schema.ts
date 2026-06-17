@@ -14,13 +14,26 @@ export const emailLogsQuerySchema = z.object({
 });
 
 export const triggerCheckSchema = z.object({
-  includeRead: z.boolean().optional().default(false),
-  query: z.string().max(500).optional(),
+  includeRead: z.coerce.boolean().optional().default(false),
+  after: z
+    .string()
+    .regex(/^\d{4}\/\d{2}\/\d{2}$/, 'Formato inválido (YYYY/MM/DD)')
+    .optional(),
+  before: z
+    .string()
+    .regex(/^\d{4}\/\d{2}\/\d{2}$/, 'Formato inválido (YYYY/MM/DD)')
+    .optional(),
+  q: z
+    .string()
+    .max(500)
+    .regex(/^[^{}()|&;$`]*$/, 'Query Gmail inválida')
+    .optional(),
+  allSenders: z.coerce.boolean().optional().default(false),
 });
 
 export const historyScanSchema = z.object({
-  daysBack: z.coerce.number().int().min(1).max(365).default(30),
-  query: z.string().max(500).optional(),
+  months: z.coerce.number().int().min(1).max(12).default(6),
+  allSenders: z.coerce.boolean().optional().default(false),
 });
 
 export const logIdParamSchema = z.object({

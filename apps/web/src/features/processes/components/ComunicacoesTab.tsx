@@ -58,7 +58,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
       if (!res.ok) throw new Error('Falha ao enviar');
       queryClient.invalidateQueries({ queryKey: ['communications', processId] });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao enviar comunicacao';
+      const message = err instanceof Error ? err.message : 'Erro ao enviar atendimento';
       toast.error(message);
     } finally {
       setSending(null);
@@ -99,7 +99,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Comunicacoes</h3>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Atendimentos</h3>
 
       {/* Signature selector - show when there are drafts and signatures available */}
       {hasDrafts && emailSignatures && emailSignatures.length > 0 && (
@@ -119,7 +119,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
             {emailSignatures.map((sig) => (
               <option key={sig.id} value={sig.id}>
                 {sig.name}
-                {sig.isDefault ? ' (padrao)' : ''}
+                {sig.isDefault ? ' (padrão)' : ''}
               </option>
             ))}
           </select>
@@ -130,7 +130,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
             <MessageSquare className="h-6 w-6 text-slate-300" />
           </div>
-          <p className="text-sm text-slate-400 font-medium">Nenhuma comunicacao registrada.</p>
+          <p className="text-sm text-slate-400 font-medium">Nenhum atendimento registrado.</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -156,6 +156,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                 <div className="flex items-center gap-2 shrink-0">
                   {comm.status === 'draft' && (
                     <button
+                      type="button"
                       onClick={() => sendEmail(comm.id)}
                       disabled={sending === comm.id}
                       className="inline-flex items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"

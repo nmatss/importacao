@@ -57,10 +57,10 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
     case 'draft':
       return {
         icon: <FileText className="h-5 w-5" />,
-        title: 'Aguardando Documentos',
+        title: 'Aguardando documentos',
         description:
-          'Envie os documentos do processo (Invoice, Packing List, BL) para iniciar a validacao.',
-        actionLabel: 'Enviar Documentos',
+          'Envie os documentos do processo (Invoice, Packing List, BL) para iniciar a validação.',
+        actionLabel: 'Enviar documentos',
         link: `/importacao/processos/${processId}`,
         color: 'text-slate-700 dark:text-slate-300',
         bgColor: 'bg-slate-50 dark:bg-slate-900',
@@ -70,10 +70,10 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
     case 'documents_received':
       return {
         icon: <CheckCircle className="h-5 w-5" />,
-        title: 'Pronto para Validacao',
+        title: 'Pronto para validação',
         description:
-          'Os documentos foram recebidos. Execute a validacao automatica para verificar consistencia.',
-        actionLabel: 'Iniciar Validacao',
+          'Os documentos foram recebidos. Execute a validação automática para verificar consistência.',
+        actionLabel: 'Iniciar validação',
         link: `/importacao/processos/${processId}`,
         color: 'text-primary-700',
         bgColor: 'bg-primary-50',
@@ -83,9 +83,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
     case 'validating':
       return {
         icon: <Clock className="h-5 w-5" />,
-        title: 'Validacao em Andamento',
+        title: 'Validação em andamento',
         description:
-          'A validacao esta sendo processada. Aguarde o resultado ou revise manualmente.',
+          'A validação está sendo processada. Aguarde o resultado ou revise manualmente.',
         actionLabel: 'Acompanhar',
         link: `/importacao/processos/${processId}`,
         color: 'text-primary-700',
@@ -96,9 +96,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
     case 'validated':
       return {
         icon: <FileSpreadsheet className="h-5 w-5" />,
-        title: 'Gerar Espelho',
-        description: 'Processo validado com sucesso. Gere o espelho para envio a Fenicia.',
-        actionLabel: 'Gerar Espelho',
+        title: 'Gerar espelho',
+        description: 'Processo validado com sucesso. Gere o espelho para envio à Fenícia.',
+        actionLabel: 'Gerar espelho',
         link: `/importacao/processos/${processId}`,
         color: 'text-primary-700',
         bgColor: 'bg-primary-50',
@@ -108,8 +108,8 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
     case 'espelho_generated':
       return {
         icon: <Send className="h-5 w-5" />,
-        title: 'Enviar para Fenicia',
-        description: 'O espelho esta pronto. Envie para a Fenicia para registro da DI.',
+        title: 'Enviar para Fenícia',
+        description: 'O espelho está pronto. Envie para a Fenícia para registro da DI.',
         actionLabel: 'Enviar',
         link: `/importacao/processos/${processId}`,
         color: 'text-violet-700',
@@ -123,7 +123,7 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
           icon: <Package className="h-5 w-5" />,
           title: 'Acompanhar LIs',
           description:
-            'Processo enviado para Fenicia com itens que requerem Licenca de Importacao. Acompanhe o status.',
+            'Processo enviado para Fenícia com itens que requerem licença de importação. Acompanhe o status.',
           actionLabel: 'Ver LIs',
           link: '/importacao/lis',
           color: 'text-amber-700',

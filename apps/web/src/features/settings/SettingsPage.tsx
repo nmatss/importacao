@@ -1015,8 +1015,8 @@ function SignaturesTab() {
                       <button
                         onClick={() => handleSetDefault(sig)}
                         className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
-                        title="Definir como padrao"
-                        aria-label={`Definir ${sig.name} como padrao`}
+                        title="Definir como padrão"
+                        aria-label={`Definir ${sig.name} como padrão`}
                       >
                         <Star className="h-4 w-4" />
                       </button>
@@ -1093,7 +1093,7 @@ function SignaturesTab() {
               </div>
               <div>
                 <label htmlFor="sig-html" className={labelClasses}>
-                  Conteudo HTML da Assinatura
+                  Conteúdo HTML da assinatura
                 </label>
                 <textarea
                   id="sig-html"
@@ -1106,7 +1106,7 @@ function SignaturesTab() {
               </div>
               {form.signatureHtml && (
                 <div>
-                  <label className={labelClasses}>Pre-visualizacao</label>
+                  <label className={labelClasses}>Pré-visualização</label>
                   <div
                     className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 p-4 text-sm text-slate-700 dark:text-slate-300 prose prose-sm max-w-none"
                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.signatureHtml) }}
@@ -1122,7 +1122,7 @@ function SignaturesTab() {
                     className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
                   />
                   <span className="text-sm text-slate-600 dark:text-slate-400">
-                    Definir como assinatura padrao
+                    Definir como assinatura padrão
                   </span>
                 </label>
               </div>

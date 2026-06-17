@@ -175,10 +175,10 @@ export function CurrencyExchangePage() {
           </div>
           <div>
             <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-              Cambios
+              Câmbios
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400">
-              Gerenciamento de cambios por processo
+              Gerenciamento de câmbios por processo.
             </p>
           </div>
         </div>

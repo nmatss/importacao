@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type KeyboardEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Plus, Search, ChevronLeft, ChevronRight, Package, Filter } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -66,6 +66,19 @@ export function ProcessListPage() {
 
   const hasActiveFilters = debouncedSearch || status || brand || startDate || endDate;
 
+  const openProcess = (processId: number) => {
+    navigate(`/importacao/processos/${processId}`);
+  };
+
+  const handleProcessRowKeyDown = (
+    event: KeyboardEvent<HTMLTableRowElement>,
+    processId: number,
+  ) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    openProcess(processId);
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -75,7 +88,7 @@ export function ProcessListPage() {
             Processos
           </h2>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-            Gerencie seus processos de importacao
+            Gerencie seus processos de importação.
           </p>
         </div>
         <Link
@@ -83,7 +96,7 @@ export function ProcessListPage() {
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary-700 active:scale-[0.98] transition-colors"
         >
           <Plus className="h-4 w-4" />
-          Novo Processo
+          Novo processo
         </Link>
       </div>
 
@@ -152,6 +165,7 @@ export function ProcessListPage() {
           </div>
           {hasActiveFilters && (
             <button
+              type="button"
               onClick={() => {
                 setSearch('');
                 setStatus('');
@@ -180,10 +194,10 @@ export function ProcessListPage() {
             description={
               hasActiveFilters
                 ? 'Tente ajustar os filtros para encontrar o que procura.'
-                : 'Comece criando seu primeiro processo de importacao.'
+                : 'Comece criando seu primeiro processo de importação.'
             }
             action={{
-              label: 'Novo Processo',
+              label: 'Novo processo',
               onClick: () => navigate('/importacao/processos/novo'),
             }}
           />
@@ -218,8 +232,12 @@ export function ProcessListPage() {
                 {processes.map((proc) => (
                   <tr
                     key={proc.id}
-                    onClick={() => navigate(`/importacao/processos/${proc.id}`)}
-                    className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors group"
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Abrir processo ${proc.processCode}`}
+                    onClick={() => openProcess(proc.id)}
+                    onKeyDown={(event) => handleProcessRowKeyDown(event, proc.id)}
+                    className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50/50 dark:hover:bg-slate-700/50 focus:bg-slate-50/70 dark:focus:bg-slate-700/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 cursor-pointer transition-colors group"
                   >
                     <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm">
                       <div className="flex items-center gap-2.5">
@@ -271,16 +289,20 @@ export function ProcessListPage() {
               </p>
               <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => p - 1)}
+                  aria-label="Página anterior"
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
                 </button>
                 <button
+                  type="button"
                   disabled={page >= totalPages}
                   onClick={() => setPage((p) => p + 1)}
+                  aria-label="Próxima página"
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   Proxima

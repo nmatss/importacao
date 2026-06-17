@@ -10,12 +10,12 @@ function relativeTime(dateStr: string): string {
   const diffMs = now - then;
   const diffMin = Math.floor(diffMs / 60000);
   if (diffMin < 1) return 'agora';
-  if (diffMin < 60) return `${diffMin} min atras`;
+  if (diffMin < 60) return `${diffMin} min atrás`;
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours}h atras`;
+  if (diffHours < 24) return `${diffHours}h atrás`;
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays === 1) return '1 dia atras';
-  return `${diffDays} dias atras`;
+  if (diffDays === 1) return '1 dia atrás';
+  return `${diffDays} dias atrás`;
 }
 
 function extractSenderName(fromAddress: string): string {
@@ -31,10 +31,11 @@ function extractSenderName(fromAddress: string): string {
 export interface EmailsTabProps {
   processId: string;
   processCode: string;
+  initialResponse?: { data: EmailLog[]; pagination: unknown };
 }
 
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluido' },
+  completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluído' },
   processing: { color: 'bg-primary-100 text-primary-700', label: 'Processando' },
   pending: {
     color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
@@ -44,13 +45,17 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
   ignored: { color: 'bg-slate-100 dark:bg-slate-700 text-slate-400', label: 'Ignorado' },
 };
 
-export function EmailsTab({ processId, processCode }: EmailsTabProps) {
-  const { data: response, isLoading } = useApiQuery<{ data: EmailLog[]; pagination: unknown }>(
-    ['email-logs', processId],
-    `/api/email-ingestion/logs?limit=50`,
-  );
+export function EmailsTab({ processId, processCode, initialResponse }: EmailsTabProps) {
+  const { data: fetchedResponse, isLoading } = useApiQuery<{
+    data: EmailLog[];
+    pagination: unknown;
+  }>(['email-logs', processId], `/api/email-ingestion/logs?limit=50`, {
+    enabled: !initialResponse,
+    staleTime: 60_000,
+  });
+  const response = initialResponse ?? fetchedResponse;
 
-  if (isLoading) return <TableSkeleton />;
+  if (!initialResponse && isLoading) return <TableSkeleton />;
 
   // Filter logs related to this process
   const allLogs = response?.data ?? [];
@@ -60,9 +65,9 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Emails Recebidos</h3>
+      <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">E-mails recebidos</h3>
       <p className="text-sm text-slate-500 dark:text-slate-400">
-        Emails processados automaticamente que foram vinculados a este processo.
+        E-mails processados automaticamente que foram vinculados a este processo.
       </p>
       {logs.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -71,10 +76,10 @@ export function EmailsTab({ processId, processCode }: EmailsTabProps) {
           </div>
           <div className="text-center">
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-              Nenhum email vinculado a este processo
+              Nenhum e-mail vinculado a este processo
             </p>
             <p className="text-xs text-slate-400 mt-1">
-              Emails recebidos com referencia ao processo aparecerao aqui automaticamente.
+              E-mails recebidos com referência ao processo aparecem aqui automaticamente.
             </p>
           </div>
         </div>

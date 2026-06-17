@@ -1,0 +1,197 @@
+# Known Issues
+
+Ultima atualizacao: 2026-06-17
+
+## ALTO - Extração De Cabeçalho, Portos E Datas Pode Depender Do Provider
+
+Descricao:
+
+- Analise anterior do DEMO apontou que documentos existiam, mas campos de cabeçalho/portos/datas vinham nulos ou fracos na extracao.
+
+Evidencias:
+
+- `docs/STATUS-2026-06-16.md`
+- `apps/api/src/modules/ai/service.ts`
+- `apps/api/src/modules/ai/skills/registry.ts`
+
+Impacto:
+
+- Comparativo e validacao funcionam quando os campos existem, mas qualidade de extracao afeta sintomas operacionais.
+
+Status:
+
+- Aberto. Vertex vs IA local permanece decisao de produto/privacidade/custo.
+
+## MEDIO - Validacao Usa `ohbl` Como BL Principal
+
+Descricao:
+
+- `runAllChecks` monta `blData` a partir de documento `ohbl`; `draft_bl` tem fluxo proprio e nem sempre substitui OHBL ausente.
+
+Evidencias:
+
+- `apps/api/src/modules/validation/service.ts`
+- `apps/api/src/modules/documents/service.ts`
+
+Impacto:
+
+- Processo com Draft BL antes do OHBL pode ter validacoes incompletas.
+
+Status:
+
+- Aberto. Precisa definir regra operacional para Draft BL como fallback ou trilha separada.
+
+## ALTO - Acao "Enviar Para Fenicia" Do Espelho Nao Envia E-mail
+
+Descricao:
+
+- O fluxo de espelho exposto como envio para Fenicia marca o espelho como enviado e avanca status, mas nao dispara e-mail real.
+
+Evidencias:
+
+- `apps/web/src/features/espelhos/EspelhoPreview.tsx`
+- `apps/api/src/modules/espelhos/controller.ts`
+- `apps/api/src/modules/espelhos/service.ts`
+
+Impacto:
+
+- Usuario pode acreditar que o envio externo aconteceu quando o sistema apenas registrou marco interno.
+
+Status:
+
+- Aberto. Decidir se a acao deve enviar e-mail real, gerar rascunho em Comunicacoes ou ser renomeada.
+
+## MEDIO - Incoterm E Moeda Sao Validacoes Restritivas
+
+Descricao:
+
+- Regras atuais tendem a aceitar formatos exatos. Variantes como `FOB NINGBO`, `FOB - CHINA`, `US$` ou `U.S.D.` precisam ser confirmadas e cobertas.
+
+Evidencias:
+
+- `apps/api/src/modules/validation/checks/incoterm-check.ts`
+- `apps/api/src/modules/validation/checks/currency-check.ts`
+
+Impacto:
+
+- Pode gerar falso positivo em documento comercial com formato comum.
+
+Status:
+
+- Aberto.
+
+## MEDIO - Delete/Reprocessamento Pode Deixar `aiExtractedData` Obsoleto
+
+Descricao:
+
+- Delete de documento remove arquivo/linha, mas dados consolidados em `import_processes.ai_extracted_data` podem permanecer ate novo calculo explicito.
+
+Evidencias:
+
+- `apps/api/src/modules/documents/service.ts`
+- `apps/api/src/shared/database/schema.ts`
+
+Impacto:
+
+- Comparativo, card do processo ou gate operacional podem considerar dados de documento que ja foi removido.
+
+Status:
+
+- Aberto.
+
+## MEDIO - Logs De E-mail Ainda Sao Filtrados No Frontend
+
+Descricao:
+
+- A UI busca logs globais de e-mail e filtra por processo no cliente. Se o processo nao estiver entre os registros recentes retornados, contador/aba podem ficar incompletos.
+
+Evidencias:
+
+- `apps/web/src/features/processes/ProcessDetailPage.tsx`
+- `apps/web/src/features/processes/components/EmailsTab.tsx`
+- `apps/api/src/modules/email-ingestion/processor.ts`
+
+Impacto:
+
+- Historico de e-mails por processo pode parecer vazio ou incompleto.
+
+Status:
+
+- Aberto. Criar filtro backend por `processId` ou `processCode`.
+
+## MEDIO - Datas Misturam Invoice Date E ETD/Shipment Em Alguns Checks
+
+Descricao:
+
+- Ha risco de comparar data de emissao da invoice contra data de embarque quando campos de embarque nao foram extraidos.
+
+Evidencias:
+
+- `apps/api/src/modules/validation/checks/dates-match.ts`
+- auditoria multi-agente de 2026-06-17 registrada na conversa operacional.
+
+Impacto:
+
+- Falsos positivos ou falsos conformes em ETD/embarque.
+
+Status:
+
+- Aberto.
+
+## MEDIO - Odoo Settings DB Vs Env
+
+Descricao:
+
+- UI/settings podem salvar chaves Odoo no banco, mas o service le variaveis de ambiente.
+- Ha risco adicional se URL `http://` for usada com client seguro.
+
+Evidencias:
+
+- `apps/api/src/modules/integrations/odoo.service.ts`
+- `apps/web/src/features/settings/SettingsPage.tsx`
+
+Impacto:
+
+- Configuracao feita pela UI pode parecer salva, mas nao afetar a integracao real.
+
+Status:
+
+- Aberto.
+
+## BAIXO - `.env.sops.yaml` Ausente Em Producao
+
+Descricao:
+
+- Deploy registra warning e usa `.env` existente no servidor.
+
+Evidencias:
+
+- `scripts/deploy.sh`
+- `docs/STATUS-2026-06-16.md`
+- deploy de 2026-06-17.
+
+Impacto:
+
+- Governanca de secrets incompleta, mas deploy segue funcionando.
+
+Status:
+
+- Aberto.
+
+## BAIXO - Warning CSS De `@import`
+
+Descricao:
+
+- Build web emite warning: `@import rules must precede all rules`.
+
+Evidencias:
+
+- `npm run build` em 2026-06-17.
+
+Impacto:
+
+- Nao bloqueia build, mas deve ser limpo.
+
+Status:
+
+- Aberto.

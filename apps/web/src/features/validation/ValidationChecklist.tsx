@@ -297,7 +297,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       dispatch({ type: 'SET_ANOMALIES', payload: null });
       dispatch({ type: 'SET_DRAFT', payload: null });
       await invalidateValidationContext();
-      toast.success('Validacao executada com sucesso.');
+      toast.success('Validação executada com sucesso.');
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -335,7 +335,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         await invalidateValidationContext();
         setResolveTarget(null);
         setResolveNote('');
-        toast.success('Divergencia aceita com justificativa.');
+        toast.success('Divergência aceita com justificativa.');
       } catch (err: unknown) {
         toast.error(getErrorMessage(err));
       } finally {
@@ -347,7 +347,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
 
   const generateCorrectionDraft = async (useAi = false) => {
     if (openFailedCount === 0) {
-      toast.success('Nao ha falhas abertas para gerar e-mail de correcao.');
+      toast.success('Não há falhas abertas para gerar e-mail de correção.');
       return;
     }
     dispatch({ type: 'SET_GENERATING_DRAFT', payload: true });
@@ -413,7 +413,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   }
 
   if (error) {
-    return <ErrorState message="Erro ao carregar validacoes." onRetry={() => refetch()} />;
+    return <ErrorState message="Erro ao carregar validações." onRetry={() => refetch()} />;
   }
 
   // Total of actionable checks (skipped are excluded — blocked, not failures).
@@ -432,12 +432,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
     filter === 'failed'
       ? 'Nenhuma falha aberta neste processo.'
       : filter === 'warning'
-        ? 'Nenhuma atencao aberta neste processo.'
+        ? 'Nenhuma atenção aberta neste processo.'
         : filter === 'accepted'
-          ? 'Nenhuma divergencia aceita manualmente neste processo.'
+          ? 'Nenhuma divergência aceita manualmente neste processo.'
           : filter === 'passed'
-            ? 'Nenhuma verificacao conforme neste processo.'
-            : 'Nenhuma validacao executada ainda. Clique em "Executar validacao" para iniciar.';
+            ? 'Nenhuma verificação conforme neste processo.'
+            : 'Nenhuma validação executada ainda. Clique em "Executar validação" para iniciar.';
 
   return (
     <div className="space-y-4">
@@ -446,7 +446,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-sm">
             <span className="font-medium text-slate-700 dark:text-slate-300">
-              {completedCount} de {totalCount} verificacoes aprovadas ou aceitas
+              {completedCount} de {totalCount} verificações aprovadas ou aceitas
             </span>
             <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
           </div>
@@ -465,7 +465,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           {[
             { key: 'all' as const, label: 'Todos', count: totalCount },
             { key: 'failed' as const, label: 'Falhas', count: openFailedCount },
-            { key: 'warning' as const, label: 'Atencoes', count: openWarningCount },
+            { key: 'warning' as const, label: 'Atenções', count: openWarningCount },
             { key: 'accepted' as const, label: 'Aceitos', count: acceptedCount },
             { key: 'passed' as const, label: 'Conformes', count: passedCount },
           ].map(({ key, label, count }) => (
@@ -505,7 +505,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:opacity-50 transition-colors"
         >
           {running ? <LoadingSpinner size="sm" /> : <Play className="h-4 w-4" />}
-          Executar validacao
+          Executar validação
         </button>
         <button
           onClick={detectAnomalies}
@@ -513,7 +513,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors"
         >
           {detectingAnomalies ? <LoadingSpinner size="sm" /> : <Brain className="h-4 w-4" />}
-          Analisar divergencias
+          Analisar divergências
         </button>
 
         {/* Generate Correction Email - only show when there are failures */}
@@ -833,7 +833,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               {/* Recipient Email */}
               <div>
                 <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  Destinatario
+                  Destinatário
                 </label>
                 <input
                   type="email"
@@ -896,7 +896,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     {emailSignatures.map((sig) => (
                       <option key={sig.id} value={sig.id}>
                         {sig.name}
-                        {sig.isDefault ? ' (padrao)' : ''}
+                        {sig.isDefault ? ' (padrão)' : ''}
                       </option>
                     ))}
                   </select>

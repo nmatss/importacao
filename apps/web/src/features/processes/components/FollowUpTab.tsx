@@ -20,13 +20,13 @@ export interface FollowUpTabProps {
 }
 
 const FOLLOW_UP_STEPS = [
-  { key: 'documentsReceivedAt', label: 'Documentos Recebidos', icon: FileText },
-  { key: 'preInspectionAt', label: 'Pre-Inspecao', icon: ClipboardCheck },
-  { key: 'ncmVerifiedAt', label: 'NCM Verificado', icon: ShieldCheck },
-  { key: 'espelhoGeneratedAt', label: 'Espelho Gerado', icon: FileSpreadsheet },
-  { key: 'sentToFeniciaAt', label: 'Enviado a Fenicia', icon: Send },
-  { key: 'liSubmittedAt', label: 'LI Submetida', icon: FileEdit },
-  { key: 'liApprovedAt', label: 'LI Aprovada', icon: CheckCircle },
+  { key: 'documentsReceivedAt', label: 'Documentos recebidos', icon: FileText },
+  { key: 'preInspectionAt', label: 'Pré-inspeção', icon: ClipboardCheck },
+  { key: 'ncmVerifiedAt', label: 'NCM verificado', icon: ShieldCheck },
+  { key: 'espelhoGeneratedAt', label: 'Espelho gerado', icon: FileSpreadsheet },
+  { key: 'sentToFeniciaAt', label: 'Enviado à Fenícia', icon: Send },
+  { key: 'liSubmittedAt', label: 'LI submetida', icon: FileEdit },
+  { key: 'liApprovedAt', label: 'LI aprovada', icon: CheckCircle },
 ] as const;
 
 export function FollowUpTab({ processId }: FollowUpTabProps) {

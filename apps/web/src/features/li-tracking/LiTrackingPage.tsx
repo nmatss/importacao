@@ -177,7 +177,7 @@ export function LiTrackingPage() {
 
   if (error) {
     return (
-      <ErrorState message="Erro ao carregar licencas de importacao." onRetry={() => refetch()} />
+      <ErrorState message="Erro ao carregar licenças de importação." onRetry={() => refetch()} />
     );
   }
 
@@ -190,10 +190,10 @@ export function LiTrackingPage() {
         </div>
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-            Licencas de Importacao (LI)
+            Licenças de Importação (LI)
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            {pagination?.total ?? liData?.length ?? 0} licenca
+            {pagination?.total ?? liData?.length ?? 0} licença
             {(pagination?.total ?? liData?.length ?? 0) !== 1 ? 's' : ''} registrada
             {(pagination?.total ?? liData?.length ?? 0) !== 1 ? 's' : ''}
           </p>
@@ -290,7 +290,7 @@ export function LiTrackingPage() {
               htmlFor="li-orgao"
               className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400"
             >
-              Orgao
+              Órgão
             </label>
             <div className="relative">
               <select
@@ -302,7 +302,7 @@ export function LiTrackingPage() {
                 }}
                 className="w-full appearance-none rounded-lg border border-slate-200 dark:border-slate-600 py-2 pl-3 pr-10 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
               >
-                <option value="">Todos os Orgaos</option>
+                <option value="">Todos os órgãos</option>
                 {ORGAO_OPTIONS.map((org) => (
                   <option key={org} value={org}>
                     {org}
@@ -316,7 +316,7 @@ export function LiTrackingPage() {
           {/* Date Range Filter */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
-              Periodo
+              Período
             </label>
             <DateRangeFilter
               startDate={startDate}
@@ -368,7 +368,7 @@ export function LiTrackingPage() {
                     Processo
                   </th>
                   <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Orgao
+                    Órgão
                   </th>
                   <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     NCM
@@ -377,7 +377,7 @@ export function LiTrackingPage() {
                     Status
                   </th>
                   <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Solicitacao
+                    Solicitação
                   </th>
                   <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Deferimento

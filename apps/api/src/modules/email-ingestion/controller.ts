@@ -30,19 +30,11 @@ export const emailIngestionController = {
 
   async triggerCheck(req: Request, res: Response) {
     try {
-      const includeRead = req.query.includeRead === 'true';
-      const dateRe = /^\d{4}\/\d{2}\/\d{2}$/;
-      const after =
-        typeof req.query.after === 'string' && dateRe.test(req.query.after)
-          ? req.query.after
-          : undefined;
-      const before =
-        typeof req.query.before === 'string' && dateRe.test(req.query.before)
-          ? req.query.before
-          : undefined;
-      const rawQuery =
-        typeof req.query.q === 'string' ? req.query.q.replace(/[{}()|&;$`]/g, '') : undefined;
-      const skipSenderFilter = req.query.allSenders === 'true';
+      const includeRead = String(req.query.includeRead ?? 'false') === 'true';
+      const after = typeof req.query.after === 'string' ? req.query.after : undefined;
+      const before = typeof req.query.before === 'string' ? req.query.before : undefined;
+      const rawQuery = typeof req.query.q === 'string' ? req.query.q : undefined;
+      const skipSenderFilter = String(req.query.allSenders ?? 'false') === 'true';
       let gmailQuery: string | undefined;
       if (rawQuery) {
         gmailQuery = rawQuery;
@@ -79,7 +71,7 @@ export const emailIngestionController = {
 
       const parts = ['has:attachment', `newer_than:${daysBack}d`];
 
-      const skipSenderFilter = req.query.allSenders === 'true';
+      const skipSenderFilter = String(req.query.allSenders ?? 'false') === 'true';
       if (!skipSenderFilter) {
         const allowedSenders =
           process.env.EMAIL_ALLOWED_SENDERS?.split(',')

@@ -302,7 +302,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           {espelho.sentToFenicia && (
             <div className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700">
               <CheckCircle className="h-4 w-4" />
-              Enviado a Fenicia
+              Enviado à Fenícia
               {espelho.sentToFeniciaAt && (
                 <span className="text-xs text-orange-600">
                   em{' '}

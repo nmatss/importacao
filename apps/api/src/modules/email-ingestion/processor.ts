@@ -18,6 +18,9 @@ import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
+const MAX_EMAIL_ATTACHMENT_BYTES =
+  Number(process.env.EMAIL_ATTACHMENT_MAX_BYTES) || 50 * 1024 * 1024;
+
 const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
   '.pdf': new Set(['application/pdf']),
   '.xlsx': new Set([
@@ -924,6 +927,25 @@ export const emailProcessor = {
         ];
 
         for (const att of email.attachments) {
+          const attachmentSize = att.content.byteLength;
+          if (attachmentSize > MAX_EMAIL_ATTACHMENT_BYTES) {
+            logger.warn(
+              {
+                filename: att.filename,
+                size: attachmentSize,
+                maxSize: MAX_EMAIL_ATTACHMENT_BYTES,
+              },
+              'Attachment skipped: exceeds maximum email attachment size',
+            );
+            processedAttachments.push({
+              filename: att.filename,
+              type: 'unsupported',
+              status: 'skipped',
+              skipReason: `Arquivo excede o limite de ${Math.round(MAX_EMAIL_ATTACHMENT_BYTES / 1024 / 1024)} MB`,
+            });
+            continue;
+          }
+
           // Skip unsupported file types (images, docs, etc.)
           const isSupported =
             supportedMimes.some((m) => att.contentType?.includes(m)) ||

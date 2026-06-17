@@ -75,10 +75,10 @@ export function ProcessCreatePage() {
         </button>
         <div>
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
-            Novo Processo
+            Novo processo
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400">
-            Preencha os dados para criar um novo processo de importacao
+            Preencha os dados para criar um novo processo de importação.
           </p>
         </div>
       </div>
@@ -91,7 +91,7 @@ export function ProcessCreatePage() {
               <Ship className="h-5 w-5" />
             </div>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Dados Gerais
+              Dados gerais
             </h3>
           </div>
 

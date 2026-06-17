@@ -103,13 +103,13 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
-      if (!res.ok) throw new Error('Falha ao buscar emails');
-      toast.success('Emails verificados — documentos atualizados');
+      if (!res.ok) throw new Error('Falha ao buscar e-mails');
+      toast.success('E-mails verificados — documentos atualizados');
       // Refresh document list + reset countdown
       queryClient.invalidateQueries({ queryKey: ['documents', processId] });
       resetCountdown();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar emails';
+      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar e-mails';
       toast.error(msg);
     } finally {
       setSyncing(false);
@@ -135,7 +135,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Documentos chegam automaticamente via email
+            Documentos chegam automaticamente via e-mail
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             {emailStatus?.enabled ? (
@@ -146,7 +146,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
                     ? 'Gmail API'
                     : emailStatus.method === 'imap'
                       ? 'IMAP'
-                      : 'Email'}{' '}
+                      : 'E-mail'}{' '}
                   ativo
                 </span>
                 {lastCheckTime && (
@@ -154,7 +154,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
                     <span className="text-slate-300 dark:text-slate-600">|</span>
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      Ultima busca: {lastCheckTime}
+                      Última busca: {lastCheckTime}
                     </span>
                   </>
                 )}
@@ -162,7 +162,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
             ) : (
               <span className="inline-flex items-center gap-1 text-amber-600">
                 <AlertCircle className="h-3 w-3" />
-                Email nao configurado — use upload manual
+                E-mail não configurado — use upload manual
               </span>
             )}
           </div>
@@ -184,10 +184,10 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
           ) : (
             <RefreshCw className="h-4 w-4" />
           )}
-          {syncing ? 'Buscando...' : 'Buscar Emails Agora'}
+          {syncing ? 'Buscando...' : 'Buscar e-mails agora'}
         </button>
         <span className="text-xs text-slate-400 font-mono tabular-nums">
-          Proxima busca em {Math.floor(countdown / 60)}m {String(countdown % 60).padStart(2, '0')}s
+          Próxima busca em {Math.floor(countdown / 60)}m {String(countdown % 60).padStart(2, '0')}s
         </span>
       </div>
 

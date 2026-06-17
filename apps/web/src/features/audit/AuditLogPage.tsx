@@ -45,13 +45,13 @@ const actionLabels: Record<string, string> = {
   delete: 'Excluir',
   upload: 'Upload',
   reprocess: 'Reprocessar',
-  email_processed: 'Email Processado',
-  validation_run: 'Validacao',
-  manual_resolution: 'Resolucao Manual',
+  email_processed: 'E-mail processado',
+  validation_run: 'Validação',
+  manual_resolution: 'Resolução manual',
   alert_created: 'Alerta Criado',
   acknowledge: 'Reconhecimento',
   generate: 'Gerar',
-  sent_to_fenicia: 'Envio Fenicia',
+  sent_to_fenicia: 'Envio Fenícia',
 };
 
 const actionColors: Record<string, { bg: string; text: string; dot: string }> = {
@@ -81,9 +81,9 @@ const entityTypeLabels: Record<string, string> = {
   document: 'Documento',
   espelho: 'Espelho',
   alert: 'Alerta',
-  user: 'Usuario',
-  email: 'Email',
-  validation: 'Validacao',
+  user: 'Usuário',
+  email: 'E-mail',
+  validation: 'Validação',
 };
 
 function formatDateTime(dateStr: string): string {
@@ -190,10 +190,10 @@ export function AuditLogPage() {
       {/* Page header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-          Auditoria
+          Auditoria do sistema
         </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Registro de atividades e acoes do sistema
+          Registro de atividades, atendimentos e automações do sistema.
         </p>
       </div>
 
@@ -218,7 +218,7 @@ export function AuditLogPage() {
               htmlFor="audit-action"
               className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
-              Acao
+              Ação
             </label>
             <select
               id="audit-action"
@@ -229,7 +229,7 @@ export function AuditLogPage() {
               }}
               className={selectClasses}
             >
-              <option value="">Todas as acoes</option>
+              <option value="">Todas as ações</option>
               {Object.entries(actionLabels).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
@@ -287,7 +287,7 @@ export function AuditLogPage() {
               htmlFor="audit-end-date"
               className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
             >
-              Ate
+              Até
             </label>
             <input
               id="audit-end-date"
@@ -312,7 +312,7 @@ export function AuditLogPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
-              Logs de Auditoria
+              Histórico de auditoria
             </h3>
             {pagination && (
               <span className="rounded-lg bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
@@ -345,11 +345,11 @@ export function AuditLogPage() {
                   <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     <div className="flex items-center gap-1.5">
                       <User className="h-3 w-3" />
-                      Usuario
+                      Usuário
                     </div>
                   </th>
                   <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Acao
+                    Ação
                   </th>
                   <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Entidade

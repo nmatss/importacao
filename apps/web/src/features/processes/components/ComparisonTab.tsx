@@ -11,16 +11,16 @@ export function ComparisonTab({ processId }: ComparisonTabProps) {
     <div className="space-y-8">
       <div>
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-          Comparativo de Documentos
+          Comparativo de documentos
         </h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Validacao, cruzamento e aceite operacional de divergencias em uma unica tela.
+          Validação, cruzamento e aceite operacional de divergências em uma única tela.
         </p>
       </div>
 
       <section className="space-y-3">
         <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Validacao e e-mail de correcao
+          Validação e e-mail de correção
         </h4>
         <ValidationChecklist processId={processId} />
       </section>

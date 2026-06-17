@@ -183,6 +183,69 @@ describe('communicationService', () => {
 
       await expect(communicationService.send(1)).rejects.toThrow('Falha ao enviar');
     });
+
+    it('should reject legacy attachment paths outside the process', async () => {
+      const mockComm = {
+        id: 1,
+        processId: 10,
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: [{ filename: 'secret.txt', path: '/etc/passwd' }],
+      };
+
+      // select communication
+      queryQueue.push(createResolvedChain([mockComm]));
+      // documents for same process
+      queryQueue.push(createResolvedChain([]));
+      // espelhos for same process
+      queryQueue.push(createResolvedChain([]));
+      // update status to failed
+      queryQueue.push(createResolvedChain(undefined));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Anexo invalido');
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('should resolve attachments only from documents in the same process', async () => {
+      const mockComm = {
+        id: 1,
+        processId: 10,
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: [{ documentId: 7, filename: 'invoice.pdf' }],
+      };
+      const mockDoc = {
+        id: 7,
+        processId: 10,
+        originalFilename: 'invoice-original.pdf',
+        storagePath: '/safe/uploads/invoice-original.pdf',
+      };
+      const mockUpdated = { ...mockComm, status: 'sent', sentAt: new Date() };
+
+      // select communication
+      queryQueue.push(createResolvedChain([mockComm]));
+      // documents for same process
+      queryQueue.push(createResolvedChain([mockDoc]));
+      // espelhos for same process
+      queryQueue.push(createResolvedChain([]));
+      // update status to sent
+      queryQueue.push(createResolvedChain([mockUpdated]));
+
+      await communicationService.send(1);
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            {
+              filename: 'invoice.pdf',
+              path: '/safe/uploads/invoice-original.pdf',
+            },
+          ],
+        }),
+      );
+    });
   });
 
   describe('updateDraft()', () => {

@@ -2,10 +2,20 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { Bell, AlertTriangle, Info, CheckCircle2, Shield, Clock, ExternalLink } from 'lucide-react';
+import {
+  Bell,
+  AlertTriangle,
+  Info,
+  CheckCircle2,
+  Shield,
+  Clock,
+  ExternalLink,
+  FileDown,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatDate, cn } from '@/shared/lib/utils';
+import { downloadCsv } from '@/shared/lib/csv';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -38,7 +48,7 @@ const severityConfig = {
     badgeText: 'text-primary-700',
     iconColor: 'text-primary-600',
     iconBg: 'bg-primary-50',
-    label: 'Info',
+    label: 'Informativo',
   },
   warning: {
     icon: AlertTriangle,
@@ -48,7 +58,7 @@ const severityConfig = {
     badgeText: 'text-amber-700',
     iconColor: 'text-amber-600',
     iconBg: 'bg-amber-50',
-    label: 'Aviso',
+    label: 'Atenção',
   },
   critical: {
     icon: AlertTriangle,
@@ -58,7 +68,7 @@ const severityConfig = {
     badgeText: 'text-danger-700',
     iconColor: 'text-danger-600',
     iconBg: 'bg-danger-50',
-    label: 'Critico',
+    label: 'Crítico',
   },
 } as const;
 
@@ -67,15 +77,15 @@ type AckFilter = 'all' | 'true' | 'false';
 
 const severityOptions: { value: SeverityFilter; label: string }[] = [
   { value: 'all', label: 'Todas' },
-  { value: 'critical', label: 'Critico' },
-  { value: 'warning', label: 'Aviso' },
-  { value: 'info', label: 'Info' },
+  { value: 'critical', label: 'Crítico' },
+  { value: 'warning', label: 'Atenção' },
+  { value: 'info', label: 'Informativo' },
 ];
 
 const ackOptions: { value: AckFilter; label: string }[] = [
   { value: 'all', label: 'Todos' },
   { value: 'false', label: 'Pendentes' },
-  { value: 'true', label: 'Reconhecidos' },
+  { value: 'true', label: 'Tratados' },
 ];
 
 export function AlertsPage() {
@@ -115,27 +125,73 @@ export function AlertsPage() {
 
   const pendingCount = alerts?.filter((a) => !a.acknowledged).length ?? 0;
 
+  const handleExportCsv = () => {
+    if (!alerts?.length) {
+      toast.error('Nenhum alerta para exportar com os filtros atuais.');
+      return;
+    }
+
+    downloadCsv('alertas-importacao.csv', [
+      [
+        'ID',
+        'Processo',
+        'Severidade',
+        'Titulo',
+        'Mensagem',
+        'Status',
+        'Criado em',
+        'Tratado em',
+        'Tratado por',
+      ],
+      ...alerts.map((alert) => [
+        alert.id,
+        alert.processCode || alert.processId || '',
+        severityConfig[alert.severity].label,
+        alert.title,
+        alert.message,
+        alert.acknowledged ? 'Tratado' : 'Pendente',
+        alert.createdAt,
+        alert.acknowledgedAt || '',
+        alert.acknowledgedBy || '',
+      ]),
+    ]);
+    toast.success('Relatório de alertas exportado em CSV.');
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Alertas</h2>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Central de Alertas
+          </h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Monitore e gerencie alertas do sistema
+            Acompanhe riscos, prazos e automações que exigem ação.
           </p>
         </div>
-        {pendingCount > 0 && (
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
-            </span>
-            <span className="text-sm font-semibold text-amber-700">
-              {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
-            </span>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={!alerts?.length}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-all hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+          >
+            <FileDown className="h-4 w-4" />
+            Exportar CSV
+          </button>
+          {pendingCount > 0 && (
+            <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+              </span>
+              <span className="text-sm font-semibold text-amber-700">
+                {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Filter Pills */}
@@ -149,6 +205,7 @@ export function AlertsPage() {
             <div className="flex items-center gap-1.5">
               {severityOptions.map((opt) => (
                 <button
+                  type="button"
                   key={opt.value}
                   onClick={() => setSeverityFilter(opt.value)}
                   className={cn(
@@ -170,7 +227,7 @@ export function AlertsPage() {
           {/* Date Range Filter */}
           <div>
             <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
-              Periodo
+              Período
             </p>
             <DateRangeFilter
               startDate={startDate}
@@ -192,6 +249,7 @@ export function AlertsPage() {
             <div className="flex items-center gap-1.5">
               {ackOptions.map((opt) => (
                 <button
+                  type="button"
                   key={opt.value}
                   onClick={() => setAckFilter(opt.value)}
                   className={cn(
@@ -217,7 +275,7 @@ export function AlertsPage() {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
-              Alertas do Sistema
+              Alertas encontrados
             </h3>
             {alerts?.length ? (
               <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
@@ -286,7 +344,7 @@ export function AlertsPage() {
                         {alert.acknowledged && (
                           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                             <CheckCircle2 className="h-3 w-3" />
-                            Reconhecido
+                            Tratado
                           </span>
                         )}
                       </div>
@@ -312,7 +370,7 @@ export function AlertsPage() {
                         </span>
                         {alert.acknowledgedAt && (
                           <span>
-                            Reconhecido em {formatDate(alert.acknowledgedAt)}
+                            Tratado em {formatDate(alert.acknowledgedAt)}
                             {alert.acknowledgedBy && ` por ${alert.acknowledgedBy}`}
                           </span>
                         )}
@@ -322,11 +380,12 @@ export function AlertsPage() {
                     {/* Action */}
                     {!alert.acknowledged && (
                       <button
+                        type="button"
                         onClick={() => handleAcknowledge(alert.id)}
                         className="shrink-0 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Reconhecer</span>
+                        <span className="hidden sm:inline">Marcar tratado</span>
                       </button>
                     )}
                   </div>

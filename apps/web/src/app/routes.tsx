@@ -35,6 +35,9 @@ const CommunicationsPage = lazy(() =>
     default: m.CommunicationsPage,
   })),
 );
+const AssistantPage = lazy(() =>
+  import('@/features/assistant/AssistantPage').then((m) => ({ default: m.AssistantPage })),
+);
 const SettingsPage = lazy(() =>
   import('@/features/settings/SettingsPage').then((m) => ({ default: m.SettingsPage })),
 );
@@ -144,6 +147,7 @@ export function AppRoutes() {
                   <Route path="/desembaraco" element={<DesembaracoPage />} />
                   <Route path="/numerario" element={<NumerarioPage />} />
                   <Route path="/follow-up" element={<FollowUpPage />} />
+                  <Route path="/assistente" element={<AssistantPage />} />
                   <Route path="/comunicacoes" element={<CommunicationsPage />} />
                   <Route path="/alertas" element={<AlertsPage />} />
                   <Route path="/email-ingestion" element={<EmailIngestionPage />} />

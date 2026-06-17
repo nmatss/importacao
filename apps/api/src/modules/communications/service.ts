@@ -1,5 +1,6 @@
 import { eq, desc, count, and, sql, gte } from 'drizzle-orm';
 import nodemailer from 'nodemailer';
+import path from 'node:path';
 import { db } from '../../shared/database/connection.js';
 import {
   communications,
@@ -18,6 +19,18 @@ import { auditService } from '../audit/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 
 const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
+
+interface StoredAttachment {
+  filename?: unknown;
+  documentId?: unknown;
+  espelhoId?: unknown;
+  path?: unknown;
+}
+
+interface MailAttachment {
+  filename: string;
+  path: string;
+}
 
 function sanitizeHtml(html: string): string {
   // Remove script tags and their content
@@ -52,6 +65,96 @@ function getSmtpTransport() {
       rejectUnauthorized: process.env.NODE_ENV === 'production',
       minVersion: 'TLSv1.2',
     },
+  });
+}
+
+function sanitizeAttachmentFilename(filename: unknown, fallback: string): string {
+  const raw = typeof filename === 'string' && filename.trim() ? filename.trim() : fallback;
+  const clean = path
+    .basename(raw)
+    .replace(/[\r\n]/g, '')
+    .split('')
+    .map((char) => (char.charCodeAt(0) < 32 || '<>:"/\\|?*'.includes(char) ? '_' : char))
+    .join('')
+    .slice(0, 255);
+
+  if (!clean) throw new Error('Nome de anexo invalido');
+  return clean;
+}
+
+async function resolveMailAttachments(communication: {
+  processId: number | null;
+  attachments: unknown;
+}): Promise<MailAttachment[] | undefined> {
+  if (!communication.attachments) return undefined;
+  if (!Array.isArray(communication.attachments)) {
+    throw new Error('Formato de anexos invalido');
+  }
+
+  const requested = communication.attachments as StoredAttachment[];
+  if (requested.length === 0) return undefined;
+  if (!communication.processId) {
+    throw new Error('Anexos exigem uma comunicacao vinculada a um processo');
+  }
+
+  const [processDocuments, processEspelhos] = await Promise.all([
+    db.select().from(documents).where(eq(documents.processId, communication.processId)),
+    db.select().from(espelhos).where(eq(espelhos.processId, communication.processId)),
+  ]);
+
+  const documentsById = new Map(processDocuments.map((doc) => [doc.id, doc]));
+  const documentsByPath = new Map(processDocuments.map((doc) => [doc.storagePath, doc]));
+  const espelhoFiles = processEspelhos
+    .map((espelho) => {
+      const data = espelho.generatedData as Record<string, unknown> | null;
+      const filePath = typeof data?.filePath === 'string' ? data.filePath : null;
+      const filename = typeof data?.filename === 'string' ? data.filename : `espelho-${espelho.id}`;
+      return filePath ? { id: espelho.id, filePath, filename } : null;
+    })
+    .filter((item): item is { id: number; filePath: string; filename: string } => Boolean(item));
+  const espelhosById = new Map(espelhoFiles.map((espelho) => [espelho.id, espelho]));
+  const espelhosByPath = new Map(espelhoFiles.map((espelho) => [espelho.filePath, espelho]));
+
+  return requested.map((attachment) => {
+    if (attachment.documentId != null) {
+      const documentId = Number(attachment.documentId);
+      const document = documentsById.get(documentId);
+      if (!document) throw new Error(`Anexo de documento nao autorizado: ${documentId}`);
+      return {
+        filename: sanitizeAttachmentFilename(attachment.filename, document.originalFilename),
+        path: document.storagePath,
+      };
+    }
+
+    if (attachment.espelhoId != null) {
+      const espelhoId = Number(attachment.espelhoId);
+      const espelhoFile = espelhosById.get(espelhoId);
+      if (!espelhoFile) throw new Error(`Anexo de espelho nao autorizado: ${espelhoId}`);
+      return {
+        filename: sanitizeAttachmentFilename(attachment.filename, espelhoFile.filename),
+        path: espelhoFile.filePath,
+      };
+    }
+
+    if (typeof attachment.path === 'string' && attachment.path.trim()) {
+      const document = documentsByPath.get(attachment.path);
+      if (document) {
+        return {
+          filename: sanitizeAttachmentFilename(attachment.filename, document.originalFilename),
+          path: document.storagePath,
+        };
+      }
+
+      const espelhoFile = espelhosByPath.get(attachment.path);
+      if (espelhoFile) {
+        return {
+          filename: sanitizeAttachmentFilename(attachment.filename, espelhoFile.filename),
+          path: espelhoFile.filePath,
+        };
+      }
+    }
+
+    throw new Error('Anexo invalido ou fora do processo');
   });
 }
 
@@ -123,15 +226,7 @@ export const communicationService = {
     const transport = getSmtpTransport();
 
     try {
-      // Build attachments list from DB record
-      const dbAttachments = communication.attachments as Array<{
-        filename: string;
-        path: string;
-      }> | null;
-      const mailAttachments = dbAttachments?.map((att) => ({
-        filename: att.filename,
-        path: att.path,
-      }));
+      const mailAttachments = await resolveMailAttachments(communication);
 
       // Append signature if provided
       let htmlBody = communication.body;
@@ -220,12 +315,12 @@ export const communicationService = {
       .limit(1);
 
     // Build attachments list
-    const attachments: Array<{ filename: string; path: string }> = [];
+    const attachments: Array<{ filename: string; documentId?: number; espelhoId?: number }> = [];
     for (const doc of docs) {
       if (['invoice', 'packing_list', 'ohbl'].includes(doc.type)) {
         attachments.push({
           filename: doc.originalFilename,
-          path: doc.storagePath,
+          documentId: doc.id,
         });
       }
     }
@@ -235,7 +330,7 @@ export const communicationService = {
       if (espelhoData?.filePath && espelhoData?.filename) {
         attachments.push({
           filename: espelhoData.filename,
-          path: espelhoData.filePath,
+          espelhoId: espelho.id,
         });
       }
     }

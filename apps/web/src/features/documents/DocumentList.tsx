@@ -362,6 +362,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Ver origem"
+                          aria-label={`Ver origem de ${doc.fileName}`}
                         >
                           {source ? (
                             source.source === 'email' ? (
@@ -386,6 +387,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Abrir documento"
+                          aria-label={`Abrir documento ${doc.fileName}`}
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </button>
@@ -398,6 +400,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Baixar documento"
+                          aria-label={`Baixar documento ${doc.fileName}`}
                         >
                           <Download className="h-3.5 w-3.5" />
                         </button>
@@ -411,6 +414,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             onClick={(e) => e.stopPropagation()}
                             className="rounded p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
                             title="Abrir no Drive"
+                            aria-label={`Abrir ${doc.fileName} no Drive`}
                           >
                             <ExternalLink className="h-3.5 w-3.5" />
                           </a>
@@ -425,6 +429,11 @@ export function DocumentList({ processId }: DocumentListProps) {
                             }}
                             className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                             title="Ver dados extraídos"
+                            aria-label={
+                              expanded
+                                ? `Ocultar dados extraidos de ${doc.fileName}`
+                                : `Ver dados extraidos de ${doc.fileName}`
+                            }
                           >
                             {expanded ? (
                               <ChevronDown className="h-3.5 w-3.5" />
@@ -442,6 +451,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Reprocessar IA"
+                          aria-label={`Reprocessar IA de ${doc.fileName}`}
                         >
                           <RefreshCw className="h-3.5 w-3.5" />
                         </button>
@@ -454,6 +464,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
                           title="Excluir"
+                          aria-label={`Excluir documento ${doc.fileName}`}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

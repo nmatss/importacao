@@ -16,7 +16,7 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
 
   return (
-    <div className="min-h-screen flex">
+    <main id="main" className="min-h-screen flex">
       {/* Left panel — dark branding */}
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden bg-sidebar-950 animate-fade-in">
         {/* Gradient overlay */}
@@ -176,6 +176,6 @@ export function LoginPage() {
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

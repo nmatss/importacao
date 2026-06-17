@@ -133,7 +133,7 @@ export function MeuDiaPage() {
     if (slaData.docsOverdue?.length > 0) {
       tasks.push({
         id: 'docs-overdue',
-        title: 'Documentos Pendentes',
+        title: 'Documentos pendentes',
         description: 'Processos com documentos atrasados',
         priority: 'critical',
         link: '/importacao/processos?status=draft',
@@ -144,8 +144,8 @@ export function MeuDiaPage() {
     if (slaData.liUrgent?.length > 0) {
       tasks.push({
         id: 'li-urgent',
-        title: 'LIs Urgentes',
-        description: 'Licencas de importacao com prazo proximo',
+        title: 'LIs urgentes',
+        description: 'Licenças de importação com prazo próximo',
         priority: 'critical',
         link: '/importacao/lis',
         count: slaData.liUrgent.length,
@@ -155,8 +155,8 @@ export function MeuDiaPage() {
     if (slaData.withDivergences?.length > 0) {
       tasks.push({
         id: 'divergences',
-        title: 'Divergencias a Resolver',
-        description: 'Processos com falhas na validacao',
+        title: 'Divergências a resolver',
+        description: 'Processos com falhas na validação',
         priority: 'high',
         link: '/importacao/processos?status=validating',
         count: slaData.withDivergences.length,
@@ -166,7 +166,7 @@ export function MeuDiaPage() {
     if (slaData.noEspelho?.length > 0) {
       tasks.push({
         id: 'no-espelho',
-        title: 'Aguardando Espelho',
+        title: 'Aguardando espelho',
         description: 'Processos validados sem espelho gerado',
         priority: 'medium',
         link: '/importacao/processos?status=validated',
@@ -177,7 +177,7 @@ export function MeuDiaPage() {
     if (slaData.pendingFenicia?.length > 0) {
       tasks.push({
         id: 'pending-fenicia',
-        title: 'Pendente Envio Fenicia',
+        title: 'Pendente envio Fenícia',
         description: 'Espelhos prontos aguardando envio',
         priority: 'medium',
         link: '/importacao/processos?status=espelho_generated',
@@ -399,7 +399,7 @@ export function MeuDiaPage() {
             <>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2 pt-2">
                 <FileWarning className="h-5 w-5 text-amber-500" />
-                LIs com Prazo Critico
+                LIs com prazo crítico
               </h3>
               <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 divide-y divide-amber-100 dark:divide-amber-800">
                 {slaData.liUrgent.slice(0, 5).map((li) => (
