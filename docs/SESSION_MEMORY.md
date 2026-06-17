@@ -1,5 +1,31 @@
 # Session Memory
 
+## 2026-06-17 - Odoo Settings DB Com Fallback Env
+
+Correcoes aplicadas:
+
+- `odoo.service` passou a resolver `odoo_url`, `odoo_db` e `odoo_user` a partir
+  de `system_settings`, com fallback para `ODOO_URL`, `ODOO_DB` e `ODOO_USER`.
+- `ODOO_PASSWORD` permanece somente em SOPS/env, sem campo novo no banco ou UI.
+- O client XML-RPC passou a usar `createClient` para URL `http` e
+  `createSecureClient` para URL `https`, preservando path base da URL.
+- Cache de autenticação Odoo passa a ser reaproveitado apenas enquanto a
+  configuração efetiva permanece igual.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/modules/integrations/__tests__/odoo.service.test.ts`
+- `npm test -w apps/api -- src/modules/integrations/__tests__/odoo.service.test.ts src/modules/validation/checks/__tests__/document-fixture.test.ts`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
 ## 2026-06-17 - Fallback De Draft BL Na Validacao
 
 Correcoes aplicadas:

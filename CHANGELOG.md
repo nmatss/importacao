@@ -65,6 +65,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   no Gmail/Drive/Sheets/Groups/Vertex.
 - Validacao e deteccao de anomalias agora usam `draft_bl` como fallback parcial
   quando `ohbl` ainda nao existe, mantendo OHBL como fonte preferencial.
+- Integracao Odoo passou a usar URL, database e usuario salvos em
+  `system_settings` com fallback para env, mantendo `ODOO_PASSWORD` somente em
+  SOPS/env e selecionando XML-RPC HTTP/HTTPS conforme a URL.
 
 ### Tests
 
@@ -72,6 +75,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   falha se um conjunto documental coerente produzir status `failed`.
 - Cobertura de regressao garante fallback de `draft_bl` e precedencia de
   `ohbl` em `runAllChecks` e `runAnomalyDetection`.
+- Cobertura de regressao garante configuracao Odoo por banco/env e selecao
+  correta do client XML-RPC HTTP/HTTPS.
 
 ### Security
 

@@ -156,6 +156,7 @@ Ver detalhes em:
 Principais temas:
 
 - Extração de cabeçalho/portos/datas ainda depende da qualidade do provider.
-- Odoo settings no banco e variaveis de ambiente precisam de alinhamento.
+- Odoo agora aceita URL/database/usuario do banco com fallback para env; senha
+  permanece em SOPS/env.
 - Fluxos de aceite entre checklist e comparativo ainda podem ser melhor unificados.
 - Documentacao de IA possui divergencias historicas entre Vertex ideal e IA local atual.

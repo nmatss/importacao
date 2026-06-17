@@ -172,7 +172,10 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. `odoo.service` agora resolve `odoo_url`,
+  `odoo_db` e `odoo_user` a partir de `system_settings` com fallback para env,
+  mantendo `ODOO_PASSWORD` somente em SOPS/env. O client XML-RPC agora usa
+  `createClient` para `http` e `createSecureClient` para `https`.
 
 ## BAIXO - `.env.sops.yaml` Ausente Em Producao
 
