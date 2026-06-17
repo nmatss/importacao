@@ -58,6 +58,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Backup inclui o volume `cert-certs` com PDFs/evidencias de certificacao.
 - Incoterm e moeda da invoice aceitam variantes comerciais comuns sem gerar falso positivo.
 - `dates-match` deixou de tratar `invoiceDate` como data de ETD/embarque.
+- Delete e reprocessamento de documento agora recalculam `aiExtractedData`
+  consolidado do processo para evitar dados obsoletos.
 
 ### Tests
 

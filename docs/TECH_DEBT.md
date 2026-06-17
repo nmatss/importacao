@@ -27,9 +27,9 @@ Ultima atualizacao: 2026-06-17
 - Auditar indices redundantes e queries com risco de full scan.
 - Avaliar historizacao e origem por campo para dados projetados no card do processo.
 - Padronizar query keys do frontend com `processKeys`, `documentKeys`, `followUpKeys` e equivalentes de validacao.
-- Criar endpoint/filtro backend para logs de e-mail por processo, evitando busca global limitada a 50 registros.
 - Unificar cache de `/api/documents/process/:id/comparison` entre comparativo e Draft BL.
-- Ao deletar/reprocessar documento, limpar ou recalcular `aiExtractedData` por tipo e invalidar comparativo/espelho derivado.
+- Avaliar invalidação granular de aceite manual/comparativo derivado quando
+  `aiExtractedData` for reconstruído por delete/reprocessamento de documento.
 
 ## DevOps E Operacao
 

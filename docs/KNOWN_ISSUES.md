@@ -125,7 +125,10 @@ Impacto:
 
 Status:
 
-- Aberto.
+- Resolvido em 2026-06-17. `reprocess` e `delete` de documentos agora
+  reconstroem `import_processes.ai_extracted_data` a partir dos documentos
+  processados restantes, preservando chaves nao documentais e descartando
+  extrações falhas/pendentes.
 
 ## MEDIO - Datas Misturam Invoice Date E ETD/Shipment Em Alguns Checks
 

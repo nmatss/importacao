@@ -66,6 +66,7 @@ describe('document extraction history (backlog #12)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    txQueue.length = 0;
   });
 
   afterEach(() => {
@@ -94,6 +95,9 @@ describe('document extraction history (backlog #12)', () => {
       const historyInsertChain = createResolvedChain(undefined); // insert history (in tx)
       txQueue.push(historyInsertChain);
       txQueue.push(createResolvedChain(undefined)); // update doc (zero aiParsedData) (in tx)
+      txQueue.push(createResolvedChain([])); // rebuild process aiExtractedData: remaining docs
+      txQueue.push(createResolvedChain([{ aiExtractedData: { invoice: previousExtraction } }])); // current process projection
+      txQueue.push(createResolvedChain(undefined)); // update process projection
 
       await documentService.reprocess(7, 1);
 
@@ -125,6 +129,9 @@ describe('document extraction history (backlog #12)', () => {
       const emptyDoc = { ...mockDoc, aiParsedData: null, confidenceScore: null };
       queryQueue.push(createResolvedChain([emptyDoc])); // select document (outside tx)
       txQueue.push(createResolvedChain(undefined)); // update doc (in tx)
+      txQueue.push(createResolvedChain([])); // rebuild process aiExtractedData: remaining docs
+      txQueue.push(createResolvedChain([{ aiExtractedData: { invoice: previousExtraction } }])); // current process projection
+      txQueue.push(createResolvedChain(undefined)); // update process projection
 
       await documentService.reprocess(7, 1);
 

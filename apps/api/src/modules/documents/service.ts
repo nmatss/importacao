@@ -55,6 +55,32 @@ function hasFailedEspelhoExtraction(aiParsedData: unknown): boolean {
   return Boolean(data.error || data.extractionFailed);
 }
 
+const PROJECTED_AI_DATA_KEYS = new Set([
+  'invoice',
+  'proforma_invoice',
+  'packing_list',
+  'ohbl',
+  'draft_bl',
+  'espelho',
+  'li',
+  'certificate',
+  'other',
+]);
+
+function isRecord(value: unknown): value is Record<string, any> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function shouldProjectAiData(
+  type: string,
+  aiParsedData: unknown,
+): aiParsedData is Record<string, any> {
+  if (!PROJECTED_AI_DATA_KEYS.has(type) || !isRecord(aiParsedData)) return false;
+  if (aiParsedData.extractionFailed || aiParsedData.skipped) return false;
+  if (type === 'espelho' && hasFailedEspelhoExtraction(aiParsedData)) return false;
+  return true;
+}
+
 function standardizeDocumentName(
   type: string,
   processCode: string,
@@ -106,6 +132,59 @@ function standardizeDocumentName(
 }
 
 export const documentService = {
+  async rebuildProcessAiExtractedData(
+    processId: number,
+    client: Pick<typeof db, 'select' | 'update'> = db,
+  ) {
+    const processDocs = await client
+      .select({
+        id: documents.id,
+        type: documents.type,
+        isProcessed: documents.isProcessed,
+        aiParsedData: documents.aiParsedData,
+      })
+      .from(documents)
+      .where(eq(documents.processId, processId))
+      .orderBy(desc(documents.createdAt), desc(documents.id));
+
+    const projected: Record<string, any> = {};
+    for (const doc of processDocs) {
+      if (
+        projected[doc.type] ||
+        !doc.isProcessed ||
+        !shouldProjectAiData(doc.type, doc.aiParsedData)
+      ) {
+        continue;
+      }
+      projected[doc.type] =
+        doc.type === 'espelho' ? doc.aiParsedData : flattenAiData(doc.aiParsedData);
+    }
+
+    const [processRow] = await client
+      .select({ aiExtractedData: importProcesses.aiExtractedData })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    const existing = isRecord(processRow?.aiExtractedData) ? processRow.aiExtractedData : {};
+    const preserved = Object.fromEntries(
+      Object.entries(existing).filter(([key]) => !PROJECTED_AI_DATA_KEYS.has(key)),
+    );
+    const nextAiExtractedData = { ...preserved, ...projected };
+
+    await client
+      .update(importProcesses)
+      .set({ aiExtractedData: nextAiExtractedData, updatedAt: new Date() })
+      .where(eq(importProcesses.id, processId));
+
+    logger.info(
+      { processId, projectedKeys: Object.keys(projected) },
+      'Process AI extracted data rebuilt from current documents',
+    );
+
+    return nextAiExtractedData;
+  },
+
   async upload(
     processId: number,
     type: string,
@@ -1393,6 +1472,8 @@ export const documentService = {
           updatedAt: new Date(),
         })
         .where(eq(documents.id, documentId));
+
+      await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
 
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
@@ -1412,7 +1493,11 @@ export const documentService = {
       // File might already be gone
     }
 
-    await db.delete(documents).where(eq(documents.id, id));
+    await db.transaction(async (tx) => {
+      await tx.delete(documents).where(eq(documents.id, id));
+      await this.rebuildProcessAiExtractedData(doc.processId, tx);
+    });
+
     auditService.log(
       userId,
       'delete',

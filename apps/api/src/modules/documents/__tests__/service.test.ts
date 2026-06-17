@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, queryQueue } = createMockDb();
+const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -21,6 +21,7 @@ vi.mock('../../ai/service.js', () => ({
     extractPackingListData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.85 }),
     extractBLData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.88 }),
   },
+  flattenAiData: vi.fn((data) => data),
 }));
 
 vi.mock('../../integrations/google-drive.service.js', () => ({
@@ -69,6 +70,7 @@ describe('documentService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    txQueue.length = 0;
   });
 
   describe('upload()', () => {
@@ -160,23 +162,43 @@ describe('documentService', () => {
   });
 
   describe('delete()', () => {
-    it('should remove file and DB record', async () => {
+    it('should remove file, DB record and rebuild process AI projection', async () => {
       const mockDoc = {
         id: 1,
         processId: 1,
+        type: 'invoice',
         storagePath: '/tmp/test.pdf',
         originalFilename: 'test.pdf',
       };
 
       // select doc
       queryQueue.push(createResolvedChain([mockDoc]));
-      // delete doc
-      queryQueue.push(createResolvedChain(undefined));
+      txQueue.push(createResolvedChain(undefined)); // delete doc
+      txQueue.push(createResolvedChain([])); // remaining docs for rebuild
+      txQueue.push(
+        createResolvedChain([
+          {
+            aiExtractedData: {
+              invoice: { invoiceNumber: 'stale' },
+              customKey: { keep: true },
+            },
+          },
+        ]),
+      );
+      const processUpdateChain = createResolvedChain(undefined);
+      txQueue.push(processUpdateChain);
 
       const result = await documentService.delete(1, 2);
 
       expect(result).toEqual({ id: 1 });
       expect(mockFsUnlink).toHaveBeenCalledWith('/tmp/test.pdf');
+      expect(mockTx.delete).toHaveBeenCalled();
+      expect(processUpdateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aiExtractedData: { customKey: { keep: true } },
+          updatedAt: expect.any(Date),
+        }),
+      );
       expect(auditService.log).toHaveBeenCalledWith(
         2,
         'delete',
@@ -184,6 +206,72 @@ describe('documentService', () => {
         1,
         expect.objectContaining({ processId: 1 }),
         null,
+      );
+    });
+  });
+
+  describe('rebuildProcessAiExtractedData()', () => {
+    it('rebuilds projected document data from current processed documents only', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 4,
+            type: 'invoice',
+            isProcessed: true,
+            aiParsedData: { invoiceNumber: 'INV-NEW' },
+          },
+          {
+            id: 3,
+            type: 'invoice',
+            isProcessed: true,
+            aiParsedData: { invoiceNumber: 'INV-OLD' },
+          },
+          {
+            id: 5,
+            type: 'packing_list',
+            isProcessed: false,
+            aiParsedData: { packingListNumber: 'PL-PENDING' },
+          },
+          {
+            id: 6,
+            type: 'ohbl',
+            isProcessed: true,
+            aiParsedData: { extractionFailed: true, reason: 'AI failed' },
+          },
+          {
+            id: 7,
+            type: 'espelho',
+            isProcessed: true,
+            aiParsedData: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            aiExtractedData: {
+              invoice: { invoiceNumber: 'STALE' },
+              packing_list: { packingListNumber: 'STALE' },
+              customKey: { keep: true },
+            },
+          },
+        ]),
+      );
+      const processUpdateChain = createResolvedChain(undefined);
+      queryQueue.push(processUpdateChain);
+
+      const rebuilt = await documentService.rebuildProcessAiExtractedData(1);
+
+      expect(rebuilt).toEqual({
+        customKey: { keep: true },
+        invoice: { invoiceNumber: 'INV-NEW' },
+        espelho: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
+      });
+      expect(processUpdateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          aiExtractedData: rebuilt,
+          updatedAt: expect.any(Date),
+        }),
       );
     });
   });

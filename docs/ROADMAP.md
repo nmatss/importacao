@@ -15,8 +15,6 @@ Ultima atualizacao: 2026-06-17
 
 - Usar Draft BL como fonte parcial/fallback quando OHBL nao existe, se aprovado pelo negocio.
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).
-- Limpar/recalcular `aiExtractedData` por tipo ao deletar ou reprocessar documentos.
-- Criar endpoint/filtro de logs de e-mail por processo.
 
 ## P1 - UX Operacional
 

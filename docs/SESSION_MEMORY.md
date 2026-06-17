@@ -1,5 +1,32 @@
 # Session Memory
 
+## 2026-06-17 - Recalculo De `aiExtractedData` Em Delete/Reprocessamento
+
+Correcoes aplicadas:
+
+- Criado `documentService.rebuildProcessAiExtractedData`, que reconstrói
+  `import_processes.ai_extracted_data` a partir dos documentos processados
+  atuais do processo.
+- `reprocess` agora arquiva/zera a extração do documento e reconstrói a
+  projeção consolidada dentro da mesma transação antes da nova extração.
+- `delete` agora remove a linha do documento e reconstrói a projeção consolidada
+  dentro da mesma transação.
+- A reconstrução preserva chaves não documentais, escolhe o documento processado
+  mais recente por tipo e descarta extrações pendentes, `skipped` ou falhas.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/modules/documents/__tests__/service.test.ts src/modules/documents/__tests__/extraction-history.test.ts`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
 ## 2026-06-17 - Validacao Documental, Datas Logisticas E Fixtures
 
 Correcoes aplicadas:
