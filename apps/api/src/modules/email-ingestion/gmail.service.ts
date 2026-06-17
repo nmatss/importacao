@@ -1,4 +1,5 @@
 import { gmail_v1, auth as googleAuth } from '@googleapis/gmail';
+import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
 
 const GMAIL_API_TIMEOUT_MS = 30_000;
@@ -34,7 +35,7 @@ function getGmailClient(): gmail_v1.Gmail {
   if (gmailClient) return gmailClient;
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY);
   const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX;
 
   if (!clientEmail || !privateKey) {

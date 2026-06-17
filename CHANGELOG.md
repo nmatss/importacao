@@ -60,6 +60,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `dates-match` deixou de tratar `invoiceDate` como data de ETD/embarque.
 - Delete e reprocessamento de documento agora recalculam `aiExtractedData`
   consolidado do processo para evitar dados obsoletos.
+- Chaves privadas Google vindas do SOPS agora são normalizadas mesmo quando
+  chegam com `\n` duplamente escapado, evitando falha `ERR_OSSL_UNSUPPORTED`
+  no Gmail/Drive/Sheets/Groups/Vertex.
 
 ### Tests
 

@@ -2,6 +2,7 @@ import { drive_v3, auth as googleAuth } from '@googleapis/drive';
 import { eq } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { importProcesses } from '../../shared/database/schema.js';
+import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
 
 const DRIVE_API_TIMEOUT_MS = 30_000;
@@ -49,7 +50,7 @@ function getDriveClient(): drive_v3.Drive {
   if (driveClient) return driveClient;
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY);
 
   if (!clientEmail || !privateKey) {
     throw new Error('Google Drive credentials not configured');

@@ -1,4 +1,5 @@
 import { sheets_v4, auth as googleAuth } from '@googleapis/sheets';
+import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
 
 const SHEETS_API_TIMEOUT_MS = 30_000;
@@ -19,7 +20,7 @@ function getSheetsClient(): sheets_v4.Sheets {
   if (sheetsClient) return sheetsClient;
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const privateKey = process.env.GOOGLE_DRIVE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  const privateKey = normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY);
 
   if (!clientEmail || !privateKey) {
     throw new Error('Google credentials not configured');

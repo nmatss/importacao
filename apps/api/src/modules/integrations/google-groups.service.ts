@@ -1,8 +1,10 @@
 import { JWT } from 'google-auth-library';
+import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
 
 const GOOGLE_DRIVE_CLIENT_EMAIL = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
-const GOOGLE_DRIVE_PRIVATE_KEY = (process.env.GOOGLE_DRIVE_PRIVATE_KEY || '').replace(/\\n/g, '\n');
+const GOOGLE_DRIVE_PRIVATE_KEY =
+  normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY) || '';
 const GOOGLE_ADMIN_EMAIL = process.env.GOOGLE_ADMIN_EMAIL || '';
 const GOOGLE_GROUP_ALLOWED = process.env.GOOGLE_GROUP_ALLOWED || '';
 const GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET = process.env.GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET === 'true';

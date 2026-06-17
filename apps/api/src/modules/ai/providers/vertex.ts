@@ -1,4 +1,5 @@
 import { auth as googleAuth } from '@googleapis/drive';
+import { normalizeGooglePrivateKey } from '../../../shared/utils/google-private-key.js';
 import { logger } from '../../../shared/utils/logger.js';
 import type { AIProvider, ChatMessage, ChatOptions, ChatResponse } from './types.js';
 
@@ -31,9 +32,9 @@ function getAuthClient(): { getAccessToken: () => Promise<string | null | undefi
   // single-SA setups keep working unchanged.
   const clientEmail =
     process.env.GOOGLE_VERTEX_CLIENT_EMAIL || process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
-  const privateKey = (
-    process.env.GOOGLE_VERTEX_PRIVATE_KEY || process.env.GOOGLE_DRIVE_PRIVATE_KEY
-  )?.replace(/\\n/g, '\n');
+  const privateKey = normalizeGooglePrivateKey(
+    process.env.GOOGLE_VERTEX_PRIVATE_KEY || process.env.GOOGLE_DRIVE_PRIVATE_KEY,
+  );
   if (!clientEmail || !privateKey) {
     throw new Error(
       'Vertex provider: set GOOGLE_VERTEX_CLIENT_EMAIL / GOOGLE_VERTEX_PRIVATE_KEY (or reuse GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY).',

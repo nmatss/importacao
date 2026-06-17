@@ -1,5 +1,36 @@
 # Session Memory
 
+## 2026-06-17 - Normalizacao De Chave Google Em SOPS
+
+Correcoes aplicadas:
+
+- Criado `normalizeGooglePrivateKey` para aceitar PEM com quebras reais,
+  `\n` escapado ou `\\n` duplamente escapado.
+- Drive, Sheets, Gmail ingestion, Google Groups e Vertex passaram a usar o
+  helper compartilhado.
+- `scripts/generate-env-from-vault.sh` passou a normalizar `*_PRIVATE_KEY`
+  antes de escrever `.env`, evitando gerar PEM com barra residual no fim das
+  linhas.
+
+Evidencia operacional:
+
+- Pos-deploy de `10d09ca4825c` mostrou `ERR_OSSL_UNSUPPORTED` no job Gmail
+  porque `GOOGLE_DRIVE_PRIVATE_KEY` chegava duplamente escapada.
+
+Testes focados executados:
+
+- `npm test -w apps/api -- src/shared/utils/__tests__/google-private-key.test.ts`
+- `bash -n scripts/generate-env-from-vault.sh`
+
+Validacoes completas executadas:
+
+- `npm run typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `CERT_API_KEY=dummy docker compose -f docker-compose.prod.yml config --quiet`
+
 ## 2026-06-17 - Recalculo De `aiExtractedData` Em Delete/Reprocessamento
 
 Correcoes aplicadas:

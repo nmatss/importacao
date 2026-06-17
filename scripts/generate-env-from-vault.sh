@@ -63,6 +63,8 @@ def parse_scalar(raw: str) -> str:
 
 def encode_env(key: str, value: str) -> str:
     value = value.replace("\r\n", "\n").replace("\r", "\n")
+    if key.endswith("_PRIVATE_KEY"):
+        value = value.replace("\\\\n", "\n").replace("\\n", "\n")
     needs_quote = any(c in value for c in [" ", "\n", "\"", "#", ";", "|", "&", "(", ")", "!", "'"])
     if not needs_quote:
         return f"{key}={value}"
