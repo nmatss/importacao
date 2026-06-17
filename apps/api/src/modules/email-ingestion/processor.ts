@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { fileTypeFromBuffer } from 'file-type';
 import { eq, desc, count, sql, ilike, and, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
@@ -16,6 +17,20 @@ import { alertService } from '../alerts/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
+
+const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
+  '.pdf': new Set(['application/pdf']),
+  '.xlsx': new Set([
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/zip',
+  ]),
+  '.xls': new Set(['application/vnd.ms-excel', 'application/x-cfb']),
+};
+
+function isDetectedEmailAttachmentAllowed(filename: string, detectedMime: string): boolean {
+  const ext = path.extname(filename).toLowerCase();
+  return Boolean(EMAIL_ATTACHMENT_EXT_MIME_ALIASES[ext]?.has(detectedMime));
+}
 
 // ── Regex-based process code extraction (fast, first pass) ──────────────
 
@@ -926,6 +941,25 @@ export const emailProcessor = {
               type: 'unsupported',
               status: 'skipped',
               skipReason: `Tipo de arquivo não suportado: ${att.contentType}`,
+            });
+            continue;
+          }
+
+          const detected = await fileTypeFromBuffer(att.content);
+          if (!detected || !isDetectedEmailAttachmentAllowed(att.filename, detected.mime)) {
+            logger.warn(
+              {
+                filename: att.filename,
+                contentType: att.contentType,
+                detectedMime: detected?.mime,
+              },
+              'Attachment skipped: MIME/extensao incompatível com assinatura do arquivo',
+            );
+            processedAttachments.push({
+              filename: att.filename,
+              type: 'unsupported',
+              status: 'skipped',
+              skipReason: 'Tipo de arquivo incompatível com o conteúdo do anexo',
             });
             continue;
           }

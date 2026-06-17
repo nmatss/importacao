@@ -3,6 +3,13 @@
 
 /** AI-extracted metadata attached to a process. */
 export interface AiExtractedData {
+  invoice?: Record<string, unknown>;
+  espelho?:
+    | {
+        summary?: Record<string, unknown>;
+        items?: Array<Record<string, unknown>>;
+      }
+    | Record<string, unknown>;
   blNumber?: string;
   vessel?: string;
   shipowner?: string;

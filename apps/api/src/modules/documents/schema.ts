@@ -4,6 +4,7 @@ export const uploadDocumentSchema = z.object({
   processId: z.coerce.number(),
   documentType: z.enum([
     'invoice',
+    'proforma_invoice',
     'packing_list',
     'ohbl',
     'draft_bl',

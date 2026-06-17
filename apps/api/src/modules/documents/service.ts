@@ -47,6 +47,14 @@ function extractTextFromXlsxBuffer(buffer: Buffer): string {
   return text;
 }
 
+function hasFailedEspelhoExtraction(aiParsedData: unknown): boolean {
+  if (!aiParsedData || typeof aiParsedData !== 'object' || Array.isArray(aiParsedData)) {
+    return false;
+  }
+  const data = aiParsedData as Record<string, unknown>;
+  return Boolean(data.error || data.extractionFailed);
+}
+
 function standardizeDocumentName(
   type: string,
   processCode: string,
@@ -732,9 +740,9 @@ export const documentService = {
    * all 3 docs have been extracted. Writes into importProcesses.aiExtractedData.espelho
    * via atomic JSONB merge — same merge primitive used by processWithAI so
    * concurrent espelho/processWithAI writes do not stomp each other.
-   * Skips when an operator-uploaded espelho document exists OR when an
-   * auto-built espelho is already present (the user can force a rebuild via
-   * the regenerate endpoint — outside scope here).
+   * Skips when an operator-uploaded espelho is pending/successful OR when an
+   * auto-built espelho is already present. If every uploaded espelho failed
+   * parsing, the deterministic build can still recover the process.
    */
   async autoGenerateEspelhoIfMissing(processId: number) {
     const [processRow] = await db
@@ -751,12 +759,20 @@ export const documentService = {
     }
 
     const espelhoDocs = await db
-      .select({ id: documents.id })
+      .select({
+        id: documents.id,
+        isProcessed: documents.isProcessed,
+        aiParsedData: documents.aiParsedData,
+      })
       .from(documents)
-      .where(and(eq(documents.processId, processId), eq(documents.type, 'espelho')))
-      .limit(1);
-    if (espelhoDocs.length > 0) {
-      // Operator uploaded a real espelho — don't override.
+      .where(and(eq(documents.processId, processId), eq(documents.type, 'espelho')));
+
+    const hasPendingOrSuccessfulEspelho = espelhoDocs.some(
+      (doc) => !doc.isProcessed || !hasFailedEspelhoExtraction(doc.aiParsedData),
+    );
+    if (hasPendingOrSuccessfulEspelho) {
+      // Operator uploaded a real espelho that is still pending or already valid.
+      // Only fall back to auto-build when every uploaded espelho failed parsing.
       return;
     }
 

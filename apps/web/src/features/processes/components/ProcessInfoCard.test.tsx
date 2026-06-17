@@ -1,0 +1,119 @@
+import { render, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import type { ImportProcess } from '@/shared/types';
+import { ProcessInfoCard } from './ProcessInfoCard';
+
+function makeProcess(overrides: Partial<ImportProcess> = {}): ImportProcess {
+  return {
+    id: 1,
+    processCode: 'IMP-001',
+    brand: 'puket',
+    status: 'draft',
+    logisticStatus: 'consolidation',
+    incoterm: null,
+    portOfLoading: null,
+    portOfDischarge: null,
+    etd: null,
+    eta: null,
+    shipmentDate: null,
+    etaActual: null,
+    customsClearanceAt: null,
+    cdArrivalAt: null,
+    exporterName: null,
+    exporterAddress: null,
+    importerName: null,
+    importerAddress: null,
+    totalFobValue: null,
+    freightValue: null,
+    totalBoxes: null,
+    totalNetWeight: null,
+    totalGrossWeight: null,
+    totalCbm: null,
+    containerType: null,
+    vesselName: null,
+    blNumber: null,
+    shippingLine: null,
+    diNumber: null,
+    customsChannel: null,
+    freightAgent: null,
+    inspectionType: null,
+    hasLiItems: false,
+    hasCertification: false,
+    hasFreeOfCharge: false,
+    correctionStatus: null,
+    paymentTerms: null,
+    aiExtractedData: null,
+    notes: null,
+    driveFolderId: null,
+    sistemaDriveFolderId: null,
+    createdAt: '2026-04-11T00:00:00.000Z',
+    updatedAt: '2026-04-11T00:00:00.000Z',
+    documents: [],
+    followUp: null,
+    ...overrides,
+  };
+}
+
+describe('ProcessInfoCard', () => {
+  it('fills process information from espelho when invoice is not available', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            espelho: {
+              summary: {
+                importerName: 'IMPORTADOR ESPELHO',
+                totalAmountUsd: 1234.56,
+                totalBoxes: 42,
+                totalNetWeight: 100.5,
+                totalGrossWeight: 112.75,
+                totalCbm: 8.25,
+                shippingLine: 'MSC',
+              },
+              items: [{ fornecedor: 'FORNECEDOR ESPELHO' }],
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('FORNECEDOR ESPELHO')).toBeInTheDocument();
+    expect(screen.getByText('IMPORTADOR ESPELHO')).toBeInTheDocument();
+    expect(screen.getByText('42')).toBeInTheDocument();
+    expect(screen.getByText('MSC')).toBeInTheDocument();
+    expect(screen.getAllByTitle('Fonte: Espelho').length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('prioritizes invoice values over espelho values when both are available', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          exporterName: 'FORNECEDOR MANUAL',
+          aiExtractedData: {
+            invoice: {
+              exporterName: 'FORNECEDOR INVOICE',
+              importerName: 'IMPORTADOR INVOICE',
+              incoterm: 'FOB',
+              totalFobValue: 2000,
+              totalBoxes: 12,
+            },
+            espelho: {
+              summary: {
+                importerName: 'IMPORTADOR ESPELHO',
+                totalAmountUsd: 1234.56,
+                totalBoxes: 42,
+              },
+              items: [{ fornecedor: 'FORNECEDOR ESPELHO' }],
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('FORNECEDOR INVOICE')).toBeInTheDocument();
+    expect(screen.getByText('IMPORTADOR INVOICE')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.queryByText('FORNECEDOR ESPELHO')).not.toBeInTheDocument();
+    expect(screen.getAllByTitle('Fonte: Invoice').length).toBeGreaterThanOrEqual(4);
+  });
+});

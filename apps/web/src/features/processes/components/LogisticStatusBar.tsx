@@ -226,7 +226,7 @@ function StatusDropdown({
     }
     setSaving(true);
     try {
-      await api.patch(`/api/processes/${processId}`, { logisticStatus: key });
+      await api.patch(`/api/processes/${processId}/logistic-status`, { logisticStatus: key });
       toast.success('Status logistico atualizado');
       queryClient.invalidateQueries({ queryKey: ['process', String(processId)] });
       onClose();

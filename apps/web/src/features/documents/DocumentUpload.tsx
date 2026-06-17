@@ -8,6 +8,7 @@ interface DocumentUploadProps {
 }
 
 const FILE_TYPES = [
+  { value: 'proforma_invoice', label: 'Proforma', keywords: ['proforma', 'pro forma'] },
   { value: 'invoice', label: 'Invoice', keywords: ['invoice', 'inv', 'fatura', 'commercial'] },
   { value: 'packing_list', label: 'Packing List', keywords: ['packing', 'pl', 'pack'] },
   { value: 'ohbl', label: 'BL', keywords: ['bl', 'bill', 'lading', 'conhecimento', 'ohbl'] },

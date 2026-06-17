@@ -7,7 +7,27 @@ import { alertService } from '../alerts/service.js';
 
 function safeNum(val: any): number | null {
   if (val == null || val === '') return null;
-  const n = Number(val);
+  if (typeof val === 'number') return Number.isFinite(val) ? val : null;
+
+  const raw = String(val)
+    .trim()
+    .replace(/[^\d,.-]/g, '');
+  if (!raw) return null;
+
+  const commaIndex = raw.lastIndexOf(',');
+  const dotIndex = raw.lastIndexOf('.');
+  let normalized = raw;
+
+  if (commaIndex >= 0 && dotIndex >= 0) {
+    normalized =
+      commaIndex > dotIndex ? raw.replace(/\./g, '').replace(',', '.') : raw.replace(/,/g, '');
+  } else if (commaIndex >= 0) {
+    normalized = raw.replace(',', '.');
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(raw)) {
+    normalized = raw.replace(/\./g, '');
+  }
+
+  const n = Number(normalized);
   return isNaN(n) ? null : n;
 }
 
