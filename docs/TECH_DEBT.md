@@ -33,6 +33,7 @@ Ultima atualizacao: 2026-06-17
 - Resolver `.env.sops.yaml` em producao para reduzir dependencia de `.env` manual.
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
 - Documentar restore testado e tempo de recuperacao esperado.
+- Resolver residuais de `npm audit` moderados sem downgrade inseguro: `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do Sentry, `js-yaml`, `protobufjs` e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e quebrou E2E local em Node 20).
 
 ## Frontend
 

@@ -46,15 +46,17 @@ logging.basicConfig(level=logging.INFO)
 
 API_KEY = os.environ.get("CERT_API_KEY", "")
 if not API_KEY:
-    log.warning("CERT_API_KEY is not set — API key auth is DISABLED (relying on Nginx proxy)")
+    log.error("CERT_API_KEY is not set — protected cert-api routes will fail closed")
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def verify_api_key(request: Request, api_key: str = Security(api_key_header)):
-    """Verify API key from X-API-Key header. Warns at startup if CERT_API_KEY is not set."""
-    if request.url.path == "/api/health":
+    """Verify API key from X-API-Key header."""
+    if request.url.path in ("/api/health", "/api/ready"):
         return
-    if API_KEY and not hmac.compare_digest(api_key or "", API_KEY):
+    if not API_KEY:
+        raise HTTPException(status_code=503, detail="CERT_API_KEY not configured")
+    if not hmac.compare_digest(api_key or "", API_KEY):
         raise HTTPException(status_code=403, detail="Invalid API key")
 
 # ---------------------------------------------------------------------------

@@ -15,6 +15,7 @@ service, and `infra/nginx/prod.conf` provides the HTTPS Nginx configuration with
 
 ```bash
 export DOMAIN=importacao.grupounico.com
+export CERT_API_KEY='<same value from production .env>'
 
 # 1. Start web service (for ACME challenge)
 docker compose -f docker-compose.prod.yml up -d web
@@ -27,8 +28,8 @@ docker compose -f docker-compose.prod.yml run --rm certbot \
   --agree-tos --no-eff-email \
   -d ${DOMAIN}
 
-# 3. Activate TLS nginx config (replace env var in template)
-envsubst '$DOMAIN' < infra/nginx/prod.conf \
+# 3. Activate TLS nginx config (replace env vars in template)
+envsubst '$DOMAIN $CERT_API_KEY' < infra/nginx/prod.conf \
   | docker exec -i importacao-web sh -c 'cat > /etc/nginx/conf.d/default.conf'
 docker compose -f docker-compose.prod.yml exec web nginx -s reload
 
@@ -51,11 +52,11 @@ curl -I https://${DOMAIN}
 
 ## Certificate Paths (in container)
 
-| File | Path |
-|------|------|
+| File                | Path                                            |
+| ------------------- | ----------------------------------------------- |
 | Certificate + chain | `/etc/letsencrypt/live/${DOMAIN}/fullchain.pem` |
-| Private key | `/etc/letsencrypt/live/${DOMAIN}/privkey.pem` |
-| Docker volume | `letsencrypt` (persisted across restarts) |
+| Private key         | `/etc/letsencrypt/live/${DOMAIN}/privkey.pem`   |
+| Docker volume       | `letsencrypt` (persisted across restarts)       |
 
 ## Troubleshooting
 

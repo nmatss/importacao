@@ -137,7 +137,7 @@ Acesse: `http://localhost:8085`
 - **Rate limiting** — protecao contra abuso em rotas de autenticacao
 - **HTML sanitization** — sanitizacao reforçada no backend (script, style, svg, iframe, object, embed, form, data/vbscript URLs)
 - **Magic-byte validation** — verificacao real do tipo de arquivo em uploads
-- **API Key auth** — autenticacao por chave no cert-api
+- **API Key auth** — autenticacao fail-closed por chave no cert-api; `/api/health` e `/api/ready` ficam sem chave para healthcheck
 - **Non-root containers** — USER node/appuser nos Dockerfiles
 - **Correlation ID** — rastreamento de requests end-to-end
 

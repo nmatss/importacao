@@ -23,7 +23,8 @@ def _get_api_key() -> str:
 async def verify_api_key(request: Request, api_key: str = Security(api_key_header)) -> None:
     """Verify API key from X-API-Key header.
 
-    Skips verification for /api/health. Warns if CERT_API_KEY is not set.
+    Skips verification for /api/health and /api/ready. Protected routes fail
+    closed if CERT_API_KEY is not set.
 
     Args:
         request: Incoming HTTP request.
@@ -32,11 +33,11 @@ async def verify_api_key(request: Request, api_key: str = Security(api_key_heade
     Raises:
         HTTPException: 403 if API key is configured and the provided key is invalid.
     """
-    if request.url.path == "/api/health":
+    if request.url.path in ("/api/health", "/api/ready"):
         return
     configured_key = _get_api_key()
     if not configured_key:
-        log.warning("CERT_API_KEY is not set — API key auth is DISABLED (relying on Nginx proxy)")
-        return
+        log.error("CERT_API_KEY is not set — refusing protected cert-api request")
+        raise HTTPException(status_code=503, detail="CERT_API_KEY not configured")
     if not hmac.compare_digest(api_key or "", configured_key):
         raise HTTPException(status_code=403, detail="Invalid API key")

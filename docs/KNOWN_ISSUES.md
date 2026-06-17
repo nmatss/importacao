@@ -59,7 +59,7 @@ Impacto:
 
 Status:
 
-- Aberto. Decidir se a acao deve enviar e-mail real, gerar rascunho em Comunicacoes ou ser renomeada.
+- Resolvido em 2026-06-17. `sendToFeniciaByProcess` agora cria a comunicacao Fenícia, envia via SMTP real usando allowlist/anexos auditaveis de `communicationService.send`, e so marca o espelho/processo apos envio bem-sucedido.
 
 ## MEDIO - Incoterm E Moeda Sao Validacoes Restritivas
 

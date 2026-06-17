@@ -27,6 +27,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Acao "Enviar para Fenícia" do espelho agora cria a comunicacao, envia SMTP real com allowlist/anexos auditaveis e so marca o espelho/processo apos sucesso.
+- Inicializacao da API passa a conectar o cache Redis em runtime fora de testes e encerra Redis junto da fila no shutdown.
 - Checklist de validacao diferencia falhas abertas de aceites manuais.
 - Geracao de email de correcao depende apenas de falhas abertas.
 - FOB reconhece FOC/desconto por campos alternativos, flag explicita, preco zero
@@ -57,6 +59,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Security
 
+- `cert-api` falha fechado quando `CERT_API_KEY` nao esta configurado; somente `/api/health` e `/api/ready` ficam sem chave para healthchecks.
+- Proxy `/cert-api/` do nginx do `web` injeta `X-API-Key` a partir de `CERT_API_KEY`, sem expor a chave ao browser.
+- `docker-compose.prod.yml` passa a exigir `CERT_API_KEY` para `cert-api` e `web`.
+- Acoes criticas de processo/documento/follow-up/espelho passaram a exigir admin: delete de processo, reprocess/delete de documento, sync manual de follow-up, delete de item de espelho, marco/envio Fenícia.
+- Cadastro de usuarios no frontend foi alinhado aos papeis suportados (`admin` e `analyst`), removendo criacao visual de `operator`.
+- Dependencias com vulnerabilidade alta em audit foram atualizadas ou pinadas em dev/test (`vite`, `form-data`, `@grpc/grpc-js`, `multer`); `npm audit` ficou sem `high`/`critical`.
 - Comunicacoes nao aceitam mais anexos com `path` livre vindo da API; envio resolve anexos apenas por documento/espelho do mesmo processo.
 - Rascunhos legados com `path` de anexo so sao enviados se o caminho bater com documento/espelho autorizado do processo.
 - Trigger, varredura historica e reprocessamento de ingestao de e-mail agora exigem usuario admin.

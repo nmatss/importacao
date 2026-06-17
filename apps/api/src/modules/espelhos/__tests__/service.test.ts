@@ -15,6 +15,13 @@ vi.mock('../../alerts/service.js', () => ({
   alertService: { create: vi.fn().mockResolvedValue({}) },
 }));
 
+vi.mock('../../communications/service.js', () => ({
+  communicationService: {
+    sendToFenicia: vi.fn(),
+    send: vi.fn(),
+  },
+}));
+
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
@@ -53,6 +60,7 @@ vi.mock('../../integrations/google-sheets.service.js', () => ({
 
 const { espelhoService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
+const { communicationService } = await import('../../communications/service.js');
 
 describe('espelhoService', () => {
   beforeEach(() => {
@@ -107,11 +115,11 @@ describe('espelhoService', () => {
       const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };
 
       queryQueue.push(createResolvedChain([mockProcess])); // select process
-      queryQueue.push(createResolvedChain(mockItems));      // select items
-      queryQueue.push(createResolvedChain([]));             // no existing espelhos
-      queryQueue.push(createResolvedChain([mockEspelho]));  // insert espelho
-      queryQueue.push(createResolvedChain(undefined));      // update process
-      queryQueue.push(createResolvedChain(undefined));      // update followUp
+      queryQueue.push(createResolvedChain(mockItems)); // select items
+      queryQueue.push(createResolvedChain([])); // no existing espelhos
+      queryQueue.push(createResolvedChain([mockEspelho])); // insert espelho
+      queryQueue.push(createResolvedChain(undefined)); // update process
+      queryQueue.push(createResolvedChain(undefined)); // update followUp
 
       await espelhoService.generate(1, 1);
 
@@ -132,6 +140,61 @@ describe('espelhoService', () => {
 
       expect(result).toEqual(mockItems);
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('sendToFeniciaByProcess()', () => {
+    it('should send the Fenicia communication before marking the espelho as sent', async () => {
+      const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };
+      const mockCommunication = { id: 55, processId: 1, status: 'draft' };
+
+      vi.mocked(communicationService.sendToFenicia).mockResolvedValue(mockCommunication as any);
+      vi.mocked(communicationService.send).mockResolvedValue({
+        ...mockCommunication,
+        status: 'sent',
+      } as any);
+
+      queryQueue.push(createResolvedChain([mockEspelho])); // getEspelho
+      queryQueue.push(createResolvedChain([mockEspelho])); // mark espelho sent
+      queryQueue.push(createResolvedChain([{ status: 'espelho_generated' }])); // current process
+      queryQueue.push(createResolvedChain(undefined)); // update process
+      queryQueue.push(createResolvedChain(undefined)); // update follow-up
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-001' }])); // milestone process code
+
+      const result = await espelhoService.sendToFeniciaByProcess(1, 7);
+
+      expect(result).toEqual(mockEspelho);
+      expect(communicationService.sendToFenicia).toHaveBeenCalledWith(1);
+      expect(communicationService.send).toHaveBeenCalledWith(55, undefined, 7);
+      expect(
+        vi.mocked(communicationService.sendToFenicia).mock.invocationCallOrder[0],
+      ).toBeLessThan(vi.mocked(communicationService.send).mock.invocationCallOrder[0]);
+      expect(auditService.log).toHaveBeenCalledWith(
+        7,
+        'sent_to_fenicia',
+        'espelho',
+        10,
+        { processId: 1 },
+        null,
+      );
+    });
+
+    it('should not mark the espelho as sent when the email send fails', async () => {
+      const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };
+      const mockCommunication = { id: 55, processId: 1, status: 'draft' };
+
+      vi.mocked(communicationService.sendToFenicia).mockResolvedValue(mockCommunication as any);
+      vi.mocked(communicationService.send).mockRejectedValue(new Error('SMTP indisponivel'));
+
+      queryQueue.push(createResolvedChain([mockEspelho])); // getEspelho
+
+      await expect(espelhoService.sendToFeniciaByProcess(1, 7)).rejects.toThrow(
+        'SMTP indisponivel',
+      );
+
+      expect(communicationService.sendToFenicia).toHaveBeenCalledWith(1);
+      expect(communicationService.send).toHaveBeenCalledWith(55, undefined, 7);
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });

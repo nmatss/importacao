@@ -40,6 +40,10 @@ Evidencia:
 
 - `scripts/deploy.sh`
 
+Requisito de segredo:
+
+- `CERT_API_KEY` deve existir no `.env` remoto. O compose de producao falha se a variavel estiver ausente, e o nginx do `web` usa esse valor para injetar `X-API-Key` no proxy `/cert-api/`.
+
 ## Backup E Restore
 
 Backups sao gerados em:

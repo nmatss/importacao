@@ -1,5 +1,37 @@
 # Session Memory
 
+## 2026-06-17 - Hardening Cert-API, Fenicia, AuthZ E Dependencias
+
+Analise continuada com subagentes para cert-api/proxy, AuthZ/Fenicia e
+dependencias npm.
+
+Correcoes aplicadas:
+
+- `cert-api` passou a falhar fechado quando `CERT_API_KEY` esta ausente; apenas
+  `/api/health` e `/api/ready` ficam sem API key.
+- Nginx do `web` passou a injetar `X-API-Key` no proxy `/cert-api/` via
+  `CERT_API_KEY`; compose de producao exige a variavel para `web` e `cert-api`.
+- Proxy dev do Vite tambem injeta `X-API-Key` quando `CERT_API_KEY` existe no
+  ambiente local.
+- API Node inicializa Redis/cache fora de testes e encerra Redis no shutdown.
+- Cadastro de usuarios no frontend ficou restrito aos papeis `admin` e
+  `analyst`.
+- Rotas criticas passaram a exigir admin: delete de processo, reprocess/delete
+  de documento, sync manual de follow-up, delete de item de espelho e envio/marco
+  Fenícia.
+- "Enviar para Fenícia" agora cria comunicacao, envia SMTP real por
+  `communicationService.send` e so marca espelho/processo apos sucesso.
+- Dependencias com audit `high` foram removidas: `vite`, `form-data`,
+  `@grpc/grpc-js` e `multer` ficaram em versoes corrigidas.
+
+Observacoes:
+
+- `npm audit --audit-level=high` ficou sem `high`/`critical`; restam 13
+  moderadas e 1 baixa transitivas registradas em `docs/TECH_DEBT.md`.
+- `@googleapis/drive` foi atualizado para major. `testcontainers` v12 foi
+  testado, mas voltou para 11.14.0 porque puxou `undici@8` e quebrou E2E local
+  com Node 20.
+
 ## 2026-06-17 - Revisao Completa Pos-Deploy, Segurança E Operacao
 
 Analise conduzida com subagentes especializados em backend/RAG/seguranca,

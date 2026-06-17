@@ -116,25 +116,25 @@ pytest tests/ -v
 
 ## Environment Variables
 
-| Variable                                   | Description                                          |
-| ------------------------------------------ | ---------------------------------------------------- |
-| CERT_API_KEY                               | API key for X-API-Key header (empty = disabled)      |
-| DATABASE_URL                               | PostgreSQL connection string                         |
-| GOOGLE_SHEETS_CLIENT_EMAIL                 | Service account email                                |
-| GOOGLE_SHEETS_PRIVATE_KEY                  | Service account private key                          |
-| GOOGLE_SHEETS_SPREADSHEET_ID               | Spreadsheet ID                                       |
-| VTEX_PUKET_DOMAIN                          | Puket VTEX domain (default: www.puket.com.br)        |
-| VTEX_IMAGINARIUM_DOMAIN                    | Imaginarium VTEX domain                              |
-| VTEX_REQUEST_DELAY                         | Seconds between VTEX requests (default: 1.5)         |
-| WMS_ORACLE_HOST/PORT/SID/USER/PASS         | Oracle WMS credentials                               |
-| ERP_PUKET_HOST/DB, ERP_IMG_HOST/DB         | SQL Server ERP connection                            |
-| ERP_MSSQL_USER/PASS                        | SQL Server credentials                               |
-| CORS_ORIGINS                               | Comma-separated allowed origins                      |
-| REPORTS_DIR                                | Path to store generated reports                      |
-| LINX_WRITE_ENABLED                         | Gate da escrita no Linx (default false, fail-closed) |
-| LINX_PROP_COL_PRODUTO/PROPRIEDADE/VALOR    | Colunas reais de PROP_PRODUTOS (via descoberta)      |
-| LINX_PRODUTO_COL_SKU / LINX_SKU_IS_PRODUTO | Resolução SKU→produto (fail-closed sem config)       |
-| LINX_DATE_FORMAT                           | Formato da data gravada (default %d/%m/%Y)           |
+| Variable                                   | Description                                                 |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| CERT_API_KEY                               | API key for X-API-Key header; required for protected routes |
+| DATABASE_URL                               | PostgreSQL connection string                                |
+| GOOGLE_SHEETS_CLIENT_EMAIL                 | Service account email                                       |
+| GOOGLE_SHEETS_PRIVATE_KEY                  | Service account private key                                 |
+| GOOGLE_SHEETS_SPREADSHEET_ID               | Spreadsheet ID                                              |
+| VTEX_PUKET_DOMAIN                          | Puket VTEX domain (default: www.puket.com.br)               |
+| VTEX_IMAGINARIUM_DOMAIN                    | Imaginarium VTEX domain                                     |
+| VTEX_REQUEST_DELAY                         | Seconds between VTEX requests (default: 1.5)                |
+| WMS_ORACLE_HOST/PORT/SID/USER/PASS         | Oracle WMS credentials                                      |
+| ERP_PUKET_HOST/DB, ERP_IMG_HOST/DB         | SQL Server ERP connection                                   |
+| ERP_MSSQL_USER/PASS                        | SQL Server credentials                                      |
+| CORS_ORIGINS                               | Comma-separated allowed origins                             |
+| REPORTS_DIR                                | Path to store generated reports                             |
+| LINX_WRITE_ENABLED                         | Gate da escrita no Linx (default false, fail-closed)        |
+| LINX_PROP_COL_PRODUTO/PROPRIEDADE/VALOR    | Colunas reais de PROP_PRODUTOS (via descoberta)             |
+| LINX_PRODUTO_COL_SKU / LINX_SKU_IS_PRODUTO | Resolução SKU→produto (fail-closed sem config)              |
+| LINX_DATE_FORMAT                           | Formato da data gravada (default %d/%m/%Y)                  |
 
 ## Docker
 

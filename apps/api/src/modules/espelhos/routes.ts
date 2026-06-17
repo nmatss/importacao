@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { espelhoController } from './controller.js';
-import { authMiddleware } from '../../shared/middleware/auth.js';
+import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { updateEspelhoItemSchema, addEspelhoItemSchema } from './schema.js';
 
@@ -10,11 +10,11 @@ router.use(authMiddleware);
 
 // Item-scoped routes (literal prefix, must come first)
 router.put('/items/:id', validate(updateEspelhoItemSchema), espelhoController.updateItem);
-router.delete('/items/:id', espelhoController.deleteItem);
+router.delete('/items/:id', adminMiddleware, espelhoController.deleteItem);
 
 // Espelho-scoped routes with sub-path (must come before bare /:processId)
 router.get('/:id/download', espelhoController.download);
-router.patch('/:id/sent', espelhoController.markSentToFenicia);
+router.patch('/:id/sent', adminMiddleware, espelhoController.markSentToFenicia);
 
 // Process-scoped routes with sub-paths
 router.post('/:processId/generate', espelhoController.generate);
@@ -23,8 +23,12 @@ router.post('/:processId/items', validate(addEspelhoItemSchema), espelhoControll
 router.post('/:processId/generate-partial', espelhoController.generatePartial);
 router.post('/:processId/generate-li', espelhoController.generatePartial);
 router.post('/:processId/send-drive', espelhoController.sendToDrive);
-router.post('/:processId/send-fenicia', espelhoController.sendToFenicia);
-router.patch('/:processId/items/:id', validate(updateEspelhoItemSchema), espelhoController.updateItem);
+router.post('/:processId/send-fenicia', adminMiddleware, espelhoController.sendToFenicia);
+router.patch(
+  '/:processId/items/:id',
+  validate(updateEspelhoItemSchema),
+  espelhoController.updateItem,
+);
 
 // Bare param route (must be last to avoid matching other routes)
 router.get('/:processId', espelhoController.getEspelho);

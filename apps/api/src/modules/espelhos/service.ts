@@ -16,6 +16,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { flattenAiData } from '../ai/service.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
+import { communicationService } from '../communications/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
@@ -450,6 +451,10 @@ export const espelhoService = {
   async sendToFeniciaByProcess(processId: number, userId: number | null = null) {
     const espelho = await this.getEspelho(processId);
     if (!espelho) throw new NotFoundError('Espelho');
+
+    const communication = await communicationService.sendToFenicia(processId);
+    await communicationService.send(communication.id, undefined, userId);
+
     return this.markSentToFenicia(espelho.id, userId);
   },
 

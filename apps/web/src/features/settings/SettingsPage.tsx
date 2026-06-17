@@ -64,9 +64,7 @@ const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
   admin: { bg: 'bg-danger-50', text: 'text-danger-700' },
-  manager: { bg: 'bg-primary-50', text: 'text-primary-700' },
-  operator: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  viewer: { bg: 'bg-slate-100 dark:bg-slate-700', text: 'text-slate-600 dark:text-slate-400' },
+  analyst: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
 };
 
 const defaultRoleBadge = {
@@ -375,7 +373,7 @@ function UsersTab() {
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deactivateId, setDeactivateId] = useState<number | null>(null);
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'operator' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'analyst' });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -390,7 +388,7 @@ function UsersTab() {
 
   const openCreate = () => {
     setEditUser(null);
-    setForm({ name: '', email: '', password: '', role: 'operator' });
+    setForm({ name: '', email: '', password: '', role: 'analyst' });
     setShowModal(true);
   };
 
@@ -648,9 +646,7 @@ function UsersTab() {
                   className={inputClasses}
                 >
                   <option value="admin">Admin</option>
-                  <option value="manager">Manager</option>
-                  <option value="operator">Operator</option>
-                  <option value="viewer">Viewer</option>
+                  <option value="analyst">Analista</option>
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">

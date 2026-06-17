@@ -46,6 +46,6 @@ router.patch(
 );
 router.post('/:id/lock', adminMiddleware, validate(lockProcessSchema), processController.lock);
 router.post('/:id/unlock', adminMiddleware, processController.unlock);
-router.delete('/:id', processController.delete);
+router.delete('/:id', adminMiddleware, processController.delete);
 
 export { router as processRoutes };

@@ -154,7 +154,7 @@ services:
       ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
       ERP_MSSQL_USER: ${ERP_MSSQL_USER}
       ERP_MSSQL_PASS: ${ERP_MSSQL_PASS}
-      CERT_API_KEY: ${CERT_API_KEY:-}
+      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     volumes:
       - cert-reports:/app/reports
       # Certificate PDFs (INMETRO/ANVISA evidence) live in CERTS_DIR=/app/certs
@@ -189,6 +189,8 @@ services:
     restart: unless-stopped
     ports:
       - "8085:80"
+    environment:
+      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     depends_on:
       api:
         condition: service_healthy

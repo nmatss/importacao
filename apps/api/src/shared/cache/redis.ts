@@ -150,3 +150,7 @@ export const cache: CacheClient = new RedisCache();
 export async function initCache(): Promise<void> {
   await (cache as RedisCache).init();
 }
+
+export async function stopCache(): Promise<void> {
+  await cache.disconnect();
+}

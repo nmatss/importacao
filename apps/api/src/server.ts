@@ -8,6 +8,7 @@ import { logger } from './shared/utils/logger.js';
 import { startScheduler } from './jobs/scheduler.js';
 import { initQueue, stopQueue } from './shared/queue/index.js';
 import { registerWorkers } from './shared/queue/workers.js';
+import { initCache, stopCache } from './shared/cache/redis.js';
 
 // Validate env vars at startup — fail-fast if invalid
 const env = getEnv();
@@ -65,6 +66,10 @@ const server = app.listen(PORT, () => {
 
   // Start cron jobs
   if (process.env.NODE_ENV !== 'test') {
+    void initCache().catch((err) => {
+      logger.error({ err }, 'Cache failed to initialize');
+    });
+
     startScheduler();
     logger.info('Scheduler started');
 
@@ -83,9 +88,10 @@ const shutdown = (signal: string) => {
   logger.info(`${signal} received. Starting graceful shutdown...`);
   server.close(() => {
     logger.info('HTTP server closed');
-    void stopQueue()
-      .catch((err) => logger.error({ err }, 'Failed to stop job queue'))
-      .finally(() => process.exit(0));
+    void Promise.all([
+      stopQueue().catch((err) => logger.error({ err }, 'Failed to stop job queue')),
+      stopCache().catch((err) => logger.error({ err }, 'Failed to stop cache')),
+    ]).finally(() => process.exit(0));
   });
 
   // Force close after 10 seconds

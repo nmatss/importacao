@@ -87,6 +87,8 @@ Evidencias:
 Servico Python separado para certificacoes:
 
 - Saude: `/cert-api/api/health` via nginx/proxy.
+- Readiness: `/cert-api/api/ready` via nginx/proxy.
+- Rotas protegidas exigem `X-API-Key`; em producao o header e injetado pelo nginx do `web` a partir de `CERT_API_KEY`.
 - Relatorios, validacao e produtos ficam sob `apps/cert-api`.
 
 Evidencias:

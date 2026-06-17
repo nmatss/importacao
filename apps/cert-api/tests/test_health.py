@@ -23,7 +23,7 @@ async def test_health_no_auth_required(test_client):
 @pytest.mark.asyncio
 async def test_ready_no_db(test_client):
     """GET /api/ready should return ready=False when DATABASE_URL is empty."""
-    resp = await test_client.get("/api/ready", headers={"X-API-Key": "test-key"})
+    resp = await test_client.get("/api/ready")
     assert resp.status_code == 200
     data = resp.json()
     # When DATABASE_URL is empty, not ready
