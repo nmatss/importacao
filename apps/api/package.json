@@ -3,6 +3,14 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "overrides": {
+    "imapflow": {
+      "nodemailer": "$nodemailer"
+    },
+    "mailparser": {
+      "nodemailer": "$nodemailer"
+    }
+  },
   "scripts": {
     "dev": "DOTENV_CONFIG_PATH=../../.env tsx watch -r dotenv/config src/server.ts",
     "build": "tsc && mkdir -p dist/modules/ai/knowledge && cp src/modules/ai/knowledge/*.json dist/modules/ai/knowledge/",
