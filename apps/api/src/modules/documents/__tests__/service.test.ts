@@ -183,6 +183,43 @@ describe('documentService', () => {
       expect(result[0]).toHaveProperty('documentType');
       expect(result[0]).toHaveProperty('aiProcessingStatus');
     });
+
+    it('marks processed documents without meaningful extracted data as failed', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            processId: 1,
+            type: 'invoice',
+            originalFilename: 'invoice.pdf',
+            isProcessed: true,
+            aiParsedData: {
+              invoiceNumber: { value: null, confidence: 0 },
+              exporterName: { value: '', confidence: 0 },
+              items: [],
+            },
+          },
+          {
+            id: 2,
+            processId: 1,
+            type: 'packing_list',
+            originalFilename: 'pl.pdf',
+            isProcessed: true,
+            aiParsedData: {
+              exporterName: { value: 'KIOM GLOBAL LIMITED', confidence: 1 },
+            },
+          },
+        ]),
+      );
+
+      const result = await documentService.getByProcess(1);
+
+      expect(result[0]).toMatchObject({ documentType: 'invoice', aiProcessingStatus: 'failed' });
+      expect(result[1]).toMatchObject({
+        documentType: 'packing_list',
+        aiProcessingStatus: 'completed',
+      });
+    });
   });
 
   describe('delete()', () => {
@@ -239,6 +276,17 @@ describe('documentService', () => {
     it('rebuilds projected document data from current processed documents only', async () => {
       queryQueue.push(
         createResolvedChain([
+          {
+            id: 5,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            aiParsedData: {
+              invoiceNumber: { value: null, confidence: 0 },
+              exporterName: { value: '', confidence: 0 },
+              items: [],
+            },
+          },
           {
             id: 4,
             type: 'invoice',
@@ -398,6 +446,45 @@ describe('documentService', () => {
       });
       expect(loadingPort).toMatchObject({ status: 'divergent' });
       expect(dischargePort).toMatchObject({ status: 'match' });
+    });
+
+    it('does not treat processed documents without meaningful extraction as available', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              invoiceNumber: { value: null, confidence: 0 },
+              exporterName: { value: '', confidence: 0 },
+              items: [],
+            },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED', items: [{ itemCode: 'A1' }] },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+
+      expect(comparison.hasInvoice).toBe(false);
+      expect(comparison.hasPackingList).toBe(true);
+      expect(comparison.itemComparison).toHaveLength(0);
+      expect(
+        comparison.aggregateComparison.find((row: any) => row.label === 'Exportador / Shipper'),
+      ).toMatchObject({ invoice: null, packingList: 'KIOM GLOBAL LIMITED' });
     });
   });
 

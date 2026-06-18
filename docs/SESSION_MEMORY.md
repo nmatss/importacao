@@ -601,3 +601,59 @@ Verificacoes ja executadas nesta sessao:
 Pendencias antes de deploy:
 
 - Commit, push e `scripts/deploy.sh`.
+
+## 2026-06-18 - Auditoria Feedback Eduarda/Leticia E Invoice DEMO 264
+
+Contexto:
+
+- Feedback operacional revisado contra codigo, documentacao e producao.
+- Producao consultada no processo `264` (`DEMO-IM0712602NB-E227210`).
+
+Evidencias de producao:
+
+- Documento `2026.02.22 KIOM INV - IM0712602NB (1).pdf` estava como
+  `type=invoice` e `is_processed=true`, mas sem `exporterName`, sem
+  `invoiceNumber`, sem datas logisticas e com `items=0`.
+- Packing List, OHBL, Draft BL e Espelho tinham dados parciais/itens; a falha
+  principal do Comparativo era a invoice antiga sem dado util, nao ausencia de
+  aba ou botao.
+- SKU `050402313` em producao: `last_validation_status=URL_NOT_FOUND`,
+  `is_expired=true`, `sale_deadline=07/12/2025`; a derivacao atual retorna
+  `cert_status=ENCERRADO`, `site_status=CONFORME`,
+  `license_status=NAO_APLICAVEL`, `comercializacao_status=ENCERRADA`.
+
+Correcoes aplicadas nesta sessao:
+
+- Documento processado sem dado util extraido deixou de contar como lido.
+- `aiParsedData` vazio, com campos `{ value: null }`, string vazia ou lista de
+  itens vazia nao projeta dados em `aiExtractedData`.
+- Comparativo, validacao e deteccao de anomalias passaram a ignorar documentos
+  sem dado util, mesmo que estejam `isProcessed=true`.
+- Nova extracao IA que retorna sucesso sem dado util passa a ser marcada como
+  `extractionFailed`, com alerta critico para reprocessar/reclassificar.
+
+Status dos pedidos:
+
+- Importacao: FOC/desconto, centralizacao no Comparativo, filtros,
+  `Aceitar`, comparativo por item, normalizacao de portos, ETD com tolerancia,
+  log de checklist e Proformas estao implementados. A invoice do processo 264
+  ainda depende de reprocessamento/reupload apos deploy desta correcao.
+- Importacao pendente de decisao UX: unificar `Atendimentos` e `E-mails`.
+- Certificacao: tela principal ja mostra `Status Certificacao`,
+  `Cert. - Prazo`, `Status Ecommerce`, `Status Licenciamento` e
+  `Licen. - Prazo`; exportacoes/relatorios ainda tem nomenclatura legada
+  `Status`/`Prazo Venda`.
+- Certificacao pendente de dado/regra: prazo de licenciamento separado nao
+  existe na fonte atual; estoque CD usa disponivel do WMS, nao necessariamente
+  estoque fisico do relatorio externo da Leticia.
+
+Testes locais executados:
+
+- `npm test -w apps/api -- src/modules/documents/__tests__/service.test.ts`
+- `npm test -w apps/api -- src/modules/documents/__tests__/process-with-ai-resilience.test.ts`
+- `npm test -w apps/api -- src/modules/validation/__tests__/service.test.ts`
+- `npm run typecheck`
+- `npm run lint`
+- `git diff --check`
+- `npm test`
+- `npm run build`

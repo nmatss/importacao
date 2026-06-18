@@ -68,6 +68,19 @@ const PROJECTED_AI_DATA_KEYS = new Set([
   'other',
 ]);
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+const AI_META_KEYS = new Set([
+  'budgetExceeded',
+  'confidence',
+  'confidenceScore',
+  'error',
+  'extractionFailed',
+  'fieldsWithLowConfidence',
+  'reason',
+  'rawText',
+  'skipped',
+  'source',
+  'warnings',
+]);
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -80,6 +93,7 @@ function shouldProjectAiData(
 ): aiParsedData is Record<string, any> {
   if (!PROJECTED_AI_DATA_KEYS.has(type) || !isRecord(aiParsedData)) return false;
   if (aiParsedData.extractionFailed || aiParsedData.skipped) return false;
+  if (!hasMeaningfulAiData(aiParsedData)) return false;
   if (!hasOperationalConfidence(confidenceScore)) return false;
   if (type === 'espelho' && hasFailedEspelhoExtraction(aiParsedData)) return false;
   return true;
@@ -90,6 +104,28 @@ function hasOperationalConfidence(confidenceScore: string | number | null | unde
   const confidence =
     typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
   return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
+}
+
+function hasMeaningfulAiData(value: unknown): boolean {
+  return hasMeaningfulAiValue(value);
+}
+
+function hasMeaningfulAiValue(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return value === true;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulAiValue(item));
+  if (!isRecord(value)) return false;
+
+  if ('value' in value) {
+    return hasMeaningfulAiValue(value.value);
+  }
+
+  return Object.entries(value).some(([key, nested]) => {
+    if (AI_META_KEYS.has(key)) return false;
+    return hasMeaningfulAiValue(nested);
+  });
 }
 
 function standardizeDocumentName(
@@ -186,7 +222,7 @@ function documentAiProcessingStatus(row: {
 }): 'processing' | 'completed' | 'failed' {
   if (row.isProcessed) {
     if (hasExtractionFailureData(row.aiParsedData)) return 'failed';
-    return row.aiParsedData ? 'completed' : 'failed';
+    return hasMeaningfulAiData(row.aiParsedData) ? 'completed' : 'failed';
   }
   return isProcessingStale(row.updatedAt ?? row.createdAt) ? 'failed' : 'processing';
 }
@@ -655,6 +691,17 @@ export const documentService = {
       cleanItemCodesInAiData(result.data as Record<string, any>);
     }
 
+    if (!hasMeaningfulAiData(result.data)) {
+      await this.markExtractionFailure(
+        doc,
+        type,
+        new Error(
+          'Extração IA concluída sem dados úteis no documento. Reclassifique/reenvie ou reprocesse.',
+        ),
+      );
+      return;
+    }
+
     await db
       .update(documents)
       .set({
@@ -837,19 +884,11 @@ export const documentService = {
    * alertService (same processId + title within 24h).
    */
   async runDegradableGate(processId: number, mergedAiData: Record<string, any>) {
-    // Boolean(obj) era true para um {} vazio — uma INV classificada mas com
-    // extração vazia contava como "presente" e suprimia o alerta "Aguardando
-    // INV" (UAT Odett #7). Exige pelo menos um campo com valor ou itens.
-    const hasRelevantData = (obj: any): boolean => {
-      if (!obj || typeof obj !== 'object') return false;
-      if (Array.isArray(obj.items) && obj.items.length > 0) return true;
-      return Object.values(obj).some(
-        (f: any) => f && typeof f === 'object' && 'value' in f && f.value != null,
-      );
-    };
-    const hasInvoice = hasRelevantData(mergedAiData.invoice);
-    const hasPackingList = hasRelevantData(mergedAiData.packing_list);
-    const hasBl = hasRelevantData(mergedAiData.ohbl);
+    // Boolean(obj) era true para um {} vazio — uma INV classificada mas sem
+    // dado útil contava como "presente" e suprimia o alerta "Aguardando INV".
+    const hasInvoice = hasMeaningfulAiData(mergedAiData.invoice);
+    const hasPackingList = hasMeaningfulAiData(mergedAiData.packing_list);
+    const hasBl = hasMeaningfulAiData(mergedAiData.ohbl);
     const allThree = hasInvoice && hasPackingList && hasBl;
 
     // Nothing core extracted yet (e.g. only a proforma/espelho/cert so far) —
@@ -1713,9 +1752,10 @@ export const documentService = {
           d.type === type &&
           d.isProcessed &&
           d.aiParsedData &&
+          hasMeaningfulAiData(d.aiParsedData) &&
           hasOperationalConfidence(d.confidenceScore) &&
           !hasExtractionFailureData(d.aiParsedData),
-      ) ?? newestFirst.find((d) => d.type === type);
+      );
 
     const invoiceDoc = selectComparisonDoc('invoice');
     const plDoc = selectComparisonDoc('packing_list');

@@ -35,6 +35,19 @@ type DocumentWithAiData = {
 };
 
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+const AI_META_KEYS = new Set([
+  'budgetExceeded',
+  'confidence',
+  'confidenceScore',
+  'error',
+  'extractionFailed',
+  'fieldsWithLowConfidence',
+  'reason',
+  'rawText',
+  'skipped',
+  'source',
+  'warnings',
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -50,6 +63,24 @@ function hasOperationalConfidence(confidenceScore: string | number | null | unde
   const confidence =
     typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
   return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
+}
+
+function hasMeaningfulAiData(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value === 'boolean') return value === true;
+  if (Array.isArray(value)) return value.some((item) => hasMeaningfulAiData(item));
+  if (!isRecord(value)) return false;
+
+  if ('value' in value) {
+    return hasMeaningfulAiData(value.value);
+  }
+
+  return Object.entries(value).some(([key, nested]) => {
+    if (AI_META_KEYS.has(key)) return false;
+    return hasMeaningfulAiData(nested);
+  });
 }
 
 function documentTime(value: Date | string | null | undefined): number {
@@ -72,6 +103,7 @@ function isUsableValidationDocument(doc: DocumentWithAiData): boolean {
   return (
     doc.isProcessed !== false &&
     doc.aiParsedData != null &&
+    hasMeaningfulAiData(doc.aiParsedData) &&
     hasOperationalConfidence(doc.confidenceScore) &&
     !hasExtractionFailureData(doc.aiParsedData)
   );

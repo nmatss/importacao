@@ -129,6 +129,55 @@ describe('processWithAI — extraction failure resilience', () => {
     );
   });
 
+  it('marks document as extractionFailed when AI returns no meaningful data', async () => {
+    extractInvoiceData.mockResolvedValueOnce({
+      data: {
+        invoiceNumber: { value: null, confidence: 0 },
+        exporterName: { value: '', confidence: 0 },
+        items: [],
+      },
+      confidenceScore: 0.91,
+    });
+
+    const doc = {
+      id: 17,
+      processId: 42,
+      type: 'invoice',
+      storagePath: '/tmp/inv-empty.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'inv-empty.pdf',
+    };
+
+    queryQueue.push(createResolvedChain([doc]));
+    const failUpdate = createResolvedChain(undefined);
+    queryQueue.push(failUpdate);
+    queryQueue.push(createResolvedChain([{ processCode: 'IMP-042' }]));
+    queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
+
+    await documentService.processWithAI(17, 'invoice');
+
+    expect(failUpdate.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiParsedData: expect.objectContaining({
+          extractionFailed: true,
+          reason: expect.stringContaining('sem dados úteis'),
+        }),
+        confidenceScore: '0',
+        isProcessed: true,
+      }),
+    );
+    expect(alertCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processId: 42,
+        severity: 'critical',
+        title: 'Falha na extração de IA',
+      }),
+    );
+  });
+
   it('flags budgetExceeded when extraction throws AIBudgetExceededError', async () => {
     extractInvoiceData.mockRejectedValueOnce(new AIBudgetExceededError(250, 200));
 

@@ -70,6 +70,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   PDF, evitando acao visualmente infinita em arquivo lento ou indisponivel.
 - Comparativo de documentos passou a preferir o documento mais recente,
   processado e sem falha por tipo, evitando usar invoice pendente/obsoleta.
+- Documentos processados sem nenhum dado útil extraído agora são tratados como
+  falha operacional: não projetam dados no processo, não entram no Comparativo,
+  não alimentam validação/anomalias e novas extrações vazias viram
+  `extractionFailed` com alerta para reprocessar/reclassificar.
 - Compose/env de producao passam a exigir `GOOGLE_CLIENT_ID` e
   `VITE_GOOGLE_CLIENT_ID`; destinatarios KIOM/Fenicia/ISA agora sao
   configuraveis em `Configuracoes > Destinatarios operacionais`, com env apenas
@@ -133,6 +137,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   falha se um conjunto documental coerente produzir status `failed`.
 - Cobertura de regressao garante fallback de `draft_bl` e precedencia de
   `ohbl` em `runAllChecks` e `runAnomalyDetection`.
+- Cobertura de regressao garante que extrações vazias/nulas não sejam
+  classificadas como documento lido no status da lista, na validação, na
+  detecção de anomalias nem no Comparativo.
 - Cobertura de regressao garante configuracao Odoo por banco/env e selecao
   correta do client XML-RPC HTTP/HTTPS.
 - Cobertura de regressao garante foco/Escape/Tab do modal de e-mail de

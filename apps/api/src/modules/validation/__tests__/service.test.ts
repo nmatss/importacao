@@ -293,6 +293,18 @@ describe('validationService', () => {
             aiParsedData: { invoiceNumber: 'INV-LOW' },
           },
           {
+            id: 9,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            updatedAt: new Date('2026-06-01T00:00:00Z'),
+            aiParsedData: {
+              invoiceNumber: { value: null, confidence: 0 },
+              exporterName: { value: '', confidence: 0 },
+              items: [],
+            },
+          },
+          {
             id: 5,
             type: 'packing_list',
             isProcessed: true,
@@ -531,6 +543,18 @@ describe('validationService', () => {
             confidenceScore: '0.39',
             updatedAt: new Date('2026-03-01T00:00:00Z'),
             aiParsedData: { invoiceNumber: 'INV-LOW' },
+          },
+          {
+            id: 8,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            updatedAt: new Date('2026-04-01T00:00:00Z'),
+            aiParsedData: {
+              invoiceNumber: { value: null, confidence: 0 },
+              exporterName: { value: '', confidence: 0 },
+              items: [],
+            },
           },
           {
             id: 3,

@@ -81,6 +81,8 @@ Concluido em 2026-06-18:
   com confianca menor que 40% ficam como evidencia, sem projecao operacional
   para validacao/espelho; comparativo e validacao usam documento vigente,
   processado, nao falho e acima do piso de confianca.
+- Extrações processadas sem dado útil deixaram de contar como documento lido e
+  novas respostas vazias da IA passam a virar falha de extração com alerta.
 - Runbook/README reconciliados com `AI_PROVIDER=ialocal`, egress externo por
   opt-in e rollback rsync/snapshot sem `git checkout` no servidor.
 - Rotas internas invalidas com fallback contextual em Importacao/Certificacoes.
