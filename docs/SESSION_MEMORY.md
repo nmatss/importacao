@@ -1,5 +1,42 @@
 # Session Memory
 
+## 2026-06-18 - Deploy Producao E Fechamento Pos-Auditoria
+
+Correcoes finais aplicadas:
+
+- Deploy oficial concluido em producao via `scripts/deploy.sh` no servidor
+  `192.168.168.124`, com backup obrigatorio, snapshot de rollback, migrations,
+  rebuild/restart e healthchecks.
+- Segredos obrigatorios `GOOGLE_SHEETS_SPREADSHEET_ID` e
+  `GRAFANA_ADMIN_PASSWORD` foram adicionados no SOPS remoto e o `.env` passou a
+  ser gerado com `docker compose config --quiet` valido.
+- Destinatarios operacionais foram mantidos em `system_settings`: KIOM e
+  Fenicia preenchidos; ISA permaneceu vazio para cadastro pelo negocio em
+  Configuracoes.
+- O processo `264` permaneceu sem documentos pendentes de processamento apos a
+  correcao da invoice presa.
+- O runtime Docker da API foi corrigido com `overrides` locais para
+  `imapflow`/`mailparser` usarem o `nodemailer` corrigido. O container final
+  ficou com `npm audit --omit=dev --audit-level=high` sem vulnerabilidades.
+
+Validacoes finais executadas:
+
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `npm audit --audit-level=high` em `apps/api`
+- Instalacao standalone temporaria de `apps/api` com `npm install --omit=dev`
+  e audit high.
+- `docker build -t importacao-api-audit ./apps/api`
+- `docker run --rm --entrypoint sh importacao-api-audit -lc 'cd /app && npm audit --omit=dev --audit-level=high'`
+- Deploys oficiais para `de8d688d5b49` e depois `8170d3dc9a0e`.
+- Pos-deploy: containers `importacao-api`, `importacao-web`, `importacao-cert-api`,
+  `importacao-redis` e `importacao-postgres` saudaveis; `/health/ready` OK;
+  cert-api `ready=True`; rota publica `/importacao/processos/264` respondeu
+  `HTTP 200`; logs recentes da API sem `error|exception|fatal|unhandled|oauth`.
+
 ## 2026-06-18 - Fase De Fechamento De Pendencias E Acessibilidade Residual
 
 Inventario:

@@ -38,7 +38,13 @@ Ultima atualizacao: 2026-06-18
 - Evoluir autorizacao fina do proxy `/cert-api/`: hoje o Nginx exige JWT valido
   antes de injetar `X-API-Key`, mas a separacao por papel/escopo do modulo de
   certificacoes deve ser definida com o negocio.
-- Resolver residuais de `npm audit` moderados sem downgrade inseguro: `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do Sentry, `js-yaml`, `protobufjs` e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e quebrou E2E local em Node 20).
+- Resolver residuais de `npm audit` moderados sem downgrade inseguro: raiz do
+  workspace com 11 moderadas; builder Docker da API com 8 moderadas de
+  dev/tooling; runtime Docker da API sem vulnerabilidades em
+  `npm audit --omit=dev --audit-level=high`. Pendencias principais:
+  `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do
+  Sentry e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e
+  quebrou E2E local em Node 20).
 
 ## Frontend
 
