@@ -21,6 +21,7 @@ Principais grupos:
 - `/api/settings`
 - `/api/ai`
 - `/api/assistant`
+- `/api/sydle`
 - `/health`
 - `/metrics`
 
@@ -81,6 +82,40 @@ Evidencias:
 - `apps/api/src/modules/assistant/service.ts`
 - `apps/api/src/modules/ai/rag/retriever.ts`
 - `apps/web/src/features/assistant/AssistantPage.tsx`
+
+## SYDLE - Compras E Pagamentos
+
+Relatorio operacional de compras e pagamentos internacionais sincronizado da
+SYDLE a cada 15 minutos. A sincronizacao real depende das variaveis
+`SYDLE_*`; sem configuracao, o job registra `skipped`.
+
+Endpoints:
+
+- `GET /api/sydle/payments-report`
+- `GET /api/sydle/payments-report/summary`
+- `GET /api/sydle/payments-report/export.csv`
+- `GET /api/sydle/sync-runs`
+- `POST /api/sydle/sync-now` admin-only
+
+Filtros principais:
+
+- `search`
+- `supplier`
+- `brand`
+- `paymentStatus`
+- `paymentType`
+- `matchStatus`
+- `dueFrom`
+- `dueTo`
+- `page`
+- `limit`
+
+Evidencias:
+
+- `apps/api/src/modules/sydle/routes.ts`
+- `apps/api/src/modules/sydle/service.ts`
+- `apps/web/src/features/sydle-payments/SydlePaymentsPage.tsx`
+- `docs/SYDLE-INTEGRATION.md`
 
 ## Cert API
 

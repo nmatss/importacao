@@ -98,6 +98,7 @@ Acesse: `http://localhost:8085`
 | **Validacao**             | 27+ checks automatizados (status `skipped` por doc ausente, aceite manual com justificativa, historico por run) |
 | **Espelhos**              | Geracao de espelhos com templates por marca (join por EAN com fallback itemCode)                                |
 | **Financeiro**            | Valor aduaneiro, numerario (x0,6) e %numerario; alertas de invoice baixa, seguro e demurrage (job diario 08:30) |
+| **Compras e Pagamentos**  | Relatorio SYDLE de compras e pagamentos internacionais com sync a cada 15 minutos                               |
 | **LI Tracking**           | Rastreamento de Licencas de Importacao                                                                          |
 | **Desembaraco**           | Acompanhamento de desembaraco aduaneiro                                                                         |
 | **Numerario**             | Controle de numerario                                                                                           |
@@ -204,6 +205,7 @@ Hierarquia de erros tipados com dispatch automatico no error handler:
 | **Gmail API**     | Ingestao automatica de emails                                     |
 | **VTEX API**      | Verificacao de certificacoes em tempo real                        |
 | **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                      |
+| **SYDLE**         | Relatorio de compras/pagamentos internacionais via sync 15 min    |
 | **IA_LOCAL**      | Analise de documentos com DocIntel on-prem, sem egress por padrao |
 | **Redis**         | Cache e rate limiting                                             |
 

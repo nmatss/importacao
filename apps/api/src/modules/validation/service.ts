@@ -722,7 +722,7 @@ export const validationService = {
   async uploadValidationReportToDrive(processCode: string, results: CheckResult[]): Promise<void> {
     try {
       const { googleDriveService } = await import('../integrations/google-drive.service.js');
-      const configured = await googleDriveService.isConfigured();
+      const configured = await googleDriveService.isRootConfigured();
       if (!configured) return;
 
       const report = {

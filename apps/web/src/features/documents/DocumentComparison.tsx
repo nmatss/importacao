@@ -339,6 +339,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
     };
   }, [aggregateRows, itemRows]);
 
+  const missingComparisonDocs = useMemo(() => {
+    if (!data) return [];
+    return [
+      !data.hasInvoice ? 'Invoice' : null,
+      !data.hasPackingList ? 'Packing List' : null,
+      !data.hasBl ? 'Bill of Lading' : null,
+      !data.hasEspelho ? 'Espelho' : null,
+    ].filter(Boolean) as string[];
+  }, [data]);
+
   const submitAcceptance = async () => {
     if (!acceptTarget) return;
     const note = acceptNote.trim();
@@ -472,6 +482,19 @@ export function DocumentComparison({ processId }: { processId: string }) {
           confidence={data.espelhoConfidence ?? null}
         />
       </div>
+
+      {missingComparisonDocs.length > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Comparativo parcial</p>
+            <p className="mt-0.5 text-xs leading-5">
+              {missingComparisonDocs.join(', ')} ausente ou sem extracao valida. Reenvie ou
+              reprocesse o documento para liberar os campos e itens dependentes.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         {[

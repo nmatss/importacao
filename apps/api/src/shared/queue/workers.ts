@@ -102,7 +102,7 @@ async function handleEmailSend(data: EmailSendJob): Promise<void> {
 
 async function handleDriveSync(data: DriveSyncJob): Promise<void> {
   const { googleDriveService } = await import('../../modules/integrations/google-drive.service.js');
-  const configured = await googleDriveService.isConfigured();
+  const configured = await googleDriveService.isRootConfigured();
   if (!configured) {
     logger.warn('Google Drive not configured, skipping drive-sync job');
     return;

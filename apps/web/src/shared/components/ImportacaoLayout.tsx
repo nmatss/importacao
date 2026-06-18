@@ -22,6 +22,7 @@ import {
   ClipboardList,
   ChevronRight,
   Bot,
+  ReceiptText,
 } from 'lucide-react';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
@@ -42,6 +43,7 @@ const navSections = [
     label: 'Operacional',
     items: [
       { to: '/importacao/pre-cons', label: 'Pré-Conferência', icon: ClipboardList },
+      { to: '/importacao/compras-pagamentos', label: 'Compras e Pagamentos', icon: ReceiptText },
       { to: '/importacao/cambios', label: 'Câmbios', icon: DollarSign },
       { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },
       { to: '/importacao/desembaraco', label: 'Desembaraço', icon: Building2 },
@@ -76,6 +78,7 @@ const pageTitles: Record<string, string> = {
   '/importacao/processos': 'Processos',
   '/importacao/processos/novo': 'Novo Processo',
   '/importacao/pre-cons': 'Pré-Conferência',
+  '/importacao/compras-pagamentos': 'Compras e Pagamentos Internacionais',
   '/importacao/cambios': 'Câmbios',
   '/importacao/lis': 'LIs / LPCOs',
   '/importacao/desembaraco': 'Desembaraço Aduaneiro',

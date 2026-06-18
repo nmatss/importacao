@@ -95,6 +95,8 @@ export interface ImportProcess {
     type: string;
     originalFilename: string;
     isProcessed: boolean;
+    aiParsedData?: Record<string, unknown> | null;
+    confidenceScore?: string | null;
   }>;
   followUp: FollowUpTracking | null;
 }

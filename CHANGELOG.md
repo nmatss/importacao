@@ -24,6 +24,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Balao flutuante do Assistente IA nos layouts de Importacao e Certificacoes,
   reutilizando `POST /api/assistant/query` sem interromper formularios ou
   navegacao.
+- Modulo SYDLE de Compras e Pagamentos Internacionais com tabelas
+  `sydle_purchase_payments`/`sydle_sync_runs`, API `/api/sydle`,
+  tela `/importacao/compras-pagamentos`, exportacao CSV backend e sync
+  agendado a cada 15 minutos com no-op seguro quando desconfigurado.
 - Exportacao CSV para Central de Alertas e Atendimentos usando os filtros
   ativos da tela.
 - Utilitario compartilhado `apps/web/src/shared/lib/csv.ts`.
@@ -87,6 +91,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `VITE_GOOGLE_CLIENT_ID`; destinatarios KIOM/Fenicia/ISA agora sao
   configuraveis em `Configuracoes > Destinatarios operacionais`, com env apenas
   como fallback opcional.
+- Reprocessamento de documentos agora retorna o mesmo DTO operacional da lista,
+  incluindo `aiProcessingStatus`, evitando contrato divergente entre API e UI.
+- Enfileiramento de `ai-extraction` agora cai para processamento in-process
+  quando o `pg-boss` nao devolve ID de job, evitando documentos presos ate o
+  timeout operacional.
+- Google Drive passou a diferenciar credenciais configuradas de pasta raiz
+  configurada: `GOOGLE_DRIVE_ROOT_FOLDER_ID=your-root-folder-id` e tratado como
+  desconfigurado, pulando upload/movimentacao automáticos sem erro em cascata.
+- Comparativo documental agora exibe aviso de comparativo parcial quando
+  Invoice, Packing List, BL ou Espelho estao ausentes ou sem extracao valida;
+  indicadores do processo deixam de contar falha tecnica como documento
+  extraido.
 - Chaves privadas Google vindas do SOPS agora são normalizadas mesmo quando
   chegam com `\n` duplamente escapado, evitando falha `ERR_OSSL_UNSUPPORTED`
   no Gmail/Drive/Sheets/Groups/Vertex.

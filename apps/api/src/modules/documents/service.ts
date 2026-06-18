@@ -227,6 +227,46 @@ function documentAiProcessingStatus(row: {
   return isProcessingStale(row.updatedAt ?? row.createdAt) ? 'failed' : 'processing';
 }
 
+function toDocumentResponse(row: {
+  id: number;
+  processId: number;
+  originalFilename?: string | null;
+  type: string;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
+  isProcessed?: boolean | null;
+  aiParsedData?: unknown;
+  confidenceScore?: string | number | null;
+  driveFileId?: string | null;
+  storagePath?: string | null;
+  mimeType?: string | null;
+  fileSize?: number | null;
+}) {
+  const uploadedAt =
+    row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt ?? null);
+  const confidence = row.confidenceScore != null ? Number(row.confidenceScore) : null;
+
+  return {
+    id: row.id,
+    processId: row.processId,
+    fileName: row.originalFilename,
+    documentType: row.type,
+    uploadedAt,
+    aiProcessingStatus: documentAiProcessingStatus({
+      isProcessed: row.isProcessed ?? false,
+      aiParsedData: row.aiParsedData,
+      updatedAt: row.updatedAt,
+      createdAt: row.createdAt,
+    }),
+    aiParsedData: row.aiParsedData,
+    aiConfidence: confidence,
+    driveFileId: row.driveFileId,
+    storagePath: row.storagePath,
+    mimeType: row.mimeType,
+    fileSize: row.fileSize,
+  };
+}
+
 export const documentService = {
   async rebuildProcessAiExtractedData(
     processId: number,
@@ -291,13 +331,26 @@ export const documentService = {
   ) {
     try {
       const boss = await getQueue();
-      await boss.send('ai-extraction', {
+      const jobId = await boss.send('ai-extraction', {
         documentId: doc.id,
         processId: doc.processId,
         documentType: type,
         filePath: doc.storagePath,
       });
-      logger.info({ documentId: doc.id, processId: doc.processId, type }, 'AI extraction queued');
+      if (!jobId) {
+        logger.error(
+          { documentId: doc.id, processId: doc.processId, type },
+          'AI extraction queue did not return a job id — falling back to in-process extraction',
+        );
+        this.processWithAI(doc.id, type).catch((processErr) =>
+          logger.error({ err: processErr, documentId: doc.id }, 'AI fallback processing failed'),
+        );
+        return;
+      }
+      logger.info(
+        { documentId: doc.id, processId: doc.processId, type, jobId },
+        'AI extraction queued',
+      );
     } catch (err) {
       // Queue failure should be loud, but it must not recreate the old infinite
       // "processing" trap. Fallback keeps the document moving in single-node
@@ -1493,20 +1546,7 @@ export const documentService = {
       .where(eq(documents.processId, processId))
       .orderBy(desc(documents.createdAt));
 
-    return rows.map((row) => ({
-      id: row.id,
-      processId: row.processId,
-      fileName: row.originalFilename,
-      documentType: row.type,
-      uploadedAt: row.createdAt?.toISOString() ?? null,
-      aiProcessingStatus: documentAiProcessingStatus(row),
-      aiParsedData: row.aiParsedData,
-      aiConfidence: row.confidenceScore != null ? Number(row.confidenceScore) : null,
-      driveFileId: row.driveFileId,
-      storagePath: row.storagePath,
-      mimeType: row.mimeType,
-      fileSize: row.fileSize,
-    }));
+    return rows.map((row) => toDocumentResponse(row));
   },
 
   async getById(id: number) {
@@ -1628,7 +1668,13 @@ export const documentService = {
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 
     await this.enqueueAIExtraction(doc, doc.type);
-    return this.getById(documentId);
+    return toDocumentResponse({
+      ...doc,
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      updatedAt: new Date(),
+    });
   },
 
   async delete(id: number, userId: number | null = null) {
@@ -1666,7 +1712,7 @@ export const documentService = {
     filePath: string,
     fileName: string,
   ) {
-    const configured = await googleDriveService.isConfigured();
+    const configured = await googleDriveService.isRootConfigured();
     if (!configured) return;
 
     const [process] = await db

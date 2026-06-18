@@ -89,6 +89,28 @@ docker compose -f docker-compose.prod.yml restart api
 # All users will need to log in again
 ```
 
+## SYDLE Integration Secrets
+
+O relatorio de compras e pagamentos internacionais usa somente SOPS/env para
+credenciais. Nao armazenar token SYDLE em `system_settings`.
+
+Variaveis:
+
+- `SYDLE_SYNC_ENABLED`
+- `SYDLE_BASE_URL`
+- `SYDLE_API_TOKEN`
+- `SYDLE_PAYMENTS_PATH`
+- `SYDLE_AUTH_HEADER`
+- `SYDLE_AUTH_SCHEME`
+- `SYDLE_UPDATED_AFTER_PARAM`
+- `SYDLE_PAGE_PARAM`
+- `SYDLE_PAGE_SIZE_PARAM`
+- `SYDLE_PAGE_SIZE`
+- `SYDLE_TIMEOUT_MS`
+
+Padrao seguro: `SYDLE_SYNC_ENABLED=false`. Com esse valor, o scheduler registra
+`skipped` em `sydle_sync_runs` e nao tenta conectar na SYDLE.
+
 ## Access Control
 
 | Person  | Role          | Key location                 |

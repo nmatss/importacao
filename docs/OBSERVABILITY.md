@@ -39,6 +39,7 @@ Evidencias:
 - Falhas de email ingestion.
 - Falhas de upload/extracao.
 - Falhas de certificacao e relatorio.
+- Falhas/atrasos de sync SYDLE (`sydle_sync_runs`) e registros nao conciliados.
 
 ## Gaps
 
@@ -59,3 +60,4 @@ Criar dashboard minimo:
 - Jobs por status.
 - AI calls, latency, budget.
 - Uploads/extractions por status.
+- SYDLE sync: ultimo status, duracao, registros lidos, erros e nao conciliados.

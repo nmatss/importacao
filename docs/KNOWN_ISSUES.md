@@ -51,6 +51,60 @@ Status:
 - Aberto. Requer confirmacao/cadastro dos enderecos operacionais reais na tela
   de Configuracoes.
 
+## MEDIO - SYDLE Aguardando Contrato Externo Para Sync Real
+
+Descricao:
+
+- O modulo interno de compras/pagamentos SYDLE foi implementado, mas o
+  repositorio nao possui URL, credencial, endpoint ou payload real do projeto
+  SYDLE.
+- Enquanto `SYDLE_SYNC_ENABLED=false` ou faltarem `SYDLE_BASE_URL` /
+  `SYDLE_API_TOKEN`, o job de 15 minutos registra `status=skipped`.
+
+Evidencias:
+
+- `docs/SYDLE-INTEGRATION.md`
+- `apps/api/src/modules/sydle`
+- `apps/web/src/features/sydle-payments/SydlePaymentsPage.tsx`
+
+Impacto:
+
+- A tela e o relatorio funcionam, mas permanecem sem dados reais ate a
+  configuracao da fonte SYDLE.
+
+Status:
+
+- Aberto. Requer contrato/API/exportacao real da SYDLE e credenciais em SOPS.
+
+## MEDIO - Pasta Raiz Do Google Drive Ausente Em Producao
+
+Descricao:
+
+- Em 2026-06-18, a producao tinha credenciais Google Drive validas, mas
+  `GOOGLE_DRIVE_ROOT_FOLDER_ID=your-root-folder-id`.
+- O codigo agora trata esse placeholder como raiz desconfigurada e pula
+  upload/movimentacao/relatorios no Drive sem quebrar extração, validacao ou
+  Pre-Cons.
+
+Evidencias:
+
+- Logs de reprocessamento do processo `264` tentavam consultar o folder
+  `your-root-folder-id` e recebiam 404 do Google Drive.
+- `apps/api/src/modules/integrations/google-drive.service.ts`
+- `apps/api/src/modules/documents/service.ts`
+- `apps/api/src/modules/validation/service.ts`
+
+Impacto:
+
+- Documentos continuam salvos localmente e a extração/comparativo funcionam.
+- Backup/movimentacao automatica para a arvore operacional do Drive fica
+  desativada ate configurar o folder ID real.
+
+Status:
+
+- Aberto. Requer preencher `GOOGLE_DRIVE_ROOT_FOLDER_ID` real no SOPS/env de
+  producao e compartilhar a pasta com a service account do Drive.
+
 ## MEDIO - Validacao Usa `ohbl` Como BL Principal
 
 Descricao:

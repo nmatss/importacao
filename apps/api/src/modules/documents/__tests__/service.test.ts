@@ -2,9 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
+const mockQueueSend = vi.fn();
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
+}));
+
+vi.mock('../../../shared/queue/index.js', () => ({
+  getQueue: vi.fn().mockResolvedValue({ send: mockQueueSend }),
 }));
 
 vi.mock('../../audit/service.js', () => ({
@@ -27,6 +32,7 @@ vi.mock('../../ai/service.js', () => ({
 vi.mock('../../integrations/google-drive.service.js', () => ({
   googleDriveService: {
     isConfigured: vi.fn().mockResolvedValue(false),
+    isRootConfigured: vi.fn().mockResolvedValue(false),
     uploadToProcessFolder: vi.fn().mockResolvedValue('drive-file-id'),
   },
 }));
@@ -69,6 +75,7 @@ const { auditService } = await import('../../audit/service.js');
 describe('documentService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockQueueSend.mockResolvedValue('job-1');
     queryQueue.length = 0;
     txQueue.length = 0;
   });
@@ -219,6 +226,55 @@ describe('documentService', () => {
         documentType: 'packing_list',
         aiProcessingStatus: 'completed',
       });
+    });
+
+    it('marks processed documents with only an AI error reason as failed', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 3,
+            processId: 1,
+            type: 'invoice',
+            originalFilename: 'invoice-fetch-failed.pdf',
+            isProcessed: true,
+            aiParsedData: { reason: 'fetch failed' },
+          },
+        ]),
+      );
+
+      const result = await documentService.getByProcess(1);
+
+      expect(result[0]).toMatchObject({ documentType: 'invoice', aiProcessingStatus: 'failed' });
+    });
+  });
+
+  describe('enqueueAIExtraction()', () => {
+    it('falls back to in-process extraction when queue returns no job id', async () => {
+      mockQueueSend.mockResolvedValueOnce(null);
+      const processSpy = vi
+        .spyOn(documentService, 'processWithAI')
+        .mockResolvedValue(undefined as never);
+
+      try {
+        await documentService.enqueueAIExtraction(
+          {
+            id: 99,
+            processId: 1,
+            type: 'invoice',
+            storagePath: '/tmp/invoice.pdf',
+            originalFilename: 'invoice.pdf',
+          },
+          'invoice',
+        );
+
+        expect(mockQueueSend).toHaveBeenCalledWith(
+          'ai-extraction',
+          expect.objectContaining({ documentId: 99, documentType: 'invoice' }),
+        );
+        expect(processSpy).toHaveBeenCalledWith(99, 'invoice');
+      } finally {
+        processSpy.mockRestore();
+      }
     });
   });
 

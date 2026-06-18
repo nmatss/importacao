@@ -39,6 +39,7 @@ const PENDING_MIGRATIONS = [
   '0014_validation_resolution_note.sql',
   '0015_validation_history.sql',
   '0016_pre_cons_tables.sql',
+  '0017_sydle_purchase_payments.sql',
 ];
 
 function isCI(): boolean {

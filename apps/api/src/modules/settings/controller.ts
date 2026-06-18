@@ -158,11 +158,13 @@ export const settingsController = {
 
   async testDrive(_req: Request, res: Response) {
     try {
-      const configured = await googleDriveService.isConfigured();
+      const configured = await googleDriveService.isRootConfigured();
       if (!configured) return sendError(res, 'Google Drive não está configurado');
 
       const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
-      if (!rootFolderId) return sendError(res, 'GOOGLE_DRIVE_ROOT_FOLDER_ID não configurado');
+      if (!rootFolderId || rootFolderId === 'your-root-folder-id') {
+        return sendError(res, 'GOOGLE_DRIVE_ROOT_FOLDER_ID não configurado');
+      }
 
       await googleDriveService.listProcessFiles(rootFolderId);
       sendSuccess(res, { connected: true });

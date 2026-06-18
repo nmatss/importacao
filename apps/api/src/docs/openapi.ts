@@ -71,6 +71,7 @@ export const openapiSpec = {
     { name: 'Dashboard', description: 'Dashboard and analytics' },
     { name: 'Espelhos', description: 'Mirror documents (espelhos)' },
     { name: 'Currency Exchange', description: 'Currency exchange records' },
+    { name: 'SYDLE', description: 'Purchase and international payment report' },
     { name: 'Settings', description: 'System settings (admin)' },
     { name: 'Audit', description: 'Audit logs (admin)' },
   ],
@@ -1019,6 +1020,53 @@ export const openapiSpec = {
         tags: ['Settings'],
         summary: 'Test Odoo connection',
         responses: { '200': { description: 'Test result' } },
+      },
+    },
+    '/api/sydle/payments-report': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'List SYDLE purchase/payment report rows',
+        parameters: [
+          { name: 'search', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'supplier', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'brand', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'paymentStatus', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'paymentType', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'matchStatus', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'dueFrom', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'dueTo', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'page', in: 'query' as const, schema: { type: 'integer' as const } },
+          { name: 'limit', in: 'query' as const, schema: { type: 'integer' as const } },
+        ],
+        responses: { '200': { description: 'Paginated SYDLE report rows' } },
+      },
+    },
+    '/api/sydle/payments-report/summary': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Get SYDLE purchase/payment report summary',
+        responses: { '200': { description: 'SYDLE report summary' } },
+      },
+    },
+    '/api/sydle/payments-report/export.csv': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Export SYDLE purchase/payment report as CSV',
+        responses: { '200': { description: 'CSV export' } },
+      },
+    },
+    '/api/sydle/sync-runs': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Get recent SYDLE sync runs',
+        responses: { '200': { description: 'Sync runs' } },
+      },
+    },
+    '/api/sydle/sync-now': {
+      post: {
+        tags: ['SYDLE'],
+        summary: 'Run SYDLE sync now (admin)',
+        responses: { '200': { description: 'Sync result' } },
       },
     },
     '/api/settings/{key}': {

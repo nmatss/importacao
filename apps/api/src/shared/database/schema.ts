@@ -703,6 +703,90 @@ export type PreConsItem = typeof preConsItems.$inferSelect;
 export type NewPreConsItem = typeof preConsItems.$inferInsert;
 export type PreConsSyncLog = typeof preConsSyncLog.$inferSelect;
 
+// ── SYDLE purchase/payment staging + sync audit ──────────────────────
+
+export const sydlePurchasePayments = pgTable(
+  'sydle_purchase_payments',
+  {
+    id: serial('id').primaryKey(),
+    externalId: varchar('external_id', { length: 255 }).notNull(),
+    sourceSystem: varchar('source_system', { length: 50 }).default('sydle').notNull(),
+    processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'set null' }),
+    matchStatus: varchar('match_status', { length: 20 }).default('unmatched').notNull(),
+    matchScore: numeric('match_score', { precision: 5, scale: 4 }),
+    matchReason: text('match_reason'),
+    processCode: varchar('process_code', { length: 50 }),
+    purchaseRef: varchar('purchase_ref', { length: 100 }),
+    purchaseOrder: varchar('purchase_order', { length: 100 }),
+    proformaNumber: varchar('proforma_number', { length: 100 }),
+    invoiceNumber: varchar('invoice_number', { length: 100 }),
+    supplierName: varchar('supplier_name', { length: 255 }),
+    brand: varchar('brand', { length: 50 }),
+    currency: varchar('currency', { length: 3 }).default('USD').notNull(),
+    purchaseAmount: numeric('purchase_amount', { precision: 14, scale: 2 }),
+    paidAmount: numeric('paid_amount', { precision: 14, scale: 2 }),
+    openAmount: numeric('open_amount', { precision: 14, scale: 2 }),
+    paymentType: varchar('payment_type', { length: 30 }).default('other').notNull(),
+    paymentStatus: varchar('payment_status', { length: 30 }).default('unknown').notNull(),
+    dueDate: date('due_date'),
+    paidAt: timestamp('paid_at', { withTimezone: true }),
+    scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
+    exchangeRate: numeric('exchange_rate', { precision: 10, scale: 6 }),
+    amountBrl: numeric('amount_brl', { precision: 14, scale: 2 }),
+    bankName: varchar('bank_name', { length: 255 }),
+    contractNumber: varchar('contract_number', { length: 100 }),
+    remittanceId: varchar('remittance_id', { length: 100 }),
+    sourceUpdatedAt: timestamp('source_updated_at', { withTimezone: true }),
+    rawPayload: jsonb('raw_payload'),
+    syncedAt: timestamp('synced_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('sydle_purchase_payments_external_id_idx').on(table.externalId),
+    index('sydle_purchase_payments_process_id_idx').on(table.processId),
+    index('sydle_purchase_payments_process_code_idx').on(table.processCode),
+    index('sydle_purchase_payments_purchase_ref_idx').on(table.purchaseRef),
+    index('sydle_purchase_payments_supplier_idx').on(table.supplierName),
+    index('sydle_purchase_payments_due_date_idx').on(table.dueDate),
+    index('sydle_purchase_payments_payment_status_idx').on(table.paymentStatus),
+    index('sydle_purchase_payments_match_status_idx').on(table.matchStatus),
+    index('sydle_purchase_payments_source_updated_idx').on(table.sourceUpdatedAt),
+  ],
+);
+
+export const sydleSyncRuns = pgTable(
+  'sydle_sync_runs',
+  {
+    id: serial('id').primaryKey(),
+    status: varchar('status', { length: 20 }).default('running').notNull(),
+    trigger: varchar('trigger', { length: 20 }).default('cron').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+    duration: integer('duration'),
+    cursorFrom: timestamp('cursor_from', { withTimezone: true }),
+    cursorTo: timestamp('cursor_to', { withTimezone: true }),
+    fetched: integer('fetched').default(0),
+    created: integer('created').default(0),
+    updated: integer('updated').default(0),
+    unchanged: integer('unchanged').default(0),
+    matched: integer('matched').default(0),
+    unmatched: integer('unmatched').default(0),
+    errors: integer('errors').default(0),
+    errorMessage: text('error_message'),
+    metadata: jsonb('metadata'),
+  },
+  (table) => [
+    index('sydle_sync_runs_status_idx').on(table.status),
+    index('sydle_sync_runs_started_at_idx').on(table.startedAt),
+  ],
+);
+
+export type SydlePurchasePayment = typeof sydlePurchasePayments.$inferSelect;
+export type NewSydlePurchasePayment = typeof sydlePurchasePayments.$inferInsert;
+export type SydleSyncRun = typeof sydleSyncRuns.$inferSelect;
+export type NewSydleSyncRun = typeof sydleSyncRuns.$inferInsert;
+
 // ── Validation & Extraction History (append-only, regulatory audit) ──
 // Backlog #12 (docs/REVISAO-100.md): validation_results is deleted and
 // recreated on every run and ai_parsed_data is zeroed on reprocess — these

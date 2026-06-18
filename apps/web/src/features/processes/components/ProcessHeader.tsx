@@ -64,10 +64,44 @@ function ProcessFlags({ process }: { process: ImportProcess }) {
   );
 }
 
+function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
+  const data = doc.aiParsedData;
+  if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) return false;
+  if (data.extractionFailed || data.error || data.skipped) return false;
+
+  const metaKeys = new Set([
+    'budgetExceeded',
+    'confidence',
+    'confidenceScore',
+    'error',
+    'extractionFailed',
+    'fieldsWithLowConfidence',
+    'reason',
+    'rawText',
+    'skipped',
+    'source',
+    'warnings',
+  ]);
+
+  const hasValue = (value: unknown): boolean => {
+    if (value == null) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'boolean') return value === true;
+    if (Array.isArray(value)) return value.some((item) => hasValue(item));
+    if (typeof value !== 'object') return false;
+    const record = value as Record<string, unknown>;
+    if ('value' in record) return hasValue(record.value);
+    return Object.entries(record).some(([key, nested]) => !metaKeys.has(key) && hasValue(nested));
+  };
+
+  return hasValue(data);
+}
+
 export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHeaderProps) {
   const docCounts = {
     total: process.documents?.length ?? 0,
-    processed: process.documents?.filter((d) => d.isProcessed).length ?? 0,
+    extracted: process.documents?.filter(hasUsefulExtraction).length ?? 0,
   };
   const queryClient = useQueryClient();
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
@@ -160,8 +194,8 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               )}
               <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
               <span>
-                {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.processed}{' '}
-                processado{docCounts.processed !== 1 ? 's' : ''})
+                {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.extracted}{' '}
+                extraido{docCounts.extracted !== 1 ? 's' : ''})
               </span>
             </div>
           </div>

@@ -1,12 +1,13 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-18
 
 ## Objetivo
 
 Sistema de gestao de importacoes do Grupo Uni.co para Puket e Imaginarium,
 incluindo processos de importacao, documentos, validacoes, espelhos, follow-up,
-comunicacoes, assistente operacional RAG, certificacoes e dashboards operacionais.
+comunicacoes, assistente operacional RAG, certificacoes, dashboards
+operacionais e relatorio SYDLE de compras/pagamentos internacionais.
 
 Evidencias:
 
@@ -66,6 +67,9 @@ Grau de confianca: alto.
 - FOC/desconto nao deve reabrir falso positivo de FOB quando identificado.
 - Portos precisam ser normalizados para pais/sufixo, mas sem aceitar prefixo inseguro.
 - Documentos ausentes devem gerar `skipped` ou `warning`, nao falsa conformidade.
+- Documentos com falha de extracao, sem dados uteis ou abaixo da confianca
+  operacional minima nao devem alimentar `aiExtractedData`, comparativo,
+  validacao ou indicadores verdes de documento extraido.
 - Comunicacoes nunca devem aceitar anexo por `path` livre do cliente; anexo precisa ser resolvido por documento/espelho autorizado do mesmo processo.
 - Trigger, varredura historica e reprocessamento manual de e-mail ingestion sao operacoes administrativas.
 - Exportacoes CSV de alertas e atendimentos devem refletir os filtros atuais da tela, evitando relatorios duplicados com o mesmo dado.
@@ -103,9 +107,41 @@ Tabelas centrais observadas:
 - `email_ingestion_logs`
 - `settings`
 - `ai_usage_log`
+- `sydle_purchase_payments`
+- `sydle_sync_runs`
 
 Grau de confianca: medio-alto. A lista deve ser revisada contra todo `schema.ts`
 quando houver mudanca de dados.
+
+## Integracao SYDLE
+
+Estado:
+
+- Modulo tecnico entregue em 2026-06-18.
+- Sync automatico agendado a cada 15 minutos.
+- Sync real fica desligado ate preencher `SYDLE_SYNC_ENABLED=true`,
+  `SYDLE_BASE_URL`, `SYDLE_API_TOKEN` e contrato do endpoint no SOPS/env.
+
+## Integracao Google Drive
+
+Estado:
+
+- Credenciais Google podem estar configuradas para Pre-Cons/Sheets mesmo quando
+  a pasta raiz operacional nao esta.
+- `GOOGLE_DRIVE_ROOT_FOLDER_ID` vazio ou `your-root-folder-id` deve ser tratado
+  como Drive operacional desconfigurado; upload, movimentacao e relatorios no
+  Drive devem degradar sem afetar extração, comparativo ou validacao.
+- Para reativar a arvore operacional, preencher o folder ID real no SOPS/env e
+  compartilhar a pasta com a service account.
+
+Evidencias:
+
+- `docs/SYDLE-INTEGRATION.md`
+- `apps/api/src/modules/sydle`
+- `apps/web/src/features/sydle-payments/SydlePaymentsPage.tsx`
+
+Grau de confianca: alto para a arquitetura interna; medio para o contrato de
+extracao externa, pois o payload real da SYDLE ainda nao foi fornecido.
 
 ## IA E Harness
 

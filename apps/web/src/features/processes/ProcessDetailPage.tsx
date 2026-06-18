@@ -111,19 +111,60 @@ function TabIndicator({
 
   if (tabKey === 'documentos') {
     const docs = process.documents ?? [];
-    const types = new Set(docs.map((d) => d.type?.toLowerCase()));
-    const hasInv = types.has('invoice') || types.has('inv');
-    const hasPl = types.has('packing_list') || types.has('packing-list') || types.has('pl');
-    const hasBl =
-      types.has('ohbl') ||
-      types.has('bl') ||
-      types.has('bill_of_lading') ||
-      types.has('bill-of-lading');
+    const hasUsableDoc = (aliases: string[]) =>
+      docs.some((doc) => {
+        const type = doc.type?.toLowerCase();
+        if (!type || !aliases.includes(type)) return false;
+        const data = doc.aiParsedData;
+        if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) {
+          return false;
+        }
+        if (data.extractionFailed || data.error || data.skipped) return false;
+        return Object.entries(data).some(([key, value]) => {
+          if (
+            [
+              'budgetExceeded',
+              'confidence',
+              'confidenceScore',
+              'error',
+              'extractionFailed',
+              'fieldsWithLowConfidence',
+              'reason',
+              'rawText',
+              'skipped',
+              'source',
+              'warnings',
+            ].includes(key)
+          ) {
+            return false;
+          }
+          if (value == null) return false;
+          if (typeof value === 'string') return value.trim().length > 0;
+          if (typeof value === 'number') return Number.isFinite(value);
+          if (Array.isArray(value)) return value.length > 0;
+          if (typeof value === 'object') return Object.keys(value).length > 0;
+          return true;
+        });
+      });
+    const hasInv = hasUsableDoc(['invoice', 'inv']);
+    const hasPl = hasUsableDoc(['packing_list', 'packing-list', 'pl']);
+    const hasBl = hasUsableDoc(['ohbl', 'bl', 'bill_of_lading', 'bill-of-lading']);
+    const hasAllReceived = ['invoice', 'packing_list', 'ohbl'].every((type) =>
+      docs.some((doc) => doc.type?.toLowerCase() === type),
+    );
     if (hasInv && hasPl && hasBl) {
       return (
         <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white">
           <Check className="h-2.5 w-2.5" />
         </span>
+      );
+    }
+    if (hasAllReceived) {
+      return (
+        <span
+          className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-amber-500"
+          title="Documentos recebidos, mas ainda ha extracao pendente ou com erro"
+        />
       );
     }
     return null;

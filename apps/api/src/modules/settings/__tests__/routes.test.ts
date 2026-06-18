@@ -42,6 +42,7 @@ vi.mock('../service.js', () => ({
 vi.mock('../../integrations/google-drive.service.js', () => ({
   googleDriveService: {
     isConfigured: vi.fn().mockResolvedValue(false),
+    isRootConfigured: vi.fn().mockResolvedValue(false),
     listProcessFiles: vi.fn().mockResolvedValue([]),
   },
 }));

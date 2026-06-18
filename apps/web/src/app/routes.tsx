@@ -27,6 +27,11 @@ const CurrencyExchangePage = lazy(() =>
     default: m.CurrencyExchangePage,
   })),
 );
+const SydlePaymentsPage = lazy(() =>
+  import('@/features/sydle-payments/SydlePaymentsPage').then((m) => ({
+    default: m.SydlePaymentsPage,
+  })),
+);
 const FollowUpPage = lazy(() =>
   import('@/features/follow-up/FollowUpPage').then((m) => ({ default: m.FollowUpPage })),
 );
@@ -180,6 +185,7 @@ export function AppRoutes() {
                   <Route path="/processos/:id" element={<ProcessDetailPage />} />
                   <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
                   <Route path="/pre-cons" element={<PreConsPage />} />
+                  <Route path="/compras-pagamentos" element={<SydlePaymentsPage />} />
                   <Route path="/cambios" element={<CurrencyExchangePage />} />
                   <Route path="/lis" element={<LiTrackingPage />} />
                   <Route path="/desembaraco" element={<DesembaracoPage />} />

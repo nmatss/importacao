@@ -23,6 +23,13 @@ let driveClient: drive_v3.Drive | null = null;
 // LRU-like cache with max size to prevent unbounded memory growth
 const FOLDER_CACHE_MAX = 1000;
 const folderCache = new Map<string, string>();
+const ROOT_FOLDER_PLACEHOLDERS = new Set(['your-root-folder-id']);
+
+function getConfiguredRootFolderId(): string | null {
+  const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
+  if (!rootFolderId || ROOT_FOLDER_PLACEHOLDERS.has(rootFolderId)) return null;
+  return rootFolderId;
+}
 
 function folderCacheSet(key: string, value: string): void {
   if (folderCache.size >= FOLDER_CACHE_MAX) {
@@ -68,7 +75,8 @@ function getDriveClient(): drive_v3.Drive {
 export const googleDriveService = {
   async createFolder(name: string, parentId?: string): Promise<string> {
     const drive = getDriveClient();
-    const rootFolderId = parentId || process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    const rootFolderId = parentId || getConfiguredRootFolderId();
+    if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
 
     const response = await withTimeout(
       drive.files.create({
@@ -118,6 +126,10 @@ export const googleDriveService = {
     return !!(process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY);
   },
 
+  async isRootConfigured(): Promise<boolean> {
+    return (await this.isConfigured()) && Boolean(getConfiguredRootFolderId());
+  },
+
   async findFolder(parentId: string, folderName: string): Promise<string | null> {
     const drive = getDriveClient();
     const response = await withTimeout(
@@ -151,7 +163,7 @@ export const googleDriveService = {
     processCode: string,
     brand: string,
   ): Promise<{ processFolderId: string; subfolders: Record<string, string> }> {
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
 
     const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
@@ -201,10 +213,10 @@ export const googleDriveService = {
   },
 
   async moveToCorrection(processCode: string, brand: string): Promise<void> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) return;
 
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) return;
 
     const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
@@ -236,10 +248,10 @@ export const googleDriveService = {
   },
 
   async moveFromCorrection(processCode: string, brand: string): Promise<void> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) return;
 
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) return;
 
     const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
@@ -274,7 +286,7 @@ export const googleDriveService = {
   // ── Sistema Automatico methods ──────────────────────────────────────
 
   async ensureSistemaFolder(): Promise<string> {
-    const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
+    const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
     return this.ensureFolder(rootFolderId, '00. SISTEMA AUTOMATICO');
   },
@@ -307,7 +319,7 @@ export const googleDriveService = {
   },
 
   async uploadToSistemaInbox(filePath: string, fileName: string): Promise<string> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
     const inboxId = await this.ensureSistemaInbox();
     return this.uploadFile(filePath, fileName, inboxId);
@@ -318,7 +330,7 @@ export const googleDriveService = {
     processCode: string,
     docType: string,
   ): Promise<void> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) return;
 
     const subfolders = await this.ensureSistemaProcessFolder(processCode);
@@ -357,7 +369,7 @@ export const googleDriveService = {
     processCode: string,
     reportData: Record<string, any>,
   ): Promise<string> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
 
     const subfolders = await this.ensureSistemaProcessFolder(processCode);
@@ -391,7 +403,7 @@ export const googleDriveService = {
   },
 
   async uploadToAlertas(fileName: string, content: string): Promise<string> {
-    const configured = await this.isConfigured();
+    const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
 
     const sistemaId = await this.ensureSistemaFolder();

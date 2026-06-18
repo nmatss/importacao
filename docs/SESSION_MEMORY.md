@@ -1,5 +1,89 @@
 # Session Memory
 
+## 2026-06-18 - Reprocessamento Invoice DEMO E Resiliencia Documental
+
+Escopo:
+
+- Validar a reclamação da Eduarda no processo demo `264`
+  (`DEMO-IM0712602NB-E227210`): invoice reupada aparecia como
+  `Processando` por tempo excessivo.
+
+Evidencias em producao:
+
+- Documento `134` estava salvo em `documents` como invoice do processo `264`,
+  com PDF local legivel e `ai_parsed_data` anterior indicando falha
+  `fetch failed`.
+- O parser deterministico da versao atual extraiu do PDF real:
+  `invoiceNumber=IM0712602NB`, `exporterName=KIOM GLOBAL LIMITED`,
+  `totalFobValue=24312.52` e 7 itens.
+- A API autenticada `/api/documents/process/264` passou a retornar a invoice
+  `134` como `completed`, confianca `0.7828`; a invoice antiga `55` permanece
+  como `failed` e nao entra no comparativo.
+- `/api/documents/process/264/comparison` passou a retornar `hasInvoice=true`,
+  7 linhas no comparativo por item, exportador correto e FOB conforme.
+
+Correcoes aplicadas:
+
+- `enqueueAIExtraction` agora faz fallback para `processWithAI` quando
+  `pg-boss.send()` nao devolve ID de job.
+- `POST /api/documents/:id/reprocess` retorna DTO operacional com
+  `aiProcessingStatus`, alinhado ao contrato da lista.
+- Lista/comparativo diferenciam documento recebido de documento extraido com
+  dados úteis; o comparativo mostra aviso de parcialidade quando documento
+  obrigatorio está ausente ou sem extracao valida.
+- Google Drive raiz com placeholder `your-root-folder-id` passou a ser tratado
+  como desconfigurado para upload/movimentacao/relatorios, evitando erro em
+  cascata sem afetar a sync Pre-Cons por pasta própria.
+
+Validacoes executadas:
+
+- `npm test -w apps/api -- src/modules/documents/__tests__/service.test.ts src/modules/documents/__tests__/process-with-ai-resilience.test.ts src/modules/documents/__tests__/extraction-history.test.ts`
+- `npm test -w apps/api -- src/modules/settings/__tests__/routes.test.ts src/modules/validation/__tests__/service.test.ts src/modules/validation/__tests__/history.test.ts`
+- `npm run -w apps/web typecheck`
+- `npm run -w apps/api typecheck`
+- `npm run lint`
+- `npm test`
+
+Pendencia externa:
+
+- Configurar `GOOGLE_DRIVE_ROOT_FOLDER_ID` real no SOPS/env de producao para
+  reativar backup/movimentacao automatica no Drive.
+
+## 2026-06-18 - Modulo SYDLE De Compras E Pagamentos Internacionais
+
+Escopo:
+
+- Criar modulo novo no portal de importacao para relatorio de compras e
+  pagamentos internacionais da SYDLE, com atualizacao automatica a cada 15
+  minutos.
+
+Entregue:
+
+- Tabelas `sydle_purchase_payments` e `sydle_sync_runs` em migration
+  idempotente `0017_sydle_purchase_payments.sql`.
+- Modulo API `apps/api/src/modules/sydle` com cliente, normalizador, service,
+  controller, rotas, resumo, listagem, historico de sync, CSV backend e sync
+  manual admin-only.
+- Scheduler `sydle-sync` registrado em `*/15 * * * *`; quando `SYDLE_*` nao
+  esta configurado, grava `status=skipped` sem quebrar a operacao.
+- Tela web `/importacao/compras-pagamentos` com KPIs, filtros, tabela desktop,
+  cards mobile, exportacao CSV e sync manual para admin.
+- Variaveis SYDLE adicionadas a `.env.example`, `.env.sops.yaml.example`,
+  `docker-compose.yml` e `docker-compose.prod.yml`.
+- Documentacao dedicada `docs/SYDLE-INTEGRATION.md` e atualizacoes em README,
+  API, DATABASE, SECRETS, OBSERVABILITY e CHANGELOG.
+
+Validacoes executadas ate aqui:
+
+- `npm test -w apps/api -- src/modules/sydle/__tests__/normalizer.test.ts`
+- `npm run -w apps/api typecheck`
+- `npm run -w apps/web typecheck`
+
+Pendencia externa:
+
+- Obter contrato real/API/exportacao do projeto SYDLE, endpoint, credencial,
+  payload sanitizado e campo incremental para ativar `SYDLE_SYNC_ENABLED=true`.
+
 ## 2026-06-18 - Revisao Completa Do Fluxo Documental, Leitura E Validacao
 
 Escopo:
