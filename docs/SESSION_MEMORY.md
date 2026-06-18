@@ -43,6 +43,11 @@ Correcoes aplicadas:
   55/134 do processo 264 ficavam `is_processed=false` e `pgboss.queue` estava
   vazia. A inicializacao passou a criar as filas conhecidas antes de registrar
   workers/enviar jobs.
+- Apos o hotfix da fila, os jobs de Invoice do processo 264 executaram, mas a
+  IA local falhou com `Headers Timeout Error` apos aproximadamente 300s. O PDF
+  KIOM tinha texto extraivel, porem em layout compacto/colado; o parser
+  deterministico de Invoice passou a cobrir esse formato e a reconhecer FOC sem
+  depender da chamada multimodal.
 
 Validacoes executadas ate aqui:
 
@@ -51,6 +56,8 @@ Validacoes executadas ate aqui:
 - `npm run lint`
 - Teste focado `npm test -w apps/api -- src/shared/queue/__tests__/index.test.ts`
   cobrindo criacao idempotente das filas.
+- Testes focados
+  `npm test -w apps/api -- src/modules/ai/utils/__tests__/invoice-text-parser.test.ts src/modules/ai/__tests__/extract-with-upgrade.test.ts`.
 
 Pendencias registradas em `docs/TECH_DEBT.md`:
 

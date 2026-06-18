@@ -32,6 +32,48 @@ describe('invoice text parser', () => {
     expect(parsed?.items[1].isFreeOfCharge.value).toBe(true);
   });
 
+  it('extracts KIOM compact PDF text with FOC discount without calling the LLM', () => {
+    const compactKiomText = `PAGE 1
+COMMERCIAL INVOICE
+EXPORTERIMPORTERNOTIFY PARTYTERMS
+TOTAL  FOBUSD24.312,52
+KIOM GLOBAL LIMITEDUNI.CO COMERCIO S/AUNI.CO COMERCIO S/ACI NUMBERIM0712602NBPAYMENT TERMSSTA TUSDAYSDATE
+BRN: 75433983CNPJ: 00.399.603/0006-12CNPJ: 00.399.603/0006-12CI DATE22-Feb-26FREIGHT0,00%USD0,00-
+ROOM E, 10/F, NEW HENNESSY TOWERRUA GERCINO MACHADO, 207RUA GERCINO MACHADO, 207PO CUSTOMER REF-DEPOSIT15,81%USD3.843,60PAID
+263 HENNESSY ROAD, WANCHAI, HONG KONGBIGUAÇU, SC, BRAZIL, ZIP 88164-290BIGUAÇU, SC, BRAZIL, ZIP 88164-290INCOTERMFOBBALANCE 10,00%USD0,00-7
+PHONE: +86 755 8659 5020PHONE: +55 ( 48)  2107 5959PHONE: +55 ( 48)  2107 5959PORT OF LOADINGNINGBOBALANCE 163,69%USD15.483,92PEND ING1405-Mar-26
+EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controladoria@grupounico.comPORT OF DESTINATIONITAPOABALANCE 220,50%USD4.985,00PEND ING6020-Apr-26
+ETD22-Feb-260,00-
+001IM1962601BSH2026 - FAT03PI7765YIMG-MOTHERS BLANKET-PU-IMGPOLYB AG--FINE TEXTILE800,00                                     PC  6,39                                               30%1.533,60                70%3.578,40            14
+002IM1962601BSH2026 - FAT03PI7752YIMG-MOTHERS ROBE-PU-IMGPOLYB AG--FINE TEXTILE1.000,00                                PC  7,70                                               30%2.310,00                70%5.390,00            14
+003IM2032601AXI2026 - FAT02PI7761YVISTO- M OTHER S THER M AL B AG- VI-IMGPOLYB AG--UN ITED500,00                                     PC4,33                                               0%-                             100%2.165,00            60
+004IM2032601AXI2026 - FAT02PI5598YVISTO- B AG B OX C R EAM  GOLD  D ETAILS- VI-IMGPOLYB AG--UN ITED500,00                                     PC5,64                                               0%-                             100%2.820,00            60
+005IM2072602ASZ2026 - FAT04PI7797YIMG-GLITTER PHOTO FRAME-HD-IMGWHITE BOX--A&C1.056,00                                PC2,56                                               0%-                             100%2.703,36            14
+006IM2072602ASZ2026 - FAT04PI7795YIMG-POLAROID PHOTO FRAME KIT-HD-IMGWHITE BOX--A&C1.056,00                                SET3,61                                               0%-                             100%3.812,16            14
+007IM2312602ANB2026 - FAT02AC 2285YIMG-AC HANDLE FOR PI6978Y-PUFREE OF CHARGE - -IMGPOLYB AG--WENZHOU ENRON120,00                                     PC2,22                                               30%79,92                       70%186,48                 7
+TOTAL TO BE PAID5.032,00
+FREE OF CHARGE (FOC)120,00-
+TOTAL FOB4.912,00`;
+
+    const parsed = tryParseInvoiceText(compactKiomText);
+
+    expect(parsed?.invoiceNumber.value).toBe('IM0712602NB');
+    expect(parsed?.invoiceDate.value).toBe('2026-02-22');
+    expect(parsed?.exporterName.value).toBe('KIOM GLOBAL LIMITED');
+    expect(parsed?.incoterm.value).toBe('FOB');
+    expect(parsed?.currency.value).toBe('USD');
+    expect(parsed?.portOfLoading.value).toBe('NINGBO');
+    expect(parsed?.portOfDischarge.value).toBe('ITAPOA');
+    expect(parsed?.totalFobValue.value).toBe(24312.52);
+    expect(parsed?.items).toHaveLength(7);
+    expect(parsed?.items[0].itemCode.value).toBe('PI7765Y');
+    expect(parsed?.items[0].quantity.value).toBe(800);
+    expect(parsed?.items[0].totalPrice.value).toBe(5112);
+    expect(parsed?.items[6].itemCode.value).toBe('AC 2285Y');
+    expect(parsed?.items[6].totalPrice.value).toBe(266.4);
+    expect(parsed?.items[6].isFreeOfCharge.value).toBe(true);
+  });
+
   it('repairs exporterName when a carrier/vessel name was selected', () => {
     const repaired = repairInvoiceExtractionFromText(
       { exporterName: { value: 'COSCO SHIPPING ARGENTINA', confidence: 0.7 } },

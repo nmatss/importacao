@@ -20,7 +20,10 @@ Ultima atualizacao: 2026-06-18
 
 - Unificar helpers de `parseNumber`, `parseDate`, FOC e normalizacao entre parsers, harness, validation e anomalies.
 - Documentar a decisao final de provider: IA local, Vertex ou estrategia hibrida.
-- Revisar latencia e timeout do provider local em CPU.
+- Revisar latencia e timeout do provider local em CPU para PDFs imagem-only:
+  em 2026-06-18 a Invoice KIOM foi resolvida por parser deterministico, mas a
+  chamada multimodal ao gateway local ainda pode bater `Headers Timeout Error`
+  em ~300s quando realmente precisar de VLM/OCR.
 - Decidir contrato final para falha de schema Zod da IA: manter fallback
   permissivo com trust downgrade explicito ou tornar extracao estrita por tipo
   de documento.
@@ -86,6 +89,8 @@ Concluido em 2026-06-18:
 - Filas `pg-boss` agora sao criadas idempotentemente no boot da API antes de
   enviar jobs, evitando `ai-extraction` silenciosamente descartado por fila
   inexistente.
+- Parser deterministico de Invoice cobre o layout compacto KIOM com campos e
+  itens colados, total FOB, portos, data `CI DATE` e FREE OF CHARGE recorrente.
 - Runbook/README reconciliados com `AI_PROVIDER=ialocal`, egress externo por
   opt-in e rollback rsync/snapshot sem `git checkout` no servidor.
 - Rotas internas invalidas com fallback contextual em Importacao/Certificacoes.

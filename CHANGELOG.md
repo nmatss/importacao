@@ -77,6 +77,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Inicializacao da fila `pg-boss` agora cria idempotentemente as filas
   `email-send`, `drive-sync`, `sheets-sync` e `ai-extraction` antes de enviar
   jobs, evitando uploads/reprocessamentos presos como pendentes.
+- Parser deterministico de Invoice cobre o layout compacto da KIOM gerado por
+  PDF com colunas coladas, incluindo `CI NUMBER`, `CI DATE`, portos,
+  `INCOTERMFOB`, `TOTAL FOBUSD...`, itens sem NCM e linha FREE OF CHARGE.
+- Calculo de confianca da IA deixou de penalizar campos declaradamente ausentes
+  (`value: null`), evitando bloquear extracoes deterministicas corretas por
+  campos opcionais vazios.
 - Compose/env de producao passam a exigir `GOOGLE_CLIENT_ID` e
   `VITE_GOOGLE_CLIENT_ID`; destinatarios KIOM/Fenicia/ISA agora sao
   configuraveis em `Configuracoes > Destinatarios operacionais`, com env apenas

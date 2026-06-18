@@ -14,7 +14,7 @@ const EMPTY_NUMBER = cf<number>(null, 0);
 const CARRIER_RE =
   /\b(COSCO|MAERSK|MSC|HAPAG[- ]?LLOYD|HAPAG|LLOYD|EVERGREEN|CMA\s*CGM|ONE\s+LINE|HMM|OOCL|YANG\s*MING|ZIM|WAN\s*HAI|APL|PIL)\b|\b(?:SHIPPING\s+LINE|CONTAINER\s+LINE|MARITIME)\b/i;
 const FOC_RE =
-  /\b(foc|free\s*of\s*charge|discount|desconto|bonificacao|bonificado|complimentary|sample|brinde|amostra)\b/i;
+  /(?:\bfoc\b|free\s*of\s*charge|\b(?:discount|desconto|bonificacao|bonificado|complimentary|sample|brinde|amostra)\b)/i;
 
 export function tryParseInvoiceText(text: string): Record<string, any> | null {
   const source = text ?? '';
@@ -23,15 +23,18 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
   const invoiceNumber = matchFirst(source, [
     /\binvoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
     /\binv(?:oice)?\s*[:#-]\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
+    /CI\s*NUMBER\s*([A-Z0-9][A-Z0-9./_-]{2,}?)(?=PAYMENT|CI\s*DATE|PO\s*CUSTOMER|FREIGHT|$)/i,
   ]);
   const invoiceDate = parseDate(
     matchFirst(source, [
       /\binvoice\s*date\s*[:#-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})/i,
       /\bdate\s*[:#-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})/i,
+      /CI\s*DATE\s*([0-9]{1,2}[-/][A-Z]{3}[-/][0-9]{2,4})(?=FREIGHT|PAYMENT|$)/i,
     ]),
   );
   const exporterName = normalizePartyLine(
-    extractLabeledValue(source, ['exporter', 'shipper', 'seller']),
+    extractLabeledValue(source, ['exporter', 'shipper', 'seller']) ??
+      extractCompactExporter(source),
   );
   const importerLine = extractLabeledValue(source, ['importer', 'consignee', 'buyer']);
   const importerName = normalizeImporterName(importerLine);
@@ -39,14 +42,19 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
     /\bCNPJ\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/i,
   ]);
   const currency = matchFirst(source, [
+    /\bTOTAL\s*FOB\s*(USD|EUR|CNY)/i,
     /\bcurrency\s*[:#-]?\s*(USD|EUR|CNY)\b/i,
     /\b(USD|EUR|CNY)\b/i,
   ]);
-  const incoterm = matchFirst(source, [/\b(FOB|CIF|CFR|EXW|FCA)\b/i]);
+  const incoterm = matchFirst(source, [
+    /INCOTERM\s*(FOB|CIF|CFR|EXW|FCA)/i,
+    /\b(FOB|CIF|CFR|EXW|FCA)\b/i,
+  ]);
   const portOfLoading = extractPort(source, 'loading');
   const portOfDischarge = extractPort(source, 'discharge');
   const totalFobValue = parseNumber(
     matchFirst(source, [
+      /\btotal\s*FOB\s*(?:USD|EUR|CNY)\s*([\d.,]+)/i,
       /\btotal\s*FOB\b[^\d]{0,20}(?:USD|EUR|CNY)?\s*([\d.,]+)/i,
       /\bFOB\s*total\b[^\d]{0,20}(?:USD|EUR|CNY)?\s*([\d.,]+)/i,
       /\bgrand\s*total\b[^\d]{0,20}(?:USD|EUR|CNY)?\s*([\d.,]+)/i,
@@ -138,6 +146,13 @@ function extractLabeledValue(text: string, labels: string[]): string | null {
   return null;
 }
 
+function extractCompactExporter(text: string): string | null {
+  const match = text.match(
+    /\bTOTAL\s*FOB\s*(?:USD|EUR|CNY)?[\d.,]+\s+([A-Z][A-Z0-9 .,&'()-]{2,}?(?:LIMITED|LTD\.?|CO\.?\s*,?\s*LTD\.?|CORPORATION|INC\.?))(?=UNI\.CO|CNPJ|CI\s*NUMBER|PAYMENT|$)/i,
+  );
+  return match?.[1]?.trim() ?? null;
+}
+
 function normalizePartyLine(value: string | null): string | null {
   if (!value) return null;
   const cleaned = value
@@ -167,6 +182,18 @@ function extractPort(text: string, kind: 'loading' | 'discharge'): string | null
       new RegExp(`${label}\\s*[:#-]?\\s*([A-Z][A-Z ,.-]{2,}?)(?:${stop})`, 'i'),
     );
     if (match?.[1]) return match[1].trim().replace(/[.,;]+$/, '') || null;
+
+    const compactLabel =
+      kind === 'loading'
+        ? String.raw`port\s+of\s+loading`
+        : String.raw`port\s+of\s+(?:destination|discharge)`;
+    const compactMatch = line.match(
+      new RegExp(
+        `${compactLabel}\\s*([A-Z][A-Z ,.-]{2,}?)(?=BALANCE|FREIGHT|DEPOSIT|PORT\\s+OF|ETD|$)`,
+        'i',
+      ),
+    );
+    if (compactMatch?.[1]) return compactMatch[1].trim().replace(/[.,;]+$/, '') || null;
   }
   return null;
 }
@@ -175,6 +202,28 @@ function parseDate(value: string | null): string | null {
   if (!value) return null;
   const raw = value.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const monthNameMatch = raw.match(/^(\d{1,2})[-/]([A-Z]{3})[-/](\d{2,4})$/i);
+  if (monthNameMatch) {
+    const months: Record<string, string> = {
+      jan: '01',
+      feb: '02',
+      mar: '03',
+      apr: '04',
+      may: '05',
+      jun: '06',
+      jul: '07',
+      aug: '08',
+      sep: '09',
+      oct: '10',
+      nov: '11',
+      dec: '12',
+    };
+    const month = months[monthNameMatch[2].toLowerCase()];
+    if (!month) return null;
+    const day = monthNameMatch[1].padStart(2, '0');
+    const year = monthNameMatch[3].length === 2 ? `20${monthNameMatch[3]}` : monthNameMatch[3];
+    return `${year}-${month}-${day}`;
+  }
   const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (!match) return null;
   const day = match[1].padStart(2, '0');
@@ -226,6 +275,53 @@ function parseItems(text: string): Record<string, any>[] {
       unitType: EMPTY_STRING,
       manufacturer: EMPTY_STRING,
       isFreeOfCharge: cf(isFreeOfCharge, 0.78),
+    });
+  }
+
+  const compactRows = parseCompactKiomItems(text);
+  return compactRows.length > rows.length ? compactRows : rows;
+}
+
+function parseCompactKiomItems(text: string): Record<string, any>[] {
+  const rows: Record<string, any>[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    if (!/^\d{3}/.test(line.trim())) continue;
+
+    const match = line.match(
+      /^\d{3}.*?-\s*FAT\d{2}\s*([A-Z]{1,4}\s*\d{3,5}Y)(.+?)(\d{1,3}(?:\.\d{3})*,\d{2})\s*(PC|SET)\s*([0-9.,]+)/i,
+    );
+    if (!match) continue;
+
+    const itemCode = match[1].replace(/\s+/g, ' ').trim();
+    const description = match[2].replace(/\s+/g, ' ').trim();
+    const quantity = parseNumber(match[3]);
+    const unitType = match[4].toUpperCase();
+    const unitPrice = parseNumber(match[5]);
+    const computedTotal =
+      quantity != null && unitPrice != null ? Number((quantity * unitPrice).toFixed(2)) : null;
+    const percentAmounts = Array.from(line.matchAll(/%\s*([0-9.,]+)/g))
+      .map((amountMatch) => parseNumber(amountMatch[1]))
+      .filter((value): value is number => value != null);
+    const totalPrice =
+      percentAmounts.length > 0
+        ? Number(percentAmounts.reduce((sum, value) => sum + value, 0).toFixed(2))
+        : computedTotal;
+    const isFreeOfCharge =
+      FOC_RE.test(description) || FOC_RE.test(line) || unitPrice === 0 || totalPrice === 0;
+
+    rows.push({
+      itemCode: cf(itemCode, 0.8),
+      ean: EMPTY_STRING,
+      description: cf(description || null, description ? 0.7 : 0),
+      color: EMPTY_STRING,
+      size: EMPTY_STRING,
+      quantity: cf(quantity, quantity != null ? 0.78 : 0),
+      unitPrice: cf(unitPrice, unitPrice != null ? 0.78 : 0),
+      totalPrice: cf(totalPrice, totalPrice != null ? 0.76 : 0),
+      ncmCode: EMPTY_STRING,
+      unitType: cf(unitType, 0.78),
+      manufacturer: EMPTY_STRING,
+      isFreeOfCharge: cf(isFreeOfCharge, 0.82),
     });
   }
   return rows;

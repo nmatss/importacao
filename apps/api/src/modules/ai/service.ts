@@ -94,6 +94,13 @@ interface ExtractionResult {
 const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
 const LOCAL_DEFAULT_MODEL = 'unico-docintel';
 
+function hasConfidenceValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === '') return false;
+  if (Array.isArray(value)) return value.some(hasConfidenceValue);
+  if (typeof value === 'object') return Object.values(value).some(hasConfidenceValue);
+  return true;
+}
+
 const anomalyDetectionSchema = z.object({
   anomalies: z.array(
     z.object({
@@ -474,6 +481,12 @@ class AIService {
         for (let i = 0; i < value.length; i++) {
           for (const [itemKey, itemValue] of Object.entries(value[i] as Record<string, any>)) {
             if (itemValue && typeof itemValue === 'object' && 'confidence' in itemValue) {
+              if (
+                'value' in itemValue &&
+                !hasConfidenceValue((itemValue as { value: unknown }).value)
+              ) {
+                continue;
+              }
               const conf = (itemValue as { confidence: number }).confidence;
               totalConfidence += conf;
               fieldCount++;
@@ -484,6 +497,9 @@ class AIService {
           }
         }
       } else if (value && typeof value === 'object' && 'confidence' in value) {
+        if ('value' in value && !hasConfidenceValue((value as { value: unknown }).value)) {
+          continue;
+        }
         const conf = (value as { confidence: number }).confidence;
         totalConfidence += conf;
         fieldCount++;
