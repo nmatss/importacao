@@ -38,12 +38,19 @@ Correcoes aplicadas:
 - README e RUNBOOK foram reconciliados: producao usa `AI_PROVIDER=ialocal`,
   egress externo exige `AI_ALLOW_EXTERNAL=true`, e rollback do servidor e por
   snapshot/rsync, nao por `git checkout`.
+- Pos-deploy do SHA `7cd31b7` mostrou que `pg-boss` estava sem filas criadas em
+  producao: `boss.send('ai-extraction', ...)` retornava `null`, os documentos
+  55/134 do processo 264 ficavam `is_processed=false` e `pgboss.queue` estava
+  vazia. A inicializacao passou a criar as filas conhecidas antes de registrar
+  workers/enviar jobs.
 
 Validacoes executadas ate aqui:
 
 - Suíte completa da API via `npm test -w apps/api`: 570 testes passaram, 1 skip.
 - `npm run typecheck`
 - `npm run lint`
+- Teste focado `npm test -w apps/api -- src/shared/queue/__tests__/index.test.ts`
+  cobrindo criacao idempotente das filas.
 
 Pendencias registradas em `docs/TECH_DEBT.md`:
 

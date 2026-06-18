@@ -1,6 +1,9 @@
 import PgBoss from 'pg-boss';
 import { logger } from '../utils/logger.js';
 
+export const QUEUE_NAMES = ['email-send', 'drive-sync', 'sheets-sync', 'ai-extraction'] as const;
+export type QueueName = (typeof QUEUE_NAMES)[number];
+
 let boss: PgBoss | null = null;
 
 export async function initQueue(): Promise<PgBoss> {
@@ -14,6 +17,11 @@ export async function initQueue(): Promise<PgBoss> {
   boss.on('error', (err) => logger.error({ err }, 'pg-boss error'));
 
   await boss.start();
+
+  for (const queueName of QUEUE_NAMES) {
+    await boss.createQueue(queueName);
+  }
+
   logger.info('Job queue started');
 
   return boss;

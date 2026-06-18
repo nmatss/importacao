@@ -83,6 +83,9 @@ Concluido em 2026-06-18:
   processado, nao falho e acima do piso de confianca.
 - Extrações processadas sem dado útil deixaram de contar como documento lido e
   novas respostas vazias da IA passam a virar falha de extração com alerta.
+- Filas `pg-boss` agora sao criadas idempotentemente no boot da API antes de
+  enviar jobs, evitando `ai-extraction` silenciosamente descartado por fila
+  inexistente.
 - Runbook/README reconciliados com `AI_PROVIDER=ialocal`, egress externo por
   opt-in e rollback rsync/snapshot sem `git checkout` no servidor.
 - Rotas internas invalidas com fallback contextual em Importacao/Certificacoes.

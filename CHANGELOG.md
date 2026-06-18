@@ -74,6 +74,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   falha operacional: não projetam dados no processo, não entram no Comparativo,
   não alimentam validação/anomalias e novas extrações vazias viram
   `extractionFailed` com alerta para reprocessar/reclassificar.
+- Inicializacao da fila `pg-boss` agora cria idempotentemente as filas
+  `email-send`, `drive-sync`, `sheets-sync` e `ai-extraction` antes de enviar
+  jobs, evitando uploads/reprocessamentos presos como pendentes.
 - Compose/env de producao passam a exigir `GOOGLE_CLIENT_ID` e
   `VITE_GOOGLE_CLIENT_ID`; destinatarios KIOM/Fenicia/ISA agora sao
   configuraveis em `Configuracoes > Destinatarios operacionais`, com env apenas

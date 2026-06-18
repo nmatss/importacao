@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
-import { getQueue } from '../../shared/queue/index.js';
+import { getQueue, QUEUE_NAMES } from '../../shared/queue/index.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { queueStatsQuerySchema } from './schema.js';
 import { db } from '../../shared/database/connection.js';
@@ -24,8 +24,6 @@ router.use((req, res, next) => {
   }
   next();
 });
-
-const QUEUE_NAMES = ['email-send', 'drive-sync', 'sheets-sync', 'ai-extraction'] as const;
 
 router.get(
   '/queue-stats',
