@@ -162,6 +162,88 @@ describe('processWithAI — extraction failure resilience', () => {
       }),
     );
   });
+
+  it('marks document as failed when PDF/text extraction throws before the AI call', async () => {
+    mockFsReadFile.mockRejectedValueOnce(new Error('ENOENT: file not found'));
+
+    const doc = {
+      id: 10,
+      processId: 44,
+      type: 'invoice',
+      storagePath: '/tmp/missing.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'missing.pdf',
+    };
+
+    queryQueue.push(createResolvedChain([doc]));
+    const failUpdate = createResolvedChain(undefined);
+    queryQueue.push(failUpdate);
+    queryQueue.push(createResolvedChain([{ processCode: 'IMP-044' }]));
+    queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
+
+    await documentService.processWithAI(10, 'invoice');
+
+    expect(extractInvoiceData).not.toHaveBeenCalled();
+    expect(failUpdate.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiParsedData: expect.objectContaining({
+          extractionFailed: true,
+          reason: expect.stringContaining('ENOENT'),
+        }),
+        isProcessed: true,
+      }),
+    );
+  });
+
+  it('returns failed status for stale processing and structured extraction failures', async () => {
+    const staleDate = new Date(Date.now() - 31 * 60 * 1000);
+    queryQueue.push(
+      createResolvedChain([
+        {
+          id: 11,
+          processId: 44,
+          type: 'invoice',
+          originalFilename: 'stale.pdf',
+          storagePath: '/tmp/stale.pdf',
+          mimeType: 'application/pdf',
+          fileSize: 1,
+          driveFileId: null,
+          aiParsedData: null,
+          confidenceScore: null,
+          isProcessed: false,
+          createdAt: staleDate,
+          updatedAt: staleDate,
+        },
+        {
+          id: 12,
+          processId: 44,
+          type: 'packing_list',
+          originalFilename: 'failed.pdf',
+          storagePath: '/tmp/failed.pdf',
+          mimeType: 'application/pdf',
+          fileSize: 1,
+          driveFileId: null,
+          aiParsedData: { extractionFailed: true, reason: 'AI failed' },
+          confidenceScore: '0',
+          isProcessed: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]),
+    );
+
+    const docs = await documentService.getByProcess(44);
+
+    expect(docs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: 11, aiProcessingStatus: 'failed' }),
+        expect.objectContaining({ id: 12, aiProcessingStatus: 'failed' }),
+      ]),
+    );
+  });
 });
 
 describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {

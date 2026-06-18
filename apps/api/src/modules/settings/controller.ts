@@ -3,6 +3,11 @@ import { settingsService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { odooService } from '../integrations/odoo.service.js';
+import {
+  OPERATIONAL_RECIPIENT_KEYS,
+  getOperationalRecipientSettings,
+  normalizeEmailList,
+} from './operational-recipients.js';
 
 const SMTP_KEYS = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_from'] as const;
 const SMTP_ENV: Record<string, string> = {
@@ -69,6 +74,14 @@ export const settingsController = {
 
   async set(req: Request, res: Response) {
     try {
+      if ((OPERATIONAL_RECIPIENT_KEYS as readonly string[]).includes(req.params.key)) {
+        return sendError(
+          res,
+          'Use /api/settings/recipients para alterar destinatários operacionais',
+          400,
+        );
+      }
+
       const { value, description } = req.body;
       const setting = await settingsService.set(req.params.key, value, description);
       sendSuccess(res, setting);
@@ -112,6 +125,31 @@ export const settingsController = {
     try {
       await saveGroupSettings(req.body, INTEGRATION_KEYS);
       sendSuccess(res, { saved: true });
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async getRecipients(_req: Request, res: Response) {
+    try {
+      const settings = await getOperationalRecipientSettings();
+      sendSuccess(res, settings);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async saveRecipients(req: Request, res: Response) {
+    try {
+      for (const key of OPERATIONAL_RECIPIENT_KEYS) {
+        if (key in req.body) {
+          await settingsService.set(key, normalizeEmailList(req.body[key]));
+        }
+      }
+      const settings = await getOperationalRecipientSettings();
+      sendSuccess(res, settings);
     } catch (error: any) {
       const status = error.statusCode || 400;
       sendError(res, error.message, status);

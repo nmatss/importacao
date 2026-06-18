@@ -311,6 +311,15 @@ export function DesembaracoPage() {
                     <tr
                       key={proc.id}
                       onClick={() => navigate(`/importacao/processos/${proc.id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          navigate(`/importacao/processos/${proc.id}`);
+                        }
+                      }}
+                      role="link"
+                      tabIndex={0}
+                      aria-label={`Abrir processo ${proc.processCode}`}
                       className="cursor-pointer border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                     >
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-semibold text-slate-900 dark:text-slate-100">

@@ -1,4 +1,4 @@
-# Alertmanager configuration for the importacao monitoring stack.
+# Alertmanager default configuration for the importacao monitoring stack.
 #
 # Prometheus (infra/prometheus/prometheus.yml -> alerting:) ships alerts here.
 # The alert rules themselves live in infra/prometheus/alerts.yml.
@@ -16,9 +16,10 @@
 # {"text": ...} body to the chat.googleapis.com space URL.
 #
 # Point ALERTMANAGER_WEBHOOK_URL at that bridge (NOT at the Google Chat URL).
-# The bridge then holds the real GOOGLE_CHAT_WEBHOOK_URL and does the reformat.
-# (The api service already knows how to post to Google Chat; a thin adapter
-# endpoint or a tiny prometheus-msteams-style relay both work.)
+# scripts/deploy.sh renders infra/alertmanager/alertmanager.webhook.yml.template
+# into this file on the production host when ALERTMANAGER_WEBHOOK_URL is set.
+# When it is not set, this checked-in config stays as a valid no-op receiver:
+# Alertmanager remains healthy, but external alert delivery is intentionally off.
 # ─────────────────────────────────────────────────────────────────────────────
 
 global:
@@ -33,32 +34,12 @@ route:
   group_interval: 5m
   # Re-send a still-firing alert at most this often, to avoid notification spam.
   repeat_interval: 4h
-  receiver: 'default-webhook'
+  receiver: 'noop'
 
 receivers:
-  - name: 'default-webhook'
-    # The bridge/adapter URL (see header) — point this at the Google Chat bridge,
-    # NOT at chat.googleapis.com directly.
-    #
-    # NOTE: Alertmanager does NOT expand ${ENV} placeholders inside this file. The
-    # ALERTMANAGER_WEBHOOK_URL var (declared on the alertmanager service / .env.example)
-    # documents the value to use; replace the placeholder below with it at deploy
-    # time (or template this file via your deploy/rsync step). Until a real bridge
-    # is deployed, leave the placeholder — alerts will fail to deliver loudly in the
-    # Alertmanager logs rather than silently, which is the desired fail-visible state.
-    webhook_configs:
-      - url: 'http://CHANGE-ME-alertmanager-webhook-bridge/alert'
-        send_resolved: true
+  - name: 'noop'
 
-    # ── Native email alternative (no bridge needed) ──────────────────────────
-    # Alertmanager speaks SMTP natively. To use email instead of (or alongside)
-    # the webhook bridge, fill `global.smtp_*` above and uncomment below. SMTP
-    # creds can be the same relay the api uses (SMTP_HOST/SMTP_PORT/SMTP_USER/...).
-    # email_configs:
-    #   - to: 'ti-alertas@grupounico.com'
-    #     from: 'alertmanager@grupounico.com'
-    #     smarthost: 'smtp.gmail.com:587'
-    #     auth_username: 'your-smtp-user'
-    #     auth_password: 'your-smtp-app-password'
-    #     require_tls: true
-    #     send_resolved: true
+# ── Native email alternative (no bridge needed) ──────────────────────────
+# Alertmanager speaks SMTP natively. To use email instead of (or alongside)
+# the webhook bridge, configure SMTP in a separate rendered config. SMTP creds
+# can be the same relay the api uses (SMTP_HOST/SMTP_PORT/SMTP_USER/...).

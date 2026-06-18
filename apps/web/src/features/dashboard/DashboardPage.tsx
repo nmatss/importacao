@@ -228,6 +228,7 @@ export function DashboardPage() {
   );
 
   const isLoading = loadingOverview || loadingStatus;
+  const emailLogItems = emailLogs?.data ?? [];
 
   if (overviewError) {
     return <ErrorState message="Erro ao carregar dashboard." onRetry={() => refetchOverview()} />;
@@ -595,7 +596,7 @@ export function DashboardPage() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
-        ) : !emailLogs || emailLogs.data.length === 0 ? (
+        ) : emailLogItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 mb-4">
               <Mail className="h-6 w-6 text-slate-300" />
@@ -609,7 +610,7 @@ export function DashboardPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {emailLogs.data.map((log) => {
+            {emailLogItems.map((log) => {
               const isCompleted = log.status === 'completed';
               const isFailed = log.status === 'failed';
               const isReprocessed = log.status === 'reprocessed';
@@ -719,6 +720,15 @@ export function DashboardPage() {
                       index % 2 === 1 && 'bg-slate-50/40',
                     )}
                     onClick={() => navigate(`/importacao/processos/${proc.id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/importacao/processos/${proc.id}`);
+                      }
+                    }}
+                    role="link"
+                    tabIndex={0}
+                    aria-label={`Abrir processo ${proc.processCode}`}
                   >
                     <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm">
                       <Link

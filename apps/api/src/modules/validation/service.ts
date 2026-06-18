@@ -22,8 +22,7 @@ import type { ProcessStatus } from '../../shared/state-machine/process-states.js
 import { IntegrationError, NotFoundError } from '../../shared/errors/index.js';
 import { getErrorTypesFromChecks } from './error-type-mapping.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
-
-const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
+import { getOperationalRecipient } from '../settings/operational-recipients.js';
 
 type DocumentWithAiData = {
   type: string;
@@ -328,7 +327,7 @@ export const validationService = {
           await communicationService.create({
             processId,
             recipient: 'KIOM',
-            recipientEmail: KIOM_EMAIL,
+            recipientEmail: await getOperationalRecipient('kiom_email'),
             subject,
             body,
           });

@@ -13,9 +13,9 @@ import { SubmitButton } from '@/shared/components/SubmitButton';
 import { cn } from '@/shared/lib/utils';
 import {
   createCertificate,
+  downloadCertificatePdf,
   fetchCertificates,
   retryCertificateLinx,
-  getCertificatePdfUrl,
   type CertCertificate,
   type LinxStatus,
 } from '@/shared/lib/cert-api-client';
@@ -81,6 +81,7 @@ export default function CertCadastroPage() {
 
   const [recent, setRecent] = useState<CertCertificate[]>([]);
   const [retrying, setRetrying] = useState<string | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
 
   // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
   // e o converte para dd/mm/AAAA somente na escrita do Linx (_format_date).
@@ -159,6 +160,17 @@ export default function CertCadastroPage() {
       // mantém estado anterior
     } finally {
       setRetrying(null);
+    }
+  }
+
+  async function handleDownloadPdf(id: string) {
+    setDownloadingPdf(id);
+    try {
+      await downloadCertificatePdf(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Falha ao baixar PDF.');
+    } finally {
+      setDownloadingPdf(null);
     }
   }
 
@@ -400,14 +412,19 @@ export default function CertCadastroPage() {
                 <LinxBadge status={c.linx_status} />
                 <div className="ml-auto flex items-center gap-3">
                   {c.pdf_filename && (
-                    <a
-                      href={getCertificatePdfUrl(c.id)}
-                      target="_blank"
-                      rel="noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadPdf(c.id)}
+                      disabled={downloadingPdf === c.id}
                       className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
                     >
-                      <FileText className="h-3.5 w-3.5" /> PDF
-                    </a>
+                      {downloadingPdf === c.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileText className="h-3.5 w-3.5" />
+                      )}
+                      PDF
+                    </button>
                   )}
                   {(c.linx_status === 'error' || c.linx_status === 'disabled') && (
                     <button

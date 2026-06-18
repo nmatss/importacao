@@ -66,3 +66,27 @@ async def test_schedules_returns_list(test_client, api_key_headers):
     resp = await test_client.get("/api/schedules", headers=api_key_headers)
     assert resp.status_code == 200
     assert isinstance(resp.json(), list)
+
+
+@pytest.mark.asyncio
+async def test_create_schedule_rejects_invalid_cron(test_client, api_key_headers):
+    """Invalid cron should return a clear validation error before DB access."""
+    resp = await test_client.post(
+        "/api/schedules",
+        headers=api_key_headers,
+        json={"name": "Invalid", "cron": "60 24 * * *", "enabled": True},
+    )
+    assert resp.status_code == 400
+    assert "Expressao cron invalida" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_update_schedule_rejects_invalid_cron(test_client, api_key_headers):
+    """Schedule updates should reject invalid cron with a validation error."""
+    resp = await test_client.put(
+        "/api/schedules/00000000-0000-0000-0000-000000000000",
+        headers=api_key_headers,
+        json={"cron": "*/0 * * * *"},
+    )
+    assert resp.status_code == 400
+    assert "Expressao cron invalida" in resp.json()["detail"]

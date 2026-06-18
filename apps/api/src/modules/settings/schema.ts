@@ -1,5 +1,20 @@
 import { z } from 'zod';
 
+const emailListSchema = z
+  .string()
+  .max(255, 'Use no máximo 255 caracteres')
+  .refine(
+    (value) => {
+      const emails = value
+        .split(/[;,\r\n]/)
+        .map((email) => email.trim())
+        .filter(Boolean);
+
+      return emails.every((email) => z.string().email().safeParse(email).success);
+    },
+    { message: 'Informe e-mails válidos separados por vírgula ou ponto-e-vírgula' },
+  );
+
 export const updateSettingSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.record(z.unknown())]),
   description: z.string().optional(),
@@ -18,6 +33,12 @@ export const integrationSettingsSchema = z.object({
   odoo_url: z.string().optional(),
   odoo_db: z.string().optional(),
   odoo_user: z.string().optional(),
+});
+
+export const recipientSettingsSchema = z.object({
+  kiom_email: emailListSchema.optional(),
+  fenicia_email: emailListSchema.optional(),
+  isa_email: emailListSchema.optional(),
 });
 
 export const createEmailSignatureSchema = z.object({

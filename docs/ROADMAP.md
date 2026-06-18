@@ -1,13 +1,13 @@
 # Roadmap
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-18
 
 ## P0 - Operacao E Confiabilidade
 
 - Adicionar PDFs ou extracoes reais anonimizadas de validacao INV/PL/OHBL/Draft
   BL. Existe fixture representativa sem mock de `allChecks` desde 2026-06-17.
-- Configurar `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL` reais no SOPS de
-  producao.
+- Cadastrar destinatarios KIOM, Fenicia e ISA em
+  `Configuracoes > Destinatarios operacionais` na producao.
 - Formalizar decisao sobre provider de IA para extracao documental.
 - Adicionar alerta externo para falha do restore test recorrente e medir RTO.
 
@@ -18,7 +18,11 @@ Ultima atualizacao: 2026-06-17
 ## P1 - UX Operacional
 
 - Consolidar aceite do checklist e aceite do comparativo.
-- Melhorar acessibilidade restante em ordenacao de tabelas, switches/toggles e filtros visuais.
+- Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como
+  anotacao local.
+- Migrar Settings, Communications e CertCadastro para validacao de formulario
+  completa com erro por campo e cobertura de teste.
+- Criar padrao mobile para tabelas largas e kanban operacional.
 
 ## P2 - Dados, DW E Observabilidade
 

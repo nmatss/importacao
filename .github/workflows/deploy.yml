@@ -22,6 +22,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
 
       - name: Validate confirmation
         if: ${{ !inputs.dry_run }}
@@ -39,25 +42,42 @@ jobs:
           echo "Commit: ${{ github.sha }}"
           echo "Triggered by: ${{ github.actor }}"
           echo ""
-          echo "Would rsync to: ${{ secrets.DEPLOY_SERVER }} (user: ${{ secrets.DEPLOY_USER }})"
-          echo "Remote dir: ~/importacao"
+          echo "Would run: DEPLOY_USER=*** bash scripts/deploy.sh ${{ secrets.DEPLOY_SERVER }}"
+          echo "Deploy model: local script + rsync + remote docker compose"
+          echo "Remote dir: /home/${{ secrets.DEPLOY_USER }}/importacao (unless DEPLOY_DIR overrides it)"
           echo ""
           echo "Docker compose file: docker-compose.prod.yml"
-          echo "Services that would restart: api web"
+          echo "Services that would restart: api web cert-api"
           echo ""
           echo "Health check endpoint: http://localhost:3050/health/ready"
           echo ""
           echo "=== END DRY RUN ==="
 
-      - name: Deploy to production server
+      - name: Install deploy prerequisites
         if: ${{ !inputs.dry_run }}
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.DEPLOY_SERVER }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd ~/importacao
-            git pull origin master
-            bash scripts/deploy.sh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rsync
+
+      - name: Configure SSH
+        if: ${{ !inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_SERVER }}" >> ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<'EOF'
+          Host *
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+          EOF
+
+      - name: Deploy with official rsync script
+        if: ${{ !inputs.dry_run }}
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          printf 'y\n' | bash scripts/deploy.sh "${{ secrets.DEPLOY_SERVER }}"

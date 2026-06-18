@@ -28,7 +28,7 @@ export interface E2EContext {
   cleanup: () => Promise<void>;
 }
 
-// Migrations 0011-0015 ship as .sql files but are intentionally absent from
+// Migrations 0011+ ship as .sql files but are intentionally absent from
 // Drizzle's meta/_journal.json (some, like 0011, contain ALTER TYPE ADD VALUE
 // which cannot run inside the migrator's transaction). They are idempotent
 // (IF NOT EXISTS / ADD VALUE IF NOT EXISTS), so we apply them after migrate().
@@ -38,7 +38,24 @@ const PENDING_MIGRATIONS = [
   '0013_ai_usage_log.sql',
   '0014_validation_resolution_note.sql',
   '0015_validation_history.sql',
+  '0016_pre_cons_tables.sql',
 ];
+
+function isCI(): boolean {
+  const value = process.env.CI?.trim().toLowerCase();
+  return value === 'true' || value === '1';
+}
+
+export function handleE2ESetupFailure(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const reason = `Docker unavailable or setup failed: ${message}`;
+
+  if (isCI()) {
+    throw new Error(`${reason}. CI=true forbids silent E2E setup skips.`);
+  }
+
+  return reason;
+}
 
 async function applyPendingMigrations(client: postgres.Sql): Promise<void> {
   for (const file of PENDING_MIGRATIONS) {

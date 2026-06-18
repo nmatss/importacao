@@ -6,6 +6,7 @@ import {
   updateSettingSchema,
   smtpSettingsSchema,
   integrationSettingsSchema,
+  recipientSettingsSchema,
   createEmailSignatureSchema,
   updateEmailSignatureSchema,
 } from './schema.js';
@@ -33,6 +34,8 @@ router.use(adminMiddleware);
 
 router.get('/smtp', settingsController.getSmtp);
 router.put('/smtp', validate(smtpSettingsSchema), settingsController.saveSmtp);
+router.get('/recipients', settingsController.getRecipients);
+router.put('/recipients', validate(recipientSettingsSchema), settingsController.saveRecipients);
 router.get('/integrations', settingsController.getIntegrations);
 router.put(
   '/integrations',

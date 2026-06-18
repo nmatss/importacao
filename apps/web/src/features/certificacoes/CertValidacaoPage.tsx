@@ -132,11 +132,15 @@ export default function CertValidacaoPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
             {/* Brand Selector */}
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              <label
+                htmlFor="cert-validacao-brand"
+                className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+              >
                 Marca
               </label>
               <div className="relative">
                 <select
+                  id="cert-validacao-brand"
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   disabled={running}

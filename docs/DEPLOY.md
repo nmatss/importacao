@@ -20,6 +20,10 @@ Compose:
 bash scripts/deploy.sh 192.168.168.124
 ```
 
+O workflow manual `.github/workflows/deploy.yml` tambem usa este mesmo caminho:
+ele roda `scripts/deploy.sh` no runner e o script sincroniza o codigo por rsync.
+Nao ha `git pull` no servidor de producao.
+
 O script:
 
 1. Exige branch `master`.
@@ -28,14 +32,21 @@ O script:
 4. Solicita confirmacao.
 5. Executa backup PostgreSQL obrigatorio.
 6. Cria snapshot de rollback do codigo remoto.
-7. Sincroniza codigo por rsync.
+7. Sincroniza codigo por rsync, preservando `.env`, `.env.sops.yaml`, uploads
+   e logs remotos.
 8. Gera `.env` remoto via SOPS + age a partir de `.env.sops.yaml`; se falhar,
    preserva o `.env` existente como fallback operacional.
-9. Aplica migrations pendentes e aborta se falharem.
-10. Rebuilda `api`, `web` e `cert-api`.
-11. Executa health check da API e readiness do `cert-api`.
-12. Grava `REVISION` com o SHA implantado.
-13. Faz rollback de codigo se health falhar.
+9. Renderiza `infra/alertmanager/alertmanager.yml` a partir de
+   `infra/alertmanager/alertmanager.webhook.yml.template` quando
+   `ALERTMANAGER_WEBHOOK_URL` esta configurado; se estiver vazio, mantem o
+   receiver `noop`.
+10. Valida `docker compose -f docker-compose.prod.yml config --quiet` no
+    servidor antes de migrations/restart.
+11. Aplica migrations pendentes e aborta se falharem.
+12. Rebuilda `api`, `web` e `cert-api`.
+13. Executa health check da API e readiness do `cert-api`.
+14. Grava `REVISION` com o SHA implantado.
+15. Faz rollback de codigo se health falhar.
 
 Evidencia:
 
@@ -43,7 +54,23 @@ Evidencia:
 
 Requisito de segredo:
 
-- `CERT_API_KEY` deve existir no `.env` remoto. O compose de producao falha se a variavel estiver ausente, e o nginx do `web` usa esse valor para injetar `X-API-Key` no proxy `/cert-api/`.
+- `CERT_API_KEY` deve existir no `.env` remoto. O compose de producao falha se
+  a variavel estiver ausente, e o nginx do `web` usa esse valor para injetar
+  `X-API-Key` no proxy interno `/cert-api/` somente apos validar o JWT do
+  usuario em `/api/auth/me`.
+- `GRAFANA_ADMIN_PASSWORD` deve existir no `.env` remoto. Nao ha fallback
+  `changeme` em producao.
+- `GOOGLE_CLIENT_ID` e `VITE_GOOGLE_CLIENT_ID` devem existir e apontar para o
+  mesmo OAuth Client ID autorizado para a origem publica do frontend.
+- Destinatarios KIOM, Fenicia e ISA devem ser configurados no sistema em
+  `Configuracoes > Destinatarios operacionais`. `KIOM_EMAIL`, `FENICIA_EMAIL` e
+  `ISA_EMAIL` continuam aceitos no `.env` remoto apenas como fallback opcional.
+- Variaveis WMS/ERP/Sheets da `cert-api` (`GOOGLE_SHEETS_SPREADSHEET_ID`,
+  `WMS_ORACLE_*`, `ERP_*`, `ERP_MSSQL_*`) devem existir no `.env` remoto.
+  O compose falha cedo se alguma estiver ausente.
+- `ALERTMANAGER_WEBHOOK_URL` e opcional, mas se existir deve apontar para um
+  bridge compatível com payload nativo do Alertmanager, nao diretamente para
+  Google Chat.
 
 ## Backup E Restore
 

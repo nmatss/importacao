@@ -85,6 +85,9 @@ services:
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      KIOM_EMAIL: ${KIOM_EMAIL:-}
+      FENICIA_EMAIL: ${FENICIA_EMAIL:-}
+      ISA_EMAIL: ${ISA_EMAIL:-}
       GMAIL_SHARED_MAILBOX: ${GMAIL_SHARED_MAILBOX:-}
       EMAIL_INGESTION_ENABLED: ${EMAIL_INGESTION_ENABLED:-false}
       EMAIL_ALLOWED_SENDERS: ${EMAIL_ALLOWED_SENDERS:-}
@@ -93,7 +96,8 @@ services:
       IMAP_USER: ${IMAP_USER:-}
       IMAP_PASS: ${IMAP_PASS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      DOCUMENT_PROCESSING_STALE_MINUTES: ${DOCUMENT_PROCESSING_STALE_MINUTES:-30}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
       ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-}
       CORS_ORIGIN: ${CORS_ORIGIN:-}
       ODOO_URL: ${ODOO_URL:-}
@@ -142,18 +146,18 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
-      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE}
-      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:-192.168.168.10}
-      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:-1521}
-      WMS_ORACLE_SID: ${WMS_ORACLE_SID:-WMS}
-      WMS_ORACLE_USER: ${WMS_ORACLE_USER:-wisweb}
-      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:-wisweb}
-      ERP_PUKET_HOST: ${ERP_PUKET_HOST:-db01.grupounico.com}
-      ERP_PUKET_DB: ${ERP_PUKET_DB:-DB_puket}
-      ERP_IMG_HOST: ${ERP_IMG_HOST:-db02.grupounico.com}
-      ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
-      ERP_MSSQL_USER: ${ERP_MSSQL_USER}
-      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS}
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:?GOOGLE_SHEETS_SPREADSHEET_ID is required}
+      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:?WMS_ORACLE_HOST is required}
+      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:?WMS_ORACLE_PORT is required}
+      WMS_ORACLE_SID: ${WMS_ORACLE_SID:?WMS_ORACLE_SID is required}
+      WMS_ORACLE_USER: ${WMS_ORACLE_USER:?WMS_ORACLE_USER is required}
+      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:?WMS_ORACLE_PASS is required}
+      ERP_PUKET_HOST: ${ERP_PUKET_HOST:?ERP_PUKET_HOST is required}
+      ERP_PUKET_DB: ${ERP_PUKET_DB:?ERP_PUKET_DB is required}
+      ERP_IMG_HOST: ${ERP_IMG_HOST:?ERP_IMG_HOST is required}
+      ERP_IMG_DB: ${ERP_IMG_DB:?ERP_IMG_DB is required}
+      ERP_MSSQL_USER: ${ERP_MSSQL_USER:?ERP_MSSQL_USER is required}
+      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:?ERP_MSSQL_PASS is required}
       CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     volumes:
       - cert-reports:/app/reports
@@ -184,7 +188,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-}
-        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required}
     container_name: importacao-web
     restart: unless-stopped
     ports:
@@ -260,10 +264,6 @@ services:
     command:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
-    environment:
-      # Bridge/adapter URL that reformats Alertmanager's native webhook payload
-      # into the target chat format (see alertmanager.yml comment). Empty by default.
-      ALERTMANAGER_WEBHOOK_URL: ${ALERTMANAGER_WEBHOOK_URL:-}
     depends_on:
       - prometheus
     deploy:
@@ -279,7 +279,7 @@ services:
     ports:
       - "127.0.0.1:3030:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD is required}
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3030}
     volumes:

@@ -1,6 +1,26 @@
 """Pydantic request/response models."""
 
+from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel
+
+CRON_VALIDATION_ERROR = (
+    "Expressao cron invalida. Use 5 campos: minuto hora dia mes dia_semana "
+    "(ex: 0 8 * * 1-5)."
+)
+
+
+def normalize_cron_expression(cron: str) -> str:
+    """Validate and normalize a five-field cron expression for APScheduler."""
+    normalized = " ".join(cron.strip().split())
+    if not normalized:
+        raise ValueError("Expressao cron e obrigatoria")
+    if len(normalized.split()) != 5:
+        raise ValueError(CRON_VALIDATION_ERROR)
+    try:
+        CronTrigger.from_crontab(normalized, timezone="America/Sao_Paulo")
+    except ValueError as exc:
+        raise ValueError(CRON_VALIDATION_ERROR) from exc
+    return normalized
 
 
 class VerifyRequest(BaseModel):

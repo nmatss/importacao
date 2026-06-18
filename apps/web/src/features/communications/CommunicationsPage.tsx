@@ -369,10 +369,10 @@ export function CommunicationsPage() {
                   </label>
                   <input
                     id="comm-recipient-email"
-                    type="email"
+                    type="text"
                     value={composer.recipientEmail}
                     onChange={(e) => setComposer({ ...composer, recipientEmail: e.target.value })}
-                    placeholder="email@exemplo.com"
+                    placeholder="email@exemplo.com, outro@exemplo.com"
                     className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
                   />
                 </div>

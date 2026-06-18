@@ -373,19 +373,8 @@ export function ProcessDetailPage() {
                   )}
                 >
                   <Icon className={cn('h-4 w-4', isActive ? 'text-primary-600' : '')} />
-                  <span className="relative hidden sm:inline">
+                  <span className="relative inline">
                     {tab.label}
-                    {process && (
-                      <TabIndicator
-                        tabKey={tab.key}
-                        process={process}
-                        validationChecks={validationChecks}
-                        emailCount={emailCount}
-                      />
-                    )}
-                  </span>
-                  {/* Mobile: show indicator on icon, not label */}
-                  <span className="relative sm:hidden">
                     {process && (
                       <TabIndicator
                         tabKey={tab.key}

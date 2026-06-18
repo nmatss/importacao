@@ -13,6 +13,10 @@ Ultima atualizacao: 2026-06-17
 - Google Chat webhook opcional.
 - Sentry opcional via `SENTRY_DSN`.
 - AI governance com logging de requisicoes/custos.
+- Alertmanager interno com config `noop` por padrao. Em deploy, se
+  `ALERTMANAGER_WEBHOOK_URL` existir, `scripts/deploy.sh` renderiza o template
+  `infra/alertmanager/alertmanager.webhook.yml.template` para enviar alertas a
+  um bridge compativel com Alertmanager.
 
 Evidencias:
 
@@ -40,6 +44,8 @@ Evidencias:
 
 - Dashboards Prometheus/Grafana nao estao documentados no repo.
 - SLO/SLI ainda nao formalizados.
+- Alertas externos dependem de um bridge/adapter para Chat ou de config SMTP
+  nativa do Alertmanager.
 - Alertas externos precisam de runbook por severidade.
 - Retencao de logs e politica de PII precisam de decisao formal.
 

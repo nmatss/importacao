@@ -1,18 +1,26 @@
-# Camada de IA — Provider Vertex + Skills + Harness de Confiança
+# Camada de IA — Provider Local/Vertex + Skills + Harness de Confiança
+
+> Estado operacional mais recente (2026-06-18): producao recente usa
+> `AI_PROVIDER=ialocal`, `AI_ALLOW_EXTERNAL=false` e `AI_USE_SPECIALIST=1`.
+> Vertex continua documentado como caminho recomendado para qualidade/privacidade
+> quando houver decisao formal e IAM liberado. Nao trate este documento como
+> evidencia de que Vertex esta ativo em producao.
 
 > Como o sistema garante que **tudo que a IA gera e analisa** é confiável. Toda
 > extração de documento (Invoice, Packing List, BL, Draft BL) passa por esta
 > camada antes de ser persistida ou usada nas validações.
 
-## 1. Provider — Vertex AI (privacidade por contrato)
+## 1. Provider — Estado Atual E Opcao Vertex
 
-Toda análise por IA roda via **Google Vertex AI** (`aiplatform.googleapis.com`),
-nunca pela Gemini Developer API. Motivo: os documentos contêm dados sensíveis
-(Invoices, CNPJ, BLs, valores comerciais) e o Vertex tem garantia contratual de
+O codigo suporta provider local e Vertex. O estado recente de producao e IA local
+via `unico-docintel`, com egress externo bloqueado por default. Vertex AI
+(`aiplatform.googleapis.com`) permanece como opcao recomendada quando a decisao
+formal for qualidade/privacidade contratual, porque documentos contêm dados
+sensiveis (Invoices, CNPJ, BLs, valores comerciais) e Vertex oferece garantia de
 **não usar os dados para treino**.
 
 - Implementação: `apps/api/src/modules/ai/providers/vertex.ts` (REST + OAuth2 via Service Account).
-- Seleção: `ai/service.ts` — `AI_PROVIDER=vertex` (ternário sem fallback para OpenRouter).
+- Seleção: `ai/service.ts` — `AI_PROVIDER=ialocal` no estado recente; `AI_PROVIDER=vertex` quando aprovado.
 - Validação fail-fast: `shared/config/env.ts` exige `GOOGLE_VERTEX_PROJECT` quando `AI_PROVIDER=vertex`.
 - Modelos: `gemini-2.5-flash` → upgrade para `gemini-2.5-pro` só quando a confiança fica baixa.
 - Teto de custo: `AI_MONTHLY_BUDGET_USD` (≈ R$150/mês = USD 26) — `ai/cost-tracker.ts`, com alerta aos 80%.

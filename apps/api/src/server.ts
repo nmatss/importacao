@@ -40,15 +40,6 @@ function checkEnvVars() {
   ) {
     warnings.push('SMTP não configurado — envio de emails não funcionará');
   }
-  if (!process.env.KIOM_EMAIL) {
-    warnings.push('KIOM_EMAIL não definido — emails de correção para KIOM não terão destinatário');
-  }
-  if (!process.env.FENICIA_EMAIL) {
-    warnings.push('FENICIA_EMAIL não definido — emails para Fenicia não terão destinatário');
-  }
-  if (!process.env.ISA_EMAIL) {
-    warnings.push('ISA_EMAIL não definido — emails para ISA Certificação não terão destinatário');
-  }
 
   for (const w of warnings) {
     logger.warn(`[ENV] ${w}`);

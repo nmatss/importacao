@@ -22,6 +22,7 @@ import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import { getQueue } from '../../shared/queue/index.js';
 import { normalizePort } from '../validation/utils/port-normalize.js';
 import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
 import { extractPartyParts } from '../validation/utils/party-extract.js';
@@ -131,6 +132,40 @@ function standardizeDocumentName(
   return null;
 }
 
+const DEFAULT_PROCESSING_STALE_MINUTES = 30;
+const processingStaleMinutes = Number(
+  process.env.DOCUMENT_PROCESSING_STALE_MINUTES ?? DEFAULT_PROCESSING_STALE_MINUTES,
+);
+const PROCESSING_STALE_MS =
+  Number.isFinite(processingStaleMinutes) && processingStaleMinutes > 0
+    ? processingStaleMinutes * 60 * 1000
+    : DEFAULT_PROCESSING_STALE_MINUTES * 60 * 1000;
+
+function hasExtractionFailureData(aiParsedData: unknown): boolean {
+  if (!isRecord(aiParsedData)) return false;
+  return Boolean(aiParsedData.extractionFailed || aiParsedData.error);
+}
+
+function isProcessingStale(updatedAt: Date | string | null | undefined): boolean {
+  if (!updatedAt) return false;
+  const timestamp = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  return Date.now() - timestamp > PROCESSING_STALE_MS;
+}
+
+function documentAiProcessingStatus(row: {
+  isProcessed: boolean | null;
+  aiParsedData: unknown;
+  updatedAt?: Date | string | null;
+  createdAt?: Date | string | null;
+}): 'processing' | 'completed' | 'failed' {
+  if (row.isProcessed) {
+    if (hasExtractionFailureData(row.aiParsedData)) return 'failed';
+    return row.aiParsedData ? 'completed' : 'failed';
+  }
+  return isProcessingStale(row.updatedAt ?? row.createdAt) ? 'failed' : 'processing';
+}
+
 export const documentService = {
   async rebuildProcessAiExtractedData(
     processId: number,
@@ -183,6 +218,36 @@ export const documentService = {
     );
 
     return nextAiExtractedData;
+  },
+
+  async enqueueAIExtraction(
+    doc: Pick<
+      typeof documents.$inferSelect,
+      'id' | 'processId' | 'type' | 'storagePath' | 'originalFilename'
+    >,
+    type: string = doc.type,
+  ) {
+    try {
+      const boss = await getQueue();
+      await boss.send('ai-extraction', {
+        documentId: doc.id,
+        processId: doc.processId,
+        documentType: type,
+        filePath: doc.storagePath,
+      });
+      logger.info({ documentId: doc.id, processId: doc.processId, type }, 'AI extraction queued');
+    } catch (err) {
+      // Queue failure should be loud, but it must not recreate the old infinite
+      // "processing" trap. Fallback keeps the document moving in single-node
+      // deployments while the queue alert/log is investigated.
+      logger.error(
+        { err, documentId: doc.id, processId: doc.processId, type },
+        'Failed to queue AI extraction — falling back to in-process extraction',
+      );
+      this.processWithAI(doc.id, type).catch((processErr) =>
+        logger.error({ err: processErr, documentId: doc.id }, 'AI fallback processing failed'),
+      );
+    }
   },
 
   async upload(
@@ -312,10 +377,9 @@ export const documentService = {
       userId,
     );
 
-    // Trigger AI extraction in background
-    this.processWithAI(doc.id, type).catch((err) =>
-      logger.error({ err, documentId: doc.id }, 'AI processing failed'),
-    );
+    // Trigger AI extraction through durable queue so deploy/restart does not
+    // lose in-flight invoices and leave the UI polling forever.
+    await this.enqueueAIExtraction(doc, type);
 
     // For invoices and certificates, defer Drive upload to after AI processing to get standardized name
     if (type !== 'invoice' && type !== 'certificate') {
@@ -367,6 +431,72 @@ export const documentService = {
       .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
   },
 
+  async markExtractionFailure(
+    doc: typeof documents.$inferSelect,
+    type: string,
+    extractionError: unknown,
+  ) {
+    const isBudget = extractionError instanceof AIBudgetExceededError;
+    const reason = isBudget
+      ? 'Orçamento mensal de IA esgotado — extração não executada'
+      : extractionError instanceof Error
+        ? extractionError.message
+        : 'Falha desconhecida na extração de IA';
+
+    logger.error(
+      { err: extractionError, documentId: doc.id, type, isBudget },
+      'AI extraction failed — marking document as processed-with-failure',
+    );
+
+    await db
+      .update(documents)
+      .set({
+        aiParsedData: {
+          extractionFailed: true,
+          reason,
+          budgetExceeded: isBudget,
+          type,
+        } as Record<string, unknown>,
+        confidenceScore: '0',
+        isProcessed: true,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, doc.id));
+
+    const [proc] = await db
+      .select({ processCode: importProcesses.processCode })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, doc.processId))
+      .limit(1);
+
+    await alertService
+      .create({
+        processId: doc.processId,
+        severity: 'critical',
+        title: isBudget
+          ? 'Extração de IA bloqueada — orçamento mensal esgotado'
+          : 'Falha na extração de IA',
+        message: isBudget
+          ? `O documento ${type} do processo ${proc?.processCode ?? doc.processId} não pôde ser extraído porque o orçamento mensal de IA foi esgotado. Ajuste AI_MONTHLY_BUDGET_USD ou aguarde o próximo mês e reprocesse o documento.`
+          : `O documento ${type} do processo ${proc?.processCode ?? doc.processId} falhou na extração automática (${reason}). Reprocesse o documento ou revise-o manualmente.`,
+        processCode: proc?.processCode,
+      })
+      .catch((err) => logger.error({ err }, 'Failed to create extraction-failed alert'));
+
+    // Degradable: try to advance the rest of the process with whatever was
+    // already extracted from the other documents (mergedAiData comes from the
+    // process row, not this failed doc).
+    const [processRow] = await db
+      .select({ aiExtractedData: importProcesses.aiExtractedData })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, doc.processId))
+      .limit(1);
+    await this.runDegradableGate(
+      doc.processId,
+      (processRow?.aiExtractedData as Record<string, any>) ?? {},
+    );
+  },
+
   async processWithAI(documentId: number, type: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
@@ -381,21 +511,25 @@ export const documentService = {
 
     // Espelho (xlsx) — deterministic parser; no AI round-trip.
     if (type === 'espelho') {
-      await this.processEspelho(doc);
+      try {
+        await this.processEspelho(doc);
+      } catch (extractionError) {
+        await this.markExtractionFailure(doc, type, extractionError);
+      }
       return;
     }
 
-    const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
-
-    // Build extraction options with optional image data for multimodal processing
-    const extractionOpts = extracted.imageBase64
-      ? { imageBase64: extracted.imageBase64, imageMimeType: extracted.imageMimeType }
-      : undefined;
-
-    const text = extracted.text;
-
     let result;
     try {
+      const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
+
+      // Build extraction options with optional image data for multimodal processing
+      const extractionOpts = extracted.imageBase64
+        ? { imageBase64: extracted.imageBase64, imageMimeType: extracted.imageMimeType }
+        : undefined;
+
+      const text = extracted.text;
+
       switch (type) {
         case 'invoice':
           result = await aiService.extractInvoiceData(text, extractionOpts);
@@ -470,74 +604,7 @@ export const documentService = {
         }
       }
     } catch (extractionError) {
-      // Extraction THREW — the AI call failed hard (monthly budget exhausted,
-      // or every model in the fallback chain failed). Previously this bubbled
-      // out of processWithAI and the document stayed isProcessed=false /
-      // aiParsedData=null forever: the UI spinner never stopped and the
-      // degradable gate (auto-validation / auto-espelho for the OTHER
-      // documents) never fired. Now we mark the document as processed-with-
-      // failure so the spinner stops and the doc remains reprocessable, raise
-      // a CRITICAL alert, and fall through to the degradable gate so the rest
-      // of the process is not held hostage by one failed extraction.
-      const isBudget = extractionError instanceof AIBudgetExceededError;
-      const reason = isBudget
-        ? 'Orçamento mensal de IA esgotado — extração não executada'
-        : extractionError instanceof Error
-          ? extractionError.message
-          : 'Falha desconhecida na extração de IA';
-
-      logger.error(
-        { err: extractionError, documentId, type, isBudget },
-        'AI extraction failed — marking document as processed-with-failure',
-      );
-
-      await db
-        .update(documents)
-        .set({
-          aiParsedData: {
-            extractionFailed: true,
-            reason,
-            budgetExceeded: isBudget,
-            type,
-          } as Record<string, unknown>,
-          confidenceScore: '0',
-          isProcessed: true,
-          updatedAt: new Date(),
-        })
-        .where(eq(documents.id, documentId));
-
-      const [proc] = await db
-        .select({ processCode: importProcesses.processCode })
-        .from(importProcesses)
-        .where(eq(importProcesses.id, doc.processId))
-        .limit(1);
-
-      await alertService
-        .create({
-          processId: doc.processId,
-          severity: 'critical',
-          title: isBudget
-            ? 'Extração de IA bloqueada — orçamento mensal esgotado'
-            : 'Falha na extração de IA',
-          message: isBudget
-            ? `O documento ${type} do processo ${proc?.processCode ?? doc.processId} não pôde ser extraído porque o orçamento mensal de IA foi esgotado. Ajuste AI_MONTHLY_BUDGET_USD ou aguarde o próximo mês e reprocesse o documento.`
-            : `O documento ${type} do processo ${proc?.processCode ?? doc.processId} falhou na extração automática (${reason}). Reprocesse o documento ou revise-o manualmente.`,
-          processCode: proc?.processCode,
-        })
-        .catch((err) => logger.error({ err }, 'Failed to create extraction-failed alert'));
-
-      // Degradable: try to advance the rest of the process with whatever was
-      // already extracted from the other documents (mergedAiData comes from the
-      // process row, not this failed doc).
-      const [processRow] = await db
-        .select({ aiExtractedData: importProcesses.aiExtractedData })
-        .from(importProcesses)
-        .where(eq(importProcesses.id, doc.processId))
-        .limit(1);
-      await this.runDegradableGate(
-        doc.processId,
-        (processRow?.aiExtractedData as Record<string, any>) ?? {},
-      );
+      await this.markExtractionFailure(doc, type, extractionError);
       return;
     }
 
@@ -1353,11 +1420,7 @@ export const documentService = {
       fileName: row.originalFilename,
       documentType: row.type,
       uploadedAt: row.createdAt?.toISOString() ?? null,
-      aiProcessingStatus: row.isProcessed
-        ? row.aiParsedData
-          ? 'completed'
-          : 'failed'
-        : 'processing',
+      aiProcessingStatus: documentAiProcessingStatus(row),
       aiParsedData: row.aiParsedData,
       aiConfidence: row.confidenceScore != null ? Number(row.confidenceScore) : null,
       driveFileId: row.driveFileId,
@@ -1444,6 +1507,12 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
 
+    if (!doc.isProcessed && !isProcessingStale(doc.updatedAt ?? doc.createdAt)) {
+      const error = new Error('Reprocessamento já está em andamento para este documento');
+      (error as Error & { statusCode?: number }).statusCode = 409;
+      throw error;
+    }
+
     // Atomic: archive the previous extraction BEFORE zeroing it (audit,
     // backlog #12) and zero the fields in one transaction, mirroring the
     // history-snapshot + mutate pattern in validation.runAllChecks. Prevents a
@@ -1478,7 +1547,7 @@ export const documentService = {
 
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 
-    await this.processWithAI(documentId, doc.type);
+    await this.enqueueAIExtraction(doc, doc.type);
     return this.getById(documentId);
   },
 
@@ -1590,11 +1659,26 @@ export const documentService = {
       db.select().from(importProcesses).where(eq(importProcesses.id, processId)).limit(1),
     ]);
 
-    const invoiceDoc = docs.find((d) => d.type === 'invoice');
-    const plDoc = docs.find((d) => d.type === 'packing_list');
-    const blDoc = docs.find((d) => d.type === 'ohbl');
-    const draftBlDoc = docs.find((d) => d.type === 'draft_bl');
-    const espelhoDoc = docs.find((d) => d.type === 'espelho');
+    const newestFirst = [...docs].sort((a, b) => {
+      const aTime = (a.updatedAt ?? a.createdAt)?.getTime?.() ?? 0;
+      const bTime = (b.updatedAt ?? b.createdAt)?.getTime?.() ?? 0;
+      if (bTime !== aTime) return bTime - aTime;
+      return b.id - a.id;
+    });
+    const selectComparisonDoc = (type: string) =>
+      newestFirst.find(
+        (d) =>
+          d.type === type &&
+          d.isProcessed &&
+          d.aiParsedData &&
+          !hasExtractionFailureData(d.aiParsedData),
+      ) ?? newestFirst.find((d) => d.type === type);
+
+    const invoiceDoc = selectComparisonDoc('invoice');
+    const plDoc = selectComparisonDoc('packing_list');
+    const blDoc = selectComparisonDoc('ohbl');
+    const draftBlDoc = selectComparisonDoc('draft_bl');
+    const espelhoDoc = selectComparisonDoc('espelho');
 
     // Flatten { value, confidence } structures to plain values for comparison
     const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;

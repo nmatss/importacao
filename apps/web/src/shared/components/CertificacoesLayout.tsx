@@ -18,6 +18,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
 import { checkCertApiHealth } from '@/shared/lib/cert-api-client';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
+import { AssistantBubble } from '@/shared/components/AssistantBubble';
 
 const navSections = [
   {
@@ -142,6 +143,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
                     key={item.to}
                     to={item.to}
                     end={item.exact}
+                    aria-label={collapsed ? item.label : undefined}
                     onClick={() => setMobileOpen(false)}
                     className={({ isActive }) =>
                       cn(
@@ -183,6 +185,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
           <div className="px-3 py-2">
             <Link
               to="/portal"
+              aria-label={collapsed ? 'Voltar ao Portal' : undefined}
               className={cn(
                 'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/40 hover:bg-white/5 hover:text-white transition-all duration-150',
                 collapsed && 'justify-center px-0',
@@ -227,8 +230,8 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
       {/* Main area */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
-          <div className="flex items-center gap-3">
+        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
@@ -237,20 +240,20 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
             >
               <Menu className="h-5 w-5" />
             </button>
-            <h1 className="text-base font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
+            <h1 className="truncate text-base font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
               {pageTitle}
             </h1>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             <ThemeToggle />
             {user && (
               <>
-                <div className="hidden sm:block text-right mr-1">
-                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
+                <div className="mr-1 hidden max-w-[180px] text-right sm:block lg:max-w-[240px]">
+                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
                     {user.name}
                   </p>
-                  <p className="text-[11px] text-slate-400">{user.role}</p>
+                  <p className="truncate text-[11px] text-slate-400">{user.role}</p>
                 </div>
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-[11px] font-bold shadow-sm">
                   {getInitials(user.name)}
@@ -259,7 +262,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
                 <button
                   type="button"
                   onClick={logout}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400 transition-all duration-150"
+                  className="flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400 transition-all duration-150"
                   title="Sair"
                   aria-label="Sair do sistema"
                 >
@@ -276,6 +279,7 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
           {children}
         </main>
       </div>
+      <AssistantBubble accent="emerald" />
     </div>
   );
 }

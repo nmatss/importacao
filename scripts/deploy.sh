@@ -111,7 +111,7 @@ fi
 # Mandatory backup
 # ---------------------------------------------------------------------------
 if [[ "${SKIP_BACKUP:-0}" != "1" ]]; then
-  info "[1/6] Running mandatory pre-deploy database backup..."
+  info "[1/8] Running mandatory pre-deploy database backup..."
   if ! bash "$(dirname "$0")/backup-db.sh" --remote "${SERVER}" --user "${DEPLOY_USER}"; then
     error "Pre-deploy backup FAILED. Aborting deploy to protect data."
     notify "FAILED" "Pre-deploy backup failed — deploy aborted"
@@ -119,7 +119,7 @@ if [[ "${SKIP_BACKUP:-0}" != "1" ]]; then
   fi
   success "Database backup completed."
 else
-  warn "[1/6] Backup skipped (SKIP_BACKUP=1)"
+  warn "[1/8] Backup skipped (SKIP_BACKUP=1)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -143,9 +143,10 @@ fi
 # ---------------------------------------------------------------------------
 # Sync code
 # ---------------------------------------------------------------------------
-info "[2/6] Syncing code to ${SERVER}:${DEPLOY_DIR}..."
+info "[2/8] Syncing code to ${SERVER}:${DEPLOY_DIR}..."
 rsync -avz --delete \
   --exclude '.env' \
+  --exclude '.env.sops.yaml' \
   --exclude 'node_modules' \
   --exclude 'dist' \
   --exclude 'uploads' \
@@ -166,15 +167,85 @@ success "Code synced."
 # ---------------------------------------------------------------------------
 # Generate .env from SOPS or Vault (non-blocking)
 # ---------------------------------------------------------------------------
-info "[3/6] Generating .env from SOPS/Vault..."
+info "[3/8] Generating .env from SOPS/Vault..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/generate-env-from-vault.sh" 2>&1 || {
   warn "SOPS/Vault env generation failed — using existing .env on server"
 }
 
+info "[4/8] Rendering Alertmanager config..."
+ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && python3 -" <<'PY'
+from pathlib import Path
+import shlex
+import sys
+
+env_file = Path(".env")
+target = Path("infra/alertmanager/alertmanager.yml")
+template = Path("infra/alertmanager/alertmanager.webhook.yml.template")
+
+
+def parse_env(path: Path) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not path.exists():
+        return values
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, raw_value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        try:
+            parts = shlex.split(raw_value, posix=True)
+        except ValueError:
+            parts = []
+        values[key] = parts[0] if parts else raw_value.strip().strip('"').strip("'")
+    return values
+
+
+webhook_url = parse_env(env_file).get("ALERTMANAGER_WEBHOOK_URL", "").strip()
+if not webhook_url:
+    print("ALERTMANAGER_WEBHOOK_URL is empty; keeping checked-in noop Alertmanager config.")
+    sys.exit(0)
+
+if "chat.googleapis.com" in webhook_url:
+    print(
+        "ERROR: ALERTMANAGER_WEBHOOK_URL must point to an Alertmanager webhook bridge, "
+        "not directly to Google Chat.",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+if not template.exists():
+    print(f"ERROR: missing template {template}", file=sys.stderr)
+    sys.exit(1)
+
+yaml_url = webhook_url.replace("'", "''")
+target.write_text(
+    template.read_text(encoding="utf-8").replace("${ALERTMANAGER_WEBHOOK_URL}", yaml_url),
+    encoding="utf-8",
+)
+print(f"Rendered {target} from {template}.")
+PY
+
 # ---------------------------------------------------------------------------
 # Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
 # ---------------------------------------------------------------------------
-info "[4/6] Applying pending SQL migrations..."
+# ---------------------------------------------------------------------------
+# Validate remote compose before migrations/restart
+# ---------------------------------------------------------------------------
+info "[5/8] Validating production compose config..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COMPOSE_FILE} config --quiet"; then
+  error "Remote compose config is invalid. Deploy aborted before migrations/restart."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: compose config invalid"
+  exit 1
+fi
+success "Remote compose config valid."
+
+# ---------------------------------------------------------------------------
+# Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
+# ---------------------------------------------------------------------------
+info "[6/8] Applying pending SQL migrations..."
 if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/apply-pending-migrations.sh"; then
   error "Migrations failed. Deploy aborted before starting the new api/web containers."
   notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: migrations failed"
@@ -185,7 +256,7 @@ success "Migrations applied."
 # ---------------------------------------------------------------------------
 # Deploy: build + restart application services
 # ---------------------------------------------------------------------------
-info "[5/6] Building and deploying api + web + cert-api..."
+info "[7/8] Building and deploying api + web + cert-api..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
   docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"
 success "Containers started."
@@ -193,7 +264,7 @@ success "Containers started."
 # ---------------------------------------------------------------------------
 # Health check loop
 # ---------------------------------------------------------------------------
-info "[6/6] Waiting for health check: ${HEALTH_ENDPOINT}"
+info "[8/8] Waiting for health check: ${HEALTH_ENDPOINT}"
 ATTEMPT=0
 HEALTHY=0
 until [[ ${ATTEMPT} -ge ${HEALTH_RETRIES} ]]; do

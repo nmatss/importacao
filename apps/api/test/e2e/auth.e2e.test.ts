@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { setupE2EDatabase, type E2EContext } from './setup.js';
+import { handleE2ESetupFailure, setupE2EDatabase, type E2EContext } from './setup.js';
 
-// Skip all tests if Docker is not available
+// Local developer runs skip when Docker/setup is unavailable; CI must fail loudly.
 let ctx: E2EContext;
 let skipReason: string | null = null;
 
@@ -11,7 +11,7 @@ beforeAll(async () => {
     // setupE2EDatabase() sets DATABASE_URL/JWT_SECRET/NODE_ENV/REDIS_URL.
     ctx = await setupE2EDatabase();
   } catch (err) {
-    skipReason = `Docker unavailable or setup failed: ${(err as Error).message}`;
+    skipReason = handleE2ESetupFailure(err);
   }
 }, 60_000);
 

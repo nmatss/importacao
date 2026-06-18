@@ -281,7 +281,7 @@ GitHub Actions pipeline (`.github/workflows/ci.yml`), Node 22:
 5. **test-web** — Vitest do Web
 6. **test-python** — pytest do cert-api
 7. **security-scan** — `npm audit --audit-level=high` (bloqueante)
-8. **build-docker** — build das imagens API/Web + scan Trivy (CRITICAL/HIGH) e SBOM (syft); roda apos todos os lints/testes/audit passarem
+8. **build-docker** — build das imagens API/Web/Cert API + scan Trivy (CRITICAL/HIGH) e SBOM (syft); roda apos todos os lints/testes/audit passarem
 
 ## Deploy em Producao
 

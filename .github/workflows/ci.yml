@@ -156,6 +156,15 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=docker
+      - name: Build Cert API image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./apps/cert-api
+          push: false
+          tags: importacao-cert-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker
       - name: Trivy scan - API image
         uses: aquasecurity/trivy-action@master
         with:
@@ -174,6 +183,15 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           trivyignores: .trivyignore
+      - name: Trivy scan - Cert API image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: importacao-cert-api:ci
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          trivyignores: .trivyignore
       - name: SBOM - API (syft)
         uses: anchore/sbom-action@v0
         with:
@@ -186,3 +204,9 @@ jobs:
           image: importacao-web:ci
           artifact-name: sbom-web.spdx.json
           output-file: sbom-web.spdx.json
+      - name: SBOM - Cert API (syft)
+        uses: anchore/sbom-action@v0
+        with:
+          image: importacao-cert-api:ci
+          artifact-name: sbom-cert-api.spdx.json
+          output-file: sbom-cert-api.spdx.json

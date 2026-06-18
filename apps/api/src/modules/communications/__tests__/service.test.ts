@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, queryQueue } = createMockDb();
+const mockGetOperationalRecipient = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -17,6 +18,21 @@ vi.mock('../../../shared/utils/logger.js', () => ({
 
 vi.mock('../../ai/service.js', () => ({
   aiService: { generateCorrectionEmail: vi.fn() },
+}));
+
+vi.mock('../../settings/operational-recipients.js', () => ({
+  getOperationalRecipient: (...args: any[]) => mockGetOperationalRecipient(...args),
+  parseEmailList: (value?: string | null) =>
+    (value ?? '')
+      .split(/[;,\r\n]/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
+  normalizeEmailList: (value?: string | null) =>
+    (value ?? '')
+      .split(/[;,\r\n]/)
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+      .join(', '),
 }));
 
 const mockSendMail = vi.fn().mockResolvedValue({ messageId: 'msg-1' });
@@ -38,6 +54,14 @@ describe('communicationService', () => {
     queryQueue.length = 0;
     process.env.SMTP_HOST = 'smtp.test.com';
     process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
+    mockGetOperationalRecipient.mockImplementation(async (key: string) => {
+      const recipients: Record<string, string> = {
+        kiom_email: 'kiom@example.com',
+        fenicia_email: 'fenicia@example.com',
+        isa_email: 'isa@example.com',
+      };
+      return recipients[key] ?? '';
+    });
   });
 
   describe('create()', () => {
@@ -82,6 +106,20 @@ describe('communicationService', () => {
 
       // The service calls sanitizeHtml before inserting
       expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should reject communications without a recipient email', async () => {
+      await expect(
+        communicationService.create({
+          processId: 1,
+          recipient: 'Test',
+          recipientEmail: '',
+          subject: 'Test',
+          body: '<p>Hello</p>',
+        }),
+      ).rejects.toThrow('E-mail do destinatário não configurado');
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });
 
@@ -172,6 +210,46 @@ describe('communicationService', () => {
         id: 1,
         status: 'draft',
         recipientEmail: 'outside@evil.test',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Destinatário não autorizado');
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('should send when every recipient in a list is authorized', async () => {
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com, second@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      const mockUpdated = { ...mockComm, status: 'sent', sentAt: new Date() };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([mockUpdated]));
+
+      const result = await communicationService.send(1);
+
+      expect(result).toEqual(mockUpdated);
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: 'to@example.com, second@example.com',
+        }),
+      );
+    });
+
+    it('should reject a recipient list when any address is outside allowlist', async () => {
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com, outside@evil.test',
         subject: 'Test',
         body: '<p>Content</p>',
         attachments: null,
@@ -334,7 +412,7 @@ describe('communicationService', () => {
         id: 78,
         processId: 10,
         recipient: 'KIOM',
-        recipientEmail: '',
+        recipientEmail: 'kiom@example.com',
         subject: 'Correção documental necessária - Processo IMP-010',
         body: '<p>Body</p>',
         status: 'draft',

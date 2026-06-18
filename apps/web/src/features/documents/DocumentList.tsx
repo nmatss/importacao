@@ -114,6 +114,8 @@ export function DocumentList({ processId }: DocumentListProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
+  const [activeFileAction, setActiveFileAction] = useState<string | null>(null);
+  const [reprocessingId, setReprocessingId] = useState<number | null>(null);
 
   // Auto-refresh every 5s while any doc is still processing
   const {
@@ -155,14 +157,20 @@ export function DocumentList({ processId }: DocumentListProps) {
     filename: string | undefined,
     mode: 'open' | 'download',
   ) => {
+    const actionKey = `${docId}:${mode}`;
+    if (activeFileAction) return;
+    setActiveFileAction(actionKey);
     const token = localStorage.getItem('importacao_token');
     const baseUrl = import.meta.env.VITE_API_URL || '';
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 45_000);
     try {
       const url = `${baseUrl}/api/documents/${docId}/file${mode === 'download' ? '?download=1' : ''}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         // Allow redirect to Google Drive when the local file is missing
         redirect: 'follow',
+        signal: controller.signal,
       });
       if (res.redirected && res.url) {
         window.open(res.url, '_blank', 'noopener,noreferrer');
@@ -183,25 +191,38 @@ export function DocumentList({ processId }: DocumentListProps) {
       }
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (err: any) {
-      toast.error(err.message || 'Erro ao acessar documento');
+      toast.error(
+        err?.name === 'AbortError'
+          ? 'Tempo limite ao acessar documento. Tente baixar novamente ou abrir no Drive.'
+          : err.message || 'Erro ao acessar documento',
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setActiveFileAction(null);
     }
   };
 
-  const handleReprocess = (docId: number) => {
+  const handleReprocess = async (docId: number) => {
+    if (reprocessingId) return;
+    setReprocessingId(docId);
     const token = localStorage.getItem('importacao_token');
     const baseUrl = import.meta.env.VITE_API_URL || '';
-    fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Falha ao reprocessar documento');
-        toast.success('Reprocessamento iniciado');
-        queryClient.invalidateQueries({ queryKey: ['documents', processId] });
-      })
-      .catch((err: any) => {
-        toast.error(err.message || 'Erro ao reprocessar documento');
+    try {
+      const res = await fetch(`${baseUrl}/api/documents/${docId}/reprocess`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || body?.message || 'Falha ao reprocessar documento');
+      }
+      toast.success('Reprocessamento iniciado');
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao reprocessar documento');
+    } finally {
+      setReprocessingId(null);
+    }
   };
 
   const handleDelete = (doc: Document) => {
@@ -309,6 +330,9 @@ export function DocumentList({ processId }: DocumentListProps) {
               {docs.map((doc) => {
                 const expanded = expandedId === doc.id;
                 const source = sources[doc.id];
+                const opening = activeFileAction === `${doc.id}:open`;
+                const downloading = activeFileAction === `${doc.id}:download`;
+                const reprocessing = reprocessingId === doc.id;
 
                 return (
                   <div
@@ -385,11 +409,16 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             openOrDownload(doc.id, doc.fileName, 'open');
                           }}
+                          disabled={!!activeFileAction}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Abrir documento"
                           aria-label={`Abrir documento ${doc.fileName}`}
                         >
-                          <Eye className="h-3.5 w-3.5" />
+                          {opening ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5" />
+                          )}
                         </button>
 
                         {/* Download document */}
@@ -398,11 +427,16 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             openOrDownload(doc.id, doc.fileName, 'download');
                           }}
+                          disabled={!!activeFileAction}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Baixar documento"
                           aria-label={`Baixar documento ${doc.fileName}`}
                         >
-                          <Download className="h-3.5 w-3.5" />
+                          {downloading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" />
+                          )}
                         </button>
 
                         {/* Drive link */}
@@ -449,11 +483,16 @@ export function DocumentList({ processId }: DocumentListProps) {
                             e.stopPropagation();
                             handleReprocess(doc.id);
                           }}
+                          disabled={!!reprocessingId}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
                           title="Reprocessar IA"
                           aria-label={`Reprocessar IA de ${doc.fileName}`}
                         >
-                          <RefreshCw className="h-3.5 w-3.5" />
+                          {reprocessing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
                         </button>
 
                         {/* Delete */}

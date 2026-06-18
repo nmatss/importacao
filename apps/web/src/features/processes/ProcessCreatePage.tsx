@@ -7,28 +7,62 @@ import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'luc
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { useApiMutation } from '@/shared/hooks/useApi';
 
-const processSchema = z.object({
-  processCode: z.string().min(1, 'Codigo do processo e obrigatorio'),
-  brand: z.enum(['puket', 'imaginarium'], { required_error: 'Selecione a marca' }),
-  incoterm: z.string().default('FOB'),
-  portOfLoading: z.string().optional(),
-  portOfDischarge: z.string().optional(),
-  etd: z.string().optional(),
-  eta: z.string().optional(),
-  exporterName: z.string().optional(),
-  exporterAddress: z.string().optional(),
-  importerName: z.string().optional(),
-  importerAddress: z.string().optional(),
-  notes: z.string().optional(),
-  containerType: z.string().optional(),
-  totalFobValue: z.string().optional(),
-  freightValue: z.string().optional(),
-  totalCbm: z.string().optional(),
-  totalBoxes: z.coerce.number().optional(),
-  totalNetWeight: z.string().optional(),
-  totalGrossWeight: z.string().optional(),
-  shipmentDate: z.string().optional(),
-});
+const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,4})?$/;
+
+function optionalDecimalString(label: string) {
+  return z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => !value || decimalPattern.test(value), {
+      message: `${label} deve ser zero ou positivo`,
+    });
+}
+
+const optionalNonNegativeInteger = z.preprocess(
+  (value) => (value === '' || value == null ? undefined : Number(value)),
+  z.number().int('Informe um numero inteiro').min(0, 'Informe zero ou mais').optional(),
+);
+
+const processSchema = z
+  .object({
+    processCode: z.string().min(1, 'Codigo do processo e obrigatorio'),
+    brand: z.enum(['puket', 'imaginarium'], { required_error: 'Selecione a marca' }),
+    incoterm: z.string().default('FOB'),
+    portOfLoading: z.string().optional(),
+    portOfDischarge: z.string().optional(),
+    etd: z.string().optional(),
+    eta: z.string().optional(),
+    exporterName: z.string().optional(),
+    exporterAddress: z.string().optional(),
+    importerName: z.string().optional(),
+    importerAddress: z.string().optional(),
+    notes: z.string().optional(),
+    containerType: z.string().optional(),
+    totalFobValue: optionalDecimalString('Valor FOB'),
+    freightValue: optionalDecimalString('Valor de frete'),
+    totalCbm: optionalDecimalString('CBM'),
+    totalBoxes: optionalNonNegativeInteger,
+    totalNetWeight: optionalDecimalString('Peso liquido'),
+    totalGrossWeight: optionalDecimalString('Peso bruto'),
+    shipmentDate: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.etd && data.eta && data.eta < data.etd) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['eta'],
+        message: 'ETA nao pode ser anterior ao ETD',
+      });
+    }
+    if (data.shipmentDate && data.eta && data.shipmentDate > data.eta) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['shipmentDate'],
+        message: 'Data de embarque nao pode ser posterior ao ETA',
+      });
+    }
+  });
 
 type ProcessFormData = z.infer<typeof processSchema>;
 
@@ -67,6 +101,7 @@ export function ProcessCreatePage() {
       {/* Header */}
       <div className="flex items-center gap-3">
         <button
+          type="button"
           onClick={() => navigate('/importacao/processos')}
           className="rounded-lg p-2 text-slate-400 hover:text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-all"
           aria-label="Voltar para lista de processos"
@@ -161,14 +196,28 @@ export function ProcessCreatePage() {
               <label htmlFor="etd" className={labelClass}>
                 ETD
               </label>
-              <input type="date" id="etd" {...register('etd')} className={inputClass} />
+              <input
+                type="date"
+                id="etd"
+                {...register('etd')}
+                aria-invalid={!!errors.etd}
+                className={inputClass}
+              />
+              {errors.etd && <p className={errorClass}>{errors.etd.message}</p>}
             </div>
 
             <div>
               <label htmlFor="eta" className={labelClass}>
                 ETA
               </label>
-              <input type="date" id="eta" {...register('eta')} className={inputClass} />
+              <input
+                type="date"
+                id="eta"
+                {...register('eta')}
+                aria-invalid={!!errors.eta}
+                className={inputClass}
+              />
+              {errors.eta && <p className={errorClass}>{errors.eta.message}</p>}
             </div>
           </div>
         </div>
@@ -261,11 +310,15 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
+                inputMode="decimal"
                 id="totalFobValue"
                 {...register('totalFobValue')}
+                aria-invalid={!!errors.totalFobValue}
                 placeholder="0.00"
                 className={inputClass}
               />
+              {errors.totalFobValue && <p className={errorClass}>{errors.totalFobValue.message}</p>}
             </div>
             <div>
               <label htmlFor="freightValue" className={labelClass}>
@@ -274,11 +327,15 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
+                inputMode="decimal"
                 id="freightValue"
                 {...register('freightValue')}
+                aria-invalid={!!errors.freightValue}
                 placeholder="0.00"
                 className={inputClass}
               />
+              {errors.freightValue && <p className={errorClass}>{errors.freightValue.message}</p>}
             </div>
             <div>
               <label htmlFor="containerType" className={labelClass}>
@@ -298,11 +355,15 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="1"
+                min="0"
+                inputMode="numeric"
                 id="totalBoxes"
                 {...register('totalBoxes')}
+                aria-invalid={!!errors.totalBoxes}
                 placeholder="0"
                 className={inputClass}
               />
+              {errors.totalBoxes && <p className={errorClass}>{errors.totalBoxes.message}</p>}
             </div>
             <div>
               <label htmlFor="totalNetWeight" className={labelClass}>
@@ -311,11 +372,17 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
+                inputMode="decimal"
                 id="totalNetWeight"
                 {...register('totalNetWeight')}
+                aria-invalid={!!errors.totalNetWeight}
                 placeholder="0.00"
                 className={inputClass}
               />
+              {errors.totalNetWeight && (
+                <p className={errorClass}>{errors.totalNetWeight.message}</p>
+              )}
             </div>
             <div>
               <label htmlFor="totalGrossWeight" className={labelClass}>
@@ -324,11 +391,17 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
+                inputMode="decimal"
                 id="totalGrossWeight"
                 {...register('totalGrossWeight')}
+                aria-invalid={!!errors.totalGrossWeight}
                 placeholder="0.00"
                 className={inputClass}
               />
+              {errors.totalGrossWeight && (
+                <p className={errorClass}>{errors.totalGrossWeight.message}</p>
+              )}
             </div>
             <div>
               <label htmlFor="totalCbm" className={labelClass}>
@@ -337,11 +410,15 @@ export function ProcessCreatePage() {
               <input
                 type="number"
                 step="0.01"
+                min="0"
+                inputMode="decimal"
                 id="totalCbm"
                 {...register('totalCbm')}
+                aria-invalid={!!errors.totalCbm}
                 placeholder="0.00"
                 className={inputClass}
               />
+              {errors.totalCbm && <p className={errorClass}>{errors.totalCbm.message}</p>}
             </div>
             <div>
               <label htmlFor="shipmentDate" className={labelClass}>
@@ -351,8 +428,10 @@ export function ProcessCreatePage() {
                 type="date"
                 id="shipmentDate"
                 {...register('shipmentDate')}
+                aria-invalid={!!errors.shipmentDate}
                 className={inputClass}
               />
+              {errors.shipmentDate && <p className={errorClass}>{errors.shipmentDate.message}</p>}
             </div>
           </div>
         </div>

@@ -120,16 +120,20 @@ function formatCurrency(value: string | null): string {
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-function formatCompactCurrency(value: number): string {
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
-  return `$${value.toFixed(2)}`;
+function formatCompactCurrency(value?: number): string {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return '$0.00';
+  if (num >= 1_000_000) return `$${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `$${(num / 1_000).toFixed(1)}K`;
+  return `$${num.toFixed(2)}`;
 }
 
-function formatCompactNumber(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-  return value.toLocaleString('pt-BR');
+function formatCompactNumber(value?: number): string {
+  const num = Number(value ?? 0);
+  if (!Number.isFinite(num)) return '0';
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
+  return num.toLocaleString('pt-BR');
 }
 
 function ErrorBanner({ message }: { message: string }) {
@@ -187,16 +191,25 @@ function SortableHeader({
 
   return (
     <th
+      scope="col"
+      aria-sort={isActive ? (currentOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
       className={cn(
-        'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider cursor-pointer select-none transition-colors group',
+        'px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider select-none transition-colors group',
         align === 'right' ? 'text-right' : 'text-left',
         isActive
           ? 'text-primary-700 dark:text-primary-300'
           : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300',
       )}
-      onClick={() => onSort(field)}
     >
-      <span className="inline-flex items-center gap-1">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className={cn(
+          'inline-flex items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/40',
+          align === 'right' && 'justify-end',
+        )}
+        aria-label={`Ordenar por ${label}`}
+      >
         {label}
         {isActive ? (
           currentOrder === 'asc' ? (
@@ -207,7 +220,7 @@ function SortableHeader({
         ) : (
           <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-40 transition-opacity" />
         )}
-      </span>
+      </button>
     </th>
   );
 }
@@ -498,7 +511,9 @@ export function PreConsPage() {
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-500" />
               <input
+                id="pre-cons-search"
                 type="text"
+                aria-label="Buscar pre-conferencia"
                 placeholder="Buscar processo, fornecedor, produto, item..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
@@ -512,6 +527,8 @@ export function PreConsPage() {
                 <div className="h-[38px] w-full rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
               ) : (
                 <select
+                  id="pre-cons-supplier"
+                  aria-label="Filtrar fornecedor"
                   value={supplierFilter}
                   onChange={(e) => {
                     setSupplierFilter(e.target.value);
@@ -535,6 +552,8 @@ export function PreConsPage() {
                 <div className="h-[38px] w-full rounded-lg bg-slate-100 dark:bg-slate-700 animate-pulse" />
               ) : (sheetNames?.length ?? 0) > 1 ? (
                 <select
+                  id="pre-cons-sheet"
+                  aria-label="Filtrar aba da planilha"
                   value={sheetFilter}
                   onChange={(e) => {
                     setSheetFilter(e.target.value);
@@ -557,7 +576,9 @@ export function PreConsPage() {
               <div className="relative flex-1">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                 <input
+                  id="pre-cons-etd-from"
                   type="date"
+                  aria-label="Filtrar ETD a partir de"
                   value={etdFrom}
                   onChange={(e) => {
                     setEtdFrom(e.target.value);
@@ -572,7 +593,9 @@ export function PreConsPage() {
               <div className="relative flex-1">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                 <input
+                  id="pre-cons-etd-to"
                   type="date"
+                  aria-label="Filtrar ETD ate"
                   value={etdTo}
                   onChange={(e) => {
                     setEtdTo(e.target.value);
@@ -588,6 +611,8 @@ export function PreConsPage() {
             {/* Sort controls */}
             <div className="flex items-center gap-2">
               <select
+                id="pre-cons-sort-by"
+                aria-label="Ordenar pre-conferencia por"
                 value={sortBy}
                 onChange={(e) => {
                   setSortBy(e.target.value as SortField);
@@ -615,6 +640,7 @@ export function PreConsPage() {
                   'focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none',
                 )}
                 title={sortOrder === 'asc' ? 'Ordenacao crescente' : 'Ordenacao decrescente'}
+                aria-label={sortOrder === 'asc' ? 'Ordenacao crescente' : 'Ordenacao decrescente'}
               >
                 {sortOrder === 'asc' ? (
                   <ArrowUp className="h-4 w-4" />

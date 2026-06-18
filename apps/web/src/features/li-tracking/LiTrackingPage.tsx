@@ -397,6 +397,16 @@ export function LiTrackingPage() {
                     onClick={() =>
                       li.processId ? navigate(`/importacao/processos/${li.processId}`) : undefined
                     }
+                    onKeyDown={(event) => {
+                      if (!li.processId) return;
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        navigate(`/importacao/processos/${li.processId}`);
+                      }
+                    }}
+                    role={li.processId ? 'link' : undefined}
+                    tabIndex={li.processId ? 0 : undefined}
+                    aria-label={li.processId ? `Abrir processo ${li.processCode}` : undefined}
                     className={cn(
                       'border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors',
                       li.processId != null && 'cursor-pointer',

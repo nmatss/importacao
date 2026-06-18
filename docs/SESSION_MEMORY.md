@@ -1,5 +1,139 @@
 # Session Memory
 
+## 2026-06-18 - Fase De Fechamento De Pendencias E Acessibilidade Residual
+
+Inventario:
+
+- Varredura cruzou `README.md`, `CHANGELOG.md`, `docs/PROJECT_MEMORY.md`,
+  `docs/SESSION_MEMORY.md`, `docs/KNOWN_ISSUES.md`, `docs/TECH_DEBT.md`,
+  `docs/ROADMAP.md`, `docs/STATUS-2026-06-16.md`,
+  `docs/UX_UI_AUDIT_2026-06-17.md`, codigo web/API e estado git.
+- Pendencias P0 ainda abertas dependem de decisao externa ou dado operacional:
+  provider de IA, cadastro de destinatarios KIOM/Fenicia/ISA em Configuracoes,
+  alerta externo de restore/RTO, pasta/credencial Pre-Cons, escrita Linx e regras
+  regulatorias de certificacao/licenciamento/estoque.
+
+Correcoes aplicadas:
+
+- Upload/preview de documentos: HTML removido da allowlist, conteudo ativo
+  forca download com `nosniff`, upload no frontend valida extensao/tamanho e
+  expoe controle acessivel com progresso.
+- Pre-Cons: adicionada migration SQL `0016_pre_cons_tables.sql`; script de
+  pending migrations aplica a migration; filtros e headers ordenaveis ganharam
+  labels/`aria-sort`.
+- CI/deploy/infra: cert-api entrou no build/Trivy/SBOM; deploy GitHub Actions
+  usa `scripts/deploy.sh`; defaults sensiveis de WMS/ERP/Sheets/Grafana foram
+  removidos; Alertmanager ficou noop por padrao com template de webhook real.
+- E2E de API: falha de setup em CI deixa de ser skip silencioso.
+- Produtos de Certificacoes: cabecalhos ordenaveis viraram botoes focaveis com
+  `aria-sort`; filtros de status e marca passaram a expor `aria-pressed`.
+- Agendamentos de Certificacoes: toggles de ativacao da lista e do modal passaram
+  a usar `role="switch"` e `aria-checked`; acoes icon-only ganharam `type` e
+  nomes acessiveis.
+- Configuracoes/Usuarios: toggle de usuario ativo passou a expor semantica de
+  switch.
+- Seletor global de tema: botao declara aberto/fechado e opcoes usam
+  `aria-pressed`, sem prometer comportamento ARIA de menu.
+- Rotas internas invalidas de Importacao/Certificacoes agora mostram fallback
+  contextual; redirect legado `/processos/*` preserva caminho profundo.
+- Sidebar recolhida, headers de layout, login mobile, linhas de tabelas
+  navegaveis, abas de processo e botoes icon-only receberam ajustes de
+  acessibilidade e responsividade.
+- Formularios: processo/cambio validam numeros e datas no frontend/API; edicao
+  de processo travado bloqueia campos; cron de agendamento e validado no
+  frontend/cert-api; telas de certificacao nao mascaram erro de API como lista
+  vazia.
+- Assistente IA: adicionado balao flutuante nos layouts de Importacao e
+  Certificacoes, com consulta ao endpoint existente `/api/assistant/query`,
+  atalhos operacionais, fontes internas e inferencia automatica de processo em
+  paginas de detalhe.
+- Segurança cert-api: proxy `/cert-api/` passou a validar JWT via
+  `auth_request` em `/api/auth/me` antes de injetar `X-API-Key`; client web de
+  certificacoes passou a usar `Authorization` em chamadas JSON, multipart,
+  downloads e stream de validacao.
+- Deploy: `scripts/deploy.sh` agora valida `docker compose config --quiet` no
+  servidor depois da geracao de `.env` e antes de migrations/restart.
+- Incidente processo 264: invoice `2026.02.22 KIOM INV - IM0712602NB (1).pdf`
+  estava presa em `is_processed=false`/`ai_parsed_data=null` desde abril; a API
+  recebia polling em `/api/documents/process/264` a cada 5s. Correcoes locais:
+  extração enfileirada em `ai-extraction`, falhas de `extractText`/PDF/IA viram
+  `failed`, documentos presos passam a `failed` apos
+  `DOCUMENT_PROCESSING_STALE_MINUTES`, reprocessamento concorrente retorna 409 e
+  abertura/download de PDF no frontend tem timeout visual.
+- Auth/OAuth: URL `devolucoes.grupounico.com:3091/api/auth/error?OAuthSignin`
+  nao pertence ao fluxo deste repo (`POST /api/auth/google`); `devolucoes:3091`
+  resolve para outro host/servico. Neste repo, compose/env agora exigem
+  `GOOGLE_CLIENT_ID` e `VITE_GOOGLE_CLIENT_ID` em producao.
+- Operacao: destinatarios KIOM/Fenicia/ISA agora sao configurados no sistema em
+  Configuracoes, com `KIOM_EMAIL`/`FENICIA_EMAIL`/`ISA_EMAIL` apenas como fallback
+  opcional.
+- Documentacao reconciliada para retirar a acessibilidade corrigida da divida
+  aberta e explicitar que secrets/SOPS ja estao configurados, restando governanca
+  continua.
+
+Testes e validacoes executados:
+
+- `npm run -w apps/web typecheck`
+- `npm test -w apps/web -- src/features/espelhos/EspelhoPreview.test.tsx`
+- `npm test -w apps/web`
+- `npm run lint`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+- `npm audit --audit-level=high`
+- `POSTGRES_USER=dummy POSTGRES_PASSWORD=dummy POSTGRES_DB=dummy JWT_SECRET=dummy GOOGLE_SHEETS_SPREADSHEET_ID=dummy WMS_ORACLE_HOST=dummy WMS_ORACLE_PORT=1521 WMS_ORACLE_SID=dummy WMS_ORACLE_USER=dummy WMS_ORACLE_PASS=dummy ERP_PUKET_HOST=dummy ERP_PUKET_DB=dummy ERP_IMG_HOST=dummy ERP_IMG_DB=dummy ERP_MSSQL_USER=dummy ERP_MSSQL_PASS=dummy CERT_API_KEY=dummy GRAFANA_ADMIN_PASSWORD=dummy docker compose -f docker-compose.prod.yml config --quiet`
+- `bash -n scripts/deploy.sh`
+- `bash -n scripts/apply-pending-migrations.sh`
+- `npm test -w apps/api -- src/modules/documents/__tests__/controller.test.ts src/shared/middleware/__tests__/upload.test.ts src/modules/pre-cons/__tests__/parse-precons.test.ts`
+- `ruff check apps/cert-api/`
+- `pytest apps/cert-api/ --tb=short -q`
+- `npx eslint` focado nos TSX alterados
+- `npx eslint apps/web/src/shared/components/AssistantBubble.tsx apps/web/src/shared/components/ImportacaoLayout.tsx apps/web/src/shared/components/CertificacoesLayout.tsx`
+- `docker run ... nginx:alpine ... nginx -t` para `apps/web/nginx.conf`
+- Playwright MCP em 28 rotas x desktop/mobile, com mocks de API, verificando
+  overflow, controles sem label, botoes sem nome e rotas invalidas.
+- Playwright MCP especifico do balao do Assistente IA em Importacao e
+  Certificacoes desktop/mobile: abertura, envio para `/api/assistant/query`,
+  fontes, Escape, ausencia de overflow/botoes sem nome e ocultacao na pagina
+  dedicada `/importacao/assistente`.
+- Playwright MCP limpo em `/importacao/processos/123/rota-invalida` confirmou
+  inferencia automatica do ID `123`, zero overflow, zero botoes sem nome e zero
+  warnings/erros de console.
+
+Observacoes:
+
+- `npm audit --audit-level=high` ficou sem `high`/`critical`; ainda lista 13
+  moderadas e 1 baixa transitivas ja registradas em `docs/TECH_DEBT.md`.
+- `docker compose config` local passou com variaveis obrigatorias dummy.
+- Deploy nao foi executado nesta fase porque `scripts/deploy.sh` exige worktree
+  limpa e `master` sincronizado; `HEAD` e `origin/master` estavam iguais
+  (`5a99bf3c351122afc111b05566a787f6a47bd7ab`), mas havia alteracoes locais
+  nao commitadas.
+- Nova politica de compose prod exige variaveis reais para Sheets/WMS/ERP/Grafana
+  antes do proximo deploy.
+- Checagem remota em 2026-06-18 indicou `.env` atual do servidor com
+  `GOOGLE_SHEETS_SPREADSHEET_ID` e `GRAFANA_ADMIN_PASSWORD` ausentes; o deploy
+  com o compose novo deve ser bloqueado ate esses segredos existirem.
+- Pendencias residuais registradas em `docs/TECH_DEBT.md`: migrar modais
+  especificos restantes para Dialog compartilhado, fortalecer forms de
+  Settings/Communications/CertCadastro e criar UX mobile dedicada para tabelas
+  largas/kanban.
+
+## 2026-06-17 - Confirmacao Do Envio Fenícia No Espelho
+
+Correcoes aplicadas:
+
+- Botao "Enviar para Fenícia" no preview do espelho passou a abrir confirmacao
+  antes do POST real.
+- Acao mostra estado de envio, bloqueia duplo clique e fica desabilitada quando
+  o espelho ja foi enviado.
+- Sucesso invalida `espelho`, `process`, `process-events` e `communications`
+  para refletir marco operacional, timeline e comunicacao enviada.
+
+Testes focados executados:
+
+- `npm test -w apps/web -- src/features/espelhos/EspelhoPreview.test.tsx`
+
 ## 2026-06-17 - Acessibilidade Do Modal De E-mail De Correcao
 
 Correcoes aplicadas:
@@ -166,10 +300,10 @@ Pendencia mantida:
 
 - Trocar/complementar a fixture representativa por PDFs ou extracoes reais
   anonimizadas quando o negocio liberar amostras.
-- Pos-deploy de `e72e8930ce91` confirmou API/cert-api healthy, mas logs de
-  startup ainda avisam `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL` ausentes em
-  producao. Pendencia movida para `docs/KNOWN_ISSUES.md`/`docs/ROADMAP.md`
-  porque depende dos enderecos reais do negocio.
+- Pos-deploy de `e72e8930ce91` confirmou API/cert-api healthy, mas logs antigos
+  ainda avisavam `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL` ausentes em
+  producao. A pendencia foi movida para cadastro via Configuracoes, pois depende
+  dos enderecos reais do negocio.
 
 ## 2026-06-17 - Hardening Cert-API, Fenicia, AuthZ E Dependencias
 

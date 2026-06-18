@@ -1,0 +1,19 @@
+# Rendered by scripts/deploy.sh when ALERTMANAGER_WEBHOOK_URL is set.
+# The URL must point to a bridge/adapter that accepts Alertmanager's native
+# webhook payload. Do not point it directly at chat.googleapis.com.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ['alertname', 'severity']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-webhook'
+
+receivers:
+  - name: 'default-webhook'
+    webhook_configs:
+      - url: '${ALERTMANAGER_WEBHOOK_URL}'
+        send_resolved: true

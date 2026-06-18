@@ -298,6 +298,15 @@ export function SLADashboard() {
             <tr
               key={row.id}
               onClick={() => goToProcess(row.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  goToProcess(row.id);
+                }
+              }}
+              role="link"
+              tabIndex={0}
+              aria-label={`Abrir processo ${row.processCode}`}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>

@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import { setupE2EDatabase, signTestToken, E2E_ADMIN, type E2EContext } from './setup.js';
+import {
+  handleE2ESetupFailure,
+  setupE2EDatabase,
+  signTestToken,
+  E2E_ADMIN,
+  type E2EContext,
+} from './setup.js';
 
 let ctx: E2EContext;
 let skipReason: string | null = null;
@@ -11,7 +17,7 @@ beforeAll(async () => {
     ctx = await setupE2EDatabase();
     authToken = signTestToken(E2E_ADMIN);
   } catch (err) {
-    skipReason = `Docker unavailable or setup failed: ${(err as Error).message}`;
+    skipReason = handleE2ESetupFailure(err);
   }
 }, 60_000);
 

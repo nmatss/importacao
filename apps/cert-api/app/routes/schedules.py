@@ -1,7 +1,6 @@
 """Certification schedule management routes."""
 
 import json
-import re
 import threading
 import time
 import uuid
@@ -13,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.config import DATABASE_URL
 from app.db.postgres import db
-from app.models.schemas import ScheduleCreate, ScheduleUpdate
+from app.models.schemas import CRON_VALIDATION_ERROR, ScheduleCreate, ScheduleUpdate, normalize_cron_expression
 from app.utils.logging import log
 
 router = APIRouter()
@@ -99,15 +98,14 @@ def load_schedules_into_scheduler() -> None:
             cur.execute("SELECT * FROM cert_schedules WHERE enabled = true")
             schedules = [dict(r) for r in cur.fetchall()]
 
-        def _validate_cron_part(part: str) -> bool:
-            return bool(re.match(r"^[\d,\-\*/]+$", part))
-
         for s in schedules:
             cron_expr = s["cron_expression"]
-            parts = cron_expr.split()
-            if len(parts) != 5 or not all(_validate_cron_part(p) for p in parts):
+            try:
+                cron_expr = normalize_cron_expression(cron_expr)
+            except ValueError:
                 log.warning(f"Invalid cron for schedule {s['id']}: {cron_expr}")
                 continue
+            parts = cron_expr.split()
             try:
                 trigger = CronTrigger(
                     minute=parts[0], hour=parts[1], day=parts[2],
@@ -181,13 +179,17 @@ def create_schedule(req: ScheduleCreate) -> dict:
     Raises:
         HTTPException: 500 if database not configured.
     """
+    try:
+        cron = normalize_cron_expression(req.cron)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc) or CRON_VALIDATION_ERROR) from exc
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
     with db() as (conn, cur):
         schedule_id = str(uuid.uuid4())
         cur.execute(
             "INSERT INTO cert_schedules (id, name, cron_expression, brand_filter, enabled) VALUES (%s, %s, %s, %s, %s) RETURNING *",
-            [schedule_id, req.name, req.cron, req.brand_filter, req.enabled],
+            [schedule_id, req.name, cron, req.brand_filter, req.enabled],
         )
         row = _serialize_schedule(dict(cur.fetchone()))
     load_schedules_into_scheduler()
@@ -208,6 +210,12 @@ def update_schedule(schedule_id: str, req: ScheduleUpdate) -> dict:
     Raises:
         HTTPException: 400 if no fields provided, 404 if not found.
     """
+    cron = None
+    if req.cron is not None:
+        try:
+            cron = normalize_cron_expression(req.cron)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc) or CRON_VALIDATION_ERROR) from exc
     if not DATABASE_URL:
         raise HTTPException(500, "Database not configured")
     with db() as (conn, cur):
@@ -218,7 +226,7 @@ def update_schedule(schedule_id: str, req: ScheduleUpdate) -> dict:
             params.append(req.name)
         if req.cron is not None:
             updates.append("cron_expression = %s")
-            params.append(req.cron)
+            params.append(cron)
         if req.brand_filter is not None:
             updates.append("brand_filter = %s")
             params.append(req.brand_filter if req.brand_filter else None)

@@ -3,6 +3,18 @@ import { documentService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { acceptComparisonSchema, uploadDocumentSchema } from './schema.js';
 
+export function isActiveContent(mimeType: string, filename?: string | null): boolean {
+  const lowerMime = mimeType.toLowerCase();
+  const lowerName = filename?.toLowerCase() ?? '';
+
+  return (
+    lowerMime === 'text/html' ||
+    lowerMime === 'application/xhtml+xml' ||
+    lowerName.endsWith('.html') ||
+    lowerName.endsWith('.htm')
+  );
+}
+
 export const documentController = {
   async upload(req: Request, res: Response) {
     try {
@@ -82,11 +94,15 @@ export const documentController = {
         return res.redirect(302, viewerUrl);
       }
 
-      res.setHeader('Content-Type', resource.mimeType);
       const safeName = encodeURIComponent(resource.filename ?? `documento-${req.params.id}`);
-      const disposition = wantsDownload ? 'attachment' : 'inline';
+      const forceAttachment = isActiveContent(resource.mimeType, resource.filename);
+      const contentType = forceAttachment ? 'application/octet-stream' : resource.mimeType;
+      const disposition = wantsDownload || forceAttachment ? 'attachment' : 'inline';
+
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${safeName}`);
       res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Content-Type-Options', 'nosniff');
       res.sendFile(resource.absolutePath);
     } catch (error: any) {
       const status = error.statusCode || 404;

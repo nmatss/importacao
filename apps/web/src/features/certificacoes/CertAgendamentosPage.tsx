@@ -47,6 +47,34 @@ const FREQUENCY_PRESETS = [
   { value: 'custom', label: 'Personalizado', cron: '' },
 ];
 
+const CRON_VALIDATION_ERROR =
+  'Expressão cron inválida. Use 5 campos: minuto hora dia mês dia_semana. Ex: 0 8 * * 1-5';
+
+const CRON_MONTH_ALIASES: Record<string, number> = {
+  jan: 1,
+  feb: 2,
+  mar: 3,
+  apr: 4,
+  may: 5,
+  jun: 6,
+  jul: 7,
+  aug: 8,
+  sep: 9,
+  oct: 10,
+  nov: 11,
+  dec: 12,
+};
+
+const CRON_DOW_ALIASES: Record<string, number> = {
+  mon: 0,
+  tue: 1,
+  wed: 2,
+  thu: 3,
+  fri: 4,
+  sat: 5,
+  sun: 6,
+};
+
 function buildCron(preset: string, hour: string, minute: string): string {
   if (preset === 'custom') return '';
   const p = FREQUENCY_PRESETS.find((f) => f.value === preset);
@@ -77,9 +105,57 @@ function parseCronTime(cron: string): { hour: string; minute: string } {
   return { hour: '6', minute: '0' };
 }
 
+function parseCronFieldValue(value: string, aliases: Record<string, number>): number | null {
+  const lower = value.toLowerCase();
+  if (lower in aliases) return aliases[lower];
+  if (!/^\d+$/.test(value)) return null;
+  return Number(value);
+}
+
+function isValidCronField(
+  field: string,
+  min: number,
+  max: number,
+  aliases: Record<string, number> = {},
+): boolean {
+  if (!field) return false;
+
+  return field.split(',').every((item) => {
+    const [range, step, extra] = item.split('/');
+    if (!range || extra !== undefined) return false;
+    if (step !== undefined && (!/^\d+$/.test(step) || Number(step) <= 0)) return false;
+    if (range === '*') return true;
+
+    const rangeParts = range.split('-');
+    if (rangeParts.length > 2) return false;
+
+    const start = parseCronFieldValue(rangeParts[0], aliases);
+    const end = rangeParts.length === 2 ? parseCronFieldValue(rangeParts[1], aliases) : start;
+    if (start === null || end === null) return false;
+
+    return start >= min && end <= max && start <= end;
+  });
+}
+
+function validateCronExpression(cron: string): string {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return CRON_VALIDATION_ERROR;
+
+  const [minute, hour, day, month, dayOfWeek] = parts;
+  const valid =
+    isValidCronField(minute, 0, 59) &&
+    isValidCronField(hour, 0, 23) &&
+    isValidCronField(day, 1, 31) &&
+    isValidCronField(month, 1, 12, CRON_MONTH_ALIASES) &&
+    isValidCronField(dayOfWeek, 0, 6, CRON_DOW_ALIASES);
+
+  return valid ? '' : CRON_VALIDATION_ERROR;
+}
+
 export default function CertAgendamentosPage() {
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<string | null>(null);
@@ -115,14 +191,16 @@ export default function CertAgendamentosPage() {
   const [formError, setFormError] = useState('');
 
   const loadSchedules = useCallback(async () => {
+    setLoading(true);
     try {
       const params: { start_date?: string; end_date?: string } = {};
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
       const data = await fetchCertSchedules(Object.keys(params).length > 0 ? params : undefined);
       setSchedules(Array.isArray(data) ? data : []);
+      setLoadError(null);
     } catch {
-      setSchedules([]);
+      setLoadError('Nao foi possivel carregar os agendamentos. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -175,11 +253,20 @@ export default function CertAgendamentosPage() {
       return;
     }
 
-    const cron =
-      formPreset === 'custom' ? formCustomCron : buildCron(formPreset, formHour, formMinute);
+    const cron = (
+      formPreset === 'custom' ? formCustomCron : buildCron(formPreset, formHour, formMinute)
+    )
+      .trim()
+      .replace(/\s+/g, ' ');
 
-    if (!cron.trim()) {
+    if (!cron) {
       setFormError('Expressão cron é obrigatória');
+      return;
+    }
+
+    const cronError = validateCronExpression(cron);
+    if (cronError) {
+      setFormError(cronError);
       return;
     }
 
@@ -319,6 +406,7 @@ export default function CertAgendamentosPage() {
           </div>
         </div>
         <button
+          type="button"
           onClick={openCreateForm}
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all"
         >
@@ -338,6 +426,22 @@ export default function CertAgendamentosPage() {
         />
       </div>
 
+      {loadError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <span>{loadError}</span>
+          <button
+            type="button"
+            onClick={loadSchedules}
+            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {/* Schedule list */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
@@ -356,6 +460,7 @@ export default function CertAgendamentosPage() {
             Crie um agendamento para executar validações de certificações automaticamente
           </p>
           <button
+            type="button"
             onClick={openCreateForm}
             className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
           >
@@ -467,6 +572,10 @@ export default function CertAgendamentosPage() {
                   <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0">
                     {/* Toggle switch */}
                     <button
+                      type="button"
+                      role="switch"
+                      aria-checked={schedule.enabled}
+                      aria-label={`${schedule.enabled ? 'Desativar' : 'Ativar'} agendamento ${schedule.name}`}
                       onClick={() => handleToggleEnabled(schedule)}
                       disabled={togglingId === schedule.id}
                       className={`relative w-11 h-6 rounded-full transition-all duration-200 ${
@@ -486,10 +595,12 @@ export default function CertAgendamentosPage() {
                     <div className="w-px h-6 bg-slate-200 mx-1" />
 
                     <button
+                      type="button"
                       onClick={() => handleTrigger(schedule.id)}
                       disabled={triggeringId === schedule.id}
                       className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
                       title="Executar agora"
+                      aria-label={`Executar agendamento ${schedule.name} agora`}
                     >
                       {triggeringId === schedule.id ? (
                         <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
@@ -499,6 +610,7 @@ export default function CertAgendamentosPage() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => openEditForm(schedule)}
                       className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-700 dark:text-slate-300 transition-colors"
                       title="Editar"
@@ -508,6 +620,7 @@ export default function CertAgendamentosPage() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => setDeleteConfirm(schedule.id)}
                       className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
                       title="Excluir"
@@ -517,7 +630,10 @@ export default function CertAgendamentosPage() {
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => toggleHistory(schedule.id)}
+                      aria-expanded={expandedHistory === schedule.id}
+                      aria-label={`${expandedHistory === schedule.id ? 'Ocultar' : 'Mostrar'} historico do agendamento ${schedule.name}`}
                       className={`flex items-center justify-center w-9 h-9 rounded-xl transition-colors ${
                         expandedHistory === schedule.id
                           ? 'bg-emerald-50 text-emerald-600'
@@ -621,12 +737,14 @@ export default function CertAgendamentosPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => setDeleteConfirm(null)}
                         className="px-4 py-2 rounded-xl text-sm font-medium text-slate-700 dark:text-slate-300 bg-white border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
                       >
                         Cancelar
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleDelete(schedule.id)}
                         className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-danger-600 hover:bg-danger-700 active:scale-[0.98] transition-all"
                       >
@@ -671,6 +789,7 @@ export default function CertAgendamentosPage() {
                 </h3>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setShowForm(false);
                   resetForm();
@@ -823,6 +942,9 @@ export default function CertAgendamentosPage() {
                 </div>
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={formEnabled}
+                  aria-label={formEnabled ? 'Desativar agendamento' : 'Ativar agendamento'}
                   onClick={() => setFormEnabled(!formEnabled)}
                   className={`relative w-11 h-6 rounded-full transition-all duration-200 ${
                     formEnabled

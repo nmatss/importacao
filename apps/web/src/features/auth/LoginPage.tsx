@@ -100,8 +100,8 @@ export function LoginPage() {
           <span className="text-slate-800 dark:text-slate-200 font-bold">Uni.co</span>
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-sm">
+        <div className="flex-1 flex items-center justify-center px-4 py-12 sm:px-6">
+          <div className="w-full max-w-sm min-w-0">
             {/* Welcome text */}
             <div className="text-center mb-8">
               <div className="lg:hidden inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-600 mb-5">
@@ -117,7 +117,7 @@ export function LoginPage() {
 
             {/* Login card */}
             <div
-              className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-8 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up"
+              className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-4 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up sm:p-8"
               style={{ animationDelay: '100ms' }}
             >
               {error && (
@@ -152,7 +152,7 @@ export function LoginPage() {
                       setError('Erro ao conectar com Google');
                     }}
                     size="large"
-                    width="320"
+                    width="250"
                     text="signin_with"
                     shape="rectangular"
                     logo_alignment="left"

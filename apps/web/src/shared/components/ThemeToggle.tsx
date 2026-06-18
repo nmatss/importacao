@@ -28,6 +28,7 @@ export function ThemeToggle() {
   return (
     <div ref={ref} className="relative">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
         className={cn(
           'flex h-8 w-8 items-center justify-center rounded-lg transition-colors',
@@ -35,19 +36,27 @@ export function ThemeToggle() {
           'dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200',
         )}
         aria-label="Alterar tema"
+        aria-haspopup="true"
+        aria-expanded={open}
         title="Alterar tema"
       >
         <CurrentIcon className="h-4 w-4" />
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 animate-scale-in">
+        <div
+          role="group"
+          aria-label="Opcoes de tema"
+          className="absolute right-0 top-full mt-1 z-50 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-800 animate-scale-in"
+        >
           {options.map((opt) => {
             const Icon = opt.icon;
             const isActive = theme === opt.value;
             return (
               <button
                 key={opt.value}
+                type="button"
+                aria-pressed={isActive}
                 onClick={() => {
                   setTheme(opt.value);
                   setOpen(false);

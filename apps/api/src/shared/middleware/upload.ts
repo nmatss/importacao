@@ -24,10 +24,9 @@ const ALLOWED_MIMES = new Set([
   'image/webp',
   'image/tiff',
   'image/bmp',
-  // Text / CSV / HTML
+  // Text / CSV
   'text/plain',
   'text/csv',
-  'text/html',
   // Email
   'message/rfc822', // .eml
   'application/vnd.ms-outlook', // .msg
@@ -37,7 +36,6 @@ const ALLOWED_MIMES = new Set([
 const SKIP_MAGIC_CHECK = new Set([
   'text/plain',
   'text/csv',
-  'text/html',
   'message/rfc822',
   'application/vnd.ms-outlook',
 ]);
@@ -107,8 +105,6 @@ export const upload = multer({
         '.bmp',
         '.csv',
         '.txt',
-        '.html',
-        '.htm',
         '.eml',
         '.msg',
       ]);
@@ -117,7 +113,7 @@ export const upload = multer({
       } else {
         cb(
           new Error(
-            'Tipo de arquivo não permitido. Aceitos: PDF, Excel, Word, Imagens, CSV, TXT, HTML, EML.',
+            'Tipo de arquivo não permitido. Aceitos: PDF, Excel, Word, Imagens, CSV, TXT, EML.',
           ),
         );
       }

@@ -55,4 +55,33 @@ describe('env IA policy', () => {
     expect(env.AI_PROVIDER).toBe('openrouter');
     expect(env.AI_ALLOW_EXTERNAL).toBe('true');
   });
+
+  it('nao exige destinatarios operacionais no env de producao', async () => {
+    const env = await loadEnv({
+      NODE_ENV: 'production',
+      GOOGLE_CLIENT_ID: 'google-client-id',
+      IA_LOCAL_API_KEY: 'test-token',
+      KIOM_EMAIL: undefined,
+      FENICIA_EMAIL: undefined,
+      ISA_EMAIL: undefined,
+    });
+
+    expect(env.NODE_ENV).toBe('production');
+    expect(env.GOOGLE_CLIENT_ID).toBe('google-client-id');
+  });
+
+  it('valida lista opcional de destinatarios operacionais no env', async () => {
+    const env = await loadEnv({
+      IA_LOCAL_API_KEY: 'test-token',
+      KIOM_EMAIL: 'contact@kiomglobal.com;ops@kiomglobal.com',
+    });
+
+    expect(env.KIOM_EMAIL).toBe('contact@kiomglobal.com;ops@kiomglobal.com');
+    await expect(
+      loadEnv({
+        IA_LOCAL_API_KEY: 'test-token',
+        KIOM_EMAIL: 'contact@kiomglobal.com,nao-e-email',
+      }),
+    ).rejects.toThrow(/KIOM_EMAIL/);
+  });
 });

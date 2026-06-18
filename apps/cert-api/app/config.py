@@ -30,7 +30,7 @@ SHEETS_PRIVATE_KEY: str = (
 ).replace("\\n", "\n")
 SHEETS_SPREADSHEET_ID: str = os.environ.get(
     "GOOGLE_SHEETS_SPREADSHEET_ID",
-    "1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE",
+    "",
 )
 
 # --- VTEX ---
@@ -52,18 +52,20 @@ VTEX_STORES: dict[str, dict[str, str]] = {
 VTEX_REQUEST_DELAY: float = float(os.environ.get("VTEX_REQUEST_DELAY", "1.5"))
 
 # --- WMS Oracle ---
-WMS_ORACLE_HOST: str = os.environ.get("WMS_ORACLE_HOST", "192.168.168.10")
+# Production compose marks these as required. Keep Python defaults empty so this
+# module does not bake real endpoints/credentials into local tests or images.
+WMS_ORACLE_HOST: str = os.environ.get("WMS_ORACLE_HOST", "")
 WMS_ORACLE_PORT: int = int(os.environ.get("WMS_ORACLE_PORT", "1521"))
-WMS_ORACLE_SID: str = os.environ.get("WMS_ORACLE_SID", "WMS")
-WMS_ORACLE_USER: str = os.environ.get("WMS_ORACLE_USER", "wisweb")
-WMS_ORACLE_PASS: str = os.environ.get("WMS_ORACLE_PASS", "wisweb")
+WMS_ORACLE_SID: str = os.environ.get("WMS_ORACLE_SID", "")
+WMS_ORACLE_USER: str = os.environ.get("WMS_ORACLE_USER", "")
+WMS_ORACLE_PASS: str = os.environ.get("WMS_ORACLE_PASS", "")
 
 # --- ERP SQL Server ---
-ERP_PUKET_HOST: str = os.environ.get("ERP_PUKET_HOST", "db01.grupounico.com")
-ERP_PUKET_DB: str = os.environ.get("ERP_PUKET_DB", "DB_puket")
-ERP_IMG_HOST: str = os.environ.get("ERP_IMG_HOST", "db02.grupounico.com")
-ERP_IMG_DB: str = os.environ.get("ERP_IMG_DB", "Grupo_Imaginarium")
-ERP_MSSQL_USER: str = os.environ.get("ERP_MSSQL_USER", "nicolas.matsuda")
+ERP_PUKET_HOST: str = os.environ.get("ERP_PUKET_HOST", "")
+ERP_PUKET_DB: str = os.environ.get("ERP_PUKET_DB", "")
+ERP_IMG_HOST: str = os.environ.get("ERP_IMG_HOST", "")
+ERP_IMG_DB: str = os.environ.get("ERP_IMG_DB", "")
+ERP_MSSQL_USER: str = os.environ.get("ERP_MSSQL_USER", "")
 ERP_MSSQL_PASS: str = os.environ.get("ERP_MSSQL_PASS", "")
 
 # --- Linx ERP write (product properties) ---

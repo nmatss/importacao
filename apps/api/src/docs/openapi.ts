@@ -959,6 +959,42 @@ export const openapiSpec = {
         responses: { '200': { description: 'Saved' } },
       },
     },
+    '/api/settings/recipients': {
+      get: {
+        tags: ['Settings'],
+        summary: 'Get operational recipient settings',
+        responses: { '200': { description: 'Operational recipient config' } },
+      },
+      put: {
+        tags: ['Settings'],
+        summary: 'Save operational recipient settings',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object' as const,
+                properties: {
+                  kiom_email: {
+                    type: 'string' as const,
+                    description: 'Comma, semicolon, or newline separated KIOM recipients',
+                  },
+                  fenicia_email: {
+                    type: 'string' as const,
+                    description: 'Comma, semicolon, or newline separated Fenicia recipients',
+                  },
+                  isa_email: {
+                    type: 'string' as const,
+                    description: 'Comma, semicolon, or newline separated ISA recipients',
+                  },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Saved' } },
+      },
+    },
     '/api/settings/integrations': {
       get: {
         tags: ['Settings'],

@@ -1,6 +1,6 @@
 # Security
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-18
 
 ## Controles Existentes
 
@@ -18,6 +18,8 @@ Ultima atualizacao: 2026-06-17
 - PostgreSQL exposto somente em `127.0.0.1:5450` no host.
 - IA externa exige `AI_ALLOW_EXTERNAL=true`.
 - IA local usa allowlist de hosts e bearer token.
+- Proxy `/cert-api/` do Nginx valida o JWT do usuario via `auth_request` em
+  `/api/auth/me` antes de injetar a chave interna `X-API-Key` para a cert-api.
 - CodeQL SAST em `.github/workflows/codeql.yml`.
 - `npm audit --audit-level=high` no CI.
 
@@ -34,13 +36,17 @@ Evidencias:
 
 ## Riscos A Monitorar
 
-### ALTO - Secrets E `.env`
+### BAIXO - Governanca Continua De Secrets
 
-`.env.sops.yaml` ainda ausente em producao; deploy usa `.env` existente.
+SOPS + age e `.env.sops.yaml` criptografado estao configurados para producao.
+Risco residual: edicoes manuais de secrets fora do fluxo SOPS ou rotacao
+incompleta de credenciais.
 
 Mitigacao:
 
-- Criar `.env.sops.yaml`, criptografar com SOPS e documentar rotacao.
+- Editar secrets apenas via `sops .env.sops.yaml`.
+- Manter rotacao documentada em `docs/SECRETS.md`.
+- Nunca commitar `.env.sops.yaml` descriptografado.
 
 ### ALTO - Egress De IA
 
@@ -69,6 +75,18 @@ validar autenticacao e autorizacao.
 Mitigacao:
 
 - Revisar middleware de auth em todo novo endpoint.
+
+### MEDIO - AuthZ Fina Da Cert-API
+
+O proxy `/cert-api/` exige usuario autenticado antes de encaminhar chamadas para
+a cert-api. Risco residual: autorizacao por papel/escopo dentro do modulo de
+certificacoes ainda deve ser revisada caso o negocio exija separar operadores,
+analistas e administradores.
+
+Mitigacao:
+
+- Evoluir para endpoint de autorizacao dedicado no backend antes de abrir novos
+  comandos destrutivos na cert-api.
 
 ## Checklist De Auditoria
 

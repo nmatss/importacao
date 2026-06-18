@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { toast } from 'sonner';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
-import { fetchCertReportDetail, getCertReportDownloadUrl } from '@/shared/lib/cert-api-client';
+import { downloadCertReport, fetchCertReportDetail } from '@/shared/lib/cert-api-client';
 import type { CertReportResult, CertReportData } from '@/shared/lib/cert-api-client';
 import {
   Download,
@@ -19,14 +20,20 @@ export default function CertRelatorioDetailPage() {
   const filename = decodeURIComponent(id || '');
   const [data, setData] = useState<CertReportData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [brandFilter, setBrandFilter] = useState('');
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
     fetchCertReportDetail(filename)
-      .then(setData)
-      .catch(() => setData(null))
+      .then((report) => {
+        setData(report);
+        setLoadError(null);
+      })
+      .catch(() => setLoadError('Nao foi possivel carregar o relatorio. Tente novamente.'))
       .finally(() => setLoading(false));
   }, [filename]);
 
@@ -35,6 +42,46 @@ export default function CertRelatorioDetailPage() {
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-7 h-7 animate-spin text-emerald-500" />
         <p className="text-sm text-slate-400">Carregando relatório...</p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div
+        role="alert"
+        className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-danger-200 bg-danger-50 px-6 py-10 text-center"
+      >
+        <p className="text-base font-semibold text-danger-700 mb-1">Erro ao carregar relatório</p>
+        <p className="text-sm text-danger-600 mb-4">{loadError}</p>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setLoadError(null);
+              setLoading(true);
+              fetchCertReportDetail(filename)
+                .then((report) => {
+                  setData(report);
+                  setLoadError(null);
+                })
+                .catch(() =>
+                  setLoadError('Nao foi possivel carregar o relatorio. Tente novamente.'),
+                )
+                .finally(() => setLoading(false));
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-danger-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-danger-700"
+          >
+            Tentar novamente
+          </button>
+          <Link
+            to="/certificacoes/relatorios"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-danger-700 transition-colors hover:bg-danger-100"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Voltar aos relatórios
+          </Link>
+        </div>
       </div>
     );
   }
@@ -86,6 +133,17 @@ export default function CertRelatorioDetailPage() {
   const brands = [...new Set(results.map((r) => r.brand))];
   const hasActiveFilters = search || statusFilter || brandFilter;
 
+  async function handleDownloadReport() {
+    setDownloading(true);
+    try {
+      await downloadCertReport(filename);
+    } catch {
+      toast.error('Nao foi possivel baixar o relatorio.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -104,13 +162,19 @@ export default function CertRelatorioDetailPage() {
             <p className="text-sm text-slate-400 mt-0.5">Detalhes do relatório de validação</p>
           </div>
         </div>
-        <a
-          href={getCertReportDownloadUrl(filename)}
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all flex-shrink-0"
+        <button
+          type="button"
+          onClick={handleDownloadReport}
+          disabled={downloading}
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all flex-shrink-0 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Download className="w-4 h-4" />
+          {downloading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4" />
+          )}
           Baixar Relatório
-        </a>
+        </button>
       </div>
 
       {/* Stats Cards */}
@@ -150,7 +214,9 @@ export default function CertRelatorioDetailPage() {
           <div className="relative flex-1 min-w-[220px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id="cert-report-detail-search"
               type="text"
+              aria-label="Buscar por SKU ou nome"
               placeholder="Buscar por SKU ou nome..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -158,6 +224,8 @@ export default function CertRelatorioDetailPage() {
             />
           </div>
           <select
+            id="cert-report-detail-status"
+            aria-label="Filtrar status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all min-w-[160px]"
@@ -170,6 +238,8 @@ export default function CertRelatorioDetailPage() {
             ))}
           </select>
           <select
+            id="cert-report-detail-brand"
+            aria-label="Filtrar marca"
             value={brandFilter}
             onChange={(e) => setBrandFilter(e.target.value)}
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all min-w-[160px]"

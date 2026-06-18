@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EspelhoItem {
@@ -55,6 +56,8 @@ interface EspelhoPreviewProps {
 export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
+  const [sendingFenicia, setSendingFenicia] = useState(false);
+  const [showFeniciaConfirm, setShowFeniciaConfirm] = useState(false);
   const [editingCell, setEditingCell] = useState<{
     itemId: number;
     field: string;
@@ -122,11 +125,23 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     }
   };
   const sendToFenicia = async () => {
+    setShowFeniciaConfirm(false);
+    setSendingFenicia(true);
     try {
       const res = await apiCall(`/api/espelhos/${processId}/send-fenicia`);
       if (!res.ok) throw new Error('Falha ao enviar para Fenicia');
+      toast.success('Espelho enviado para Fenícia com sucesso.');
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['espelho', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['process', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['process-events', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['communications', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['communications'] }),
+      ]);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
+    } finally {
+      setSendingFenicia(false);
     }
   };
   const generatePartialLi = async () => {
@@ -246,11 +261,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               Enviar para Drive
             </button>
             <button
-              onClick={sendToFenicia}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
+              onClick={() => setShowFeniciaConfirm(true)}
+              disabled={sendingFenicia || !!espelho.sentToFenicia}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 disabled:pointer-events-none transition-colors"
             >
-              <Send className="h-4 w-4" />
-              Enviar para Fenícia
+              {sendingFenicia ? <LoadingSpinner size="sm" /> : <Send className="h-4 w-4" />}
+              {espelho.sentToFenicia ? 'Enviado à Fenícia' : 'Enviar para Fenícia'}
             </button>
             <button
               onClick={generatePartialLi}
@@ -430,6 +446,16 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
           Adicionar item
         </button>
       )}
+
+      <ConfirmDialog
+        isOpen={showFeniciaConfirm}
+        variant="danger"
+        title="Enviar espelho para Fenícia"
+        message="Deseja enviar o espelho e os documentos do processo para a Fenícia? O marco operacional só será registrado se o e-mail for enviado com sucesso."
+        confirmLabel="Enviar"
+        onConfirm={sendToFenicia}
+        onCancel={() => setShowFeniciaConfirm(false)}
+      />
     </div>
   );
 }

@@ -192,7 +192,7 @@ async function handleSheetsSync(data: SheetsSyncJob): Promise<void> {
 
 async function handleAIExtraction(data: AIExtractionJob): Promise<void> {
   const { documentService } = await import('../../modules/documents/service.js');
-  await documentService.reprocess(data.documentId);
+  await documentService.processWithAI(data.documentId, data.documentType);
 }
 
 // ── Register all workers ─────────────────────────────────────────────

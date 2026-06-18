@@ -227,7 +227,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
   const [resolvingId, setResolvingId] = useState<number | null>(null);
   const draftBodyRef = useRef<HTMLDivElement | null>(null);
   const draftModalRef = useRef<HTMLDivElement | null>(null);
-  const draftRecipientEmailRef = useRef<HTMLInputElement | null>(null);
+  const draftRecipientEmailRef = useRef<HTMLTextAreaElement | null>(null);
   const draftModalOpenerRef = useRef<HTMLElement | null>(null);
   const latestDraftBodyRef = useRef(editBody);
 
@@ -925,15 +925,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                 >
                   Destinatário
                 </label>
-                <input
+                <textarea
                   ref={draftRecipientEmailRef}
                   id="draft-recipient-email"
-                  type="email"
                   value={editRecipientEmail}
                   onChange={(e) =>
                     dispatch({ type: 'SET_EDIT_RECIPIENT_EMAIL', payload: e.target.value })
                   }
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                  rows={2}
+                  placeholder="email@exemplo.com, outro@exemplo.com"
+                  className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
                 />
               </div>
 

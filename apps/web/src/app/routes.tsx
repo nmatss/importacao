@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Link, useParams } from 'react-router-dom';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { ImportacaoLayout } from '@/shared/components/ImportacaoLayout';
 import { CertificacoesLayout } from '@/shared/components/CertificacoesLayout';
@@ -110,6 +110,44 @@ function LazyFallback() {
   );
 }
 
+function ModuleNotFound({
+  title,
+  message,
+  to,
+  action,
+}: {
+  title: string;
+  message: string;
+  to: string;
+  action: string;
+}) {
+  return (
+    <div className="flex min-h-[360px] items-center justify-center">
+      <div className="max-w-md rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
+        <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
+          Pagina nao encontrada
+        </p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{message}</p>
+        <Link
+          to={to}
+          className="mt-5 inline-flex items-center justify-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700"
+        >
+          {action}
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function LegacyProcessRedirect() {
+  const params = useParams();
+  const splat = params['*'];
+  return (
+    <Navigate to={splat ? `/importacao/processos/${splat}` : '/importacao/processos'} replace />
+  );
+}
+
 export function AppRoutes() {
   return (
     <Routes>
@@ -153,6 +191,17 @@ export function AppRoutes() {
                   <Route path="/email-ingestion" element={<EmailIngestionPage />} />
                   <Route path="/auditoria" element={<AuditLogPage />} />
                   <Route path="/configuracoes" element={<SettingsPage />} />
+                  <Route
+                    path="*"
+                    element={
+                      <ModuleNotFound
+                        title="Rota de importacao invalida"
+                        message="Essa tela nao existe neste modulo. Volte para o dashboard ou use o menu lateral."
+                        to="/importacao/dashboard"
+                        action="Ir para o dashboard"
+                      />
+                    }
+                  />
                 </Routes>
               </Suspense>
             </ImportacaoLayout>
@@ -177,6 +226,17 @@ export function AppRoutes() {
                   <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
                   <Route path="/agendamentos" element={<CertAgendamentosPage />} />
                   <Route path="/configuracoes" element={<CertConfiguracoesPage />} />
+                  <Route
+                    path="*"
+                    element={
+                      <ModuleNotFound
+                        title="Rota de certificacoes invalida"
+                        message="Essa tela nao existe no modulo de certificacoes. Volte para o dashboard ou use o menu lateral."
+                        to="/certificacoes"
+                        action="Ir para certificacoes"
+                      />
+                    }
+                  />
                 </Routes>
               </Suspense>
             </CertificacoesLayout>
@@ -186,7 +246,7 @@ export function AppRoutes() {
 
       {/* Redirects for old routes */}
       <Route path="/dashboard" element={<Navigate to="/portal" replace />} />
-      <Route path="/processos/*" element={<Navigate to="/importacao/processos" replace />} />
+      <Route path="/processos/*" element={<LegacyProcessRedirect />} />
       <Route path="/" element={<Navigate to="/portal" replace />} />
       <Route path="*" element={<Navigate to="/portal" replace />} />
     </Routes>

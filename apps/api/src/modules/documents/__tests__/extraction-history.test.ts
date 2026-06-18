@@ -86,8 +86,8 @@ describe('document extraction history (backlog #12)', () => {
 
     it('archives the previous extraction BEFORE zeroing aiParsedData', async () => {
       // Isolate reprocess from the downstream AI pipeline
-      const processSpy = vi
-        .spyOn(documentService, 'processWithAI')
+      const enqueueSpy = vi
+        .spyOn(documentService, 'enqueueAIExtraction')
         .mockResolvedValue(undefined as never);
       vi.spyOn(documentService, 'getById').mockResolvedValue(mockDoc as never);
 
@@ -118,12 +118,12 @@ describe('document extraction history (backlog #12)', () => {
       const updateOrder = mockTx.update.mock.invocationCallOrder[0];
       expect(insertOrder).toBeLessThan(updateOrder);
 
-      // Re-extraction is still triggered
-      expect(processSpy).toHaveBeenCalledWith(7, 'invoice');
+      // Re-extraction is still queued
+      expect(enqueueSpy).toHaveBeenCalledWith(mockDoc, 'invoice');
     });
 
     it('does not archive anything when the document was never extracted', async () => {
-      vi.spyOn(documentService, 'processWithAI').mockResolvedValue(undefined as never);
+      vi.spyOn(documentService, 'enqueueAIExtraction').mockResolvedValue(undefined as never);
       vi.spyOn(documentService, 'getById').mockResolvedValue(mockDoc as never);
 
       const emptyDoc = { ...mockDoc, aiParsedData: null, confidenceScore: null };
@@ -139,6 +139,24 @@ describe('document extraction history (backlog #12)', () => {
       // zeroing update still runs, both inside db.transaction -> mockTx.
       expect(mockTx.insert).not.toHaveBeenCalled();
       expect(mockTx.update).toHaveBeenCalled();
+    });
+
+    it('rejects duplicate reprocess while extraction is already active', async () => {
+      const freshProcessingDoc = {
+        ...mockDoc,
+        isProcessed: false,
+        aiParsedData: null,
+        confidenceScore: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      queryQueue.push(createResolvedChain([freshProcessingDoc]));
+
+      await expect(documentService.reprocess(7, 1)).rejects.toMatchObject({
+        statusCode: 409,
+      });
+
+      expect(mockDb.transaction).not.toHaveBeenCalled();
     });
   });
 

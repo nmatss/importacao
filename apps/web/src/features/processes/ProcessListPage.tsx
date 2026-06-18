@@ -106,7 +106,9 @@ export function ProcessListPage() {
           <div className="relative flex-1 min-w-0 w-full sm:min-w-[240px]">
             <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
+              id="process-search"
               type="text"
+              aria-label="Buscar processo"
               placeholder="Buscar por codigo do processo..."
               value={search}
               onChange={(e) => {

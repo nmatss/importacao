@@ -20,6 +20,7 @@ import { communicationService } from '../communications/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { getOperationalRecipient } from '../settings/operational-recipients.js';
 
 const UPLOAD_DIR = 'uploads';
 
@@ -570,7 +571,7 @@ export const espelhoService = {
       await communicationService.create({
         processId,
         recipient: 'ISA Certificação',
-        recipientEmail: globalThis.process.env.ISA_EMAIL || '',
+        recipientEmail: await getOperationalRecipient('isa_email'),
         subject,
         body,
       });

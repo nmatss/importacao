@@ -1,6 +1,6 @@
 # Database
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-18
 
 ## Fonte Canonica
 
@@ -33,6 +33,17 @@ Ultima atualizacao: 2026-06-17
 - `alerts`
 - `settings`
 - `ai_usage_log`
+- `pre_cons_items`
+- `pre_cons_sync_log`
+
+## Migrations Fora Do Journal Drizzle
+
+- `0011_proforma_invoice.sql` ate `0016_pre_cons_tables.sql` sao SQL
+  idempotentes aplicados pelo fluxo pendente (`scripts/apply-pending-migrations.sh`)
+  e pelo setup E2E apos `migrate()`.
+- `0016_pre_cons_tables.sql` cria `pre_cons_items` e `pre_cons_sync_log`,
+  alinhadas ao `schema.ts`, com indices em `process_code`, `item_code` e
+  `pi_number`. Nao ha FK fisica declarada no schema atual para essas tabelas.
 
 ## Indices Observados
 

@@ -44,8 +44,11 @@ class TestFetchEcommerceStock:
     def test_puket_escolares_uses_puket_db(self, mock_sqlserver_conn, mocker):
         """puket_escolares brand should connect to Puket ERP host."""
         import pymssql
+        mocker.patch("app.db.sqlserver.ERP_PUKET_HOST", "puket-test-host")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_DB", "puket_test_db")
+        mocker.patch("app.db.sqlserver.ERP_MSSQL_USER", "erp-test-user")
+        mocker.patch("app.db.sqlserver.ERP_MSSQL_PASS", "erp-test-pass")
         mock_sqlserver_conn.fetchall.return_value = []
         fetch_ecommerce_stock("puket_escolares")
         call_args = pymssql.connect.call_args
-        # First positional arg is the host
-        assert "db01" in str(call_args) or "puket" in str(call_args).lower()
+        assert call_args.args[:4] == ("puket-test-host", "erp-test-user", "erp-test-pass", "puket_test_db")

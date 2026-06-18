@@ -21,6 +21,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Assistente operacional RAG em `/importacao/assistente`, com rota
   autenticada `POST /api/assistant/query`, fontes internas e fallback
   deterministico.
+- Balao flutuante do Assistente IA nos layouts de Importacao e Certificacoes,
+  reutilizando `POST /api/assistant/query` sem interromper formularios ou
+  navegacao.
 - Exportacao CSV para Central de Alertas e Atendimentos usando os filtros
   ativos da tela.
 - Utilitario compartilhado `apps/web/src/shared/lib/csv.ts`.
@@ -53,13 +56,24 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   salva ou envia sem sair do campo.
 - Busca manual de e-mails fica visivel apenas para administradores, alinhada a
   permissao da API.
-- Deploy passa a abortar se migrations falharem e healthchecks usam readiness
-  real de API/cert-api.
+- Deploy passa a validar o compose remoto antes de migrations/restart, abortar
+  se migrations falharem e usar healthchecks com readiness real de API/cert-api.
 - Backup inclui o volume `cert-certs` com PDFs/evidencias de certificacao.
 - Incoterm e moeda da invoice aceitam variantes comerciais comuns sem gerar falso positivo.
 - `dates-match` deixou de tratar `invoiceDate` como data de ETD/embarque.
 - Delete e reprocessamento de documento agora recalculam `aiExtractedData`
   consolidado do processo para evitar dados obsoletos.
+- Extração de documentos agora usa fila durável `ai-extraction`, captura falhas
+  de leitura/parsing antes da IA, classifica documentos presos como `failed`
+  apos timeout operacional e bloqueia reprocessamento concorrente.
+- Lista de documentos ganhou timeout/estado de carregamento para abrir/baixar
+  PDF, evitando acao visualmente infinita em arquivo lento ou indisponivel.
+- Comparativo de documentos passou a preferir o documento mais recente,
+  processado e sem falha por tipo, evitando usar invoice pendente/obsoleta.
+- Compose/env de producao passam a exigir `GOOGLE_CLIENT_ID` e
+  `VITE_GOOGLE_CLIENT_ID`; destinatarios KIOM/Fenicia/ISA agora sao
+  configuraveis em `Configuracoes > Destinatarios operacionais`, com env apenas
+  como fallback opcional.
 - Chaves privadas Google vindas do SOPS agora são normalizadas mesmo quando
   chegam com `\n` duplamente escapado, evitando falha `ERR_OSSL_UNSUPPORTED`
   no Gmail/Drive/Sheets/Groups/Vertex.
@@ -74,6 +88,44 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   processo, preservando edicoes do operador e evitando duplicidade.
 - Envio de comunicacao por API passa a exigir `status=draft`, bloqueando
   reenvio acidental de e-mail ja enviado.
+- Envio do espelho para Fenícia no frontend passou a exigir confirmação, mostrar
+  estado de envio, bloquear duplo clique e atualizar processo/timeline/e-mails
+  apos sucesso.
+- Tabela de Produtos de Certificacoes ganhou ordenacao acessivel com botoes
+  focaveis e `aria-sort`; filtros visuais passaram a expor `aria-pressed`.
+- Switches visuais de agendamentos, status de usuario e seletor de tema passaram
+  a declarar estado acessivel (`role="switch"`, `aria-checked`,
+  `aria-expanded` e opcoes de tema com `aria-pressed`).
+- Upload de documentos deixou de aceitar HTML no frontend/API, bloqueia arquivo
+  acima de 50 MB no cliente, valida extensoes permitidas, usa botao acessivel e
+  anuncia progresso/erro.
+- Download/preview de documentos com conteudo ativo passou a forcar attachment,
+  `application/octet-stream` e `X-Content-Type-Options: nosniff`.
+- Criada migration SQL pendente para tabelas Pre-Cons e script de migrations
+  passou a aplicar `0016_pre_cons_tables.sql`.
+- CI passou a buildar/scanear/SBOM da `cert-api`; workflow de deploy passou a
+  usar `scripts/deploy.sh` via rsync, alinhado ao modelo operacional real.
+- `docker-compose.prod.yml` e cert-api removeram defaults sensiveis de WMS/ERP,
+  Sheets e Grafana, exigindo variaveis explicitas em producao.
+- Alertmanager ganhou configuracao noop segura e template separado para webhook
+  real.
+- Rotas internas invalidas de Importacao/Certificacoes passaram a renderizar
+  estado 404 contextual em vez de layout vazio; redirect legado `/processos/*`
+  preserva caminho profundo.
+- Sidebar recolhida, headers de layout, login mobile, filtros, abas de processo,
+  linhas navegaveis de tabelas operacionais e botoes icon-only receberam ajustes
+  de acessibilidade/layout.
+- Formulario de processo e API passaram a validar numeros nao negativos e datas
+  coerentes; edicao de processo travado fica bloqueada no frontend.
+- Cambio passou a validar valores positivos e datas coerentes no frontend/API.
+- Agendamentos de certificacao passaram a validar cron no frontend e na cert-api
+  antes de persistir/carregar no APScheduler.
+- Produtos, relatorios e agendamentos de certificacao passaram a diferenciar erro
+  de API de lista vazia, com alerta e retry.
+- Proxy `/cert-api/` passou a exigir JWT valido via `auth_request` em
+  `/api/auth/me` antes de injetar a chave interna da cert-api; downloads,
+  exports, upload de certificado e stream de validacao agora usam fetch
+  autenticado.
 
 ### Tests
 
@@ -87,11 +139,23 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   correcao e salvamento do HTML atual do editor sem depender de blur.
 - Cobertura de regressao garante reuso de rascunho KIOM aberto e bloqueio de
   reenvio de comunicacao ja enviada.
+- Cobertura de regressao garante confirmação e invalidações do envio Fenícia no
+  preview do espelho.
+- Validacao completa de 2026-06-18: `npm run -w apps/web typecheck`,
+  `npm test -w apps/web -- src/features/espelhos/EspelhoPreview.test.tsx`,
+  `npm test -w apps/web`, `npm run lint`, `npm run typecheck`, `npm test`,
+  `npm run build`, `npm audit --audit-level=high` e
+  `docker compose -f docker-compose.prod.yml config --quiet` com variaveis
+  obrigatorias dummy.
+- Playwright MCP validou o balao do Assistente IA em Importacao/Certificacoes
+  desktop/mobile, incluindo envio mockado, fontes, Escape, inferencia de ID de
+  processo, ausencia de overflow e ausencia de warnings/erros de console.
 
 ### Security
 
 - `cert-api` falha fechado quando `CERT_API_KEY` nao esta configurado; somente `/api/health` e `/api/ready` ficam sem chave para healthchecks.
-- Proxy `/cert-api/` do nginx do `web` injeta `X-API-Key` a partir de `CERT_API_KEY`, sem expor a chave ao browser.
+- Proxy `/cert-api/` do nginx do `web` valida JWT via `/api/auth/me` antes de
+  injetar `X-API-Key` a partir de `CERT_API_KEY`, sem expor a chave ao browser.
 - `docker-compose.prod.yml` passa a exigir `CERT_API_KEY` para `cert-api` e `web`.
 - Acoes criticas de processo/documento/follow-up/espelho passaram a exigir admin: delete de processo, reprocess/delete de documento, sync manual de follow-up, delete de item de espelho, marco/envio Fenícia.
 - Cadastro de usuarios no frontend foi alinhado aos papeis suportados (`admin` e `analyst`), removendo criacao visual de `operator`.

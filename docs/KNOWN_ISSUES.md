@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-18
 
 ## ALTO - Extração De Cabeçalho, Portos E Datas Pode Depender Do Provider
 
@@ -22,31 +22,34 @@ Status:
 
 - Aberto. Vertex vs IA local permanece decisao de produto/privacidade/custo.
 
-## ALTO - Destinatarios Operacionais De Email Ausentes Em Producao
+## ALTO - Destinatarios Operacionais De Email Pendentes De Cadastro
 
 Descricao:
 
-- Producao sobe com warnings para `KIOM_EMAIL`, `FENICIA_EMAIL` e `ISA_EMAIL`
-  ausentes.
+- Producao anterior subia com warnings para `KIOM_EMAIL`, `FENICIA_EMAIL` e
+  `ISA_EMAIL` ausentes.
+- Desde a revisao de 2026-06-18, esses destinatarios devem ser cadastrados em
+  `Configuracoes > Destinatarios operacionais`; env permanece apenas fallback
+  opcional.
 - `communicationService.send` bloqueia envio quando `recipientEmail` esta vazio.
 
 Evidencias:
 
-- Logs pos-deploy de 2026-06-17 em `importacao-api`.
-- `apps/api/src/server.ts`
+- Logs remotos de 2026-06-18 em `importacao-api`.
+- `apps/api/src/modules/settings/operational-recipients.ts`
 - `apps/api/src/modules/communications/service.ts`
 - `docs/STATUS-2026-06-16.md`
 
 Impacto:
 
-- Emails de correcao para KIOM, envio real para Fenícia e fluxo ISA podem gerar
-  rascunhos sem destinatario e falhar no envio ate que os enderecos reais sejam
-  configurados em `.env.sops.yaml`.
+- Emails de correcao para KIOM, envio real para Fenicia e fluxo ISA ficam
+  bloqueados ate que os enderecos reais sejam configurados em
+  `Configuracoes > Destinatarios operacionais`.
 
 Status:
 
-- Aberto. Requer confirmacao dos enderecos operacionais reais antes de atualizar
-  secrets de producao.
+- Aberto. Requer confirmacao/cadastro dos enderecos operacionais reais na tela
+  de Configuracoes.
 
 ## MEDIO - Validacao Usa `ohbl` Como BL Principal
 

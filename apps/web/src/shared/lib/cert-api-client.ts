@@ -223,26 +223,79 @@ export interface CertHealthResponse {
 // ── Client ─────────────────────────────────────────────────────────────
 
 const CERT_BASE = '/cert-api';
+const TOKEN_KEY = 'importacao_token';
 
-async function certFetch<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+export async function certApiFetch(path: string, options: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(options.headers);
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null;
+
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (
+    options.body !== undefined &&
+    !(options.body instanceof FormData) &&
+    !headers.has('Content-Type')
+  ) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const res = await fetch(`${CERT_BASE}${path}`, {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
+    headers,
   });
+
+  if (res.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
   if (!res.ok) {
     let detail = `${res.status} ${res.statusText}`;
     try {
       const body = await res.clone().json();
       if (body?.detail) detail = String(body.detail);
+      if (body?.error) detail = String(body.error);
     } catch {
       // keep status text
     }
     throw new Error(`Erro na API: ${detail}`);
   }
+
+  return res;
+}
+
+async function certFetch<T = unknown>(path: string, options?: RequestInit): Promise<T> {
+  const res = await certApiFetch(path, options);
   return res.json();
+}
+
+function contentDispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  const utfMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1].replace(/"/g, ''));
+  const match = header.match(/filename="?([^";]+)"?/i);
+  return match?.[1] ?? null;
+}
+
+export async function downloadCertApiResource(
+  path: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const res = await certApiFetch(path);
+  const blob = await res.blob();
+  const filename =
+    contentDispositionFilename(res.headers.get('content-disposition')) ?? fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = 'noreferrer';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 export async function fetchCertStats(): Promise<CertStats> {
@@ -308,26 +361,64 @@ export async function fetchCertValidationStatus(runId: string): Promise<CertVali
 export function streamCertValidation(
   runId: string,
   onEvent: (data: CertValidationEvent) => void,
-): EventSource {
-  const eventSource = new EventSource(`${CERT_BASE}/api/validate/${runId}/stream`);
+): { close: () => void } {
+  const controller = new AbortController();
+  let closed = false;
 
-  eventSource.onmessage = (event) => {
+  const close = () => {
+    closed = true;
+    controller.abort();
+  };
+
+  const dispatchEvent = (raw: string) => {
     try {
-      const data: CertValidationEvent = JSON.parse(event.data);
+      const data: CertValidationEvent = JSON.parse(raw);
       onEvent(data);
       if (data.type === 'complete' || data.type === 'error') {
-        eventSource.close();
+        close();
       }
     } catch {
       // ignore parse errors
     }
   };
 
-  eventSource.onerror = () => {
-    eventSource.close();
-  };
+  void (async () => {
+    const res = await certApiFetch(`/api/validate/${runId}/stream`, {
+      headers: { Accept: 'text/event-stream' },
+      signal: controller.signal,
+    });
+    if (!res.body) throw new Error('Stream indisponivel');
 
-  return eventSource;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (!closed) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop() ?? '';
+      for (const event of events) {
+        const data = event
+          .split(/\r?\n/)
+          .filter((line) => line.startsWith('data:'))
+          .map((line) => line.slice(5).trimStart())
+          .join('\n');
+        if (data) dispatchEvent(data);
+      }
+    }
+  })().catch((error: unknown) => {
+    if (!closed) {
+      onEvent({
+        type: 'error',
+        error: error instanceof Error ? error.message : 'Erro no stream de validacao',
+      });
+    }
+  });
+
+  return { close };
 }
 
 export async function checkCertApiHealth(): Promise<{ connected: boolean; latencyMs: number }> {
@@ -420,16 +511,6 @@ export async function fetchCertExpired(params?: {
   return certFetch<CertProductsResponse>(`/api/expired${qs ? `?${qs}` : ''}`);
 }
 
-// ---------- Export ----------
-
-export function exportCertProductsExcel(params?: { brand?: string; status?: string }): string {
-  const query = new URLSearchParams();
-  if (params?.brand) query.set('brand', params.brand);
-  if (params?.status) query.set('status', params.status);
-  const qs = query.toString();
-  return `${CERT_BASE}/api/reports/export${qs ? `?${qs}` : ''}`;
-}
-
 // ---------- Certificates (cadastro + escrita no Linx) ----------
 
 export type LinxStatus = 'pending' | 'applied' | 'disabled' | 'error';
@@ -488,18 +569,8 @@ export async function createCertificate(input: CreateCertificateInput): Promise<
   if (input.created_by) fd.set('created_by', input.created_by);
   if (input.pdf) fd.set('pdf', input.pdf);
 
-  // multipart: let the browser set the Content-Type boundary (do not use certFetch)
-  const res = await fetch(`${CERT_BASE}/api/certificates`, { method: 'POST', body: fd });
-  if (!res.ok) {
-    let detail = `${res.status} ${res.statusText}`;
-    try {
-      const body = await res.json();
-      if (body?.detail) detail = String(body.detail);
-    } catch {
-      // ignore — keep status text
-    }
-    throw new Error(detail);
-  }
+  // multipart: let the browser set the Content-Type boundary.
+  const res = await certApiFetch('/api/certificates', { method: 'POST', body: fd });
   return res.json();
 }
 
@@ -526,8 +597,8 @@ export async function retryCertificateLinx(id: string): Promise<CertCertificate>
   });
 }
 
-export function getCertificatePdfUrl(id: string): string {
-  return `${CERT_BASE}/api/certificates/${encodeURIComponent(id)}/pdf`;
+export async function downloadCertificatePdf(id: string): Promise<void> {
+  await downloadCertApiResource(`/api/certificates/${encodeURIComponent(id)}/pdf`, `${id}.pdf`);
 }
 
 // ---------- Reports ----------
@@ -540,13 +611,20 @@ export async function fetchCertReportDetail(filename: string): Promise<CertRepor
   return certFetch<CertReportData>(`/api/reports/${encodeURIComponent(filename)}/data`);
 }
 
-export function getCertReportDownloadUrl(
+function getCertReportDownloadPath(filename: string, format: 'xlsx' | 'json' = 'xlsx'): string {
+  if (filename.endsWith('.xlsx') && format === 'xlsx') {
+    return `/api/reports/${encodeURIComponent(filename)}`;
+  }
+  return `/api/reports/${encodeURIComponent(filename)}?format=${format}`;
+}
+
+export async function downloadCertReport(
   filename: string,
   format: 'xlsx' | 'json' = 'xlsx',
-): string {
-  // If file is already xlsx, serve directly; otherwise convert from json
-  if (filename.endsWith('.xlsx') && format === 'xlsx') {
-    return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}`;
-  }
-  return `${CERT_BASE}/api/reports/${encodeURIComponent(filename)}?format=${format}`;
+): Promise<void> {
+  const fallbackFilename =
+    format === 'json'
+      ? filename.replace(/\.xlsx$/i, '.json')
+      : filename.replace(/\.json$/i, '.xlsx');
+  await downloadCertApiResource(getCertReportDownloadPath(filename, format), fallbackFilename);
 }

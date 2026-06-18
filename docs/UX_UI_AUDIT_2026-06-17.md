@@ -27,6 +27,20 @@ Rotas revisadas:
 - Criada tela `/importacao/assistente` com pergunta operacional, filtro opcional por processo, atalhos, resposta e lista de fontes internas.
 - Paginas de Alertas e Atendimentos ganharam exportacao CSV baseada nos filtros ativos.
 - Nomenclatura revisada em telas centrais para reduzir termos sem acento, mistura PT/EN e rotulos tecnicos.
+- Complemento 2026-06-18: tabela de Produtos de Certificacoes passou a usar
+  botoes focaveis com `aria-sort`; filtros de status/marca expõem
+  `aria-pressed`; switches de agendamentos/usuarios e seletor de tema expõem
+  estado acessivel.
+- Complemento 2026-06-18 fase 2: upload de documentos virou controle acessivel
+  com validacao client-side e progresso; sidebar recolhida ganhou nomes
+  acessiveis; rotas internas invalidas ganharam fallback contextual; login
+  mobile deixou de estourar largura; linhas de tabelas operacionais ganharam
+  navegacao por teclado; abas de processo mantem labels no mobile; filtros de
+  Pre-Cons, processos e certificacoes ganharam labels programaticos.
+- Complemento 2026-06-18 fase 2: processos, cambios e agendamentos de
+  certificacao passaram a bloquear valores/datas/cron invalidos antes da
+  persistencia; telas de produtos, relatorios e agendamentos diferenciam falha
+  de API de lista vazia.
 
 ### Duplicidade De Dados
 
@@ -70,12 +84,14 @@ Rotas revisadas:
 ### P2
 
 - Criar hooks de dominio e padronizar query keys (`processKeys`, `documentKeys`, `followUpKeys`, `validationKeys`).
-- Adicionar filtro backend para logs de e-mail por `processId` ou `processCode`; hoje a UI ainda filtra uma lista global limitada.
 - Unificar cache do endpoint `/api/documents/process/:id/comparison`.
 - Reduzir repeticao entre checklist, relatorio de validacao e comparativo dentro da aba Comparativo.
 - Persistir checklist de Draft BL no backend ou deixar claro no produto que e anotacao local.
-- Melhorar ordenacao acessivel nas tabelas de Certificacoes/Produtos.
-- Adicionar `aria-pressed`, `role="switch"` ou equivalente em filtros/toggles visuais restantes.
+- Migrar modais especificos restantes de Settings/Agendamentos para Dialog
+  compartilhado com foco gerenciado completo.
+- Fortalecer formularios de Settings, Communications e CertCadastro com validacao
+  por campo e testes.
+- Criar UX mobile dedicada para tabelas largas e kanban operacional.
 
 ## Validacao
 
@@ -87,5 +103,7 @@ Rotas revisadas:
 - `npm run typecheck`
 - `npm test`
 - `npm run build`
+- Playwright MCP em desktop/mobile para 28 rotas, verificando overflow,
+  controles sem label, botoes sem nome e fallback de rotas invalidas.
 
 Observacao: uma tentativa com `npm test -w apps/api -- --runInBand` falhou porque o Vitest atual nao aceita `--runInBand`; a suite foi executada com o comando padrao e passou.

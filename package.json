@@ -7,6 +7,10 @@
     "apps/api",
     "apps/web"
   ],
+  "overrides": {
+    "nodemailer": "9.0.1",
+    "undici": "7.28.0"
+  },
   "scripts": {
     "dev:api": "npm run dev -w apps/api",
     "dev:web": "npm run dev -w apps/web",

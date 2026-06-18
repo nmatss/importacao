@@ -6,6 +6,7 @@ const aiServiceMocks = vi.hoisted(() => ({
   detectAnomalies: vi.fn(),
   flattenAiData: vi.fn((data: Record<string, unknown>) => data),
 }));
+const mockGetOperationalRecipient = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -25,6 +26,10 @@ vi.mock('../../communications/service.js', () => ({
 
 vi.mock('../../communications/templates/kiom-correction.js', () => ({
   kiomCorrectionTemplate: vi.fn().mockReturnValue({ subject: 'Correction', body: 'Body' }),
+}));
+
+vi.mock('../../settings/operational-recipients.js', () => ({
+  getOperationalRecipient: (...args: any[]) => mockGetOperationalRecipient(...args),
 }));
 
 vi.mock('../../ai/service.js', () => ({
@@ -86,6 +91,7 @@ describe('validationService', () => {
     aiServiceMocks.detectAnomalies.mockReset();
     aiServiceMocks.detectAnomalies.mockResolvedValue({ anomalies: [] });
     aiServiceMocks.flattenAiData.mockImplementation((data: Record<string, unknown>) => data);
+    mockGetOperationalRecipient.mockResolvedValue('kiom@example.com');
     // Reset allChecks to default passing check
     (allChecks as any).length = 0;
     (allChecks as any).push(mockPassingCheck);

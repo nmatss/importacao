@@ -1,6 +1,22 @@
 import { z } from 'zod';
 import { logger } from '../utils/logger.js';
 
+const optionalEmailListEnv = z
+  .string()
+  .optional()
+  .refine(
+    (value) => {
+      if (!value) return true;
+      const emails = value
+        .split(/[;,\r\n]/)
+        .map((email) => email.trim())
+        .filter(Boolean);
+
+      return emails.every((email) => z.string().email().safeParse(email).success);
+    },
+    { message: 'deve conter e-mails válidos separados por vírgula ou ponto-e-vírgula' },
+  );
+
 const envSchema = z
   .object({
     // Server
@@ -12,6 +28,7 @@ const envSchema = z
 
     // Auth
     JWT_SECRET: z.string().min(16, 'JWT_SECRET deve ter ao menos 16 caracteres'),
+    GOOGLE_CLIENT_ID: z.string().optional(),
 
     // Redis
     REDIS_URL: z.string().optional(),
@@ -72,9 +89,9 @@ const envSchema = z
     SMTP_PASS: z.string().optional(),
 
     // Email recipients
-    KIOM_EMAIL: z.string().email().optional(),
-    FENICIA_EMAIL: z.string().email().optional(),
-    ISA_EMAIL: z.string().email().optional(),
+    KIOM_EMAIL: optionalEmailListEnv,
+    FENICIA_EMAIL: optionalEmailListEnv,
+    ISA_EMAIL: optionalEmailListEnv,
   })
   .superRefine((env, ctx) => {
     const usesExternalProvider = env.AI_PROVIDER === 'vertex' || env.AI_PROVIDER === 'openrouter';
@@ -133,6 +150,14 @@ const envSchema = z
           message: 'obrigatório quando AI_PROVIDER=ialocal (bearer do gateway IA_LOCAL)',
         });
       }
+    }
+
+    if (env.NODE_ENV === 'production' && !env.GOOGLE_CLIENT_ID) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['GOOGLE_CLIENT_ID'],
+        message: 'obrigatório em produção para login Google',
+      });
     }
   });
 

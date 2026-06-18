@@ -18,8 +18,11 @@ import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
 import { auditService } from '../audit/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { AppError } from '../../shared/errors/index.js';
-
-const KIOM_EMAIL = process.env.KIOM_EMAIL || '';
+import {
+  getOperationalRecipient,
+  normalizeEmailList,
+  parseEmailList,
+} from '../settings/operational-recipients.js';
 
 interface StoredAttachment {
   filename?: unknown;
@@ -73,30 +76,34 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-function allowedRecipientPatterns(): string[] {
-  return [
-    process.env.KIOM_EMAIL,
-    process.env.FENICIA_EMAIL,
-    process.env.ISA_EMAIL,
-    process.env.COMMUNICATION_ALLOWED_RECIPIENTS,
-  ]
-    .flatMap((value) => (value ?? '').split(','))
+async function allowedRecipientPatterns(): Promise<string[]> {
+  const [kiomEmail, feniciaEmail, isaEmail] = await Promise.all([
+    getOperationalRecipient('kiom_email'),
+    getOperationalRecipient('fenicia_email'),
+    getOperationalRecipient('isa_email'),
+  ]);
+
+  return [kiomEmail, feniciaEmail, isaEmail, process.env.COMMUNICATION_ALLOWED_RECIPIENTS]
+    .flatMap(parseEmailList)
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
 }
 
-function isRecipientAllowed(recipientEmail: string): boolean {
-  const recipient = normalizeEmail(recipientEmail);
-  const patterns = allowedRecipientPatterns();
+async function isRecipientAllowed(recipientEmail: string): Promise<boolean> {
+  const recipients = parseEmailList(recipientEmail).map(normalizeEmail);
+  const patterns = await allowedRecipientPatterns();
+  if (recipients.length === 0) return false;
   if (patterns.length === 0) return false;
 
-  return patterns.some((pattern) => {
-    if (pattern.startsWith('@')) {
-      const domain = pattern.slice(1);
-      return recipient.endsWith(`@${domain}`) || recipient.endsWith(`.${domain}`);
-    }
-    if (pattern.includes('@')) return recipient === pattern;
-    return recipient.endsWith(`@${pattern}`) || recipient.endsWith(`.${pattern}`);
+  return recipients.every((recipient) => {
+    return patterns.some((pattern) => {
+      if (pattern.startsWith('@')) {
+        const domain = pattern.slice(1);
+        return recipient.endsWith(`@${domain}`) || recipient.endsWith(`.${domain}`);
+      }
+      if (pattern.includes('@')) return recipient === pattern;
+      return recipient.endsWith(`@${pattern}`) || recipient.endsWith(`.${pattern}`);
+    });
   });
 }
 
@@ -220,12 +227,21 @@ export const communicationService = {
   },
 
   async create(input: CreateCommunicationInput) {
+    const recipientEmail = normalizeEmailList(input.recipientEmail);
+    if (!recipientEmail) {
+      throw new AppError(
+        'E-mail do destinatário não configurado. Verifique Configurações > Destinatários operacionais.',
+        400,
+        'RECIPIENT_EMAIL_REQUIRED',
+      );
+    }
+
     const [communication] = await db
       .insert(communications)
       .values({
         processId: input.processId,
         recipient: input.recipient,
-        recipientEmail: input.recipientEmail,
+        recipientEmail,
         subject: input.subject,
         body: sanitizeHtml(input.body),
         attachments: input.attachments,
@@ -250,13 +266,13 @@ export const communicationService = {
 
     if (!communication.recipientEmail) {
       throw new Error(
-        'E-mail do destinatário não configurado. Verifique as variáveis KIOM_EMAIL / FENICIA_EMAIL / ISA_EMAIL.',
+        'E-mail do destinatário não configurado. Verifique Configurações > Destinatários operacionais.',
       );
     }
 
-    if (!isRecipientAllowed(communication.recipientEmail)) {
+    if (!(await isRecipientAllowed(communication.recipientEmail))) {
       throw new AppError(
-        'Destinatário não autorizado para envio. Configure COMMUNICATION_ALLOWED_RECIPIENTS ou use um destinatário operacional previsto.',
+        'Destinatário não autorizado para envio. Configure os destinatários operacionais ou COMMUNICATION_ALLOWED_RECIPIENTS.',
         403,
         'RECIPIENT_NOT_ALLOWED',
       );
@@ -295,10 +311,14 @@ export const communicationService = {
 
       // Sanitize headers to prevent CRLF injection
       const sanitizeHeader = (v: string) => v.replace(/[\r\n]/g, '').trim();
+      const sanitizeRecipientHeader = (v: string) =>
+        normalizeEmailList(v)
+          .replace(/[\r\n]/g, '')
+          .trim();
 
       await transport.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: sanitizeHeader(communication.recipientEmail),
+        to: sanitizeRecipientHeader(communication.recipientEmail),
         subject: sanitizeHeader(communication.subject),
         html: sanitizeHtml(htmlBody),
         attachments: mailAttachments,
@@ -403,7 +423,7 @@ export const communicationService = {
       eta: proc.eta ?? undefined,
     });
 
-    const feniciaEmail = process.env.FENICIA_EMAIL || '';
+    const feniciaEmail = await getOperationalRecipient('fenicia_email');
 
     return this.create({
       processId,
@@ -528,11 +548,13 @@ export const communicationService = {
       body = templateResult.body;
     }
 
+    const kiomEmail = await getOperationalRecipient('kiom_email');
+
     // Create draft communication
     const communication = await this.create({
       processId,
       recipient: 'KIOM',
-      recipientEmail: KIOM_EMAIL,
+      recipientEmail: kiomEmail,
       subject,
       body,
     });
@@ -561,7 +583,17 @@ export const communicationService = {
     const updateData: Record<string, any> = {};
     if (data.subject !== undefined) updateData.subject = data.subject;
     if (data.body !== undefined) updateData.body = sanitizeHtml(data.body);
-    if (data.recipientEmail !== undefined) updateData.recipientEmail = data.recipientEmail;
+    if (data.recipientEmail !== undefined) {
+      const recipientEmail = normalizeEmailList(data.recipientEmail);
+      if (!recipientEmail) {
+        throw new AppError(
+          'E-mail do destinatário não configurado. Verifique Configurações > Destinatários operacionais.',
+          400,
+          'RECIPIENT_EMAIL_REQUIRED',
+        );
+      }
+      updateData.recipientEmail = recipientEmail;
+    }
 
     const [updated] = await db
       .update(communications)

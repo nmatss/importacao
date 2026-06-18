@@ -62,6 +62,7 @@ export function CurrencyExchangePage() {
   const queryClient = useQueryClient();
   const [selectedProcessId, setSelectedProcessId] = useState('');
   const [form, setForm] = useState<ExchangeForm>(emptyForm);
+  const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
@@ -99,19 +100,30 @@ export function CurrencyExchangePage() {
     }
   };
 
+  const parsedAmountUsd = Number(form.amountUsd);
+  const parsedExchangeRate = Number(form.exchangeRate);
   const calculatedBrl =
-    form.amountUsd && form.exchangeRate
-      ? parseFloat(form.amountUsd) * parseFloat(form.exchangeRate)
+    Number.isFinite(parsedAmountUsd) && parsedAmountUsd > 0 && parsedExchangeRate > 0
+      ? parsedAmountUsd * parsedExchangeRate
       : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const usd = parseFloat(form.amountUsd);
-    const rate = parseFloat(form.exchangeRate);
-    if (isNaN(usd) || isNaN(rate)) {
-      toast.error('Valor USD e Taxa de Cambio devem ser numeros validos');
+    const usd = Number(form.amountUsd);
+    const rate = Number(form.exchangeRate);
+    if (!Number.isFinite(usd) || usd <= 0) {
+      setFormError('Valor USD deve ser maior que zero.');
       return;
     }
+    if (!Number.isFinite(rate) || rate <= 0) {
+      setFormError('Taxa de Cambio deve ser maior que zero.');
+      return;
+    }
+    if (form.paymentDeadline && form.expirationDate && form.expirationDate < form.paymentDeadline) {
+      setFormError('Data de expiracao nao pode ser anterior ao vencimento.');
+      return;
+    }
+    setFormError(null);
     createMutation.mutate({
       processId: selectedProcessId,
       type: form.type,
@@ -214,6 +226,7 @@ export function CurrencyExchangePage() {
           </div>
           {selectedProcessId && (
             <button
+              type="button"
               onClick={() => setShowForm(!showForm)}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary-700"
             >
@@ -234,8 +247,10 @@ export function CurrencyExchangePage() {
               Novo Cambio
             </h3>
             <button
+              type="button"
               onClick={() => {
                 setShowForm(false);
+                setFormError(null);
                 setForm(emptyForm);
               }}
               className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
@@ -276,8 +291,15 @@ export function CurrencyExchangePage() {
                   id="exchange-amount-usd"
                   type="number"
                   step="0.01"
+                  min="0.01"
+                  inputMode="decimal"
                   value={form.amountUsd}
-                  onChange={(e) => setForm({ ...form, amountUsd: e.target.value })}
+                  onChange={(e) => {
+                    setFormError(null);
+                    setForm({ ...form, amountUsd: e.target.value });
+                  }}
+                  aria-invalid={formError?.startsWith('Valor USD') || undefined}
+                  aria-describedby={formError ? 'exchange-form-error' : undefined}
                   placeholder="0.00"
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
@@ -294,8 +316,15 @@ export function CurrencyExchangePage() {
                   id="exchange-rate"
                   type="number"
                   step="0.0001"
+                  min="0.0001"
+                  inputMode="decimal"
                   value={form.exchangeRate}
-                  onChange={(e) => setForm({ ...form, exchangeRate: e.target.value })}
+                  onChange={(e) => {
+                    setFormError(null);
+                    setForm({ ...form, exchangeRate: e.target.value });
+                  }}
+                  aria-invalid={formError?.startsWith('Taxa') || undefined}
+                  aria-describedby={formError ? 'exchange-form-error' : undefined}
                   placeholder="0.0000"
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
@@ -324,7 +353,11 @@ export function CurrencyExchangePage() {
                   id="exchange-payment-deadline"
                   type="date"
                   value={form.paymentDeadline}
-                  onChange={(e) => setForm({ ...form, paymentDeadline: e.target.value })}
+                  onChange={(e) => {
+                    setFormError(null);
+                    setForm({ ...form, paymentDeadline: e.target.value });
+                  }}
+                  aria-describedby={formError ? 'exchange-form-error' : undefined}
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
@@ -340,7 +373,12 @@ export function CurrencyExchangePage() {
                   id="exchange-expiration"
                   type="date"
                   value={form.expirationDate}
-                  onChange={(e) => setForm({ ...form, expirationDate: e.target.value })}
+                  onChange={(e) => {
+                    setFormError(null);
+                    setForm({ ...form, expirationDate: e.target.value });
+                  }}
+                  aria-invalid={formError?.startsWith('Data de expiracao') || undefined}
+                  aria-describedby={formError ? 'exchange-form-error' : undefined}
                   className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
                   required
                 />
@@ -362,11 +400,21 @@ export function CurrencyExchangePage() {
                 />
               </div>
             </div>
+            {formError && (
+              <div
+                id="exchange-form-error"
+                role="alert"
+                className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700"
+              >
+                {formError}
+              </div>
+            )}
             <div className="mt-5 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-700 pt-5">
               <button
                 type="button"
                 onClick={() => {
                   setShowForm(false);
+                  setFormError(null);
                   setForm(emptyForm);
                 }}
                 className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900"

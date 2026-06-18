@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useId } from 'react';
 import { Upload, CheckCircle, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/lib/utils';
@@ -20,7 +20,9 @@ const FILE_TYPES = [
 ] as const;
 
 const ACCEPT =
-  '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.html,.htm,.eml';
+  '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.eml';
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const ALLOWED_EXTENSIONS = ACCEPT.split(',');
 
 function detectDocType(filename: string): string {
   const lower = filename.toLowerCase();
@@ -41,6 +43,7 @@ type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 export function DocumentUpload({ processId }: DocumentUploadProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
   const [docType, setDocType] = useState<string>('invoice');
   const [dragOver, setDragOver] = useState(false);
   const [state, setState] = useState<UploadState>('idle');
@@ -108,9 +111,29 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
     [docType, processId, queryClient],
   );
 
+  const validateFile = (file: File): string | null => {
+    if (file.size > MAX_FILE_SIZE) {
+      return `Arquivo acima do limite de ${formatFileSize(MAX_FILE_SIZE)}.`;
+    }
+    const lowerName = file.name.toLowerCase();
+    const hasAllowedExtension = ALLOWED_EXTENSIONS.some((ext) => lowerName.endsWith(ext));
+    if (!hasAllowedExtension) {
+      return 'Tipo de arquivo nao permitido para upload.';
+    }
+    return null;
+  };
+
   const handleFiles = (files: FileList | null) => {
+    if (state === 'uploading') return;
     if (!files || files.length === 0) return;
     const file = files[0];
+    const validationError = validateFile(file);
+    if (validationError) {
+      setSelectedFile(file);
+      setError(validationError);
+      setState('error');
+      return;
+    }
     // Auto-detect doc type from filename
     const detected = detectDocType(file.name);
     if (detected !== 'other') {
@@ -121,6 +144,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    if (state === 'uploading') return;
     setDragOver(false);
     handleFiles(e.dataTransfer.files);
   };
@@ -154,36 +178,47 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
       </div>
 
       {/* Drop zone */}
-      <div
+      <input
+        id={inputId}
+        ref={fileInputRef}
+        type="file"
+        accept={ACCEPT}
+        onChange={(e) => handleFiles(e.target.files)}
+        className="sr-only"
+        aria-label="Selecionar documento para upload"
+        tabIndex={-1}
+      />
+      <button
+        type="button"
         onDragOver={(e) => {
           e.preventDefault();
+          if (state === 'uploading') return;
           setDragOver(true);
         }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => {
+        onClick={(e) => {
+          if (state === 'uploading') {
+            e.preventDefault();
+            return;
+          }
           if (state === 'error') reset();
-          if (state !== 'uploading') fileInputRef.current?.click();
+          fileInputRef.current?.click();
         }}
+        aria-describedby={`${inputId}-description ${inputId}-status`}
+        aria-busy={state === 'uploading'}
+        aria-disabled={state === 'uploading'}
         className={cn(
-          'relative cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200',
+          'relative w-full rounded-xl border-2 border-dashed text-left transition-all duration-200',
           dragOver && 'border-primary-400 bg-primary-50 scale-[1.01]',
           state === 'idle' &&
             !dragOver &&
-            'border-slate-200 dark:border-slate-600 hover:border-primary-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
+            'cursor-pointer border-slate-200 dark:border-slate-600 hover:border-primary-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
           state === 'uploading' && 'border-primary-300 bg-primary-50/50 cursor-wait',
           state === 'success' && 'border-emerald-300 bg-emerald-50',
           state === 'error' && 'border-danger-300 bg-danger-50',
         )}
       >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPT}
-          onChange={(e) => handleFiles(e.target.files)}
-          className="hidden"
-        />
-
         <div className="flex items-center gap-4 px-5 py-4">
           {/* Icon */}
           <div
@@ -208,14 +243,14 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Arraste ou clique para enviar
                 </p>
-                <p className="text-xs text-slate-400">
-                  PDF, Excel, Word, Imagens, CSV, HTML, EML — máx. 50MB
+                <p id={`${inputId}-description`} className="text-xs text-slate-400">
+                  PDF, Excel, Word, imagens, CSV, TXT, EML - max. 50MB
                 </p>
               </>
             )}
 
             {state === 'uploading' && selectedFile && (
-              <>
+              <div id={`${inputId}-status`} role="status" aria-live="polite">
                 <div className="flex items-center gap-2">
                   <FileText className="h-3.5 w-3.5 text-primary-500" />
                   <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -226,7 +261,14 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-100">
+                  <div
+                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-100"
+                    role="progressbar"
+                    aria-label="Progresso do upload"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={progress}
+                  >
                     <div
                       className="h-full rounded-full bg-primary-500 transition-all duration-300"
                       style={{ width: `${progress}%` }}
@@ -234,23 +276,23 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                   </div>
                   <span className="text-xs font-medium text-primary-600">{progress}%</span>
                 </div>
-              </>
+              </div>
             )}
 
             {state === 'success' && selectedFile && (
-              <>
+              <div id={`${inputId}-status`} role="status" aria-live="polite">
                 <p className="text-sm font-medium text-emerald-700">
                   {selectedFile.name} enviado com sucesso
                 </p>
                 <p className="text-xs text-emerald-500">IA processando em background...</p>
-              </>
+              </div>
             )}
 
             {state === 'error' && (
-              <>
+              <div id={`${inputId}-status`} role="alert">
                 <p className="text-sm font-medium text-danger-700">{error || 'Erro no upload'}</p>
                 <p className="text-xs text-danger-400">Clique para tentar novamente</p>
-              </>
+              </div>
             )}
           </div>
 
@@ -259,7 +301,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             {FILE_TYPES.find((ft) => ft.value === docType)?.label}
           </span>
         </div>
-      </div>
+      </button>
     </div>
   );
 }

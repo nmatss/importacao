@@ -76,6 +76,18 @@ const inputClasses =
   'w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 placeholder:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 const labelClasses =
   'block text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider';
+const textareaClasses = cn(inputClasses, 'min-h-28 resize-y leading-relaxed');
+
+function parseEmailList(value: string) {
+  return value
+    .split(/[;,\r\n]/)
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+function invalidEmailListItems(value: string) {
+  return parseEmailList(value).filter((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+}
 
 export function SettingsPage() {
   const { user } = useAuth();
@@ -215,10 +227,15 @@ function GeneralTab() {
   const [smtpPort, setSmtpPort] = useState('');
   const [smtpUser, setSmtpUser] = useState('');
   const [smtpFrom, setSmtpFrom] = useState('');
+  const [kiomEmail, setKiomEmail] = useState('');
+  const [feniciaEmail, setFeniciaEmail] = useState('');
+  const [isaEmail, setIsaEmail] = useState('');
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
+  const [savingRecipients, setSavingRecipients] = useState(false);
   const [savedWebhook, setSavedWebhook] = useState(false);
   const [savedSmtp, setSavedSmtp] = useState(false);
+  const [savedRecipients, setSavedRecipients] = useState(false);
 
   const { data: webhookSetting } = useApiQuery<SettingValue>(
     settingsKeys.webhook(),
@@ -228,6 +245,11 @@ function GeneralTab() {
   const { data: smtpSettings } = useApiQuery<SettingValue[]>(
     settingsKeys.smtp(),
     '/api/settings/smtp',
+  );
+
+  const { data: recipientSettings } = useApiQuery<SettingValue[]>(
+    settingsKeys.recipients(),
+    '/api/settings/recipients',
   );
 
   useEffect(() => {
@@ -244,6 +266,16 @@ function GeneralTab() {
       }
     }
   }, [smtpSettings]);
+
+  useEffect(() => {
+    if (recipientSettings && Array.isArray(recipientSettings)) {
+      for (const s of recipientSettings) {
+        if (s.key === 'kiom_email') setKiomEmail(s.value || '');
+        if (s.key === 'fenicia_email') setFeniciaEmail(s.value || '');
+        if (s.key === 'isa_email') setIsaEmail(s.value || '');
+      }
+    }
+  }, [recipientSettings]);
 
   const handleSaveWebhook = useCallback(async () => {
     setSavingWebhook(true);
@@ -275,6 +307,34 @@ function GeneralTab() {
       setSavingSmtp(false);
     }
   }, [smtpHost, smtpPort, smtpUser, smtpFrom]);
+
+  const handleSaveRecipients = useCallback(async () => {
+    const invalidItems = [
+      ...invalidEmailListItems(kiomEmail),
+      ...invalidEmailListItems(feniciaEmail),
+      ...invalidEmailListItems(isaEmail),
+    ];
+
+    if (invalidItems.length > 0) {
+      toast.error(`E-mail inválido: ${invalidItems[0]}`);
+      return;
+    }
+
+    setSavingRecipients(true);
+    try {
+      await api.put('/api/settings/recipients', {
+        kiom_email: kiomEmail,
+        fenicia_email: feniciaEmail,
+        isa_email: isaEmail,
+      });
+      setSavedRecipients(true);
+      setTimeout(() => setSavedRecipients(false), 2000);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSavingRecipients(false);
+    }
+  }, [kiomEmail, feniciaEmail, isaEmail]);
 
   return (
     <div className="space-y-6">
@@ -362,6 +422,67 @@ function GeneralTab() {
             </div>
           </div>
           <SaveButton onClick={handleSaveSmtp} saving={savingSmtp} saved={savedSmtp} />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        icon={Users}
+        title="Destinatarios operacionais"
+        description="Listas usadas nos rascunhos e envios automaticos"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="min-w-0">
+              <label htmlFor="kiom-email" className={labelClasses}>
+                KIOM
+              </label>
+              <textarea
+                id="kiom-email"
+                value={kiomEmail}
+                onChange={(e) => setKiomEmail(e.target.value)}
+                placeholder="contact@kiomglobal.com"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(kiomEmail).length} destinatário(s)
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="fenicia-email" className={labelClasses}>
+                Fenicia
+              </label>
+              <textarea
+                id="fenicia-email"
+                value={feniciaEmail}
+                onChange={(e) => setFeniciaEmail(e.target.value)}
+                placeholder="bruna@feniciacomex.com.br, fenicia.fin@feniciacomex.com.br"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(feniciaEmail).length} destinatário(s)
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="isa-email" className={labelClasses}>
+                ISA
+              </label>
+              <textarea
+                id="isa-email"
+                value={isaEmail}
+                onChange={(e) => setIsaEmail(e.target.value)}
+                placeholder="email@dominio.com"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(isaEmail).length} destinatário(s)
+              </p>
+            </div>
+          </div>
+          <SaveButton
+            onClick={handleSaveRecipients}
+            saving={savingRecipients}
+            saved={savedRecipients}
+          />
         </div>
       </SectionCard>
     </div>
@@ -536,6 +657,9 @@ function UsersTab() {
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                       <button
+                        type="button"
+                        role="switch"
+                        aria-checked={user.active}
                         onClick={() => toggleActive(user)}
                         aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
                         className={cn(
