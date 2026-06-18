@@ -778,6 +778,9 @@ Correcoes aplicadas:
 - Validacao de fabricante passou a usar sufixos de descricao da invoice como
   fallback conservador (`--FINE TEXTILE`, `--A&C`) e rejeitar sufixos genericos
   como FOC/amostra.
+- Validacao de datas passou a usar `skipped` quando existe zero ou apenas uma
+  data logistica, evitando atencao falsa quando nao ha contraparte documental
+  para comparar.
 
 Verificacoes executadas:
 

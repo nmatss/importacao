@@ -25,6 +25,16 @@ describe('dates-match check', () => {
     expect(result.message).toContain('invoice nao foi usada');
   });
 
+  it('skips when only one document has a shipment date', () => {
+    const result = datesMatch({
+      invoiceData: { invoiceDate: '2026-06-01' },
+      blData: { shippedOnBoardDate: '2026-06-21' },
+    });
+
+    expect(result.status).toBe('skipped');
+    expect(result.message).toContain('apenas em BL');
+  });
+
   it('warns for small shipment date differences and fails only for relevant divergence', () => {
     const warning = datesMatch({
       invoiceData: { shipmentDate: '2026-06-01' },

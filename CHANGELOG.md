@@ -120,6 +120,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Validacao de fabricante passou a reconhecer fabricantes no sufixo da
   descricao do item da invoice (`--FINE TEXTILE`, `--A&C`) sem aceitar sufixos
   genericos como FOC/amostra.
+- Validacao de datas logisticas agora fica como `skipped` quando ha zero ou
+  apenas uma data de ETD/embarque, reservando `warning`/`failed` para casos com
+  contraparte real para comparar.
 - Modal do e-mail de correcao agora recebe foco inicial no destinatario, fecha
   por Escape, mantem Tab dentro do dialogo e devolve foco ao botao de origem.
 - Geracao manual de e-mail de correcao agora reusa rascunho KIOM aberto do

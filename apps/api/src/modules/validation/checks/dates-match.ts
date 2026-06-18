@@ -92,7 +92,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
   if (present.length === 0 && invoiceDateIgnored) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       documentsCompared: 'INV vs PL vs BL',
       message:
         'A invoice possui apenas data de emissao; nenhuma data de ETD ou embarque foi encontrada para comparar.',
@@ -102,7 +102,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
   if (present.length === 0) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       documentsCompared: 'INV vs PL vs BL',
       message: 'Nenhuma data de ETD ou embarque encontrada nos documentos.',
     };
@@ -111,7 +111,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
   if (present.length === 1) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       expectedValue: present[0].value,
       actualValue: present[0].value,
       documentsCompared: 'INV vs PL vs BL',
