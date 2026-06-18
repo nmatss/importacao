@@ -48,6 +48,8 @@ Pendencia externa:
 
 - Configurar `GOOGLE_DRIVE_ROOT_FOLDER_ID` real no SOPS/env de producao para
   reativar backup/movimentacao automatica no Drive.
+- Validar/rotacionar `GOOGLE_CHAT_WEBHOOK_URL`: envio de resumo de validacao
+  retornou HTTP 400 no pós-deploy, sem afetar extracao/comparativo.
 
 ## 2026-06-18 - Modulo SYDLE De Compras E Pagamentos Internacionais
 

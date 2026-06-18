@@ -105,6 +105,33 @@ Status:
 - Aberto. Requer preencher `GOOGLE_DRIVE_ROOT_FOLDER_ID` real no SOPS/env de
   producao e compartilhar a pasta com a service account do Drive.
 
+## BAIXO - Webhook Do Google Chat Retorna 400
+
+Descricao:
+
+- Em 2026-06-18, apos reprocessamento/validacao do processo demo `264`, o
+  envio de resumo para Google Chat retornou HTTP 400.
+- `GOOGLE_CHAT_WEBHOOK_URL` está configurado e aponta para domínio Google, mas
+  o destino rejeitou a mensagem.
+
+Evidencias:
+
+- Log da API: `Google Chat webhook failed`, `status=400`.
+- `apps/api/src/modules/alerts/google-chat.service.ts`
+- `apps/api/src/modules/validation/service.ts`
+
+Impacto:
+
+- Extração, validação, comparativo, e-mails e alertas internos continuam
+  funcionando.
+- Notificações externas no Google Chat podem não chegar até corrigir o webhook
+  ou o formato permitido pelo espaço.
+
+Status:
+
+- Aberto. Requer validar/rotacionar o webhook do espaço Google Chat e testar
+  envio real.
+
 ## MEDIO - Validacao Usa `ohbl` Como BL Principal
 
 Descricao:
