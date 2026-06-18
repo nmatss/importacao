@@ -781,10 +781,14 @@ Correcoes aplicadas:
 - Validacao de datas passou a usar `skipped` quando existe zero ou apenas uma
   data logistica, evitando atencao falsa quando nao ha contraparte documental
   para comparar.
+- Extração IA documental passou a ter timeout global
+  `DOCUMENT_AI_EXTRACTION_TIMEOUT_MS` (default 180s), para transformar OCR/IA
+  pendurado em falha operacional explicita em vez de spinner indefinido.
 
 Verificacoes executadas:
 
 - `npm test -w apps/api -- src/modules/validation/utils/__tests__/item-code-normalize.test.ts src/modules/validation/checks/__tests__/item-level-match.test.ts src/modules/validation/checks/__tests__/unit-type-validation.test.ts src/modules/validation/checks/__tests__/manufacturer-completeness.test.ts`
+- `npm test -w apps/api -- src/modules/documents/__tests__/process-with-ai-resilience.test.ts src/modules/documents/__tests__/service.test.ts`
 - `npm test -w apps/api -- src/modules/validation`
 - `npm run -w apps/api typecheck`
 - `npm run -w apps/web typecheck`

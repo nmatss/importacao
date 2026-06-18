@@ -96,6 +96,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Enfileiramento de `ai-extraction` agora cai para processamento in-process
   quando o `pg-boss` nao devolve ID de job, evitando documentos presos ate o
   timeout operacional.
+- Extração IA de documentos ganhou timeout global configuravel por
+  `DOCUMENT_AI_EXTRACTION_TIMEOUT_MS` (padrao 180s), marcando falha explicita
+  quando OCR/IA fica pendurado e evitando spinner indefinido.
 - Google Drive passou a diferenciar credenciais configuradas de pasta raiz
   configurada: `GOOGLE_DRIVE_ROOT_FOLDER_ID=your-root-folder-id` e tratado como
   desconfigurado, pulando upload/movimentacao automáticos sem erro em cascata.

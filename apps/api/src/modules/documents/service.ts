@@ -186,6 +186,39 @@ const PROCESSING_STALE_MS =
   Number.isFinite(processingStaleMinutes) && processingStaleMinutes > 0
     ? processingStaleMinutes * 60 * 1000
     : DEFAULT_PROCESSING_STALE_MINUTES * 60 * 1000;
+const DEFAULT_AI_EXTRACTION_TIMEOUT_MS = 180_000;
+
+function aiExtractionTimeoutMs(): number {
+  const configured = Number(process.env.DOCUMENT_AI_EXTRACTION_TIMEOUT_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_AI_EXTRACTION_TIMEOUT_MS;
+}
+
+async function withAIExtractionTimeout<T>(
+  promise: Promise<T>,
+  context: { documentId: number; type: string },
+): Promise<T> {
+  const timeoutMs = aiExtractionTimeoutMs();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(
+            new Error(
+              `Tempo limite operacional de extração IA excedido (${timeoutMs}ms) para documento ${context.documentId} (${context.type})`,
+            ),
+          );
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
 
 function hasExtractionFailureData(aiParsedData: unknown): boolean {
   if (!isRecord(aiParsedData)) return false;
@@ -651,28 +684,36 @@ export const documentService = {
         : undefined;
 
       const text = extracted.text;
+      const runExtraction = async () => {
+        switch (type) {
+          case 'invoice':
+            return aiService.extractInvoiceData(text, extractionOpts);
+          case 'proforma_invoice':
+            return aiService.extractProformaData(text, extractionOpts);
+          case 'packing_list':
+            return aiService.extractPackingListData(text, extractionOpts);
+          case 'ohbl':
+            return aiService.extractBLData(text, extractionOpts);
+          case 'draft_bl':
+            return aiService.extractDraftBLData(text, extractionOpts);
+          case 'certificate':
+            return aiService.extractCertificateData(text, extractionOpts);
+          case 'li':
+            return aiService.extractLIData(text, extractionOpts);
+          default:
+            throw new Error(`Tipo de documento sem extractor dedicado: ${type}`);
+        }
+      };
 
       switch (type) {
         case 'invoice':
-          result = await aiService.extractInvoiceData(text, extractionOpts);
-          break;
         case 'proforma_invoice':
-          result = await aiService.extractProformaData(text, extractionOpts);
-          break;
         case 'packing_list':
-          result = await aiService.extractPackingListData(text, extractionOpts);
-          break;
         case 'ohbl':
-          result = await aiService.extractBLData(text, extractionOpts);
-          break;
         case 'draft_bl':
-          result = await aiService.extractDraftBLData(text, extractionOpts);
-          break;
         case 'certificate':
-          result = await aiService.extractCertificateData(text, extractionOpts);
-          break;
         case 'li':
-          result = await aiService.extractLIData(text, extractionOpts);
+          result = await withAIExtractionTimeout(runExtraction(), { documentId, type });
           break;
         default: {
           // Do NOT silent-drop — previously `li` and `other` fell through here

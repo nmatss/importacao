@@ -21,6 +21,7 @@ vi.mock('../../alerts/service.js', () => ({
 const extractInvoiceData = vi.fn();
 const extractPackingListData = vi.fn();
 const extractEspelhoData = vi.fn();
+const extractProformaData = vi.fn();
 vi.mock('../../ai/service.js', async () => {
   const { AIBudgetExceededError } = await import('../../ai/cost-pricing.js');
   return {
@@ -30,6 +31,7 @@ vi.mock('../../ai/service.js', async () => {
       extractInvoiceData,
       extractPackingListData,
       extractEspelhoData,
+      extractProformaData,
     },
   };
 });
@@ -86,6 +88,8 @@ describe('processWithAI — extraction failure resilience', () => {
     delete process.env.ESPELHO_AI_FALLBACK;
     delete process.env.AI_PROVIDER;
     delete process.env.AI_ALLOW_EXTERNAL;
+    delete process.env.DOCUMENT_AI_EXTRACTION_TIMEOUT_MS;
+    vi.useRealTimers();
   });
 
   it('marks document as extractionFailed and raises a critical alert when extraction throws', async () => {
@@ -245,6 +249,45 @@ describe('processWithAI — extraction failure resilience', () => {
           extractionFailed: true,
           reason: expect.stringContaining('ENOENT'),
         }),
+        isProcessed: true,
+      }),
+    );
+  });
+
+  it('marks document as failed when AI extraction exceeds the operational timeout', async () => {
+    vi.useFakeTimers();
+    process.env.DOCUMENT_AI_EXTRACTION_TIMEOUT_MS = '10';
+    extractInvoiceData.mockReturnValueOnce(new Promise(() => {}));
+
+    const doc = {
+      id: 14,
+      processId: 45,
+      type: 'invoice',
+      storagePath: '/tmp/slow-inv.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'slow-inv.pdf',
+    };
+
+    queryQueue.push(createResolvedChain([doc]));
+    const failUpdate = createResolvedChain(undefined);
+    queryQueue.push(failUpdate);
+    queryQueue.push(createResolvedChain([{ processCode: 'IMP-045' }]));
+    queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
+
+    const processing = documentService.processWithAI(14, 'invoice');
+    await vi.advanceTimersByTimeAsync(11);
+    await processing;
+
+    expect(failUpdate.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiParsedData: expect.objectContaining({
+          extractionFailed: true,
+          reason: expect.stringContaining('Tempo limite operacional de extração IA excedido'),
+        }),
+        confidenceScore: '0',
         isProcessed: true,
       }),
     );

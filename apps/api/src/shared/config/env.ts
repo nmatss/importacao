@@ -69,6 +69,7 @@ const envSchema = z
     // the HTTP request, so it gets a much larger ceiling.
     AI_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     AI_LOCAL_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+    DOCUMENT_AI_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
 
     // Vertex AI (Google self-hosted provider). Credentials fall back to GOOGLE_DRIVE_* if unset.
     GOOGLE_VERTEX_PROJECT: z.string().optional(),
