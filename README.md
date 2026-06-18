@@ -36,7 +36,7 @@ Browser ──> Nginx (Web)
               ├── /api/* ──────────> Node API ──> PostgreSQL
               │                        ├──> Redis (cache + filas)
               │                        ├──> pg-boss (job queue)
-              │                        └──> OpenRouter AI
+              │                        └──> IA_LOCAL / DocIntel
               ├── /cert-api/* ─────> Cert API ──> PostgreSQL
               │                         ├──> Google Sheets
               │                         └──> VTEX API (tempo real)
@@ -175,8 +175,9 @@ Event emitter tipado com 6 tipos de eventos:
 ### AI Governance
 
 - Logging de todas as requisicoes AI (latencia, modelo, status) com flag `aiGovernance` no Pino
-- Schemas Zod para validacao de respostas AI
-- Fallback chain entre modelos (gemini-flash <-> claude-sonnet)
+- Provider padrao em producao: `AI_PROVIDER=ialocal` com `AI_ALLOW_EXTERNAL=false`
+- Providers externos (`vertex`, `openrouter`) exigem opt-in explicito via `AI_ALLOW_EXTERNAL=true`
+- Schemas Zod validam respostas AI; falha de schema no caminho permissivo rebaixa confianca/gera revisao operacional
 - Regex-first em email ingestion (skip AI quando regex resolve)
 - Prompt versioning para rastreabilidade
 
@@ -195,16 +196,16 @@ Hierarquia de erros tipados com dispatch automatico no error handler:
 
 ## Integracoes
 
-| Servico           | Uso                                                         |
-| ----------------- | ----------------------------------------------------------- |
-| **Google OAuth**  | Autenticacao de usuarios (restrito por dominio/grupo)       |
-| **Google Drive**  | Armazenamento de documentos                                 |
-| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync            |
-| **Gmail API**     | Ingestao automatica de emails                               |
-| **VTEX API**      | Verificacao de certificacoes em tempo real                  |
-| **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                |
-| **OpenRouter**    | Analise de documentos com IA (Gemini Flash + Claude Sonnet) |
-| **Redis**         | Cache e rate limiting                                       |
+| Servico           | Uso                                                               |
+| ----------------- | ----------------------------------------------------------------- |
+| **Google OAuth**  | Autenticacao de usuarios (restrito por dominio/grupo)             |
+| **Google Drive**  | Armazenamento de documentos                                       |
+| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync                  |
+| **Gmail API**     | Ingestao automatica de emails                                     |
+| **VTEX API**      | Verificacao de certificacoes em tempo real                        |
+| **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                      |
+| **IA_LOCAL**      | Analise de documentos com DocIntel on-prem, sem egress por padrao |
+| **Redis**         | Cache e rate limiting                                             |
 
 ## Variaveis de Ambiente
 
@@ -217,7 +218,7 @@ Copie `.env.example` para `.env` e configure:
 | **Google**      | `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_ADMIN_EMAIL` |
 | **Email**       | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`                            |
 | **VTEX/Sheets** | `GOOGLE_SHEETS_SPREADSHEET_ID`                                                |
-| **IA**          | `OPENROUTER_API_KEY`                                                          |
+| **IA**          | `AI_PROVIDER`, `AI_ALLOW_EXTERNAL`, `IA_LOCAL_BASE_URL`, `IA_LOCAL_API_KEY`   |
 | **Odoo**        | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD`                           |
 | **Redis**       | `REDIS_URL`                                                                   |
 
@@ -240,7 +241,7 @@ PostgreSQL 16 com schema gerenciado pelo Drizzle ORM (API Node) e tabelas adicio
 - Compostos: `(status, brand)`, `(status, updated_at)`, `(process_id, status, resolved_manually)`, `(process_id, type)`
 - Trigram GIN: `process_code` para buscas ILIKE performaticas
 - Unique: `(process_id, version, is_partial)` em espelhos
-- ON DELETE CASCADE/SET NULL em todas as FKs
+- FKs com `ON DELETE CASCADE/SET NULL` onde explicitamente definido no schema
 
 ### Migracoes
 

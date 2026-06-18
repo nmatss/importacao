@@ -1,5 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { randomUUID } from 'crypto';
 import { fileTypeFromBuffer } from 'file-type';
 import { eq, desc, count, sql, ilike, and, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
@@ -1007,7 +1008,7 @@ export const emailProcessor = {
           }
 
           await fs.mkdir(UPLOAD_DIR, { recursive: true });
-          const safeName = `${Date.now()}-${att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const safeName = `${Date.now()}-${randomUUID()}-${att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
           const filePath = path.join(UPLOAD_DIR, safeName);
           await fs.writeFile(filePath, att.content);
 

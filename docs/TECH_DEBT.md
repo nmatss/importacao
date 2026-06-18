@@ -12,13 +12,22 @@ Ultima atualizacao: 2026-06-18
   `allChecks`.
 - Persistir contrato relacional para aceite do comparativo, em vez de depender apenas de evento de timeline.
 - Ao revalidar, definir se aceites manuais devem sobreviver ao novo run quando a divergencia persistir.
+- Fortalecer E2E do fluxo documental com upload multipart real, magic-byte
+  negativo, preview/download, permissao admin para reprocess/delete, processo
+  travado e validacao ponta a ponta usando as rotas reais.
 
 ## IA E Extracao
 
 - Unificar helpers de `parseNumber`, `parseDate`, FOC e normalizacao entre parsers, harness, validation e anomalies.
 - Documentar a decisao final de provider: IA local, Vertex ou estrategia hibrida.
-- Atualizar docs historicos que ainda descrevem Vertex como estado atual quando for decidido o padrao definitivo.
 - Revisar latencia e timeout do provider local em CPU.
+- Decidir contrato final para falha de schema Zod da IA: manter fallback
+  permissivo com trust downgrade explicito ou tornar extracao estrita por tipo
+  de documento.
+- Implementar classificador por conteudo para anexos genericos de e-mail que
+  hoje chegam como `other` quando nome/contexto nao resolvem tipo.
+- Deduplicar reprocessamentos concorrentes com update condicional atomico,
+  `SELECT FOR UPDATE` ou singleton por `documentId` na fila.
 
 ## Banco E Dados
 
@@ -68,6 +77,12 @@ Concluido em 2026-06-18:
   tema) nos filtros/toggles visuais revisados.
 - Upload de documentos acessivel com validacao client-side de extensao/tamanho e
   progresso semantico.
+- Upload/reprocess/delete de documentos respeitam processo travado; extracoes
+  com confianca menor que 40% ficam como evidencia, sem projecao operacional
+  para validacao/espelho; comparativo e validacao usam documento vigente,
+  processado, nao falho e acima do piso de confianca.
+- Runbook/README reconciliados com `AI_PROVIDER=ialocal`, egress externo por
+  opt-in e rollback rsync/snapshot sem `git checkout` no servidor.
 - Rotas internas invalidas com fallback contextual em Importacao/Certificacoes.
 - Linhas navegaveis por teclado nas tabelas operacionais revisadas.
 - Validacao positiva/coerente em processos, cambios e cron de agendamentos.

@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useId } from 'react';
 import { Upload, CheckCircle, FileText, Loader2, AlertCircle } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/lib/utils';
+import { invalidateDocumentWorkflow } from './queryInvalidation';
 
 interface DocumentUploadProps {
   processId: string;
@@ -20,8 +21,9 @@ const FILE_TYPES = [
 ] as const;
 
 const ACCEPT =
-  '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.eml';
+  '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.eml,.msg';
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 45_000;
 const ALLOWED_EXTENSIONS = ACCEPT.split(',');
 
 function detectDocType(filename: string): string {
@@ -46,6 +48,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
   const inputId = useId();
   const [docType, setDocType] = useState<string>('invoice');
   const [dragOver, setDragOver] = useState(false);
+  const [typeTouched, setTypeTouched] = useState(false);
   const [state, setState] = useState<UploadState>('idle');
   const [progress, setProgress] = useState(0);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -69,6 +72,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${baseUrl}/api/documents/upload`);
+        xhr.timeout = UPLOAD_TIMEOUT_MS;
         if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
 
         xhr.upload.onprogress = (e) => {
@@ -82,7 +86,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             if (xhr.status >= 200 && xhr.status < 300) {
               setState('success');
               if (fileInputRef.current) fileInputRef.current.value = '';
-              queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+              void invalidateDocumentWorkflow(queryClient, processId);
               // Auto-reset after 3s
               setTimeout(() => {
                 setState('idle');
@@ -101,6 +105,9 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
             }
           };
           xhr.onerror = () => reject(new Error('Erro de rede'));
+          xhr.ontimeout = () =>
+            reject(new Error('Tempo limite no upload. Verifique a conexão e tente novamente.'));
+          xhr.onabort = () => reject(new Error('Upload cancelado.'));
           xhr.send(formData);
         });
       } catch (err) {
@@ -136,10 +143,11 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
     }
     // Auto-detect doc type from filename
     const detected = detectDocType(file.name);
-    if (detected !== 'other') {
+    const effectiveDocType = !typeTouched && detected !== 'other' ? detected : docType;
+    if (!typeTouched && detected !== 'other') {
       setDocType(detected);
     }
-    upload(file, detected !== 'other' ? detected : docType);
+    upload(file, effectiveDocType);
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -164,7 +172,12 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           <button
             key={ft.value}
             type="button"
-            onClick={() => setDocType(ft.value)}
+            onClick={() => {
+              setDocType(ft.value);
+              setTypeTouched(true);
+            }}
+            aria-pressed={docType === ft.value}
+            disabled={state === 'uploading'}
             className={cn(
               'rounded-full px-3 py-1 text-xs font-medium transition-all',
               docType === ft.value
@@ -244,7 +257,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                   Arraste ou clique para enviar
                 </p>
                 <p id={`${inputId}-description`} className="text-xs text-slate-400">
-                  PDF, Excel, Word, imagens, CSV, TXT, EML - max. 50MB
+                  PDF, Excel, Word, imagens, CSV, TXT, EML/MSG - max. 50MB
                 </p>
               </>
             )}

@@ -17,12 +17,14 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { AiExtractionSummary } from './AiExtractionSummary';
+import { invalidateDocumentWorkflow } from './queryInvalidation';
 
 interface Document {
   id: number;
@@ -109,8 +111,25 @@ function AiStatus({ status }: { status: Document['aiProcessingStatus'] }) {
   }
 }
 
+function extractionFailureMessage(doc: Document): string | null {
+  if (doc.aiProcessingStatus !== 'failed') return null;
+  const data = doc.aiParsedData;
+  if (!data || typeof data !== 'object') {
+    return 'Falha na extração. Reprocesse o documento ou revise o arquivo enviado.';
+  }
+  if (data.budgetExceeded) {
+    return 'Orçamento de IA indisponível no momento. Reprocesse após a normalização do provedor.';
+  }
+  const detail = data.reason ?? data.error ?? data.message;
+  return detail
+    ? `Falha na extração: ${String(detail).slice(0, 180)}`
+    : 'Falha na extração. Reprocesse o documento ou revise o arquivo enviado.';
+}
+
 export function DocumentList({ processId }: DocumentListProps) {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const canManageDocuments = user?.role === 'admin';
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
@@ -152,12 +171,8 @@ export function DocumentList({ processId }: DocumentListProps) {
     }
   };
 
-  const openOrDownload = async (
-    docId: number,
-    filename: string | undefined,
-    mode: 'open' | 'download',
-  ) => {
-    const actionKey = `${docId}:${mode}`;
+  const openOrDownload = async (doc: Document, mode: 'open' | 'download') => {
+    const actionKey = `${doc.id}:${mode}`;
     if (activeFileAction) return;
     setActiveFileAction(actionKey);
     const token = localStorage.getItem('importacao_token');
@@ -165,7 +180,7 @@ export function DocumentList({ processId }: DocumentListProps) {
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 45_000);
     try {
-      const url = `${baseUrl}/api/documents/${docId}/file${mode === 'download' ? '?download=1' : ''}`;
+      const url = `${baseUrl}/api/documents/${doc.id}/file${mode === 'download' ? '?download=1' : ''}`;
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         // Allow redirect to Google Drive when the local file is missing
@@ -182,7 +197,7 @@ export function DocumentList({ processId }: DocumentListProps) {
       if (mode === 'download') {
         const a = window.document.createElement('a');
         a.href = objectUrl;
-        a.download = filename || `documento-${docId}`;
+        a.download = doc.fileName || `documento-${doc.id}`;
         window.document.body.appendChild(a);
         a.click();
         a.remove();
@@ -191,6 +206,15 @@ export function DocumentList({ processId }: DocumentListProps) {
       }
       setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (err: any) {
+      if (doc.driveFileId) {
+        window.open(
+          `https://drive.google.com/file/d/${doc.driveFileId}/view`,
+          '_blank',
+          'noopener,noreferrer',
+        );
+        toast.info('Arquivo local indisponível. Abrindo cópia no Drive.');
+        return;
+      }
       toast.error(
         err?.name === 'AbortError'
           ? 'Tempo limite ao acessar documento. Tente baixar novamente ou abrir no Drive.'
@@ -217,7 +241,7 @@ export function DocumentList({ processId }: DocumentListProps) {
         throw new Error(body?.error || body?.message || 'Falha ao reprocessar documento');
       }
       toast.success('Reprocessamento iniciado');
-      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      void invalidateDocumentWorkflow(queryClient, processId);
     } catch (err: any) {
       toast.error(err.message || 'Erro ao reprocessar documento');
     } finally {
@@ -235,7 +259,7 @@ export function DocumentList({ processId }: DocumentListProps) {
       .then((res) => {
         if (!res.ok) throw new Error('Falha ao excluir documento');
         toast.success('Documento excluído');
-        queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+        void invalidateDocumentWorkflow(queryClient, processId);
         setDeleteTarget(null);
       })
       .catch((err: any) => {
@@ -293,7 +317,12 @@ export function DocumentList({ processId }: DocumentListProps) {
   // Status summary
   const totalDocs = visibleDocuments.length;
   const completedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'completed').length;
-  const hasAll3 = !!grouped['invoice'] && !!grouped['packing_list'] && !!grouped['ohbl'];
+  const failedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'failed').length;
+  const coreTypes = ['invoice', 'packing_list', 'ohbl'];
+  const hasAllCoreDocs = coreTypes.every((type) => Boolean(grouped[type]?.length));
+  const hasAllCoreExtracted = coreTypes.every((type) =>
+    (grouped[type] ?? []).some((doc) => doc.aiProcessingStatus === 'completed'),
+  );
 
   return (
     <>
@@ -306,12 +335,32 @@ export function DocumentList({ processId }: DocumentListProps) {
         <span className="text-xs text-slate-500 dark:text-slate-400">
           IA: {completedDocs}/{totalDocs} extraídos
         </span>
-        {hasAll3 && (
+        {failedDocs > 0 && (
           <>
             <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-              <CheckCircle className="h-3 w-3" />
-              INV + PL + BL completos
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600">
+              <AlertTriangle className="h-3 w-3" />
+              {failedDocs} com erro
+            </span>
+          </>
+        )}
+        {hasAllCoreDocs && (
+          <>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span
+              className={cn(
+                'inline-flex items-center gap-1 text-xs font-medium',
+                hasAllCoreExtracted ? 'text-emerald-600' : 'text-amber-600',
+              )}
+            >
+              {hasAllCoreExtracted ? (
+                <CheckCircle className="h-3 w-3" />
+              ) : (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              )}
+              {hasAllCoreExtracted
+                ? 'INV + PL + BL extraídos'
+                : 'INV + PL + BL recebidos, aguardando IA'}
             </span>
           </>
         )}
@@ -333,6 +382,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                 const opening = activeFileAction === `${doc.id}:open`;
                 const downloading = activeFileAction === `${doc.id}:download`;
                 const reprocessing = reprocessingId === doc.id;
+                const failureMessage = extractionFailureMessage(doc);
 
                 return (
                   <div
@@ -374,6 +424,25 @@ export function DocumentList({ processId }: DocumentListProps) {
                           <AiStatus status={doc.aiProcessingStatus} />
                           {doc.aiConfidence != null && <ConfidenceBadge value={doc.aiConfidence} />}
                         </div>
+                        {source && (
+                          <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {source.source === 'email' ? (
+                              <Mail className="h-3 w-3 shrink-0" />
+                            ) : (
+                              <Upload className="h-3 w-3 shrink-0" />
+                            )}
+                            <span className="truncate">
+                              {source.source === 'email'
+                                ? `E-mail${source.emailSubject ? `: ${source.emailSubject}` : ''}`
+                                : 'Upload manual'}
+                            </span>
+                          </div>
+                        )}
+                        {failureMessage && (
+                          <p className="mt-1 text-[11px] leading-4 text-danger-600">
+                            {failureMessage}
+                          </p>
+                        )}
                       </div>
 
                       {/* Actions - appear on hover */}
@@ -385,8 +454,20 @@ export function DocumentList({ processId }: DocumentListProps) {
                             fetchSource(doc.id);
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
-                          title="Ver origem"
-                          aria-label={`Ver origem de ${doc.fileName}`}
+                          title={
+                            source
+                              ? source.source === 'email'
+                                ? `E-mail${source.emailSubject ? `: ${source.emailSubject}` : ''}`
+                                : 'Upload manual'
+                              : 'Ver origem'
+                          }
+                          aria-label={
+                            source
+                              ? source.source === 'email'
+                                ? `Origem e-mail de ${doc.fileName}`
+                                : `Origem upload manual de ${doc.fileName}`
+                              : `Ver origem de ${doc.fileName}`
+                          }
                         >
                           {source ? (
                             source.source === 'email' ? (
@@ -407,7 +488,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openOrDownload(doc.id, doc.fileName, 'open');
+                            openOrDownload(doc, 'open');
                           }}
                           disabled={!!activeFileAction}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
@@ -425,7 +506,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            openOrDownload(doc.id, doc.fileName, 'download');
+                            openOrDownload(doc, 'download');
                           }}
                           disabled={!!activeFileAction}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
@@ -478,35 +559,39 @@ export function DocumentList({ processId }: DocumentListProps) {
                         )}
 
                         {/* Reprocess */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleReprocess(doc.id);
-                          }}
-                          disabled={!!reprocessingId}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
-                          title="Reprocessar IA"
-                          aria-label={`Reprocessar IA de ${doc.fileName}`}
-                        >
-                          {reprocessing ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-3.5 w-3.5" />
-                          )}
-                        </button>
+                        {canManageDocuments && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleReprocess(doc.id);
+                            }}
+                            disabled={!!reprocessingId}
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                            title="Reprocessar IA"
+                            aria-label={`Reprocessar IA de ${doc.fileName}`}
+                          >
+                            {reprocessing ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        )}
 
                         {/* Delete */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteTarget(doc);
-                          }}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
-                          title="Excluir"
-                          aria-label={`Excluir documento ${doc.fileName}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
+                        {canManageDocuments && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeleteTarget(doc);
+                            }}
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            title="Excluir"
+                            aria-label={`Excluir documento ${doc.fileName}`}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 

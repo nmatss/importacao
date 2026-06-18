@@ -19,6 +19,7 @@ vi.mock('../../alerts/service.js', () => ({
 // AIBudgetExceededError must be the real class so `instanceof` works in the
 // service catch block. extract* are stubbed per-test.
 const extractInvoiceData = vi.fn();
+const extractPackingListData = vi.fn();
 const extractEspelhoData = vi.fn();
 vi.mock('../../ai/service.js', async () => {
   const { AIBudgetExceededError } = await import('../../ai/cost-pricing.js');
@@ -27,6 +28,7 @@ vi.mock('../../ai/service.js', async () => {
     flattenAiData: (d: Record<string, any>) => d,
     aiService: {
       extractInvoiceData,
+      extractPackingListData,
       extractEspelhoData,
     },
   };
@@ -243,6 +245,49 @@ describe('processWithAI — extraction failure resilience', () => {
         expect.objectContaining({ id: 12, aiProcessingStatus: 'failed' }),
       ]),
     );
+  });
+
+  it('stores very-low-confidence extraction without projecting it into process data', async () => {
+    extractPackingListData.mockResolvedValueOnce({
+      data: { packingListNumber: 'PL-LOW' },
+      confidenceScore: 0.39,
+      fieldsWithLowConfidence: ['packingListNumber'],
+    });
+
+    const doc = {
+      id: 13,
+      processId: 45,
+      type: 'packing_list',
+      storagePath: '/tmp/pl.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'pl.pdf',
+    };
+
+    queryQueue.push(createResolvedChain([doc])); // select doc
+    const docUpdate = createResolvedChain(undefined);
+    queryQueue.push(docUpdate); // update document with evidence
+    queryQueue.push(createResolvedChain([{ processCode: 'IMP-045', aiExtractedData: {} }])); // alert/gate context
+
+    await documentService.processWithAI(13, 'packing_list');
+
+    expect(docUpdate.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiParsedData: { packingListNumber: 'PL-LOW' },
+        confidenceScore: '0.39',
+        isProcessed: true,
+      }),
+    );
+    expect(alertCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        processId: 45,
+        severity: 'critical',
+        title: 'Extração IA com Confiança Muito Baixa',
+      }),
+    );
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
   });
 });
 

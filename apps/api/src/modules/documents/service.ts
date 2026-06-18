@@ -23,7 +23,7 @@ import type { ProcessStatus } from '../../shared/state-machine/process-states.js
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { getQueue } from '../../shared/queue/index.js';
-import { normalizePort } from '../validation/utils/port-normalize.js';
+import { portsMatch as normalizedPortsMatch } from '../validation/utils/port-normalize.js';
 import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
 import { extractPartyParts } from '../validation/utils/party-extract.js';
 import { itemCodesMatch, cleanItemCodesInAiData } from '../validation/utils/item-code-normalize.js';
@@ -67,6 +67,7 @@ const PROJECTED_AI_DATA_KEYS = new Set([
   'certificate',
   'other',
 ]);
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -75,11 +76,20 @@ function isRecord(value: unknown): value is Record<string, any> {
 function shouldProjectAiData(
   type: string,
   aiParsedData: unknown,
+  confidenceScore?: string | number | null,
 ): aiParsedData is Record<string, any> {
   if (!PROJECTED_AI_DATA_KEYS.has(type) || !isRecord(aiParsedData)) return false;
   if (aiParsedData.extractionFailed || aiParsedData.skipped) return false;
+  if (!hasOperationalConfidence(confidenceScore)) return false;
   if (type === 'espelho' && hasFailedEspelhoExtraction(aiParsedData)) return false;
   return true;
+}
+
+function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
+  if (confidenceScore == null) return true;
+  const confidence =
+    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
+  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 function standardizeDocumentName(
@@ -146,6 +156,21 @@ function hasExtractionFailureData(aiParsedData: unknown): boolean {
   return Boolean(aiParsedData.extractionFailed || aiParsedData.error);
 }
 
+async function assertDocumentProcessNotLocked(processId: number) {
+  const [row] = await db
+    .select({ lockedAt: importProcesses.lockedAt, lockedReason: importProcesses.lockedReason })
+    .from(importProcesses)
+    .where(eq(importProcesses.id, processId))
+    .limit(1);
+  if (row?.lockedAt) {
+    const err: Error & { statusCode?: number } = new Error(
+      `Processo travado em ${row.lockedAt.toISOString()} (motivo: ${row.lockedReason ?? 'sem motivo registrado'}). Destrave antes de alterar documentos.`,
+    );
+    err.statusCode = 423;
+    throw err;
+  }
+}
+
 function isProcessingStale(updatedAt: Date | string | null | undefined): boolean {
   if (!updatedAt) return false;
   const timestamp = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
@@ -177,6 +202,7 @@ export const documentService = {
         type: documents.type,
         isProcessed: documents.isProcessed,
         aiParsedData: documents.aiParsedData,
+        confidenceScore: documents.confidenceScore,
       })
       .from(documents)
       .where(eq(documents.processId, processId))
@@ -187,7 +213,7 @@ export const documentService = {
       if (
         projected[doc.type] ||
         !doc.isProcessed ||
-        !shouldProjectAiData(doc.type, doc.aiParsedData)
+        !shouldProjectAiData(doc.type, doc.aiParsedData, doc.confidenceScore)
       ) {
         continue;
       }
@@ -256,6 +282,13 @@ export const documentService = {
     file: Express.Multer.File,
     userId: number | null = null,
   ) {
+    try {
+      await assertDocumentProcessNotLocked(processId);
+    } catch (error) {
+      await fs.unlink(file.path).catch(() => {});
+      throw error;
+    }
+
     let doc;
     try {
       [doc] = await db
@@ -632,6 +665,58 @@ export const documentService = {
       })
       .where(eq(documents.id, documentId));
 
+    const veryLowConfidence = result.confidenceScore < MIN_OPERATIONAL_CONFIDENCE;
+    const lowConfidenceFields = Array.isArray(result.fieldsWithLowConfidence)
+      ? result.fieldsWithLowConfidence
+      : [];
+
+    if (veryLowConfidence) {
+      const [proc] = await db
+        .select({
+          processCode: importProcesses.processCode,
+          aiExtractedData: importProcesses.aiExtractedData,
+        })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, doc.processId))
+        .limit(1);
+
+      alertService
+        .create({
+          processId: doc.processId,
+          severity: 'critical',
+          title: 'Extração IA com Confiança Muito Baixa',
+          message: `Documento ${type} do processo ${proc?.processCode ?? doc.processId} teve confiança de extração de ${(result.confidenceScore * 100).toFixed(0)}%. Os dados extraídos ficaram armazenados para revisão, mas NÃO serão usados na validação automática, no espelho ou na projeção operacional. Reclassifique/reenvie o documento ou reprocesse. Campos com baixa confiança: ${lowConfidenceFields.join(', ') || 'N/A'}.`,
+          processCode: proc?.processCode,
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create low-confidence alert'));
+
+      logger.warn(
+        { documentId, type, confidence: result.confidenceScore },
+        'Very low confidence — extraction stored as evidence but not projected operationally',
+      );
+
+      if (type === 'invoice' || type === 'certificate') {
+        this.uploadToDrive(
+          doc.id,
+          doc.processId,
+          type,
+          doc.storagePath,
+          doc.originalFilename,
+        ).catch((err) =>
+          logger.error(
+            { err, documentId: doc.id },
+            'Google Drive upload failed (low confidence doc)',
+          ),
+        );
+      }
+
+      await this.runDegradableGate(
+        doc.processId,
+        (proc?.aiExtractedData as Record<string, any>) ?? {},
+      );
+      return;
+    }
+
     // Merge AI extracted data — atomic at SQL level to eliminate the race
     // condition Nicolas flagged at 00:14:06 in the 2026-04-10 Odett meeting
     // ("o sistema pode estar tentando olhar todos os documentos
@@ -668,20 +753,9 @@ export const documentService = {
       'AI extraction completed',
     );
 
-    // Confidence score gate: alert on low-confidence extractions.
-    //
-    // Backlog #7(d): the previous behaviour was an `return` whenever the score
-    // dropped below 0.4. That early-return had two harmful side effects flagged
-    // by Nicolas: (1) the document type was NOT re-written / kept reprocessable,
-    // and (2) the WHOLE process gate (auto-validation + auto-espelho for the
-    // OTHER documents) was silently aborted just because one attachment came in
-    // weak. We now keep the alert, mark the document so the operator can
-    // reclassify/retry, but ALWAYS fall through to the degradable gate below so
-    // the remaining documents are not held hostage by one low-confidence
-    // extraction. The only thing very-low confidence still suppresses is the
-    // AI-name standardization for the Drive upload (we can't trust the parsed
-    // date when confidence is that low).
-    const veryLowConfidence = result.confidenceScore < 0.4;
+    // Confidence score gate: 40-60% still projects data but raises a review
+    // alert. Below 40% was handled before the merge: evidence is stored on the
+    // document, but it is not projected into process data or downstream gates.
     if (result.confidenceScore < 0.6) {
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
@@ -689,49 +763,15 @@ export const documentService = {
         .where(eq(importProcesses.id, doc.processId))
         .limit(1);
 
-      const severity = veryLowConfidence ? 'critical' : 'warning';
-      const title = veryLowConfidence
-        ? 'Extração IA com Confiança Muito Baixa'
-        : 'Extração IA com Confiança Baixa';
-
       alertService
         .create({
           processId: doc.processId,
-          severity,
-          title,
-          message: `Documento ${type} do processo ${proc?.processCode ?? doc.processId} teve confiança de extração de ${(result.confidenceScore * 100).toFixed(0)}%. ${
-            veryLowConfidence
-              ? 'Os dados extraídos NÃO são confiáveis: reclassifique/reenvie o documento ou reprocesse. A validação automática usará os demais documentos disponíveis e tratará este como ausente.'
-              : 'Recomenda-se revisão manual dos dados extraídos.'
-          } Campos com baixa confiança: ${result.fieldsWithLowConfidence.join(', ') || 'N/A'}.`,
+          severity: 'warning',
+          title: 'Extração IA com Confiança Baixa',
+          message: `Documento ${type} do processo ${proc?.processCode ?? doc.processId} teve confiança de extração de ${(result.confidenceScore * 100).toFixed(0)}%. Recomenda-se revisão manual dos dados extraídos. Campos com baixa confiança: ${lowConfidenceFields.join(', ') || 'N/A'}.`,
           processCode: proc?.processCode,
         })
         .catch((err) => logger.error({ err }, 'Failed to create low-confidence alert'));
-
-      // Very low confidence: skip AI-name standardization for the Drive upload
-      // (parsed date/fields untrustworthy) — upload with the original name so
-      // the file is still archived, then continue to the degradable gate.
-      if (veryLowConfidence) {
-        logger.warn(
-          { documentId, type, confidence: result.confidenceScore },
-          'Very low confidence — uploading with original name and continuing to degradable gate',
-        );
-
-        if (type === 'invoice' || type === 'certificate') {
-          this.uploadToDrive(
-            doc.id,
-            doc.processId,
-            type,
-            doc.storagePath,
-            doc.originalFilename,
-          ).catch((err) =>
-            logger.error(
-              { err, documentId: doc.id },
-              'Google Drive upload failed (low confidence doc)',
-            ),
-          );
-        }
-      }
     }
 
     // Auto-populate currency exchanges from invoice payment terms
@@ -754,8 +794,8 @@ export const documentService = {
     }
 
     // Upload to Drive with standardized name after AI extraction.
-    // When confidence is very low we already uploaded with the original name
-    // above (can't trust parsed fields for standardization) — don't double-upload.
+    // Very-low confidence returned before this point, so standardized naming
+    // only uses fields that met the operational confidence floor.
     if ((type === 'invoice' || type === 'certificate') && !veryLowConfidence) {
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
@@ -1506,6 +1546,7 @@ export const documentService = {
   async reprocess(documentId: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) throw new NotFoundError('Documento', documentId);
+    await assertDocumentProcessNotLocked(doc.processId);
 
     if (!doc.isProcessed && !isProcessingStale(doc.updatedAt ?? doc.createdAt)) {
       const error = new Error('Reprocessamento já está em andamento para este documento');
@@ -1554,6 +1595,7 @@ export const documentService = {
   async delete(id: number, userId: number | null = null) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new NotFoundError('Documento', id);
+    await assertDocumentProcessNotLocked(doc.processId);
 
     // Remove file from disk
     try {
@@ -1671,6 +1713,7 @@ export const documentService = {
           d.type === type &&
           d.isProcessed &&
           d.aiParsedData &&
+          hasOperationalConfidence(d.confidenceScore) &&
           !hasExtractionFailureData(d.aiParsedData),
       ) ?? newestFirst.find((d) => d.type === type);
 
@@ -1860,9 +1903,21 @@ export const documentService = {
       },
       {
         label: 'ETD / Shipped On Board',
-        inv: inv?.invoiceDate ?? inv?.etd ?? inv?.shipmentDate,
-        pl: pl?.packingListDate ?? (pl as any)?.date ?? pl?.shipmentDate,
-        bl: bl?.shipmentDate ?? bl?.etd,
+        inv:
+          inv?.etd ??
+          inv?.shipmentDate ??
+          inv?.shippingDate ??
+          inv?.dateOfShipment ??
+          inv?.shippedOnBoardDate ??
+          inv?.onBoardDate,
+        pl:
+          pl?.etd ??
+          pl?.shipmentDate ??
+          pl?.shippingDate ??
+          pl?.dateOfShipment ??
+          pl?.shippedOnBoardDate ??
+          pl?.onBoardDate,
+        bl: bl?.shipmentDate ?? bl?.shippedOnBoardDate ?? bl?.onBoardDate ?? bl?.etd,
         espelho: null,
         kind: 'date',
       },
@@ -2125,9 +2180,8 @@ function computeRowStatus(values: unknown[], kind: string): RowStatus {
   }
 
   if (kind === 'port') {
-    const norm = values.map((v) => normalizePort(v));
-    const base = norm[0];
-    const allEqual = norm.every((n) => n === base || n.startsWith(base) || base.startsWith(n));
+    const base = values[0];
+    const allEqual = values.every((value) => normalizedPortsMatch(base, value));
     return allEqual ? 'match' : 'divergent';
   }
 

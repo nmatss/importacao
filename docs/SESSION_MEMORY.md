@@ -1,5 +1,58 @@
 # Session Memory
 
+## 2026-06-18 - Revisao Completa Do Fluxo Documental, Leitura E Validacao
+
+Escopo:
+
+- Revisao cruzada de documentacao, memoria, ADRs, fluxo de documentos, leitura,
+  comparativo, validacao, upload, reprocessamento, email ingestion e UX.
+
+Correcoes aplicadas:
+
+- Validacao e deteccao de anomalias passaram a escolher o documento vigente:
+  mais recente, processado, com `aiParsedData`, sem falha/skipped e com
+  confianca operacional minima. OHBL continua preferido; Draft BL e fallback
+  quando OHBL valido nao existe.
+- Extração com confiança menor que 40% agora salva evidencia no documento, cria
+  alerta critico e nao projeta dados para `import_processes.ai_extracted_data`,
+  validacao ou espelho automatico.
+- Rebuild de dados projetados e comparativo documental ignoram extracoes
+  abaixo do piso de confianca operacional.
+- Upload, reprocessamento e exclusao de documentos respeitam processo travado
+  (`lockedAt`), retornando erro 423 e removendo arquivo temporario de upload
+  quando aplicavel.
+- Comparativo documental deixou de usar `invoiceDate` como ETD/embarque e
+  passou a usar comparacao estrita de portos normalizados, evitando falso match
+  como `SANTOS` vs `SANTOS DUMONT`.
+- Upload web ganhou timeout, suporte a `.msg`, preserva escolha manual de tipo
+  contra autodeteccao por nome, expõe estado acessivel do seletor e invalida
+  comparativo/validacao/processo/eventos relacionados.
+- Lista de documentos mostra falha de IA de forma acionavel, diferencia docs
+  recebidos de extraidos, expõe origem manual/e-mail quando consultada, abre
+  fallback de Drive quando arquivo local falha e oculta reprocess/delete de
+  usuarios nao admin.
+- Ingestao por e-mail passou a usar `randomUUID()` no nome fisico do anexo,
+  evitando colisao por mesmo nome no mesmo milissegundo.
+- E2E de documentos foi corrigido para a rota real
+  `/api/documents/process/:processId`.
+- README e RUNBOOK foram reconciliados: producao usa `AI_PROVIDER=ialocal`,
+  egress externo exige `AI_ALLOW_EXTERNAL=true`, e rollback do servidor e por
+  snapshot/rsync, nao por `git checkout`.
+
+Validacoes executadas ate aqui:
+
+- Suíte completa da API via `npm test -w apps/api`: 570 testes passaram, 1 skip.
+- `npm run typecheck`
+- `npm run lint`
+
+Pendencias registradas em `docs/TECH_DEBT.md`:
+
+- E2E documental ponta a ponta com upload multipart real e fixtures anonimizadas.
+- Versionamento relacional/snapshot de aceite do comparativo.
+- Classificador por conteudo para anexos genericos.
+- Dedupe atomico/singleton para reprocessamento concorrente.
+- Decisao final sobre fallback permissivo vs estrito em schema Zod da IA.
+
 ## 2026-06-18 - Deploy Producao E Fechamento Pos-Auditoria
 
 Correcoes finais aplicadas:

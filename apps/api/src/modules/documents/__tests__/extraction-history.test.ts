@@ -92,6 +92,7 @@ describe('document extraction history (backlog #12)', () => {
       vi.spyOn(documentService, 'getById').mockResolvedValue(mockDoc as never);
 
       queryQueue.push(createResolvedChain([mockDoc])); // select document (outside tx)
+      queryQueue.push(createResolvedChain([])); // assert process not locked
       const historyInsertChain = createResolvedChain(undefined); // insert history (in tx)
       txQueue.push(historyInsertChain);
       txQueue.push(createResolvedChain(undefined)); // update doc (zero aiParsedData) (in tx)
@@ -128,6 +129,7 @@ describe('document extraction history (backlog #12)', () => {
 
       const emptyDoc = { ...mockDoc, aiParsedData: null, confidenceScore: null };
       queryQueue.push(createResolvedChain([emptyDoc])); // select document (outside tx)
+      queryQueue.push(createResolvedChain([])); // assert process not locked
       txQueue.push(createResolvedChain(undefined)); // update doc (in tx)
       txQueue.push(createResolvedChain([])); // rebuild process aiExtractedData: remaining docs
       txQueue.push(createResolvedChain([{ aiExtractedData: { invoice: previousExtraction } }])); // current process projection
@@ -151,6 +153,7 @@ describe('document extraction history (backlog #12)', () => {
         updatedAt: new Date(),
       };
       queryQueue.push(createResolvedChain([freshProcessingDoc]));
+      queryQueue.push(createResolvedChain([])); // assert process not locked
 
       await expect(documentService.reprocess(7, 1)).rejects.toMatchObject({
         statusCode: 409,

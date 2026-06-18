@@ -236,6 +236,103 @@ describe('validationService', () => {
       );
     });
 
+    it('should ignore pending, failed and stale documents when building validation input', async () => {
+      const check = vi.fn().mockReturnValue({
+        checkName: 'mock-check',
+        status: 'passed',
+        documentsCompared: 'INV vs PL vs BL',
+        message: 'OK',
+      });
+      (allChecks as any).length = 0;
+      (allChecks as any).push(check);
+
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-FAILED', extractionFailed: true },
+          },
+          {
+            id: 2,
+            type: 'invoice',
+            isProcessed: false,
+            updatedAt: new Date('2026-03-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-PENDING' },
+          },
+          {
+            id: 3,
+            type: 'invoice',
+            isProcessed: true,
+            updatedAt: new Date('2026-02-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-OLD' },
+          },
+          {
+            id: 4,
+            type: 'invoice',
+            isProcessed: true,
+            updatedAt: new Date('2026-04-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-NEW' },
+          },
+          {
+            id: 8,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.39',
+            updatedAt: new Date('2026-05-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-LOW' },
+          },
+          {
+            id: 5,
+            type: 'packing_list',
+            isProcessed: true,
+            aiParsedData: { packingListNumber: 'PL-001' },
+          },
+          {
+            id: 6,
+            type: 'ohbl',
+            isProcessed: true,
+            updatedAt: new Date('2026-04-02T00:00:00Z'),
+            aiParsedData: { blNumber: 'BL-FAILED', extractionFailed: true },
+          },
+          {
+            id: 7,
+            type: 'draft_bl',
+            isProcessed: true,
+            updatedAt: new Date('2026-03-15T00:00:00Z'),
+            aiParsedData: { blNumber: 'DRAFT-VALID' },
+          },
+        ]),
+      ); // docs
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      txQueue.push(createResolvedChain([])); // tx select previous
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update to validated
+      queryQueue.push(createResolvedChain(undefined)); // update followUp
+
+      await validationService.runAllChecks(1);
+
+      expect(check).toHaveBeenCalledWith(
+        expect.objectContaining({
+          invoiceData: { invoiceNumber: 'INV-NEW' },
+          packingListData: { packingListNumber: 'PL-001' },
+          blData: { blNumber: 'DRAFT-VALID' },
+        }),
+      );
+    });
+
     it('should set status to validated when no failures', async () => {
       const mockProcess = {
         id: 1,
@@ -404,6 +501,73 @@ describe('validationService', () => {
         { invoiceNumber: 'INV-001' },
         { totalItems: 1 },
         { blNumber: 'FINAL-001' },
+      );
+    });
+
+    it('should use newest usable documents for anomaly detection', async () => {
+      const anomalyResult = { anomalies: [] };
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce(anomalyResult);
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-OLD' },
+          },
+          {
+            id: 2,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            updatedAt: new Date('2026-02-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-NEW' },
+          },
+          {
+            id: 7,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.39',
+            updatedAt: new Date('2026-03-01T00:00:00Z'),
+            aiParsedData: { invoiceNumber: 'INV-LOW' },
+          },
+          {
+            id: 3,
+            type: 'packing_list',
+            isProcessed: false,
+            updatedAt: new Date('2026-02-01T00:00:00Z'),
+            aiParsedData: { packingListNumber: 'PL-PENDING' },
+          },
+          {
+            id: 4,
+            type: 'packing_list',
+            isProcessed: true,
+            updatedAt: new Date('2026-01-15T00:00:00Z'),
+            aiParsedData: { packingListNumber: 'PL-VALID' },
+          },
+          {
+            id: 5,
+            type: 'ohbl',
+            isProcessed: true,
+            aiParsedData: { blNumber: 'BL-FAILED', extractionFailed: true },
+          },
+          {
+            id: 6,
+            type: 'draft_bl',
+            isProcessed: true,
+            aiParsedData: { blNumber: 'DRAFT-VALID' },
+          },
+        ]),
+      );
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result).toEqual(anomalyResult);
+      expect(aiServiceMocks.detectAnomalies).toHaveBeenCalledWith(
+        { invoiceNumber: 'INV-NEW' },
+        { packingListNumber: 'PL-VALID' },
+        { blNumber: 'DRAFT-VALID' },
       );
     });
 

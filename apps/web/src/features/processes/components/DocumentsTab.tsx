@@ -16,6 +16,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
+import { invalidateDocumentWorkflow } from '@/features/documents/queryInvalidation';
 import { cn } from '@/shared/lib/utils';
 
 export interface DocumentsTabProps {
@@ -77,7 +78,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
     intervalRef.current = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
-          queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+          void invalidateDocumentWorkflow(queryClient, processId);
           return 300;
         }
         return prev - 1;
@@ -110,7 +111,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
       if (!res.ok) throw new Error('Falha ao buscar e-mails');
       toast.success('E-mails verificados — documentos atualizados');
       // Refresh document list + reset countdown
-      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      void invalidateDocumentWorkflow(queryClient, processId);
       resetCountdown();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Erro ao sincronizar e-mails';

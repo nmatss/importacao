@@ -27,10 +27,64 @@ import { getOperationalRecipient } from '../settings/operational-recipients.js';
 type DocumentWithAiData = {
   type: string;
   aiParsedData: unknown;
+  id?: number | null;
+  isProcessed?: boolean | null;
+  confidenceScore?: string | number | null;
+  createdAt?: Date | string | null;
+  updatedAt?: Date | string | null;
 };
 
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function hasExtractionFailureData(aiParsedData: unknown): boolean {
+  if (!isRecord(aiParsedData)) return false;
+  return Boolean(aiParsedData.extractionFailed || aiParsedData.error || aiParsedData.skipped);
+}
+
+function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
+  if (confidenceScore == null) return true;
+  const confidence =
+    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
+  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
+}
+
+function documentTime(value: Date | string | null | undefined): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function sortNewestFirst<T extends DocumentWithAiData>(docs: T[]): T[] {
+  return [...docs].sort((a, b) => {
+    const aTime = Math.max(documentTime(a.updatedAt), documentTime(a.createdAt));
+    const bTime = Math.max(documentTime(b.updatedAt), documentTime(b.createdAt));
+    if (bTime !== aTime) return bTime - aTime;
+    return (b.id ?? 0) - (a.id ?? 0);
+  });
+}
+
+function isUsableValidationDocument(doc: DocumentWithAiData): boolean {
+  return (
+    doc.isProcessed !== false &&
+    doc.aiParsedData != null &&
+    hasOperationalConfidence(doc.confidenceScore) &&
+    !hasExtractionFailureData(doc.aiParsedData)
+  );
+}
+
+function selectValidationDoc<T extends DocumentWithAiData>(docs: T[], type: string): T | undefined {
+  return sortNewestFirst(docs)
+    .filter((d) => d.type === type)
+    .find(isUsableValidationDocument);
+}
+
 function findValidationBlDocument<T extends DocumentWithAiData>(docs: T[]): T | undefined {
-  return docs.find((d) => d.type === 'ohbl') ?? docs.find((d) => d.type === 'draft_bl');
+  return selectValidationDoc(docs, 'ohbl') ?? selectValidationDoc(docs, 'draft_bl');
 }
 
 export const validationService = {
@@ -54,8 +108,8 @@ export const validationService = {
     // 2. Get all documents for the process with aiParsedData
     const docs = await db.select().from(documents).where(eq(documents.processId, processId));
 
-    const invoiceDoc = docs.find((d) => d.type === 'invoice');
-    const packingListDoc = docs.find((d) => d.type === 'packing_list');
+    const invoiceDoc = selectValidationDoc(docs, 'invoice');
+    const packingListDoc = selectValidationDoc(docs, 'packing_list');
     const blDoc = findValidationBlDocument(docs);
 
     // Get follow-up data
@@ -593,8 +647,8 @@ export const validationService = {
   async runAnomalyDetection(processId: number) {
     const docs = await db.select().from(documents).where(eq(documents.processId, processId));
 
-    const invoiceDoc = docs.find((d) => d.type === 'invoice');
-    const packingListDoc = docs.find((d) => d.type === 'packing_list');
+    const invoiceDoc = selectValidationDoc(docs, 'invoice');
+    const packingListDoc = selectValidationDoc(docs, 'packing_list');
     const blDoc = findValidationBlDocument(docs);
 
     const rawInvAnomaly = (invoiceDoc?.aiParsedData as Record<string, any>) ?? {};

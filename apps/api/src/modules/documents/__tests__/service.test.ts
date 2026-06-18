@@ -74,6 +74,28 @@ describe('documentService', () => {
   });
 
   describe('upload()', () => {
+    it('should reject upload and remove temp file when process is locked', async () => {
+      const mockFile = {
+        originalname: 'invoice.pdf',
+        path: '/tmp/invoice.pdf',
+        mimetype: 'application/pdf',
+        size: 1024,
+      } as Express.Multer.File;
+
+      queryQueue.push(
+        createResolvedChain([
+          { lockedAt: new Date('2026-05-22T00:00:00Z'), lockedReason: 'vimbar_approval' },
+        ]),
+      );
+
+      await expect(documentService.upload(1, 'invoice', mockFile, 1)).rejects.toMatchObject({
+        statusCode: 423,
+      });
+
+      expect(mockFsUnlink).toHaveBeenCalledWith('/tmp/invoice.pdf');
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
     it('should insert document and trigger AI processing', async () => {
       const mockDoc = { id: 1, processId: 1, type: 'invoice' };
       const mockFile = {
@@ -83,6 +105,7 @@ describe('documentService', () => {
         size: 1024,
       } as Express.Multer.File;
 
+      queryQueue.push(createResolvedChain([])); // assert process not locked
       // insert document returning
       queryQueue.push(createResolvedChain([mockDoc]));
       // select docs to check all 3 present -> only 1 doc
@@ -118,6 +141,7 @@ describe('documentService', () => {
 
       const allDocs = [{ type: 'invoice' }, { type: 'packing_list' }, { type: 'ohbl' }];
 
+      queryQueue.push(createResolvedChain([])); // assert process not locked
       // insert doc
       queryQueue.push(createResolvedChain([mockDoc]));
       // select all docs for process
@@ -173,6 +197,7 @@ describe('documentService', () => {
 
       // select doc
       queryQueue.push(createResolvedChain([mockDoc]));
+      queryQueue.push(createResolvedChain([])); // assert process not locked
       txQueue.push(createResolvedChain(undefined)); // delete doc
       txQueue.push(createResolvedChain([])); // remaining docs for rebuild
       txQueue.push(
@@ -242,6 +267,7 @@ describe('documentService', () => {
             id: 7,
             type: 'espelho',
             isProcessed: true,
+            confidenceScore: '0.99',
             aiParsedData: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
           },
         ]),
@@ -273,6 +299,105 @@ describe('documentService', () => {
           updatedAt: expect.any(Date),
         }),
       );
+    });
+
+    it('does not project very-low-confidence document data', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 8,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.39',
+            aiParsedData: { invoiceNumber: 'LOW-CONFIDENCE' },
+          },
+          {
+            id: 9,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.40',
+            aiParsedData: { packingListNumber: 'PL-VALID' },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ aiExtractedData: { customKey: { keep: true } } }]));
+      const processUpdateChain = createResolvedChain(undefined);
+      queryQueue.push(processUpdateChain);
+
+      const rebuilt = await documentService.rebuildProcessAiExtractedData(1);
+
+      expect(rebuilt).toEqual({
+        customKey: { keep: true },
+        packing_list: { packingListNumber: 'PL-VALID' },
+      });
+      expect(processUpdateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({ aiExtractedData: rebuilt }),
+      );
+    });
+  });
+
+  describe('getComparison()', () => {
+    it('does not compare invoice issue date as ETD and uses strict port normalization', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              invoiceDate: '2026-01-01',
+              portOfLoading: 'SANTOS',
+              portOfDischarge: 'ITAPOA',
+            },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: {
+              shipmentDate: '2026-02-01',
+              portOfLoading: 'SANTOS DUMONT',
+              portOfDischarge: 'ITAPOA, BRAZIL',
+            },
+          },
+          {
+            id: 3,
+            type: 'ohbl',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-03T00:00:00Z'),
+            updatedAt: new Date('2026-01-03T00:00:00Z'),
+            aiParsedData: { shipmentDate: '2026-02-01', portOfDischarge: 'ITAPOA' },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+      const etd = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'ETD / Shipped On Board',
+      );
+      const loadingPort = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Porto Embarque',
+      );
+      const dischargePort = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Porto Destino',
+      );
+
+      expect(etd).toMatchObject({
+        invoice: null,
+        packingList: '2026-02-01',
+        bl: '2026-02-01',
+        status: 'match',
+      });
+      expect(loadingPort).toMatchObject({ status: 'divergent' });
+      expect(dischargePort).toMatchObject({ status: 'match' });
     });
   });
 

@@ -46,18 +46,34 @@ ssh nicolas@192.168.168.124 "df -h"
 
 ### AI extraction timeout
 
-The AI extraction provider is selected via `AI_PROVIDER` in `.env`
-(`vertex` — Google Vertex AI, default for sensitive documents — or `openrouter`).
+The AI extraction provider is selected via `AI_PROVIDER` in `.env`.
+Production default is `AI_PROVIDER=ialocal` with `AI_ALLOW_EXTERNAL=false`.
+External providers (`vertex`, `openrouter`) are opt-in only and require
+`AI_ALLOW_EXTERNAL=true`.
 If extraction times out or fails:
 
-1. Check the `.env` for the active provider's credentials:
+1. Check the `.env` for the active provider's credentials and egress policy:
+   - `AI_PROVIDER=ialocal`: `IA_LOCAL_BASE_URL`, `IA_LOCAL_API_KEY`,
+     `IA_LOCAL_MODEL`, `IA_LOCAL_ALLOWED_HOSTS`. Confirm the local gateway is
+     reachable from the API container and that CPU/GPU load is not saturated.
    - `AI_PROVIDER=vertex`: `GOOGLE_VERTEX_PROJECT`, `GOOGLE_VERTEX_LOCATION`,
-     `GOOGLE_VERTEX_CLIENT_EMAIL`, `GOOGLE_VERTEX_PRIVATE_KEY`.
-   - `AI_PROVIDER=openrouter`: `OPENROUTER_API_KEY` (and `OPENROUTER_BASE_URL`).
+     `GOOGLE_VERTEX_CLIENT_EMAIL`, `GOOGLE_VERTEX_PRIVATE_KEY`,
+     `AI_ALLOW_EXTERNAL=true`.
+   - `AI_PROVIDER=openrouter`: `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`,
+     `AI_ALLOW_EXTERNAL=true`.
 2. Check the monthly spend cap `AI_MONTHLY_BUDGET_USD` — requests are blocked
-   once the budget is exhausted.
-3. Try a smaller document (AI extraction may fail on very large PDFs).
-4. The feature degrades gracefully — manual data entry still works.
+   once the budget is exhausted for paid providers. `ialocal` does not consume
+   this budget, but still uses request timeouts and local compute.
+3. Check queue health before retrying:
+
+```bash
+ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose -f docker-compose.prod.yml logs --tail=80 api | egrep -i 'ai-extraction|timeout|confidence|extraction'"
+```
+
+4. Try a smaller document or reprocess only the failed attachment. Very-low
+   confidence (`<40%`) is stored as evidence but not projected into validation
+   or espelho until the operator reprocesses/reuploads.
+5. The feature degrades gracefully — manual data entry still works.
 
 ### Deploy failed
 
@@ -83,21 +99,21 @@ Oracle WMS connection issues are non-fatal — cert-api starts even if WMS is un
 
 ## Rollback Manual
 
-```bash
-# Check recent git tags/commits
-ssh nicolas@192.168.168.124 "cd ~/importacao && git log --oneline -10"
+Production deploy is rsync-based. The server is not a git repository, so do
+not use `git checkout` on the server. `scripts/deploy.sh` creates an
+on-server code snapshot at `/home/nicolas/importacao.rollback` before syncing
+and automatically restores it when post-deploy health checks fail.
 
-# Roll back to previous commit
-ssh nicolas@192.168.168.124 "cd ~/importacao && git checkout <commit_hash>"
-ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose build && docker compose up -d"
-```
-
-To roll back only the API without rebuilding everything:
+Manual code rollback is only possible while that snapshot exists:
 
 ```bash
-ssh nicolas@192.168.168.124 "cd ~/importacao && git checkout <commit_hash> -- apps/api/"
-ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose build api && docker compose restart api"
+ssh nicolas@192.168.168.124 "test -d /home/nicolas/importacao.rollback"
+ssh nicolas@192.168.168.124 "rsync -a --delete --exclude '.env' /home/nicolas/importacao.rollback/ /home/nicolas/importacao/"
+ssh nicolas@192.168.168.124 "cd /home/nicolas/importacao && docker compose -f docker-compose.prod.yml build api web cert-api && docker compose -f docker-compose.prod.yml up -d"
 ```
+
+Database rollback is not automatic. Use the pre-deploy PostgreSQL backup from
+`scripts/backup-db.sh` only after explicit incident approval.
 
 ---
 
