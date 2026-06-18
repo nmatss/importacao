@@ -757,3 +757,42 @@ Testes locais executados:
 - `git diff --check`
 - `npm test`
 - `npm run build`
+
+## 2026-06-18 - Ajuste Fino Qualidade Extracao/Validacao DEMO 264
+
+Contexto:
+
+- Revisao solicitada para confirmar se a extração documental esta 100% e se a
+  qualidade da leitura/comparativo esta adequada apos o destravamento da
+  invoice do processo `264`.
+- Producao confirmou todos os 6 documentos do processo como `completed`, com
+  invoice `IM0712602NB`, exportador `KIOM GLOBAL LIMITED`, total FOB
+  `24312.52` e 7 itens extraidos.
+
+Correcoes aplicadas:
+
+- Comparativo por item passou a normalizar prefixos `FATxx` vindos do Packing
+  List antes de comparar com a Invoice.
+- Validacao de unidade passou a tratar `PC`, `PCS`, `PCE` e `PIECE(S)` como
+  equivalentes de `UN`, sem relaxar `PAR` e `SET/KIT`.
+- Validacao de fabricante passou a usar sufixos de descricao da invoice como
+  fallback conservador (`--FINE TEXTILE`, `--A&C`) e rejeitar sufixos genericos
+  como FOC/amostra.
+
+Verificacoes executadas:
+
+- `npm test -w apps/api -- src/modules/validation/utils/__tests__/item-code-normalize.test.ts src/modules/validation/checks/__tests__/item-level-match.test.ts src/modules/validation/checks/__tests__/unit-type-validation.test.ts src/modules/validation/checks/__tests__/manufacturer-completeness.test.ts`
+- `npm test -w apps/api -- src/modules/validation`
+- `npm run -w apps/api typecheck`
+- `npm run -w apps/web typecheck`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+- `git diff --check`
+
+Observacao operacional:
+
+- Apos deploy, reexecutar validacao do processo `264` em producao para
+  confirmar reducao dos falsos positivos; avisos restantes esperados tendem a
+  ser dados ausentes/externos (FOC explicado, FUP/Odoo/NCM/data logistica
+  ausente), nao travamento de extracao.

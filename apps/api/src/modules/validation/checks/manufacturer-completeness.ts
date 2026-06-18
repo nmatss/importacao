@@ -15,6 +15,21 @@ interface CheckResult {
   message: string;
 }
 
+function extractManufacturerFromDescription(value: unknown): string {
+  const description = String(value ?? '').trim();
+  if (!description) return '';
+
+  const suffix = description.match(/--\s*([^-\n\r][^\n\r]*)$/);
+  const candidate = suffix?.[1]?.trim().replace(/\s+/g, ' ') ?? '';
+  if (candidate.length < 2) return '';
+
+  const normalized = candidate.toUpperCase();
+  const rejected = new Set(['FREE OF CHARGE', 'FOC', 'SAMPLE', 'N/A', 'NA', 'NO CHARGE']);
+  if (rejected.has(normalized)) return '';
+
+  return candidate;
+}
+
 export default function manufacturerCompleteness(input: CheckInput): CheckResult {
   const checkName = 'manufacturer-completeness';
   const invoice = input.invoiceData;
@@ -33,7 +48,14 @@ export default function manufacturerCompleteness(input: CheckInput): CheckResult
   const items = invoice.items as Array<Record<string, any>> | undefined;
 
   const itemManufacturers =
-    items?.map((item) => item.manufacturer ?? item.manufacturerName ?? '').filter(Boolean) ?? [];
+    items
+      ?.map(
+        (item) =>
+          item.manufacturer ??
+          item.manufacturerName ??
+          extractManufacturerFromDescription(item.description ?? item.productName),
+      )
+      .filter(Boolean) ?? [];
 
   const uniqueManufacturers = [...new Set(itemManufacturers)];
 

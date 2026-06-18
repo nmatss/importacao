@@ -1,13 +1,24 @@
+const CANONICAL_CODE_SOURCE = '[A-Z]{2,4}\\d{3,7}[A-Z]{0,3}';
+
+function normalizeItemCodeCharacters(value: unknown): string {
+  if (value == null) return '';
+  return String(value)
+    .toUpperCase()
+    .replace(/[\s\-./\\_]/g, '');
+}
+
+function stripKnownDocumentPrefix(normalized: string): string {
+  const match = normalized.match(new RegExp(`^FAT\\d{1,4}(${CANONICAL_CODE_SOURCE})$`));
+  return match?.[1] ?? normalized;
+}
+
 /**
  * Normalizes a SKU / item-code for cross-document matching.
  * Strips whitespace, dashes, dots, slashes; uppercases.
  * Example: "PI 7752Y", "pi-7752y", "PI.7752Y" all -> "PI7752Y"
  */
 export function normalizeItemCode(value: unknown): string {
-  if (value == null) return '';
-  return String(value)
-    .toUpperCase()
-    .replace(/[\s\-./\\_]/g, '');
+  return stripKnownDocumentPrefix(normalizeItemCodeCharacters(value));
 }
 
 export function itemCodesMatch(a: unknown, b: unknown): boolean {
@@ -20,7 +31,7 @@ export function itemCodesMatch(a: unknown, b: unknown): boolean {
 // Uni.co item codes follow patterns like PI7752Y, AC2285Y, PKT123, IM0712:
 // 2-4 letter prefix + 3-7 digits + optional 1-3 letter suffix.
 // Anything else around it (FALL/24, WHITE BOX, brand, supplier ref) is noise.
-const CANONICAL_CODE_RE = /\b([A-Z]{2,4}\d{3,7}[A-Z]{0,3})\b/;
+const CANONICAL_CODE_RE = new RegExp(`\\b(${CANONICAL_CODE_SOURCE})\\b`);
 
 /**
  * Strips column-bleed prefixes/suffixes from a raw item-code value extracted
@@ -37,6 +48,10 @@ export function extractCanonicalItemCode(raw: unknown): string {
   const original = String(raw).trim();
   if (!original) return '';
   const upper = original.toUpperCase();
+  const normalized = normalizeItemCodeCharacters(upper);
+  const withoutKnownPrefix = stripKnownDocumentPrefix(normalized);
+  if (withoutKnownPrefix !== normalized) return withoutKnownPrefix;
+
   const matches = upper.match(new RegExp(CANONICAL_CODE_RE.source, 'g'));
   if (!matches || matches.length === 0) return original;
   // If the original IS the canonical code with normal punctuation, leave it

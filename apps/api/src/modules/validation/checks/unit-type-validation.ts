@@ -43,6 +43,37 @@ function detectUnitType(description: string): string {
   return 'UN';
 }
 
+function normalizeDeclaredUnit(value: unknown): string {
+  const normalized = String(value ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/[.\s_-]/g, '');
+
+  if (!normalized) return '';
+  if (
+    [
+      'UN',
+      'UND',
+      'UNID',
+      'UNIDADE',
+      'UNIDADES',
+      'UNIT',
+      'UNITS',
+      'PC',
+      'PCS',
+      'PCE',
+      'PZA',
+      'PIECE',
+      'PIECES',
+    ].includes(normalized)
+  ) {
+    return 'UN';
+  }
+  if (['PAR', 'PARES', 'PAIR', 'PAIRS'].includes(normalized)) return 'PAR';
+  if (['SET', 'SETS', 'KIT', 'KITS'].includes(normalized)) return 'SET';
+  return normalized;
+}
+
 export default function unitTypeValidation(input: CheckInput): CheckResult {
   const checkName = 'unit-type-validation';
 
@@ -74,7 +105,7 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
     if (!description) continue;
 
     const expectedUnit = detectUnitType(description);
-    const declaredUnit = (item.unitType ?? item.unit ?? '').toUpperCase();
+    const declaredUnit = normalizeDeclaredUnit(item.unitType ?? item.unit);
 
     if (declaredUnit && declaredUnit !== expectedUnit) {
       mismatches.push(`"${description}": esperado ${expectedUnit}, encontrado ${declaredUnit}`);
@@ -87,7 +118,7 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
       if (!description) continue;
 
       const expectedUnit = detectUnitType(description);
-      const declaredUnit = (plItem.unitType ?? plItem.unit ?? '').toUpperCase();
+      const declaredUnit = normalizeDeclaredUnit(plItem.unitType ?? plItem.unit);
 
       if (declaredUnit && declaredUnit !== expectedUnit) {
         mismatches.push(

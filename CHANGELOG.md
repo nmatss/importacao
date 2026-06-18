@@ -111,6 +111,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Integracao Odoo passou a usar URL, database e usuario salvos em
   `system_settings` com fallback para env, mantendo `ODOO_PASSWORD` somente em
   SOPS/env e selecionando XML-RPC HTTP/HTTPS conforme a URL.
+- Comparativo por item passou a remover prefixos operacionais `FATxx` do
+  Packing List antes de confrontar com a Invoice, evitando falso erro como
+  `FAT03PI7765Y` versus `PI7765Y`.
+- Validacao de unidade aceita equivalencias comerciais de unidade simples
+  (`PC`, `PCS`, `PCE`, `PIECE`) como `UN`, mantendo `PAR` e `SET/KIT`
+  separados.
+- Validacao de fabricante passou a reconhecer fabricantes no sufixo da
+  descricao do item da invoice (`--FINE TEXTILE`, `--A&C`) sem aceitar sufixos
+  genericos como FOC/amostra.
 - Modal do e-mail de correcao agora recebe foco inicial no destinatario, fecha
   por Escape, mantem Tab dentro do dialogo e devolve foco ao botao de origem.
 - Geracao manual de e-mail de correcao agora reusa rascunho KIOM aberto do

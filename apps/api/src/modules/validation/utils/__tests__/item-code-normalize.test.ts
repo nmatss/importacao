@@ -24,6 +24,11 @@ describe('normalizeItemCode', () => {
     expect(normalizeItemCode('pi7752y')).toBe('PI7752Y');
   });
 
+  it('strips FAT invoice/packing-list prefixes before item codes', () => {
+    expect(normalizeItemCode('FAT03PI7765Y')).toBe('PI7765Y');
+    expect(normalizeItemCode('FAT02 AC 2285Y')).toBe('AC2285Y');
+  });
+
   it('returns empty string for null', () => {
     expect(normalizeItemCode(null)).toBe('');
     expect(normalizeItemCode(undefined)).toBe('');
@@ -56,6 +61,10 @@ describe('extractCanonicalItemCode', () => {
   it('strips packaging column bleed', () => {
     expect(extractCanonicalItemCode('WHITE BOX PI7752Y')).toBe('PI7752Y');
     expect(extractCanonicalItemCode('PI7752Y POLYBAG')).toBe('PI7752Y');
+  });
+
+  it('strips FAT prefixes from compact packing-list codes', () => {
+    expect(extractCanonicalItemCode('FAT03PI7765Y')).toBe('PI7765Y');
   });
 
   it('leaves plain canonical codes alone', () => {
