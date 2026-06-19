@@ -164,6 +164,34 @@ function buildDocumentSetCompletenessResult(input: {
   };
 }
 
+/**
+ * True when the process carries at least one SYSTEM (Sydle/FUP) reference value
+ * that the system_vs_document checks compare extracted documents against. Used
+ * by getReport so the "Documentos vs Sistema" panel can show an explicit
+ * "sem dados do sistema" state instead of appearing silently empty.
+ */
+function hasSystemReferenceData(process: Record<string, unknown>): boolean {
+  const SYSTEM_REFERENCE_FIELDS = [
+    'totalFobValue',
+    'freightValue',
+    'totalCbm',
+    'totalNetWeight',
+    'totalGrossWeight',
+    'totalBoxes',
+    'containerType',
+    'purchaseRef',
+    'paymentTerms',
+  ];
+  return SYSTEM_REFERENCE_FIELDS.some((field) => {
+    const value = process[field];
+    if (value == null) return false;
+    if (typeof value === 'string') return value.trim().length > 0;
+    if (typeof value === 'number') return Number.isFinite(value);
+    if (typeof value === 'object') return Object.keys(value).length > 0;
+    return true;
+  });
+}
+
 export const validationService = {
   async runAllChecks(
     processId: number,
@@ -838,7 +866,88 @@ export const validationService = {
       'AI anomaly detection completed',
     );
 
-    return result;
+    // Reconcile item-presence anomalies against the DETERMINISTIC document
+    // comparison so the anomaly stream and the comparison panel ("Itens no
+    // Packing List sem correspondencia na Invoice") never contradict each
+    // other. The AI/fuzzy matcher over-reports unmatched items; the
+    // deterministic unmatchedPlItems set is the single source of truth.
+    const reconciled = await this.reconcileItemAnomalies(processId, result.anomalies);
+
+    return { anomalies: reconciled };
+  },
+
+  /**
+   * Replaces every AI-emitted item-presence anomaly ("Item X nao localizado no
+   * Packing List") with a single deterministic anomaly whose count comes from
+   * documentService.getComparison().unmatchedPlItems. Quantity-divergence and
+   * non-item anomalies are passed through untouched. If the deterministic
+   * comparison reports zero unmatched items, the item-presence anomalies are
+   * dropped entirely (they were false positives from fuzzy matching).
+   */
+  async reconcileItemAnomalies(
+    processId: number,
+    anomalies: Array<{ field: string; description: string; severity: string }>,
+  ): Promise<Array<{ field: string; description: string; severity: string }>> {
+    const { isItemMatchAnomalyField, ITEM_MATCH_ANOMALY_FIELD } = await import(
+      '../ai/prompts/anomaly.js'
+    );
+
+    const itemPresenceAnomalies = anomalies.filter((a) => isItemMatchAnomalyField(a.field));
+    const passthrough = anomalies.filter((a) => !isItemMatchAnomalyField(a.field));
+
+    // No item-presence anomalies emitted → nothing to reconcile.
+    if (itemPresenceAnomalies.length === 0) {
+      return anomalies;
+    }
+
+    let unmatchedCount: number | null = null;
+    try {
+      const { documentService } = await import('../documents/service.js');
+      const comparison = await documentService.getComparison(processId);
+      const unmatched = Array.isArray(comparison?.unmatchedPlItems)
+        ? comparison.unmatchedPlItems
+        : [];
+      unmatchedCount = unmatched.length;
+    } catch (err) {
+      // If the deterministic comparison is unavailable, do not invent or trust
+      // the fuzzy AI count — fall back to passing the AI anomalies through.
+      logger.warn(
+        { processId, err: err instanceof Error ? err.message : err },
+        'Could not load deterministic comparison to reconcile item anomalies; keeping AI anomalies',
+      );
+      return anomalies;
+    }
+
+    // Deterministic comparison says everything matches → the AI item-presence
+    // anomalies were false positives. Drop them.
+    if (!unmatchedCount || unmatchedCount <= 0) {
+      logger.info(
+        { processId, suppressed: itemPresenceAnomalies.length },
+        'Suppressed AI item-presence anomalies: deterministic comparison found no unmatched items',
+      );
+      return passthrough;
+    }
+
+    // Re-emit a single deterministic anomaly with the authoritative count.
+    logger.info(
+      {
+        processId,
+        aiReported: itemPresenceAnomalies.length,
+        deterministic: unmatchedCount,
+      },
+      'Reconciled item-presence anomalies with deterministic unmatched count',
+    );
+
+    return [
+      ...passthrough,
+      {
+        field: ITEM_MATCH_ANOMALY_FIELD,
+        description: `${unmatchedCount} ${
+          unmatchedCount === 1 ? 'item' : 'itens'
+        } no Packing List sem correspondencia na Invoice (comparacao deterministica).`,
+        severity: 'medium',
+      },
+    ];
   },
 
   async uploadValidationReportToDrive(processCode: string, results: CheckResult[]): Promise<void> {
@@ -897,6 +1006,24 @@ export const validationService = {
 
     const results = await this.getResults(processId);
 
+    // Whether the process carries any SYSTEM (Sydle/FUP) reference values to
+    // compare extracted documents against. When false, the "Documentos vs
+    // Sistema" panel must show an explicit "sem dados do sistema" state rather
+    // than appearing silently empty. These are exactly the fields the
+    // *-vs-fup / system checks read from processData.
+    const systemDataAvailable = hasSystemReferenceData(process);
+
+    // Bucket each result by data source. dataSource is persisted at write time
+    // (documentsCompared.includes('Sistema') => system_vs_document) but legacy
+    // rows may have it null — recompute the bucket from documentsCompared as a
+    // fallback so the system panel is never silently empty for older runs.
+    const isSystemResult = (r: (typeof results)[number]) =>
+      r.dataSource === 'system_vs_document' ||
+      (r.dataSource == null && (r.documentsCompared ?? '').includes('Sistema'));
+
+    const systemChecks = results.filter(isSystemResult);
+    const crossDocumentChecks = results.filter((r) => !isSystemResult(r));
+
     return {
       processCode: process.processCode,
       brand: process.brand,
@@ -908,6 +1035,7 @@ export const validationService = {
         totalCbm: process.totalCbm,
         containerType: process.containerType,
       },
+      systemDataAvailable,
       summary: {
         total: results.length,
         passed: results.filter((r) => r.status === 'passed').length,
@@ -915,8 +1043,8 @@ export const validationService = {
         warnings: results.filter((r) => r.status === 'warning').length,
         skipped: results.filter((r) => r.status === 'skipped').length,
       },
-      crossDocumentChecks: results.filter((r) => r.dataSource === 'cross_document'),
-      systemChecks: results.filter((r) => r.dataSource === 'system_vs_document'),
+      crossDocumentChecks,
+      systemChecks,
     };
   },
 

@@ -50,6 +50,7 @@ export const CHECK_TO_ERROR_TYPES: Record<string, CorrectionErrorType[]> = {
   'incoterm-check': ['incoterm'],
   'ports-match': ['porto'],
   'dates-match': ['data'],
+  'invoice-pl-date-tolerance': ['data'],
   'currency-check': ['moeda'],
   'fob-calculation': ['invoice_valor'],
   'description-odoo-match': ['descricao'],

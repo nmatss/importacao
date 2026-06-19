@@ -4,6 +4,7 @@ import processReference from './process-reference.js';
 import incotermCheck from './incoterm-check.js';
 import portsMatch from './ports-match.js';
 import datesMatch from './dates-match.js';
+import invoicePlDateTolerance from './invoice-pl-date-tolerance.js';
 import currencyCheck from './currency-check.js';
 import fobCalculation from './fob-calculation.js';
 import descriptionOdooMatch from './description-odoo-match.js';
@@ -52,6 +53,7 @@ export const allChecks: CheckFn[] = [
   incotermCheck,
   portsMatch,
   datesMatch,
+  invoicePlDateTolerance,
   currencyCheck,
   fobCalculation,
   descriptionOdooMatch,

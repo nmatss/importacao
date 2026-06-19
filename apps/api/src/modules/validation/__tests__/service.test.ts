@@ -7,6 +7,7 @@ const aiServiceMocks = vi.hoisted(() => ({
   flattenAiData: vi.fn((data: Record<string, unknown>) => data),
 }));
 const mockGetOperationalRecipient = vi.hoisted(() => vi.fn());
+const mockGetComparison = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -35,6 +36,12 @@ vi.mock('../../settings/operational-recipients.js', () => ({
 vi.mock('../../ai/service.js', () => ({
   aiService: { detectAnomalies: aiServiceMocks.detectAnomalies },
   flattenAiData: aiServiceMocks.flattenAiData,
+}));
+
+// documentService.getComparison is consumed read-only by runAnomalyDetection to
+// reconcile AI item-presence anomalies with the deterministic unmatched set.
+vi.mock('../../documents/service.js', () => ({
+  documentService: { getComparison: mockGetComparison },
 }));
 
 vi.mock('../../../shared/utils/logger.js', () => ({
@@ -99,6 +106,8 @@ describe('validationService', () => {
     aiServiceMocks.detectAnomalies.mockResolvedValue({ anomalies: [] });
     aiServiceMocks.flattenAiData.mockImplementation((data: Record<string, unknown>) => data);
     mockGetOperationalRecipient.mockResolvedValue('kiom@example.com');
+    mockGetComparison.mockReset();
+    mockGetComparison.mockResolvedValue({ unmatchedPlItems: [] });
     // Reset allChecks to default passing check
     (allChecks as any).length = 0;
     (allChecks as any).push(mockPassingCheck);
@@ -704,6 +713,160 @@ describe('validationService', () => {
         message:
           'IA: deteccao de anomalias indisponivel; verifique o provider configurado e tente novamente',
       });
+    });
+  });
+
+  describe('runAnomalyDetection() item reconciliation', () => {
+    const itemDocs = () =>
+      createResolvedChain([
+        { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001', items: [{ itemCode: 'A' }] } },
+        { type: 'packing_list', aiParsedData: { items: [{ itemCode: 'B' }] } },
+        { type: 'ohbl', aiParsedData: { blNumber: 'BL-001' } },
+      ]);
+
+    it('suppresses AI item-presence anomalies when deterministic comparison finds none', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [
+          { field: 'items.A', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.B', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'totalFobValue', description: 'Divergencia FOB', severity: 'high' },
+        ],
+      });
+      mockGetComparison.mockResolvedValueOnce({ unmatchedPlItems: [] });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      // Only the non-item anomaly survives.
+      expect(result.anomalies).toEqual([
+        { field: 'totalFobValue', description: 'Divergencia FOB', severity: 'high' },
+      ]);
+    });
+
+    it('re-emits a single anomaly whose count agrees with the deterministic unmatched set', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [
+          { field: 'items.A', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.B', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.C', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.D', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.E', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.F', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.G', description: 'Item nao localizado no PL', severity: 'medium' },
+        ],
+      });
+      // Deterministic comparison: only ONE real unmatched item.
+      mockGetComparison.mockResolvedValueOnce({
+        unmatchedPlItems: [{ itemCode: 'X', source: 'packing_list' }],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      const itemAnomalies = result.anomalies.filter((a: any) =>
+        String(a.field).startsWith('items'),
+      );
+      // The 7 fuzzy AI anomalies collapse to exactly one deterministic anomaly,
+      // matching the panel count of 1.
+      expect(itemAnomalies).toHaveLength(1);
+      expect(itemAnomalies[0].description).toContain('1 item');
+    });
+
+    it('keeps quantity-divergence anomalies (not an item-presence signal)', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [
+          { field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' },
+        ],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result.anomalies).toEqual([
+        { field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' },
+      ]);
+      // Reconciliation should not even consult the comparison for qty anomalies.
+      expect(mockGetComparison).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getReport()', () => {
+    const processWithSystemData = {
+      id: 1,
+      processCode: 'IMP-001',
+      brand: 'X',
+      status: 'validated',
+      totalFobValue: '1000.00',
+      freightValue: '200.00',
+      totalCbm: '12.000',
+      containerType: '40HC',
+    };
+
+    it('tags system_vs_document results and reports systemDataAvailable=true', async () => {
+      queryQueue.push(createResolvedChain([processWithSystemData]));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            checkName: 'invoice-value-vs-fup',
+            status: 'passed',
+            dataSource: 'system_vs_document',
+            documentsCompared: 'Invoice vs Sistema',
+          },
+          {
+            checkName: 'exporter-match',
+            status: 'passed',
+            dataSource: 'cross_document',
+            documentsCompared: 'INV vs PL',
+          },
+        ]),
+      );
+
+      const report = await validationService.getReport(1);
+
+      expect(report.systemDataAvailable).toBe(true);
+      expect(report.systemChecks.map((c: any) => c.checkName)).toEqual(['invoice-value-vs-fup']);
+      expect(report.crossDocumentChecks.map((c: any) => c.checkName)).toEqual(['exporter-match']);
+    });
+
+    it('falls back to documentsCompared when dataSource is null (legacy rows)', async () => {
+      queryQueue.push(createResolvedChain([processWithSystemData]));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            checkName: 'freight-vs-fup',
+            status: 'passed',
+            dataSource: null,
+            documentsCompared: 'BL vs Sistema',
+          },
+        ]),
+      );
+
+      const report = await validationService.getReport(1);
+
+      expect(report.systemChecks.map((c: any) => c.checkName)).toEqual(['freight-vs-fup']);
+      expect(report.crossDocumentChecks).toHaveLength(0);
+    });
+
+    it('reports systemDataAvailable=false when no system reference data exists', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 2,
+            processCode: 'IMP-002',
+            brand: 'Y',
+            status: 'validating',
+            totalFobValue: null,
+            freightValue: null,
+            totalCbm: null,
+            containerType: null,
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([]));
+
+      const report = await validationService.getReport(2);
+
+      expect(report.systemDataAvailable).toBe(false);
     });
   });
 
