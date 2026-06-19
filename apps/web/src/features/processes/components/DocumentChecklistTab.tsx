@@ -24,10 +24,17 @@ import { CHECKLIST_STEPS } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 
+interface StepCompletedBy {
+  completedBy: number | null;
+  completedByName: string | null;
+  completedAt: string | null;
+}
+
 interface FollowUpData {
   id: number;
   processId: number;
   overallProgress: number;
+  stepCompletedBy?: Record<string, StepCompletedBy>;
   [key: string]: unknown;
 }
 
@@ -170,6 +177,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
           const isToggling = toggling === step.key;
           const Icon = STEP_ICONS[step.key] || Circle;
           const timestamp = formatTimestamp(followUp?.[step.key]);
+          const completedByName = followUp?.stepCompletedBy?.[step.key]?.completedByName ?? null;
 
           return (
             <button
@@ -223,9 +231,11 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                 {isToggling ? (
                   <LoadingSpinner size="sm" />
                 ) : isCompleted && timestamp ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
-                    <Clock className="h-3 w-3" />
-                    {timestamp}
+                  <span className="inline-flex flex-col items-end gap-0.5 text-[11px] text-emerald-600">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {completedByName ? `Concluido por ${completedByName} em ${timestamp}` : timestamp}
+                    </span>
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-300 group-hover:text-slate-400">

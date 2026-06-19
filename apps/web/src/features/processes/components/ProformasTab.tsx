@@ -1,8 +1,10 @@
-import { FileText, Package, AlertTriangle, Link as LinkIcon } from 'lucide-react';
+import { FileText, Package, AlertTriangle, Link as LinkIcon, Download } from 'lucide-react';
+import { toast } from 'sonner';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { cn } from '@/shared/lib/utils';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface ProformaItem {
   itemCode?: string | null;
@@ -16,6 +18,8 @@ interface ProformaItem {
 interface ProformaSummary {
   documentId: number;
   filename: string;
+  // Download reference returned by the aggregate route (GET /api/documents/:id/file).
+  fileUrl?: string | null;
   uploadedAt: string | null;
   confidence: number | null;
   piNumber: string | null;
@@ -41,6 +45,34 @@ export function ProformasTab({ processId }: { processId: string }) {
     ['proformas-aggregate', processId],
     `/api/documents/process/${processId}/proformas`,
   );
+
+  const downloadProforma = async (pi: ProformaSummary) => {
+    if (!pi.fileUrl) return;
+    try {
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const res = await fetch(`${baseUrl}${pi.fileUrl}?download=1`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        redirect: 'follow',
+      });
+      if (res.redirected && res.url) {
+        window.open(res.url, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (!res.ok) throw new Error(`Falha ao baixar Proforma (${res.status})`);
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = window.document.createElement('a');
+      a.href = objectUrl;
+      a.download = pi.filename || `proforma-${pi.documentId}`;
+      window.document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    }
+  };
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
   if ((isError || error) && !data) {
@@ -126,9 +158,9 @@ export function ProformasTab({ processId }: { processId: string }) {
             </div>
             <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               {pi.invoiceDate && <span>Data: {pi.invoiceDate}</span>}
-              {pi.currency && pi.totalFobValue != null && (
-                <span className="font-mono">
-                  {pi.currency} {Number(pi.totalFobValue).toFixed(2)}
+              {pi.totalFobValue != null && (
+                <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+                  FOB {pi.currency ?? '$'} {Number(pi.totalFobValue).toFixed(2)}
                 </span>
               )}
               {pi.confidence != null && (
@@ -144,6 +176,17 @@ export function ProformasTab({ processId }: { processId: string }) {
                 >
                   {(pi.confidence * 100).toFixed(0)}%
                 </span>
+              )}
+              {pi.fileUrl && (
+                <button
+                  type="button"
+                  onClick={() => downloadProforma(pi)}
+                  className="inline-flex items-center gap-1 rounded border border-slate-300 dark:border-slate-600 px-2 py-1 font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  title="Baixar Proforma"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Baixar
+                </button>
               )}
             </div>
           </div>
@@ -187,7 +230,14 @@ export function ProformasTab({ processId }: { processId: string }) {
               </table>
             </div>
           ) : (
-            <p className="px-4 py-3 text-xs text-slate-400">Nenhum item extraído desta Proforma.</p>
+            <div className="flex items-center gap-2 px-4 py-3 text-xs text-slate-400">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+              <span>
+                {pi.confidence != null && pi.confidence < 0.5
+                  ? 'Itens nao extraidos (baixa confianca na leitura). Baixe a Proforma para conferir manualmente.'
+                  : 'Itens nao extraidos desta Proforma. Baixe o arquivo para conferir manualmente.'}
+              </span>
+            </div>
           )}
         </div>
       ))}

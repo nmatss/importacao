@@ -37,7 +37,7 @@ interface EspelhoItem {
 interface Espelho {
   id: number;
   status: string;
-  items: EspelhoItem[];
+  items?: EspelhoItem[];
   totalFobValue: number;
   totalQuantity: number;
   totalNetWeight: number;
@@ -231,6 +231,10 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     return '';
   };
 
+  // Guard against an espelho whose items are missing/undefined (caused a
+  // "Cannot read properties of undefined (reading 'map')" crash).
+  const items = espelho?.items ?? [];
+
   return (
     <div className="space-y-4">
       {/* Actions */}
@@ -378,7 +382,17 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700 bg-white dark:bg-slate-800">
-              {espelho.items.map((item) => (
+              {items.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={11}
+                    className="px-3 py-8 text-center text-sm text-slate-400 dark:text-slate-500"
+                  >
+                    Nenhum item no espelho ainda. Gere o espelho ou adicione itens manualmente.
+                  </td>
+                </tr>
+              )}
+              {items.map((item) => (
                 <tr key={item.id} className={cn('transition-colors', rowBg(item))}>
                   <td className="px-3 py-2">{renderCell(item, 'itemCode', item.itemCode)}</td>
                   <td className="px-3 py-2 max-w-[200px]">

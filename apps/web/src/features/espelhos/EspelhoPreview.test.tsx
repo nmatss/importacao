@@ -103,4 +103,17 @@ describe('EspelhoPreview', () => {
 
     expect(screen.getByRole('button', { name: /Enviado à Fenícia/i })).toBeDisabled();
   });
+
+  it('does not crash and shows an empty state when items are undefined', () => {
+    // Simulate an espelho payload missing the items array entirely.
+    vi.mocked(useApiQuery).mockReturnValue({
+      data: { ...baseEspelho, items: undefined },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useApiQuery>);
+
+    expect(() => renderPreview()).not.toThrow();
+    expect(screen.getByText(/Nenhum item no espelho ainda/i)).toBeInTheDocument();
+  });
 });

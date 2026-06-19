@@ -57,6 +57,14 @@ interface Anomaly {
   confidence?: number;
 }
 
+// Canonical field for the reconciled item-presence anomaly. The backend drops
+// the AI's fuzzy "N itens nao encontrados" anomalies and re-emits a single one
+// under this field whose count comes from the deterministic document
+// comparison (the "Itens no Packing List sem correspondencia na Invoice" list
+// in the Comparativo Geral). The two surfaces must never disagree (e.g. 7 vs 1),
+// so we never render an independent numeric claim here — we point to that list.
+const ITEM_MATCH_ANOMALY_FIELD = 'items.unmatched';
+
 interface CorrectionDraft {
   id: number;
   processId: number;
@@ -838,40 +846,57 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
       {/* Anomalies */}
       {anomalies && anomalies.length > 0 && (
         <div className="rounded-lg border border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30 p-4">
-          <h4 className="mb-3 text-sm font-semibold text-violet-900 dark:text-violet-300">
+          <h4 className="mb-1 text-sm font-semibold text-violet-900 dark:text-violet-300">
             Anomalias Detectadas pela IA
           </h4>
+          <p className="mb-3 text-xs text-violet-700/80 dark:text-violet-400/80">
+            A contagem de itens sem correspondencia segue a comparacao deterministica do{' '}
+            <span className="font-semibold">Comparativo Geral</span> — esta lista nao reporta um
+            numero proprio.
+          </p>
           <div className="space-y-2">
-            {anomalies.map((anomaly, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 rounded-lg bg-white dark:bg-slate-800 p-3 border border-violet-100 dark:border-violet-800"
-              >
-                <AlertTriangle
-                  className={cn(
-                    'mt-0.5 h-4 w-4 shrink-0',
-                    anomaly.severity === 'high'
-                      ? 'text-danger-500'
-                      : anomaly.severity === 'medium'
-                        ? 'text-amber-500'
-                        : 'text-primary-500',
+            {anomalies.map((anomaly, i) => {
+              // The reconciled item-presence anomaly carries the deterministic
+              // count; it is the canonical unmatched-items signal, so we point
+              // back to the Comparativo Geral list instead of re-stating a count.
+              const isReconciledItemMatch = anomaly.field === ITEM_MATCH_ANOMALY_FIELD;
+              return (
+                <div
+                  key={i}
+                  className="flex items-start gap-3 rounded-lg bg-white dark:bg-slate-800 p-3 border border-violet-100 dark:border-violet-800"
+                >
+                  <AlertTriangle
+                    className={cn(
+                      'mt-0.5 h-4 w-4 shrink-0',
+                      anomaly.severity === 'high'
+                        ? 'text-danger-500'
+                        : anomaly.severity === 'medium'
+                          ? 'text-amber-500'
+                          : 'text-primary-500',
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                      {isReconciledItemMatch ? 'Itens sem correspondencia' : anomaly.field}
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-400">
+                      {anomaly.description}
+                    </p>
+                    {isReconciledItemMatch && (
+                      <p className="mt-1 text-[11px] text-slate-400">
+                        Ver a lista completa em "Itens no Packing List sem correspondencia na
+                        Invoice" no Comparativo Geral.
+                      </p>
+                    )}
+                  </div>
+                  {!isReconciledItemMatch && Number.isFinite(anomaly.confidence) && (
+                    <span className="text-xs text-slate-400">
+                      {((anomaly.confidence ?? 0) * 100).toFixed(0)}%
+                    </span>
                   )}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {anomaly.field}
-                  </p>
-                  <p className="text-xs text-slate-600 dark:text-slate-400">
-                    {anomaly.description}
-                  </p>
                 </div>
-                {Number.isFinite(anomaly.confidence) && (
-                  <span className="text-xs text-slate-400">
-                    {((anomaly.confidence ?? 0) * 100).toFixed(0)}%
-                  </span>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

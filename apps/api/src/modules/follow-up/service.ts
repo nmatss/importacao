@@ -1,6 +1,11 @@
-import { eq, sql, count, and, gte } from 'drizzle-orm';
+import { eq, sql, count, and, gte, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { followUpTracking, importProcesses } from '../../shared/database/schema.js';
+import {
+  followUpTracking,
+  importProcesses,
+  processEvents,
+  users,
+} from '../../shared/database/schema.js';
 import type { FollowUpTracking } from '../../shared/database/schema.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -64,6 +69,7 @@ async function recordChecklistEvent(
   newStatus: 'pendente' | 'feito',
   completedAt: Date | null,
   userId: number | null,
+  userName: string | null,
 ) {
   if (previousStatus === newStatus) return;
 
@@ -80,10 +86,86 @@ async function recordChecklistEvent(
         previousStatus,
         newStatus,
         completedAt: completedAt?.toISOString() ?? null,
+        // Persist who acted so the checklist can show "Concluido por <nome>".
+        // Stored in the event metadata (no schema migration on follow_up_tracking).
+        completedBy: userId,
+        completedByName: userName,
       },
     },
     userId,
   );
+}
+
+/**
+ * Resolves the display name of the acting user for checklist attribution.
+ * The JWT payload only carries id/email/role, so we look up the name.
+ */
+async function resolveUserName(userId: number | null): Promise<string | null> {
+  if (!userId) return null;
+  try {
+    const [u] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return u?.name ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export interface StepCompletedBy {
+  completedBy: number | null;
+  completedByName: string | null;
+  completedAt: string | null;
+}
+
+/**
+ * Builds a map of { [stepKey]: { completedBy, completedByName, completedAt } } from the
+ * most recent checklist_step_changed event per step. Falls back to the event author's
+ * current name when the metadata snapshot lacks a name (older events).
+ */
+async function getStepCompletedByMap(
+  processId: number,
+): Promise<Record<string, StepCompletedBy>> {
+  try {
+    const events = await db
+      .select({
+        metadata: processEvents.metadata,
+        createdBy: processEvents.createdBy,
+        createdAt: processEvents.createdAt,
+        authorName: users.name,
+      })
+      .from(processEvents)
+      .leftJoin(users, eq(processEvents.createdBy, users.id))
+      .where(
+        and(
+          eq(processEvents.processId, processId),
+          eq(processEvents.eventType, 'checklist_step_changed'),
+        ),
+      )
+      .orderBy(desc(processEvents.createdAt));
+
+    const map: Record<string, StepCompletedBy> = {};
+    for (const ev of events) {
+      const meta = (ev.metadata ?? {}) as Record<string, unknown>;
+      const step = typeof meta.step === 'string' ? meta.step : null;
+      if (!step || meta.newStatus !== 'feito') continue;
+      // First occurrence wins because rows are ordered newest-first.
+      if (map[step]) continue;
+      map[step] = {
+        completedBy: ev.createdBy ?? null,
+        completedByName:
+          (typeof meta.completedByName === 'string' ? meta.completedByName : null) ??
+          ev.authorName ??
+          null,
+        completedAt: typeof meta.completedAt === 'string' ? meta.completedAt : null,
+      };
+    }
+    return map;
+  } catch {
+    return {};
+  }
 }
 
 export const followUpService = {
@@ -142,6 +224,13 @@ export const followUpService = {
       .limit(1);
 
     if (!tracking) throw new NotFoundError('Acompanhamento não encontrado');
+
+    // Enrich with per-step attribution ("Concluido por <nome>") derived from the
+    // latest checklist_step_changed event for each step. No schema migration needed.
+    const stepCompletedBy = await getStepCompletedByMap(processId);
+    if (Object.keys(stepCompletedBy).length > 0) {
+      return { ...tracking, stepCompletedBy };
+    }
     return tracking;
   },
 
@@ -215,6 +304,7 @@ export const followUpService = {
 
     const previousStatus = existing?.[typedStep] ? 'feito' : 'pendente';
     const newStatus = completedAt ? 'feito' : 'pendente';
+    const userName = await resolveUserName(userId);
 
     if (!existing) {
       const [created] = await db
@@ -234,8 +324,10 @@ export const followUpService = {
         newStatus,
         completedAt,
         userId,
+        userName,
       );
-      return updated;
+      const stepCompletedBy = await getStepCompletedByMap(processId);
+      return Object.keys(stepCompletedBy).length > 0 ? { ...updated, stepCompletedBy } : updated;
     }
 
     const [updated] = await db
@@ -264,9 +356,11 @@ export const followUpService = {
       newStatus,
       completedAt,
       userId,
+      userName,
     );
 
-    return final;
+    const stepCompletedBy = await getStepCompletedByMap(processId);
+    return Object.keys(stepCompletedBy).length > 0 ? { ...final, stepCompletedBy } : final;
   },
 
   async compareWithSheet(processCode: string) {

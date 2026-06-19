@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
+import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
@@ -96,6 +97,23 @@ interface ComparisonData {
   blConfidence: number | null;
   draftBlConfidence?: number | null;
   espelhoConfidence?: number | null;
+}
+
+interface ValidationCheck {
+  id: number;
+  checkName: string;
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
+  expectedValue?: string | null;
+  actualValue?: string | null;
+  documentsCompared?: string | null;
+  message?: string | null;
+  dataSource?: string | null;
+}
+
+interface ValidationReport {
+  systemDataAvailable?: boolean;
+  crossDocumentChecks: ValidationCheck[];
+  systemChecks: ValidationCheck[];
 }
 
 interface AcceptTarget {
@@ -233,6 +251,42 @@ function StatusCell({ value, status }: { value: string | null; status?: DisplayS
   );
 }
 
+function WeightCell({
+  invoice,
+  pl,
+  espelho,
+  hasEspelho,
+}: {
+  invoice: number | null | undefined;
+  pl: number | null | undefined;
+  espelho: number | null | undefined;
+  hasEspelho: boolean;
+}) {
+  const parts: Array<{ key: string; label: string; value: number | null | undefined }> = [
+    { key: 'inv', label: 'INV', value: invoice },
+    { key: 'pl', label: 'PL', value: pl },
+  ];
+  if (hasEspelho) parts.push({ key: 'esp', label: 'Esp', value: espelho });
+  const visible = parts.filter((p) => p.value != null);
+  if (visible.length === 0) {
+    return (
+      <td className="px-3 py-2 text-right font-mono text-slate-300 dark:text-slate-600">-</td>
+    );
+  }
+  return (
+    <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
+      <div className="flex flex-col items-end gap-0.5">
+        {visible.map((p) => (
+          <span key={p.key}>
+            <span className="text-[9px] uppercase text-slate-400 mr-1">{p.label}</span>
+            {formatNumber(p.value)}
+          </span>
+        ))}
+      </div>
+    </td>
+  );
+}
+
 function acceptanceEventRowKey(event: ProcessEvent): string | null {
   const rowKey = event.metadata?.rowKey;
   return typeof rowKey === 'string' ? rowKey : null;
@@ -261,6 +315,22 @@ function passesFilter(status: DisplayStatus, filter: ComparisonFilter) {
   return filter === 'all' || status === filter;
 }
 
+const checkLabel = (name: string) =>
+  VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
+
+function checkRowStatus(status: ValidationCheck['status']): RowStatus {
+  switch (status) {
+    case 'failed':
+      return 'divergent';
+    case 'warning':
+      return 'warning';
+    case 'passed':
+      return 'match';
+    default:
+      return 'empty';
+  }
+}
+
 export function DocumentComparison({ processId }: { processId: string }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<ComparisonFilter>('all');
@@ -282,6 +352,29 @@ export function DocumentComparison({ processId }: { processId: string }) {
     ['process-events', processId],
     `/api/processes/${processId}/events?limit=200`,
   );
+  // Absorbs the standalone "Cruzamento entre Documentos" and "Documentos vs
+  // Sistema" panels (removed from FupComparisonPanel) into this consolidated
+  // comparison. We read the cross_document checks and the system_vs_document
+  // values inline so only one comparison remains.
+  const { data: report } = useApiQuery<ValidationReport>(
+    ['validation-report', processId],
+    `/api/validation/${processId}/report`,
+  );
+
+  const systemDataAvailable = report?.systemDataAvailable ?? false;
+
+  // Map a system (Sydle) value per aggregate field label so it can be shown
+  // inline in the "Sistema" column. Keyed by the localized check label, which
+  // matches the aggregate field labels emitted by the backend.
+  const systemValueByLabel = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const check of report?.systemChecks ?? []) {
+      const value = check.expectedValue;
+      if (value == null || value === '') continue;
+      map.set(checkLabel(check.checkName).toLowerCase(), value);
+    }
+    return map;
+  }, [report?.systemChecks]);
 
   const acceptedByRow = useMemo(() => {
     const map = new Map<string, ProcessEvent>();
@@ -301,10 +394,40 @@ export function DocumentComparison({ processId }: { processId: string }) {
           const key = field.rowKey ?? rowKey('aggregate', field.label, index);
           const accepted = acceptedByRow.get(key);
           const displayStatus: DisplayStatus = accepted ? 'accepted' : field.status;
-          return { ...field, rowKey: key, displayStatus, accepted };
+          const system = systemValueByLabel.get(field.label.trim().toLowerCase()) ?? null;
+          return { ...field, rowKey: key, displayStatus, accepted, system };
         }),
-    [acceptedByRow, data?.aggregateComparison],
+    [acceptedByRow, data?.aggregateComparison, systemValueByLabel],
   );
+
+  // Cross-document validation checks (the old "Cruzamento entre Documentos"
+  // panel) absorbed as extra rows. Skip any whose label already appears as an
+  // aggregate field so we never duplicate a field the aggregate already shows.
+  const crossDocumentRows = useMemo(() => {
+    const existingLabels = new Set(
+      (data?.aggregateComparison ?? []).map((f) => f.label.trim().toLowerCase()),
+    );
+    return (report?.crossDocumentChecks ?? [])
+      .map((check) => {
+        const label = checkLabel(check.checkName);
+        const status = checkRowStatus(check.status);
+        const key = `cross:${check.checkName}:${check.id}`;
+        const accepted = acceptedByRow.get(key);
+        const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
+        return {
+          rowKey: key,
+          label,
+          expected: check.expectedValue ?? null,
+          actual: check.actualValue ?? null,
+          message: check.message ?? null,
+          status,
+          displayStatus,
+          accepted,
+          normalizedLabel: label.trim().toLowerCase(),
+        };
+      })
+      .filter((row) => row.status !== 'empty' && !existingLabels.has(row.normalizedLabel));
+  }, [acceptedByRow, data?.aggregateComparison, report?.crossDocumentChecks]);
 
   const itemRows = useMemo(
     () =>
@@ -330,13 +453,18 @@ export function DocumentComparison({ processId }: { processId: string }) {
     [aggregateRows, filter],
   );
 
+  const filteredCrossDocumentRows = useMemo(
+    () => crossDocumentRows.filter((row) => passesFilter(row.displayStatus, filter)),
+    [crossDocumentRows, filter],
+  );
+
   const filteredItemRows = useMemo(
     () => itemRows.filter((row) => passesFilter(row.displayStatus, filter)),
     [filter, itemRows],
   );
 
   const counts = useMemo(() => {
-    const rows = [...aggregateRows, ...itemRows];
+    const rows = [...aggregateRows, ...crossDocumentRows, ...itemRows];
     return {
       all: rows.length,
       match: rows.filter((row) => row.displayStatus === 'match').length,
@@ -344,7 +472,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       divergent: rows.filter((row) => row.displayStatus === 'divergent').length,
       accepted: rows.filter((row) => row.displayStatus === 'accepted').length,
     };
-  }, [aggregateRows, itemRows]);
+  }, [aggregateRows, crossDocumentRows, itemRows]);
 
   const missingComparisonDocs = useMemo(() => {
     if (!data) return [];
@@ -384,8 +512,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   const renderAcceptanceCell = (target: AcceptTarget, accepted?: ProcessEvent) => {
     if (accepted) {
+      const note = accepted.description?.trim() || null;
       return (
-        <div className="space-y-1 text-xs text-primary-700">
+        <div
+          className="group relative space-y-1 text-xs text-primary-700"
+          title={note ?? undefined}
+        >
           <div className="inline-flex items-center gap-1 rounded bg-primary-50 px-2 py-1 font-medium">
             <Wrench className="h-3 w-3" />
             Aceito
@@ -400,6 +532,17 @@ export function DocumentComparison({ processId }: { processId: string }) {
               minute: '2-digit',
             })}
           </div>
+          {note && (
+            <div
+              role="tooltip"
+              className="pointer-events-none absolute left-0 top-full z-20 mt-1 hidden w-max max-w-[260px] rounded-md border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-[11px] font-normal text-slate-700 dark:text-slate-200 shadow-lg group-hover:block group-focus-within:block"
+            >
+              <span className="font-semibold text-slate-500 dark:text-slate-400">
+                Justificativa:
+              </span>{' '}
+              {note}
+            </div>
+          )}
         </div>
       );
     }
@@ -565,11 +708,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
-        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+        <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600 flex items-center justify-between gap-2">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <FileText className="h-4 w-4 text-primary-600" />
-            Comparativo Geral - Invoice vs Packing List vs BL vs Espelho
+            Comparativo Geral - Invoice vs Packing List vs BL vs Espelho vs Sistema
           </h4>
+          {!systemDataAvailable && (
+            <span className="text-[11px] font-normal text-slate-400 dark:text-slate-500">
+              sem dados do sistema
+            </span>
+          )}
         </div>
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="min-w-full">
@@ -590,6 +738,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 </th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-cyan-500">
                   Espelho
+                </th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-500">
+                  Sistema
                 </th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Status
@@ -656,6 +807,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   <StatusCell value={field.packingList} status={field.displayStatus} />
                   <StatusCell value={field.bl} status={field.displayStatus} />
                   <StatusCell value={field.espelho} status={field.displayStatus} />
+                  {systemDataAvailable ? (
+                    <StatusCell value={field.system} status={field.displayStatus} />
+                  ) : (
+                    <td className="px-3 py-2.5 text-xs text-slate-300 dark:text-slate-600 italic">
+                      sem dados do sistema
+                    </td>
+                  )}
                   <td className="px-3 py-2.5">
                     <StatusPill status={field.displayStatus} />
                   </td>
@@ -675,9 +833,71 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   </td>
                 </tr>
               ))}
-              {filteredAggregateRows.length === 0 && (
+              {filteredCrossDocumentRows.map((row) => (
+                <tr
+                  key={row.rowKey}
+                  className={cn(
+                    'border-b last:border-b-0',
+                    row.displayStatus === 'accepted'
+                      ? 'bg-primary-50/30 dark:bg-primary-950/20'
+                      : row.status === 'divergent'
+                        ? 'bg-danger-50/30 dark:bg-danger-950/20'
+                        : row.status === 'warning'
+                          ? 'bg-amber-50/30 dark:bg-amber-950/20'
+                          : '',
+                  )}
+                >
+                  <td className="px-3 py-2.5">
+                    {row.displayStatus === 'accepted' && (
+                      <Wrench className="h-4 w-4 text-primary-500" />
+                    )}
+                    {row.displayStatus === 'match' && (
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                    )}
+                    {row.displayStatus === 'warning' && (
+                      <AlertTriangle className="h-4 w-4 text-amber-500" />
+                    )}
+                    {row.displayStatus === 'divergent' && (
+                      <XCircle className="h-4 w-4 text-danger-500" />
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">
+                    <div className="flex items-center gap-1.5">
+                      <span>{row.label}</span>
+                      <span
+                        title="Cruzamento entre documentos (Invoice, Packing List e BL)"
+                        className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-500"
+                      >
+                        cruzamento
+                      </span>
+                    </div>
+                  </td>
+                  <StatusCell value={row.expected} status={row.displayStatus} />
+                  <td className="px-3 py-2.5" colSpan={2} />
+                  <StatusCell value={row.actual} status={row.displayStatus} />
+                  <td className="px-3 py-2.5" />
+                  <td className="px-3 py-2.5">
+                    <StatusPill status={row.displayStatus} />
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-400 min-w-[220px]">
+                    {row.message ?? '-'}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {renderAcceptanceCell(
+                      {
+                        scope: 'aggregate',
+                        rowKey: row.rowKey,
+                        fieldLabel: row.label,
+                        previousStatus: row.status,
+                      },
+                      row.accepted,
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filteredAggregateRows.length === 0 && filteredCrossDocumentRows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-sm text-slate-400">
+                  <td colSpan={10} className="px-3 py-8 text-center text-sm text-slate-400">
                     Nenhuma linha no filtro selecionado.
                   </td>
                 </tr>
@@ -732,7 +952,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     Total INV
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Peso PL
+                    Peso Liquido
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Peso Bruto
                   </th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Divergencia
@@ -812,9 +1035,18 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     <td className="px-3 py-2 text-right font-mono text-slate-800 dark:text-slate-100 font-medium">
                       {formatMoney(item.invoiceTotal)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {formatNumber(item.plWeight ?? item.plGrossWeight ?? item.plNetWeight)}
-                    </td>
+                    <WeightCell
+                      invoice={item.invoiceNetWeight}
+                      pl={item.plNetWeight}
+                      espelho={item.espelhoNetWeight}
+                      hasEspelho={!!data.hasEspelho}
+                    />
+                    <WeightCell
+                      invoice={item.invoiceGrossWeight}
+                      pl={item.plGrossWeight ?? item.plWeight}
+                      espelho={item.espelhoGrossWeight}
+                      hasEspelho={!!data.hasEspelho}
+                    />
                     <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 min-w-[180px]">
                       {item.divergence || '-'}
                     </td>
@@ -840,7 +1072,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 ))}
                 {filteredItemRows.length === 0 && (
                   <tr>
-                    <td colSpan={14} className="px-3 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={15} className="px-3 py-8 text-center text-sm text-slate-400">
                       Nenhum item no filtro selecionado.
                     </td>
                   </tr>

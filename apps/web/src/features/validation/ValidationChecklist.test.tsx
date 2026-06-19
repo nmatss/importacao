@@ -232,6 +232,43 @@ describe('ValidationChecklist', () => {
     expect(closeButton).toHaveFocus();
   });
 
+  it('renders the reconciled item-presence anomaly pointing to the canonical comparison list', async () => {
+    // Backend reconciles the AI's fuzzy "7 itens nao encontrados" down to the
+    // deterministic count and re-emits it under the canonical items.unmatched
+    // field. The panel must show that description and point to the Comparativo
+    // Geral list — never an independent number that could disagree (7 vs 1).
+    vi.mocked(api.post).mockResolvedValueOnce({
+      anomalies: [
+        {
+          field: 'items.unmatched',
+          description:
+            '1 item no Packing List sem correspondencia na Invoice (comparacao deterministica).',
+          severity: 'medium',
+        },
+      ],
+    });
+    renderChecklist([{ id: 1, checkName: 'ports-match', status: 'passed' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Analisar divergências/i }));
+
+    expect(await screen.findByText(/Anomalias Detectadas pela IA/i)).toBeInTheDocument();
+    // Canonical description from the deterministic comparison is shown.
+    expect(
+      screen.getByText(
+        /1 item no Packing List sem correspondencia na Invoice \(comparacao deterministica\)/i,
+      ),
+    ).toBeInTheDocument();
+    // It points back to the single canonical list instead of the raw field name.
+    expect(screen.getByText('Itens sem correspondencia')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Ver a lista completa em "Itens no Packing List sem correspondencia/i),
+    ).toBeInTheDocument();
+    // The header makes clear this surface does not report its own number.
+    expect(
+      screen.getByText(/esta lista nao reporta um numero proprio/i),
+    ).toBeInTheDocument();
+  });
+
   it('saves the current draft body HTML even when the editor has not blurred', async () => {
     vi.mocked(api.post).mockResolvedValueOnce(correctionDraft);
     vi.mocked(api.patch).mockResolvedValueOnce({
