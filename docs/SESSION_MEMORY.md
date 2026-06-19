@@ -40,6 +40,31 @@ Testes:
 - `npm test` -> API 692 passed / 1 skipped; Web 95 passed.
 - `bash -n scripts/deploy.sh` -> passed.
 
+Deploy/validacao:
+
+- Commit `5362dd3a343a955c4e694cde3df457c92b99c512`
+  (`feat: enable sydle one payment sync`) enviado ao GitHub e implantado em
+  `192.168.168.124` por `scripts/deploy.sh` com
+  `ALLOW_SYDLE_SYNC_DEPLOY=1`.
+- Backup pre-deploy validado em
+  `/home/nicolas/backups/importacao/importacao_2026-06-19_225549*`.
+- Deploy passou SOPS, compose config, migrations idempotentes, restart,
+  API health, cert-api readiness, web health e public health.
+- `https://importacao.grupounico.com/` retornou HTTP 200; chamada publica
+  `/api/auth/me` retornou 401 esperado sem token.
+- `.env` remoto contem `SYDLE_SOURCE_TYPE=sydle_one_class`,
+  `SYDLE_SYNC_ENABLED=true` e variaveis Sydle One preenchidas via SOPS.
+- Sync manual pos-deploy (`sydle_sync_runs.id=109`) finalizou `success`:
+  `fetched=20`, `created=20`, `errors=0`, `sourceType=sydle_one_class`.
+- Cron das 20:00 BRT (`sydle_sync_runs.id=110`) finalizou `success`:
+  `fetched=2`, `updated=2`, `errors=0`; esse resultado e esperado pelo overlap
+  de cursor de 5 minutos e nao duplicou linhas.
+- Totais em `sydle_purchase_payments`: 20 linhas, USD 154.847,83 comprados,
+  USD 57.142,08 pagos, USD 97.705,75 em aberto; 13 linhas `open` e 7 `paid`.
+- Todas as 20 linhas ficaram `unmatched` porque a fonte acessivel traz ticket
+  SYDLE (`SYDLE-...`) e valores, mas nao PI/invoice/processo/fornecedor por
+  falta de permissao nos formularios complementares.
+
 ## 2026-06-19 - Go-live UAT Importacao, Certificacao E Estoque WMS
 
 Objetivo:

@@ -39,6 +39,9 @@ Atualizacao posterior em 2026-06-19:
   `68bf1179b042c72f03993928` (`Solicitacao de Pagamento Internacional/current`)
   via login `sys/auth/signIn` e `POST _classId/_search`. O modulo passou a
   suportar `SYDLE_SOURCE_TYPE=sydle_one_class`.
+- Deploy posterior do commit `5362dd3a343a955c4e694cde3df457c92b99c512` habilitou
+  o sync real SYDLE em producao. Sync manual criou 20 linhas sem erro e o cron
+  seguinte confirmou o cursor incremental com overlap sem duplicar registros.
 
 - SHA implantado operacionalmente:
   `3f36137a697fee9f4f1011bc3eace3417467d5be`.
@@ -138,9 +141,9 @@ Compras/Pagamentos SYDLE` e por atalho no portal para administradores.
 - Este bloqueio publico foi superado em deploy posterior do SHA
   `0602241891addbee66d969b778c3a3f4aa1d19c3`.
 - SYDLE ja possui classe real validada e suporte tecnico no codigo. Pendencia
-  remanescente: configurar SOPS/producao, rodar sync, validar amostra com
-  financeiro/comex e confirmar se campos complementares de formulario exigem
-  permissao adicional.
+  remanescente: validar amostra com financeiro/comex e confirmar se campos
+  complementares de formulario exigem permissao adicional para PI/invoice/
+  fornecedor/processo de importacao.
 - Destinatarios operacionais devem ser confirmados/cadastrados na tela, ou
   `COMMUNICATION_ALLOWED_RECIPIENTS` deve ser preenchido como fallback.
 - HTTPS publico deve terminar no Nginx/edge externo; o compose publica o web em

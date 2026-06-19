@@ -35,6 +35,21 @@ Quando a SYDLE nao esta configurada, o job registra `status=skipped` em
 `sydle_sync_runs` com motivo `sydle_not_configured`. Isso e intencional para
 nao gerar erro falso em producao.
 
+## Validacao Em Producao - 2026-06-19
+
+- Commit implantado: `5362dd3a343a955c4e694cde3df457c92b99c512`.
+- Deploy executado com `ALLOW_SYDLE_SYNC_DEPLOY=1`, health interno e publico OK.
+- Sync manual `sydle_sync_runs.id=109`: `success`, `fetched=20`,
+  `created=20`, `errors=0`.
+- Cron seguinte `sydle_sync_runs.id=110`: `success`, `fetched=2`,
+  `updated=2`, `errors=0`; o comportamento e esperado pelo overlap de cursor
+  de 5 minutos.
+- Totais iniciais: 20 linhas, USD 154.847,83 comprados, USD 57.142,08 pagos e
+  USD 97.705,75 em aberto.
+- Conciliacao inicial: 20 `unmatched`, pois a permissao atual da API le ticket
+  SYDLE e parcelas, mas nao os formularios que poderiam expor PI/invoice/processo
+  de importacao/fornecedor.
+
 ## Variaveis De Ambiente
 
 As variaveis devem ficar em SOPS/env, nunca em `system_settings`.

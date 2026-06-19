@@ -163,6 +163,11 @@ Internacional/current`) retornou 14 solicitacoes e `paymentData[]`; o portal
 - Sync real usa SOPS/env com `SYDLE_SYNC_ENABLED=true`,
   `SYDLE_SOURCE_TYPE=sydle_one_class`, `SYDLE_BASE_URL`, `SYDLE_USER`,
   `SYDLE_PASSWORD`, `SYDLE_CLASS_ID` e `SYDLE_DATE_FIELD`.
+- Em producao, commit `5362dd3a343a955c4e694cde3df457c92b99c512` habilitou o
+  sync real. A primeira sync manual criou 20 parcelas sem erro; o cron seguinte
+  buscou 2 registros no overlap e atualizou sem duplicar linhas.
+- Totais iniciais da fonte real: 20 linhas, USD 154.847,83 comprados,
+  USD 57.142,08 pagos e USD 97.705,75 em aberto.
 
 ## Integracao Google Drive
 
