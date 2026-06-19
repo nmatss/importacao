@@ -193,7 +193,8 @@ SYDLE_SYNC_REMOTE="$(
     BEGIN { IGNORECASE = 1 }
     /^[[:space:]]*SYDLE_SYNC_ENABLED[[:space:]]*=/ {
       v = \$2
-      gsub(/[[:space:]\"'\'']/, \"\", v)
+      gsub(/[[:space:]\"]/, \"\", v)
+      gsub(/\047/, \"\", v)
       print tolower(v)
     }
   ' .env 2>/dev/null | tail -n 1"
