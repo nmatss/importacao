@@ -10,7 +10,11 @@ describe('dates-match check', () => {
     });
 
     expect(result.status).toBe('passed');
-    expect(result.documentsCompared).toBe('INV vs PL vs BL');
+    // INV shipment date is present, so the INV-vs-PL pair is deferred to the
+    // tolerance check and PL is dropped here. The reported label must reflect
+    // what was actually compared (INV vs BL), not the full set.
+    expect(result.documentsCompared).toBe('INV vs BL');
+    expect(result.documentsCompared).not.toContain('PL');
   });
 
   it('does not compare invoice issue date as ETD or shipment date', () => {

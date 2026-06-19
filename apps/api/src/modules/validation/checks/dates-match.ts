@@ -83,9 +83,20 @@ export default function datesMatch(input: CheckInput): CheckResult {
   const plShipment = firstDate(input.packingListData, PACKING_LIST_SHIPMENT_DATE_KEYS);
   const blShipment = firstDate(input.blData, BL_SHIPMENT_DATE_KEYS);
   const invoiceDateIgnored = !invShipment && normalize(input.invoiceData?.invoiceDate);
+
+  // Single source of truth for the INV-vs-PL shipment-date pair: the
+  // tolerance-aware `invoice-pl-date-tolerance` check owns that comparison
+  // (it allows a documented 30-day operational drift and emits at most a
+  // WARNING). To avoid two contradictory rows in the panel (e.g. this check
+  // FAILing while the tolerance check WARNs on the same pair), drop the PL
+  // entry whenever the Invoice date is also present — the INV-vs-PL diff is
+  // deferred to the tolerance check. PL is still compared here when the
+  // Invoice has no shipment date (so PL-vs-BL coverage is preserved), and the
+  // BL comparisons this check owns are untouched.
+  const deferPlToToleranceCheck = Boolean(invShipment && plShipment);
   const present: DateEntry[] = [
     { label: 'INV', value: invShipment },
-    { label: 'PL', value: plShipment },
+    { label: 'PL', value: deferPlToToleranceCheck ? '' : plShipment },
     { label: 'BL', value: blShipment },
   ].filter((entry) => entry.value);
 
@@ -119,6 +130,10 @@ export default function datesMatch(input: CheckInput): CheckResult {
     };
   }
 
+  // Report the documents actually compared. When PL is deferred to the
+  // tolerance check it is no longer in `present`, so the label must not claim
+  // 'INV vs PL vs BL'; derive it from the surviving entries only.
+  const comparedDocuments = present.map((entry) => entry.label).join(' vs ');
   const status = compareDates(
     present.map((entry) => entry.value),
     { matchDays: 10, warnDays: 30 },
@@ -135,7 +150,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
       status: 'passed',
       expectedValue,
       actualValue,
-      documentsCompared: 'INV vs PL vs BL',
+      documentsCompared: comparedDocuments,
       message: `Datas de ETD / embarque estao dentro da tolerancia operacional.${ignoredInvoiceDateNote}`,
     };
   }
@@ -146,7 +161,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
       status: 'warning',
       expectedValue,
       actualValue,
-      documentsCompared: 'INV vs PL vs BL',
+      documentsCompared: comparedDocuments,
       message: `Datas de ETD / embarque divergem pouco; revisar se necessario.${ignoredInvoiceDateNote}`,
     };
   }
@@ -156,7 +171,7 @@ export default function datesMatch(input: CheckInput): CheckResult {
     status: 'failed',
     expectedValue,
     actualValue,
-    documentsCompared: 'INV vs PL vs BL',
+    documentsCompared: comparedDocuments,
     message: `Divergencia relevante de datas: ${actualValue}.`,
   };
 }
