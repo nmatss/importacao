@@ -542,6 +542,126 @@ describe('documentService', () => {
         comparison.aggregateComparison.find((row: any) => row.label === 'Exportador / Shipper'),
       ).toMatchObject({ invoice: null, packingList: 'KIOM GLOBAL LIMITED' });
     });
+
+    it('exposes separate net + gross weights per item (peso liquido x peso bruto)', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: [
+                {
+                  itemCode: 'PI7752Y',
+                  description: 'Blouse',
+                  quantity: 100,
+                  unitPrice: 5.5,
+                  totalPrice: 550,
+                  netWeight: 28,
+                  grossWeight: 31,
+                },
+              ],
+            },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: [
+                {
+                  itemCode: 'PI7752Y',
+                  quantity: 100,
+                  boxQuantity: 50,
+                  netWeight: 30,
+                  grossWeight: 35,
+                },
+              ],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: {},
+                items: [
+                  {
+                    codigo: 'PI7752Y',
+                    qty: 100,
+                    pesoLiquidoTotal: 29,
+                    pesoBrutoTotal: 33,
+                  },
+                ],
+              },
+            },
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      expect(comparison.itemComparison).toHaveLength(1);
+      const row = comparison.itemComparison[0] as Record<string, any>;
+      // Net (peso liquido) per source
+      expect(row.invoiceNetWeight).toBe(28);
+      expect(row.plNetWeight).toBe(30);
+      expect(row.espelhoNetWeight).toBe(29);
+      // Gross (peso bruto) per source
+      expect(row.invoiceGrossWeight).toBe(31);
+      expect(row.plGrossWeight).toBe(35);
+      expect(row.espelhoGrossWeight).toBe(33);
+      // Legacy aggregate weight kept for backward compatibility
+      expect(row.plWeight).toBe(35);
+    });
+  });
+
+  describe('getProformasAggregate()', () => {
+    it('surfaces items, totalFobValue and a downloadable file reference per proforma', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 42,
+            type: 'proforma_invoice',
+            originalFilename: 'PI-001.pdf',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            confidenceScore: '0.91',
+            aiParsedData: {
+              // no piNumber → skips the preConsItems lookup query
+              invoiceDate: '2026-01-01',
+              currency: 'USD',
+              totalFobValue: 1234.56,
+              items: [
+                { itemCode: 'A1', description: 'Thing', quantity: 10 },
+                { itemCode: 'A2', description: 'Other', quantity: 5 },
+              ],
+            },
+          },
+        ]),
+      );
+
+      const result = await documentService.getProformasAggregate(7);
+      expect(result.proformaCount).toBe(1);
+      const pi = result.proformas[0];
+      expect(pi.documentId).toBe(42);
+      expect(pi.fileUrl).toBe('/api/documents/42/file');
+      expect(pi.totalFobValue).toBe(1234.56);
+      expect(pi.itemCount).toBe(2);
+      expect(pi.items).toHaveLength(2);
+      expect(result.totals.totalFobValue).toBe(1234.56);
+      expect(result.totals.itemCount).toBe(2);
+    });
   });
 
   describe('extractText()', () => {

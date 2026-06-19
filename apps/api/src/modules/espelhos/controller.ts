@@ -16,7 +16,9 @@ export const espelhoController = {
 
   async getEspelho(req: Request, res: Response) {
     try {
-      const espelho = await espelhoService.getEspelho(Number(req.params.processId));
+      // getEspelhoView always serializes `items` as an array so the frontend
+      // .map() cannot crash (belt-and-suspenders for the espelho preview).
+      const espelho = await espelhoService.getEspelhoView(Number(req.params.processId));
       if (!espelho) {
         return sendError(res, 'Espelho nao encontrado para este processo', 404);
       }

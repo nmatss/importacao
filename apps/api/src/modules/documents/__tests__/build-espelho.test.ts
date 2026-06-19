@@ -110,6 +110,49 @@ describe('buildEspelhoFromAiData', () => {
     expect(result.summary.totalBoxes).toBe(314);
   });
 
+  describe('BL shipment + freight projection (Eduarda feedback)', () => {
+    const blFull = {
+      blNumber: 'SHYY26021495A',
+      vesselName: 'COSCO SHIPPING ARGENTINA',
+      containerNumber: 'TCKU1234567',
+      shipper: 'KIOM GLOBAL LIMITED',
+      etd: '2026-02-10',
+      eta: '2026-03-25',
+      shipmentDate: '2026-02-12',
+      issueDate: '2026-02-13',
+      freightValue: 3200.5,
+      freightCurrency: 'USD',
+      totalGrossWeight: 5050,
+    };
+
+    it('projects etd/eta/shipmentDate/issueDate/freight/container into the summary', () => {
+      const { summary } = buildEspelhoFromAiData(inv, pl, blFull);
+      expect(summary.shipmentDate).toBe('2026-02-12');
+      expect(summary.etd).toBe('2026-02-10');
+      expect(summary.eta).toBe('2026-03-25');
+      expect(summary.issueDate).toBe('2026-02-13');
+      expect(summary.freightValue).toBe(3200.5);
+      expect(summary.freightCurrency).toBe('USD');
+      expect(summary.containerNumber).toBe('TCKU1234567');
+    });
+
+    it('falls back to etd for Data Embarque when shipmentDate is absent', () => {
+      const { summary } = buildEspelhoFromAiData(inv, pl, {
+        ...blFull,
+        shipmentDate: null,
+      });
+      expect(summary.shipmentDate).toBe('2026-02-10'); // etd fallback
+    });
+
+    it('leaves projected fields null when the BL has none of them', () => {
+      const { summary } = buildEspelhoFromAiData(inv, pl, bl);
+      expect(summary.shipmentDate).toBeNull();
+      expect(summary.etd).toBeNull();
+      expect(summary.freightValue).toBeNull();
+      expect(summary.freightCurrency).toBeNull();
+    });
+  });
+
   describe('EAN-anchored join (groundwork #9)', () => {
     const emptyIndex = createEanIndex([]);
 

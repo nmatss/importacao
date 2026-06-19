@@ -92,6 +92,16 @@ export function buildEspelhoFromAiData(
     vesselName: bl.vesselName ?? null,
     containerNumber: bl.containerNumber ?? null,
     blNumber: bl.blNumber ?? null,
+    // BL shipping milestones + freight so the process surface can show
+    // "Data Embarque" / "Frete" / "Container" (Eduarda feedback). The BL
+    // schema extracts these (etd/eta/shipmentDate/issueDate/freight*) but they
+    // were being dropped on the way into the espelho summary.
+    shipmentDate: bl.shipmentDate ?? bl.etd ?? null,
+    etd: bl.etd ?? null,
+    eta: bl.eta ?? null,
+    issueDate: bl.issueDate ?? null,
+    freightValue: bl.freightValue ?? null,
+    freightCurrency: bl.freightCurrency ?? null,
     importerName: inv.importerName ?? pl.importerName ?? null,
     importerCnpj: inv.importerCnpj ?? pl.importerCnpj ?? null,
     importerAddress: inv.importerAddress ?? pl.importerAddress ?? null,

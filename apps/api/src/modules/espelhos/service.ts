@@ -315,6 +315,69 @@ export const espelhoService = {
     return espelho ?? null;
   },
 
+  /**
+   * Serialize the latest espelho for the read view (GET /api/espelhos/:processId).
+   *
+   * Belt-and-suspenders for the frontend, which renders `espelho.items.map(...)`:
+   * the espelhos row itself carries no items column (lines live in
+   * process_items), so this view ALWAYS attaches a serialized `items` array —
+   * never null/undefined — so the client cannot crash on .map(). Totals are
+   * derived here too so the preview's totals row stays consistent. Kept
+   * separate from getEspelho() so internal callers (download/send) keep their
+   * lean row-only read.
+   */
+  async getEspelhoView(processId: number) {
+    const espelho = await this.getEspelho(processId);
+    if (!espelho) return null;
+
+    const rows = await db
+      .select()
+      .from(processItems)
+      .where(eq(processItems.processId, processId));
+
+    const items = (Array.isArray(rows) ? rows : []).map((it) => ({
+      id: it.id,
+      itemCode: it.itemCode ?? '',
+      description: it.description ?? '',
+      color: it.color ?? '',
+      size: it.size ?? '',
+      ncm: it.ncmCode ?? '',
+      unitPrice: it.unitPrice != null ? Number(it.unitPrice) : 0,
+      quantity: it.quantity ?? 0,
+      totalPrice: it.totalPrice != null ? Number(it.totalPrice) : 0,
+      boxes: it.boxQuantity ?? 0,
+      netWeight: it.netWeight != null ? Number(it.netWeight) : 0,
+      grossWeight: it.grossWeight != null ? Number(it.grossWeight) : 0,
+      isFoc: it.isFreeOfCharge ?? false,
+      requiresLi: it.requiresLi ?? false,
+      requiresCert: it.requiresCertification ?? false,
+    }));
+
+    const totals = items.reduce(
+      (acc, it) => {
+        acc.totalFobValue += it.totalPrice;
+        acc.totalQuantity += it.quantity;
+        acc.totalBoxes += it.boxes;
+        acc.totalNetWeight += it.netWeight;
+        acc.totalGrossWeight += it.grossWeight;
+        return acc;
+      },
+      {
+        totalFobValue: 0,
+        totalQuantity: 0,
+        totalBoxes: 0,
+        totalNetWeight: 0,
+        totalGrossWeight: 0,
+      },
+    );
+
+    return {
+      ...espelho,
+      items,
+      ...totals,
+    };
+  },
+
   async downloadXlsx(espelhoId: number): Promise<Buffer> {
     const [espelho] = await db.select().from(espelhos).where(eq(espelhos.id, espelhoId)).limit(1);
 

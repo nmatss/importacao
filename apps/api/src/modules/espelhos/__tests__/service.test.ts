@@ -143,6 +143,72 @@ describe('espelhoService', () => {
     });
   });
 
+  describe('getEspelhoView()', () => {
+    it('returns null when no espelho exists', async () => {
+      queryQueue.push(createResolvedChain([])); // getEspelho → none
+
+      const result = await espelhoService.getEspelhoView(1);
+      expect(result).toBeNull();
+    });
+
+    it('always serializes items as an array (never undefined) so the frontend .map() cannot crash', async () => {
+      const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };
+      queryQueue.push(createResolvedChain([mockEspelho])); // getEspelho
+      queryQueue.push(createResolvedChain([])); // process_items → empty
+
+      const result = await espelhoService.getEspelhoView(1);
+      expect(Array.isArray(result!.items)).toBe(true);
+      expect(result!.items).toHaveLength(0);
+      expect(result!.totalFobValue).toBe(0);
+    });
+
+    it('maps process items to the view shape and aggregates totals', async () => {
+      const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };
+      const mockItems = [
+        {
+          id: 1,
+          processId: 1,
+          itemCode: 'A001',
+          description: 'Thing',
+          color: 'BLUE',
+          size: 'M',
+          ncmCode: '6404.19.00',
+          unitPrice: '5.50',
+          quantity: 100,
+          totalPrice: '550.00',
+          boxQuantity: 50,
+          netWeight: '30.000',
+          grossWeight: '35.000',
+          isFreeOfCharge: false,
+          requiresLi: true,
+          requiresCertification: false,
+        },
+      ];
+      queryQueue.push(createResolvedChain([mockEspelho])); // getEspelho
+      queryQueue.push(createResolvedChain(mockItems)); // process_items
+
+      const result = await espelhoService.getEspelhoView(1);
+      expect(result!.items).toHaveLength(1);
+      const it = result!.items[0];
+      expect(it).toMatchObject({
+        id: 1,
+        itemCode: 'A001',
+        ncm: '6404.19.00',
+        boxes: 50,
+        netWeight: 30,
+        grossWeight: 35,
+        isFoc: false,
+        requiresLi: true,
+        requiresCert: false,
+      });
+      expect(result!.totalFobValue).toBe(550);
+      expect(result!.totalQuantity).toBe(100);
+      expect(result!.totalBoxes).toBe(50);
+      expect(result!.totalNetWeight).toBe(30);
+      expect(result!.totalGrossWeight).toBe(35);
+    });
+  });
+
   describe('sendToFeniciaByProcess()', () => {
     it('should send the Fenicia communication before marking the espelho as sent', async () => {
       const mockEspelho = { id: 10, processId: 1, version: 1, brand: 'puket' };

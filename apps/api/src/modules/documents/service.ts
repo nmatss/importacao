@@ -1175,6 +1175,9 @@ export const documentService = {
     type ProformaSummary = {
       documentId: number;
       filename: string;
+      // Download reference so the Proformas tab can offer "baixar PI" — mirrors
+      // how single documents are served (GET /api/documents/:id/file).
+      fileUrl: string;
       uploadedAt: Date | null;
       confidence: number | null;
       piNumber: string | null;
@@ -1208,6 +1211,7 @@ export const documentService = {
       summaries.push({
         documentId: doc.id,
         filename: doc.originalFilename,
+        fileUrl: `/api/documents/${doc.id}/file`,
         uploadedAt: doc.createdAt,
         confidence: doc.confidenceScore ? Number(doc.confidenceScore) : null,
         piNumber,
