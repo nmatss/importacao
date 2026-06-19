@@ -4,6 +4,27 @@ import { cache } from '../cache/redis.js';
 import { logger } from '../utils/logger.js';
 
 const KEY_PREFIX = 'rl:';
+const memoryStore = new Map<string, { count: number; resetAt: number }>();
+
+function pruneExpiredMemoryEntries(now = Date.now()) {
+  for (const [key, value] of memoryStore) {
+    if (now > value.resetAt) memoryStore.delete(key);
+  }
+}
+
+function incrementMemory(key: string, windowMs: number) {
+  const now = Date.now();
+  pruneExpiredMemoryEntries(now);
+  const current = memoryStore.get(key);
+  if (!current || now > current.resetAt) {
+    const next = { count: 1, resetAt: now + windowMs };
+    memoryStore.set(key, next);
+    return next;
+  }
+  const next = { count: current.count + 1, resetAt: current.resetAt };
+  memoryStore.set(key, next);
+  return next;
+}
 
 export function createRateLimiter(maxAttempts: number, windowMs: number) {
   const windowSec = Math.ceil(windowMs / 1000);
@@ -54,8 +75,19 @@ export function createRateLimiter(maxAttempts: number, windowMs: number) {
 
       return next();
     } catch (err) {
-      // Fail-open: if cache/Redis is down, allow the request through
-      logger.warn({ err }, 'Rate limiter error, allowing request (fail-open)');
+      logger.warn({ err }, 'Rate limiter cache error, using in-memory fallback');
+      const { count, resetAt } = incrementMemory(`mem:${key}`, windowMs);
+      const remaining = Math.max(0, maxAttempts - count);
+      res.set('X-RateLimit-Limit', maxAttempts.toString());
+      res.set('X-RateLimit-Remaining', remaining.toString());
+      res.set('X-RateLimit-Reset', Math.ceil(resetAt / 1000).toString());
+
+      if (count > maxAttempts) {
+        const retryAfter = Math.ceil((resetAt - Date.now()) / 1000);
+        res.set('Retry-After', retryAfter.toString());
+        return sendError(res, 'Muitas tentativas. Tente novamente mais tarde.', 429);
+      }
+
       return next();
     }
   };

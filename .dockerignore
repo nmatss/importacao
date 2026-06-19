@@ -6,6 +6,8 @@ dist
 .env
 .env.*
 .vscode
+.claude
+.codex
 coverage
 .nyc_output
 *.log

@@ -933,11 +933,6 @@ export const validationService = {
     const itemPresenceAnomalies = anomalies.filter((a) => isItemMatchAnomalyField(a.field));
     const passthrough = anomalies.filter((a) => !isItemMatchAnomalyField(a.field));
 
-    // No item-presence anomalies emitted → nothing to reconcile.
-    if (itemPresenceAnomalies.length === 0) {
-      return anomalies;
-    }
-
     let unmatchedPlCount = 0;
     let unmatchedInvoiceCount = 0;
     try {

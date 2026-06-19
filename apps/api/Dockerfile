@@ -8,10 +8,14 @@ RUN apk upgrade --no-cache
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+ENV HUSKY=0
+RUN npm ci --workspace apps/api --ignore-scripts
 
-COPY . .
+COPY apps/api ./apps/api
+WORKDIR /app/apps/api
 RUN npm run build
 
 # Production stage
@@ -21,15 +25,20 @@ RUN apk upgrade --no-cache && apk add --no-cache su-exec
 
 WORKDIR /app
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY apps/web/package.json ./apps/web/package.json
+ENV HUSKY=0
+RUN npm ci --omit=dev --workspace apps/api --ignore-scripts
+RUN if [ -d apps/api/node_modules ]; then cp -a apps/api/node_modules/. node_modules/; fi
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/apps/api/dist ./dist
+COPY --from=builder /app/apps/api/drizzle ./drizzle
 
 RUN mkdir -p uploads && chown node:node uploads
 
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY apps/api/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 USER node

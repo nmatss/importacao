@@ -73,6 +73,6 @@ describe('Validation E2E', () => {
       .post('/api/validation/999999/run')
       .set('Authorization', `Bearer ${authToken}`);
 
-    expect([400, 404, 500]).toContain(res.status);
+    expect([400, 404]).toContain(res.status);
   });
 });

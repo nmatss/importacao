@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, queryQueue } = createMockDb();
+const { mockDb, mockTx, queryQueue } = createMockDb();
 mockDb.execute = vi.fn();
 
 vi.mock('../../../shared/database/connection.js', () => ({
@@ -59,6 +59,7 @@ describe('sydleService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    mockTx.execute.mockResolvedValue([]);
     process.env = { ...originalEnv, SYDLE_SYNC_ENABLED: 'false' };
   });
 
@@ -84,6 +85,39 @@ describe('sydleService', () => {
     expect(mockDb.insert).toHaveBeenCalled();
     expect(mockDb.update).toHaveBeenCalled();
     expect(mockDb.execute).not.toHaveBeenCalled();
+  });
+
+  it('records skipped sync when another SYDLE sync owns the advisory lock', async () => {
+    const started = { id: 11, status: 'running', trigger: 'manual' };
+    const completed = {
+      id: 11,
+      status: 'skipped',
+      fetched: 0,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      matched: 0,
+      unmatched: 0,
+      errors: 0,
+      metadata: { skippedReason: 'sync_already_running' },
+    };
+
+    process.env = {
+      ...originalEnv,
+      SYDLE_SYNC_ENABLED: 'true',
+      SYDLE_BASE_URL: 'https://sydle.example.test',
+      SYDLE_API_TOKEN: 'token',
+    };
+    mockTx.execute.mockResolvedValueOnce([{ acquired: false }]);
+    queryQueue.push(createResolvedChain([started]));
+    queryQueue.push(createResolvedChain([completed]));
+
+    const result = await sydleService.sync('manual', 1);
+
+    expect(result).toEqual(completed);
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockTx.execute).toHaveBeenCalledTimes(1);
+    expect(mockDb.update).toHaveBeenCalled();
   });
 
   it('matches a payment by exact process code', async () => {
@@ -164,6 +198,51 @@ describe('sydleService', () => {
 
     expect(result).toMatchObject({
       processId: 265,
+      matchStatus: 'matched',
+    });
+    expect(result.matchReason).toContain('purchase_order');
+    expect(result.matchReason).toContain('proforma');
+    expect(result.matchReason).toContain('invoice');
+  });
+
+  it('matches lookup values nested inside extracted document payloads', async () => {
+    queryQueue.push(
+      createResolvedChain([
+        {
+          id: 268,
+          processCode: 'IM0712606NB',
+          purchaseRef: null,
+          brand: 'puket',
+          exporterName: 'KIOM GLOBAL LIMITED',
+          totalFobValue: '24312.52',
+          aiExtractedData: {
+            proforma_invoice: {
+              piNumber: { value: 'PI-NESTED', confidence: 0.94 },
+            },
+            invoice: {
+              invoiceNumber: { value: 'INV-NESTED', confidence: 0.93 },
+            },
+            metadata: {
+              purchaseOrder: 'PO-NESTED',
+            },
+          },
+        },
+      ]),
+    );
+
+    const result = await sydleService.matchProcess(
+      makePayment({
+        purchaseOrder: 'PO-NESTED',
+        proformaNumber: 'PI-NESTED',
+        invoiceNumber: 'INV-NESTED',
+        supplierName: 'KIOM GLOBAL LIMITED',
+        brand: 'Puket',
+        purchaseAmount: 24312.52,
+      }),
+    );
+
+    expect(result).toMatchObject({
+      processId: 268,
       matchStatus: 'matched',
     });
     expect(result.matchReason).toContain('purchase_order');

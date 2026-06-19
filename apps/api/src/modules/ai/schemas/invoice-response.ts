@@ -16,6 +16,8 @@ const invoiceItemSchema = z.object({
   quantity: confidenceField(z.number()),
   unitPrice: confidenceField(z.number()),
   totalPrice: confidenceField(z.number()),
+  netWeight: confidenceField(z.number()).optional(),
+  grossWeight: confidenceField(z.number()).optional(),
   ncmCode: confidenceField(z.string()).optional(),
   unitType: confidenceField(z.string()).optional(),
   manufacturer: confidenceField(z.string()).optional(),
@@ -33,6 +35,9 @@ const paymentTermsValue = z.object({
 export const invoiceResponseSchema = z.object({
   invoiceNumber: confidenceField(z.string()),
   invoiceDate: confidenceField(z.string()),
+  shipmentDate: confidenceField(z.string()).optional(),
+  etd: confidenceField(z.string()).optional(),
+  shippedOnBoardDate: confidenceField(z.string()).optional(),
   exporterName: confidenceField(z.string()),
   exporterAddress: confidenceField(z.string()),
   exporterTaxId: confidenceField(z.string()).optional(),

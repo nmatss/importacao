@@ -1,7 +1,12 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
-import { certApiFetch, downloadCertReport, fetchCertReports } from '@/shared/lib/cert-api-client';
+import {
+  certApiFetch,
+  downloadCertApiResource,
+  downloadCertReport,
+  fetchCertReports,
+} from '@/shared/lib/cert-api-client';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import {
   FileSpreadsheet,
@@ -21,6 +26,7 @@ import { getErrorMessage } from '@/shared/utils/errors';
 
 interface CertReportFile {
   filename: string;
+  format?: string;
   date?: string;
   size_bytes?: number;
 }
@@ -93,7 +99,9 @@ export default function CertRelatoriosPage() {
         setReports(Array.isArray(data) ? data : []);
         setLoadError(null);
       })
-      .catch(() => setLoadError('Nao foi possivel carregar os relatorios. Tente novamente.'))
+      .catch((err: unknown) =>
+        setLoadError(`Nao foi possivel carregar os relatorios: ${getErrorMessage(err)}`),
+      )
       .finally(() => setLoading(false));
   }, []);
 
@@ -111,18 +119,11 @@ export default function CertRelatoriosPage() {
       const baseExportUrl = (exportType as any).exportUrl || '/api/reports/export';
       const url = `${baseExportUrl}${query ? `?${query}` : ''}`;
 
-      const res = await certApiFetch(url, { method: 'POST' });
-
-      const blob = await res.blob();
-      const filename =
-        res.headers.get('content-disposition')?.match(/filename="?(.+)"?/)?.[1] ||
-        `relatorio_${exportType.id}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      await downloadCertApiResource(
+        url,
+        `relatorio_${exportType.id}_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        { method: 'POST' },
+      );
 
       toast.success(`Relatorio "${exportType.label}" exportado`);
       loadReports();
@@ -139,14 +140,16 @@ export default function CertRelatoriosPage() {
       const res = await certApiFetch('/api/sync-stock', { method: 'POST' });
       const data = await res.json();
       if (data.errors?.length) {
-        toast.warning(`Sync parcial: ${data.errors.join(', ')}`);
+        toast.warning(
+          `Sync parcial: ${data.errors.length} fonte(s) falharam. Verifique logs da cert-api.`,
+        );
       } else {
         toast.success(
           `Estoque sincronizado: WMS ${data.wms?.toLocaleString('pt-BR') ?? 0} | Puket ${data.ecommerce_puket?.toLocaleString('pt-BR') ?? 0} | IMG ${data.ecommerce_imaginarium?.toLocaleString('pt-BR') ?? 0}`,
         );
       }
-    } catch {
-      toast.error('Erro ao sincronizar estoque');
+    } catch (err: unknown) {
+      toast.error(`Erro ao sincronizar estoque: ${getErrorMessage(err)}`);
     } finally {
       setSyncing(false);
     }
@@ -325,58 +328,66 @@ export default function CertRelatoriosPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {reports.map((report, i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
-              >
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 group-hover:bg-emerald-100 transition-colors">
-                    <FileSpreadsheet className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
-                      {report.filename.replace('.json', '')}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-400">
-                      {report.date && <span>{formatDateTime(report.date)}</span>}
-                      {report.size_bytes && (
-                        <>
-                          <span className="text-slate-200">|</span>
-                          <span>{formatSize(report.size_bytes)}</span>
-                        </>
-                      )}
+            {reports.map((report, i) => {
+              const format = report.format ?? report.filename.split('.').pop()?.toLowerCase() ?? '';
+              const isJson = format === 'json';
+              return (
+                <div
+                  key={i}
+                  className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 group-hover:bg-emerald-100 transition-colors">
+                      <FileSpreadsheet className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                        {report.filename.replace(/\.(json|xlsx)$/i, '')}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                        {report.date && <span>{formatDateTime(report.date)}</span>}
+                        {report.size_bytes && (
+                          <>
+                            <span className="text-slate-200">|</span>
+                            <span>{formatSize(report.size_bytes)}</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-3">
-                  <Link
-                    to={`/certificacoes/relatorios/${encodeURIComponent(report.filename)}`}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
-                  >
-                    <Eye className="w-3 h-3" />
-                    Ver
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadExcel(report.filename)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
-                  >
-                    <Table className="w-3 h-3" />
-                    Excel
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDownloadJson(report.filename)}
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
-                  >
-                    <FileJson className="w-3 h-3" />
-                    JSON
-                  </button>
+                  <div className="flex flex-wrap items-center gap-1.5 shrink-0 ml-3">
+                    {isJson && (
+                      <Link
+                        to={`/certificacoes/relatorios/${encodeURIComponent(report.filename)}`}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Ver
+                      </Link>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadExcel(report.filename)}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                    >
+                      <Table className="w-3 h-3" />
+                      Excel
+                    </button>
+                    {isJson && (
+                      <button
+                        type="button"
+                        onClick={() => handleDownloadJson(report.filename)}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
+                      >
+                        <FileJson className="w-3 h-3" />
+                        JSON
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

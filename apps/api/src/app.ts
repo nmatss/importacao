@@ -14,6 +14,19 @@ import { openapiSpec } from './docs/openapi.js';
 
 const app = express();
 
+const trustProxy =
+  process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? '1' : 'false');
+if (trustProxy !== 'false') {
+  app.set(
+    'trust proxy',
+    trustProxy === 'true'
+      ? true
+      : Number.isNaN(Number(trustProxy))
+        ? trustProxy
+        : Number(trustProxy),
+  );
+}
+
 // Security headers
 app.use(helmet());
 
@@ -104,11 +117,16 @@ app.get(
   },
 );
 
-// OpenAPI / Swagger docs
-app.get('/api/docs/openapi.json', (_req, res) => {
-  res.json(openapiSpec);
-});
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+// OpenAPI / Swagger docs. Public in development/test; disabled by default in
+// production to avoid exposing the route surface to unauthenticated users.
+const apiDocsEnabled =
+  process.env.NODE_ENV !== 'production' || process.env.API_DOCS_ENABLED === 'true';
+if (apiDocsEnabled) {
+  app.get('/api/docs/openapi.json', (_req, res) => {
+    res.json(openapiSpec);
+  });
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapiSpec));
+}
 
 // API routes
 app.use('/api', apiRouter);

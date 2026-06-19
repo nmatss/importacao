@@ -82,7 +82,8 @@ docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-Acesse: `http://localhost:8085`
+Acesso local do container web: `http://localhost:8085`. Em producao publica,
+acesse sempre via HTTPS pelo reverse proxy/TLS externo.
 
 ## Modulos do Sistema
 
@@ -117,7 +118,7 @@ Acesse: `http://localhost:8085`
 | **Dashboard**             | Estatisticas gerais, grafico por marca, produtos com problemas                                                 |
 | **Validacao**             | Execucao de validacao em tempo real com progresso via SSE                                                      |
 | **Produtos**              | Listagem completa com filtros, busca e verificacao individual                                                  |
-| **Relatorios**            | Historico de relatorios gerados com download CSV                                                               |
+| **Relatorios**            | Historico de relatorios gerados com download XLSX/JSON e estoque detalhado WMS + e-commerce                    |
 | **Agendamentos**          | Configuracao de cron jobs com APScheduler                                                                      |
 | **Cadastrar Certificado** | Formulario de cadastro (datas, OCP, PDF) + escrita gated no Linx PROP_PRODUTOS — ver `docs/CERT-LINX-WRITE.md` |
 | **Configuracoes**         | Status do sistema, teste de conexao, informacoes                                                               |
@@ -184,8 +185,8 @@ Event emitter tipado com 6 tipos de eventos:
 
 ### Observabilidade
 
-- **Prometheus metrics** — endpoint `/metrics` com metricas HTTP (requests, latencia), Node.js (memoria, CPU, event loop) e queue
-- **Swagger/OpenAPI** — documentacao interativa em `/api/docs` com spec JSON em `/api/docs/openapi.json`
+- **Prometheus metrics** — endpoint `/metrics` com metricas HTTP, Node.js e queue; em producao fica atras de rede Docker/local e deve permanecer sem exposicao publica direta
+- **Swagger/OpenAPI** — documentacao interativa em `/api/docs` com spec JSON em `/api/docs/openapi.json`; em producao fica desabilitada por default e exige `API_DOCS_ENABLED=true`
 - **Queue monitoring** — endpoint admin `/api/admin/queue-stats` com status de todas as filas pg-boss
 - **Cron job alerts** — falhas em cron jobs geram alertas criticos automaticos no sistema
 
@@ -197,17 +198,17 @@ Hierarquia de erros tipados com dispatch automatico no error handler:
 
 ## Integracoes
 
-| Servico           | Uso                                                               |
-| ----------------- | ----------------------------------------------------------------- |
-| **Google OAuth**  | Autenticacao de usuarios (restrito por dominio/grupo)             |
-| **Google Drive**  | Armazenamento de documentos                                       |
-| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync                  |
-| **Gmail API**     | Ingestao automatica de emails                                     |
-| **VTEX API**      | Verificacao de certificacoes em tempo real                        |
-| **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                      |
-| **SYDLE**         | Relatorio de compras/pagamentos internacionais via sync 15 min    |
-| **IA_LOCAL**      | Analise de documentos com DocIntel on-prem, sem egress por padrao |
-| **Redis**         | Cache e rate limiting                                             |
+| Servico           | Uso                                                                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Google OAuth**  | Autenticacao de usuarios (restrito por dominio/grupo)                                                                    |
+| **Google Drive**  | Armazenamento de documentos                                                                                              |
+| **Google Sheets** | Fonte de dados de certificacoes + follow-up sync                                                                         |
+| **Gmail API**     | Ingestao automatica de emails                                                                                            |
+| **VTEX API**      | Verificacao de certificacoes em tempo real                                                                               |
+| **Odoo**          | Integracao ERP via XML-RPC (com timeout 30s)                                                                             |
+| **SYDLE**         | Relatorio admin-only de compras/pagamentos internacionais; sync real depende de contrato/payload e `SYDLE_*` configurado |
+| **IA_LOCAL**      | Analise de documentos com DocIntel on-prem, sem egress por padrao                                                        |
+| **Redis**         | Cache e rate limiting                                                                                                    |
 
 ## Variaveis de Ambiente
 
@@ -296,29 +297,32 @@ bash scripts/deploy.sh [server-ip]
 
 O script:
 
-1. Verifica compilacao TypeScript (API + Web)
-2. Sincroniza codigo via rsync
-3. Gera `.env` via `scripts/generate-env-from-vault.sh` (modo padrao SOPS + age; HashiCorp Vault como fallback legado)
-4. Build Docker images (no-cache)
-5. Deploy com force-recreate
-6. Verifica saude dos containers
+1. Exige `master` limpo e sincronizado com `origin/master`.
+2. Executa backup PostgreSQL e cria snapshot remoto de rollback do codigo.
+3. Sincroniza codigo via rsync, excluindo caches/worktrees locais e preservando dados remotos.
+4. Gera `.env` via SOPS + age a partir de `.env.sops.yaml`; se falhar, aborta.
+5. Renderiza Alertmanager quando configurado e valida `docker compose config`.
+6. Aplica migrations pendentes, builda/reinicia `api`, `web` e `cert-api`.
+7. Verifica API `/health/ready`, web local/publica opcional e cert-api `/api/ready`.
+8. Atualiza observabilidade, grava `REVISION` e remove snapshot se tudo passar.
 
 ### Portas Producao
 
-| Servico     | Porta Externa | Porta Interna |
-| ----------- | ------------- | ------------- |
-| Web (Nginx) | 8085          | 80            |
-| API Node    | 3050          | 3001          |
-| Cert API    | --            | 8000          |
-| PostgreSQL  | 5450          | 5432          |
-| Redis       | 6379          | 6379          |
+| Servico     | Porta Externa  | Porta Interna |
+| ----------- | -------------- | ------------- |
+| Web (Nginx) | 127.0.0.1:8085 | 80            |
+| API Node    | 127.0.0.1:3050 | 3001          |
+| Cert API    | --             | 8000          |
+| PostgreSQL  | 127.0.0.1:5450 | 5432          |
+| Redis       | --             | 6379          |
 
 ### Volumes Persistentes
 
 - `pgdata` — Dados do PostgreSQL
 - `redisdata` — Dados do Redis
 - `uploads` — Documentos uploaded
-- `cert-reports` — Relatorios CSV de certificacao
+- `cert-reports` — Relatorios XLSX/JSON de certificacao
+- `cert-certs` — PDFs/evidencias de certificados cadastrados
 
 ## Desenvolvimento
 
@@ -386,13 +390,13 @@ bash scripts/backup-db.sh  # Backup PostgreSQL (retenção 7 dias)
 
 ### Endpoints de Operacao
 
-| Endpoint                     | Acesso  | Descricao                            |
-| ---------------------------- | ------- | ------------------------------------ |
-| `GET /health`                | Publico | Healthcheck da API                   |
-| `GET /metrics`               | Publico | Metricas Prometheus                  |
-| `GET /api/docs`              | Publico | Swagger UI (documentacao interativa) |
-| `GET /api/docs/openapi.json` | Publico | Spec OpenAPI 3.0 JSON                |
-| `GET /api/admin/queue-stats` | Admin   | Status das filas pg-boss             |
+| Endpoint                     | Acesso     | Descricao                                             |
+| ---------------------------- | ---------- | ----------------------------------------------------- |
+| `GET /health`                | Publico    | Healthcheck da API                                    |
+| `GET /metrics`               | Restrito   | Metricas Prometheus via rede local/Docker             |
+| `GET /api/docs`              | Dev/opt-in | Swagger UI; em producao exige `API_DOCS_ENABLED=true` |
+| `GET /api/docs/openapi.json` | Dev/opt-in | Spec OpenAPI 3.0 JSON                                 |
+| `GET /api/admin/queue-stats` | Admin      | Status das filas pg-boss                              |
 
 ### Backup do Banco
 

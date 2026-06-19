@@ -44,15 +44,15 @@ services:
 
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     container_name: importacao-api
     restart: unless-stopped
     ports:
       - "127.0.0.1:3050:3001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       API_PORT: 3001
       NODE_ENV: production
@@ -88,6 +88,7 @@ services:
       KIOM_EMAIL: ${KIOM_EMAIL:-}
       FENICIA_EMAIL: ${FENICIA_EMAIL:-}
       ISA_EMAIL: ${ISA_EMAIL:-}
+      COMMUNICATION_ALLOWED_RECIPIENTS: ${COMMUNICATION_ALLOWED_RECIPIENTS:-}
       GMAIL_SHARED_MAILBOX: ${GMAIL_SHARED_MAILBOX:-}
       EMAIL_INGESTION_ENABLED: ${EMAIL_INGESTION_ENABLED:-false}
       EMAIL_ALLOWED_SENDERS: ${EMAIL_ALLOWED_SENDERS:-}
@@ -99,7 +100,8 @@ services:
       DOCUMENT_PROCESSING_STALE_MINUTES: ${DOCUMENT_PROCESSING_STALE_MINUTES:-30}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID is required}
       ALLOWED_DOMAIN: ${ALLOWED_DOMAIN:-}
-      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      CORS_ORIGIN: ${CORS_ORIGIN:?CORS_ORIGIN is required}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       ODOO_URL: ${ODOO_URL:-}
       ODOO_DB: ${ODOO_DB:-}
       ODOO_USER: ${ODOO_USER:-}
@@ -116,7 +118,7 @@ services:
       SYDLE_PAGE_SIZE: ${SYDLE_PAGE_SIZE:-200}
       SYDLE_TIMEOUT_MS: ${SYDLE_TIMEOUT_MS:-30000}
       GOOGLE_ADMIN_EMAIL: ${GOOGLE_ADMIN_EMAIL:-}
-      GOOGLE_GROUP_ALLOWED: ${GOOGLE_GROUP_ALLOWED:-}
+      GOOGLE_GROUP_ALLOWED: ${GOOGLE_GROUP_ALLOWED:?GOOGLE_GROUP_ALLOWED is required}
       GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET: ${GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET:-false}
       REDIS_URL: redis://redis:6379
       # Sentry (observability). Empty DSN keeps Sentry disabled (see shared/observability/sentry.ts).
@@ -147,6 +149,15 @@ services:
       - default
       - ia-local-net
 
+  cert-volumes-init:
+    image: alpine:3.22
+    container_name: importacao-cert-volumes-init
+    command: ["sh", "-c", "chown -R 1001:1001 /app/reports /app/certs"]
+    volumes:
+      - cert-reports:/app/reports
+      - cert-certs:/app/certs
+    restart: "no"
+
   cert-api:
     build:
       context: ./apps/cert-api
@@ -169,6 +180,16 @@ services:
       ERP_IMG_DB: ${ERP_IMG_DB:?ERP_IMG_DB is required}
       ERP_MSSQL_USER: ${ERP_MSSQL_USER:?ERP_MSSQL_USER is required}
       ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:?ERP_MSSQL_PASS is required}
+      LINX_WRITE_ENABLED: ${LINX_WRITE_ENABLED:-false}
+      LINX_PROP_TABLE: ${LINX_PROP_TABLE:-PROP_PRODUTOS}
+      LINX_PROP_COL_PRODUTO: ${LINX_PROP_COL_PRODUTO:-PRODUTO}
+      LINX_PROP_COL_PROPRIEDADE: ${LINX_PROP_COL_PROPRIEDADE:-PROPRIEDADE}
+      LINX_PROP_COL_VALOR: ${LINX_PROP_COL_VALOR:-VALOR_PROPRIEDADE}
+      LINX_SKU_IS_PRODUTO: ${LINX_SKU_IS_PRODUTO:-false}
+      LINX_PRODUTO_TABLE: ${LINX_PRODUTO_TABLE:-PRODUTOS}
+      LINX_PRODUTO_COL_CODIGO: ${LINX_PRODUTO_COL_CODIGO:-PRODUTO}
+      LINX_PRODUTO_COL_SKU: ${LINX_PRODUTO_COL_SKU:-}
+      LINX_DATE_FORMAT: ${LINX_DATE_FORMAT:-%d/%m/%Y}
       CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     volumes:
       - cert-reports:/app/reports
@@ -177,6 +198,8 @@ services:
       # container restart.
       - cert-certs:/app/certs
     depends_on:
+      cert-volumes-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
     healthcheck:
@@ -195,15 +218,15 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:?VITE_GOOGLE_CLIENT_ID is required}
     container_name: importacao-web
     restart: unless-stopped
     ports:
-      - "8085:80"
+      - "127.0.0.1:8085:80"
     environment:
       CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY is required}
     depends_on:

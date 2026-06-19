@@ -146,4 +146,20 @@ describe('buildLogisticProps', () => {
 
     expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
   });
+
+  it('does not let the default consolidation status hide a past espelho ETD', () => {
+    const props = buildLogisticProps(
+      makeProcess({
+        logisticStatus: 'consolidation',
+        aiExtractedData: {
+          espelho: {
+            summary: { etd: PAST_DATE, shipmentDate: PAST_DATE },
+            items: [],
+          },
+        },
+      }),
+    );
+
+    expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
+  });
 });

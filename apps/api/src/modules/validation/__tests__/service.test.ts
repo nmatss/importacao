@@ -850,6 +850,24 @@ describe('validationService', () => {
       expect(itemAnomalies[0].description).toContain('1 item');
     });
 
+    it('synthesizes deterministic item-presence anomalies even when the AI emits none', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({ anomalies: [] });
+      mockGetComparison.mockResolvedValueOnce({
+        unmatchedPlItems: [{ itemCode: 'PL-ONLY', source: 'packing_list' }],
+        unmatchedInvoiceItems: [],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      expect(result.anomalies).toEqual([
+        expect.objectContaining({
+          field: 'items.unmatched',
+          description: expect.stringContaining('1 item'),
+        }),
+      ]);
+    });
+
     it('keeps quantity-divergence anomalies (not an item-presence signal)', async () => {
       aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
         anomalies: [{ field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' }],
@@ -861,8 +879,7 @@ describe('validationService', () => {
       expect(result.anomalies).toEqual([
         { field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' },
       ]);
-      // Reconciliation should not even consult the comparison for qty anomalies.
-      expect(mockGetComparison).not.toHaveBeenCalled();
+      expect(mockGetComparison).toHaveBeenCalledWith(261);
     });
   });
 

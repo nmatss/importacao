@@ -1,6 +1,6 @@
 # Roadmap
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## P0 - Operacao E Confiabilidade
 
@@ -34,5 +34,5 @@ Ultima atualizacao: 2026-06-18
 ## P2 - Certificacao
 
 - Agendar revalidacao periodica dos SKUs.
-- Diferenciar prazo de certificacao e prazo de licenciamento se o negocio fornecer fonte.
+- Definir SLA de frescor para `cert_stock` antes de exportar estoque detalhado.
 - Documentar regra de estoque disponivel vs fisico.

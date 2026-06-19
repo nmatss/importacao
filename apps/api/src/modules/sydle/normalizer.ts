@@ -128,6 +128,10 @@ function stableStringify(value: unknown): string {
     .join(',')}}`;
 }
 
+function hashValue(prefix: string, value: unknown): string {
+  return `${prefix}:${createHash('sha256').update(stableStringify(value)).digest('hex').slice(0, 48)}`;
+}
+
 function findValue(record: RawRecord, keys: readonly string[]): unknown {
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(record, key)) return record[key];
@@ -342,10 +346,13 @@ export function sanitizeSydleRawPayload(value: unknown): unknown {
 }
 
 export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment {
-  const externalId =
-    stringOrNull(findValue(record, FIELD_KEYS.externalId), 255) ??
-    `hash:${createHash('sha256').update(stableStringify(record)).digest('hex').slice(0, 48)}`;
-
+  const processCode = stringOrNull(findValue(record, FIELD_KEYS.processCode), 50);
+  const purchaseRef = stringOrNull(findValue(record, FIELD_KEYS.purchaseRef), 100);
+  const purchaseOrder = stringOrNull(findValue(record, FIELD_KEYS.purchaseOrder), 100);
+  const proformaNumber = stringOrNull(findValue(record, FIELD_KEYS.proformaNumber), 100);
+  const invoiceNumber = stringOrNull(findValue(record, FIELD_KEYS.invoiceNumber), 100);
+  const supplierName = stringOrNull(findValue(record, FIELD_KEYS.supplierName), 255);
+  const brand = stringOrNull(findValue(record, FIELD_KEYS.brand), 50)?.toLowerCase() ?? null;
   const purchaseAmount = parseSydleNumber(findValue(record, FIELD_KEYS.purchaseAmount));
   const paidAmount = parseSydleNumber(findValue(record, FIELD_KEYS.paidAmount));
   const openAmountFromSource = parseSydleNumber(findValue(record, FIELD_KEYS.openAmount));
@@ -353,21 +360,32 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
     openAmountFromSource ??
     (purchaseAmount !== null && paidAmount !== null ? round2(purchaseAmount - paidAmount) : null);
   const dueDate = parseDateOnly(findValue(record, FIELD_KEYS.dueDate));
+  const paymentType = normalizePaymentType(findValue(record, FIELD_KEYS.paymentType));
+  const externalId =
+    stringOrNull(findValue(record, FIELD_KEYS.externalId), 255) ??
+    deriveFallbackExternalId(record, {
+      processCode,
+      purchaseRef,
+      purchaseOrder,
+      proformaNumber,
+      invoiceNumber,
+      paymentType,
+    });
 
   return {
     externalId,
-    processCode: stringOrNull(findValue(record, FIELD_KEYS.processCode), 50),
-    purchaseRef: stringOrNull(findValue(record, FIELD_KEYS.purchaseRef), 100),
-    purchaseOrder: stringOrNull(findValue(record, FIELD_KEYS.purchaseOrder), 100),
-    proformaNumber: stringOrNull(findValue(record, FIELD_KEYS.proformaNumber), 100),
-    invoiceNumber: stringOrNull(findValue(record, FIELD_KEYS.invoiceNumber), 100),
-    supplierName: stringOrNull(findValue(record, FIELD_KEYS.supplierName), 255),
-    brand: stringOrNull(findValue(record, FIELD_KEYS.brand), 50)?.toLowerCase() ?? null,
+    processCode,
+    purchaseRef,
+    purchaseOrder,
+    proformaNumber,
+    invoiceNumber,
+    supplierName,
+    brand,
     currency: normalizeCurrency(findValue(record, FIELD_KEYS.currency)),
     purchaseAmount,
     paidAmount,
     openAmount,
-    paymentType: normalizePaymentType(findValue(record, FIELD_KEYS.paymentType)),
+    paymentType,
     paymentStatus: normalizePaymentStatus(
       findValue(record, FIELD_KEYS.paymentStatus),
       dueDate,
@@ -385,4 +403,30 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
     sourceUpdatedAt: parseDateTime(findValue(record, FIELD_KEYS.sourceUpdatedAt)),
     rawPayload: sanitizeSydleRawPayload(record) as Record<string, unknown>,
   };
+}
+
+function deriveFallbackExternalId(
+  record: RawRecord,
+  identity: {
+    processCode: string | null;
+    purchaseRef: string | null;
+    purchaseOrder: string | null;
+    proformaNumber: string | null;
+    invoiceNumber: string | null;
+    paymentType: SydlePaymentType;
+  },
+): string {
+  const hasBusinessReference = Boolean(
+    identity.processCode ||
+    identity.purchaseRef ||
+    identity.purchaseOrder ||
+    identity.proformaNumber ||
+    identity.invoiceNumber,
+  );
+
+  if (hasBusinessReference) {
+    return hashValue('derived', identity);
+  }
+
+  return hashValue('hash', record);
 }

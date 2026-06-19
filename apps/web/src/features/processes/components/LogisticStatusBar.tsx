@@ -85,16 +85,7 @@ const STAGE_INDEX_MAP = Object.fromEntries(LOGISTIC_STAGES.map((s, i) => [s.key,
   number
 >;
 
-/**
- * Derive the current logistic step index (0-based) from process fields.
- * Manual override via logisticStatus takes priority.
- */
-export function deriveLogisticStep(props: LogisticStatusBarProps): number {
-  // Manual override takes priority
-  if (props.logisticStatus && STAGE_INDEX_MAP[props.logisticStatus] !== undefined) {
-    return STAGE_INDEX_MAP[props.logisticStatus];
-  }
-
+function inferLogisticStep(props: LogisticStatusBarProps): number {
   const {
     cdArrivalAt,
     customsClearanceAt,
@@ -138,6 +129,24 @@ export function deriveLogisticStep(props: LogisticStatusBarProps): number {
 
   // 0: Em Consolidacao — default
   return 0;
+}
+
+/**
+ * Derive the current logistic step index (0-based) from process fields.
+ * Manual override via logisticStatus takes priority, except for the database
+ * default "consolidation": real BL/ETD evidence should still advance it.
+ */
+export function deriveLogisticStep(props: LogisticStatusBarProps): number {
+  const inferredStep = inferLogisticStep(props);
+  if (props.logisticStatus && STAGE_INDEX_MAP[props.logisticStatus] !== undefined) {
+    const manualStep = STAGE_INDEX_MAP[props.logisticStatus];
+    if (props.logisticStatus === 'consolidation' && inferredStep > manualStep) {
+      return inferredStep;
+    }
+    return manualStep;
+  }
+
+  return inferredStep;
 }
 
 /**

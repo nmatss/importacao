@@ -31,7 +31,7 @@ describe('Auth E2E', () => {
       .post('/api/auth/login')
       .send({ email: 'nonexistent@test.com', password: 'wrongpassword' });
 
-    expect([400, 401, 500]).toContain(res.status);
+    expect([400, 401]).toContain(res.status);
   });
 
   it('POST /api/auth/login — missing fields returns 400', async () => {

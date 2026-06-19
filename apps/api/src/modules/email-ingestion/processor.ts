@@ -1206,7 +1206,7 @@ export const emailProcessor = {
       gmailConfigured,
       imapConfigured,
       sharedMailbox: process.env.GMAIL_SHARED_MAILBOX || null,
-      allowedSenders: process.env.EMAIL_ALLOWED_SENDERS || '(todos)',
+      allowedSenders: process.env.EMAIL_ALLOWED_SENDERS || '(bloqueado - configure allowlist)',
       lastRun: lastLog?.createdAt || null,
       todayStats: stats,
     };

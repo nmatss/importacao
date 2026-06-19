@@ -153,11 +153,11 @@ describe('ProcessInfoCard', () => {
       <ProcessInfoCard
         process={makeProcess({
           aiExtractedData: {
-            // Invoice wins the freight value but carries no currency; the
+            // Invoice wins only because the espelho has no freight value; the
             // espelho currency (EUR) must NOT leak onto the invoice value.
             invoice: { freightValue: 1500 },
             espelho: {
-              summary: { freightValue: 9999, freightCurrency: 'EUR' },
+              summary: { freightCurrency: 'EUR' },
               items: [],
             },
           },

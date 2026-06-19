@@ -20,6 +20,7 @@ interface NextBestActionProps {
   hasFailedValidations?: boolean;
   hasLiItems?: boolean;
   failedCheckCount?: number;
+  correctionStatus?: string | null;
   className?: string;
 }
 
@@ -37,14 +38,28 @@ interface ActionSuggestion {
 // ── Logic ────────────────────────────────────────────────────────────────
 
 function getNextAction(props: NextBestActionProps): ActionSuggestion {
-  const { processId, status, hasFailedValidations, hasLiItems, failedCheckCount } = props;
+  const {
+    processId,
+    status,
+    hasFailedValidations,
+    hasLiItems,
+    failedCheckCount,
+    correctionStatus,
+  } = props;
 
   // Failed validations take priority over status-based suggestions
-  if (hasFailedValidations && status !== 'completed' && status !== 'cancelled') {
+  if (
+    (hasFailedValidations || correctionStatus === 'pending') &&
+    status !== 'completed' &&
+    status !== 'cancelled'
+  ) {
     return {
       icon: <AlertTriangle className="h-5 w-5" />,
-      title: 'Resolver Divergencias',
-      description: `${failedCheckCount ?? 0} verificacao(oes) falharam. Revise os documentos e corrija as inconsistencias.`,
+      title: 'Resolver correcoes',
+      description:
+        failedCheckCount && failedCheckCount > 0
+          ? `${failedCheckCount} verificacao(oes) falharam. Revise os documentos e corrija as inconsistencias.`
+          : 'A validacao terminou com pendencias de correcao. Revise os documentos antes de seguir.',
       actionLabel: 'Ver Divergencias',
       link: `/importacao/processos/${processId}`,
       color: 'text-danger-700',

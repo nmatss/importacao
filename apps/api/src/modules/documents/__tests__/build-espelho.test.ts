@@ -122,6 +122,7 @@ describe('buildEspelhoFromAiData', () => {
       issueDate: '2026-02-13',
       freightValue: 3200.5,
       freightCurrency: 'USD',
+      containerType: '40HQ',
       totalGrossWeight: 5050,
     };
 
@@ -134,6 +135,7 @@ describe('buildEspelhoFromAiData', () => {
       expect(summary.freightValue).toBe(3200.5);
       expect(summary.freightCurrency).toBe('USD');
       expect(summary.containerNumber).toBe('TCKU1234567');
+      expect(summary.containerType).toBe('40HQ');
     });
 
     it('falls back to etd for Data Embarque when shipmentDate is absent', () => {

@@ -150,6 +150,7 @@ export interface CertVerifyResult {
 
 export interface CertReport {
   filename: string;
+  format?: string;
   created_at?: string;
   date?: string;
   size?: number;
@@ -274,7 +275,7 @@ async function certFetch<T = unknown>(path: string, options?: RequestInit): Prom
   return res.json();
 }
 
-function contentDispositionFilename(header: string | null): string | null {
+export function contentDispositionFilename(header: string | null): string | null {
   if (!header) return null;
   const utfMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
   if (utfMatch?.[1]) return decodeURIComponent(utfMatch[1].replace(/"/g, ''));
@@ -285,8 +286,9 @@ function contentDispositionFilename(header: string | null): string | null {
 export async function downloadCertApiResource(
   path: string,
   fallbackFilename: string,
+  options?: RequestInit,
 ): Promise<void> {
-  const res = await certApiFetch(path);
+  const res = await certApiFetch(path, options);
   const blob = await res.blob();
   const filename =
     contentDispositionFilename(res.headers.get('content-disposition')) ?? fallbackFilename;

@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -18,6 +19,27 @@ from app.services.report_service import (
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+_BRAND_ALIASES = {
+    "puket": "puket",
+    "imaginarium": "imaginarium",
+    "puket_escolares": "puket escolares",
+    "puket escolares": "puket escolares",
+}
+
+
+def _normalize_brand(value: str) -> str:
+    normalized = value.strip().lower().replace("_", " ")
+    return _BRAND_ALIASES.get(normalized, normalized)
+
+
+def _safe_export_error(exc: Exception) -> HTTPException:
+    if isinstance(exc, PermissionError):
+        return HTTPException(
+            status_code=500,
+            detail="Diretorio de relatorios sem permissao de escrita. Verifique o volume cert-reports.",
+        )
+    return HTTPException(status_code=500, detail="Nao foi possivel gerar o relatorio.")
 
 
 @router.post("/api/reports/export")
@@ -44,8 +66,8 @@ def export_products_report(
         conditions: list[str] = []
         params: list = []
         if brand:
-            conditions.append("LOWER(brand) = LOWER(%s)")
-            params.append(brand)
+            conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
+            params.append(_normalize_brand(brand))
         if status:
             statuses = [s.strip() for s in status.split(",") if s.strip()]
             if "EXPIRED" in statuses:
@@ -69,7 +91,10 @@ def export_products_report(
         cur.execute(f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
         rows = [dict(r) for r in cur.fetchall()]
 
-    filepath = generate_products_report(rows, brand=brand, status=status)
+    try:
+        filepath = generate_products_report(rows, brand=brand, status=status)
+    except Exception as exc:
+        raise _safe_export_error(exc) from exc
     return FileResponse(
         str(filepath),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -98,8 +123,8 @@ def export_stock_report(request: Request, brand: str = Query("")) -> FileRespons
         conditions = []
         params: list = []
         if brand:
-            conditions.append("cs.brand = %s")
-            params.append(brand)
+            conditions.append("LOWER(REPLACE(COALESCE(cp.brand, cs.brand, ''), '_', ' ')) = %s")
+            params.append(_normalize_brand(brand))
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
         cur.execute(
@@ -118,7 +143,10 @@ def export_stock_report(request: Request, brand: str = Query("")) -> FileRespons
         )
         rows = cur.fetchall()
 
-    filepath = generate_stock_report(rows, brand=brand)
+    try:
+        filepath = generate_stock_report(rows, brand=brand)
+    except Exception as exc:
+        raise _safe_export_error(exc) from exc
     return FileResponse(
         str(filepath),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -139,8 +167,10 @@ def list_reports() -> list:
     for f in sorted(REPORTS_DIR.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
         if f.is_file():
             stat = f.stat()
+            suffix = f.suffix.lower().lstrip(".") or "unknown"
             reports.append({
                 "filename": f.name,
+                "format": suffix,
                 "date": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(),
                 "size_bytes": stat.st_size,
             })
@@ -162,6 +192,8 @@ def get_report_data(filename: str) -> dict:
     """
     if ".." in filename or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    if Path(filename).suffix.lower() != ".json":
+        raise HTTPException(status_code=400, detail="Visualizacao disponivel apenas para relatorios JSON")
     filepath = REPORTS_DIR / filename
     if not filepath.exists() or not filepath.is_file():
         raise HTTPException(404, "Report not found")

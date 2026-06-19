@@ -19,7 +19,7 @@ beforeAll(async () => {
   } catch (err) {
     skipReason = handleE2ESetupFailure(err);
   }
-}, 60_000);
+}, 120_000);
 
 afterAll(async () => {
   await ctx?.cleanup();

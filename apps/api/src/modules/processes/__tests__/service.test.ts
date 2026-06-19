@@ -11,6 +11,10 @@ vi.mock('../../audit/service.js', () => ({
   auditService: { log: vi.fn() },
 }));
 
+vi.mock('../../../shared/utils/process-events.js', () => ({
+  recordProcessEvent: vi.fn(),
+}));
+
 const { processService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
 
@@ -138,6 +142,51 @@ describe('processService', () => {
 
       await expect(processService.updateStatus(1, 'draft', 1)).rejects.toThrow(
         'Transicao invalida',
+      );
+    });
+  });
+
+  describe('advanceLogisticStatus()', () => {
+    it('uses ETD from espelho/BL summary when process columns are still empty', async () => {
+      queryQueue.push(createResolvedChain([])); // assertNotLocked
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            status: 'documents_received',
+            logisticStatus: 'consolidation',
+            etd: null,
+            eta: null,
+            shipmentDate: null,
+            customsChannel: null,
+            diNumber: null,
+            customsClearanceAt: null,
+            cdArrivalAt: null,
+            aiExtractedData: { espelho: { summary: { etd: '2026-02-01' } } },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ processId: 1 }])); // follow-up
+      const updateChain = createResolvedChain([]);
+      queryQueue.push(updateChain);
+
+      const result = await processService.advanceLogisticStatus(1, 7);
+
+      expect(result).toEqual({
+        updated: true,
+        previous: 'consolidation',
+        current: 'in_transit',
+      });
+      expect(updateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({ logisticStatus: 'in_transit' }),
+      );
+      expect(auditService.log).toHaveBeenCalledWith(
+        7,
+        'logistic_status_auto_advance',
+        'process',
+        1,
+        { previousStatus: 'consolidation', newStatus: 'in_transit' },
+        null,
       );
     });
   });

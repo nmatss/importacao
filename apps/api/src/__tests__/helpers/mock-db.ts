@@ -77,6 +77,7 @@ export function createMockDb() {
   for (const method of ['insert', 'update', 'delete', 'select']) {
     mockTx[method] = vi.fn(() => getNextTxChain());
   }
+  mockTx.execute = vi.fn(async () => []);
 
   const mockDb: Record<string, any> = {};
   for (const method of ['insert', 'update', 'delete', 'select']) {

@@ -24,7 +24,7 @@ export function isEmailAllowedByPatterns(email: string, patterns: string[]): boo
 }
 
 export function isAllowedSenderFromEnv(from: string, allowedRaw?: string): boolean {
-  if (!allowedRaw) return true;
+  if (!allowedRaw) return false;
 
   const allowed = allowedRaw
     .split(',')

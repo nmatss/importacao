@@ -29,8 +29,8 @@ services:
 
   api:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/api/Dockerfile
     ports:
       - "3001:3001"
     environment:
@@ -64,6 +64,7 @@ services:
       KIOM_EMAIL: ${KIOM_EMAIL:-}
       FENICIA_EMAIL: ${FENICIA_EMAIL:-}
       ISA_EMAIL: ${ISA_EMAIL:-}
+      COMMUNICATION_ALLOWED_RECIPIENTS: ${COMMUNICATION_ALLOWED_RECIPIENTS:-}
       GMAIL_SHARED_MAILBOX: ${GMAIL_SHARED_MAILBOX:-}
       EMAIL_INGESTION_ENABLED: ${EMAIL_INGESTION_ENABLED:-false}
       EMAIL_ALLOWED_SENDERS: ${EMAIL_ALLOWED_SENDERS:-}
@@ -120,19 +121,19 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB required}
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
-      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-1qcgcj9814UFikhurgvsTTcUxvPF2r3w_QY_EurvBtSE}
-      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:-192.168.168.10}
-      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:-1521}
-      WMS_ORACLE_SID: ${WMS_ORACLE_SID:-WMS}
-      WMS_ORACLE_USER: ${WMS_ORACLE_USER:-wisweb}
-      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:-wisweb}
-      ERP_PUKET_HOST: ${ERP_PUKET_HOST:-db01.grupounico.com}
-      ERP_PUKET_DB: ${ERP_PUKET_DB:-DB_puket}
-      ERP_IMG_HOST: ${ERP_IMG_HOST:-db02.grupounico.com}
-      ERP_IMG_DB: ${ERP_IMG_DB:-Grupo_Imaginarium}
-      ERP_MSSQL_USER: ${ERP_MSSQL_USER:-nicolas.matsuda}
-      ERP_MSSQL_PASS: "${ERP_MSSQL_PASS:-}"
-      CERT_API_KEY: ${CERT_API_KEY:-}
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:?GOOGLE_SHEETS_SPREADSHEET_ID required}
+      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:?WMS_ORACLE_HOST required}
+      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:?WMS_ORACLE_PORT required}
+      WMS_ORACLE_SID: ${WMS_ORACLE_SID:?WMS_ORACLE_SID required}
+      WMS_ORACLE_USER: ${WMS_ORACLE_USER:?WMS_ORACLE_USER required}
+      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:?WMS_ORACLE_PASS required}
+      ERP_PUKET_HOST: ${ERP_PUKET_HOST:?ERP_PUKET_HOST required}
+      ERP_PUKET_DB: ${ERP_PUKET_DB:?ERP_PUKET_DB required}
+      ERP_IMG_HOST: ${ERP_IMG_HOST:?ERP_IMG_HOST required}
+      ERP_IMG_DB: ${ERP_IMG_DB:?ERP_IMG_DB required}
+      ERP_MSSQL_USER: ${ERP_MSSQL_USER:?ERP_MSSQL_USER required}
+      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:?ERP_MSSQL_PASS required}
+      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY required}
     volumes:
       - cert-reports:/app/reports
       # Certificate PDFs (INMETRO/ANVISA evidence) live in CERTS_DIR=/app/certs
@@ -153,8 +154,8 @@ services:
 
   web:
     build:
-      context: ./apps/web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: apps/web/Dockerfile
       args:
         VITE_API_URL: ${VITE_API_URL:-}
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}

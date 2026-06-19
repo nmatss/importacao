@@ -1,5 +1,70 @@
 # Session Memory
 
+## 2026-06-19 - Go-live UAT Importacao, Certificacao E Estoque WMS
+
+Objetivo:
+
+- Corrigir feedback operacional de Importacao/Certificacao e revisar prontidao
+  go-live com subagentes focados em importacao, certificacao, Proformas/Espelho,
+  QA/release e relatorio WMS.
+
+Resultado:
+
+- Importacao: status logistico persistido passou a usar ETD/ETA/Data Embarque do
+  espelho/BL; card do processo prioriza BL/Espelho para Data Embarque/Frete/
+  Container; barra visual do ciclo nao deixa o default `consolidation` esconder
+  ETD passado; coluna Sistema no comparativo casa por check key e eleva a linha
+  para falha quando o Sistema diverge; Container numerico e Tipo Container foram
+  separados; anomalias de itens passam a seguir a comparacao deterministica
+  mesmo sem emissao da IA; download XLSX do Espelho usa `espelho.id`; edicao
+  manual do Espelho envia `ncmCode`/`boxQuantity`.
+- Extracao: Invoice/PL passaram a aceitar datas logisticas separadas; itens de
+  Invoice aceitam peso liquido/bruto quando impresso.
+- Certificacao: rota `/api/products?license_status=VENCIDO` ganhou cobertura com
+  `license_map` da aba `Licenciamentos Vencidos`.
+- Relatorio de estoque: export `Estoque Detalhado` preserva WMS ao filtrar por
+  marca, normaliza `puket_escolares`, inclui `Sincronizado em`, retorna erro
+  claro para `cert-reports` sem escrita, e a UI oculta acoes JSON/Ver para XLSX.
+- Operacao: Dockerfiles API/Web usam contexto raiz + manifests dos workspaces +
+  `npm ci --ignore-scripts` com `HUSKY=0`; compose prod adiciona
+  `cert-volumes-init`; cert-api readiness valida escrita em `REPORTS_DIR`;
+  deploy/rsync exclui `.claude` e `.codex`; API image expõe deps do workspace
+  para `/app/dist`; web prod publica apenas `127.0.0.1:8085`; compose prod exige
+  `CORS_ORIGIN`/`GOOGLE_GROUP_ALLOWED`, define `TRUST_PROXY=1` e repassa `LINX_*`
+  ao cert-api.
+- SYDLE: conciliacao por PI/invoice/pedido agora busca valores em
+  `aiExtractedData` aninhado e em campos `{ value, confidence }`; sync usa lock
+  transacional; fallback de `externalId` prioriza referencias de negocio
+  estaveis e tipo de parcela, sem vencimento/fornecedor/marca; rotas API de
+  relatorio/export/sync ganharam cobertura.
+- Release: `scripts/deploy.sh` valida a rede externa `ia-local-net`, executa
+  `cert-volumes-init` explicitamente antes do restart com `--no-deps`, e a
+  imagem API remove `npm`/`npx` do runtime final.
+
+Testes direcionados:
+
+- API Vitest direcionado: 75 passed.
+- Web Vitest direcionado: 22 passed + nova rodada Importacao 23 passed.
+- Cert-api pytest direcionado: 25 passed.
+- SYDLE Vitest direcionado: API 19 passed, Web 2 passed.
+- SYDLE rodada final: 27 passed.
+
+Validacao global:
+
+- Gates completos executados: `git diff --check`, `npm run typecheck`,
+  `npm run lint`, `npm test`, `npm run build`, E2E API, `pytest -q
+apps/cert-api`, compileall Python, shell checks, compose prod config, npm
+  audit HIGH, pip-audit, builds Docker sem cache API/Web/Cert-API, runtime API
+  e Trivy HIGH/CRITICAL nas tres imagens.
+
+Pendencias:
+
+- Merge para `master` antes de deploy; `scripts/deploy.sh` exige master limpo.
+- SYDLE segue dependente de contrato/API/payload real, credenciais e UAT
+  financeiro; para dados reais, e bloqueador externo critico.
+- Definir SLA de frescor para `cert_stock` antes de tratar relatorio de estoque
+  como 100% operacional.
+
 ## 2026-06-19 - Hardening De Validacao Documental E SYDLE
 
 Escopo:

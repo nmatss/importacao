@@ -2,8 +2,15 @@
 
 ## Overview
 
-Production uses Let's Encrypt via Certbot. The `docker-compose.prod.yml` includes a `certbot`
-service, and `infra/nginx/prod.conf` provides the HTTPS Nginx configuration with HSTS preload.
+The application container exposes the web service only on `127.0.0.1:8085` in
+production. HTTPS for `importacao.grupounico.com` must terminate in the host or
+edge reverse proxy that forwards traffic to that local port.
+
+`docker-compose.prod.yml` still includes the `certbot` service behind the
+optional `tls` profile for environments that issue certificates on the same
+host, but the `web` container does not currently mount `letsencrypt` or
+`certbot-webroot`. Do not assume the compose file alone activates HTTPS inside
+the app container.
 
 ## Prerequisites
 
@@ -11,30 +18,41 @@ service, and `infra/nginx/prod.conf` provides the HTTPS Nginx configuration with
 - Ports 80 and 443 open in firewall
 - Docker Compose v2
 
-## Initial Certificate Issuance
+## External Reverse Proxy Path
 
 ```bash
 export DOMAIN=importacao.grupounico.com
-export CERT_API_KEY='<same value from production .env>'
 
-# 1. Start web service (for ACME challenge)
+# 1. Deploy the app. It should listen locally only.
 docker compose -f docker-compose.prod.yml up -d web
+curl -I http://127.0.0.1:8085/
 
-# 2. Issue certificate
-docker compose -f docker-compose.prod.yml run --rm certbot \
+# 2. Configure the host/edge proxy to terminate TLS and forward to 127.0.0.1:8085.
+# Example proxy target:
+#   proxy_pass http://127.0.0.1:8085;
+
+# 3. Verify public HTTPS.
+curl -I https://${DOMAIN}
+```
+
+When using `scripts/deploy.sh`, set `PUBLIC_WEB_HEALTH_ENDPOINT=https://importacao.grupounico.com/`
+so the deploy validates the public HTTPS path after the container health checks.
+
+## Optional Certbot Profile
+
+Use this only if the host proxy is wired to the compose-managed
+`letsencrypt`/`certbot-webroot` volumes. The current app `web` service does not
+consume these volumes by itself.
+
+```bash
+export DOMAIN=importacao.grupounico.com
+
+docker compose -f docker-compose.prod.yml --profile tls run --rm certbot \
   certbot certonly \
   --webroot -w /var/www/certbot \
   --email admin@grupounico.com \
   --agree-tos --no-eff-email \
   -d ${DOMAIN}
-
-# 3. Activate TLS nginx config (replace env vars in template)
-envsubst '$DOMAIN $CERT_API_KEY' < infra/nginx/prod.conf \
-  | docker exec -i importacao-web sh -c 'cat > /etc/nginx/conf.d/default.conf'
-docker compose -f docker-compose.prod.yml exec web nginx -s reload
-
-# 4. Verify
-curl -I https://${DOMAIN}
 ```
 
 ## Auto-Renewal

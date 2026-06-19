@@ -335,6 +335,9 @@ describe('documentService', () => {
       expect(result).toEqual({ id: 1 });
       expect(mockFsUnlink).toHaveBeenCalledWith('/tmp/test.pdf');
       expect(mockTx.delete).toHaveBeenCalled();
+      expect(mockTx.delete.mock.invocationCallOrder[0]).toBeLessThan(
+        mockFsUnlink.mock.invocationCallOrder[0],
+      );
       expect(processUpdateChain.set).toHaveBeenCalledWith(
         expect.objectContaining({
           aiExtractedData: { customKey: { keep: true } },

@@ -33,9 +33,12 @@ Extraia os campos abaixo. Para cada campo, inclua confidence entre 0.0 e 1.0.
 
 Responda com JSON estrito neste formato:
 {
-  "invoiceNumber": { "value": "", "confidence": 0.0 },
-  "invoiceDate": { "value": "", "confidence": 0.0 },
-  "exporterName": { "value": "", "confidence": 0.0 },
+	  "invoiceNumber": { "value": "", "confidence": 0.0 },
+	  "invoiceDate": { "value": "", "confidence": 0.0 },
+	  "shipmentDate": { "value": "", "confidence": 0.0 },
+	  "etd": { "value": "", "confidence": 0.0 },
+	  "shippedOnBoardDate": { "value": "", "confidence": 0.0 },
+	  "exporterName": { "value": "", "confidence": 0.0 },
   "exporterAddress": { "value": "", "confidence": 0.0 },
   "exporterTaxId": { "value": "", "confidence": 0.0 },
   "importerName": { "value": "", "confidence": 0.0 },
@@ -52,10 +55,12 @@ Responda com JSON estrito neste formato:
       "description": { "value": "", "confidence": 0.0 },
       "color": { "value": "", "confidence": 0.0 },
       "size": { "value": "", "confidence": 0.0 },
-      "quantity": { "value": 0, "confidence": 0.0 },
-      "unitPrice": { "value": 0.0, "confidence": 0.0 },
-      "totalPrice": { "value": 0.0, "confidence": 0.0 },
-      "ncmCode": { "value": "", "confidence": 0.0 },
+	      "quantity": { "value": 0, "confidence": 0.0 },
+	      "unitPrice": { "value": 0.0, "confidence": 0.0 },
+	      "totalPrice": { "value": 0.0, "confidence": 0.0 },
+	      "netWeight": { "value": 0.0, "confidence": 0.0 },
+	      "grossWeight": { "value": 0.0, "confidence": 0.0 },
+	      "ncmCode": { "value": "", "confidence": 0.0 },
       "unitType": { "value": "", "confidence": 0.0 },
       "manufacturer": { "value": "", "confidence": 0.0 },
       "isFreeOfCharge": { "value": false, "confidence": 0.0 }
@@ -73,8 +78,9 @@ Responda com JSON estrito neste formato:
 
 REGRAS:
 - Campo nao encontrado → value: null, confidence: 0.0
-- Datas em ISO 8601 (YYYY-MM-DD)
-- Valores numericos como numeros, nao strings
+	- Datas em ISO 8601 (YYYY-MM-DD)
+	- invoiceDate = data de emissao da fatura. shipmentDate/etd/shippedOnBoardDate = datas logisticas de embarque quando impressas como "shipment", "ETD", "shipped/on board" ou equivalentes. Nao copie invoiceDate para esses campos se o documento nao indicar embarque.
+	- Valores numericos como numeros, nao strings
 - Moeda em ISO 4217 (USD, EUR, CNY)
 - Extraia TODOS os itens da tabela de produtos
 - manufacturerName = fabrica (nao exportador/trading company)
@@ -87,8 +93,9 @@ REGRAS:
 - exporterTaxId: VAT/Tax ID do exportador (fora do Brasil, ex.: registro chines de 18 digitos, EIN, etc.). importerCnpj: CNPJ brasileiro do importador no formato 00.000.000/0000-00 quando possivel.
 - exporterName = empresa VENDEDORA/exportadora que emite a fatura (trading company ou fabrica, ex.: "KIOM GLOBAL LIMITED"). NUNCA use o nome do NAVIO nem da companhia maritima/armador. Nomes como "COSCO", "COSCO SHIPPING ARGENTINA", "MAERSK", "MSC", "HAPAG-LLOYD", "EVERGREEN", "CMA CGM", "ONE LINE", "HMM", "OOCL", ou qualquer "... SHIPPING LINE" / "... CONTAINER LINE" / "... MARITIME" sao do TRANSPORTE (pertencem ao Bill of Lading), NAO da fatura. Se o unico candidato a exportador for um nome de navio/armador, retorne exporterName com value:null, confidence:0.
 - isFreeOfCharge: TRUE quando o item e gratuito — sinais: unitPrice = 0, descricao contem "FREE OF CHARGE", "FOC", "complimentary", "sample", "amostra", "brinde". Quando true, o item NAO entra na soma do totalFobValue declarado.
-- SEPARE quantidade de faturamento: quantity = NUMERO de unidades (QTY/QUANTITY/PCS/PAR/SET); unitPrice e totalPrice = VALORES em dinheiro (UNIT PRICE/AMOUNT/TOTAL/USD). NUNCA troque os dois: nao coloque preco/amount em quantity nem quantidade em unitPrice/totalPrice. Em layout compacto, use o cabecalho da coluna para decidir.
-- NAO invente dados. Responda SOMENTE com JSON.`,
+	- SEPARE quantidade de faturamento: quantity = NUMERO de unidades (QTY/QUANTITY/PCS/PAR/SET); unitPrice e totalPrice = VALORES em dinheiro (UNIT PRICE/AMOUNT/TOTAL/USD). NUNCA troque os dois: nao coloque preco/amount em quantity nem quantidade em unitPrice/totalPrice. Em layout compacto, use o cabecalho da coluna para decidir.
+	- netWeight/grossWeight por item: preencha apenas quando houver colunas de peso liquido/bruto por item na Invoice; pesos sempre em KG. Se a Invoice nao trouxer peso por item, retorne null/confidence 0 nesses campos.
+	- NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {
       role: 'user',

@@ -37,7 +37,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     const decoded = jwt.verify(token, secret) as UserPayload;
 
     const [user] = await db
-      .select({ isActive: users.isActive })
+      .select({ id: users.id, email: users.email, role: users.role, isActive: users.isActive })
       .from(users)
       .where(eq(users.id, decoded.id))
       .limit(1);
@@ -46,7 +46,7 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
       return sendError(res, 'Conta desativada', 401);
     }
 
-    req.user = decoded;
+    req.user = { id: user.id, email: user.email, role: user.role };
     next();
   } catch {
     return sendError(res, 'Token inválido ou expirado', 401);

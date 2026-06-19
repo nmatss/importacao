@@ -63,16 +63,21 @@ export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promis
     return false;
   }
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+
   try {
     const card = formatGoogleChatCard(alert);
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(card),
+      signal: controller.signal,
     });
 
     if (!response.ok) {
-      logger.error({ status: response.status }, 'Google Chat webhook failed');
+      const responseBody = (await response.text().catch(() => '')).slice(0, 500);
+      logger.error({ status: response.status, responseBody }, 'Google Chat webhook failed');
       return false;
     }
 
@@ -81,5 +86,7 @@ export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promis
   } catch (error: any) {
     logger.error({ error: error.message }, 'Google Chat webhook error');
     return false;
+  } finally {
+    clearTimeout(timeout);
   }
 }

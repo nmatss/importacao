@@ -91,6 +91,7 @@ export function buildEspelhoFromAiData(
     shippingLine: bl.shippingLine ?? bl.carrier ?? bl.carrierName ?? null,
     vesselName: bl.vesselName ?? null,
     containerNumber: bl.containerNumber ?? null,
+    containerType: bl.containerType ?? null,
     blNumber: bl.blNumber ?? null,
     // BL shipping milestones + freight so the process surface can show
     // "Data Embarque" / "Frete" / "Container" (Eduarda feedback). The BL

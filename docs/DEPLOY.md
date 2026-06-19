@@ -1,6 +1,6 @@
 # Deploy
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-19
 
 ## Producao
 
@@ -35,18 +35,23 @@ O script:
 7. Sincroniza codigo por rsync, preservando `.env`, `.env.sops.yaml`, uploads
    e logs remotos.
 8. Gera `.env` remoto via SOPS + age a partir de `.env.sops.yaml`; se falhar,
-   preserva o `.env` existente como fallback operacional.
+   o deploy aborta para evitar subir com segredo remoto obsoleto.
 9. Renderiza `infra/alertmanager/alertmanager.yml` a partir de
    `infra/alertmanager/alertmanager.webhook.yml.template` quando
    `ALERTMANAGER_WEBHOOK_URL` esta configurado; se estiver vazio, mantem o
    receiver `noop`.
 10. Valida `docker compose -f docker-compose.prod.yml config --quiet` no
-    servidor antes de migrations/restart.
+    servidor e confirma a existencia da rede externa `ia-local-net` antes de
+    migrations/restart.
 11. Aplica migrations pendentes e aborta se falharem.
-12. Rebuilda `api`, `web` e `cert-api`.
-13. Executa health check da API e readiness do `cert-api`.
-14. Grava `REVISION` com o SHA implantado.
-15. Faz rollback de codigo se health falhar.
+12. Executa `cert-volumes-init` explicitamente para corrigir ownership dos
+    volumes `cert-reports` e `cert-certs` para o usuario 1001 da cert-api,
+    mesmo com o restart principal usando `--no-deps`.
+13. Rebuilda `api`, `web` e `cert-api`.
+14. Executa health check da API, readiness do `cert-api` e health do `web`.
+15. Atualiza Prometheus/Alertmanager/Grafana para carregar configuracoes novas.
+16. Grava `REVISION` com o SHA implantado.
+17. Faz rollback de codigo se health falhar.
 
 Evidencia:
 
@@ -65,12 +70,31 @@ Requisito de segredo:
 - Destinatarios KIOM, Fenicia e ISA devem ser configurados no sistema em
   `Configuracoes > Destinatarios operacionais`. `KIOM_EMAIL`, `FENICIA_EMAIL` e
   `ISA_EMAIL` continuam aceitos no `.env` remoto apenas como fallback opcional.
+- `COMMUNICATION_ALLOWED_RECIPIENTS` e fallback opcional para e-mails/dominios
+  adicionais. O container `api` recebe esta variavel; sem cadastro operacional ou
+  allowlist, o envio e bloqueado com 403.
+- `CORS_ORIGIN` e `GOOGLE_GROUP_ALLOWED` sao obrigatorios em producao. O compose
+  falha antes do build se qualquer um estiver ausente, evitando boot sem login
+  Google ou com CORS inseguro.
+- `TRUST_PROXY` padrao `1` em producao para rate limit/autenticacao enxergarem
+  o IP real encaminhado pelo Nginx/reverse proxy.
 - Variaveis WMS/ERP/Sheets da `cert-api` (`GOOGLE_SHEETS_SPREADSHEET_ID`,
   `WMS_ORACLE_*`, `ERP_*`, `ERP_MSSQL_*`) devem existir no `.env` remoto.
   O compose falha cedo se alguma estiver ausente.
+- Variaveis `LINX_*` sao repassadas ao `cert-api`. Mantenha
+  `LINX_WRITE_ENABLED=false` ate a descoberta/validacao final de
+  `PROP_PRODUTOS`.
 - `ALERTMANAGER_WEBHOOK_URL` e opcional, mas se existir deve apontar para um
   bridge compatível com payload nativo do Alertmanager, nao diretamente para
   Google Chat.
+
+## Exposicao HTTP/TLS
+
+- O container `web` publica `127.0.0.1:8085:80` no compose de producao. Nao
+  exponha esta porta diretamente para a rede.
+- TLS publico deve terminar no Nginx externo descrito em `infra/nginx/prod.conf`
+  e `docs/TLS.md`.
+- Com JWT no browser, HTTP publico e bloqueador de go-live.
 
 ## Backup E Restore
 
@@ -113,3 +137,9 @@ O historico detalhado fica no `deploy.log` local e no output do deploy.
 ## Warnings Conhecidos
 
 - Backup pode avisar volumes nao encontrados.
+- Se `/api/ready` da cert-api retornar `REPORTS_DIR not writable`, corrija o
+  volume manualmente com:
+
+```bash
+docker run --rm -v importacao_cert-reports:/data alpine chown -R 1001:1001 /data
+```

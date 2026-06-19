@@ -47,6 +47,13 @@ Ultima atualizacao: 2026-06-19
 - Evoluir autorizacao fina do proxy `/cert-api/`: hoje o Nginx exige JWT valido
   antes de injetar `X-API-Key`, mas a separacao por papel/escopo do modulo de
   certificacoes deve ser definida com o negocio.
+- Formalizar frescor minimo do estoque: o relatorio `Estoque Detalhado` exporta
+  o cache `cert_stock`; se `/api/sync-stock` falhar parcialmente, WMS e
+  e-commerce podem ter timestamps diferentes. Em 2026-06-19 o XLSX passou a
+  expor `Sincronizado em`, mas ainda falta politica/SLA de bloqueio por dado
+  velho.
+- Harmonizar limpeza de estoque entre fontes: WMS apaga/reinsere `wms_biguacu`,
+  mas e-commerce faz upsert sem remover SKUs que desapareceram da origem.
 - Resolver residuais de `npm audit` moderados sem downgrade inseguro: raiz do
   workspace com 11 moderadas; builder Docker da API com 8 moderadas de
   dev/tooling; runtime Docker da API sem vulnerabilidades em
@@ -106,3 +113,9 @@ Concluido em 2026-06-19:
   delete arquiva a extracao com metadados antes da remocao.
 - SYDLE mitigou riscos internos de cursor, matching, CSV truncado, acesso amplo
   e `raw_payload` sensivel.
+- Relatorio de estoque detalhado passou a filtrar marca por
+  `COALESCE(cp.brand, cs.brand)` normalizado, preservar WMS em filtros por marca,
+  retornar erro claro para `cert-reports` sem permissao e expor `Sincronizado em`.
+- Dockerfiles API/Web passaram a usar contexto raiz, manifests de workspaces e
+  `npm ci --ignore-scripts` com `HUSKY=0`; E2E de documentos teve timeout local
+  alinhado ao Vitest 4.

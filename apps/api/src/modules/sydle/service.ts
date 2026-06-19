@@ -68,18 +68,46 @@ function normalizeText(value: unknown): string {
 }
 
 function extractAiString(data: unknown, keys: string[]): string | null {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-  const obj = data as Record<string, unknown>;
-  for (const key of keys) {
-    const value = obj[key];
-    if (value === null || value === undefined || value === '') continue;
-    if (typeof value === 'object' && value && 'value' in value) {
-      const nested = (value as Record<string, unknown>).value;
-      if (nested) return String(nested);
+  const wanted = new Set(keys.map(normalizeText));
+
+  function visit(value: unknown, depth: number): string | null {
+    if (!value || depth > 6) return null;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const found = visit(item, depth + 1);
+        if (found) return found;
+      }
+      return null;
     }
-    return String(value);
+    if (typeof value !== 'object') return null;
+
+    const obj = value as Record<string, unknown>;
+    for (const [key, nestedValue] of Object.entries(obj)) {
+      if (!wanted.has(normalizeText(key))) continue;
+      if (nestedValue === null || nestedValue === undefined || nestedValue === '') continue;
+      if (
+        typeof nestedValue === 'object' &&
+        !Array.isArray(nestedValue) &&
+        'value' in nestedValue
+      ) {
+        const confidenceValue = (nestedValue as Record<string, unknown>).value;
+        if (confidenceValue !== null && confidenceValue !== undefined && confidenceValue !== '') {
+          return String(confidenceValue);
+        }
+        continue;
+      }
+      if (typeof nestedValue !== 'object') return String(nestedValue);
+    }
+
+    for (const nestedValue of Object.values(obj)) {
+      const found = visit(nestedValue, depth + 1);
+      if (found) return found;
+    }
+
+    return null;
   }
-  return null;
+
+  return visit(data, 0);
 }
 
 function buildWhere(filters: SydleReportQuery, includeSearch = true) {
@@ -182,100 +210,93 @@ export const sydleService = {
       });
     }
 
-    const lock = await this.tryAcquireSyncLock();
-    if (!lock.acquired) {
-      return this.completeRun(run.id, started, {
-        status: 'skipped',
-        cursorFrom: null,
-        cursorTo: null,
-        fetched: 0,
-        created: 0,
-        updated: 0,
-        unchanged: 0,
-        matched: 0,
-        unmatched: 0,
-        errors: 0,
-        errorMessage: null,
-        metadata: { skippedReason: 'sync_already_running' },
-      });
-    }
-
-    try {
-      const previousCursor = await this.resolveLastCursor();
-      const cursorFrom = this.applyCursorOverlap(previousCursor);
-      const client = new SydleClient();
-      const fetched = await client.fetchPayments(cursorFrom);
-      const normalized = fetched.records.map((record) => normalizeSydlePayment(record));
-      const cursorTo = this.resolveCursorTo(previousCursor, normalized, fetched.cursorTo);
-      const result = await this.upsertPayments(normalized);
-
-      const completed = await this.completeRun(run.id, started, {
-        status: result.errors > 0 ? 'partial' : 'success',
-        cursorFrom,
-        cursorTo,
-        fetched: normalized.length,
-        ...result,
-        errorMessage: null,
-        metadata: {
-          ...fetched.metadata,
-          previousCursor: previousCursor?.toISOString() ?? null,
-          cursorOverlapMs: SYDLE_CURSOR_OVERLAP_MS,
-          cursorSource: cursorTo ? 'source_updated_at' : 'none',
-        },
-      });
-
-      auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
-
-      if (trigger === 'manual') {
-        alertService
-          .create({
-            severity: result.errors > 0 ? 'warning' : 'info',
-            title: 'SYDLE sincronizada',
-            message: `${normalized.length} registros consultados, ${result.created} criados, ${result.updated} atualizados, ${result.matched} conciliados.`,
-          })
-          .catch((err) => logger.error({ err }, 'Failed to create SYDLE sync alert'));
+    return this.withSyncLock(async (acquired) => {
+      if (!acquired) {
+        return this.completeRun(run.id, started, {
+          status: 'skipped',
+          cursorFrom: null,
+          cursorTo: null,
+          fetched: 0,
+          created: 0,
+          updated: 0,
+          unchanged: 0,
+          matched: 0,
+          unmatched: 0,
+          errors: 0,
+          errorMessage: null,
+          metadata: { skippedReason: 'sync_already_running' },
+        });
       }
 
-      return completed;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error({ error }, 'SYDLE sync failed');
-      const completed = await this.completeRun(run.id, started, {
-        status: 'failed',
-        cursorFrom: null,
-        cursorTo: null,
-        fetched: 0,
-        created: 0,
-        updated: 0,
-        unchanged: 0,
-        matched: 0,
-        unmatched: 0,
-        errors: 1,
-        errorMessage: message,
-        metadata: { failure: message },
-      });
-      auditService.log(userId, 'sydle_sync_failed', 'sydle', run.id, { message }, null);
-      throw Object.assign(new Error(message), { syncRun: completed });
-    } finally {
-      lock.release();
-    }
+      try {
+        const previousCursor = await this.resolveLastCursor();
+        const cursorFrom = this.applyCursorOverlap(previousCursor);
+        const client = new SydleClient();
+        const fetched = await client.fetchPayments(cursorFrom);
+        const normalized = fetched.records.map((record) => normalizeSydlePayment(record));
+        const cursorTo = this.resolveCursorTo(previousCursor, normalized, fetched.cursorTo);
+        const result = await this.upsertPayments(normalized);
+
+        const completed = await this.completeRun(run.id, started, {
+          status: result.errors > 0 ? 'partial' : 'success',
+          cursorFrom,
+          cursorTo,
+          fetched: normalized.length,
+          ...result,
+          errorMessage: null,
+          metadata: {
+            ...fetched.metadata,
+            previousCursor: previousCursor?.toISOString() ?? null,
+            cursorOverlapMs: SYDLE_CURSOR_OVERLAP_MS,
+            cursorSource: cursorTo ? 'source_updated_at' : 'none',
+          },
+        });
+
+        auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
+
+        if (trigger === 'manual') {
+          alertService
+            .create({
+              severity: result.errors > 0 ? 'warning' : 'info',
+              title: 'SYDLE sincronizada',
+              message: `${normalized.length} registros consultados, ${result.created} criados, ${result.updated} atualizados, ${result.matched} conciliados.`,
+            })
+            .catch((err) => logger.error({ err }, 'Failed to create SYDLE sync alert'));
+        }
+
+        return completed;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error({ error }, 'SYDLE sync failed');
+        const completed = await this.completeRun(run.id, started, {
+          status: 'failed',
+          cursorFrom: null,
+          cursorTo: null,
+          fetched: 0,
+          created: 0,
+          updated: 0,
+          unchanged: 0,
+          matched: 0,
+          unmatched: 0,
+          errors: 1,
+          errorMessage: message,
+          metadata: { failure: message },
+        });
+        auditService.log(userId, 'sydle_sync_failed', 'sydle', run.id, { message }, null);
+        throw Object.assign(new Error(message), { syncRun: completed });
+      }
+    });
   },
 
-  async tryAcquireSyncLock(): Promise<{ acquired: boolean; release: () => void }> {
-    const result = await db.execute(
-      sql`SELECT pg_try_advisory_lock(hashtext('sydle_purchase_payments_sync')) AS acquired`,
-    );
-    const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
-    const acquired = Boolean(rows[0]?.acquired);
-    return {
-      acquired,
-      release: () => {
-        if (!acquired) return;
-        void db
-          .execute(sql`SELECT pg_advisory_unlock(hashtext('sydle_purchase_payments_sync'))`)
-          .catch((err) => logger.warn({ err }, 'Failed to release SYDLE advisory lock'));
-      },
-    };
+  async withSyncLock<T>(callback: (acquired: boolean) => Promise<T>): Promise<T> {
+    return db.transaction(async (tx: any) => {
+      const result = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext('sydle_purchase_payments_sync')) AS acquired`,
+      );
+      const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
+      const acquired = Boolean(rows[0]?.acquired);
+      return callback(acquired);
+    });
   },
 
   async resolveLastCursor(): Promise<Date | null> {
@@ -490,12 +511,7 @@ export const sydleService = {
       const rows = await db
         .select()
         .from(importProcesses)
-        .where(
-          or(
-            inArray(importProcesses.purchaseRef, lookupValues),
-            ...aiLookupConditions,
-          ),
-        )
+        .where(or(inArray(importProcesses.purchaseRef, lookupValues), ...aiLookupConditions))
         .limit(10);
       candidates.push(...(rows as ProcessCandidate[]));
     }

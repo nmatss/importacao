@@ -3,13 +3,23 @@ import { db, pool } from './connection.js';
 import { users, systemSettings } from './schema.js';
 
 async function main() {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Refusing to run default seed in production');
+  }
+
   console.log('Seeding database...');
 
-  const passwordHash = await bcrypt.hash('admin123', 10);
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || 'admin@importacao.local';
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword && process.env.NODE_ENV !== 'development') {
+    throw new Error('SEED_ADMIN_PASSWORD is required outside development');
+  }
+
+  const passwordHash = await bcrypt.hash(adminPassword || 'admin123', 10);
 
   await db.insert(users).values({
     name: 'Admin',
-    email: 'admin@importacao.com',
+    email: adminEmail,
     passwordHash,
     role: 'admin',
   });

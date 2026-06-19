@@ -1818,13 +1818,6 @@ export const documentService = {
     if (!doc) throw new NotFoundError('Documento', id);
     await assertDocumentProcessNotLocked(doc.processId);
 
-    // Remove file from disk
-    try {
-      await fs.unlink(doc.storagePath);
-    } catch {
-      // File might already be gone
-    }
-
     await db.transaction(async (tx) => {
       if (doc.aiParsedData != null) {
         await tx.insert(documentExtractionHistory).values({
@@ -1846,6 +1839,18 @@ export const documentService = {
       await tx.delete(documents).where(eq(documents.id, id));
       await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
+
+    // Remove the physical file only after the database transaction commits.
+    // If this best-effort cleanup fails, the logical delete/history remains
+    // consistent and the orphaned file can be removed by an ops cleanup pass.
+    try {
+      await fs.unlink(doc.storagePath);
+    } catch (err) {
+      logger.warn(
+        { err, documentId: id, storagePath: doc.storagePath },
+        'Document file cleanup failed',
+      );
+    }
 
     auditService.log(
       userId,
@@ -2162,6 +2167,14 @@ export const documentService = {
       },
       { label: 'ETA', inv: null, pl: null, bl: bl?.eta, kind: 'date', criticality: 'info' },
       { label: 'Container', inv: null, pl: null, bl: bl?.containerNumber, criticality: 'info' },
+      {
+        label: 'Tipo Container',
+        inv: null,
+        pl: null,
+        bl: bl?.containerType,
+        espelho: espelhoSummary?.containerType,
+        criticality: 'info',
+      },
       { label: 'Navio', inv: null, pl: null, bl: bl?.vesselName, criticality: 'info' },
     ];
 

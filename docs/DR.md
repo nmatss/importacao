@@ -2,19 +2,19 @@
 
 ## RPO and RTO
 
-| Metric | Target | Notes |
-|--------|--------|-------|
-| RPO | 24h | Daily backup at 02:00. Max 24h data loss. |
-| RTO | 2h | Time to restore from backup to live service. |
+| Metric | Target | Notes                                        |
+| ------ | ------ | -------------------------------------------- |
+| RPO    | 24h    | Daily backup at 02:00. Max 24h data loss.    |
+| RTO    | 2h     | Time to restore from backup to live service. |
 
 To improve RPO to <1h: enable WAL streaming with pg_basebackup or Barman.
 
 ## Backup Storage
 
-- **Local**: `/backups/importacao/` on production server (7-day retention)
+- **Local**: `/home/nicolas/backups/importacao/` on production server (7-day retention)
 - **Remote**: configured via `BACKUP_REMOTE_HOST`/`BACKUP_REMOTE_PATH` or `BACKUP_S3_BUCKET`
 - **Format**: PostgreSQL custom format (`.pgdump`) — compressed, parallel-restore capable
-- **Volumes**: `uploads/` and `cert-reports/` archived as `.tar.gz`
+- **Volumes**: `uploads/`, `cert-reports/` and `cert-certs/` archived as `.tar.gz`
 
 ## Cron Schedule
 
@@ -31,8 +31,8 @@ To improve RPO to <1h: enable WAL streaming with pg_basebackup or Barman.
 ### Step 1 — Identify latest backup
 
 ```bash
-ls -lth /backups/importacao/*.pgdump | head -5
-BACKUP=/backups/importacao/importacao_2026-04-05_020001.pgdump
+ls -lth /home/nicolas/backups/importacao/*.pgdump | head -5
+BACKUP=/home/nicolas/backups/importacao/importacao_2026-04-05_020001.pgdump
 ```
 
 ### Step 2 — Stop application services
@@ -61,12 +61,19 @@ docker exec -i importacao-postgres \
 
 ```bash
 # Uploads
-tar -xzf /backups/importacao/*_uploads.tar.gz \
+tar -xzf /home/nicolas/backups/importacao/*_uploads.tar.gz \
   -C /var/lib/docker/volumes/importacao_uploads/_data --strip-components=1
 
 # Cert-reports
-tar -xzf /backups/importacao/*_cert-reports.tar.gz \
+tar -xzf /home/nicolas/backups/importacao/*_cert-reports.tar.gz \
   -C /var/lib/docker/volumes/importacao_cert-reports/_data --strip-components=1
+
+# Cert-certs
+tar -xzf /home/nicolas/backups/importacao/*_cert-certs.tar.gz \
+  -C /var/lib/docker/volumes/importacao_cert-certs/_data --strip-components=1
+
+docker run --rm -v importacao_cert-reports:/reports -v importacao_cert-certs:/certs \
+  alpine chown -R 1001:1001 /reports /certs
 ```
 
 ### Step 6 — Restart and verify
@@ -74,6 +81,7 @@ tar -xzf /backups/importacao/*_cert-reports.tar.gz \
 ```bash
 docker compose -f docker-compose.prod.yml up -d api cert-api web
 curl -f http://localhost:3050/health/ready
+docker exec importacao-cert-api python -c "import json, urllib.request; d=json.load(urllib.request.urlopen('http://localhost:8000/api/ready', timeout=5)); raise SystemExit(0 if d.get('ready') else 1)"
 ```
 
 ## Full Server Failure Restore

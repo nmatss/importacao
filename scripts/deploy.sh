@@ -12,6 +12,8 @@
 #   DEPLOY_DIR            Remote directory (default: /home/$DEPLOY_USER/importacao)
 #   COMPOSE_FILE          Docker compose file (default: docker-compose.prod.yml)
 #   HEALTH_ENDPOINT       API health URL (default: http://localhost:3050/health/ready)
+#   WEB_HEALTH_ENDPOINT   Web health URL (default: http://localhost:8085/)
+#   PUBLIC_WEB_HEALTH_ENDPOINT Optional public HTTPS/frontend URL to validate
 #   HEALTH_RETRIES        Health check retries (default: 30)
 #   HEALTH_INTERVAL       Seconds between retries (default: 2)
 #   SKIP_BACKUP           Set to "1" to skip DB backup (NOT recommended)
@@ -26,6 +28,8 @@ DEPLOY_USER="${DEPLOY_USER:-nicolas}"
 DEPLOY_DIR="${DEPLOY_DIR:-/home/${DEPLOY_USER}/importacao}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-http://localhost:3050/health/ready}"
+WEB_HEALTH_ENDPOINT="${WEB_HEALTH_ENDPOINT:-http://localhost:8085/}"
+PUBLIC_WEB_HEALTH_ENDPOINT="${PUBLIC_WEB_HEALTH_ENDPOINT:-}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 LOG_FILE="deploy.log"
@@ -146,12 +150,13 @@ fi
 info "[2/8] Syncing code to ${SERVER}:${DEPLOY_DIR}..."
 rsync -avz --delete \
   --exclude '.env' \
-  --exclude '.env.sops.yaml' \
   --exclude 'node_modules' \
   --exclude 'dist' \
   --exclude 'uploads' \
   --exclude 'logs' \
   --exclude '.git' \
+  --exclude '.claude' \
+  --exclude '.codex' \
   --exclude '__pycache__' \
   --exclude '.venv' \
   --exclude '*.db' \
@@ -168,9 +173,17 @@ success "Code synced."
 # Generate .env from SOPS or Vault (non-blocking)
 # ---------------------------------------------------------------------------
 info "[3/8] Generating .env from SOPS/Vault..."
-ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/generate-env-from-vault.sh" 2>&1 || {
-  warn "SOPS/Vault env generation failed — using existing .env on server"
-}
+if ssh "${DEPLOY_USER}@${SERVER}" "test -f ${DEPLOY_DIR}/.env.sops.yaml"; then
+  if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/generate-env-from-vault.sh --sops"; then
+    error "SOPS env generation failed. Deploy aborted to avoid using stale remote secrets."
+    notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: SOPS env generation failed"
+    exit 1
+  fi
+else
+  error "Missing ${DEPLOY_DIR}/.env.sops.yaml after sync. Deploy aborted."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: .env.sops.yaml missing"
+  exit 1
+fi
 
 info "[4/8] Rendering Alertmanager config..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && python3 -" <<'PY'
@@ -242,6 +255,14 @@ if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COM
 fi
 success "Remote compose config valid."
 
+info "Checking external Docker network ia-local-net..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "docker network inspect ia-local-net >/dev/null 2>&1"; then
+  error "External Docker network ia-local-net is missing. Create/connect the IA Local network before deploy."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: missing ia-local-net"
+  exit 1
+fi
+success "External Docker network ia-local-net exists."
+
 # ---------------------------------------------------------------------------
 # Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
 # ---------------------------------------------------------------------------
@@ -257,8 +278,14 @@ success "Migrations applied."
 # Deploy: build + restart application services
 # ---------------------------------------------------------------------------
 info "[7/8] Building and deploying api + web + cert-api..."
+info "Initializing cert-api persistent volume permissions..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && (docker compose -f ${COMPOSE_FILE} rm -f -s cert-volumes-init >/dev/null 2>&1 || true) && docker compose -f ${COMPOSE_FILE} run --rm --no-deps cert-volumes-init"; then
+  error "cert-api volume initialization failed. Deploy aborted before restarting cert-api."
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: cert-api volume init failed"
+  exit 1
+fi
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-  docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"
+  APP_VERSION='${LOCAL_SHA}' docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"
 success "Containers started."
 
 # ---------------------------------------------------------------------------
@@ -323,6 +350,23 @@ ssh "${DEPLOY_USER}@${SERVER}" "docker exec importacao-cert-api python -c \"impo
   exit 1
 }
 success "cert-api readiness passed."
+ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${WEB_HEALTH_ENDPOINT}'" > /dev/null || {
+  error "web health check failed after deploy: ${WEB_HEALTH_ENDPOINT}"
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: web health failed"
+  exit 1
+}
+success "web health passed."
+if [[ -n "${PUBLIC_WEB_HEALTH_ENDPOINT}" ]]; then
+  if ! curl -sf "${PUBLIC_WEB_HEALTH_ENDPOINT}" > /dev/null; then
+    error "public web health check failed after deploy: ${PUBLIC_WEB_HEALTH_ENDPOINT}"
+    notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: public web health failed"
+    exit 1
+  fi
+  success "public web health passed."
+fi
+info "Refreshing observability services..."
+ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COMPOSE_FILE} up -d --no-deps prometheus alertmanager grafana && docker compose -f ${COMPOSE_FILE} restart prometheus alertmanager" > /dev/null || \
+  warn "Could not refresh observability services — verify Prometheus/Alertmanager manually."
 ssh "${DEPLOY_USER}@${SERVER}" "printf '%s\n' '${LOCAL_SHA}' > ${DEPLOY_DIR}/REVISION" 2>/dev/null || \
   warn "Could not write ${DEPLOY_DIR}/REVISION"
 
@@ -335,7 +379,7 @@ fi
 # ---------------------------------------------------------------------------
 # Final status
 # ---------------------------------------------------------------------------
-info "[6/6] Deployment status:"
+info "Deployment status:"
 ssh "${DEPLOY_USER}@${SERVER}" "docker ps --filter name=importacao --format 'table {{.Names}}\t{{.Status}}'"
 
 echo ""
@@ -348,7 +392,7 @@ notify "SUCCESS" "Deployed ${LOCAL_SHA:0:12} to ${SERVER}"
 # ---------------------------------------------------------------------------
 cat << 'MIGRATIONS_NOTE'
 
-NOTE: migrations já rodam automaticamente no passo [4/6]. O manual abaixo
+NOTE: migrations já rodam automaticamente no passo [6/8]. O manual abaixo
 fica como fallback caso aquele passo tenha falhado:
 
   # 0011 (ALTER TYPE — MUST be manual, can't run in transaction)

@@ -52,9 +52,14 @@ export const emailIngestionController = {
             process.env.EMAIL_ALLOWED_SENDERS?.split(',')
               .map((s) => s.trim())
               .filter(Boolean) || [];
-          if (allowedSenders.length > 0) {
-            parts.push(`{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`);
+          if (allowedSenders.length === 0) {
+            return sendError(
+              res,
+              'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura de e-mails',
+              400,
+            );
           }
+          parts.push(`{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`);
         }
         gmailQuery = parts.join(' ');
       }
@@ -82,9 +87,14 @@ export const emailIngestionController = {
           process.env.EMAIL_ALLOWED_SENDERS?.split(',')
             .map((s: string) => s.trim())
             .filter(Boolean) || [];
-        if (allowedSenders.length > 0) {
-          parts.push(`{${allowedSenders.map((s: string) => `from:${s}`).join(' ')}}`);
+        if (allowedSenders.length === 0) {
+          return sendError(
+            res,
+            'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura historica',
+            400,
+          );
         }
+        parts.push(`{${allowedSenders.map((s: string) => `from:${s}`).join(' ')}}`);
       }
 
       const gmailQuery = parts.join(' ');

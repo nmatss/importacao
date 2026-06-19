@@ -2,7 +2,9 @@
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
+from typing import Any
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
@@ -69,6 +71,36 @@ def _fetch_stock_map() -> dict[str, dict[str, int]]:
     except Exception as e:
         log.warning(f"Could not fetch stock data: {e}")
     return stock_map
+
+
+def _row_get(row: Any, key: str, default: Any = "") -> Any:
+    """Return a column from dict-like, RealDictRow, tuple, or object rows."""
+    if hasattr(row, "get"):
+        return row.get(key, default)
+    if isinstance(row, tuple) and hasattr(row, "_fields") and key in row._fields:
+        return getattr(row, key)
+    return getattr(row, key, default)
+
+
+def _safe_int(value: Any) -> int:
+    """Normalize DB numeric values for Excel cells."""
+    if value is None or value == "":
+        return 0
+    if isinstance(value, Decimal):
+        return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _safe_text(value: Any) -> str:
+    """Normalize nullable values for Excel cells."""
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
 
 
 def _apply_header_row(
@@ -198,7 +230,7 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
     ws.title = "Estoque Detalhado"
 
     ws.append(["Relatório de Estoque Detalhado - CD Biguaçu + E-commerce"])
-    ws.merge_cells("A1:L1")
+    ws.merge_cells("A1:M1")
     ws["A1"].font = Font(bold=True, size=14, color="1E40AF")
     ws.append([f"Data: {now.strftime('%d/%m/%Y %H:%M')}"])
     ws.append([f"Total registros: {len(rows)}"])
@@ -207,6 +239,7 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
     headers = [
         "SKU", "Nome", "Marca", "Origem", "Localização", "Quantidade",
         "Disponível", "Reserva", "Trânsito", "Situação", "Status Cert", "Prazo Venda",
+        "Sincronizado em",
     ]
     header_row = _apply_header_row(ws, headers, _HEADER_FONT_STOCK, _HEADER_FILL_STOCK)
 
@@ -219,15 +252,21 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
     ecom_fill = PatternFill(start_color="F0FDF4", end_color="F0FDF4", fill_type="solid")
 
     for row_data in rows:
-        source_raw = row_data.get("source", "")
+        source_raw = _safe_text(_row_get(row_data, "source", ""))
         row_values = [
-            row_data.get("sku", ""), row_data.get("name", ""), row_data.get("brand", ""),
+            _safe_text(_row_get(row_data, "sku", "")),
+            _safe_text(_row_get(row_data, "name", "")),
+            _safe_text(_row_get(row_data, "brand", "")),
             source_labels.get(source_raw, source_raw),
-            (row_data.get("warehouse", "") or "").replace("CD ", ""),
-            row_data.get("quantity", 0) or 0, row_data.get("available", 0) or 0,
-            row_data.get("reserved", 0) or 0, row_data.get("in_transit", 0) or 0,
-            row_data.get("situation", ""), row_data.get("last_validation_status", ""),
-            row_data.get("sale_deadline", ""),
+            _safe_text(_row_get(row_data, "warehouse", "")).replace("CD ", ""),
+            _safe_int(_row_get(row_data, "quantity", 0)),
+            _safe_int(_row_get(row_data, "available", 0)),
+            _safe_int(_row_get(row_data, "reserved", 0)),
+            _safe_int(_row_get(row_data, "in_transit", 0)),
+            _safe_text(_row_get(row_data, "situation", "")),
+            _safe_text(_row_get(row_data, "last_validation_status", "")),
+            _safe_text(_row_get(row_data, "sale_deadline", "")),
+            _safe_text(_row_get(row_data, "synced_at", "")),
         ]
         ws.append(row_values)
         row_idx = ws.max_row
@@ -237,11 +276,11 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
             cell.border = _THIN_BORDER
             cell.fill = fill
 
-    col_widths = [15, 45, 18, 25, 22, 12, 12, 10, 10, 20, 15, 14]
+    col_widths = [15, 45, 18, 25, 22, 12, 12, 10, 10, 20, 15, 14, 24]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
-    ws.auto_filter.ref = f"A{header_row}:L{ws.max_row}"
+    ws.auto_filter.ref = f"A{header_row}:M{ws.max_row}"
 
     filename = f"estoque_detalhado_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = REPORTS_DIR / filename

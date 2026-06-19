@@ -139,6 +139,23 @@ function rowKey(scope: 'aggregate' | 'item', value: string | undefined | null, i
   return `${scope}:${slug || `linha-${index + 1}`}`;
 }
 
+function normalizeLabelKey(value: string | undefined | null) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+const SYSTEM_CHECK_BY_AGGREGATE_LABEL: Record<string, string> = {
+  'total-fob-usd': 'invoice-value-vs-fup',
+  frete: 'freight-vs-fup',
+  'cbm-m3': 'cbm-vs-fup',
+  'tipo-container': 'container-type-vs-fup',
+};
+
 function statusLabel(status: DisplayStatus) {
   switch (status) {
     case 'accepted':
@@ -332,6 +349,13 @@ function checkRowStatus(status: ValidationCheck['status']): RowStatus {
   }
 }
 
+function highestStatus(...statuses: RowStatus[]): RowStatus {
+  if (statuses.includes('divergent')) return 'divergent';
+  if (statuses.includes('warning')) return 'warning';
+  if (statuses.includes('match')) return 'match';
+  return 'empty';
+}
+
 export function DocumentComparison({ processId }: { processId: string }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<ComparisonFilter>('all');
@@ -358,15 +382,17 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   const systemDataAvailable = report?.systemDataAvailable ?? false;
 
-  // Map a system (Sydle) value per aggregate field label so it can be shown
-  // inline in the "Sistema" column. Keyed by the localized check label, which
-  // matches the aggregate field labels emitted by the backend.
-  const systemValueByLabel = useMemo(() => {
-    const map = new Map<string, string>();
+  // Map system (Sydle) values by validation key and by normalized labels. Real
+  // aggregate labels are "Total FOB (USD)", "Frete", "CBM (m3)", etc., while
+  // validation labels are "Valor Invoice vs Sistema", so label-only matching
+  // leaves the Sistema column empty in production data.
+  const systemCheckByLabel = useMemo(() => {
+    const map = new Map<string, ValidationCheck>();
     for (const check of report?.systemChecks ?? []) {
       const value = check.expectedValue;
       if (value == null || value === '') continue;
-      map.set(checkLabel(check.checkName).toLowerCase(), value);
+      map.set(check.checkName, check);
+      map.set(normalizeLabelKey(checkLabel(check.checkName)), check);
     }
     return map;
   }, [report?.systemChecks]);
@@ -388,11 +414,23 @@ export function DocumentComparison({ processId }: { processId: string }) {
         .map((field, index) => {
           const key = field.rowKey ?? rowKey('aggregate', field.label, index);
           const accepted = acceptedByRow.get(key);
-          const displayStatus: DisplayStatus = accepted ? 'accepted' : field.status;
-          const system = systemValueByLabel.get(field.label.trim().toLowerCase()) ?? null;
-          return { ...field, rowKey: key, displayStatus, accepted, system };
+          const aggregateLabelKey = normalizeLabelKey(field.label);
+          const systemCheckName = SYSTEM_CHECK_BY_AGGREGATE_LABEL[aggregateLabelKey];
+          const systemCheck =
+            (systemCheckName ? systemCheckByLabel.get(systemCheckName) : null) ??
+            systemCheckByLabel.get(aggregateLabelKey) ??
+            null;
+          const systemStatus = systemCheck ? checkRowStatus(systemCheck.status) : 'empty';
+          const status = highestStatus(field.status, systemStatus);
+          const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
+          const system = systemCheck?.expectedValue ?? null;
+          const message =
+            systemStatus !== 'empty' && systemStatus !== 'match'
+              ? (systemCheck?.message ?? field.message)
+              : field.message;
+          return { ...field, rowKey: key, status, displayStatus, accepted, system, message };
         }),
-    [acceptedByRow, data?.aggregateComparison, systemValueByLabel],
+    [acceptedByRow, data?.aggregateComparison, systemCheckByLabel],
   );
 
   // Cross-document validation checks (the old "Cruzamento entre Documentos"

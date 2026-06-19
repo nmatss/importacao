@@ -15,7 +15,7 @@ import { EspelhoPreview } from './EspelhoPreview';
 const baseEspelho = {
   id: 1,
   status: 'draft',
-  items: [],
+  items: [] as unknown[],
   totalFobValue: 0,
   totalQuantity: 0,
   totalNetWeight: 0,
@@ -59,8 +59,18 @@ describe('EspelhoPreview', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: vi.fn().mockResolvedValue({}),
+        blob: vi.fn().mockResolvedValue(new Blob(['xlsx'])),
       }),
     );
+    Object.defineProperty(URL, 'createObjectURL', {
+      configurable: true,
+      value: vi.fn().mockReturnValue('blob:espelho'),
+    });
+    Object.defineProperty(URL, 'revokeObjectURL', {
+      configurable: true,
+      value: vi.fn(),
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
   });
 
   it('requires confirmation before sending the espelho to Fenicia', async () => {
@@ -104,6 +114,22 @@ describe('EspelhoPreview', () => {
     expect(screen.getByRole('button', { name: /Enviado à Fenícia/i })).toBeDisabled();
   });
 
+  it('downloads XLSX using the espelho id instead of the process id', async () => {
+    mockEspelho({ id: 987 });
+    renderPreview();
+
+    fireEvent.click(screen.getByRole('button', { name: /Baixar XLSX/i }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/espelhos/987/download',
+        expect.objectContaining({
+          headers: expect.objectContaining({ Authorization: 'Bearer token-123' }),
+        }),
+      ),
+    );
+  });
+
   it('does not crash and shows an empty state when items are undefined', () => {
     // Simulate an espelho payload missing the items array entirely.
     vi.mocked(useApiQuery).mockReturnValue({
@@ -115,5 +141,63 @@ describe('EspelhoPreview', () => {
 
     expect(() => renderPreview()).not.toThrow();
     expect(screen.getByText(/Nenhum item no espelho ainda/i)).toBeInTheDocument();
+  });
+
+  it('adds items using the backend espelho field contract', async () => {
+    renderPreview();
+
+    fireEvent.click(screen.getByRole('button', { name: /Adicionar item/i }));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith('/api/espelhos/123/items', expect.any(Object)),
+    );
+    const [, options] = vi
+      .mocked(fetch)
+      .mock.calls.find(([url]) => url === '/api/espelhos/123/items')!;
+    expect(options).toMatchObject({ method: 'POST' });
+    expect(JSON.parse(String(options?.body))).toMatchObject({
+      ncmCode: '',
+      boxQuantity: 0,
+    });
+  });
+
+  it('edits the NCM cell using ncmCode instead of the display alias', async () => {
+    mockEspelho({
+      items: [
+        {
+          id: 55,
+          itemCode: 'SKU-1',
+          description: 'Produto',
+          color: 'Azul',
+          size: 'M',
+          ncm: '6404.19.00',
+          unitPrice: 10,
+          quantity: 2,
+          totalPrice: 20,
+          boxes: 1,
+          netWeight: 1,
+          grossWeight: 1.5,
+          isFoc: false,
+          requiresLi: false,
+          requiresCert: false,
+        },
+      ],
+    });
+    renderPreview();
+
+    fireEvent.doubleClick(screen.getByText('6404.19.00'));
+    const input = screen.getByDisplayValue('6404.19.00');
+    fireEvent.change(input, { target: { value: '6404.20.00' } });
+    fireEvent.blur(input);
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/espelhos/123/items/55',
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify({ ncmCode: '6404.20.00' }),
+        }),
+      ),
+    );
   });
 });

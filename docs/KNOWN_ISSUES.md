@@ -32,6 +32,9 @@ Descricao:
   `Configuracoes > Destinatarios operacionais`; env permanece apenas fallback
   opcional.
 - `communicationService.send` bloqueia envio quando `recipientEmail` esta vazio.
+- `COMMUNICATION_ALLOWED_RECIPIENTS` agora tambem e repassado ao container `api`
+  em compose, mas continua sendo fallback: o cadastro na tela segue como fonte
+  operacional preferida.
 
 Evidencias:
 
@@ -48,10 +51,11 @@ Impacto:
 
 Status:
 
-- Aberto. Requer confirmacao/cadastro dos enderecos operacionais reais na tela
-  de Configuracoes.
+- Parcial. Codigo/compose aceitam o fallback `COMMUNICATION_ALLOWED_RECIPIENTS`,
+  mas ainda requer confirmacao/cadastro dos enderecos operacionais reais na tela
+  de Configuracoes para nao depender de env.
 
-## MEDIO - SYDLE Aguardando Contrato Externo Para Sync Real
+## ALTO - SYDLE Aguardando Contrato Externo Para Sync Real
 
 Descricao:
 
@@ -61,8 +65,9 @@ Descricao:
 - Enquanto `SYDLE_SYNC_ENABLED=false` ou faltarem `SYDLE_BASE_URL` /
   `SYDLE_API_TOKEN`, o job de 15 minutos registra `status=skipped`.
 - Em 2026-06-19 foram mitigados riscos internos: cursor por `sourceUpdatedAt`
-  com overlap, rotas restritas a admin, redaction de `raw_payload`, export CSV
-  paginado e match por todos identificadores conhecidos.
+  com overlap, lock transacional de sync, rotas restritas a admin, redaction de
+  `raw_payload`, export CSV paginado, ID externo derivado de referencias de
+  negocio e match por todos identificadores conhecidos.
 
 Evidencias:
 
@@ -76,6 +81,9 @@ Impacto:
   configuracao da fonte SYDLE.
 - O risco restante e externo: sem contrato/payload real nao ha garantia sobre
   nomes de campo, semantica de status, cursor/paginacao oficial e timezone.
+- Para go-live com dados financeiros reais, isto e bloqueador externo critico:
+  exige contrato/API/exportacao oficial, credenciais reais e UAT financeiro com
+  amostra conciliada.
 
 Status:
 
@@ -135,8 +143,34 @@ Impacto:
 
 Status:
 
-- Aberto. Requer validar/rotacionar o webhook do espaço Google Chat e testar
-  envio real.
+- Parcial. Em 2026-06-19 o service passou a registrar status HTTP e corpo
+  truncado quando o webhook retorna erro; ainda falta validar/rotacionar o
+  webhook do espaço Google Chat e testar envio real.
+
+## MEDIO - Frescor Do Estoque WMS/E-commerce No Relatorio
+
+Descricao:
+
+- O relatorio `Estoque Detalhado (WMS + E-commerce)` le o cache `cert_stock`.
+- Se `/api/sync-stock` falhar parcialmente, o XLSX pode combinar fontes com
+  horarios diferentes.
+
+Evidencias:
+
+- `apps/cert-api/app/services/wms_service.py`
+- `apps/cert-api/app/routes/reports.py`
+- `apps/cert-api/app/services/report_service.py`
+
+Impacto:
+
+- Usuario pode interpretar estoque antigo como atual se o sync falhou antes da
+  exportacao.
+
+Status:
+
+- Parcial. Em 2026-06-19 o XLSX passou a incluir `Sincronizado em` e a UI passou
+  a sanitizar erro parcial de sync; falta regra de SLA para bloquear exportacao
+  quando a fonte estiver velha.
 
 ## MEDIO - Validacao Usa `ohbl` Como BL Principal
 

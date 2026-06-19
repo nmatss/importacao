@@ -41,10 +41,13 @@ Extraia os campos abaixo com confidence 0.0-1.0.
 
 Responda com JSON estrito:
 {
-  "packingListNumber": { "value": "", "confidence": 0.0 },
-  "invoiceNumber": { "value": "", "confidence": 0.0 },
-  "date": { "value": "", "confidence": 0.0 },
-  "exporterName": { "value": "", "confidence": 0.0 },
+	  "packingListNumber": { "value": "", "confidence": 0.0 },
+	  "invoiceNumber": { "value": "", "confidence": 0.0 },
+	  "date": { "value": "", "confidence": 0.0 },
+	  "shipmentDate": { "value": "", "confidence": 0.0 },
+	  "etd": { "value": "", "confidence": 0.0 },
+	  "shippedOnBoardDate": { "value": "", "confidence": 0.0 },
+	  "exporterName": { "value": "", "confidence": 0.0 },
   "exporterAddress": { "value": "", "confidence": 0.0 },
   "exporterTaxId": { "value": "", "confidence": 0.0 },
   "importerName": { "value": "", "confidence": 0.0 },
@@ -72,9 +75,10 @@ Responda com JSON estrito:
 }
 
 REGRAS:
-- Campo nao encontrado → value: null, confidence: 0.0
-- Datas em ISO 8601 (YYYY-MM-DD)
-- Pesos SEMPRE em quilogramas (KG). Se o doc mostra tons, converta para KG.
+	- Campo nao encontrado → value: null, confidence: 0.0
+	- Datas em ISO 8601 (YYYY-MM-DD)
+	- date = data de emissao do Packing List. shipmentDate/etd/shippedOnBoardDate = datas logisticas de embarque quando impressas como "shipment", "ETD", "shipped/on board" ou equivalentes. Nao copie date para esses campos se o documento nao indicar embarque.
+	- Pesos SEMPRE em quilogramas (KG). Se o doc mostra tons, converta para KG.
 - CBM em metros cubicos
 - Extraia TODOS os itens da tabela
 - itemCode: somente o codigo real do item. NAO inclua palavras que descrevem EMBALAGEM ("WHITE BOX", "BROWN BOX", "POLYBAG", "POLY BAG", "GIFT BOX", "COLOR BOX") como prefixo do codigo. Se o layout do PDF colocar a coluna de embalagem colada ao codigo, separe os valores.

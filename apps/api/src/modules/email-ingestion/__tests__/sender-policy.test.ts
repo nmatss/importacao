@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { extractMailboxAddress, isEmailAllowedByPatterns } from '../sender-policy.js';
+import {
+  extractMailboxAddress,
+  isEmailAllowedByPatterns,
+  isAllowedSenderFromEnv,
+} from '../sender-policy.js';
 
 describe('email sender policy', () => {
   it('uses the mailbox inside angle brackets instead of display-name substrings', () => {
@@ -17,5 +21,10 @@ describe('email sender policy', () => {
     expect(isEmailAllowedByPatterns('User <user@example.com>', ['user@example.com'])).toBe(true);
     expect(isEmailAllowedByPatterns('ops@mail.example.com', ['example.com'])).toBe(true);
     expect(isEmailAllowedByPatterns('ops@badexample.com', ['example.com'])).toBe(false);
+  });
+
+  it('fails closed when EMAIL_ALLOWED_SENDERS is empty', () => {
+    expect(isAllowedSenderFromEnv('ops@example.com', '')).toBe(false);
+    expect(isAllowedSenderFromEnv('ops@example.com', undefined)).toBe(false);
   });
 });

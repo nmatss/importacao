@@ -1,10 +1,11 @@
 """Health check routes."""
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from fastapi import APIRouter
 
-from app.config import DATABASE_URL, VTEX_STORES
+from app.config import DATABASE_URL, REPORTS_DIR, VTEX_STORES
 from app.db.postgres import db
 
 router = APIRouter()
@@ -32,7 +33,7 @@ def health() -> dict:
 
 @router.get("/api/ready")
 def ready() -> dict:
-    """Readiness check — verifies DB is reachable.
+    """Readiness check — verifies DB and writable report storage.
 
     Returns:
         Dict with ready flag and details.
@@ -42,6 +43,11 @@ def ready() -> dict:
     try:
         with db() as (conn, cur):
             cur.execute("SELECT 1")
+        probe = REPORTS_DIR / f".ready-{uuid4().hex}.tmp"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
         return {"ready": True}
+    except PermissionError:
+        return {"ready": False, "reason": "REPORTS_DIR not writable"}
     except Exception as e:
         return {"ready": False, "reason": str(e)}

@@ -365,6 +365,30 @@ async def test_products_csv_filter_matches_any_value_in_axis(
 
 
 @pytest.mark.asyncio
+async def test_products_license_status_filter_uses_license_map(
+    test_client, api_key_headers, mocker
+):
+    """license_status and license_deadline must come from Licenciamentos Vencidos."""
+    rows = [_make_product_row("LIC1"), _make_product_row("NO_LIC")]
+    _mock_products_db(mocker, rows)
+    mocker.patch(
+        "app.routes.certifications._safe_license_map",
+        return_value={"LIC1": {"status": "VENCIDO", "valid_until": "2025-01-31"}},
+    )
+
+    resp = await test_client.get(
+        "/api/products?license_status=VENCIDO", headers=api_key_headers
+    )
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["products"][0]["sku"] == "LIC1"
+    assert data["products"][0]["license_status"] == "VENCIDO"
+    assert data["products"][0]["license_deadline"] == "2025-01-31"
+
+
+@pytest.mark.asyncio
 async def test_products_no_derived_filter_uses_sql_count(
     test_client, api_key_headers, mocker
 ):

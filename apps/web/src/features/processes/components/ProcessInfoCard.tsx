@@ -234,11 +234,11 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'processo', value: process.totalFobValue },
   ]);
   const freightValue = pickValue<number | string>([
-    { source: 'invoice', value: readPath(invoice, 'freightValue') as number | string | null },
     {
       source: 'espelho',
       value: readPath(espelhoSummary, 'freightValue') as number | string | null,
     },
+    { source: 'invoice', value: readPath(invoice, 'freightValue') as number | string | null },
     { source: 'processo', value: process.freightValue },
   ]);
   // Pair the currency with the SAME source that won freightValue, otherwise the
@@ -278,18 +278,19 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'processo', value: process.totalCbm },
   ]);
   const containerType = pickValue<string>([
+    { source: 'espelho', value: readPath(espelhoSummary, 'containerType') as string | null },
     { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
     { source: 'processo', value: process.containerType },
   ]);
   const containerNumber = pickValue<string>([
-    { source: 'invoice', value: readPath(invoice, 'containerNumber') as string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'containerNumber') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'containerNumber') as string | null },
   ]);
   const shipmentDate = pickValue<string>([
-    { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
-    { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
     { source: 'processo', value: process.shipmentDate },
   ]);
   const exporterAddress = pickValue<string>([

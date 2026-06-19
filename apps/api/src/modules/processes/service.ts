@@ -204,6 +204,8 @@ export const processService = {
 
     if (!process) return { updated: false as const, current: null };
 
+    const espelhoSummary = getEspelhoSummary(process.aiExtractedData);
+
     const [followUp] = await db
       .select()
       .from(followUpTracking)
@@ -212,9 +214,13 @@ export const processService = {
 
     const derived = deriveLogisticStatus({
       process: {
-        etd: process.etd ?? null,
-        eta: process.eta ?? null,
-        shipmentDate: process.shipmentDate ?? null,
+        etd: process.etd ?? readString(espelhoSummary, 'etd') ?? null,
+        eta: process.eta ?? readString(espelhoSummary, 'eta') ?? null,
+        shipmentDate:
+          process.shipmentDate ??
+          readString(espelhoSummary, 'shipmentDate') ??
+          readString(espelhoSummary, 'shippedOnBoardDate') ??
+          null,
         customsChannel: process.customsChannel ?? null,
         diNumber: process.diNumber ?? null,
         customsClearanceAt: process.customsClearanceAt ?? null,
@@ -596,3 +602,20 @@ export const processService = {
     return result;
   },
 };
+
+function getEspelhoSummary(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const root = value as Record<string, unknown>;
+  const espelho = root.espelho;
+  if (espelho && typeof espelho === 'object') {
+    const summary = (espelho as Record<string, unknown>).summary;
+    if (summary && typeof summary === 'object') return summary as Record<string, unknown>;
+  }
+  const summary = root.espelhoSummary;
+  return summary && typeof summary === 'object' ? (summary as Record<string, unknown>) : null;
+}
+
+function readString(source: Record<string, unknown> | null, key: string): string | null {
+  const value = source?.[key];
+  return typeof value === 'string' && value.trim() ? value : null;
+}

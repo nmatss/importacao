@@ -133,8 +133,8 @@ describe('DocumentComparison', () => {
         ...baseComparison,
         aggregateComparison: [
           {
-            rowKey: 'aggregate:valor-invoice-vs-sistema',
-            label: 'Valor Invoice vs Sistema',
+            rowKey: 'aggregate:total-fob-usd',
+            label: 'Total FOB (USD)',
             invoice: '$1.000,00',
             packingList: null,
             bl: null,
@@ -163,6 +163,45 @@ describe('DocumentComparison', () => {
     expect(screen.getByRole('columnheader', { name: /^Sistema$/i })).toBeInTheDocument();
     // The system expected value is shown inline against the matching label.
     expect(screen.getByText('$1.200,00')).toBeInTheDocument();
+  });
+
+  it('marks the aggregate row as failed when the system check fails', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        aggregateComparison: [
+          {
+            rowKey: 'aggregate:total-fob-usd',
+            label: 'Total FOB (USD)',
+            invoice: '$1.000,00',
+            packingList: '$1.000,00',
+            bl: null,
+            espelho: '$1.000,00',
+            status: 'match',
+          },
+        ],
+      },
+      report: {
+        systemDataAvailable: true,
+        crossDocumentChecks: [],
+        systemChecks: [
+          {
+            id: 1,
+            checkName: 'invoice-value-vs-fup',
+            status: 'failed',
+            expectedValue: '$1.200,00',
+            actualValue: '$1.000,00',
+            message: 'Valor no sistema diverge dos documentos.',
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    const row = screen.getByText('Total FOB (USD)').closest('tr') as HTMLTableRowElement;
+    expect(within(row).getByText('Falha')).toBeInTheDocument();
+    expect(within(row).getByText(/Valor no sistema diverge/i)).toBeInTheDocument();
   });
 
   it('shows a "sem dados do sistema" hint when system data is unavailable', () => {

@@ -53,6 +53,27 @@ interface EspelhoPreviewProps {
   processId: string;
 }
 
+const API_FIELD_BY_UI_FIELD: Record<string, string> = {
+  ncm: 'ncmCode',
+  boxes: 'boxQuantity',
+};
+
+const INTEGER_FIELDS = new Set(['quantity', 'boxQuantity']);
+const DECIMAL_FIELDS = new Set(['unitPrice', 'netWeight', 'grossWeight']);
+
+function toApiField(field: string) {
+  return API_FIELD_BY_UI_FIELD[field] ?? field;
+}
+
+function toApiValue(field: string, value: string) {
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  if (!INTEGER_FIELDS.has(field) && !DECIMAL_FIELDS.has(field)) return value;
+  const numeric = Number(trimmed.replace(',', '.'));
+  if (!Number.isFinite(numeric)) return value;
+  return INTEGER_FIELDS.has(field) ? Math.trunc(numeric) : numeric;
+}
+
 export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   const queryClient = useQueryClient();
   const [generating, setGenerating] = useState(false);
@@ -98,9 +119,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
   const downloadXlsx = async () => {
     try {
+      if (!espelho?.id) {
+        throw new Error('Espelho ainda nao foi gerado');
+      }
       const token = localStorage.getItem('importacao_token');
       const baseUrl = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${baseUrl}/api/espelhos/${processId}/download`, {
+      const res = await fetch(`${baseUrl}/api/espelhos/${espelho.id}/download`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error('Falha ao baixar espelho');
@@ -108,7 +132,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `espelho_${processId}.xlsx`;
+      a.download = `espelho_${espelho.id}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: unknown) {
@@ -161,8 +185,9 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   const saveEdit = async () => {
     if (!editingCell) return;
     try {
+      const field = toApiField(editingCell.field);
       const res = await apiCall(`/api/espelhos/${processId}/items/${editingCell.itemId}`, 'PATCH', {
-        [editingCell.field]: editValue,
+        [field]: toApiValue(field, editValue),
       });
       if (!res.ok) throw new Error('Falha ao salvar edicao');
       setEditingCell(null);
@@ -179,9 +204,10 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
         description: 'Novo Item',
         color: '',
         size: '',
-        ncm: '',
+        ncmCode: '',
         unitPrice: 0,
         quantity: 0,
+        boxQuantity: 0,
       });
       if (!res.ok) throw new Error('Falha ao adicionar item');
       queryClient.invalidateQueries({ queryKey: ['espelho', processId] });
@@ -400,7 +426,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
                   </td>
                   <td className="px-3 py-2">{renderCell(item, 'color', item.color)}</td>
                   <td className="px-3 py-2">{renderCell(item, 'size', item.size)}</td>
-                  <td className="px-3 py-2">{renderCell(item, 'ncm', item.ncm)}</td>
+                  <td className="px-3 py-2">{renderCell(item, 'ncmCode', item.ncm)}</td>
                   <td className="px-3 py-2 text-right">
                     {renderCell(item, 'unitPrice', Number(item.unitPrice).toFixed(2))}
                   </td>
@@ -410,7 +436,9 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
                   <td className="px-3 py-2 text-right font-medium">
                     {formatCurrency(item.totalPrice)}
                   </td>
-                  <td className="px-3 py-2 text-right">{renderCell(item, 'boxes', item.boxes)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {renderCell(item, 'boxQuantity', item.boxes)}
+                  </td>
                   <td className="px-3 py-2 text-right">{formatWeight(item.netWeight)}</td>
                   <td className="px-3 py-2 text-right">{formatWeight(item.grossWeight)}</td>
                 </tr>

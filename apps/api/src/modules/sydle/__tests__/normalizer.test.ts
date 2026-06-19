@@ -63,6 +63,53 @@ describe('SYDLE payment normalizer', () => {
     expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T10:30:00.000Z');
   });
 
+  it('keeps explicit external IDs from SYDLE when present', () => {
+    const result = normalizeSydlePayment({
+      codigoPagamento: 'PAY-STABLE-123',
+      processo: 'IM0712602NB',
+      numeroPi: 'PI-777',
+      statusPagamento: 'Aberto',
+    });
+
+    expect(result.externalId).toBe('PAY-STABLE-123');
+  });
+
+  it('derives a stable fallback external ID from business references', () => {
+    const first = normalizeSydlePayment({
+      processo: 'IM0712602NB',
+      numeroPi: 'PI-777',
+      tipoPagamento: 'Sinal',
+      vencimento: '22/06/2026',
+      fornecedor: 'KIOM GLOBAL LIMITED',
+      marca: 'Puket',
+      valorCompra: '24.312,52',
+      statusPagamento: 'Aberto',
+    });
+    const updated = normalizeSydlePayment({
+      processo: 'IM0712602NB',
+      numeroPi: 'PI-777',
+      tipoPagamento: 'Sinal',
+      vencimento: '25/06/2026',
+      fornecedor: 'KIOM Global Ltd',
+      marca: 'Puket Escolares',
+      valorCompra: '25.000,00',
+      valorPago: '25.000,00',
+      statusPagamento: 'Pago',
+    });
+
+    expect(first.externalId).toMatch(/^derived:/);
+    expect(updated.externalId).toBe(first.externalId);
+  });
+
+  it('falls back to payload hash when SYDLE omits every business reference', () => {
+    const result = normalizeSydlePayment({
+      fornecedor: 'KIOM GLOBAL LIMITED',
+      valorCompra: '24.312,52',
+    });
+
+    expect(result.externalId).toMatch(/^hash:/);
+  });
+
   it('parses Brazilian date-time values without losing the time component', () => {
     const parsed = parseSydleDateTime('18/06/2026 10:10:00');
     const result = normalizeSydlePayment({
