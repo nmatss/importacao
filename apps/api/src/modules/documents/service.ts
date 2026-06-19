@@ -363,7 +363,7 @@ export const documentService = {
   async rebuildProcessAiExtractedData(
     processId: number,
     client: Pick<typeof db, 'select' | 'update'> = db,
-  ) {
+  ): Promise<Record<string, any>> {
     const processDocs = await client
       .select({
         id: documents.id,
@@ -389,22 +389,35 @@ export const documentService = {
         doc.type === 'espelho' ? doc.aiParsedData : flattenAiData(doc.aiParsedData);
     }
 
-    const [processRow] = await client
-      .select({ aiExtractedData: importProcesses.aiExtractedData })
-      .from(importProcesses)
-      .where(eq(importProcesses.id, processId))
-      .limit(1);
-
-    const existing = isRecord(processRow?.aiExtractedData) ? processRow.aiExtractedData : {};
-    const preserved = Object.fromEntries(
-      Object.entries(existing).filter(([key]) => !PROJECTED_AI_DATA_KEYS.has(key)),
+    // Atomic SQL-level rebuild. Previously this did a JS read-modify-write:
+    // SELECT aiExtractedData -> compute `{ ...preserved, ...projected }` in JS
+    // -> UPDATE the FULL blob back. That last write clobbers any concurrent
+    // fire-and-forget `processWithAI` JSONB `||` merge that committed between
+    // our SELECT and our UPDATE (lost update) — the very race processWithAI's
+    // atomic merge was built to avoid. A reprocess/delete that rebuilds while
+    // a sibling extraction finishes would silently drop the sibling's data.
+    //
+    // Fix: express the rebuild as a single UPDATE computed from the LIVE column
+    // value, never a stale JS snapshot. We strip every projected key from the
+    // current value (the `preserved` part) and `||`-merge the freshly computed
+    // `projected` object on top. Reading the base and writing happen in one
+    // statement, so a concurrent merge can no longer be lost to a stale read.
+    const projectedKeyArray = sql.raw(
+      `ARRAY[${[...PROJECTED_AI_DATA_KEYS].map((k) => `'${k}'`).join(', ')}]::text[]`,
     );
-    const nextAiExtractedData = { ...preserved, ...projected };
 
-    await client
+    const [updated] = await client
       .update(importProcesses)
-      .set({ aiExtractedData: nextAiExtractedData, updatedAt: new Date() })
-      .where(eq(importProcesses.id, processId));
+      .set({
+        aiExtractedData: sql`(coalesce(${importProcesses.aiExtractedData}, '{}'::jsonb) - ${projectedKeyArray}) || ${JSON.stringify(projected)}::jsonb`,
+        updatedAt: new Date(),
+      })
+      .where(eq(importProcesses.id, processId))
+      .returning({ aiExtractedData: importProcesses.aiExtractedData });
+
+    const nextAiExtractedData = isRecord(updated?.aiExtractedData)
+      ? updated.aiExtractedData
+      : { ...projected };
 
     logger.info(
       { processId, projectedKeys: Object.keys(projected) },

@@ -317,17 +317,11 @@ describe('documentService', () => {
       queryQueue.push(createResolvedChain([])); // assert process not locked
       txQueue.push(createResolvedChain(undefined)); // delete doc
       txQueue.push(createResolvedChain([])); // remaining docs for rebuild
-      txQueue.push(
-        createResolvedChain([
-          {
-            aiExtractedData: {
-              invoice: { invoiceNumber: 'stale' },
-              customKey: { keep: true },
-            },
-          },
-        ]),
-      );
-      const processUpdateChain = createResolvedChain(undefined);
+      // Atomic rebuild: no process-row SELECT anymore — the update computes the
+      // next blob from the live column in SQL and reads it back via RETURNING.
+      const processUpdateChain = createResolvedChain([
+        { aiExtractedData: { customKey: { keep: true } } },
+      ]);
       txQueue.push(processUpdateChain);
 
       const result = await documentService.delete(1, 2);
@@ -337,10 +331,11 @@ describe('documentService', () => {
       expect(mockTx.delete).toHaveBeenCalled();
       expect(processUpdateChain.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          aiExtractedData: { customKey: { keep: true } },
+          aiExtractedData: expect.objectContaining({ queryChunks: expect.any(Array) }),
           updatedAt: expect.any(Date),
         }),
       );
+      expect(processUpdateChain.returning).toHaveBeenCalled();
       expect(auditService.log).toHaveBeenCalledWith(
         2,
         'delete',
@@ -400,18 +395,19 @@ describe('documentService', () => {
           },
         ]),
       );
-      queryQueue.push(
-        createResolvedChain([
-          {
-            aiExtractedData: {
-              invoice: { invoiceNumber: 'STALE' },
-              packing_list: { packingListNumber: 'STALE' },
-              customKey: { keep: true },
-            },
+      // The atomic rebuild computes the next blob entirely in SQL
+      // ((live - projectedKeys) || projected) and reads it back via RETURNING,
+      // so the test simulates the post-merge state the DB returns. customKey is
+      // a non-projected key the DB preserves; projected keys come from docs.
+      const processUpdateChain = createResolvedChain([
+        {
+          aiExtractedData: {
+            customKey: { keep: true },
+            invoice: { invoiceNumber: 'INV-NEW' },
+            espelho: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
           },
-        ]),
-      );
-      const processUpdateChain = createResolvedChain(undefined);
+        },
+      ]);
       queryQueue.push(processUpdateChain);
 
       const rebuilt = await documentService.rebuildProcessAiExtractedData(1);
@@ -421,12 +417,15 @@ describe('documentService', () => {
         invoice: { invoiceNumber: 'INV-NEW' },
         espelho: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
       });
+      // The update must use an atomic SQL expression (not a plain JS blob) and
+      // read back via RETURNING — guards against regressing to read-modify-write.
       expect(processUpdateChain.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          aiExtractedData: rebuilt,
+          aiExtractedData: expect.objectContaining({ queryChunks: expect.any(Array) }),
           updatedAt: expect.any(Date),
         }),
       );
+      expect(processUpdateChain.returning).toHaveBeenCalled();
     });
 
     it('does not project very-low-confidence document data', async () => {
@@ -448,8 +447,14 @@ describe('documentService', () => {
           },
         ]),
       );
-      queryQueue.push(createResolvedChain([{ aiExtractedData: { customKey: { keep: true } } }]));
-      const processUpdateChain = createResolvedChain(undefined);
+      const processUpdateChain = createResolvedChain([
+        {
+          aiExtractedData: {
+            customKey: { keep: true },
+            packing_list: { packingListNumber: 'PL-VALID' },
+          },
+        },
+      ]);
       queryQueue.push(processUpdateChain);
 
       const rebuilt = await documentService.rebuildProcessAiExtractedData(1);
@@ -459,8 +464,66 @@ describe('documentService', () => {
         packing_list: { packingListNumber: 'PL-VALID' },
       });
       expect(processUpdateChain.set).toHaveBeenCalledWith(
-        expect.objectContaining({ aiExtractedData: rebuilt }),
+        expect.objectContaining({
+          aiExtractedData: expect.objectContaining({ queryChunks: expect.any(Array) }),
+        }),
       );
+      expect(processUpdateChain.returning).toHaveBeenCalled();
+    });
+
+    it('rebuilds atomically without a read-modify-write of the process blob', async () => {
+      // Concurrency guard (P2): the rebuild must NOT first SELECT the process
+      // row and then UPDATE the full blob, because a concurrent fire-and-forget
+      // processWithAI JSONB `||` merge committing in between would be clobbered.
+      // It must compute the next value from the LIVE column in a single UPDATE.
+      // We assert: (a) the only SELECT issued is for documents (no process-row
+      // read), and (b) the UPDATE carries an atomic SQL expression that strips
+      // the projected keys and embeds the freshly-projected JSON.
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 10,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.95',
+            aiParsedData: { invoiceNumber: 'INV-FRESH' },
+          },
+        ]),
+      );
+      const processUpdateChain = createResolvedChain([
+        { aiExtractedData: { invoice: { invoiceNumber: 'INV-FRESH' } } },
+      ]);
+      queryQueue.push(processUpdateChain);
+
+      mockDb.select.mockClear();
+
+      await documentService.rebuildProcessAiExtractedData(1);
+
+      // Only the documents SELECT — never a SELECT of the process aiExtractedData.
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
+
+      const setArg = processUpdateChain.set.mock.calls[0][0];
+      const chunks = setArg.aiExtractedData.queryChunks as any[];
+      // Flatten the SQL chunks to a readable string without tripping over the
+      // circular PgTable references Drizzle embeds for column refs.
+      const serialized = chunks
+        .map((c: any) => {
+          // Drizzle interpolates a raw string operand (our projected JSON) as a
+          // bare primitive-string chunk.
+          if (typeof c === 'string') return c;
+          if (Array.isArray(c?.value)) return c.value.join(''); // StringChunk
+          if (typeof c?.value === 'string') return c.value; // Param-style chunk
+          if (Array.isArray(c?.queryChunks)) {
+            return c.queryChunks.map((x: any) => (Array.isArray(x?.value) ? x.value.join('') : '')).join('');
+          }
+          return '';
+        })
+        .join(' ');
+      // Freshly-projected payload is embedded as the right-hand `||` operand.
+      expect(serialized).toContain('INV-FRESH');
+      // The live column is the base (coalesced) and projected keys are stripped.
+      expect(serialized).toContain('coalesce');
+      expect(serialized).toContain('::text[]');
     });
   });
 
