@@ -14,6 +14,35 @@ import { openapiSpec } from './docs/openapi.js';
 
 const app = express();
 
+// Trust proxy — required so req.ip reflects the real client behind our reverse
+// proxy (nginx/load balancer) instead of the proxy's own address. This is what
+// per-IP rate limiting and the /metrics IP allow-list rely on: without it every
+// client shares the proxy's IP (one rate-limit bucket) and the allow-list check
+// is meaningless.
+//
+// SECURITY: never blindly trust all proxies ('true'), which would let any
+// client spoof X-Forwarded-For and forge req.ip. Default to 'loopback' (the
+// proxy runs on the same host). For multi-hop setups, set TRUST_PROXY to the
+// number of trusted proxy hops (e.g. "1") or an Express trust-proxy value
+// (a subnet/IP/CSV like "10.0.0.0/8"). See:
+// https://expressjs.com/en/guide/behind-proxies.html
+const trustProxyEnv = process.env.TRUST_PROXY?.trim();
+if (trustProxyEnv) {
+  // A bare integer means "trust N hops"; anything else is passed through as an
+  // Express trust-proxy expression (IP/subnet/CSV). 'false'/'true' are honored
+  // as booleans for completeness, but 'true' is discouraged in production.
+  if (/^\d+$/.test(trustProxyEnv)) {
+    app.set('trust proxy', Number(trustProxyEnv));
+  } else if (trustProxyEnv === 'true' || trustProxyEnv === 'false') {
+    app.set('trust proxy', trustProxyEnv === 'true');
+  } else {
+    app.set('trust proxy', trustProxyEnv);
+  }
+} else {
+  // Safe default: only trust a proxy on the loopback interface.
+  app.set('trust proxy', 'loopback');
+}
+
 // Security headers
 app.use(helmet());
 
