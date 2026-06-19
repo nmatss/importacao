@@ -84,6 +84,35 @@ def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
     return r
 
 
+def _parse_csv_filter(raw: str) -> set[str]:
+    """Parse a comma-separated, case-insensitive filter value into a set.
+
+    Empty / blank input means "no constraint" (returns an empty set).
+    """
+    return {part.strip().lower() for part in (raw or "").split(",") if part.strip()}
+
+
+def _matches_derived_filters(
+    product: dict,
+    cert_statuses: set[str],
+    site_statuses: set[str],
+    license_statuses: set[str],
+) -> bool:
+    """Return True when a serialized product matches all requested derived axes.
+
+    Filtering is case-insensitive, AND across axes; an empty axis imposes no
+    constraint. The derived fields (cert_status/site_status/license_status) come
+    from `compute_status_dimensions`, so this must run AFTER serialization.
+    """
+    if cert_statuses and str(product.get("cert_status") or "").strip().lower() not in cert_statuses:
+        return False
+    if site_statuses and str(product.get("site_status") or "").strip().lower() not in site_statuses:
+        return False
+    if license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses:
+        return False
+    return True
+
+
 def _run_validation(
     run_id: str, brand_filter: str | None, limit: int | None, source: str | None = None
 ) -> None:
@@ -327,6 +356,9 @@ def list_expired_products(
     per_page: int = Query(25, ge=1, le=100),
     search: str = Query(""),
     brand: str = Query(""),
+    cert_status: str = Query(""),
+    site_status: str = Query(""),
+    license_status: str = Query(""),
 ) -> dict:
     """List expired certification products.
 
@@ -335,12 +367,24 @@ def list_expired_products(
         per_page: Items per page (max 100).
         search: Optional search string for sku/name.
         brand: Optional brand filter.
+        cert_status: Optional comma-separated derived cert_status filter.
+        site_status: Optional comma-separated derived site_status filter.
+        license_status: Optional comma-separated derived license_status filter.
+
+    The derived-status filters are applied AFTER status derivation but BEFORE
+    pagination, so total / total_pages reflect the FILTERED result set (same
+    semantics as /api/products).
 
     Returns:
         Paginated dict with products, total, page, per_page, total_pages.
     """
     if not DATABASE_URL:
         return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0}
+
+    cert_statuses = _parse_csv_filter(cert_status)
+    site_statuses = _parse_csv_filter(site_status)
+    license_statuses = _parse_csv_filter(license_status)
+    derived_filtering = bool(cert_statuses or site_statuses or license_statuses)
 
     with db() as (conn, cur):
         conditions = ["is_expired = TRUE"]
@@ -353,16 +397,31 @@ def list_expired_products(
             params.append(brand)
 
         where = "WHERE " + " AND ".join(conditions)
-        cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
-        total = cur.fetchone()["cnt"]
-
-        offset = (page - 1) * per_page
-        cur.execute(
-            f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST LIMIT %s OFFSET %s",
-            params + [per_page, offset],
-        )
         license_map = _safe_license_map()
-        rows = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
+        offset = (page - 1) * per_page
+
+        if derived_filtering:
+            cur.execute(
+                f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST",
+                params,
+            )
+            all_serialized = (_serialize_product(dict(r), license_map) for r in cur.fetchall())
+            filtered = [
+                p
+                for p in all_serialized
+                if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
+            ]
+            total = len(filtered)
+            rows = filtered[offset : offset + per_page]
+        else:
+            cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(
+                f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST LIMIT %s OFFSET %s",
+                params + [per_page, offset],
+            )
+            rows = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
+
         return {
             "products": rows,
             "total": total,
@@ -381,8 +440,17 @@ def list_products(
     status: str = Query(""),
     start_date: str = Query(""),
     end_date: str = Query(""),
+    cert_status: str = Query(""),
+    site_status: str = Query(""),
+    license_status: str = Query(""),
 ) -> dict:
     """List certification products with optional filters and stock enrichment.
+
+    The cert_status / site_status / license_status filters are derivation-time
+    dimensions (not DB columns). They are applied server-side AFTER status
+    derivation but BEFORE pagination, so total / total_pages reflect the FILTERED
+    result set. Each accepts a comma-separated, case-insensitive list; filtering
+    is AND across axes, and an empty axis imposes no constraint.
 
     Returns:
         Paginated dict with products (enriched with stock), total, page, per_page,
@@ -390,6 +458,11 @@ def list_products(
     """
     if not DATABASE_URL:
         return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0, "last_validation_date": None}
+
+    cert_statuses = _parse_csv_filter(cert_status)
+    site_statuses = _parse_csv_filter(site_status)
+    license_statuses = _parse_csv_filter(license_status)
+    derived_filtering = bool(cert_statuses or site_statuses or license_statuses)
 
     with db() as (conn, cur):
         conditions = []
@@ -428,16 +501,35 @@ def list_products(
             params.append(end_date)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
-        total = cur.fetchone()["cnt"]
-
-        offset = (page - 1) * per_page
-        cur.execute(
-            f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
-            params + [per_page, offset],
-        )
         license_map = _safe_license_map()
-        products_raw = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
+        offset = (page - 1) * per_page
+
+        if derived_filtering:
+            # Derived-status filters are not SQL columns, so we cannot paginate in
+            # SQL: load the full candidate set (post text/brand/status/date SQL
+            # filters), derive each row's status, filter by the requested derived
+            # axes, then paginate the filtered set in Python so total/total_pages
+            # are computed from the FILTERED count.
+            cur.execute(
+                f"SELECT * FROM cert_products {where} ORDER BY sku",
+                params,
+            )
+            all_serialized = (_serialize_product(dict(r), license_map) for r in cur.fetchall())
+            filtered = [
+                p
+                for p in all_serialized
+                if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
+            ]
+            total = len(filtered)
+            products_raw = filtered[offset : offset + per_page]
+        else:
+            cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+            total = cur.fetchone()["cnt"]
+            cur.execute(
+                f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
+                params + [per_page, offset],
+            )
+            products_raw = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
 
         if products_raw:
             skus = [p["sku"] for p in products_raw]

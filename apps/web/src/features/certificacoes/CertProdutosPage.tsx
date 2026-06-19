@@ -130,7 +130,13 @@ const EMPTY_STATUS_FILTERS: StatusFilterState = {
 /**
  * Pure predicate: true when a product matches the active semantic filters.
  * Empty filter value on an axis means "no constraint" for that axis.
- * Exported for unit testing.
+ *
+ * NOTE: the cert-api server is now authoritative for cert_status/site_status/
+ * license_status filtering AND pagination — it returns the correctly-filtered
+ * page plus the real total/total_pages. This helper is therefore NOT used to
+ * re-filter the visible page (doing so would shrink a single page below the
+ * server's total and desync the "N produtos encontrados" count / pagination).
+ * It is kept only as a typed pure guard, exported for unit testing.
  */
 export function matchesStatusFilters(
   product: Pick<CertProduct, 'cert_status' | 'site_status' | 'license_status'>,
@@ -261,9 +267,9 @@ export default function CertProdutosPage() {
     }
   }
 
-  const sortedProducts = products
-    .filter((p) => matchesStatusFilters(p, statusFilters))
-    .sort((a, b) => {
+  // Server is authoritative for filtering/pagination: render the page it
+  // returned as-is, only applying client-side sort on the current page.
+  const sortedProducts = [...products].sort((a, b) => {
     const aVal = a[sortField] ?? '';
     const bVal = b[sortField] ?? '';
     if (typeof aVal === 'number' && typeof bVal === 'number') {
@@ -622,7 +628,17 @@ export default function CertProdutosPage() {
                     </td>
                     <td className="px-5 py-3.5">
                       {p.site_status ? (
-                        <CertStatusBadge status={p.site_status} />
+                        <div className="flex flex-col gap-1">
+                          <CertStatusBadge status={p.site_status} />
+                          {p.site_status === 'NAO_CONFORME' && p.site_status_reason && (
+                            <span
+                              title={p.site_status_reason}
+                              className="text-[11px] leading-tight text-slate-400 dark:text-slate-500 max-w-[200px]"
+                            >
+                              {p.site_status_reason}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>
                       )}

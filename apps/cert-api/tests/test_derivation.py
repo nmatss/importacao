@@ -46,6 +46,21 @@ class TestCertStatusCollapsed:
     def test_excluido_is_encerrado(self):
         assert derive_cert_status("SKU excluído", False, None) == "ENCERRADO"
 
+    def test_excluido_precedes_sale_window(self):
+        # Regra Eduarda: "Encerrado = certificação encerrada, SKU excluído OU
+        # fora do prazo de venda". SKU excluído SEMPRE é ENCERRADO, mesmo dentro
+        # da janela de venda (a verificação de exclusão precede o short-circuit
+        # de within_window).
+        assert (
+            derive_cert_status("SKU excluído", False, "Venda até fim do lote")
+            == "ENCERRADO"
+        )
+
+    def test_excluido_precedes_sale_window_not_expired(self):
+        assert (
+            derive_cert_status("SKU excluido", False, "fim do lote") == "ENCERRADO"
+        )
+
     def test_andamento_defaults_encerrado(self):
         assert derive_cert_status("Em andamento", False, None) == "ENCERRADO"
 

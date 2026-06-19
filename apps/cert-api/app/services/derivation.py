@@ -102,13 +102,16 @@ def derive_cert_status(
     within_window = _within_sale_window(sale_deadline_raw)
     deadline = _norm(sale_deadline_raw)
 
-    # Dentro da janela de venda sempre reativa (prioridade máxima).
-    if within_window:
-        return "ATIVO"
-
-    # SKU excluído → sempre encerrado.
+    # SKU excluído → SEMPRE encerrado (regra explícita Eduarda: "Encerrado =
+    # certificação encerrada, SKU excluído OU fora do prazo de venda"). Precede o
+    # short-circuit de janela de venda: um SKU excluído nunca volta a ATIVO mesmo
+    # com prazo de venda vigente.
     if "exclu" in s:
         return "ENCERRADO"
+
+    # Dentro da janela de venda reativa (após excluir SKUs excluídos).
+    if within_window:
+        return "ATIVO"
 
     # Em andamento → conservador ENCERRADO (sem flag clara de atividade);
     # a janela de venda já foi tratada acima.

@@ -49,6 +49,9 @@ export interface CertProduct {
   // Status semânticos derivados (port Verificao_status — sessão 2026-05-22):
   cert_status?: CertStatusKind | null;
   site_status?: SiteStatusKind | null;
+  // Frase explicativa emitida pelo backend quando site_status === 'NAO_CONFORME'
+  // (ex.: 'Verificacao pendente - revisar'). Exibida sob o badge Status Ecommerce.
+  site_status_reason?: string | null;
   license_status?: LicenseStatusKind | null;
   comercializacao_status?: ComercializacaoStatusKind | null;
   created_at?: string;

@@ -185,3 +185,196 @@ async def test_get_certificate_404_without_db(test_client, api_key_headers):
     """Without a DATABASE_URL a certificate lookup returns 404, not 500."""
     resp = await test_client.get(f"{CREATE_URL}/abc", headers=api_key_headers)
     assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Server-side derived-status filtering on GET /api/products (round-1 BLOCKER)
+# ---------------------------------------------------------------------------
+
+
+def _make_product_row(sku: str, **overrides) -> dict:
+    """Build a cert_products row dict with sensible defaults for derivation."""
+    row = {
+        "sku": sku,
+        "name": f"Product {sku}",
+        "brand": "imaginarium",
+        "certification_type": "INMETRO",
+        "expected_cert_text": "INMETRO",
+        "ecommerce_description": "",
+        "sheet_status": "Ativo",
+        "is_expired": False,
+        "sale_deadline": "2030-01-01",
+        "sale_deadline_date": None,
+        "last_validation_status": "OK",
+        "last_validation_score": None,
+        "last_validation_url": None,
+        "last_validation_error": None,
+        "last_validation_date": None,
+        "actual_cert_text": None,
+        "created_at": None,
+        "updated_at": None,
+    }
+    row.update(overrides)
+    return row
+
+
+def _mock_products_db(mocker, rows: list[dict]):
+    """Point list_products at a fake DB whose SELECT * returns ``rows``.
+
+    The cursor routes fetch results by inspecting the executed SQL:
+    - SELECT * FROM cert_products  -> the full candidate set (derived filtering)
+    - cert_stock                   -> no stock rows
+    - MAX(last_validation_date)    -> a null last date
+
+    Returns:
+        The mock cursor for assertions.
+    """
+    mocker.patch("app.routes.certifications.DATABASE_URL", "postgres://test")
+    mocker.patch("app.routes.certifications._safe_license_map", return_value={})
+
+    cur = mocker.MagicMock()
+    state = {"last_sql": ""}
+
+    def _execute(sql, params=None):
+        state["last_sql"] = str(sql)
+
+    def _fetchall():
+        sql = state["last_sql"]
+        if "FROM cert_stock" in sql:
+            return []
+        if "SELECT * FROM cert_products" in sql:
+            return [dict(r) for r in rows]
+        return []
+
+    def _fetchone():
+        sql = state["last_sql"]
+        if "COUNT(*)" in sql:
+            return {"cnt": len(rows)}
+        if "MAX(last_validation_date)" in sql:
+            return {"last_date": None}
+        return None
+
+    cur.execute.side_effect = _execute
+    cur.fetchall.side_effect = _fetchall
+    cur.fetchone.side_effect = _fetchone
+
+    conn = mocker.MagicMock()
+    ctx = mocker.MagicMock()
+    ctx.__enter__ = mocker.MagicMock(return_value=(conn, cur))
+    ctx.__exit__ = mocker.MagicMock(return_value=False)
+    mocker.patch("app.routes.certifications.db", return_value=ctx)
+    return cur
+
+
+@pytest.mark.asyncio
+async def test_products_cert_status_filter_returns_only_matches(
+    test_client, api_key_headers, mocker
+):
+    """cert_status=ENCERRADO must return only ENCERRADO rows with correct totals.
+
+    5 of 8 rows derive to ENCERRADO; the unfiltered table is larger than a page,
+    yet total/total_pages must reflect the FILTERED count, not the raw table.
+    """
+    rows = []
+    # 5 ENCERRADO (expired, out of sale window)
+    for i in range(5):
+        rows.append(
+            _make_product_row(
+                f"ENC{i}", sheet_status="Encerrado", is_expired=True, sale_deadline="Vencido"
+            )
+        )
+    # 3 ATIVO (clean active)
+    for i in range(3):
+        rows.append(_make_product_row(f"ACT{i}"))
+
+    _mock_products_db(mocker, rows)
+    resp = await test_client.get(
+        "/api/products?cert_status=ENCERRADO&per_page=3", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 5
+    assert data["total_pages"] == 2  # ceil(5 / 3)
+    assert len(data["products"]) == 3  # first page
+    assert all(p["cert_status"] == "ENCERRADO" for p in data["products"])
+
+
+@pytest.mark.asyncio
+async def test_products_cert_status_filter_is_case_insensitive(
+    test_client, api_key_headers, mocker
+):
+    """Lower-case filter value must still match the upper-case derived status."""
+    rows = [_make_product_row("ACT0"), _make_product_row("ACT1")]
+    _mock_products_db(mocker, rows)
+    resp = await test_client.get(
+        "/api/products?cert_status=ativo", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert all(p["cert_status"] == "ATIVO" for p in data["products"])
+
+
+@pytest.mark.asyncio
+async def test_products_multi_axis_filter_is_and(test_client, api_key_headers, mocker):
+    """cert_status AND site_status applied together narrow to the intersection."""
+    rows = [
+        # ATIVO + CONFORME (OK on active)
+        _make_product_row("A_CONF"),
+        # ATIVO + NAO_CONFORME (never validated -> pending phrase)
+        _make_product_row("A_NAOCONF", last_validation_status=None),
+        # ENCERRADO + NAO_CONFORME (on site, encerrado)
+        _make_product_row(
+            "ENC_NAOCONF",
+            sheet_status="Encerrado",
+            is_expired=True,
+            sale_deadline="Vencido",
+            last_validation_status="OK",
+        ),
+    ]
+    _mock_products_db(mocker, rows)
+    resp = await test_client.get(
+        "/api/products?cert_status=ATIVO&site_status=CONFORME", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["products"][0]["sku"] == "A_CONF"
+    assert data["products"][0]["cert_status"] == "ATIVO"
+    assert data["products"][0]["site_status"] == "CONFORME"
+
+
+@pytest.mark.asyncio
+async def test_products_csv_filter_matches_any_value_in_axis(
+    test_client, api_key_headers, mocker
+):
+    """A comma-separated axis matches rows whose derived status is in the list."""
+    rows = [
+        _make_product_row("ACT0"),  # ATIVO
+        _make_product_row(
+            "ENC0", sheet_status="Encerrado", is_expired=True, sale_deadline="Vencido"
+        ),  # ENCERRADO
+    ]
+    _mock_products_db(mocker, rows)
+    resp = await test_client.get(
+        "/api/products?cert_status=ATIVO,ENCERRADO", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+
+
+@pytest.mark.asyncio
+async def test_products_no_derived_filter_uses_sql_count(
+    test_client, api_key_headers, mocker
+):
+    """Without derived filters the route keeps the COUNT(*)-based total."""
+    rows = [_make_product_row(f"S{i}") for i in range(2)]
+    cur = _mock_products_db(mocker, rows)
+    resp = await test_client.get("/api/products", headers=api_key_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    # COUNT(*) path executed when no derived filter is present.
+    executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
+    assert "COUNT(*)" in executed
