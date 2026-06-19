@@ -30,8 +30,11 @@ RUN pip install --no-cache-dir --target=/build/site-packages -r requirements.txt
 # ---- Stage 3: Runtime ----
 FROM python:3.12-slim
 
+# gosu lets the entrypoint run a tiny root-only chown step and then drop
+# privileges to the unprivileged appuser (uid 1001) before exec'ing the app,
+# so the application process never runs as root.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    freetds-bin libaio1t64 curl \
+    freetds-bin libaio1t64 curl gosu \
     && ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1 \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,13 +51,20 @@ RUN groupadd --gid 1001 appgroup \
 WORKDIR /app
 
 COPY --chown=appuser:appgroup . .
-RUN mkdir -p reports && chown appuser:appgroup reports
+RUN mkdir -p /app/reports /app/certs && chown appuser:appgroup /app/reports /app/certs
 
-USER appuser
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# NOTE: the container intentionally starts as root so the entrypoint can chown
+# the report/cert volumes (a fresh named volume is owned by root and otherwise
+# breaks writes — issue #85). entrypoint.sh drops to uid 1001 via gosu before
+# exec'ing the app, so the application process never runs as root.
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
+ENTRYPOINT ["entrypoint.sh"]
 CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

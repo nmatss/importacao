@@ -90,3 +90,69 @@ class TestReadLicenciamentosVencidos:
         _patch_client(mocker, {"Licenciamentos Vencidos": rows})
         result = erp_service.read_licenciamentos_vencidos()
         assert "PI4257Y" in result
+
+
+class TestLicenseMapCache:
+    """Short-TTL cache around read_licenciamentos_vencidos (P1 hot-path fix)."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_cache(self):
+        erp_service.invalidate_license_map_cache()
+        yield
+        erp_service.invalidate_license_map_cache()
+
+    def test_repeated_calls_within_ttl_hit_sheets_once(self, mocker):
+        # Two list/pagination calls in the same session must reuse one fetch.
+        spy = mocker.patch.object(
+            erp_service,
+            "read_licenciamentos_vencidos",
+            return_value={"PI4257Y": {"status": "VENCIDO", "valid_until": "2024-05-01"}},
+        )
+
+        first_map, first_stale = erp_service.get_license_map_cached(ttl_seconds=300)
+        second_map, second_stale = erp_service.get_license_map_cached(ttl_seconds=300)
+
+        assert spy.call_count == 1  # single Sheets round-trip
+        assert first_map == second_map
+        assert first_stale is False
+        assert second_stale is False
+
+    def test_fetch_error_within_ttl_reuses_cached_map_as_stale(self, mocker):
+        good = {"PI4257Y": {"status": "VENCIDO", "valid_until": "2024-05-01"}}
+        spy = mocker.patch.object(
+            erp_service, "read_licenciamentos_vencidos", return_value=good
+        )
+
+        # Prime the cache with a good fetch.
+        cached_map, stale = erp_service.get_license_map_cached(ttl_seconds=300)
+        assert cached_map == good
+        assert stale is False
+
+        # Next refresh fails (e.g. 429). Force a refresh so the cache TTL is
+        # bypassed and the fetch path runs; the last good map must be reused
+        # and flagged stale instead of collapsing to {} (NAO_APLICAVEL).
+        spy.side_effect = RuntimeError("APIError: [429] rate limited")
+        result_map, result_stale = erp_service.get_license_map_cached(
+            ttl_seconds=300, force_refresh=True
+        )
+        assert result_map == good
+        assert result_stale is True
+
+    def test_fetch_error_without_cache_returns_empty_stale(self, mocker):
+        mocker.patch.object(
+            erp_service,
+            "read_licenciamentos_vencidos",
+            side_effect=RuntimeError("boom"),
+        )
+        result_map, result_stale = erp_service.get_license_map_cached()
+        assert result_map == {}
+        assert result_stale is True
+
+    def test_empty_sheet_is_not_flagged_stale(self, mocker):
+        # A genuinely empty/absent sheet must stay ({}, False) — correctness.
+        mocker.patch.object(
+            erp_service, "read_licenciamentos_vencidos", return_value={}
+        )
+        result_map, result_stale = erp_service.get_license_map_cached()
+        assert result_map == {}
+        assert result_stale is False

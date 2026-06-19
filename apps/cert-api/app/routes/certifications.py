@@ -22,7 +22,7 @@ from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
 from app.services.derivation import compute_status_dimensions
-from app.services.erp_service import read_licenciamentos_vencidos, sync_sheets_to_db
+from app.services.erp_service import get_license_map_cached, sync_sheets_to_db
 from app.utils.logging import log
 
 router = APIRouter()
@@ -65,15 +65,24 @@ def cleanup_old_validations(max_age_seconds: int = 3600, stuck_timeout: int = 72
         del _running_validations[rid]
 
 
-def _safe_license_map() -> dict[str, dict]:
-    """Load the 'Licenciamentos Vencidos' map, never raising on Sheets failures."""
+def _safe_license_map() -> tuple[dict[str, dict], bool]:
+    """Load the cached 'Licenciamentos Vencidos' map, never raising on failures.
+
+    Returns:
+        Tuple of (license_map, stale). The map is served from a short-TTL cache
+        (see erp_service.get_license_map_cached) so a list/pagination session
+        reuses one Sheets fetch. On a Sheets error within the TTL the last good
+        cached map is reused and `stale` is True; callers should surface that as
+        a soft 'license data temporarily unavailable' signal rather than letting
+        every row silently downgrade to NAO_APLICAVEL.
+    """
     if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
-        return {}
+        return {}, False
     try:
-        return read_licenciamentos_vencidos()
+        return get_license_map_cached()
     except Exception as e:
         log.warning(f"Could not load Licenciamentos Vencidos map: {e}")
-        return {}
+        return {}, False
 
 
 def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
@@ -397,7 +406,7 @@ def list_expired_products(
             params.append(brand)
 
         where = "WHERE " + " AND ".join(conditions)
-        license_map = _safe_license_map()
+        license_map, license_data_stale = _safe_license_map()
         offset = (page - 1) * per_page
 
         if derived_filtering:
@@ -428,6 +437,7 @@ def list_expired_products(
             "page": page,
             "per_page": per_page,
             "total_pages": max(1, (total + per_page - 1) // per_page),
+            "license_data_stale": license_data_stale,
         }
 
 
@@ -501,7 +511,7 @@ def list_products(
             params.append(end_date)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        license_map = _safe_license_map()
+        license_map, license_data_stale = _safe_license_map()
         offset = (page - 1) * per_page
 
         if derived_filtering:
@@ -583,6 +593,7 @@ def list_products(
             "per_page": per_page,
             "total_pages": max(1, (total + per_page - 1) // per_page),
             "last_validation_date": last_date,
+            "license_data_stale": license_data_stale,
         }
 
 
@@ -607,7 +618,9 @@ def get_product(sku: str) -> dict:
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Product not found")
-        result = _serialize_product(dict(row), _safe_license_map())
+        license_map, license_data_stale = _safe_license_map()
+        result = _serialize_product(dict(row), license_map)
+        result["license_data_stale"] = license_data_stale
 
         if result.get("last_validation_status"):
             result["last_validation"] = {

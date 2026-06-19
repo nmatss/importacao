@@ -176,6 +176,11 @@ services:
       # (apps/cert-api/app/config.py). Without this named volume they are lost on
       # container restart.
       - cert-certs:/app/certs
+      # Ownership of these named volumes is fixed durably at runtime by
+      # apps/cert-api/entrypoint.sh (root chown -> gosu drop to uid 1001), so a
+      # fresh/recreated volume no longer breaks cert-api writes (issue #85). No
+      # manual chown needed. no-new-privileges below is gosu-compatible (gosu
+      # drops privileges, it does not escalate).
     depends_on:
       postgres:
         condition: service_healthy

@@ -230,7 +230,7 @@ def _mock_products_db(mocker, rows: list[dict]):
         The mock cursor for assertions.
     """
     mocker.patch("app.routes.certifications.DATABASE_URL", "postgres://test")
-    mocker.patch("app.routes.certifications._safe_license_map", return_value={})
+    mocker.patch("app.routes.certifications._safe_license_map", return_value=({}, False))
 
     cur = mocker.MagicMock()
     state = {"last_sql": ""}

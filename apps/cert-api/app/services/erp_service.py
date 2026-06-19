@@ -1,6 +1,7 @@
 """Google Sheets sync services for certifications and licenciados."""
 
 import re
+import time
 from datetime import datetime
 
 import gspread
@@ -9,6 +10,84 @@ from google.oauth2.service_account import Credentials
 from app.config import SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY, SHEETS_SPREADSHEET_ID
 from app.db.postgres import db
 from app.utils.logging import log
+
+# ---------------------------------------------------------------------------
+# Licenciamentos Vencidos cache
+# ---------------------------------------------------------------------------
+# The license map (read_licenciamentos_vencidos) is consulted on EVERY
+# list/get/pagination request. Without caching, a single paginated browsing
+# session triggers dozens of Google Sheets reads, blowing past the Sheets
+# ~60 reads/min quota — and on a 429 the map came back empty, silently
+# downgrading every license_status to NAO_APLICAVEL.
+#
+# We cache the last successfully-fetched map with a short TTL so a browsing
+# session reuses one fetch, and on a fetch error within (or after) the TTL we
+# prefer the last good cached map instead of an empty one, surfacing a
+# `stale` flag to the caller.
+LICENSE_MAP_TTL_SECONDS: float = 120.0
+
+_license_cache: dict = {
+    "map": None,        # last good map (None until first successful fetch)
+    "fetched_at": 0.0,  # monotonic timestamp of last good fetch
+}
+
+
+def invalidate_license_map_cache() -> None:
+    """Reset the in-memory Licenciamentos Vencidos cache (useful in tests)."""
+    _license_cache["map"] = None
+    _license_cache["fetched_at"] = 0.0
+
+
+def get_license_map_cached(
+    ttl_seconds: float | None = None, force_refresh: bool = False
+) -> tuple[dict[str, dict], bool]:
+    """Return the Licenciamentos Vencidos map with short-TTL caching.
+
+    Repeated calls within the TTL reuse a single Sheets fetch. On a Sheets
+    error (e.g. 429), the last good cached map is reused and the result is
+    flagged stale, instead of silently returning an empty map (which would
+    mislabel every license_status as NAO_APLICAVEL).
+
+    Args:
+        ttl_seconds: Override the default cache TTL.
+        force_refresh: Bypass the cache and force a fresh fetch.
+
+    Returns:
+        Tuple of (license_map, stale). `stale` is True when the returned map
+        comes from a cached value after a failed/expired refresh. A genuinely
+        empty sheet returns ({}, False) — correctness is preserved.
+    """
+    ttl = LICENSE_MAP_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+    now = time.monotonic()
+    cached = _license_cache["map"]
+
+    fresh = (
+        not force_refresh
+        and cached is not None
+        and (now - _license_cache["fetched_at"]) < ttl
+    )
+    if fresh:
+        return cached, False
+
+    try:
+        fetched = read_licenciamentos_vencidos()
+    except Exception as e:
+        # Fetch failed (429 / network / auth). Prefer the last good map.
+        if cached is not None:
+            log.warning(
+                f"Licenciamentos Vencidos refresh failed ({e}); serving stale cached map"
+            )
+            return cached, True
+        log.warning(
+            f"Licenciamentos Vencidos refresh failed ({e}) with no cached map available"
+        )
+        return {}, True
+
+    # Successful fetch — refresh the cache. An empty dict is a legitimate
+    # result (empty/absent sheet) and is cached as the new good value.
+    _license_cache["map"] = fetched
+    _license_cache["fetched_at"] = now
+    return fetched, False
 
 
 def _get_sheets_client() -> gspread.Client | None:
