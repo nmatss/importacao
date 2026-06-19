@@ -2,9 +2,10 @@
 
 ## Overview
 
-The application container exposes the web service only on `127.0.0.1:8085` in
-production. HTTPS for `importacao.grupounico.com` must terminate in the host or
-edge reverse proxy that forwards traffic to that local port.
+The application container exposes the web service on `127.0.0.1:8085` for local
+health checks and also joins the external Docker network `n8n_enterprise_web`.
+Public HTTPS for `importacao.grupounico.com` is routed by the shared Traefik
+container through Docker labels on the `web` service.
 
 `docker-compose.prod.yml` still includes the `certbot` service behind the
 optional `tls` profile for environments that issue certificates on the same
@@ -23,13 +24,12 @@ the app container.
 ```bash
 export DOMAIN=importacao.grupounico.com
 
-# 1. Deploy the app. It should listen locally only.
+# 1. Deploy the app. It should listen locally and be attached to Traefik.
 docker compose -f docker-compose.prod.yml up -d web
 curl -I http://127.0.0.1:8085/
 
-# 2. Configure the host/edge proxy to terminate TLS and forward to 127.0.0.1:8085.
-# Example proxy target:
-#   proxy_pass http://127.0.0.1:8085;
+# 2. Confirm the shared Traefik network exists.
+docker network inspect n8n_enterprise_web >/dev/null
 
 # 3. Verify public HTTPS.
 curl -I https://${DOMAIN}

@@ -54,6 +54,11 @@ Compras/Pagamentos SYDLE` e atalho no portal para admins; tabela/mobile
   corrigido com o spreadsheet ID preservado do `cert-api` em execucao e uma nova
   senha forte de Grafana; `docker compose -f docker-compose.prod.yml config
 --quiet` passou no servidor.
+- TLS/publicacao: deploy do SHA `b4f4872` subiu containers saudaveis e passou
+  health interno, mas o health publico retornou 502 porque o Traefik compartilhado
+  roteava `importacao.grupounico.com` para um router generico de n8n. O compose
+  de producao passou a conectar o `web` na rede externa `n8n_enterprise_web` e a
+  declarar labels Traefik dedicadas para `importacao.grupounico.com`.
 
 Testes direcionados:
 
