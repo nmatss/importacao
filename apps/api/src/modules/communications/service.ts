@@ -76,6 +76,30 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+// Masks an email for logging/error messages: keeps the first char of the local
+// part and the domain so an operator can recognize the address without leaking
+// the full mailbox. e.g. "eduarda@kiom.com" -> "e***@kiom.com".
+function maskEmail(value: string): string {
+  const email = normalizeEmail(value);
+  const at = email.indexOf('@');
+  if (at <= 0) return email ? '***' : '';
+  return `${email[0]}***${email.slice(at)}`;
+}
+
+function maskRecipientList(recipientEmail: string): string {
+  const masked = parseEmailList(recipientEmail).map(maskEmail).filter(Boolean);
+  return masked.length > 0 ? masked.join(', ') : '***';
+}
+
+/**
+ * Builds the allow-list of recipient patterns.
+ *
+ * The configured operational recipients (kiom/fenicia/isa) are ALWAYS folded in
+ * so that a communication addressed to a recipient resolved from settings/env is
+ * accepted even when COMMUNICATION_ALLOWED_RECIPIENTS is empty. `parseEmailList`
+ * already trims, lowercases, de-duplicates and drops empties, so an unconfigured
+ * (empty string) operational recipient is skipped rather than poisoning the list.
+ */
 async function allowedRecipientPatterns(): Promise<string[]> {
   const [kiomEmail, feniciaEmail, isaEmail] = await Promise.all([
     getOperationalRecipient('kiom_email'),
@@ -89,22 +113,36 @@ async function allowedRecipientPatterns(): Promise<string[]> {
     .filter(Boolean);
 }
 
-async function isRecipientAllowed(recipientEmail: string): Promise<boolean> {
+function matchesPattern(recipient: string, pattern: string): boolean {
+  if (pattern.startsWith('@')) {
+    const domain = pattern.slice(1);
+    return recipient.endsWith(`@${domain}`) || recipient.endsWith(`.${domain}`);
+  }
+  if (pattern.includes('@')) return recipient === pattern;
+  return recipient.endsWith(`@${pattern}`) || recipient.endsWith(`.${pattern}`);
+}
+
+interface RecipientCheckResult {
+  allowed: boolean;
+  patternCount: number;
+}
+
+async function isRecipientAllowed(recipientEmail: string): Promise<RecipientCheckResult> {
   const recipients = parseEmailList(recipientEmail).map(normalizeEmail);
   const patterns = await allowedRecipientPatterns();
-  if (recipients.length === 0) return false;
-  if (patterns.length === 0) return false;
+  const patternCount = patterns.length;
 
-  return recipients.every((recipient) => {
-    return patterns.some((pattern) => {
-      if (pattern.startsWith('@')) {
-        const domain = pattern.slice(1);
-        return recipient.endsWith(`@${domain}`) || recipient.endsWith(`.${domain}`);
-      }
-      if (pattern.includes('@')) return recipient === pattern;
-      return recipient.endsWith(`@${pattern}`) || recipient.endsWith(`.${pattern}`);
-    });
-  });
+  if (recipients.length === 0) return { allowed: false, patternCount };
+  // Security property: with no patterns configured nothing is allowed. Configured
+  // operational recipients are part of `patterns`, so they pass here naturally and
+  // no arbitrary recipient is ever auto-allowed.
+  if (patternCount === 0) return { allowed: false, patternCount };
+
+  const allowed = recipients.every((recipient) =>
+    patterns.some((pattern) => matchesPattern(recipient, pattern)),
+  );
+
+  return { allowed, patternCount };
 }
 
 function sanitizeAttachmentFilename(filename: unknown, fallback: string): string {
@@ -270,9 +308,27 @@ export const communicationService = {
       );
     }
 
-    if (!(await isRecipientAllowed(communication.recipientEmail))) {
+    const recipientCheck = await isRecipientAllowed(communication.recipientEmail);
+    if (!recipientCheck.allowed) {
+      const maskedRecipient = maskRecipientList(communication.recipientEmail);
+      logger.warn(
+        {
+          communicationId: id,
+          processId: communication.processId,
+          recipient: maskedRecipient,
+          allowedPatternCount: recipientCheck.patternCount,
+        },
+        'Envio bloqueado: destinatário fora da allow-list',
+      );
+      const reason =
+        recipientCheck.patternCount === 0
+          ? 'Nenhum destinatário autorizado está configurado.'
+          : `Nenhum dos ${recipientCheck.patternCount} padrão(ões) autorizado(s) corresponde a este destinatário.`;
       throw new AppError(
-        'Destinatário não autorizado para envio. Configure os destinatários operacionais ou COMMUNICATION_ALLOWED_RECIPIENTS.',
+        `Destinatário ${maskedRecipient} não autorizado para envio. ${reason} ` +
+          'Cadastre o destinatário em "Configurações > Destinatários operacionais" ' +
+          '(campos KIOM/Fenícia/ISA) ou defina a variável de ambiente ' +
+          'COMMUNICATION_ALLOWED_RECIPIENTS com o e-mail ou domínio permitido.',
         403,
         'RECIPIENT_NOT_ALLOWED',
       );

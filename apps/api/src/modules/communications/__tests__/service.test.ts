@@ -47,6 +47,7 @@ vi.mock('nodemailer', () => ({
 
 const { communicationService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
+const { logger } = await import('../../../shared/utils/logger.js');
 
 describe('communicationService', () => {
   beforeEach(() => {
@@ -217,7 +218,7 @@ describe('communicationService', () => {
 
       queryQueue.push(createResolvedChain([mockComm]));
 
-      await expect(communicationService.send(1)).rejects.toThrow('Destinatário não autorizado');
+      await expect(communicationService.send(1)).rejects.toThrow(/não autorizado para envio/);
       expect(mockSendMail).not.toHaveBeenCalled();
     });
 
@@ -245,6 +246,192 @@ describe('communicationService', () => {
       );
     });
 
+    it('should reject when no allow-list patterns are configured', async () => {
+      // No operational recipients and no env allow-list -> empty pattern set.
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'kiom@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow(
+        /Nenhum destinatário autorizado está configurado/,
+      );
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('should allow a configured operational recipient even with empty COMMUNICATION_ALLOWED_RECIPIENTS', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '';
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'kiom_email' ? 'kiom@example.com' : '',
+      );
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'kiom@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      const mockUpdated = { ...mockComm, status: 'sent', sentAt: new Date() };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([mockUpdated]));
+
+      await communicationService.send(1);
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'kiom@example.com' }),
+      );
+    });
+
+    it('should skip an empty operational recipient value without poisoning the allow-list', async () => {
+      // fenicia_email is an empty string; it must not match an empty recipient or widen the list.
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '';
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'kiom_email' ? 'kiom@example.com' : '',
+      );
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'someone@evil.test',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Destinatário');
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('should allow a recipient matching a bare-domain pattern', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'kiom.com.br';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'eduarda@kiom.com.br',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      const mockUpdated = { ...mockComm, status: 'sent', sentAt: new Date() };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([mockUpdated]));
+
+      await communicationService.send(1);
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'eduarda@kiom.com.br' }),
+      );
+    });
+
+    it('should allow a recipient matching an @domain wildcard pattern', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '@fenicia.com';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'ops@sub.fenicia.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      const mockUpdated = { ...mockComm, status: 'sent', sentAt: new Date() };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([mockUpdated]));
+
+      await communicationService.send(1);
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'ops@sub.fenicia.com' }),
+      );
+    });
+
+    it('should reject when an exact-match pattern does not equal the recipient', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'allowed@example.com';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'other@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Destinatário');
+      expect(mockSendMail).not.toHaveBeenCalled();
+    });
+
+    it('should log a masked rejection with process and pattern count', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        processId: 42,
+        status: 'draft',
+        recipientEmail: 'eduarda@evil.test',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow('Destinatário');
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          communicationId: 1,
+          processId: 42,
+          recipient: 'e***@evil.test',
+          allowedPatternCount: 1,
+        }),
+        expect.stringContaining('Envio bloqueado'),
+      );
+    });
+
+    it('should not leak the full recipient in the 403 message', async () => {
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
+      mockGetOperationalRecipient.mockResolvedValue('');
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'eduarda@evil.test',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow(
+        /Configurações > Destinatários operacionais/,
+      );
+    });
+
     it('should reject a recipient list when any address is outside allowlist', async () => {
       const mockComm = {
         id: 1,
@@ -257,7 +444,7 @@ describe('communicationService', () => {
 
       queryQueue.push(createResolvedChain([mockComm]));
 
-      await expect(communicationService.send(1)).rejects.toThrow('Destinatário não autorizado');
+      await expect(communicationService.send(1)).rejects.toThrow(/não autorizado para envio/);
       expect(mockSendMail).not.toHaveBeenCalled();
     });
 
