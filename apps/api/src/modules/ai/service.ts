@@ -727,43 +727,47 @@ Responda SOMENTE com JSON estrito no formato:
 
     try {
       const model = this.analysisModel();
-      const response = await this.chat(model, messages, true, `${registryKey}_self_repair`);
-      const repaired = this.safeJsonParse(response, `${registryKey} self-repair`);
-      if (!repaired || typeof repaired !== 'object') return result;
+      // Bounded re-ask: never loop indefinitely on a stubborn document.
+      for (let round = 0; round < SELF_REPAIR_MAX_ROUNDS; round++) {
+        const response = await this.chat(model, messages, true, `${registryKey}_self_repair`);
+        const repaired = this.safeJsonParse(response, `${registryKey} self-repair`);
+        if (!repaired || typeof repaired !== 'object') return result;
 
-      let mergedAny = false;
-      for (const path of candidates) {
-        const incoming = (repaired as Record<string, any>)[path];
-        if (!incoming || typeof incoming !== 'object' || !('value' in incoming)) continue;
-        const incomingValue = incoming.value;
-        const incomingConf = typeof incoming.confidence === 'number' ? incoming.confidence : 0;
-        if (incomingValue === null || incomingValue === undefined || incomingValue === '') continue;
-        const current = data[path];
-        const currentConf =
-          current && typeof current === 'object' && 'confidence' in current
-            ? (current as { confidence: number }).confidence
-            : 0;
-        // Only adopt a strictly higher-confidence, source-grounded value.
-        if (incomingConf > currentConf) {
-          data[path] = { value: incomingValue, confidence: incomingConf };
-          mergedAny = true;
+        let mergedAny = false;
+        for (const path of candidates) {
+          const incoming = (repaired as Record<string, any>)[path];
+          if (!incoming || typeof incoming !== 'object' || !('value' in incoming)) continue;
+          const incomingValue = incoming.value;
+          const incomingConf = typeof incoming.confidence === 'number' ? incoming.confidence : 0;
+          if (incomingValue === null || incomingValue === undefined || incomingValue === '') continue;
+          const current = data[path];
+          const currentConf =
+            current && typeof current === 'object' && 'confidence' in current
+              ? (current as { confidence: number }).confidence
+              : 0;
+          // Only adopt a strictly higher-confidence, source-grounded value.
+          if (incomingConf > currentConf) {
+            data[path] = { value: incomingValue, confidence: incomingConf };
+            mergedAny = true;
+          }
         }
+
+        if (!mergedAny) return result;
+
+        logger.info(
+          { registryKey, repairedFields: candidates },
+          'Self-repair merged higher-confidence fields',
+        );
+        // Recompute confidence + re-run the harness over the merged data so the
+        // trust verdict reflects the repaired values.
+        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+        return this.applyHarness(
+          registryKey,
+          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          sourceText,
+        );
       }
-
-      if (!mergedAny) return result;
-
-      logger.info(
-        { registryKey, repairedFields: candidates },
-        'Self-repair merged higher-confidence fields',
-      );
-      // Recompute confidence + re-run the harness over the merged data so the
-      // trust verdict reflects the repaired values.
-      const { score, lowConfidenceFields } = this.calculateConfidence(data);
-      return this.applyHarness(
-        registryKey,
-        { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
-        sourceText,
-      );
+      return result;
     } catch (err) {
       logger.warn({ err, registryKey }, 'Self-repair pass failed — keeping primary result');
       return result;

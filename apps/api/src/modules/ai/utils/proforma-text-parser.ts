@@ -184,7 +184,6 @@ function parseItems(text: string): Record<string, any>[] {
     const ncmMatch = line.match(/\b\d{4}\.?\d{2}\.?\d{2}\b/);
     if (!ncmMatch || ncmMatch.index == null) continue;
     const beforeNcm = line.slice(0, ncmMatch.index).trim();
-    const ean = line.slice(ncmMatch.index + ncmMatch[0].length).match(/\b\d{8,14}\b/)?.[0] ?? null;
     const tokens = beforeNcm.split(/\s+/).filter(Boolean);
     if (tokens.length < 4) continue;
 
