@@ -148,6 +148,49 @@ function queueRunPassing(previousLiveRows: any[]) {
   return { liveInsertChain };
 }
 
+/**
+ * Variant for the case where the ONLY failed finding is carried-forward as
+ * manually resolved. The resolution-aware status promotion must treat it as
+ * non-blocking, so the process clears pending_correction and is promoted to
+ * 'validated' (with the pre-inspection milestone), NOT re-marked
+ * pending_correction. The trailing chains mirror queueRunPassing's validated
+ * path, and we return them so the test can assert the .set() payloads.
+ */
+function queueRunCarriedResolved(previousLiveRows: any[]) {
+  queryQueue.push(createResolvedChain([mockProcess])); // select process
+  queryQueue.push(createResolvedChain(completeCoreDocs)); // select documents
+  queryQueue.push(createResolvedChain([])); // select followUp
+  queryQueue.push(createResolvedChain(undefined)); // update to validating
+
+  const runInsertChain = createResolvedChain([{ id: 903 }]); // tx insert validation run
+  const selectPrevChain = createResolvedChain(previousLiveRows); // tx select previous live
+  const historyInsertChain = createResolvedChain(undefined); // tx insert history
+  const deleteChain = createResolvedChain(undefined); // tx delete live
+  const liveInsertChain = createResolvedChain(undefined); // tx insert new live
+  const correctionDeleteChain = createResolvedChain(undefined); // tx delete corrections
+  const correctionInsertChain = createResolvedChain(undefined); // tx insert corrections
+  txQueue.push(
+    runInsertChain,
+    selectPrevChain,
+    historyInsertChain,
+    deleteChain,
+    liveInsertChain,
+    correctionDeleteChain,
+    correctionInsertChain,
+  );
+
+  // Every failure was carried-forward resolved → no blocking failure. With
+  // correctionStatus === 'pending_correction', the validated branch updates
+  // importProcesses (validated + clears correctionStatus) and writes the
+  // pre-inspection milestone (followUpTracking).
+  const promoteChain = createResolvedChain(undefined); // update importProcesses -> validated
+  const milestoneChain = createResolvedChain(undefined); // update followUpTracking milestone
+  queryQueue.push(promoteChain);
+  queryQueue.push(milestoneChain);
+
+  return { liveInsertChain, promoteChain, milestoneChain };
+}
+
 describe('runAllChecks() carry-forward of manual resolutions (P1 data-loss)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -253,6 +296,73 @@ describe('runAllChecks() carry-forward of manual resolutions (P1 data-loss)', ()
       resolvedAt: null,
       resolutionNote: null,
     });
+  });
+
+  it('does NOT re-flag pending_correction when the only failure was carried-forward resolved', async () => {
+    // The re-run re-emits the SAME failing finding the operator already
+    // accepted. The carried-forward resolution must make the status promotion
+    // treat it as non-blocking, so the process is promoted to 'validated' and
+    // is NEVER re-marked pending_correction (the bug being fixed).
+    mockFailingCheck.mockReturnValue({
+      checkName: 'fob-value-match',
+      status: 'failed',
+      expectedValue: '1000',
+      actualValue: '900',
+      documentsCompared: 'INV vs PL',
+      message: 'FOB diverge',
+    });
+
+    const resolvedAt = new Date('2026-06-10T10:00:00.000Z');
+    const previousLiveRows = [
+      {
+        id: 10,
+        processId: 1,
+        validationRunId: 800,
+        checkName: 'fob-value-match',
+        status: 'failed',
+        expectedValue: '1000',
+        actualValue: '900',
+        documentsCompared: 'INV vs PL',
+        message: 'FOB diverge',
+        dataSource: 'cross_document',
+        resolvedManually: true,
+        resolvedBy: 7,
+        resolvedAt,
+        resolutionNote: 'Aceito pela Eduarda',
+        createdAt: resolvedAt,
+      },
+    ];
+
+    const { liveInsertChain } = queueRunCarriedResolved(previousLiveRows);
+
+    await validationService.runAllChecks(1, 1);
+
+    // The failed row is still persisted as carried-forward resolved.
+    const insertedRows = liveInsertChain.values.mock.calls[0][0];
+    const fob = insertedRows.find((r: any) => r.checkName === 'fob-value-match');
+    expect(fob).toMatchObject({ status: 'failed', resolvedManually: true });
+
+    // Inspect every outer db.update().set() payload, independent of queue
+    // position (the validated-pending path interleaves a dynamic import).
+    const updateSets = (mockDb.update as any).mock.results
+      .map((r: any) => r.value)
+      .flatMap((chain: any) => chain.set.mock.calls.map((args: any[]) => args[0]))
+      .filter(Boolean);
+
+    // Process promoted to validated and correction cleared — NOT pending.
+    expect(
+      updateSets.some(
+        (s: any) => s.status === 'validated' && s.correctionStatus === null,
+      ),
+    ).toBe(true);
+
+    // Pre-inspection milestone written (validated path side effect).
+    expect(updateSets.some((s: any) => s.preInspectionAt != null)).toBe(true);
+
+    // The bug being fixed: no update re-flags the process pending_correction.
+    expect(
+      updateSets.some((s: any) => s.correctionStatus === 'pending_correction'),
+    ).toBe(false);
   });
 
   it('does NOT inherit a stale resolution when the finding now PASSES', async () => {
