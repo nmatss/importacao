@@ -398,6 +398,110 @@ def _read_licenciados_from_sheets() -> list[dict]:
     return items
 
 
+def read_licenciamentos_vencidos() -> dict[str, dict]:
+    """Read the 'Licenciamentos Vencidos' worksheet (expired licenses).
+
+    Esta aba é a FONTE de licenciamento (status + prazo). Não replica dados de
+    certificação — alimenta `license_status` e o prazo 'Licen. - Prazo' via
+    `derivation.derive_license_status`.
+
+    Layout de colunas assumido (tolerante a variações de cabeçalho; cada coluna
+    é localizada por `_find_col_by_header`, não por índice fixo):
+        - Processo  : identificador do processo/SKU (ex.: "PI4257Y"). Também
+                      aceita cabeçalhos "SKU", "código", "ref".
+        - Status    : "VÁLIDO" / "VENCIDO" (ou "Licenciamento Vencido" etc.).
+                      Quando ausente, a presença na aba de *vencidos* é tratada
+                      como VENCIDO.
+        - Validade  : data de expiração do licenciamento ("Validade", "Vencimento",
+                      "Prazo", "valid_until"). Parseada nos formatos d/m/Y, ISO etc.
+
+    Returns:
+        Dict {PROCESS_CODE/SKU em MAIÚSCULAS -> {"status": "VALIDO"|"VENCIDO",
+        "valid_until": <ISO str|None>}}. Vazio quando a aba não existe ou as
+        credenciais não estão configuradas (sem crashar).
+    """
+    client = _get_sheets_client()
+    if not client:
+        return {}
+    try:
+        spreadsheet = client.open_by_key(SHEETS_SPREADSHEET_ID)
+    except Exception as e:
+        log.error(f"Failed to open spreadsheet for Licenciamentos Vencidos: {e}")
+        return {}
+
+    try:
+        ws = spreadsheet.worksheet("Licenciamentos Vencidos")
+        rows = ws.get_all_values()
+    except gspread.exceptions.WorksheetNotFound:
+        log.info("Worksheet 'Licenciamentos Vencidos' not found, license_status -> NAO_APLICAVEL")
+        return {}
+    except Exception as e:
+        log.warning(f"Could not read worksheet 'Licenciamentos Vencidos': {e}")
+        return {}
+
+    if not rows or len(rows) < 2:
+        return {}
+
+    headers = rows[0]
+    process_col = _find_col_by_header(headers, "processo", "process", "sku", "código", "codigo", "ref")
+    status_col = _find_col_by_header(headers, "status", "situação", "situacao")
+    valid_col = _find_col_by_header(
+        headers, "validade", "vencimento", "valid_until", "prazo", "data"
+    )
+
+    if process_col is None:
+        log.warning("Worksheet 'Licenciamentos Vencidos': missing process/SKU column")
+        return {}
+
+    result: dict[str, dict] = {}
+    for row in rows[1:]:
+        if process_col >= len(row):
+            continue
+        raw_code = str(row[process_col]).strip()
+        if not raw_code:
+            continue
+
+        status_str = (
+            str(row[status_col]).strip()
+            if status_col is not None and status_col < len(row)
+            else ""
+        )
+        status_low = status_str.lower()
+        # Aba de *vencidos*: default VENCIDO quando o status não diz "válido".
+        if "venc" in status_low or "expir" in status_low:
+            status = "VENCIDO"
+        elif "vál" in status_low or "val" in status_low or "ativo" in status_low:
+            status = "VALIDO"
+        else:
+            status = "VENCIDO"
+
+        valid_str = (
+            str(row[valid_col]).strip()
+            if valid_col is not None and valid_col < len(row)
+            else ""
+        )
+        valid_iso: str | None = None
+        if valid_str:
+            for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+                try:
+                    valid_iso = datetime.strptime(valid_str, fmt).date().isoformat()
+                    break
+                except ValueError:
+                    continue
+            if valid_iso is None:
+                # Mantém o texto original quando não parseável (ex.: "Fim do lote").
+                valid_iso = valid_str
+
+        for code in re.split(r"[\r\n]+", raw_code):
+            code = code.strip()
+            if not code:
+                continue
+            result[code.upper()] = {"status": status, "valid_until": valid_iso}
+
+    log.info(f"Read {len(result)} expired-license rows from 'Licenciamentos Vencidos'")
+    return result
+
+
 def sync_licenciados_to_db() -> dict:
     """Sync Licenciados from Google Sheets into li_tracking table.
 

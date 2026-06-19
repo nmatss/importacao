@@ -190,7 +190,8 @@ class TestStatusDerivation:
 
         assert result["cert_status"] == "ENCERRADO"
         assert result["site_status"] == "CONFORME"
-        assert result["license_status"] == "VENCIDO"
+        # license vem da aba 'Licenciamentos Vencidos'; sem map -> NAO_APLICAVEL.
+        assert result["license_status"] == "NAO_APLICAVEL"
 
     def test_excluded_sku_maps_to_certificacao_encerrado(self):
         result = compute_status_dimensions(
@@ -207,16 +208,20 @@ class TestStatusDerivation:
         assert result["cert_status"] == "ENCERRADO"
         assert result["site_status"] == "CONFORME"
 
-    def test_active_license_maps_to_valido(self):
+    def test_license_status_comes_from_expired_license_map(self):
+        # Licenciamento agora vem EXCLUSIVAMENTE da aba 'Licenciamentos Vencidos'.
         result = compute_status_dimensions(
             {
+                "sku": "PI4257Y",
                 "sheet_status": "Ativo",
                 "is_expired": False,
                 "sale_deadline": "Fim do lote",
                 "certification_type": "INMETRO",
                 "expected_cert_text": "INMETRO",
                 "last_validation_status": "OK",
-            }
+            },
+            license_map={"PI4257Y": {"status": "VALIDO", "valid_until": "2027-01-01"}},
         )
 
         assert result["license_status"] == "VALIDO"
+        assert result["license_deadline"] == "2027-01-01"

@@ -22,7 +22,7 @@ from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
 from app.services.derivation import compute_status_dimensions
-from app.services.erp_service import sync_sheets_to_db
+from app.services.erp_service import read_licenciamentos_vencidos, sync_sheets_to_db
 from app.utils.logging import log
 
 router = APIRouter()
@@ -65,11 +65,22 @@ def cleanup_old_validations(max_age_seconds: int = 3600, stuck_timeout: int = 72
         del _running_validations[rid]
 
 
-def _serialize_product(r: dict) -> dict:
+def _safe_license_map() -> dict[str, dict]:
+    """Load the 'Licenciamentos Vencidos' map, never raising on Sheets failures."""
+    if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
+        return {}
+    try:
+        return read_licenciamentos_vencidos()
+    except Exception as e:
+        log.warning(f"Could not load Licenciamentos Vencidos map: {e}")
+        return {}
+
+
+def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
     for dtfield in ("last_validation_date", "created_at", "updated_at", "sale_deadline_date"):
         if r.get(dtfield):
             r[dtfield] = r[dtfield].isoformat() if hasattr(r[dtfield], "isoformat") else str(r[dtfield])
-    r.update(compute_status_dimensions(r))
+    r.update(compute_status_dimensions(r, license_map))
     return r
 
 
@@ -350,7 +361,8 @@ def list_expired_products(
             f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST LIMIT %s OFFSET %s",
             params + [per_page, offset],
         )
-        rows = [_serialize_product(dict(r)) for r in cur.fetchall()]
+        license_map = _safe_license_map()
+        rows = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
         return {
             "products": rows,
             "total": total,
@@ -424,7 +436,8 @@ def list_products(
             f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
             params + [per_page, offset],
         )
-        products_raw = [_serialize_product(dict(r)) for r in cur.fetchall()]
+        license_map = _safe_license_map()
+        products_raw = [_serialize_product(dict(r), license_map) for r in cur.fetchall()]
 
         if products_raw:
             skus = [p["sku"] for p in products_raw]
@@ -502,7 +515,7 @@ def get_product(sku: str) -> dict:
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Product not found")
-        result = _serialize_product(dict(row))
+        result = _serialize_product(dict(row), _safe_license_map())
 
         if result.get("last_validation_status"):
             result["last_validation"] = {

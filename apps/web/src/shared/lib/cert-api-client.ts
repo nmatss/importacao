@@ -3,14 +3,9 @@
 // Consumers may use their own local interfaces; functions are generic
 // so callers can override the return type when needed.
 
-export type CertStatusKind =
-  | 'ATIVO'
-  | 'ENCERRADO'
-  | 'SKU_EXCLUIDO'
-  | 'EM_ANDAMENTO'
-  | 'DESCONHECIDO';
+export type CertStatusKind = 'ATIVO' | 'ENCERRADO';
 
-export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME' | 'PENDENTE';
+export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME';
 
 export type LicenseStatusKind = 'VALIDO' | 'VENCIDO' | 'NAO_APLICAVEL';
 
@@ -33,6 +28,11 @@ export interface CertProduct {
   is_expired?: boolean;
   sale_deadline?: string;
   sale_deadline_date?: string | null;
+  // Prazo de licenciamento — distinto do prazo de venda (sale_deadline).
+  // Alimenta a coluna "Licen. - Prazo". Backend ainda precisa expor este campo
+  // a partir da planilha "Licenciamentos Vencidos" (ver followups).
+  license_deadline?: string | null;
+  license_deadline_date?: string | null;
   cert_url?: string | null;
   cert_expiry?: string | null;
   last_checked?: string | null;

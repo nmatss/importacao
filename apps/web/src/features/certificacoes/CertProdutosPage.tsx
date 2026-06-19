@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
-import { fetchCertProducts, fetchCertStats, verifyCertProduct } from '@/shared/lib/cert-api-client';
+import { fetchCertProducts, verifyCertProduct } from '@/shared/lib/cert-api-client';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import {
@@ -16,73 +16,131 @@ import {
   ArrowUp,
   ArrowDown,
   ShieldCheck,
-  CheckCircle2,
-  AlertTriangle,
-  SearchX,
-  Ban,
-  CalendarX2,
-  LayoutGrid,
   X,
 } from 'lucide-react';
+import type { CertProduct } from '@/shared/lib/cert-api-client';
 
 // ── Filter config ──────────────────────────────────────────────────────
+// Filtros sobre as colunas semânticas reais. Cada eixo é independente:
+//   - cert_status:    ATIVO | ENCERRADO          (Status Certificacao)
+//   - site_status:    CONFORME | NAO_CONFORME    (Status Ecommerce)
+//   - license_status: VALIDO | VENCIDO | NAO_APLICAVEL (Status Licenciamento)
+// O backend só emite estes valores; "Todos" (value: '') não filtra o eixo.
 
-const STATUS_FILTERS = [
+type FilterField = 'cert_status' | 'site_status' | 'license_status';
+
+interface StatusFilterOption {
+  value: string;
+  label: string;
+  activeBg: string;
+  dotColor: string;
+}
+
+interface StatusFilterGroup {
+  field: FilterField;
+  label: string;
+  options: StatusFilterOption[];
+}
+
+const ALL_OPTION: StatusFilterOption = {
+  value: '',
+  label: 'Todos',
+  activeBg: 'bg-slate-900 text-white shadow-sm',
+  dotColor: 'bg-slate-400',
+};
+
+const STATUS_FILTER_GROUPS: StatusFilterGroup[] = [
   {
-    value: '',
-    label: 'Todos',
-    icon: LayoutGrid,
-    color: 'text-slate-600 dark:text-slate-400',
-    activeBg: 'bg-slate-900 text-white shadow-sm',
-    dotColor: 'bg-slate-400',
-    countKey: 'total' as const,
+    field: 'cert_status',
+    label: 'Status Certificacao',
+    options: [
+      ALL_OPTION,
+      {
+        value: 'ATIVO',
+        label: 'Ativo',
+        activeBg: 'bg-emerald-600 text-white shadow-sm',
+        dotColor: 'bg-emerald-500',
+      },
+      {
+        value: 'ENCERRADO',
+        label: 'Encerrado',
+        activeBg: 'bg-pink-600 text-white shadow-sm',
+        dotColor: 'bg-pink-500',
+      },
+    ],
   },
   {
-    value: 'OK',
-    label: 'Conforme',
-    icon: CheckCircle2,
-    color: 'text-emerald-700',
-    activeBg: 'bg-emerald-600 text-white shadow-sm',
-    dotColor: 'bg-emerald-500',
-    countKey: 'ok' as const,
+    field: 'site_status',
+    label: 'Status Ecommerce',
+    options: [
+      ALL_OPTION,
+      {
+        value: 'CONFORME',
+        label: 'Conforme',
+        activeBg: 'bg-emerald-600 text-white shadow-sm',
+        dotColor: 'bg-emerald-500',
+      },
+      {
+        value: 'NAO_CONFORME',
+        label: 'Nao conforme',
+        activeBg: 'bg-pink-600 text-white shadow-sm',
+        dotColor: 'bg-pink-500',
+      },
+    ],
   },
   {
-    value: 'INCONSISTENT',
-    label: 'Inconsistente',
-    icon: AlertTriangle,
-    color: 'text-amber-700',
-    activeBg: 'bg-amber-500 text-white shadow-sm',
-    dotColor: 'bg-amber-500',
-    countKey: 'inconsistent' as const,
-  },
-  {
-    value: 'URL_NOT_FOUND',
-    label: 'Nao Encontrado',
-    icon: SearchX,
-    color: 'text-slate-600 dark:text-slate-400',
-    activeBg: 'bg-slate-600 text-white shadow-sm',
-    dotColor: 'bg-slate-400',
-    countKey: 'not_found' as const,
-  },
-  {
-    value: 'EXPIRED',
-    label: 'Vencido',
-    icon: CalendarX2,
-    color: 'text-pink-700',
-    activeBg: 'bg-pink-600 text-white shadow-sm',
-    dotColor: 'bg-pink-500',
-    countKey: 'expired' as const,
-  },
-  {
-    value: 'NO_EXPECTED',
-    label: 'Sem Cert.',
-    icon: Ban,
-    color: 'text-slate-500 dark:text-slate-400',
-    activeBg: 'bg-slate-500 text-white shadow-sm',
-    dotColor: 'bg-slate-300',
-    countKey: 'no_expected' as const,
+    field: 'license_status',
+    label: 'Status Licenciamento',
+    options: [
+      ALL_OPTION,
+      {
+        value: 'VALIDO',
+        label: 'Valido',
+        activeBg: 'bg-emerald-600 text-white shadow-sm',
+        dotColor: 'bg-emerald-500',
+      },
+      {
+        value: 'VENCIDO',
+        label: 'Vencido',
+        activeBg: 'bg-pink-600 text-white shadow-sm',
+        dotColor: 'bg-pink-500',
+      },
+      {
+        value: 'NAO_APLICAVEL',
+        label: 'Nao aplicavel',
+        activeBg: 'bg-slate-500 text-white shadow-sm',
+        dotColor: 'bg-slate-400',
+      },
+    ],
   },
 ];
+
+interface StatusFilterState {
+  cert_status: string;
+  site_status: string;
+  license_status: string;
+}
+
+const EMPTY_STATUS_FILTERS: StatusFilterState = {
+  cert_status: '',
+  site_status: '',
+  license_status: '',
+};
+
+/**
+ * Pure predicate: true when a product matches the active semantic filters.
+ * Empty filter value on an axis means "no constraint" for that axis.
+ * Exported for unit testing.
+ */
+export function matchesStatusFilters(
+  product: Pick<CertProduct, 'cert_status' | 'site_status' | 'license_status'>,
+  filters: StatusFilterState,
+): boolean {
+  if (filters.cert_status && product.cert_status !== filters.cert_status) return false;
+  if (filters.site_status && product.site_status !== filters.site_status) return false;
+  if (filters.license_status && product.license_status !== filters.license_status) return false;
+  return true;
+}
 
 const BRAND_FILTERS = [
   { value: '', label: 'Todas' },
@@ -90,17 +148,6 @@ const BRAND_FILTERS = [
   { value: 'puket', label: 'Puket' },
   { value: 'puket_escolares', label: 'Puket Escolares' },
 ];
-
-import type { CertProduct } from '@/shared/lib/cert-api-client';
-
-interface StatusCounts {
-  total: number;
-  ok: number;
-  inconsistent: number;
-  not_found: number;
-  expired: number;
-  no_expected: number;
-}
 
 type SortField = 'sku' | 'name' | 'brand' | 'last_validation_status' | 'last_validation_score';
 type SortDir = 'asc' | 'desc';
@@ -118,54 +165,17 @@ export default function CertProdutosPage() {
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [brand, setBrand] = useState('');
-  const [status, setStatus] = useState(() => searchParams.get('status') || '');
+  const [statusFilters, setStatusFilters] = useState<StatusFilterState>(() => ({
+    cert_status: searchParams.get('cert_status') || '',
+    site_status: searchParams.get('site_status') || '',
+    license_status: searchParams.get('license_status') || '',
+  }));
   const [lastDate, setLastDate] = useState<string | null>(null);
   const [verifying, setVerifying] = useState<string | null>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortField, setSortField] = useState<SortField>('sku');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
-  const [counts, setCounts] = useState<StatusCounts>({
-    total: 0,
-    ok: 0,
-    inconsistent: 0,
-    not_found: 0,
-    expired: 0,
-    no_expected: 0,
-  });
-
-  // Load stats for counts
-  useEffect(() => {
-    fetchCertStats()
-      .then((stats: any) => {
-        const byBrand = stats?.by_brand || [];
-        const totals = byBrand.reduce(
-          (acc: StatusCounts, b: any) => ({
-            total:
-              acc.total +
-              (b.ok || 0) +
-              (b.missing || 0) +
-              (b.inconsistent || 0) +
-              (b.not_found || 0),
-            ok: acc.ok + (b.ok || 0),
-            inconsistent: acc.inconsistent + (b.inconsistent || 0),
-            not_found: acc.not_found + (b.not_found || 0) + (b.missing || 0),
-            expired: acc.expired + (b.expired || 0),
-            no_expected: acc.no_expected + (b.no_expected || 0),
-          }),
-          {
-            total: 0,
-            ok: 0,
-            inconsistent: 0,
-            not_found: 0,
-            expired: 0,
-            no_expected: 0,
-          },
-        );
-        setCounts(totals);
-      })
-      .catch(() => {});
-  }, []);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -175,7 +185,9 @@ export default function CertProdutosPage() {
         per_page: perPage,
         search: search || undefined,
         brand: brand || undefined,
-        status: status || undefined,
+        cert_status: statusFilters.cert_status || undefined,
+        site_status: statusFilters.site_status || undefined,
+        license_status: statusFilters.license_status || undefined,
         start_date: startDate || undefined,
         end_date: endDate || undefined,
       });
@@ -189,20 +201,33 @@ export default function CertProdutosPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, perPage, search, brand, status, startDate, endDate]);
+  }, [
+    page,
+    perPage,
+    search,
+    brand,
+    statusFilters.cert_status,
+    statusFilters.site_status,
+    statusFilters.license_status,
+    startDate,
+    endDate,
+  ]);
 
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
 
-  function handleStatusChange(newStatus: string) {
-    setStatus(newStatus);
+  function handleStatusFilterChange(field: FilterField, value: string) {
+    setStatusFilters((prev) => {
+      const next = { ...prev, [field]: value };
+      const params: Record<string, string> = {};
+      if (next.cert_status) params.cert_status = next.cert_status;
+      if (next.site_status) params.site_status = next.site_status;
+      if (next.license_status) params.license_status = next.license_status;
+      setSearchParams(params);
+      return next;
+    });
     setPage(1);
-    if (newStatus) {
-      setSearchParams({ status: newStatus });
-    } else {
-      setSearchParams({});
-    }
   }
 
   function handleBrandChange(newBrand: string) {
@@ -217,7 +242,7 @@ export default function CertProdutosPage() {
   }
 
   function clearFilters() {
-    setStatus('');
+    setStatusFilters(EMPTY_STATUS_FILTERS);
     setBrand('');
     setSearch('');
     setSearchInput('');
@@ -236,7 +261,9 @@ export default function CertProdutosPage() {
     }
   }
 
-  const sortedProducts = [...products].sort((a, b) => {
+  const sortedProducts = products
+    .filter((p) => matchesStatusFilters(p, statusFilters))
+    .sort((a, b) => {
     const aVal = a[sortField] ?? '';
     const bVal = b[sortField] ?? '';
     if (typeof aVal === 'number' && typeof bVal === 'number') {
@@ -302,7 +329,14 @@ export default function CertProdutosPage() {
     );
   }
 
-  const hasActiveFilters = status || brand || search || startDate || endDate;
+  const hasActiveFilters =
+    statusFilters.cert_status ||
+    statusFilters.site_status ||
+    statusFilters.license_status ||
+    brand ||
+    search ||
+    startDate ||
+    endDate;
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -322,11 +356,11 @@ export default function CertProdutosPage() {
         </div>
       )}
 
-      {/* ── Status Filter Tabs ── */}
+      {/* ── Status Filter Tabs (semantic axes) ── */}
       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 p-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            Status
+            Filtros de Status
           </span>
           {hasActiveFilters && (
             <button
@@ -338,38 +372,42 @@ export default function CertProdutosPage() {
             </button>
           )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => {
-            const isActive = status === f.value;
-            const count = counts[f.countKey];
+        <div className="flex flex-col gap-3">
+          {STATUS_FILTER_GROUPS.map((group) => {
+            const activeValue = statusFilters[group.field];
             return (
-              <button
-                key={f.value}
-                type="button"
-                onClick={() => handleStatusChange(f.value)}
-                aria-pressed={isActive}
-                className={cn(
-                  'group relative flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold transition-all duration-200',
-                  isActive
-                    ? f.activeBg
-                    : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60',
-                )}
-              >
-                <f.icon className={cn('w-3.5 h-3.5', isActive ? 'text-white/90' : f.color)} />
-                <span>{f.label}</span>
-                {count > 0 && (
-                  <span
-                    className={cn(
-                      'min-w-[22px] h-[22px] flex items-center justify-center rounded-full text-[10px] font-bold tabular-nums leading-none px-1.5',
-                      isActive
-                        ? 'bg-white/20 text-white'
-                        : 'bg-white text-slate-500 dark:text-slate-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60',
-                    )}
-                  >
-                    {count > 999 ? `${(count / 1000).toFixed(0)}k` : count}
-                  </span>
-                )}
-              </button>
+              <div key={group.field} className="flex flex-col gap-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  {group.label}
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {group.options.map((opt) => {
+                    const isActive = activeValue === opt.value;
+                    return (
+                      <button
+                        key={`${group.field}-${opt.value || 'all'}`}
+                        type="button"
+                        onClick={() => handleStatusFilterChange(group.field, opt.value)}
+                        aria-pressed={isActive}
+                        className={cn(
+                          'group relative flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all duration-200',
+                          isActive
+                            ? opt.activeBg
+                            : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60',
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'w-1.5 h-1.5 rounded-full shrink-0',
+                            isActive ? 'bg-white/90' : opt.dotColor,
+                          )}
+                        />
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </div>
@@ -597,16 +635,17 @@ export default function CertProdutosPage() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      {p.sale_deadline ? (
+                      {/* Prazo de licenciamento (distinto de sale_deadline) */}
+                      {p.license_deadline ? (
                         <span
                           className={cn(
                             'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
-                            p.is_expired
+                            p.license_status === 'VENCIDO'
                               ? 'text-pink-700 bg-pink-50'
                               : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900',
                           )}
                         >
-                          {p.sale_deadline}
+                          {p.license_deadline}
                         </span>
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>

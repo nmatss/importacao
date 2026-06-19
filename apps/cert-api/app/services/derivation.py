@@ -1,12 +1,23 @@
 """Derivações de status (port do projeto Verificao_status — sessão 2026-05-22).
 
 Recebe um row de `cert_products` e devolve 4 dimensões semânticas adicionais
-que o time fiscal (Carla) pediu na reunião:
+que o time fiscal (Carla / Eduarda) pediu na reunião:
 
-    cert_status            ATIVO | ENCERRADO | SKU_EXCLUIDO | EM_ANDAMENTO | DESCONHECIDO
-    site_status            CONFORME | NAO_CONFORME | PENDENTE
+    cert_status            ATIVO | ENCERRADO
+    site_status            CONFORME | NAO_CONFORME (+ site_status_reason)
     license_status         VALIDO | VENCIDO | NAO_APLICAVEL
     comercializacao_status LIBERADA | DENTRO_PRAZO | ENCERRADA | NAO_APLICA
+
+Feedback Eduarda 2026-06-19:
+- cert_status colapsa para apenas ATIVO / ENCERRADO (sem EM_ANDAMENTO,
+  SKU_EXCLUIDO, DESCONHECIDO). "Ativo" = certificação ativa OU dentro do prazo
+  de venda. "Encerrado" = encerrada, SKU excluído OU fora do prazo de venda.
+- site_status colapsa para apenas CONFORME / NAO_CONFORME (sem PENDENTE). Quando
+  NAO_CONFORME por erro/indefinição, acompanha frase obrigatória em
+  `site_status_reason` (a UI exige a frase explicativa).
+- license_status deixa de replicar dados de certificação: vem da aba
+  "Licenciamentos Vencidos" via `license_map` (process_code/SKU → status+prazo),
+  com fallback NAO_APLICAVEL quando não há linha correspondente.
 
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 (não persiste no DB). Pode ser usado direto em routes ou em report_service.
@@ -23,10 +34,14 @@ REGULATED_KEYWORDS = (
 
 # ---------- Constantes / valores válidos ----------
 
-CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO", "SKU_EXCLUIDO", "EM_ANDAMENTO", "DESCONHECIDO"}
-SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME", "PENDENTE"}
+CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO"}
+SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME"}
 LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL"}
 COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA"}
+
+# Frase obrigatória exibida na UI quando o site_status fica NAO_CONFORME por
+# indefinição/erro de validação (não pode haver terceiro estado silencioso).
+SITE_REASON_PENDING = "Verificacao pendente - revisar"
 
 
 # ---------- Helpers ----------
@@ -47,73 +62,93 @@ def _norm(s: str | None) -> str:
 
 # ---------- Derivações ----------
 
+def _within_sale_window(sale_deadline_raw: str | None) -> bool:
+    """True quando o prazo de venda ('fim do lote'/'fim de venda') ainda cobre o item.
+
+    Mantém a lógica de prazo de venda que reativa um item expirado enquanto ele
+    estiver dentro da janela de venda (venda até o fim do lote / fim de venda).
+    """
+    deadline = _norm(sale_deadline_raw)
+    return (
+        "fim do lote" in deadline
+        or "fim de lote" in deadline
+        or "fim de venda" in deadline
+        or "fim da venda" in deadline
+        or "ate o fim" in deadline
+    )
+
+
 def derive_cert_status(
     sheet_status: str | None,
     is_expired: bool | None,
     sale_deadline_raw: str | None,
 ) -> str:
-    """Status da certificação.
+    """Status da certificação — colapsado em ATIVO | ENCERRADO.
 
-    Regras (consenso reunião 2026-05-21 com Carla):
-    - SKU excluído             → SKU_EXCLUIDO
-    - Em andamento             → EM_ANDAMENTO
-    - Ativo / Finalizado       → ATIVO
-    - EXPIRING                 → ATIVO (vai expirar mas ainda no prazo)
-    - EXPIRED / Vencido        → ENCERRADO
-    - Encerrado + prazo lote/futuro → ATIVO (ainda comercializa)
-    - Encerrado + prazo vencido     → ENCERRADO
-    - sheet_status histórico (texto livre) → fallback por is_expired + prazo
+    Feedback Eduarda 2026-06-19:
+    - "Ativo": certificação ativa OU dentro do prazo de venda.
+    - "Encerrado": certificação encerrada, SKU excluído OU fora do prazo de venda.
+
+    Mapeamento:
+    - SKU excluído                  → ENCERRADO
+    - Em andamento                  → ENCERRADO (a menos que claramente ativo
+                                       por prazo de venda vigente)
+    - Expired / Vencido / Encerrado → ENCERRADO, salvo dentro da janela de venda
+    - Ativo / Finalizado / Expiring → ATIVO, salvo expirado e fora da janela
+    - Texto livre / desconhecido    → conservador: ENCERRADO se expirado e fora
+                                       da janela; senão ATIVO por prazo
     """
     s = _norm(sheet_status)
+    within_window = _within_sale_window(sale_deadline_raw)
+    deadline = _norm(sale_deadline_raw)
 
-    if not s:
-        # Vazio: usa is_expired/prazo como sinal
-        return _fallback_from_expiration(is_expired, sale_deadline_raw)
+    # Dentro da janela de venda sempre reativa (prioridade máxima).
+    if within_window:
+        return "ATIVO"
 
+    # SKU excluído → sempre encerrado.
     if "exclu" in s:
         return "ENCERRADO"
+
+    # Em andamento → conservador ENCERRADO (sem flag clara de atividade);
+    # a janela de venda já foi tratada acima.
     if "andamento" in s:
-        return "EM_ANDAMENTO"
-    if s == "ativo" or "finalizad" in s or s == "expiring":
-        return "ATIVO"
-    if s == "expired" or "vencid" in s:
-        # Marcador binário de encerramento
-        deadline = _norm(sale_deadline_raw)
-        if "fim do lote" in deadline or "fim de lote" in deadline or "ate o fim" in deadline:
-            return "ATIVO"
         return "ENCERRADO"
 
-    # Variações que indicam encerramento da certificação
-    if "encerrad" in s:
-        deadline = _norm(sale_deadline_raw)
-        if "fim do lote" in deadline or "fim de lote" in deadline or "ate o fim" in deadline:
-            return "ATIVO"
-        if "vencido" in deadline:
+    # Marcadores explícitos de encerramento.
+    if s == "expired" or "vencid" in s or "encerrad" in s:
+        return "ENCERRADO"
+
+    # Marcadores explícitos de atividade — só permanecem ATIVO se não houver
+    # sinal concreto de expiração ("Ativo" obsoleto + vencido → ENCERRADO).
+    if s == "ativo" or "finalizad" in s or s == "expiring":
+        if is_expired or "vencido" in deadline:
             return "ENCERRADO"
-        if is_expired:
-            return "ENCERRADO"
-        # Encerrado mas sem flag de vencido → assume dentro do prazo
         return "ATIVO"
 
-    # sheet_status é texto longo histórico (ex: "01/09/25 - Registro concedido...")
-    # → fallback pelo estado de expiração concreto.
+    # sheet_status vazio ou texto livre histórico → deduz pelos sinais binários,
+    # de forma conservadora (default ENCERRADO quando não claramente ativo).
     return _fallback_from_expiration(is_expired, sale_deadline_raw)
 
 
 def _fallback_from_expiration(is_expired: bool | None, sale_deadline_raw: str | None) -> str:
-    """Quando sheet_status é vazio ou texto livre, deduz pelos sinais binários."""
-    deadline = _norm(sale_deadline_raw)
-    if "fim do lote" in deadline or "fim de lote" in deadline or "ate o fim" in deadline:
+    """Quando sheet_status é vazio/texto livre, deduz pelos sinais binários.
+
+    Conservador: ENCERRADO quando vencido/expirado; ATIVO apenas com prazo
+    vigente explícito ou janela de venda aberta.
+    """
+    if _within_sale_window(sale_deadline_raw):
         return "ATIVO"
+    deadline = _norm(sale_deadline_raw)
     if "vencido" in deadline:
         return "ENCERRADO"
     if is_expired:
         return "ENCERRADO"
     if deadline:
-        # Tem prazo mas não vencido → ativo dentro do prazo
+        # Tem prazo estruturado e não está vencido → dentro do prazo.
         return "ATIVO"
-    # Sem qualquer sinal → assume ATIVO (não bloquear; sem motivo pra dizer encerrado)
-    return "ATIVO"
+    # Sem qualquer sinal de prazo nem certificação ativa → conservador ENCERRADO.
+    return "ENCERRADO"
 
 
 def derive_site_status(
@@ -121,17 +156,28 @@ def derive_site_status(
     cert_status: str,
     expected_cert_text: str | None,
     certification_type: str | None,
-) -> str:
-    """Status de conformidade no e-commerce.
+) -> tuple[str, str | None]:
+    """Status de conformidade no e-commerce — colapsado em CONFORME | NAO_CONFORME.
 
-    Regra refinada da reunião: "frase obrigatória ausente em produto regulado
-    com cert ATIVO = NAO_CONFORME" (era PENDENTE silencioso antes).
+    Feedback Eduarda 2026-06-19 (sem PENDENTE — nunca um terceiro estado silencioso):
+    - "Conforme": NÃO está no site, OU está no site com certificação ATIVO /
+      dentro da validade.
+    - "Nao conforme": está no site mas o prazo de certificação/licenciamento
+      acabou, foi excluído, OU há um erro que precisa de revisão. Quando é
+      NAO_CONFORME por erro/indefinição, retorna também a frase obrigatória
+      (`reason`) que a UI exibe — o frontend lê `site_status_reason` pelo index
+      signature do CertProduct.
+
+    Returns:
+        Tupla (status, reason). `reason` é None quando CONFORME ou quando o
+        NAO_CONFORME é autoexplicativo pela própria certificação.
     """
     vs = last_validation_status
 
-    # Nunca validado contra o site → não dá pra afirmar nada
+    # Nunca validado / status ausente → nunca silencia: marca NAO_CONFORME e
+    # sinaliza a frase obrigatória de revisão.
     if vs is None or vs == "":
-        return "PENDENTE"
+        return "NAO_CONFORME", SITE_REASON_PENDING
 
     # Cadastro incompleto (frase esperada vazia) em produto regulado + cert ativa
     if (
@@ -140,47 +186,64 @@ def derive_site_status(
         and cert_status == "ATIVO"
         and _is_regulated(certification_type)
     ):
-        return "NAO_CONFORME"
+        return "NAO_CONFORME", "Frase de certificacao obrigatoria ausente no cadastro"
 
+    # Sem frase esperada para comparar → não dá para confirmar: flag para revisão.
     if vs == "NO_EXPECTED":
-        return "PENDENTE"
+        return "NAO_CONFORME", SITE_REASON_PENDING
 
     found_on_site = vs != "URL_NOT_FOUND"
 
-    # Cert encerrada / SKU excluído: se está no site, é não-conforme
-    if cert_status in ("SKU_EXCLUIDO", "ENCERRADO"):
-        return "NAO_CONFORME" if found_on_site else "CONFORME"
+    # Cert encerrada / SKU excluído: se está no site, é não-conforme.
+    if cert_status == "ENCERRADO":
+        if found_on_site:
+            return "NAO_CONFORME", "Certificacao encerrada / fora do prazo com produto no site"
+        return "CONFORME", None
 
     if cert_status == "ATIVO":
-        if vs == "URL_NOT_FOUND":
-            return "CONFORME"  # fora do site é OK
-        if vs == "OK":
-            return "CONFORME"
+        if vs in ("URL_NOT_FOUND", "OK"):
+            # Fora do site (OK) ou cadastro consistente → conforme.
+            return "CONFORME", None
         if vs == "EXPIRED":
-            return "NAO_CONFORME"
-        # MISSING / INCONSISTENT / API_ERROR
-        return "NAO_CONFORME"
+            return "NAO_CONFORME", "Certificacao vencida no site"
+        # MISSING / INCONSISTENT / API_ERROR / outros → revisar.
+        return "NAO_CONFORME", SITE_REASON_PENDING
 
-    # EM_ANDAMENTO / DESCONHECIDO → indefinido
-    return "PENDENTE"
+    # cert_status fora do esperado (defensivo) → nunca silencia.
+    return "NAO_CONFORME", SITE_REASON_PENDING
 
 
 def derive_license_status(
-    certification_type: str | None,
-    is_expired: bool | None,
-    sale_deadline_raw: str | None,
-) -> str:
-    """Status de licenciamento.
+    license_row: dict | None,
+) -> tuple[str, str | None]:
+    """Status de licenciamento — vem EXCLUSIVAMENTE da aba 'Licenciamentos Vencidos'.
 
-    Usa o prazo de venda quando disponível; `is_expired` permanece como
-    fallback para cadastros antigos que ainda não têm prazo estruturado.
+    Feedback Eduarda 2026-06-19: licenciamento deixa de replicar dados de
+    certificação. O status e o prazo ('Licen. - Prazo') vêm de uma linha da aba
+    de licenciamentos vencidos casada por SKU/identificador de processo
+    (ex.: PI4257Y). Sem linha correspondente → NAO_APLICAVEL.
+
+    Args:
+        license_row: dict de `erp_service.read_licenciamentos_vencidos()` para a
+            chave (process_code/SKU) do produto, ou None quando não há match.
+            Esperado: {"status": "VALIDO"|"VENCIDO", "valid_until": <ISO|None>}.
+
+    Returns:
+        Tupla (license_status, license_deadline). `license_deadline` alimenta o
+        campo 'Licen. - Prazo'. Ambos defaultam para (NAO_APLICAVEL, None).
     """
-    if not _is_regulated(certification_type):
-        return "NAO_APLICAVEL"
-    deadline = _norm(sale_deadline_raw)
-    if "vencido" in deadline or is_expired:
-        return "VENCIDO"
-    return "VALIDO"
+    if not license_row:
+        return "NAO_APLICAVEL", None
+    status = str(license_row.get("status") or "").strip().upper()
+    deadline = license_row.get("valid_until")
+    if isinstance(deadline, str):
+        deadline = deadline.strip() or None
+    if status in ("VENCIDO", "VENCIDA", "EXPIRED"):
+        return "VENCIDO", deadline
+    if status in ("VALIDO", "VÁLIDO", "VALIDA", "VALID", "ATIVO"):
+        return "VALIDO", deadline
+    # Linha existe mas status não reconhecido → não aplicável (não inventa dado).
+    return "NAO_APLICAVEL", deadline
 
 
 def derive_comercializacao_status(
@@ -189,13 +252,11 @@ def derive_comercializacao_status(
     sheet_status: str | None,
 ) -> str:
     """Status de comercialização (cobertura do "estatório de cessamento")."""
-    if cert_status in ("SKU_EXCLUIDO", "EM_ANDAMENTO"):
-        return "NAO_APLICA"
     s = _norm(sheet_status)
     deadline = _norm(sale_deadline_raw)
     if cert_status == "ATIVO":
         # Ativo mas com SITUAÇÃO=Encerrado e prazo até final do lote = dentro do prazo
-        if "encerrad" in s or "fim do lote" in deadline or "fim de lote" in deadline:
+        if "encerrad" in s or _within_sale_window(sale_deadline_raw) or "fim de lote" in deadline:
             return "DENTRO_PRAZO"
         return "LIBERADA"
     if cert_status == "ENCERRADO":
@@ -205,11 +266,35 @@ def derive_comercializacao_status(
 
 # ---------- Orquestrador ----------
 
-def compute_status_dimensions(row: dict) -> dict[str, str]:
+def _lookup_license_row(row: dict, license_map: dict | None) -> dict | None:
+    """Casa o produto com uma linha da aba 'Licenciamentos Vencidos'.
+
+    Tenta, em ordem, as chaves de identificação que o ERP usa para licenciamento:
+    process_code, sku e código de processo embutido. As chaves são normalizadas
+    em maiúsculas no `license_map` (ver `read_licenciamentos_vencidos`).
+    """
+    if not license_map:
+        return None
+    for key in ("process_code", "sku", "process_id", "code"):
+        val = row.get(key)
+        if val:
+            hit = license_map.get(str(val).strip().upper())
+            if hit:
+                return hit
+    return None
+
+
+def compute_status_dimensions(row: dict, license_map: dict | None = None) -> dict[str, str | None]:
     """Recebe um dict de cert_products (psycopg2 DictRow ou similar) e devolve
-    os 4 status semânticos como dict ready-to-merge no response.
+    os status semânticos como dict ready-to-merge no response.
 
     O caller é responsável por mesclar (ex.: `row.update(compute_status_dimensions(row))`).
+
+    Args:
+        row: linha de cert_products.
+        license_map: dict opcional {PROCESS_CODE/SKU(upper) -> {status, valid_until}}
+            vindo de `erp_service.read_licenciamentos_vencidos()`. Quando None ou
+            sem match, license_status defaulta para NAO_APLICAVEL.
     """
     sheet_status = row.get("sheet_status")
     is_expired = bool(row.get("is_expired") or False)
@@ -219,12 +304,14 @@ def compute_status_dimensions(row: dict) -> dict[str, str]:
     last_vs = row.get("last_validation_status")
 
     cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw)
-    ss = derive_site_status(last_vs, cs, expected_cert_text, certification_type)
-    ls = derive_license_status(certification_type, is_expired, sale_deadline_raw)
+    ss, ss_reason = derive_site_status(last_vs, cs, expected_cert_text, certification_type)
+    ls, ls_deadline = derive_license_status(_lookup_license_row(row, license_map))
     cms = derive_comercializacao_status(cs, sale_deadline_raw, sheet_status)
     return {
         "cert_status": cs,
         "site_status": ss,
+        "site_status_reason": ss_reason,
         "license_status": ls,
+        "license_deadline": ls_deadline,
         "comercializacao_status": cms,
     }
