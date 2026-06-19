@@ -55,7 +55,7 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
   - `scripts/deploy.sh` valida a rede externa `ia-local-net` antes de migrations
     e restart.
   - Compose prod exige `CORS_ORIGIN` e `GOOGLE_GROUP_ALLOWED`, define
-    `TRUST_PROXY=1`, publica web somente em `127.0.0.1:8085` e repassa
+    `TRUST_PROXY=1`, publica web em `8085:80` para o Nginx/edge externo e repassa
     variaveis `LINX_*` ao `cert-api`.
   - Cert-api readiness valida escrita em `REPORTS_DIR`.
 
@@ -117,15 +117,15 @@ Compras/Pagamentos SYDLE` e por atalho no portal para administradores.
 - Go-live publico ainda esta bloqueado ate
   `curl -fS https://importacao.grupounico.com/` retornar 200 e uma chamada API
   via dominio publico funcionar. Em 2026-06-19, o dominio publico respondia por
-  uma camada `nginx` externa com 502; o Traefik local nao tinha certificado
-  ACME emitido para esse SNI porque o challenge publico era respondido por
-  outro IP/proxy com 404.
+  uma camada `nginx` externa com 502; a causa operacional identificada foi o
+  bind do web em `127.0.0.1:8085`, incompatível com o Nginx/edge externo que
+  acessa o upstream em `192.168.168.124:8085`.
 - SYDLE segue aguardando contrato/API/payload real, identificador estavel de
   pagamento, credenciais em SOPS e UAT financeiro para habilitar sync real.
 - Destinatarios operacionais devem ser confirmados/cadastrados na tela, ou
   `COMMUNICATION_ALLOWED_RECIPIENTS` deve ser preenchido como fallback.
-- HTTPS publico deve terminar no reverse proxy externo; o compose publica o web
-  apenas em `127.0.0.1:8085` para evitar HTTP publico acidental.
+- HTTPS publico deve terminar no Nginx/edge externo; o compose publica o web em
+  `8085:80` para manter o upstream acessivel ao proxy externo.
 - Estoque WMS/e-commerce ainda precisa de SLA de frescor para bloquear relatorio
   quando o sync estiver velho ou parcial.
 

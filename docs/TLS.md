@@ -2,10 +2,9 @@
 
 ## Overview
 
-The application container exposes the web service on `127.0.0.1:8085` for local
-health checks and also joins the external Docker network `n8n_enterprise_web`.
-Public HTTPS for `importacao.grupounico.com` is routed by the shared Traefik
-container through Docker labels on the `web` service.
+The application container exposes the internal Nginx web service on host port
+`8085`. Public HTTPS for `importacao.grupounico.com` terminates on the external
+Nginx/edge layer, which proxies traffic to `192.168.168.124:8085`.
 
 `docker-compose.prod.yml` still includes the `certbot` service behind the
 optional `tls` profile for environments that issue certificates on the same
@@ -17,18 +16,16 @@ the app container.
 
 - The application is deployed internally on
   `3f36137a697fee9f4f1011bc3eace3417467d5be`.
-- Internal web health is OK at `http://127.0.0.1:8085/`.
-- The shared Traefik receives `Host: importacao.grupounico.com` over HTTP and
-  redirects to HTTPS, but it does not have an ACME certificate for that SNI.
-- Public `https://importacao.grupounico.com/` still returns `HTTP/2 502` from
-  an external `nginx` layer.
-- ACME logs showed the challenge being answered by another public IP/proxy with 404. Fix DNS/NAT/proxy ownership before declaring public go-live.
+- The correct topology for this domain is external Nginx/edge -> internal app
+  Nginx on `192.168.168.124:8085`.
+- A 502 was observed when the app was bound only to `127.0.0.1:8085`; that
+  prevents an external edge proxy from reaching the upstream.
+- Do not route this domain through the shared Traefik unless DNS/edge ownership
+  is intentionally changed.
 
 ## Prerequisites
 
-- Domain A record or edge proxy pointing 80/443 to the component that owns TLS.
-  If Traefik owns TLS, ACME HTTP challenge paths must reach the Traefik
-  container without interception.
+- External Nginx/edge proxy configured with upstream `192.168.168.124:8085`.
 - Ports 80 and 443 open in firewall
 - Docker Compose v2
 
@@ -37,12 +34,12 @@ the app container.
 ```bash
 export DOMAIN=importacao.grupounico.com
 
-# 1. Deploy the app. It should listen locally and be attached to Traefik.
+# 1. Deploy the app. It should listen on host port 8085.
 docker compose -f docker-compose.prod.yml up -d web
 curl -I http://127.0.0.1:8085/
 
-# 2. Confirm the shared Traefik network exists.
-docker network inspect n8n_enterprise_web >/dev/null
+# 2. Confirm the upstream is reachable on the host IP used by the edge.
+curl -I http://192.168.168.124:8085/
 
 # 3. Verify public HTTPS.
 curl -I https://${DOMAIN}
@@ -97,12 +94,8 @@ docker compose -f docker-compose.prod.yml --profile tls run --rm certbot \
 # Verify the app container directly on the production host
 curl -I http://127.0.0.1:8085/
 
-# Verify Traefik HTTP routing on the production host
-curl -I -H 'Host: importacao.grupounico.com' http://127.0.0.1/
-
-# Check whether Traefik has an ACME certificate entry without printing secrets
-docker exec n8n-enterprise-traefik-1 sh -lc \
-  "grep -o 'importacao.grupounico.com' /letsencrypt/acme.json | sort -u"
+# Verify the same upstream through the host IP used by the edge
+curl -I http://192.168.168.124:8085/
 
 # Check certificate status
 docker compose -f docker-compose.prod.yml run --rm certbot certbot certificates

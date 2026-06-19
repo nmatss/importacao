@@ -2,7 +2,7 @@
 
 Ultima atualizacao: 2026-06-19
 
-## CRITICO - Go-live Publico Bloqueado Por DNS/Edge/TLS
+## CRITICO - Go-live Publico Bloqueado Por Upstream Do Nginx/Edge
 
 Descricao:
 
@@ -12,12 +12,11 @@ Descricao:
 - A URL publica `https://importacao.grupounico.com/` ainda retorna `HTTP/2 502`
   com header `server: nginx`, portanto o acesso externo nao esta apto para
   go-live.
-- O Traefik compartilhado local reconhece o Host em HTTP e redireciona para
-  HTTPS, mas nao possui certificado emitido para `importacao.grupounico.com`.
-- A validacao ACME observada no log chegou em outro IP/proxy publico
-  (`177.36.181.21`) e recebeu 404 em
-  `/.well-known/acme-challenge/*`, indicando bloqueio fora do container da
-  aplicacao.
+- A topologia correta confirmada e Nginx/edge externo terminando TLS e fazendo
+  proxy reverso para o Nginx interno do app em `192.168.168.124:8085`.
+- A causa operacional identificada foi a publicacao do `web` apenas em
+  `127.0.0.1:8085`, que funciona para health local, mas impede o Nginx/edge
+  externo de alcançar o upstream.
 
 Evidencias:
 
@@ -29,8 +28,8 @@ Evidencias:
 - Cert-api readiness passou dentro do container em `/api/ready` com
   `ready=True`.
 - `curl https://importacao.grupounico.com/` retorna 502 `server: nginx`.
-- HTTPS direto no Traefik por SNI falha com `tlsv1 unrecognized name`; nao ha
-  entrada de `importacao.grupounico.com` em `/letsencrypt/acme.json`.
+- `docker-compose.prod.yml` foi corrigido para publicar `8085:80` e remover
+  labels/rede Traefik do `web`.
 
 Impacto:
 
@@ -41,11 +40,9 @@ Impacto:
 
 Status:
 
-- Aberto. Requer escolher e concluir uma rota:
-  1. Fazer DNS/NAT/proxy encaminhar `importacao.grupounico.com` nas portas
-     80/443 para o Traefik do servidor `192.168.168.124`, sem interceptar ACME.
-  2. Ou configurar o nginx/edge externo como dono do TLS e proxy reverso para
-     `http://192.168.168.124:8085` ou para o Traefik interno.
+- Em correcao. Requer deploy do compose corrigido e validacao publica com:
+  `curl -fS https://importacao.grupounico.com/` e uma chamada API via dominio
+  oficial.
 
 ## ALTO - Extração De Cabeçalho, Portos E Datas Pode Depender Do Provider
 

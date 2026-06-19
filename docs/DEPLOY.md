@@ -96,18 +96,17 @@ Requisito de segredo:
 
 ## Exposicao HTTP/TLS
 
-- O container `web` publica `127.0.0.1:8085:80` no compose de producao. Nao
-  exponha esta porta diretamente para a rede.
-- O mesmo container entra na rede externa `n8n_enterprise_web` e declara labels
-  Traefik para `importacao.grupounico.com`.
-- A camada publica precisa ter um unico dono claro de TLS: ou o Traefik
-  compartilhado do servidor recebe o trafego 80/443 e emite ACME, ou o
-  nginx/edge externo termina TLS e faz proxy reverso para o app/Traefik.
+- O container `web` publica `8085:80` no compose de producao. Essa porta e o
+  upstream do Nginx/edge externo que publica
+  `https://importacao.grupounico.com/`.
+- O TLS publico termina no Nginx/edge externo; o container `web` roda o Nginx
+  interno da aplicacao e atende HTTP na porta 8085 do host.
+- Nao registrar `importacao.grupounico.com` no Traefik compartilhado enquanto o
+  fluxo oficial for Nginx/edge externo -> `192.168.168.124:8085`.
 - Com JWT no browser, HTTP publico e bloqueador de go-live.
-- Em 2026-06-19, o deploy interno do SHA `3f36137a697f` concluiu com health
-  OK, mas `https://importacao.grupounico.com/` ainda retornava 502 de `nginx`.
-  Nao considere go-live publico concluido ate o endpoint publico responder
-  200 e uma chamada API via dominio oficial funcionar.
+- Em 2026-06-19, a tentativa de restringir o bind para `127.0.0.1:8085` causou
+  502 no Nginx/edge externo, pois ele nao conseguia acessar o upstream. O bind
+  correto para esta topologia e `8085:80`.
 
 ## Backup E Restore
 

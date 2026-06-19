@@ -29,7 +29,8 @@ Resultado:
   `npm ci --ignore-scripts` com `HUSKY=0`; compose prod adiciona
   `cert-volumes-init`; cert-api readiness valida escrita em `REPORTS_DIR`;
   deploy/rsync exclui `.claude` e `.codex`; API image expõe deps do workspace
-  para `/app/dist`; web prod publica apenas `127.0.0.1:8085`; compose prod exige
+  para `/app/dist`; web prod publica `8085:80` para o Nginx/edge externo;
+  compose prod exige
   `CORS_ORIGIN`/`GOOGLE_GROUP_ALLOWED`, define `TRUST_PROXY=1` e repassa `LINX_*`
   ao cert-api.
 - SYDLE: conciliacao por PI/invoice/pedido agora busca valores em
@@ -59,6 +60,11 @@ Compras/Pagamentos SYDLE` e atalho no portal para admins; tabela/mobile
   roteava `importacao.grupounico.com` para um router generico de n8n. O compose
   de producao passou a conectar o `web` na rede externa `n8n_enterprise_web` e a
   declarar labels Traefik dedicadas para `importacao.grupounico.com`.
+- Correcao da rota publica: o usuario confirmou que a topologia correta era
+  Nginx/edge externo -> Nginx interno do container `web`, como antes. A causa
+  provavel do 502 passou a ser o bind `127.0.0.1:8085`, que impede um proxy
+  externo de acessar `192.168.168.124:8085`. O compose voltou a publicar
+  `8085:80` e removeu labels/rede Traefik do `web`.
 - Deploy operacional final: SHA `3f36137a697fee9f4f1011bc3eace3417467d5be`
   publicado em `192.168.168.124` por `scripts/deploy.sh` em 2026-06-19
   19:16 BRT. Backup validado em
@@ -98,9 +104,9 @@ apps/cert-api`, compileall Python, shell checks, compose prod config, npm
 Pendencias:
 
 - Go-live publico bloqueado ate `curl -fS https://importacao.grupounico.com/`
-  retornar 200 e uma chamada API via dominio publico funcionar. Corrigir
-  DNS/NAT/proxy/ACME para que `importacao.grupounico.com` chegue no Traefik do
-  servidor ou configurar o nginx/edge externo como dono do TLS e proxy reverso.
+  retornar 200 e uma chamada API via dominio publico funcionar. A topologia
+  esperada e Nginx/edge externo terminando TLS e fazendo proxy para
+  `192.168.168.124:8085`.
 - SYDLE segue dependente de contrato/API/payload real, identificador estavel de
   pagamento, credenciais e UAT financeiro; para dados reais, e bloqueador
   externo critico.

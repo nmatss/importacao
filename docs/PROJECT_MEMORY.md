@@ -206,9 +206,9 @@ Grau de confianca: alto para estado de codigo; medio para estrategia futura, poi
   operacional em 2026-06-19: backup, migrations, API/web/cert-api healthy,
   observabilidade iniciada e `REVISION` remoto gravado.
 - O go-live publico ainda esta bloqueado: `https://importacao.grupounico.com/`
-  retornou 502 de uma camada `nginx` externa, enquanto o Traefik local nao tinha
-  certificado ACME para o SNI. Corrigir DNS/proxy/TLS antes de liberar acesso
-  externo.
+  retornou 502 de uma camada `nginx` externa. A topologia correta confirmada e
+  Nginx/edge externo -> Nginx interno do app em `192.168.168.124:8085`; manter
+  o compose com `8085:80` e sem roteamento Traefik para este dominio.
 
 Evidencias:
 
