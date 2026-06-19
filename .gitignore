@@ -40,3 +40,4 @@ __pycache__/
 
 # Python virtualenv (cert-api)
 apps/cert-api/.venv/
+node_modules
