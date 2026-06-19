@@ -33,6 +33,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Migration `0018_validation_run_links.sql` ligando resultados atuais/historicos
   a `validation_runs` e preservando historico de extracao apos delete de
   documento.
+- Endpoint `GET /api/documents/process/:processId/extraction-history` para
+  recuperar historico de extracao mesmo apos delete do documento.
 - Exportacao CSV para Central de Alertas e Atendimentos usando os filtros
   ativos da tela.
 - Utilitario compartilhado `apps/web/src/shared/lib/csv.ts`.
@@ -116,6 +118,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   no Gmail/Drive/Sheets/Groups/Vertex.
 - Validacao e deteccao de anomalias agora usam `draft_bl` como fallback parcial
   quando `ohbl` ainda nao existe, mantendo OHBL como fonte preferencial.
+- Validacao final persiste `validation_runs`, snapshots/live results e
+  `document_corrections` na mesma transacao, evitando runs orfaos e perda de
+  correcao em falha intermediaria.
+- Marco `documents_received` passou a aceitar Draft BL como BL operacional,
+  alinhando upload, follow-up e validacao final.
+- Suite Vitest da API deixou de paralelizar arquivos para evitar vazamento de
+  `process.env` entre testes de IA e chamadas externas acidentais.
 - Integracao Odoo passou a usar URL, database e usuario salvos em
   `system_settings` com fallback para env, mantendo `ODOO_PASSWORD` somente em
   SOPS/env e selecionando XML-RPC HTTP/HTTPS conforme a URL.

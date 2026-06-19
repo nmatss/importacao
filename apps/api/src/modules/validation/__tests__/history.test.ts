@@ -126,13 +126,23 @@ describe('validation history (backlog #12)', () => {
       queryQueue.push(createResolvedChain(completeCoreDocs)); // select documents
       queryQueue.push(createResolvedChain([])); // select followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 501 }])); // insert validation run
 
+      const runInsertChain = createResolvedChain([{ id: 501 }]); // tx insert validation run
       const selectPrevChain = createResolvedChain(previousResults); // tx select previous
       const historyInsertChain = createResolvedChain(undefined); // tx insert history
       const deleteChain = createResolvedChain(undefined); // tx delete live
       const insertChain = createResolvedChain(undefined); // tx insert new live
-      txQueue.push(selectPrevChain, historyInsertChain, deleteChain, insertChain);
+      const correctionDeleteChain = createResolvedChain(undefined); // tx delete corrections
+      const correctionInsertChain = createResolvedChain(undefined); // tx insert corrections
+      txQueue.push(
+        runInsertChain,
+        selectPrevChain,
+        historyInsertChain,
+        deleteChain,
+        insertChain,
+        correctionDeleteChain,
+        correctionInsertChain,
+      );
 
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
@@ -143,7 +153,7 @@ describe('validation history (backlog #12)', () => {
       expect(mockDb.transaction).toHaveBeenCalledOnce();
 
       // History insert happened (1st tx insert) with one snapshot row per check
-      expect(mockTx.insert).toHaveBeenCalledTimes(2);
+      expect(mockTx.insert).toHaveBeenCalledTimes(4);
       expect(historyInsertChain.values).toHaveBeenCalledWith([
         expect.objectContaining({
           processId: 1,
@@ -172,7 +182,7 @@ describe('validation history (backlog #12)', () => {
       ]);
 
       // ...and STRICTLY BEFORE the delete of the live table
-      const firstInsertOrder = mockTx.insert.mock.invocationCallOrder[0];
+      const firstInsertOrder = mockTx.insert.mock.invocationCallOrder[1];
       const deleteOrder = mockTx.delete.mock.invocationCallOrder[0];
       expect(firstInsertOrder).toBeLessThan(deleteOrder);
     });
@@ -182,20 +192,22 @@ describe('validation history (backlog #12)', () => {
       queryQueue.push(createResolvedChain(completeCoreDocs)); // select documents
       queryQueue.push(createResolvedChain([])); // select followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 502 }])); // insert validation run
 
+      txQueue.push(createResolvedChain([{ id: 502 }])); // tx insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous → empty
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert new
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
 
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
 
       await validationService.runAllChecks(1, 1);
 
-      // Only the insert of the NEW live results — no history insert
-      expect(mockTx.insert).toHaveBeenCalledTimes(1);
-      expect(mockTx.delete).toHaveBeenCalledTimes(1);
+      // Inserts validation_run + new live results + correction summary — no history insert
+      expect(mockTx.insert).toHaveBeenCalledTimes(3);
+      expect(mockTx.delete).toHaveBeenCalledTimes(2);
     });
   });
 

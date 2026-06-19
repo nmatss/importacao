@@ -47,7 +47,7 @@ Web:
 
 - Features por dominio em `apps/web/src/features`.
 - Detalhe do processo centraliza abas em `ProcessDetailPage`.
-- Comparativo usa `ValidationChecklist`, `FupComparisonPanel` e `DocumentComparison`.
+- Comparativo usa `ValidationChecklist` e `DocumentComparison`.
 
 Cert API:
 

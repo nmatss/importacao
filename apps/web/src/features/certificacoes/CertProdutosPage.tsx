@@ -633,7 +633,7 @@ export default function CertProdutosPage() {
                           {p.site_status === 'NAO_CONFORME' && p.site_status_reason && (
                             <span
                               title={p.site_status_reason}
-                              className="text-[11px] leading-tight text-slate-400 dark:text-slate-500 max-w-[200px]"
+                              className="text-[11px] leading-tight text-slate-400 dark:text-slate-500 max-w-[200px] line-clamp-2"
                             >
                               {p.site_status_reason}
                             </span>

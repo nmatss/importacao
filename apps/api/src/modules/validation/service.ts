@@ -267,6 +267,8 @@ export const validationService = {
 
     let results: CheckResult[];
     let validationRunId: number | null = null;
+    let failedCheckNames: string[] = [];
+    let errorTypes: ReturnType<typeof getErrorTypesFromChecks> = [];
     try {
       // 5. Run all checks (supports async checks like Odoo)
       const checkResults = await Promise.all(allChecks.map((check) => check(checkInput)));
@@ -289,141 +291,190 @@ export const validationService = {
       const failedCount = results.filter((r) => r.status === 'failed').length;
       const warningCount = results.filter((r) => r.status === 'warning').length;
       const duration = Date.now() - startedAt;
-
-      try {
-        const [run] = await db
-          .insert(validationRuns)
-          .values({
-            processId,
-            triggeredBy: userId,
-            triggerType,
-            totalChecks: results.length,
-            passedChecks: passedCount,
-            failedChecks: failedCount,
-            warningChecks: warningCount,
-            duration,
-          })
-          .returning({ id: validationRuns.id });
-        validationRunId = run?.id ?? null;
-      } catch (runErr) {
-        logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
-        throw runErr;
-      }
-
-      if (!validationRunId) {
-        throw new Error('Falha ao registrar validation_runs para a validacao');
-      }
+      failedCheckNames = results.filter((r) => r.status === 'failed').map((r) => r.checkName);
+      errorTypes = getErrorTypesFromChecks(failedCheckNames);
 
       if (mode === 'partial') {
+        try {
+          const [run] = await db
+            .insert(validationRuns)
+            .values({
+              processId,
+              triggeredBy: userId,
+              triggerType,
+              totalChecks: results.length,
+              passedChecks: passedCount,
+              failedChecks: failedCount,
+              warningChecks: warningCount,
+              duration,
+            })
+            .returning({ id: validationRuns.id });
+          validationRunId = run?.id ?? null;
+        } catch (runErr) {
+          logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
+          throw runErr;
+        }
+
+        if (!validationRunId) {
+          throw new Error('Falha ao registrar validation_runs para a validacao');
+        }
+
         logger.info(
           { processId, validationRunId, total: results.length },
           'Partial validation completed without final side effects',
         );
       } else {
-      // 6. Atomic: snapshot previous results to history, then delete old
-      // results + insert new ones — all in one transaction. The history
-      // snapshot (append-only, regulatory audit — backlog #12) preserves what
-      // the live table is about to lose; the live table behavior is unchanged.
-      await db.transaction(async (tx) => {
-        const previousRaw = await tx
-          .select()
-          .from(validationResults)
-          .where(eq(validationResults.processId, processId));
-        const previous: ValidationResult[] = Array.isArray(previousRaw) ? previousRaw : [];
+        // 6. Atomic: create canonical run, snapshot previous results, replace
+        // live results and refresh correction summary in one transaction. This
+        // prevents orphan validation_runs or lost document_corrections when a
+        // final validation fails mid-persistence.
+        await db.transaction(async (tx) => {
+          try {
+            const [run] = await tx
+              .insert(validationRuns)
+              .values({
+                processId,
+                triggeredBy: userId,
+                triggerType,
+                totalChecks: results.length,
+                passedChecks: passedCount,
+                failedChecks: failedCount,
+                warningChecks: warningCount,
+                duration,
+              })
+              .returning({ id: validationRuns.id });
+            validationRunId = run?.id ?? null;
+          } catch (runErr) {
+            logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
+            throw runErr;
+          }
 
-        if (previous.length > 0) {
-          const now = new Date();
-          await tx.insert(validationResultHistory).values(
-            previous.map((r) => ({
+          if (!validationRunId) {
+            throw new Error('Falha ao registrar validation_runs para a validacao');
+          }
+
+          const previousRaw = await tx
+            .select()
+            .from(validationResults)
+            .where(eq(validationResults.processId, processId));
+          const previous: ValidationResult[] = Array.isArray(previousRaw) ? previousRaw : [];
+
+          if (previous.length > 0) {
+            const now = new Date();
+            await tx.insert(validationResultHistory).values(
+              previous.map((r) => ({
+                processId,
+                validationRunId: r.validationRunId ?? null,
+                // run_at = moment the previous run was recorded, when available.
+                runAt: r.createdAt ?? now,
+                checkName: r.checkName,
+                status: r.status as string,
+                message: r.message,
+                details: {
+                  expectedValue: r.expectedValue ?? null,
+                  actualValue: r.actualValue ?? null,
+                  documentsCompared: r.documentsCompared ?? null,
+                  dataSource: r.dataSource ?? null,
+                  resolvedBy: r.resolvedBy ?? null,
+                  resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
+                },
+                resolvedManually: r.resolvedManually ?? false,
+                resolutionNote: r.resolutionNote ?? null,
+              })),
+            );
+          }
+
+          await tx.delete(validationResults).where(eq(validationResults.processId, processId));
+
+          await tx.insert(validationResults).values(
+            results.map((r) => ({
               processId,
-              validationRunId: r.validationRunId ?? null,
-              // run_at = moment the previous run was recorded, when available.
-              runAt: r.createdAt ?? now,
+              validationRunId,
               checkName: r.checkName,
-              status: r.status as string,
+              status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
+              expectedValue: r.expectedValue ?? null,
+              actualValue: r.actualValue ?? null,
+              documentsCompared: r.documentsCompared,
               message: r.message,
-              details: {
-                expectedValue: r.expectedValue ?? null,
-                actualValue: r.actualValue ?? null,
-                documentsCompared: r.documentsCompared ?? null,
-                dataSource: r.dataSource ?? null,
-                resolvedBy: r.resolvedBy ?? null,
-                resolvedAt: r.resolvedAt ? new Date(r.resolvedAt).toISOString() : null,
-              },
-              resolvedManually: r.resolvedManually ?? false,
-              resolutionNote: r.resolutionNote ?? null,
+              dataSource: r.documentsCompared.includes('Sistema')
+                ? 'system_vs_document'
+                : 'cross_document',
             })),
           );
-        }
 
-        await tx.delete(validationResults).where(eq(validationResults.processId, processId));
+          await tx.delete(documentCorrections).where(eq(documentCorrections.processId, processId));
 
-        await tx.insert(validationResults).values(
-          results.map((r) => ({
+          await tx.insert(documentCorrections).values({
             processId,
             validationRunId,
-            checkName: r.checkName,
-            status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
-            expectedValue: r.expectedValue ?? null,
-            actualValue: r.actualValue ?? null,
-            documentsCompared: r.documentsCompared,
-            message: r.message,
-            dataSource: r.documentsCompared.includes('Sistema')
-              ? 'system_vs_document'
-              : 'cross_document',
-          })),
+            correctionNeeded: failedCheckNames.length > 0,
+            errorCount: failedCheckNames.length,
+            errorTypes,
+            correctionRequestedAt: failedCheckNames.length > 0 ? new Date() : null,
+          });
+        });
+
+        logger.info(
+          {
+            processId,
+            validationRunId,
+            correctionNeeded: failedCheckNames.length > 0,
+            errorCount: failedCheckNames.length,
+            errorTypes,
+          },
+          'Validation results and correction summary persisted atomically',
         );
-      });
 
-      // Upload validation report to Drive Sistema Automatico
-      this.uploadValidationReportToDrive(process.processCode, results).catch((err) =>
-        logger.error({ err, processId }, 'Failed to upload validation report to Drive'),
-      );
+        // Upload validation report to Drive Sistema Automatico
+        this.uploadValidationReportToDrive(process.processCode, results).catch((err) =>
+          logger.error({ err, processId }, 'Failed to upload validation report to Drive'),
+        );
 
-      // 7. Update process status based on results + correction status
-      const hasFailed = results.some((r) => r.status === 'failed');
-      if (!hasFailed) {
-        // If was pending correction, clear it and move back from correction folder
-        if (process.correctionStatus === 'pending_correction') {
-          assertTransition('validating' as ProcessStatus, 'validated');
+        // 7. Update process status based on results + correction status
+        const hasFailed = results.some((r) => r.status === 'failed');
+        if (!hasFailed) {
+          // If was pending correction, clear it and move back from correction folder
+          if (process.correctionStatus === 'pending_correction') {
+            assertTransition('validating' as ProcessStatus, 'validated');
+            await db
+              .update(importProcesses)
+              .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
+              .where(eq(importProcesses.id, processId));
+
+            try {
+              const { googleDriveService } =
+                await import('../integrations/google-drive.service.js');
+              await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+            } catch (err) {
+              logger.error({ err, processId }, 'Failed to move from correction folder');
+            }
+          } else {
+            assertTransition('validating' as ProcessStatus, 'validated');
+            await db
+              .update(importProcesses)
+              .set({ status: 'validated', updatedAt: new Date() })
+              .where(eq(importProcesses.id, processId));
+          }
+
+          // Update pre-inspection milestone in DB
+          await db
+            .update(followUpTracking)
+            .set({ preInspectionAt: new Date(), updatedAt: new Date() })
+            .where(eq(followUpTracking.processId, processId));
+        } else {
+          // Mark as pending correction and move to correction folder
           await db
             .update(importProcesses)
-            .set({ status: 'validated', correctionStatus: null, updatedAt: new Date() })
+            .set({ correctionStatus: 'pending_correction', updatedAt: new Date() })
             .where(eq(importProcesses.id, processId));
 
           try {
             const { googleDriveService } = await import('../integrations/google-drive.service.js');
-            await googleDriveService.moveFromCorrection(process.processCode, process.brand);
+            await googleDriveService.moveToCorrection(process.processCode, process.brand);
           } catch (err) {
-            logger.error({ err, processId }, 'Failed to move from correction folder');
+            logger.error({ err, processId }, 'Failed to move to correction folder');
           }
-        } else {
-          assertTransition('validating' as ProcessStatus, 'validated');
-          await db
-            .update(importProcesses)
-            .set({ status: 'validated', updatedAt: new Date() })
-            .where(eq(importProcesses.id, processId));
         }
-
-        // Update pre-inspection milestone in DB
-        await db
-          .update(followUpTracking)
-          .set({ preInspectionAt: new Date(), updatedAt: new Date() })
-          .where(eq(followUpTracking.processId, processId));
-      } else {
-        // Mark as pending correction and move to correction folder
-        await db
-          .update(importProcesses)
-          .set({ correctionStatus: 'pending_correction', updatedAt: new Date() })
-          .where(eq(importProcesses.id, processId));
-
-        try {
-          const { googleDriveService } = await import('../integrations/google-drive.service.js');
-          await googleDriveService.moveToCorrection(process.processCode, process.brand);
-        } catch (err) {
-          logger.error({ err, processId }, 'Failed to move to correction folder');
-        }
-      }
       }
     } catch (err) {
       // The run failed mid-flight after we moved the process into
@@ -486,15 +537,21 @@ export const validationService = {
           mode === 'partial'
             ? `Validacao parcial executada: ${passed}/${results.length} aprovadas`
             : `Validacao executada: ${passed}/${results.length} aprovadas`,
-        metadata: { mode, triggerType, validationRunId, passed, failed, warnings, skipped, total: results.length },
+        metadata: {
+          mode,
+          triggerType,
+          validationRunId,
+          passed,
+          failed,
+          warnings,
+          skipped,
+          total: results.length,
+        },
       },
       userId,
     );
 
     if (mode === 'final' && failed > 0) {
-      const errorTypes = getErrorTypesFromChecks(
-        results.filter((r) => r.status === 'failed').map((r) => r.checkName),
-      );
       await recordProcessEvent(
         processId,
         {
@@ -572,38 +629,6 @@ export const validationService = {
       );
     }
 
-    // 9. Auto-populate document_corrections with error summary
-    const failedCheckNames = results.filter((r) => r.status === 'failed').map((r) => r.checkName);
-    const errorTypes = getErrorTypesFromChecks(failedCheckNames);
-
-    if (mode === 'final') {
-    try {
-      // Upsert: delete old + insert new correction record for this process
-      await db.delete(documentCorrections).where(eq(documentCorrections.processId, processId));
-
-      await db.insert(documentCorrections).values({
-        processId,
-        validationRunId,
-        correctionNeeded: failedCheckNames.length > 0,
-        errorCount: failedCheckNames.length,
-        errorTypes: errorTypes,
-        correctionRequestedAt: failedCheckNames.length > 0 ? new Date() : null,
-      });
-
-      logger.info(
-        {
-          processId,
-          correctionNeeded: failedCheckNames.length > 0,
-          errorCount: failedCheckNames.length,
-          errorTypes,
-        },
-        'Document corrections record updated',
-      );
-    } catch (corrErr) {
-      logger.error({ err: corrErr, processId }, 'Failed to update document corrections');
-    }
-    }
-
     return results;
   },
 
@@ -637,8 +662,9 @@ export const validationService = {
 
   /**
    * Historical validation runs for a process (append-only snapshots taken
-   * before each delete+recreate). Rows are grouped by run_at — each group is
-   * one run — and pagination is applied over runs (newest first).
+   * before each delete+recreate). Rows are grouped by validation_run_id when
+   * available and fall back to run_at for legacy rows; pagination is applied
+   * over runs (newest first).
    */
   async getValidationHistory(processId: number, page = 1, pageSize = 10) {
     const safePage = Number.isFinite(page) && page > 0 ? Math.floor(page) : 1;
@@ -651,10 +677,14 @@ export const validationService = {
       .where(eq(validationResultHistory.processId, processId))
       .orderBy(desc(validationResultHistory.runAt), validationResultHistory.checkName);
 
-    // Group by run_at (ISO string key keeps grouping stable across rows)
+    // Prefer canonical validation_run_id. Legacy rows without a run id keep the
+    // previous run_at grouping to avoid losing historical compatibility.
     const runMap = new Map<string, typeof rows>();
     for (const row of rows) {
-      const key = row.runAt ? new Date(row.runAt).toISOString() : 'unknown';
+      const key =
+        row.validationRunId != null
+          ? `run:${row.validationRunId}`
+          : `time:${row.runAt ? new Date(row.runAt).toISOString() : 'unknown'}`;
       const group = runMap.get(key);
       if (group) {
         group.push(row);
@@ -663,8 +693,9 @@ export const validationService = {
       }
     }
 
-    const allRuns = Array.from(runMap.entries()).map(([runAt, results]) => ({
-      runAt,
+    const allRuns = Array.from(runMap.values()).map((results) => ({
+      validationRunId: results[0]?.validationRunId ?? null,
+      runAt: results[0]?.runAt ? new Date(results[0].runAt).toISOString() : 'unknown',
       total: results.length,
       passed: results.filter((r) => r.status === 'passed').length,
       failed: results.filter((r) => r.status === 'failed').length,
@@ -700,7 +731,9 @@ export const validationService = {
       throw new NotFoundError('Resultado de validação', resultId);
     }
     if (current.checkName === 'document-set-completeness') {
-      throw new Error('Completude documental nao pode ser resolvida manualmente; envie/reprocesse os documentos obrigatorios.');
+      throw new Error(
+        'Completude documental nao pode ser resolvida manualmente; envie/reprocesse os documentos obrigatorios.',
+      );
     }
 
     const [updated] = await db
@@ -878,19 +911,24 @@ export const validationService = {
 
   /**
    * Replaces every AI-emitted item-presence anomaly ("Item X nao localizado no
-   * Packing List") with a single deterministic anomaly whose count comes from
-   * documentService.getComparison().unmatchedPlItems. Quantity-divergence and
-   * non-item anomalies are passed through untouched. If the deterministic
-   * comparison reports zero unmatched items, the item-presence anomalies are
-   * dropped entirely (they were false positives from fuzzy matching).
+   * Packing List") with deterministic anomalies whose counts come from
+   * documentService.getComparison(): unmatchedPlItems (PL items absent from the
+   * Invoice) AND unmatchedInvoiceItems (Invoice items absent from the PL).
+   *
+   * BOTH directions are re-emitted (one clearly-labeled anomaly per non-empty
+   * direction) so the anomaly stream and the comparison panels agree in both
+   * directions instead of collapsing into a single PL→INV count. Quantity-
+   * divergence and non-item anomalies are passed through untouched. If the
+   * deterministic comparison reports zero unmatched items in both directions,
+   * the item-presence anomalies are dropped entirely (false positives from
+   * fuzzy matching).
    */
   async reconcileItemAnomalies(
     processId: number,
     anomalies: Array<{ field: string; description: string; severity: string }>,
   ): Promise<Array<{ field: string; description: string; severity: string }>> {
-    const { isItemMatchAnomalyField, ITEM_MATCH_ANOMALY_FIELD } = await import(
-      '../ai/prompts/anomaly.js'
-    );
+    const { isItemMatchAnomalyField, ITEM_MATCH_ANOMALY_FIELD, ITEM_MATCH_ANOMALY_FIELD_INVOICE } =
+      await import('../ai/prompts/anomaly.js');
 
     const itemPresenceAnomalies = anomalies.filter((a) => isItemMatchAnomalyField(a.field));
     const passthrough = anomalies.filter((a) => !isItemMatchAnomalyField(a.field));
@@ -900,14 +938,17 @@ export const validationService = {
       return anomalies;
     }
 
-    let unmatchedCount: number | null = null;
+    let unmatchedPlCount = 0;
+    let unmatchedInvoiceCount = 0;
     try {
       const { documentService } = await import('../documents/service.js');
       const comparison = await documentService.getComparison(processId);
-      const unmatched = Array.isArray(comparison?.unmatchedPlItems)
-        ? comparison.unmatchedPlItems
-        : [];
-      unmatchedCount = unmatched.length;
+      unmatchedPlCount = Array.isArray(comparison?.unmatchedPlItems)
+        ? comparison.unmatchedPlItems.length
+        : 0;
+      unmatchedInvoiceCount = Array.isArray(comparison?.unmatchedInvoiceItems)
+        ? comparison.unmatchedInvoiceItems.length
+        : 0;
     } catch (err) {
       // If the deterministic comparison is unavailable, do not invent or trust
       // the fuzzy AI count — fall back to passing the AI anomalies through.
@@ -918,9 +959,9 @@ export const validationService = {
       return anomalies;
     }
 
-    // Deterministic comparison says everything matches → the AI item-presence
-    // anomalies were false positives. Drop them.
-    if (!unmatchedCount || unmatchedCount <= 0) {
+    // Deterministic comparison says everything matches in BOTH directions → the
+    // AI item-presence anomalies were false positives. Drop them.
+    if (unmatchedPlCount <= 0 && unmatchedInvoiceCount <= 0) {
       logger.info(
         { processId, suppressed: itemPresenceAnomalies.length },
         'Suppressed AI item-presence anomalies: deterministic comparison found no unmatched items',
@@ -928,26 +969,37 @@ export const validationService = {
       return passthrough;
     }
 
-    // Re-emit a single deterministic anomaly with the authoritative count.
+    // Re-emit one deterministic anomaly PER non-empty direction.
     logger.info(
       {
         processId,
         aiReported: itemPresenceAnomalies.length,
-        deterministic: unmatchedCount,
+        unmatchedPl: unmatchedPlCount,
+        unmatchedInvoice: unmatchedInvoiceCount,
       },
-      'Reconciled item-presence anomalies with deterministic unmatched count',
+      'Reconciled item-presence anomalies with deterministic unmatched counts (bidirectional)',
     );
 
-    return [
-      ...passthrough,
-      {
+    const reconciled = [...passthrough];
+    if (unmatchedPlCount > 0) {
+      reconciled.push({
         field: ITEM_MATCH_ANOMALY_FIELD,
-        description: `${unmatchedCount} ${
-          unmatchedCount === 1 ? 'item' : 'itens'
+        description: `${unmatchedPlCount} ${
+          unmatchedPlCount === 1 ? 'item' : 'itens'
         } no Packing List sem correspondencia na Invoice (comparacao deterministica).`,
         severity: 'medium',
-      },
-    ];
+      });
+    }
+    if (unmatchedInvoiceCount > 0) {
+      reconciled.push({
+        field: ITEM_MATCH_ANOMALY_FIELD_INVOICE,
+        description: `${unmatchedInvoiceCount} ${
+          unmatchedInvoiceCount === 1 ? 'item' : 'itens'
+        } na Invoice sem correspondencia no Packing List (comparacao deterministica).`,
+        severity: 'medium',
+      });
+    }
+    return reconciled;
   },
 
   async uploadValidationReportToDrive(processCode: string, results: CheckResult[]): Promise<void> {

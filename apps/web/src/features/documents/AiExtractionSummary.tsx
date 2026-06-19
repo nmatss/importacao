@@ -2,13 +2,30 @@ import type React from 'react';
 import { useState } from 'react';
 import { cn } from '@/shared/lib/utils';
 
+// Per-document coverage summary emitted by the backend. Optional: when absent
+// we derive an equivalent from the {value,confidence} field data on the client.
+interface CoverageSummary {
+  readPercent: number;
+  totalFields: number;
+  filledFields: number;
+  missingFields: string[];
+  lowConfidenceFields: string[];
+}
+
 interface AiExtractionSummaryProps {
   documentType: string;
   data: Record<string, unknown>;
   confidence: number | null;
+  // Prefer the backend coverage summary if present; otherwise we fall back to
+  // deriving it from the field data below.
+  coverage?: CoverageSummary | null;
 }
 
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
+// Fields below this per-field confidence are surfaced as "low confidence" in the
+// derived (fallback) coverage so the user knows to double-check them.
+const LOW_FIELD_CONFIDENCE = 0.5;
 
 // Field label mapping per document type
 const FIELD_LABELS: Record<string, Record<string, string>> = {
@@ -126,6 +143,57 @@ function extractValue(val: unknown): { value: unknown; confidence: number | null
   return { value: val, confidence: null };
 }
 
+// Translate a raw field key (possibly an item path like "items[2].quantity")
+// into a friendly PT-BR label, falling back to the document's label map and
+// finally the raw key so nothing is ever shown as an opaque token.
+function friendlyFieldLabel(key: string, labels: Record<string, string>): string {
+  const itemMatch = key.match(/^items\[(\d+)\]\.(.+)$/);
+  if (itemMatch) {
+    const [, idx, sub] = itemMatch;
+    return `Item ${Number(idx) + 1} · ${labels[sub] || sub}`;
+  }
+  if (key === '_contract') return 'Consistência geral';
+  return labels[key] || key;
+}
+
+// Derive a coverage summary from the existing {value,confidence} field data when
+// the backend does not provide one. Counts the displayable top-level fields,
+// flags empty ones as "missing" and the low-confidence ones separately.
+function deriveCoverage(
+  entries: [string, unknown][],
+  data: Record<string, unknown>,
+): CoverageSummary {
+  // Cargo description is a real (often required) field; count it too.
+  const cargo = data.cargoDescription;
+  const all: [string, unknown][] =
+    cargo !== undefined ? [...entries, ['cargoDescription', cargo]] : entries;
+
+  const missingFields: string[] = [];
+  const lowConfidenceFields: string[] = [];
+  let filledFields = 0;
+
+  for (const [key, val] of all) {
+    const { value, confidence: fieldConf } = extractValue(val);
+    const isEmpty =
+      value === null ||
+      value === undefined ||
+      value === '' ||
+      (Array.isArray(value) && value.length === 0);
+    if (isEmpty) {
+      missingFields.push(key);
+      continue;
+    }
+    filledFields += 1;
+    if (fieldConf != null && fieldConf < LOW_FIELD_CONFIDENCE) {
+      lowConfidenceFields.push(key);
+    }
+  }
+
+  const totalFields = all.length;
+  const readPercent = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
+  return { readPercent, totalFields, filledFields, missingFields, lowConfidenceFields };
+}
+
 function formatValue(val: unknown, key: string): string {
   if (val === null || val === undefined || val === '') return '—';
   if (typeof val === 'boolean') return val ? 'Sim' : 'Não';
@@ -196,6 +264,94 @@ function FieldConfidence({ confidence }: { confidence: number | null }) {
   );
 }
 
+// Compact, non-alarming coverage header that directly answers "leu só X% e
+// ficou sem puxar alguns campos": shows the read percentage and an inline,
+// expandable list of the fields that were NOT read (missing) plus the
+// low-confidence ones, so the user knows exactly what to complete manually.
+function CoverageHeader({
+  coverage,
+  labels,
+}: {
+  coverage: CoverageSummary;
+  labels: Record<string, string>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const { readPercent, missingFields, lowConfidenceFields } = coverage;
+  const toReview = missingFields.length + lowConfidenceFields.length;
+
+  // A full read with nothing to flag does not deserve its own banner.
+  if (readPercent >= 100 && toReview === 0) return null;
+
+  const tone =
+    readPercent >= 90
+      ? 'border-emerald-100 bg-emerald-50/60 text-emerald-700'
+      : readPercent >= 60
+        ? 'border-amber-100 bg-amber-50/60 text-amber-700'
+        : 'border-amber-200 bg-amber-50 text-amber-800';
+
+  return (
+    <div className={cn('rounded-lg border px-3 py-2 text-xs', tone)}>
+      <div className="flex items-center justify-between gap-2">
+        <span>
+          <strong>Leu {readPercent}% dos campos.</strong>{' '}
+          {toReview > 0
+            ? `${toReview} ${toReview === 1 ? 'campo precisa' : 'campos precisam'} de revisão manual.`
+            : 'Nenhum campo pendente.'}
+        </span>
+        {toReview > 0 ? (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="shrink-0 font-medium underline-offset-2 hover:underline"
+            aria-expanded={expanded}
+          >
+            {expanded ? 'Ocultar' : 'Ver campos'}
+          </button>
+        ) : null}
+      </div>
+
+      {expanded && toReview > 0 ? (
+        <div className="mt-2 space-y-1.5">
+          {missingFields.length > 0 ? (
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                Não lidos ({missingFields.length})
+              </span>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                {missingFields.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded bg-white/70 dark:bg-slate-800/70 px-1.5 py-0.5 text-[11px] font-medium"
+                  >
+                    {friendlyFieldLabel(key, labels)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {lowConfidenceFields.length > 0 ? (
+            <div>
+              <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
+                Baixa confiança ({lowConfidenceFields.length})
+              </span>
+              <div className="mt-0.5 flex flex-wrap gap-1">
+                {lowConfidenceFields.map((key) => (
+                  <span
+                    key={key}
+                    className="rounded bg-white/70 dark:bg-slate-800/70 px-1.5 py-0.5 text-[11px] font-medium"
+                  >
+                    {friendlyFieldLabel(key, labels)}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function renderSecondaryFields(
   entries: [string, unknown][],
   labels: Record<string, string>,
@@ -220,7 +376,12 @@ function renderSecondaryFields(
   );
 }
 
-export function AiExtractionSummary({ documentType, data, confidence }: AiExtractionSummaryProps) {
+export function AiExtractionSummary({
+  documentType,
+  data,
+  confidence,
+  coverage,
+}: AiExtractionSummaryProps) {
   const labels = FIELD_LABELS[documentType] || FIELD_LABELS.invoice;
   const priority = PRIORITY_FIELDS[documentType] || [];
   const lowDocumentConfidence = confidence != null && confidence < MIN_OPERATIONAL_CONFIDENCE;
@@ -230,6 +391,9 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
     ([key]) =>
       key !== 'items' && key !== 'ncmList' && key !== 'cargoDescription' && !key.startsWith('_'), // meta do harness (_trust) não é campo exibível
   );
+
+  // Prefer the backend coverage summary; otherwise derive it from the field data.
+  const effectiveCoverage = coverage ?? deriveCoverage(allEntries, data);
 
   const priorityEntries = priority
     .map((key) => {
@@ -261,10 +425,12 @@ export function AiExtractionSummary({ documentType, data, confidence }: AiExtrac
 
   return (
     <div className="space-y-2.5">
+      <CoverageHeader coverage={effectiveCoverage} labels={labels} />
+
       {lowDocumentConfidence && (
         <div className="rounded-lg border border-danger-100 bg-danger-50/70 px-3 py-2 text-xs text-danger-700">
-          <strong>Baixa confiança</strong> — extração com {Math.round(confidence * 100)}%, abaixo
-          do piso operacional. Use estes dados apenas para revisão manual.
+          <strong>Baixa confiança</strong> — extração com {Math.round(confidence * 100)}%, abaixo do
+          piso operacional. Use estes dados apenas para revisão manual.
         </div>
       )}
 

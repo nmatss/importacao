@@ -241,10 +241,16 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     },
     { source: 'processo', value: process.freightValue },
   ]);
+  // Pair the currency with the SAME source that won freightValue, otherwise the
+  // value (e.g. invoice freight) could be labelled with a currency from another
+  // source (e.g. espelho freightCurrency). Default to no currency when the
+  // winning source carries none.
   const freightCurrency =
-    (readPath(invoice, 'freightCurrency') as string | null) ??
-    (readPath(espelhoSummary, 'freightCurrency') as string | null) ??
-    undefined;
+    freightValue.source === 'invoice'
+      ? ((readPath(invoice, 'freightCurrency') as string | null) ?? undefined)
+      : freightValue.source === 'espelho'
+        ? ((readPath(espelhoSummary, 'freightCurrency') as string | null) ?? undefined)
+        : undefined;
   const totalBoxes = pickValue<number | string>([
     { source: 'invoice', value: readPath(invoice, 'totalBoxes') as number | string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'totalBoxes') as number | string | null },

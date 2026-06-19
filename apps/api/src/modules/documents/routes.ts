@@ -19,6 +19,10 @@ router.post(
   documentController.upload,
 );
 router.get('/process/:processId', documentController.getByProcess);
+router.get(
+  '/process/:processId/extraction-history',
+  documentController.getExtractionHistoryByProcess,
+);
 router.get('/process/:processId/comparison', documentController.comparison);
 router.post('/process/:processId/comparison/accept', documentController.acceptComparison);
 router.get('/process/:processId/proformas', documentController.proformasAggregate);

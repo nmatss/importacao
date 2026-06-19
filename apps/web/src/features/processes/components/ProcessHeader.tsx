@@ -109,11 +109,32 @@ function hasOperationalConfidence(confidenceScore: string | number | null | unde
   return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
+/**
+ * Read a date field from the BL espelho summary projected by the backend
+ * (process.aiExtractedData.espelho.summary.{etd,eta}). Used as a subtle
+ * fallback for the header subtitle — same source the info card relies on.
+ */
+function readEspelhoSummaryDate(process: ImportProcess, key: 'etd' | 'eta'): string | null {
+  const aiData = process.aiExtractedData;
+  if (!aiData || typeof aiData !== 'object' || Array.isArray(aiData)) return null;
+  const espelho = (aiData as Record<string, unknown>).espelho;
+  if (!espelho || typeof espelho !== 'object' || Array.isArray(espelho)) return null;
+  const summary = (espelho as Record<string, unknown>).summary;
+  const source =
+    summary && typeof summary === 'object' && !Array.isArray(summary)
+      ? (summary as Record<string, unknown>)
+      : (espelho as Record<string, unknown>);
+  const value = source[key];
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHeaderProps) {
   const docCounts = {
     total: process.documents?.length ?? 0,
     extracted: process.documents?.filter(hasUsefulExtraction).length ?? 0,
   };
+  const etd = process.etd ?? readEspelhoSummaryDate(process, 'etd');
+  const eta = process.eta ?? readEspelhoSummaryDate(process, 'eta');
   const queryClient = useQueryClient();
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
 
@@ -181,24 +202,24 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
             </div>
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-3 text-xs sm:text-sm text-slate-400">
               <span>Criado em {formatDate(process.createdAt)}</span>
-              {process.etd && (
+              {etd && (
                 <>
                   <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
                   <span>
                     ETD:{' '}
                     <span className="text-slate-600 dark:text-slate-400 font-medium">
-                      {formatDate(process.etd)}
+                      {formatDate(etd)}
                     </span>
                   </span>
                 </>
               )}
-              {process.eta && (
+              {eta && (
                 <>
                   <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
                   <span>
                     ETA:{' '}
                     <span className="text-slate-600 dark:text-slate-400 font-medium">
-                      {formatDate(process.eta)}
+                      {formatDate(eta)}
                     </span>
                   </span>
                 </>

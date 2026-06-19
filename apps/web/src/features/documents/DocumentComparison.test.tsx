@@ -41,11 +41,7 @@ function ok<T>(data: T): QueryResult {
  * Wires up the three queries the component reads: doc-comparison,
  * process-events and validation-report. Pass overrides per key.
  */
-function mockQueries(overrides: {
-  comparison?: unknown;
-  events?: unknown;
-  report?: unknown;
-}) {
+function mockQueries(overrides: { comparison?: unknown; events?: unknown; report?: unknown }) {
   vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
     const key = Array.isArray(queryKey) ? queryKey[0] : null;
     if (key === 'process-events') return ok(overrides.events ?? []);
@@ -226,6 +222,56 @@ describe('DocumentComparison', () => {
     expect(screen.getByText('Itajai')).toBeInTheDocument();
   });
 
+  it('renders both unmatched directions in a single unified section', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        unmatchedPlItems: [
+          { itemCode: 'PL-1', description: 'Item so no PL', quantity: 5, source: 'pl' },
+        ],
+        unmatchedInvoiceItems: [
+          { itemCode: 'INV-1', description: 'Item so na Invoice', quantity: 7, source: 'invoice' },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    // Both directions present under the one consolidated quadro.
+    expect(
+      screen.getByText(/Itens sem correspondencia entre Invoice e Packing List/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Itens no Packing List sem correspondencia na Invoice \(1\)/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Itens na Invoice sem correspondencia no Packing List \(1\)/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Item so no PL')).toBeInTheDocument();
+    expect(screen.getByText('Item so na Invoice')).toBeInTheDocument();
+  });
+
+  it('still renders the PL-without-Invoice direction when no invoice-only items exist', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        unmatchedPlItems: [
+          { itemCode: 'PL-9', description: 'Apenas PL', quantity: 3, source: 'pl' },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    expect(
+      screen.getByText(/Itens no Packing List sem correspondencia na Invoice \(1\)/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Apenas PL')).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Itens na Invoice sem correspondencia no Packing List/i),
+    ).not.toBeInTheDocument();
+  });
+
   it('exposes the acceptance resolution note via a hover tooltip', () => {
     mockQueries({
       comparison: {
@@ -264,9 +310,7 @@ describe('DocumentComparison', () => {
     expect(tooltip).toHaveTextContent(/Divergencia validada com o despachante/i);
     // Accessible fallback: the same note is also exposed as a title attribute
     // on the acceptance container so it is reachable without JS hover.
-    const titled = document.querySelector(
-      'div[title="Divergencia validada com o despachante"]',
-    );
+    const titled = document.querySelector('div[title="Divergencia validada com o despachante"]');
     expect(titled).not.toBeNull();
     expect(within(titled as HTMLElement).getByText('Aceito')).toBeInTheDocument();
   });

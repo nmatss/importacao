@@ -278,6 +278,21 @@ export const openapiSpec = {
         responses: { '200': { description: 'Comparison data' } },
       },
     },
+    '/api/documents/process/{processId}/extraction-history': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Get archived AI extraction history for a process',
+        parameters: [
+          {
+            name: 'processId',
+            in: 'path' as const,
+            required: true,
+            schema: { type: 'string' as const },
+          },
+        ],
+        responses: { '200': { description: 'Process extraction history, including deleted docs' } },
+      },
+    },
     '/api/documents/{id}': {
       get: {
         tags: ['Documents'],
@@ -304,6 +319,16 @@ export const openapiSpec = {
           { name: 'id', in: 'path' as const, required: true, schema: { type: 'string' as const } },
         ],
         responses: { '200': { description: 'Source file' } },
+      },
+    },
+    '/api/documents/{id}/extraction-history': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Get archived AI extraction history for a document',
+        parameters: [
+          { name: 'id', in: 'path' as const, required: true, schema: { type: 'string' as const } },
+        ],
+        responses: { '200': { description: 'Document extraction history' } },
       },
     },
     '/api/documents/{id}/reprocess': {

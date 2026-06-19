@@ -1,6 +1,6 @@
 # API
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-19
 
 ## API Node
 
@@ -44,6 +44,22 @@ Evidencias:
 
 - `apps/api/src/modules/validation/routes.ts`
 - `apps/web/src/features/validation/ValidationChecklist.tsx`
+
+## Endpoints Criticos De Documentos
+
+- `GET /api/documents/process/:processId`
+- `GET /api/documents/process/:processId/extraction-history`
+- `GET /api/documents/:id/extraction-history`
+- `POST /api/documents/:id/reprocess` admin-only
+- `DELETE /api/documents/:id` admin-only
+
+O historico por processo inclui snapshots arquivados antes de delete, quando
+`document_id` pode ficar `null`.
+
+Evidencias:
+
+- `apps/api/src/modules/documents/routes.ts`
+- `apps/api/src/modules/documents/service.ts`
 
 ## Assistente Operacional RAG
 

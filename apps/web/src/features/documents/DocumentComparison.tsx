@@ -91,6 +91,9 @@ interface ComparisonData {
   aggregateComparison: AggregateField[];
   itemComparison: ItemComparison[];
   unmatchedPlItems: UnmatchedItem[];
+  // Symmetric direction: items present on the Invoice with no match on the
+  // Packing List. Optional so older comparison payloads still render.
+  unmatchedInvoiceItems?: UnmatchedItem[];
   draftBlRevisions?: DraftBlRevision[];
   invoiceConfidence: number | null;
   plConfidence: number | null;
@@ -269,9 +272,7 @@ function WeightCell({
   if (hasEspelho) parts.push({ key: 'esp', label: 'Esp', value: espelho });
   const visible = parts.filter((p) => p.value != null);
   if (visible.length === 0) {
-    return (
-      <td className="px-3 py-2 text-right font-mono text-slate-300 dark:text-slate-600">-</td>
-    );
+    return <td className="px-3 py-2 text-right font-mono text-slate-300 dark:text-slate-600">-</td>;
   }
   return (
     <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">
@@ -338,13 +339,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
   const [acceptNote, setAcceptNote] = useState('');
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-  } = useApiQuery<ComparisonData>(
+  const { data, isLoading, isError, error, refetch } = useApiQuery<ComparisonData>(
     ['doc-comparison', processId],
     `/api/documents/process/${processId}/comparison`,
   );
@@ -606,7 +601,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
   if (isLoading) return <LoadingSpinner className="py-8" />;
 
   if ((isError || error) && !data) {
-    return <ErrorState message="Erro ao carregar comparativo documental." onRetry={() => refetch()} />;
+    return (
+      <ErrorState message="Erro ao carregar comparativo documental." onRetry={() => refetch()} />
+    );
   }
 
   if (!data) {
@@ -1117,44 +1114,74 @@ export function DocumentComparison({ processId }: { processId: string }) {
         </div>
       )}
 
-      {data.unmatchedPlItems.length > 0 && (
+      {/*
+        Single unified "sem correspondencia" section covering BOTH directions
+        (PL-without-Invoice and Invoice-without-PL). Keeping both lists in one
+        quadro preserves a single source of truth instead of scattering a second
+        panel elsewhere.
+      */}
+      {(data.unmatchedPlItems.length > 0 || (data.unmatchedInvoiceItems?.length ?? 0) > 0) && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 overflow-hidden">
           <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
             <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              Itens no Packing List sem correspondencia na Invoice ({data.unmatchedPlItems.length})
+              Itens sem correspondencia entre Invoice e Packing List
             </h4>
           </div>
-          <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="bg-amber-50/50 dark:bg-amber-950/30 sticky top-0 z-10 bg-amber-50 dark:bg-amber-950/30 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
-                    Codigo
-                  </th>
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
-                    Descricao
-                  </th>
-                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600">
-                    Quantidade
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.unmatchedPlItems.map((item, i) => (
-                  <tr key={i} className="border-b last:border-b-0">
-                    <td className="px-3 py-2 font-mono text-amber-800">{item.itemCode || '-'}</td>
-                    <td className="px-3 py-2 text-amber-800">{item.description || '-'}</td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-800">
-                      {item.quantity}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="divide-y divide-amber-200 dark:divide-amber-800">
+            {data.unmatchedPlItems.length > 0 && (
+              <UnmatchedItemsTable
+                title={`Itens no Packing List sem correspondencia na Invoice (${data.unmatchedPlItems.length})`}
+                items={data.unmatchedPlItems}
+              />
+            )}
+            {(data.unmatchedInvoiceItems?.length ?? 0) > 0 && (
+              <UnmatchedItemsTable
+                title={`Itens na Invoice sem correspondencia no Packing List (${data.unmatchedInvoiceItems?.length})`}
+                items={data.unmatchedInvoiceItems ?? []}
+              />
+            )}
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Renders one direction of unmatched items. Both PL->Invoice and Invoice->PL
+// lists share this table so the markup stays in sync.
+function UnmatchedItemsTable({ title, items }: { title: string; items: UnmatchedItem[] }) {
+  return (
+    <div>
+      <div className="px-4 py-2 bg-amber-50/60 dark:bg-amber-950/20">
+        <h5 className="text-xs font-semibold uppercase tracking-wider text-amber-700">{title}</h5>
+      </div>
+      <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="bg-amber-50/50 dark:bg-amber-950/30 sticky top-0 z-10 bg-amber-50 dark:bg-amber-950/30 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                Codigo
+              </th>
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                Descricao
+              </th>
+              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+                Quantidade
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, i) => (
+              <tr key={i} className="border-b last:border-b-0">
+                <td className="px-3 py-2 font-mono text-amber-800">{item.itemCode || '-'}</td>
+                <td className="px-3 py-2 text-amber-800">{item.description || '-'}</td>
+                <td className="px-3 py-2 text-right font-mono text-amber-800">{item.quantity}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

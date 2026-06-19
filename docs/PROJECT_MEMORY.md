@@ -69,7 +69,8 @@ Grau de confianca: alto.
 - Validacao final exige o check sistemico `document-set-completeness` aprovado:
   Invoice, Packing List e OHBL/Draft BL utilizaveis.
 - Cada validacao final deve registrar uma linha canonica em `validation_runs` e
-  vincular resultados atuais/historicos/correcoes ao `validation_run_id`.
+  vincular resultados atuais/historicos/correcoes ao `validation_run_id` na
+  mesma transacao de persistencia.
 - Aceite manual exige justificativa e nao altera o dado original.
 - FOC/desconto nao deve reabrir falso positivo de FOB quando identificado.
 - Portos precisam ser normalizados para pais/sufixo, mas sem aceitar prefixo inseguro.
@@ -77,6 +78,9 @@ Grau de confianca: alto.
 - Documentos com falha de extracao, sem dados uteis ou abaixo da confianca
   operacional minima nao devem alimentar `aiExtractedData`, comparativo,
   validacao ou indicadores verdes de documento extraido.
+- O marco `documents_received` aceita Invoice + Packing List + OHBL ou Draft BL.
+- Historico de extracao deve ser consultavel por processo para manter auditoria
+  mesmo apos delete do documento original.
 - Falha de contrato Zod da IA deve ser preservada em `_trust.contractFailure` e
   derrubar a confianca abaixo do piso operacional, mantendo evidencia para
   revisao humana sem alimentar validacao automatica.
@@ -130,9 +134,13 @@ Estado:
 
 - Modulo tecnico entregue em 2026-06-18.
 - Sync automatico agendado a cada 15 minutos.
-- Rotas `/api/sydle/*` restritas a administradores.
+- Rotas `/api/sydle/*` e tela `/importacao/compras-pagamentos` restritas a
+  administradores.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
-  overlap de 5 minutos; nao usa horario local de inicio como cursor.
+  overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
+  inicio como cursor.
+- Matching financeiro nao deve conciliar automaticamente com invoice/PI/pedido
+  isolado; exige processo exato, compra forte ou evidencias combinadas.
 - `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns.
 - Sync real fica desligado ate preencher `SYDLE_SYNC_ENABLED=true`,
   `SYDLE_BASE_URL`, `SYDLE_API_TOKEN` e contrato do endpoint no SOPS/env.

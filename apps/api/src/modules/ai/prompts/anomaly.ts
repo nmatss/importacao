@@ -16,9 +16,20 @@ interface OpenRouterMessage {
  * whose count comes from the deterministic unmatched-items set.
  *
  * These markers let the reconciler identify (a) AI item-presence anomalies to
- * suppress, and (b) the canonical field name to use for the re-emitted one.
+ * suppress, and (b) the canonical field names to use for the re-emitted ones.
+ *
+ * Matching is BIDIRECTIONAL: the deterministic comparison exposes both
+ * unmatchedPlItems (PL items absent from the Invoice) and unmatchedInvoiceItems
+ * (Invoice items absent from the PL). The reconciler re-emits one deterministic
+ * anomaly PER non-empty direction so the anomaly stream and the comparison
+ * panels agree in both directions instead of collapsing into a single count.
  */
+/** Canonical field for PL items missing from the Invoice (PL → INV direction). */
 export const ITEM_MATCH_ANOMALY_FIELD = 'items.unmatched';
+/** Canonical field for PL items missing from the Invoice (explicit alias). */
+export const ITEM_MATCH_ANOMALY_FIELD_PL = 'items.unmatched.pl';
+/** Canonical field for Invoice items missing from the Packing List (INV → PL). */
+export const ITEM_MATCH_ANOMALY_FIELD_INVOICE = 'items.unmatched.invoice';
 
 /** A `field` belongs to the per-item match family (e.g. "items.PI7752Y"). */
 export function isItemMatchAnomalyField(field: string | undefined): boolean {

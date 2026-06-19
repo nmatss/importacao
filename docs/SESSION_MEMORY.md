@@ -20,20 +20,31 @@ Correcoes aplicadas:
 - `validation_runs` passou a ser registrado por execucao e vinculado a
   `validation_results`, `validation_result_history` e `document_corrections`
   via migration `0018_validation_run_links.sql`.
+- Validacao final passou a persistir `validation_runs`, snapshots/live results
+  e `document_corrections` atomicamente, evitando run orfao e perda de
+  correcao em falha intermediaria.
 - Historico de extracao passou a preservar `process_id`, tipo, nome original e
   `storage_path`; delete de documento arquiva a extracao antes de remover a
   linha e a FK passa a `ON DELETE SET NULL`.
+- Historico de extracao passou a ser recuperavel por processo em
+  `GET /api/documents/process/:processId/extraction-history`, cobrindo
+  documentos ja excluidos.
 - Falha de schema Zod da IA agora marca `_trust.contractFailure` e derruba a
   confianca abaixo de 40%, mantendo evidencia auditavel sem uso automatico.
 - Checks `certificate-completeness` e `weight-ratio-check` deixaram de retornar
   `passed` sem evidencia documental minima.
 - SYDLE passou a usar cursor por `sourceUpdatedAt`/`updatedAt` da fonte com
-  overlap de 5 minutos, matching por todos identificadores relevantes,
-  exportacao CSV paginada completa, redaction de `raw_payload` e rotas
-  restritas a admin.
+  overlap de 5 minutos, parser de data/hora PT-BR, matching conservador que nao
+  concilia por invoice/PI/pedido isolado, exportacao CSV paginada completa,
+  redaction de `raw_payload` e rotas/tela restritas a admin.
 - Frontend passou a mostrar documentos de baixa confianca como "nao
   utilizaveis", checks `skipped` como bloqueados, erros de API como erro/retry
-  e datas SYDLE `YYYY-MM-DD` sem shift de timezone.
+  sem apagar dados em cache, e datas SYDLE `YYYY-MM-DD` sem shift de timezone.
+- Upload/marco operacional passou a considerar Invoice + Packing List + OHBL ou
+  Draft BL como conjunto documental recebido.
+- Vitest da API passou a desabilitar paralelismo entre arquivos porque testes de
+  IA alteram `process.env` antes de importar singletons; isso evita vazamento de
+  provider externo e chamada real em suite local.
 
 Validacoes executadas:
 
@@ -44,6 +55,11 @@ Validacoes executadas:
 - `npm run -w apps/api typecheck`
 - `npm run -w apps/web typecheck`
 - `npm run lint`
+- `npm test` (API: 676 passed, 1 skipped; Web: 85 passed)
+- `npm run build`
+- `npm audit --audit-level=high` (sem vulnerabilidades high; 11 moderadas
+  conhecidas em dependencias de tooling)
+- `pytest -q` em `apps/cert-api` (325 passed)
 
 Pendencias externas:
 

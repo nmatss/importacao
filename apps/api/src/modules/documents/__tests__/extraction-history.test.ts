@@ -250,5 +250,23 @@ describe('document extraction history (backlog #12)', () => {
 
       expect(history).toEqual(rows);
     });
+
+    it('returns archived extractions for a process including deleted documents', async () => {
+      const rows = [
+        {
+          id: 3,
+          documentId: null,
+          processId: 1,
+          documentType: 'invoice',
+          reason: 'delete',
+          aiParsedData: { invoiceNumber: 'INV-DELETE' },
+        },
+      ];
+      queryQueue.push(createResolvedChain(rows));
+
+      const history = await documentService.getExtractionHistoryByProcess(1);
+
+      expect(history).toEqual(rows);
+    });
   });
 });

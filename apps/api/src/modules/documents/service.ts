@@ -129,6 +129,64 @@ function hasMeaningfulAiValue(value: unknown): boolean {
   });
 }
 
+const LOW_CONFIDENCE_FIELD_THRESHOLD = 0.5;
+
+export interface ExtractionCoverageSummary {
+  readPercent: number;
+  totalFields: number;
+  filledFields: number;
+  missingFields: string[];
+  lowConfidenceFields: string[];
+}
+
+/**
+ * Lightweight per-document coverage report computed from the EXISTING stored
+ * extracted data (no AI re-run). Serves Eduarda's "leu só 78% e faltou puxar
+ * campos": tells the UI exactly which fields were read, which came back empty,
+ * and which were read with low confidence.
+ *
+ * A field is counted when it is a top-level extracted attribute (the `items`
+ * array and harness/AI meta keys are excluded). It is:
+ *   - "missing" when its value is null/empty (per hasMeaningfulAiValue), and
+ *   - "lowConfidence" when its { value, confidence } carries confidence < 0.5.
+ * readPercent = filledFields / totalFields, rounded to a whole percent.
+ */
+function computeExtractionCoverage(aiParsedData: unknown): ExtractionCoverageSummary | null {
+  if (!isRecord(aiParsedData)) return null;
+  if (aiParsedData.extractionFailed || aiParsedData.skipped || aiParsedData.error) return null;
+
+  const missingFields: string[] = [];
+  const lowConfidenceFields: string[] = [];
+  let totalFields = 0;
+  let filledFields = 0;
+
+  for (const [key, raw] of Object.entries(aiParsedData)) {
+    if (AI_META_KEYS.has(key) || key.startsWith('_')) continue;
+    // Items are a separate collection (line-item matching has its own surface);
+    // coverage tracks the scalar/document-level fields the operator expects.
+    if (key === 'items') continue;
+
+    totalFields += 1;
+
+    const filled = hasMeaningfulAiValue(raw);
+    if (filled) {
+      filledFields += 1;
+    } else {
+      missingFields.push(key);
+    }
+
+    if (isRecord(raw) && 'value' in raw && typeof raw.confidence === 'number') {
+      if (filled && raw.confidence < LOW_CONFIDENCE_FIELD_THRESHOLD) {
+        lowConfidenceFields.push(key);
+      }
+    }
+  }
+
+  const readPercent = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
+
+  return { readPercent, totalFields, filledFields, missingFields, lowConfidenceFields };
+}
+
 function standardizeDocumentName(
   type: string,
   processCode: string,
@@ -444,7 +502,7 @@ export const documentService = {
 
     const hasInvoice = processDocs.some((d) => d.type === 'invoice');
     const hasPL = processDocs.some((d) => d.type === 'packing_list');
-    const hasBL = processDocs.some((d) => d.type === 'ohbl');
+    const hasBL = processDocs.some((d) => d.type === 'ohbl' || d.type === 'draft_bl');
 
     if (hasInvoice && hasPL && hasBL) {
       const [currentProc] = await db
@@ -596,6 +654,15 @@ export const documentService = {
       .select()
       .from(documentExtractionHistory)
       .where(eq(documentExtractionHistory.documentId, documentId))
+      .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
+  },
+
+  /** Historical archived extractions for a process, including deleted documents. */
+  async getExtractionHistoryByProcess(processId: number) {
+    return db
+      .select()
+      .from(documentExtractionHistory)
+      .where(eq(documentExtractionHistory.processId, processId))
       .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
   },
 
@@ -1770,7 +1837,10 @@ export const documentService = {
           confidence: doc.confidenceScore ?? null,
           reason: 'delete',
         });
-        logger.info({ documentId: doc.id, reason: 'delete' }, 'AI extraction archived before document delete');
+        logger.info(
+          { documentId: doc.id, reason: 'delete' },
+          'AI extraction archived before document delete',
+        );
       }
 
       await tx.delete(documents).where(eq(documents.id, id));
@@ -2240,6 +2310,47 @@ export const documentService = {
         source: 'packing_list',
       }));
 
+    // Opposite direction: Invoice items not matched in the Packing List. Same
+    // matching primitives (EAN / itemCode / description) so the anomaly stream
+    // and the comparison panels agree in BOTH directions, not just PL→INV.
+    const unmatchedInvoiceItems = invItems
+      .filter(
+        (invItem: any) =>
+          !plItems.some((plItem: any) => {
+            const invEan = normalizeGtin(invItem.ean);
+            const plEan = normalizeGtin(plItem.ean);
+            if (invEan && plEan && invEan === plEan) return true;
+            if (
+              itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)
+            ) {
+              return true;
+            }
+            const plDesc = plItem.description ?? plItem.descricao;
+            const invDesc = invItem.description ?? invItem.descricao;
+            return Boolean(
+              plDesc &&
+              invDesc &&
+              String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
+            );
+          }),
+      )
+      .map((item: any) => ({
+        itemCode: item.itemCode ?? item.codigo,
+        description: item.description ?? item.descricao,
+        quantity: item.quantity,
+        source: 'invoice',
+      }));
+
+    // Per-document extraction coverage (additive/optional). Computed from the
+    // EXISTING raw extracted data ({ value, confidence }) — no AI re-run. Lets
+    // the UI tell the operator exactly which fields were not read.
+    const extractionCoverage = {
+      invoice: computeExtractionCoverage(rawInv),
+      packingList: computeExtractionCoverage(rawPl),
+      bl: computeExtractionCoverage(rawBl),
+      draftBl: computeExtractionCoverage(rawDraftBl),
+    };
+
     // Draft BL vs Final BL ("Revisado") — only when both are present
     const draftBlRevisions = draftBl && bl ? computeDraftBlRevisions(draftBl, bl) : [];
 
@@ -2252,6 +2363,8 @@ export const documentService = {
       aggregateComparison,
       itemComparison,
       unmatchedPlItems,
+      unmatchedInvoiceItems,
+      extractionCoverage,
       draftBlRevisions,
       invoiceConfidence: invoiceDoc?.confidenceScore,
       plConfidence: plDoc?.confidenceScore,

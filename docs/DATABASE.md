@@ -72,7 +72,8 @@ Exemplos no schema:
 - Evitar migration destrutiva sem plano de reversao.
 - Historico de validacao e extracao existe para auditoria regulatoria.
   `validation_runs` e a entidade canonica de execucao; delete de documento deve
-  arquivar extracao antes da remocao.
+  arquivar extracao antes da remocao e a recuperacao operacional tambem pode
+  ocorrer por `process_id` quando `document_id` foi anulado por delete.
 - Alteracoes em enums precisam de migration idempotente e atencao a deploy.
 
 ## Pendencias

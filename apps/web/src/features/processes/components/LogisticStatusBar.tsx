@@ -517,7 +517,17 @@ export function buildLogisticProps(process: ImportProcess): LogisticStatusBarPro
   // process-level etd/shipmentDate are still null (Eduarda feedback).
   const etd = process.etd ?? asDateString(summary?.etd);
   const eta = process.eta ?? asDateString(summary?.eta);
-  const shipmentDate = process.shipmentDate ?? asDateString(summary?.shipmentDate);
+
+  // build-espelho.ts projects summary.shipmentDate = bl.shipmentDate ?? bl.etd,
+  // so a FUTURE etd can leak into shipmentDate. deriveLogisticStep treats any
+  // truthy shipmentDate as a real shipment event ("Em Transito"), which would
+  // wrongly skip the future-ETD "Ag. Embarque" step. Only honour a
+  // summary-derived shipmentDate when it is actually a past date; the raw etd
+  // already flows through the etd slot so future/past ETD logic governs.
+  const summaryShipmentDate = asDateString(summary?.shipmentDate);
+  const shipmentDate =
+    process.shipmentDate ??
+    (summaryShipmentDate && isPastDate(summaryShipmentDate) ? summaryShipmentDate : null);
 
   return {
     processId: process.id,

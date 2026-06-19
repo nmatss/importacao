@@ -148,6 +148,28 @@ describe('ProcessInfoCard', () => {
     expect(screen.getAllByTitle('Fonte: Espelho').length).toBeGreaterThanOrEqual(3);
   });
 
+  it('pairs Frete currency with the source that won the value, not a foreign source', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            // Invoice wins the freight value but carries no currency; the
+            // espelho currency (EUR) must NOT leak onto the invoice value.
+            invoice: { freightValue: 1500 },
+            espelho: {
+              summary: { freightValue: 9999, freightCurrency: 'EUR' },
+              items: [],
+            },
+          },
+        })}
+      />,
+    );
+
+    // Defaults to USD (no invoice currency) — not EUR from the espelho summary.
+    expect(screen.getByText(/US\$\s?1\.500,00/)).toBeInTheDocument();
+    expect(screen.queryByText(/€\s?1\.500,00/)).not.toBeInTheDocument();
+  });
+
   it('falls back to espelho.summary.etd for Data Embarque when shipmentDate is absent', () => {
     render(
       <ProcessInfoCard

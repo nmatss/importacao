@@ -39,6 +39,8 @@ Regras:
   espelho automatico.
 - Delete de documento deve preservar historico de extracao com metadados
   suficientes para auditoria posterior.
+- O marco `documents_received` considera Invoice + Packing List + OHBL ou Draft
+  BL presentes.
 
 ## Card Do Processo
 
@@ -68,7 +70,7 @@ Evidencias:
 - Validacao final exige `document-set-completeness` aprovado: Invoice, Packing
   List e OHBL/Draft BL utilizaveis.
 - Cada validacao final deve gerar `validation_runs` canonico e vincular
-  resultados, historico e correcao ao run.
+  resultados, historico e correcao ao run na mesma transacao de persistencia.
 - Aceite manual exige justificativa e deve ser auditado.
 - Aceite manual suprime pendencia operacional, mas nao altera o dado fonte.
 - Email de correcao deve considerar apenas falhas abertas.

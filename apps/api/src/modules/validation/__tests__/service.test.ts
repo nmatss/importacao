@@ -107,7 +107,7 @@ describe('validationService', () => {
     aiServiceMocks.flattenAiData.mockImplementation((data: Record<string, unknown>) => data);
     mockGetOperationalRecipient.mockResolvedValue('kiom@example.com');
     mockGetComparison.mockReset();
-    mockGetComparison.mockResolvedValue({ unmatchedPlItems: [] });
+    mockGetComparison.mockResolvedValue({ unmatchedPlItems: [], unmatchedInvoiceItems: [] });
     // Reset allChecks to default passing check
     (allChecks as any).length = 0;
     (allChecks as any).push(mockPassingCheck);
@@ -148,11 +148,13 @@ describe('validationService', () => {
       queryQueue.push(createResolvedChain([]));
       // 4. update process to validating
       queryQueue.push(createResolvedChain(undefined));
-      // 5. insert validation run
-      queryQueue.push(createResolvedChain([{ id: 100 }]));
-      // 6. transaction (delete + insert) - handled via txQueue
-      txQueue.push(createResolvedChain(undefined)); // delete
-      txQueue.push(createResolvedChain(undefined)); // insert
+      // 5. transaction (validation run + delete + insert + corrections) - handled via txQueue
+      txQueue.push(createResolvedChain([{ id: 100 }])); // insert validation run
+      txQueue.push(createResolvedChain([])); // tx select previous
+      txQueue.push(createResolvedChain(undefined)); // delete live results
+      txQueue.push(createResolvedChain(undefined)); // insert live results
+      txQueue.push(createResolvedChain(undefined)); // delete corrections
+      txQueue.push(createResolvedChain(undefined)); // insert corrections
       // 7. update process to validated (no failures)
       queryQueue.push(createResolvedChain(undefined));
       // 8. update followUp preInspection
@@ -188,10 +190,12 @@ describe('validationService', () => {
       queryQueue.push(createResolvedChain([])); // no usable documents
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 106 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 106 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update correctionStatus
 
       const results = await validationService.runAllChecks(1, 1);
@@ -275,10 +279,12 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 101 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 101 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
 
@@ -319,10 +325,12 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 102 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 102 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
 
@@ -427,10 +435,12 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 103 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 103 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
 
@@ -457,9 +467,12 @@ describe('validationService', () => {
       queryQueue.push(createResolvedChain(completeCoreDocs)); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 104 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 104 }])); // insert validation run
+      txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update to validated
       queryQueue.push(createResolvedChain(undefined)); // update followUp
 
@@ -485,9 +498,12 @@ describe('validationService', () => {
       queryQueue.push(createResolvedChain(completeCoreDocs)); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
-      queryQueue.push(createResolvedChain([{ id: 105 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 105 }])); // insert validation run
+      txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
+      txQueue.push(createResolvedChain(undefined)); // tx delete corrections
+      txQueue.push(createResolvedChain(undefined)); // tx insert corrections
       queryQueue.push(createResolvedChain(undefined)); // update correctionStatus
 
       const results = await validationService.runAllChecks(1);
@@ -772,11 +788,71 @@ describe('validationService', () => {
       expect(itemAnomalies[0].description).toContain('1 item');
     });
 
-    it('keeps quantity-divergence anomalies (not an item-presence signal)', async () => {
+    it('re-emits BOTH directions when PL and Invoice each have unmatched items', async () => {
       aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
         anomalies: [
-          { field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' },
+          { field: 'items.A', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'items.B', description: 'Item nao localizado no PL', severity: 'medium' },
+          { field: 'totalFobValue', description: 'Divergencia FOB', severity: 'high' },
         ],
+      });
+      mockGetComparison.mockResolvedValueOnce({
+        unmatchedPlItems: [
+          { itemCode: 'X', source: 'packing_list' },
+          { itemCode: 'Y', source: 'packing_list' },
+        ],
+        unmatchedInvoiceItems: [{ itemCode: 'Z', source: 'invoice' }],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      // Non-item anomaly passes through.
+      expect(result.anomalies).toContainEqual({
+        field: 'totalFobValue',
+        description: 'Divergencia FOB',
+        severity: 'high',
+      });
+
+      const itemAnomalies = result.anomalies.filter((a: any) =>
+        String(a.field).startsWith('items'),
+      );
+      // Exactly one anomaly per direction — they no longer collapse into PL only.
+      expect(itemAnomalies).toHaveLength(2);
+
+      const plAnomaly = itemAnomalies.find((a: any) => a.field === 'items.unmatched');
+      const invoiceAnomaly = itemAnomalies.find((a: any) => a.field === 'items.unmatched.invoice');
+      expect(plAnomaly?.description).toContain('2 itens');
+      expect(plAnomaly?.description).toContain('Packing List sem correspondencia na Invoice');
+      expect(invoiceAnomaly?.description).toContain('1 item');
+      expect(invoiceAnomaly?.description).toContain('Invoice sem correspondencia no Packing List');
+    });
+
+    it('emits only the Invoice direction when PL is fully matched but Invoice is not', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [
+          { field: 'items.A', description: 'Item nao localizado no PL', severity: 'medium' },
+        ],
+      });
+      mockGetComparison.mockResolvedValueOnce({
+        unmatchedPlItems: [],
+        unmatchedInvoiceItems: [{ itemCode: 'Z', source: 'invoice' }],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      const itemAnomalies = result.anomalies.filter((a: any) =>
+        String(a.field).startsWith('items'),
+      );
+      expect(itemAnomalies).toHaveLength(1);
+      expect(itemAnomalies[0].field).toBe('items.unmatched.invoice');
+      expect(itemAnomalies[0].description).toContain('1 item');
+    });
+
+    it('keeps quantity-divergence anomalies (not an item-presence signal)', async () => {
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [{ field: 'items.A.quantity', description: 'Qtd divergente', severity: 'high' }],
       });
       queryQueue.push(itemDocs());
 

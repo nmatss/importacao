@@ -83,6 +83,20 @@ export const documentController = {
     }
   },
 
+  async getExtractionHistoryByProcess(req: Request, res: Response) {
+    try {
+      const processId = Number(req.params.processId);
+      if (isNaN(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const history = await documentService.getExtractionHistoryByProcess(processId);
+      sendSuccess(res, history);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async getFile(req: Request, res: Response) {
     try {
       const resource = await documentService.getFileResource(Number(req.params.id));

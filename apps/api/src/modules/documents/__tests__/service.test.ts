@@ -172,6 +172,30 @@ describe('documentService', () => {
       });
       expect(mockDb.update).toHaveBeenCalled();
     });
+
+    it('should treat Draft BL as BL for documents_received milestone', async () => {
+      const mockDoc = { id: 4, processId: 1, type: 'draft_bl' };
+      const mockFile = {
+        originalname: 'draft-bl.pdf',
+        path: '/tmp/draft-bl.pdf',
+        mimetype: 'application/pdf',
+        size: 2048,
+      } as Express.Multer.File;
+
+      const allDocs = [{ type: 'invoice' }, { type: 'packing_list' }, { type: 'draft_bl' }];
+
+      queryQueue.push(createResolvedChain([])); // assert process not locked
+      queryQueue.push(createResolvedChain([mockDoc])); // insert doc
+      queryQueue.push(createResolvedChain(allDocs)); // select all docs for process
+      queryQueue.push(createResolvedChain([{ status: 'draft' }])); // select current process status
+      queryQueue.push(createResolvedChain(undefined)); // update process status
+      queryQueue.push(createResolvedChain(undefined)); // update followUpTracking
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-001' }])); // select processCode
+
+      await documentService.upload(1, 'draft_bl', mockFile, 1);
+
+      expect(mockDb.update).toHaveBeenCalled();
+    });
   });
 
   describe('getByProcess()', () => {
@@ -624,6 +648,105 @@ describe('documentService', () => {
       expect(row.espelhoGrossWeight).toBe(33);
       // Legacy aggregate weight kept for backward compatibility
       expect(row.plWeight).toBe(35);
+    });
+
+    it('exposes a per-document extraction coverage summary (missing + low confidence)', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              // filled, high confidence
+              invoiceNumber: { value: 'INV-001', confidence: 0.95 },
+              // filled, low confidence (< 0.5) → lowConfidenceFields
+              exporterName: { value: 'KIOM GLOBAL LIMITED', confidence: 0.3 },
+              // empty value → missingFields
+              portOfLoading: { value: null, confidence: 0 },
+              // plain filled value (no confidence wrapper)
+              currency: 'USD',
+              // plain empty value → missingFields
+              incoterm: '',
+              // items array is excluded from coverage counting
+              items: [{ itemCode: 'A1', description: 'Thing' }],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+      const coverage = comparison.extractionCoverage.invoice;
+
+      expect(coverage).not.toBeNull();
+      // 5 scalar fields counted (items excluded): invoiceNumber, exporterName,
+      // portOfLoading, currency, incoterm.
+      expect(coverage!.totalFields).toBe(5);
+      expect(coverage!.filledFields).toBe(3);
+      expect(coverage!.missingFields).toEqual(
+        expect.arrayContaining(['portOfLoading', 'incoterm']),
+      );
+      expect(coverage!.missingFields).toHaveLength(2);
+      expect(coverage!.lowConfidenceFields).toEqual(['exporterName']);
+      // 3 of 5 read → 60%.
+      expect(coverage!.readPercent).toBe(60);
+    });
+
+    it('computes unmatchedInvoiceItems (Invoice items absent from the Packing List)', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: [
+                { itemCode: 'PI7752Y', description: 'Blouse', quantity: 100 },
+                // Present in invoice, absent from PL → unmatchedInvoiceItems
+                { itemCode: 'PI9999Z', description: 'Jacket', quantity: 10 },
+              ],
+            },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: [
+                { itemCode: 'PI7752Y', quantity: 100 },
+                // Present in PL, absent from invoice → unmatchedPlItems
+                { itemCode: 'PI1111A', quantity: 5 },
+              ],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+
+      expect(comparison.unmatchedInvoiceItems).toHaveLength(1);
+      expect(comparison.unmatchedInvoiceItems[0]).toMatchObject({
+        itemCode: 'PI9999Z',
+        source: 'invoice',
+      });
+      expect(comparison.unmatchedPlItems).toHaveLength(1);
+      expect(comparison.unmatchedPlItems[0]).toMatchObject({
+        itemCode: 'PI1111A',
+        source: 'packing_list',
+      });
     });
   });
 
