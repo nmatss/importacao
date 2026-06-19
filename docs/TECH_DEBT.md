@@ -106,3 +106,26 @@ Concluido em 2026-06-19:
   delete arquiva a extracao com metadados antes da remocao.
 - SYDLE mitigou riscos internos de cursor, matching, CSV truncado, acesso amplo
   e `raw_payload` sensivel.
+
+## Enterprise audit — debt items (2026-06-19)
+
+Levantados na revisao enterprise (branch `fix/eduarda-enterprise`). Itens nao
+bloqueantes com remediacao recomendada.
+
+- **Re-baseline do journal/snapshots do Drizzle para casar com `schema.ts`.** O
+  journal esta congelado em 0010 enquanto 0011-0018 sao aplicadas via
+  `apply-pending-migrations.sh`. Remediacao: regenerar journal/snapshots a partir
+  do `schema.ts` atual para que `drizzle generate` volte a ser fonte unica.
+- **Bump de `@opentelemetry` para limpar 3 advisories moderados.** Fix
+  disponivel; nao aplicado aqui porque `node_modules` e compartilhado.
+  Remediacao: atualizar em ambiente isolado e revalidar build/test.
+- **Persistir o status derivado de certificacao (ou denormalizar) para devolver a
+  filtragem ao SQL.** Hoje o filtro carrega o conjunto completo de candidatos e
+  pagina em Python — aceitavel no tamanho atual. Remediacao: materializar/persistir
+  o status derivado e mover filtro+paginacao para SQL quando o volume crescer.
+- **Avaliar `SELECT FOR UPDATE` / advisory lock se rebuild+merge precisarem de
+  serializacao estrita.** O rebuild de `aiExtractedData` ja e atomico (`6440e0e`);
+  se no futuro for necessaria serializacao rigorosa entre rebuild e merge,
+  considerar lock pessimista ou advisory lock por `documentId`.
+- **`matchesStatusFilters` agora e helper apenas de teste.** Manter o uso restrito
+  a testes ou promover a um util compartilhado caso vire necessidade de producao.

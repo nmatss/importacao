@@ -219,3 +219,15 @@ Principais temas:
   permanece em SOPS/env.
 - Fluxos de aceite entre checklist e comparativo ainda podem ser melhor unificados.
 - Documentacao de IA possui divergencias historicas entre Vertex ideal e IA local atual.
+
+## Revisao Enterprise (2026-06-19)
+
+- Branch `fix/eduarda-enterprise` (rounds 1-5): implementou o feedback da Eduarda
+  mais correcoes de auditoria — carry-forward de aceite manual e dedupe de datas
+  INV/PL, rebuild atomico de `aiExtractedData`, cache TTL do Sheets + chown de
+  volume no cert-api (#85), rate limit de auth fail-closed + `TRUST_PROXY`, E2E
+  hermetico de importacao e guardas de Proformas/Comparativo. Veredito:
+  staging-only ate fechar os 3 bloqueadores de negocio (Vertex IAM #60,
+  destinatarios operacionais de email #78, planilha "Licenciamentos Vencidos"
+  #87). Suite local verde: api 688 / web 89 / cert 329 / e2e 46 / build ok. Ver
+  `docs/KNOWN_ISSUES.md` e `docs/TECH_DEBT.md`.

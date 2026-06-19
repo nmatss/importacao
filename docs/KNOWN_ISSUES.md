@@ -307,3 +307,46 @@ Status:
 
 - Resolvido em 2026-06-17. Imports CSS foram reordenados para deixar regras
   `@import` antes das demais diretivas.
+
+## Enterprise audit — open items (2026-06-19)
+
+Levantados na revisao enterprise (branch `fix/eduarda-enterprise`, rounds 1-5 +
+auditoria). Os 3 bloqueadores de negocio exigem acao humana e travam a validacao
+de usuario; a suite local esta verde, mas o veredito e staging-only ate que sejam
+resolvidos.
+
+### Bloqueadores de negocio (precisam de humanos)
+
+- **Vertex AI IAM (#60) — qualidade de extracao.** Severidade: ALTA. Status:
+  ABERTO. Owner: TI/Cloud (Nicolas). Como resolver: liberar o bloqueio IAM (403)
+  para que `AI_PROVIDER=vertex` funcione; sem isso a extracao de
+  cabecalho/portos/datas depende do modelo local e os campos de cruzamento podem
+  vir nulos/fracos. Ref: `docs/STATUS-2026-06-16.md`, `apps/api/src/modules/ai/service.ts`.
+- **Destinatarios operacionais de email (#78) — envio de email.** Severidade:
+  ALTA. Status: ABERTO. Owner: Negocio/Operacao. Como resolver: cadastrar
+  `KIOM`, `FENICIA` e `ISA` em `Configuracoes > Destinatarios operacionais`;
+  `communicationService.send` bloqueia o envio quando `recipientEmail` esta
+  vazio. Ref: `apps/api/src/modules/settings/operational-recipients.ts`,
+  `apps/api/src/modules/communications/service.ts`.
+- **Confirmar estrutura da planilha "Licenciamentos Vencidos" (#87) — status/prazo
+  de licenca.** Severidade: ALTA. Status: ABERTO. Owner: Negocio (Certificacao).
+  Como resolver: validar com o negocio a estrutura real da aba para que o mapa de
+  status/prazo de licenca do cert-api esteja correto. Ref:
+  `apps/cert-api/app/services/erp_service.py`.
+
+### Conhecidos nao bloqueantes
+
+- **Journal de migracoes Drizzle congelado em 0010 vs 0011-0018 aplicadas.**
+  Severidade: BAIXA. Status: ABERTO. As migrations 0011-0018 sao aplicadas via
+  `apply-pending-migrations.sh`, mas o journal/snapshots do Drizzle ainda apontam
+  0010. Como resolver: re-baseline do journal para refletir `schema.ts` (ver
+  `docs/TECH_DEBT.md`).
+- **npm audit: 3 advisories moderados transitivos de `@opentelemetry`.**
+  Severidade: BAIXA. Status: ABERTO (fix disponivel, nao aplicado aqui). Nao
+  aplicado nesta branch porque `node_modules` e compartilhado. Como resolver:
+  bump de `@opentelemetry` em ambiente isolado.
+- **cert-api list faz round-trip ao Sheets.** Severidade: BAIXA. Status:
+  MITIGADO. Agora com cache TTL (`201a79f`); aceitavel no volume atual.
+- **Filtro de certificacao carrega o conjunto completo de candidatos e pagina em
+  Python.** Severidade: BAIXA. Status: ABERTO/ACEITAVEL. Aceitavel no tamanho
+  atual; remediacao em `docs/TECH_DEBT.md` (mover filtragem de volta para SQL).

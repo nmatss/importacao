@@ -5,6 +5,59 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — Enterprise review (rounds 1-5 + audit, 2026-06-19)
+
+Entregue na branch `fix/eduarda-enterprise` (commits `7c71387..cd47704`),
+implementando o feedback da Eduarda mais correcoes de auditoria. Veredito:
+liberado apenas para staging enquanto os 3 bloqueadores de negocio seguem
+abertos (ver `docs/KNOWN_ISSUES.md`).
+
+### Importacao
+
+- Revalidacao final preserva resolucoes manuais ("Aceitar") do operador entre
+  re-runs, carregando o aceite adiante por identidade da divergencia e apenas
+  sobre divergencias ainda em aberto (`7c71387`).
+- Checagem de datas deixou de gerar linhas contraditorias no painel: o par de
+  embarque Invoice vs Packing List passou a ser deduplicado e delegado a
+  checagem de tolerancia (`7c71387`).
+- Reconstrucao de `aiExtractedData` virou atomica (update JSONB direto da coluna
+  viva, sem read-modify-write em JS), evitando perda de merge por documento em
+  reprocessamento concorrente (`6440e0e`).
+- Front-end de Proformas deixou de quebrar quando faltam itens; aba Comparativo
+  ajustada e protegida por `ErrorBoundary` por aba, localizando falhas em vez de
+  apagar a aplicacao inteira (`cd47704`).
+
+### Certificacao
+
+- Lista de certificacoes reaproveita uma unica leitura do Sheets dentro de um
+  TTL e serve o ultimo mapa valido em caso de 429, em vez de rebaixar
+  silenciosamente todas as licencas para `NAO_APLICAVEL` (`201a79f`).
+
+### Seguranca
+
+- Rate limiting de autenticacao passou a falhar fechado: quando o Redis cai, os
+  endpoints `/auth` usam um limitador em processo, preservando a protecao contra
+  forca bruta (`0ae0138`).
+- `TRUST_PROXY` configuravel (default loopback) para que `req.ip` reflita o
+  cliente real nos limites por IP e na allow-list de `/metrics` (`0ae0138`).
+
+### Infra-Ops
+
+- `entrypoint` do cert-api faz `chown` de `/app/reports` e `/app/certs` antes de
+  dropar para uid 1001, evitando que volumes novos quebrem a inicializacao
+  (#85, `201a79f`).
+
+### Testes
+
+- Novo E2E hermetico do caminho feliz de importacao: processo + Invoice/Packing
+  List/BL ate comparacao e relatorio (`903666a`).
+- Cobertura adicional para preservacao de aceite (carry-forward), ausencia de
+  contradicao INV/PL, rebuild atomico de extracao, limitador de autenticacao em
+  outage e guardas de Proformas/Comparativo (`7c71387`, `6440e0e`, `0ae0138`,
+  `cd47704`).
+
+---
+
 ## [Unreleased] - 2026-06-17 - Harness operacional e validacao documental
 
 ### Added

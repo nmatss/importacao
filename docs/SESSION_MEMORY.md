@@ -873,3 +873,16 @@ Observacao operacional:
   confirmar reducao dos falsos positivos; avisos restantes esperados tendem a
   ser dados ausentes/externos (FOC explicado, FUP/Odoo/NCM/data logistica
   ausente), nao travamento de extracao.
+
+## 2026-06-19 - Revisao Enterprise (branch fix/eduarda-enterprise)
+
+- Rounds 1-5 implementaram o feedback da Eduarda mais correcoes de auditoria na
+  branch `fix/eduarda-enterprise` (`7c71387..cd47704`): carry-forward de aceite
+  manual e dedupe de datas INV/PL na validacao, rebuild atomico de
+  `aiExtractedData`, cache TTL do Sheets + chown de volume no cert-api (#85),
+  rate limit de auth fail-closed + `TRUST_PROXY`, E2E hermetico do caminho feliz
+  de importacao e guardas de Proformas/Comparativo no web.
+- Veredito: staging-only ate fechar os 3 bloqueadores de negocio (Vertex IAM
+  #60, destinatarios operacionais de email #78, planilha "Licenciamentos
+  Vencidos" #87). Detalhes em `docs/KNOWN_ISSUES.md` e `docs/TECH_DEBT.md`.
+- Suite local verde: api 688 / web 89 / cert 329 / e2e 46 / build ok.
