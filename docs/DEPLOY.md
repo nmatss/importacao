@@ -89,10 +89,11 @@ Requisito de segredo:
 - `ALERTMANAGER_WEBHOOK_URL` e opcional, mas se existir deve apontar para um
   bridge compatível com payload nativo do Alertmanager, nao diretamente para
   Google Chat.
-- `SYDLE_SYNC_ENABLED` deve permanecer `false` para go-live sem contrato/API
-  real da SYDLE. O deploy aborta se encontrar `true`, a menos que
-  `ALLOW_SYDLE_SYNC_DEPLOY=1` seja usado em um rollout aprovado apos UAT
-  financeiro com identificador estavel de pagamento e payload mapeado.
+- `SYDLE_SYNC_ENABLED=true` em producao so deve ser usado com
+  `ALLOW_SYDLE_SYNC_DEPLOY=1`. O modo real validado e
+  `SYDLE_SOURCE_TYPE=sydle_one_class` com `SYDLE_CLASS_ID` da solicitacao de
+  pagamento internacional. O deploy aborta se encontrar sync ligada sem a flag
+  explicita de rollout.
 
 ## Exposicao HTTP/TLS
 

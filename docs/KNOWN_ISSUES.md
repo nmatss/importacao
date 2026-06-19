@@ -97,22 +97,23 @@ Status:
   mas ainda requer confirmacao/cadastro dos enderecos operacionais reais na tela
   de Configuracoes para nao depender de env.
 
-## ALTO - SYDLE Aguardando Contrato Externo Para Sync Real
+## MEDIO - SYDLE Campos Complementares Limitados Por Permissao
 
 Descricao:
 
-- O modulo interno de compras/pagamentos SYDLE foi implementado, mas o
-  repositorio nao possui URL, credencial, endpoint ou payload real do projeto
-  SYDLE.
-- Enquanto `SYDLE_SYNC_ENABLED=false` ou faltarem `SYDLE_BASE_URL` /
-  `SYDLE_API_TOKEN`, o job de 15 minutos registra `status=skipped`.
-- Em 2026-06-19 foram mitigados riscos internos: cursor por `sourceUpdatedAt`
-  com overlap, lock transacional de sync, rotas restritas a admin, redaction de
-  `raw_payload`, export CSV paginado, ID externo derivado de referencias de
-  negocio e match por todos identificadores conhecidos.
-- O relatorio operacional esta disponivel para administradores em
-  `/importacao/compras-pagamentos` e no menu `Importacao > Operacional >
-Compras/Pagamentos SYDLE`, mas a sincronizacao real permanece desabilitada.
+- A fonte real Sydle One para pagamentos internacionais foi validada em
+  2026-06-19 com login `sys/auth/signIn` e busca
+  `POST /api/1/main/_classId/68bf1179b042c72f03993928/_search`.
+- A classe `Solicitacao de Pagamento Internacional/current` retornou
+  solicitacoes reais e parcelas em `paymentData[]`; o portal ja possui
+  normalizacao para uma linha por parcela.
+- O usuario/API atual consegue ler a solicitacao principal, ticket, status e
+  moeda, mas buscas diretas nos formularios `InternationalPaymentOpenForm` e
+  `RequestData` retornaram 403. Assim, fornecedor, PI, invoice e processo de
+  importacao podem permanecer vazios ate haver permissao adicional ou uma visao
+  SYDLE consolidada.
+- Enquanto `SYDLE_SYNC_ENABLED=false` ou faltar alguma variavel de
+  `sydle_one_class`, o job de 15 minutos registra `status=skipped`.
 - `scripts/deploy.sh` aborta se `SYDLE_SYNC_ENABLED=true` no `.env` remoto,
   salvo rollout aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
@@ -124,19 +125,18 @@ Evidencias:
 
 Impacto:
 
-- A tela e o relatorio funcionam, mas permanecem sem dados reais ate a
-  configuracao da fonte SYDLE.
-- O risco restante e externo: sem contrato/payload real nao ha garantia sobre
-  nomes de campo, semantica de status, cursor/paginacao oficial e timezone.
-- Para go-live com dados financeiros reais, isto e bloqueador externo critico:
-  exige contrato/API/exportacao oficial, identificador estavel de pagamento,
-  credenciais reais e UAT financeiro com amostra conciliada.
+- A tela e o relatorio podem sincronizar dados reais de valores, vencimentos,
+  status do ticket e moeda.
+- A conciliacao automatica com processos de importacao pode ficar limitada ate a
+  SYDLE fornecer PI/invoice/processo/fornecedor no payload acessivel.
+- Risco operacional residual: confirmar com financeiro/comex se a regra
+  `ticket concluido = pago` e `ticket em andamento = aberto` representa o fluxo
+  final.
 
 Status:
 
-- Aberto. Requer contrato/API/exportacao real da SYDLE, identificador estavel de
-  pagamento, payload sanitizado, credenciais em SOPS e teste de UAT com amostra
-  conciliada pelo financeiro.
+- Aberto. Requer UAT financeiro e, se necessario, ajuste de permissao/API para
+  campos complementares de formulario.
 
 ## MEDIO - Pasta Raiz Do Google Drive Ausente Em Producao
 

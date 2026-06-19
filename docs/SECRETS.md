@@ -97,6 +97,7 @@ credenciais. Nao armazenar token SYDLE em `system_settings`.
 Variaveis:
 
 - `SYDLE_SYNC_ENABLED`
+- `SYDLE_SOURCE_TYPE`
 - `SYDLE_BASE_URL`
 - `SYDLE_API_TOKEN`
 - `SYDLE_PAYMENTS_PATH`
@@ -107,9 +108,21 @@ Variaveis:
 - `SYDLE_PAGE_SIZE_PARAM`
 - `SYDLE_PAGE_SIZE`
 - `SYDLE_TIMEOUT_MS`
+- `SYDLE_APP`
+- `SYDLE_USER`
+- `SYDLE_PASSWORD`
+- `SYDLE_CLASS_ID`
+- `SYDLE_DATE_FIELD`
+- `SYDLE_TICKET_CLASS_ID`
+- `SYDLE_TICKET_STATUS_CLASS_ID`
+- `SYDLE_CURRENCY_CLASS_ID`
 
 Padrao seguro: `SYDLE_SYNC_ENABLED=false`. Com esse valor, o scheduler registra
 `skipped` em `sydle_sync_runs` e nao tenta conectar na SYDLE.
+
+Para Sydle One, usar `SYDLE_SOURCE_TYPE=sydle_one_class` e credenciais em SOPS
+ou cofre operacional. Nunca registrar `SYDLE_USER`, `SYDLE_PASSWORD`,
+`Cookie`, `Set-Cookie` ou `accessToken` em logs ou documentos.
 
 ## Access Control
 

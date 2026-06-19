@@ -1,5 +1,45 @@
 # Session Memory
 
+## 2026-06-19 - SYDLE One Real E Publicacao Via Nginx Interno
+
+Resultado:
+
+- Topologia publica corrigida para o desenho real confirmado pelo usuario:
+  Nginx/edge externo -> Nginx interno do container `web` em
+  `192.168.168.124:8085`. O compose de producao manteve `8085:80` publicado e
+  removeu tentativa de Traefik/rede externa do `web`.
+- Deploy do SHA `0602241891addbee66d969b778c3a3f4aa1d19c3` em 2026-06-19
+  passou health interno e publico: `https://importacao.grupounico.com/`
+  retornou HTTP 200, e `/api/auth/me` via dominio publico retornou 401
+  esperado sem token.
+- A tela `/importacao/compras-pagamentos` ainda exibia sync ignorada porque a
+  producao estava com `SYDLE_SYNC_ENABLED=false` e sem variaveis Sydle One.
+- Projeto local `SydleOne` analisado. O padrao real e login em
+  `/api/1/main/sys/auth/signIn`, cookie de sessao e `POST _classId/{id}/_search`.
+- A classe real `68bf1179b042c72f03993928` (`Solicitacao de Pagamento
+Internacional/current`) foi consultada com credenciais do cofre local sem
+  expor segredos: retornou 14 solicitacoes, `paymentData[]`, ticket e moeda.
+- Permissoes atuais permitem ler solicitacao principal, ticket, status e moeda;
+  buscas diretas em `InternationalPaymentOpenForm` e `RequestData` retornaram
+  403, entao fornecedor/PI/invoice dependem de permissao ou visao consolidada.
+- API passou a suportar `SYDLE_SOURCE_TYPE=sydle_one_class`, login Sydle One,
+  `_classId/_search` com `search_after`, lookup de ticket/status/moeda e
+  achatamento de parcelas em linhas financeiras.
+- Env/compose/docs/memoria atualizados para `SYDLE_APP`, `SYDLE_USER`,
+  `SYDLE_PASSWORD`, `SYDLE_CLASS_ID`, `SYDLE_DATE_FIELD` e classes auxiliares.
+
+Testes:
+
+- `npm test -w apps/api -- src/modules/sydle/__tests__/client.test.ts src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/service.test.ts --run` -> 27 passed.
+- `npm run typecheck -w apps/api` -> passed.
+- `git diff --check` -> passed.
+- `npm run lint` -> passed.
+- `npm run typecheck` -> passed.
+- `npm test -w apps/api -- src/modules/sydle/__tests__/client.test.ts src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/service.test.ts src/modules/sydle/__tests__/routes.test.ts --run` -> 31 passed.
+- `npm run build` -> passed.
+- `npm test` -> API 692 passed / 1 skipped; Web 95 passed.
+- `bash -n scripts/deploy.sh` -> passed.
+
 ## 2026-06-19 - Go-live UAT Importacao, Certificacao E Estoque WMS
 
 Objetivo:

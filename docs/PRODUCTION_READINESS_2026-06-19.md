@@ -26,6 +26,20 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
 
 ## Status De Deploy Em Producao
 
+Atualizacao posterior em 2026-06-19:
+
+- A topologia publica correta foi confirmada como Nginx/edge externo acessando
+  o Nginx interno do container `web` via `192.168.168.124:8085`.
+- O compose de producao voltou a publicar `8085:80` e removeu a tentativa de
+  roteamento Traefik do `web`.
+- Deploy do SHA `0602241891addbee66d969b778c3a3f4aa1d19c3` passou health
+  interno e publico; `https://importacao.grupounico.com/` retornou HTTP 200 e
+  `/api/auth/me` pelo dominio publico retornou 401 esperado sem token.
+- A fonte real Sydle One foi validada: classe
+  `68bf1179b042c72f03993928` (`Solicitacao de Pagamento Internacional/current`)
+  via login `sys/auth/signIn` e `POST _classId/_search`. O modulo passou a
+  suportar `SYDLE_SOURCE_TYPE=sydle_one_class`.
+
 - SHA implantado operacionalmente:
   `3f36137a697fee9f4f1011bc3eace3417467d5be`.
 - Deploy concluido por `scripts/deploy.sh` em 2026-06-19 19:16 BRT com backup
@@ -39,6 +53,7 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
 - Health publico reprovado: `https://importacao.grupounico.com/` retorna
   `HTTP/2 502` com header `server: nginx`. O bloqueio remanescente esta na
   camada DNS/proxy/TLS externa, nao no container web nem na API.
+  Este item foi superado pela atualizacao posterior acima.
 
 ## Alteracoes
 
@@ -120,8 +135,12 @@ Compras/Pagamentos SYDLE` e por atalho no portal para administradores.
   uma camada `nginx` externa com 502; a causa operacional identificada foi o
   bind do web em `127.0.0.1:8085`, incompatível com o Nginx/edge externo que
   acessa o upstream em `192.168.168.124:8085`.
-- SYDLE segue aguardando contrato/API/payload real, identificador estavel de
-  pagamento, credenciais em SOPS e UAT financeiro para habilitar sync real.
+- Este bloqueio publico foi superado em deploy posterior do SHA
+  `0602241891addbee66d969b778c3a3f4aa1d19c3`.
+- SYDLE ja possui classe real validada e suporte tecnico no codigo. Pendencia
+  remanescente: configurar SOPS/producao, rodar sync, validar amostra com
+  financeiro/comex e confirmar se campos complementares de formulario exigem
+  permissao adicional.
 - Destinatarios operacionais devem ser confirmados/cadastrados na tela, ou
   `COMMUNICATION_ALLOWED_RECIPIENTS` deve ser preenchido como fallback.
 - HTTPS publico deve terminar no Nginx/edge externo; o compose publica o web em

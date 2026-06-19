@@ -103,6 +103,8 @@ const FIELD_KEYS = {
   remittanceId: ['remittanceId', 'remessa', 'swift', 'remittance'],
   sourceUpdatedAt: [
     'sourceUpdatedAt',
+    '_lastUpdateDate',
+    '_creationDate',
     'updatedAt',
     'ultimaAtualizacao',
     'modifiedAt',
@@ -291,6 +293,19 @@ function normalizePaymentStatus(
 export function extractSydleRecords(payload: unknown): RawRecord[] {
   if (Array.isArray(payload)) return payload.filter(isRawRecord);
   if (!isRawRecord(payload)) return [];
+
+  const hits = payload.hits;
+  if (isRawRecord(hits) && Array.isArray(hits.hits)) {
+    return hits.hits
+      .map((hit) => {
+        if (!isRawRecord(hit)) return null;
+        if (isRawRecord(hit._source)) {
+          return { _id: hit._id, _classId: hit._classId, ...hit._source };
+        }
+        return hit;
+      })
+      .filter(isRawRecord);
+  }
 
   const candidateKeys = ['data', 'items', 'results', 'records', 'content', 'payments'];
   for (const key of candidateKeys) {

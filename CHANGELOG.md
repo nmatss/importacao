@@ -28,6 +28,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `sydle_purchase_payments`/`sydle_sync_runs`, API `/api/sydle`,
   tela `/importacao/compras-pagamentos`, exportacao CSV backend e sync
   agendado a cada 15 minutos com no-op seguro quando desconfigurado.
+- Modo real Sydle One para SYDLE (`SYDLE_SOURCE_TYPE=sydle_one_class`) com
+  login por sessao, `POST _classId/_search`, classe internacional validada e
+  achatamento de `paymentData[]` em linhas financeiras.
 - `document-set-completeness` como check sistemico de validacao, bloqueando
   validacao final quando Invoice, Packing List e BL utilizaveis nao existem.
 - Migration `0018_validation_run_links.sql` ligando resultados atuais/historicos

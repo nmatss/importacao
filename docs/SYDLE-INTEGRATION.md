@@ -16,19 +16,20 @@ Implementado no portal:
 - Tabelas `sydle_purchase_payments` e `sydle_sync_runs`.
 - Job agendado `sydle-sync` em `*/15 * * * *`.
 - Tela web `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
-  Compras/Pagamentos SYDLE` e atalho no portal para administradores.
+Compras/Pagamentos SYDLE` e atalho no portal para administradores.
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
 - Rotas backend SYDLE e tela web restritas a administradores.
 - Sync manual admin-only em `/api/sydle/sync-now`.
 - Normalizador tolerante a campos comuns em PT-BR e ingles.
+- Fonte real Sydle One por `SYDLE_SOURCE_TYPE=sydle_one_class`, com login em
+  `sys/auth/signIn`, cookie de sessao e busca `POST _classId/{id}/_search`.
+- Classe real de pagamento internacional validada em 2026-06-19:
+  `68bf1179b042c72f03993928` (`Solicitacao de Pagamento Internacional/current`).
+- O cliente achata `paymentData[]` em uma linha por parcela, resolve moeda,
+  ticket e status quando a API permite, e preserva compatibilidade com o modo
+  generico legado.
 - `scripts/deploy.sh` bloqueia deploy quando `SYDLE_SYNC_ENABLED=true`, salvo
   rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
-
-Nao implementado por falta de contrato externo:
-
-- Endpoint real do projeto SYDLE.
-- Credencial/token real.
-- Nomes oficiais dos campos/objetos do projeto SYDLE.
 
 Quando a SYDLE nao esta configurada, o job registra `status=skipped` em
 `sydle_sync_runs` com motivo `sydle_not_configured`. Isso e intencional para
@@ -40,6 +41,7 @@ As variaveis devem ficar em SOPS/env, nunca em `system_settings`.
 
 ```env
 SYDLE_SYNC_ENABLED=false
+SYDLE_SOURCE_TYPE=generic
 SYDLE_BASE_URL=
 SYDLE_API_TOKEN=
 SYDLE_PAYMENTS_PATH=/api/purchase-payments
@@ -52,17 +54,33 @@ SYDLE_PAGE_SIZE=200
 SYDLE_TIMEOUT_MS=30000
 ```
 
-Para ativar a integracao real:
+Modo Sydle One real:
 
-1. Confirmar contrato/API/exportacao com o responsavel SYDLE.
-2. Confirmar identificador estavel de pagamento, campo incremental, paginacao e
-   payload sanitizado para fixture de teste.
-3. Preencher variaveis no `.env.sops.yaml`.
-4. Executar deploy oficial com `ALLOW_SYDLE_SYNC_DEPLOY=1` apenas no rollout
+```env
+SYDLE_SYNC_ENABLED=true
+SYDLE_SOURCE_TYPE=sydle_one_class
+SYDLE_BASE_URL=https://grupounico.sydle.one
+SYDLE_APP=main
+SYDLE_USER=
+SYDLE_PASSWORD=
+SYDLE_CLASS_ID=68bf1179b042c72f03993928
+SYDLE_DATE_FIELD=_lastUpdateDate
+SYDLE_PAGE_SIZE=200
+SYDLE_TICKET_CLASS_ID=5d446dfc62d9656275a47d69
+SYDLE_TICKET_STATUS_CLASS_ID=5cacdc04a50bfe4c0d3e5c74
+SYDLE_CURRENCY_CLASS_ID=000000000000000000000059
+```
+
+Para ativar ou alterar a integracao real:
+
+1. Preencher variaveis no `.env.sops.yaml` ou cofre operacional, nunca em texto
+   claro versionado.
+2. Executar deploy oficial com `ALLOW_SYDLE_SYNC_DEPLOY=1` apenas em rollout
    aprovado.
-5. Rodar sync manual em `/importacao/compras-pagamentos`.
-6. Conferir `sydle_sync_runs`, totais do relatorio e conciliacao com processos.
-7. Validar amostra com financeiro/comex antes de manter o job real ligado.
+3. Rodar sync manual em `/importacao/compras-pagamentos` ou via rotina
+   operacional autenticada.
+4. Conferir `sydle_sync_runs`, totais do relatorio e conciliacao com processos.
+5. Validar amostra com financeiro/comex antes de considerar o job real aprovado.
 
 ## Contrato Esperado
 
@@ -74,6 +92,40 @@ O cliente aceita payload JSON em array direto ou envelopes comuns:
 - `records`
 - `content`
 - `payments`
+- Sydle One `_search`: `hits.hits[]._source`
+
+### Sydle One - Pagamento Internacional
+
+Fonte validada:
+
+- `POST /api/1/main/_classId/68bf1179b042c72f03993928/_search`
+- Paginacao por `search_after`, ordenada por `_lastUpdateDate` e `_id`.
+- Filtro incremental por `range` em `_lastUpdateDate`, com overlap de 5
+  minutos aplicado pelo service.
+
+Campos principais observados:
+
+- Top-level: `_id`, `_creationDate`, `_lastUpdateDate`, `approved`,
+  `billOfLanding`, `ticket`, `requestData`, `paymentData[]`.
+- Parcela: `paymentData[]._id`, `paymentAmount`, `paymentCurrency._id`,
+  `expirationDate`, `paymentDeadlineAfterShipment`, `exception`, `reason`.
+- Referencias resolvidas quando permitido:
+  - Ticket: `5d446dfc62d9656275a47d69` para `code`, `searchCode`, `status` e
+    `attendanceConclusionDate`.
+  - Status ticket: `5cacdc04a50bfe4c0d3e5c74` para `name`/`identifier`.
+  - Moeda: `000000000000000000000059` para `iso`.
+
+Regras atuais de normalizacao Sydle One:
+
+- `externalId`: `sydle-one:{requestId}:{paymentId}`.
+- `purchaseRef`: `SYDLE-{ticket.code}` quando o ticket esta disponivel.
+- `purchaseAmount`: valor da parcela `paymentAmount`.
+- `paidAmount`: valor integral quando o ticket esta concluido; caso contrario
+  `0`.
+- `openAmount`: `0` quando concluido; caso contrario valor da parcela.
+- `dueDate`: `expirationDate`.
+- `paymentStatus`: `paid` para ticket concluido; caso contrario `open`.
+- `sourceUpdatedAt`: `_lastUpdateDate` da solicitacao.
 
 Campos reconhecidos pelo normalizador:
 
@@ -179,9 +231,9 @@ Checklist de validacao operacional:
 
 ## Pendencias Para Ativacao Real
 
-- Obter URL do ambiente/projeto SYDLE.
-- Obter token de service account ou fluxo OAuth.
-- Confirmar endpoint/listagem e paginacao.
-- Confirmar campo incremental equivalente a `updatedAt`.
-- Receber payload/export real sanitizado para fixture de teste.
-- Validar com financeiro/comex a regra final de status e tipos de pagamento.
+- Validar com financeiro/comex a regra final de status e tipos de pagamento
+  sobre amostra da producao.
+- Confirmar se a SYDLE deve expor fornecedor, PI, invoice e processo de
+  importacao no payload principal ou por uma visao/API com permissao de leitura.
+- Avaliar service account dedicada, pois o login atual por `GET` envia
+  credenciais em query string da propria SYDLE.

@@ -127,6 +127,63 @@ describe('SYDLE payment normalizer', () => {
     expect(extractSydleRecords([{ id: 1 }])).toHaveLength(1);
   });
 
+  it('extracts Sydle One _search hits and keeps the hit id', () => {
+    const records = extractSydleRecords({
+      hits: {
+        hits: [
+          {
+            _id: 'REQ-1',
+            _source: {
+              _lastUpdateDate: '2026-06-18T20:20:31.914Z',
+              paymentData: [{ _id: 'PAY-1' }],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(records).toEqual([
+      {
+        _id: 'REQ-1',
+        _lastUpdateDate: '2026-06-18T20:20:31.914Z',
+        paymentData: [{ _id: 'PAY-1' }],
+      },
+    ]);
+  });
+
+  it('normalizes flattened Sydle One international payment rows', () => {
+    const result = normalizeSydlePayment({
+      externalId: 'sydle-one:REQ-1:PAY-1',
+      purchaseRef: 'SYDLE-5337',
+      currency: 'USD',
+      purchaseAmount: 4460,
+      paidAmount: 0,
+      openAmount: 4460,
+      paymentType: 'balance',
+      paymentStatus: 'open',
+      dueDate: '2026-06-18T00:00:00Z',
+      sourceUpdatedAt: '2026-06-18T20:20:31.914Z',
+      rawSydleOne: {
+        request: { _id: 'REQ-1' },
+        ticket: { code: '5337' },
+        payment: { _id: 'PAY-1' },
+      },
+    });
+
+    expect(result).toMatchObject({
+      externalId: 'sydle-one:REQ-1:PAY-1',
+      purchaseRef: 'SYDLE-5337',
+      currency: 'USD',
+      purchaseAmount: 4460,
+      paidAmount: 0,
+      openAmount: 4460,
+      paymentType: 'balance',
+      paymentStatus: 'open',
+      dueDate: '2026-06-18',
+    });
+    expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T20:20:31.914Z');
+  });
+
   it('redacts sensitive keys from raw payload snapshots', () => {
     const result = normalizeSydlePayment({
       codigoPagamento: 'PAY-123',

@@ -106,6 +106,10 @@ SYDLE a cada 15 minutos. Todas as rotas `/api/sydle/*` exigem usuario
 administrador. A sincronizacao real depende das variaveis `SYDLE_*`; sem
 configuracao, o job registra `skipped`.
 
+O modo real validado para Sydle One usa `SYDLE_SOURCE_TYPE=sydle_one_class`,
+login `sys/auth/signIn` e `POST _classId/{SYDLE_CLASS_ID}/_search`. A classe de
+pagamento internacional validada e `68bf1179b042c72f03993928`.
+
 Endpoints:
 
 - `GET /api/sydle/payments-report` admin-only

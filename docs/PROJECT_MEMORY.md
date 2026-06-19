@@ -148,11 +148,21 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
 - Matching financeiro nao deve conciliar automaticamente com invoice/PI/pedido
   isolado; exige processo exato, compra forte ou evidencias combinadas.
 - `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns.
+- Em 2026-06-19, a fonte real Sydle One foi validada via
+  `SYDLE_SOURCE_TYPE=sydle_one_class`: login `sys/auth/signIn`, cookie de
+  sessao e `POST /api/1/main/_classId/68bf1179b042c72f03993928/_search`.
+- A classe `68bf1179b042c72f03993928` (`Solicitacao de Pagamento
+Internacional/current`) retornou 14 solicitacoes e `paymentData[]`; o portal
+  achata cada parcela em linha financeira com `externalId`
+  `sydle-one:{requestId}:{paymentId}`.
+- O usuario/API atual consegue resolver ticket, status e moeda; formularios
+  `InternationalPaymentOpenForm` e `RequestData` retornaram 403, entao
+  fornecedor/PI/invoice dependem de permissao adicional ou visao SYDLE.
 - `scripts/deploy.sh` bloqueia deploy se `SYDLE_SYNC_ENABLED=true`, salvo
   rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
-- Sync real fica desligado ate preencher `SYDLE_SYNC_ENABLED=true`,
-  `SYDLE_BASE_URL`, `SYDLE_API_TOKEN`, identificador estavel de pagamento e
-  contrato do endpoint no SOPS/env.
+- Sync real usa SOPS/env com `SYDLE_SYNC_ENABLED=true`,
+  `SYDLE_SOURCE_TYPE=sydle_one_class`, `SYDLE_BASE_URL`, `SYDLE_USER`,
+  `SYDLE_PASSWORD`, `SYDLE_CLASS_ID` e `SYDLE_DATE_FIELD`.
 
 ## Integracao Google Drive
 
@@ -172,8 +182,9 @@ Evidencias:
 - `apps/api/src/modules/sydle`
 - `apps/web/src/features/sydle-payments/SydlePaymentsPage.tsx`
 
-Grau de confianca: alto para a arquitetura interna; medio para o contrato de
-extracao externa, pois o payload real da SYDLE ainda nao foi fornecido.
+Grau de confianca: alto para a arquitetura interna e para a classe Sydle One
+validada; medio para campos complementares de formulario, pois a API atual
+retornou 403 para essas referencias.
 
 ## IA E Harness
 

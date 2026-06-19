@@ -202,7 +202,7 @@ SYDLE_SYNC_REMOTE="$(
 case "${SYDLE_SYNC_REMOTE}" in
   true|1|yes)
     if [[ "${ALLOW_SYDLE_SYNC_DEPLOY}" != "1" ]]; then
-      error "SYDLE_SYNC_ENABLED=true in remote .env. Deploy blocked until SYDLE contract, stable payment ID, payload mapping and finance UAT are approved."
+      error "SYDLE_SYNC_ENABLED=true in remote .env. Deploy blocked until the real SYDLE rollout is explicitly approved for this release."
       error "Set ALLOW_SYDLE_SYNC_DEPLOY=1 only for the approved real SYDLE rollout."
       notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: SYDLE sync enabled without rollout approval"
       exit 1
