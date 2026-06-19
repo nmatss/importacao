@@ -26,7 +26,7 @@ const report = {
       processId: null,
       matchStatus: 'unmatched',
       matchScore: null,
-      matchReason: null,
+      matchReason: 'invoice,supplier,amount',
       processCode: 'IM001',
       purchaseRef: 'PO-1',
       purchaseOrder: null,
@@ -36,19 +36,19 @@ const report = {
       brand: 'puket',
       currency: 'USD',
       purchaseAmount: '100',
-      paidAmount: '0',
-      openAmount: '100',
+      paidAmount: '40',
+      openAmount: '60',
       paymentType: 'deposit',
       paymentStatus: 'open',
       dueDate: '2026-06-10',
-      paidAt: null,
+      paidAt: '2026-06-11',
       scheduledAt: null,
-      exchangeRate: null,
-      amountBrl: null,
-      bankName: null,
-      contractNumber: null,
-      remittanceId: null,
-      sourceUpdatedAt: null,
+      exchangeRate: '5.4321',
+      amountBrl: '543.21',
+      bankName: 'Banco ABC',
+      contractNumber: 'CON-1',
+      remittanceId: 'REM-1',
+      sourceUpdatedAt: '2026-06-11T12:00:00.000Z',
       syncedAt: '2026-06-10T12:00:00.000Z',
       portalProcessCode: null,
       portalBrand: null,
@@ -75,7 +75,22 @@ const summary = {
     paymentsPath: '/payments',
     pageSize: 50,
   },
-  lastRun: null,
+  lastRun: {
+    id: 7,
+    status: 'skipped',
+    trigger: 'cron',
+    startedAt: '2026-06-10T12:00:00.000Z',
+    completedAt: '2026-06-10T12:00:01.000Z',
+    duration: 1,
+    fetched: 0,
+    created: 0,
+    updated: 0,
+    matched: 0,
+    unmatched: 0,
+    errors: 0,
+    errorMessage: null,
+    metadata: null,
+  },
 };
 
 function renderPage(role: 'admin' | 'analyst' = 'admin') {
@@ -110,7 +125,19 @@ describe('SydlePaymentsPage', () => {
   it('formats date-only due dates without timezone shifting the day', () => {
     renderPage();
 
-    expect(screen.getByText('10/06/2026')).toBeInTheDocument();
+    expect(screen.getAllByText('10/06/2026').length).toBeGreaterThan(0);
+  });
+
+  it('shows SYDLE financial details that are available in the report payload', () => {
+    renderPage();
+
+    expect(screen.getAllByText('Banco ABC').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('CON-1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Remessa REM-1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('PTAX 5,4321').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('R$ 543,21').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('invoice,supplier,amount').length).toBeGreaterThan(0);
+    expect(screen.getByText('Ignorada')).toBeInTheDocument();
   });
 
   it('blocks the report for analysts before enabling API queries', () => {

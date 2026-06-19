@@ -52,7 +52,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       { to: '/importacao/pre-cons', label: 'Pré-Conferência', icon: ClipboardList },
       {
         to: '/importacao/compras-pagamentos',
-        label: 'Compras e Pagamentos',
+        label: 'Compras/Pagamentos SYDLE',
         icon: ReceiptText,
         adminOnly: true,
       },

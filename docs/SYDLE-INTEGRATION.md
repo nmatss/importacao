@@ -15,11 +15,14 @@ Implementado no portal:
 - Modulo API Node em `apps/api/src/modules/sydle`.
 - Tabelas `sydle_purchase_payments` e `sydle_sync_runs`.
 - Job agendado `sydle-sync` em `*/15 * * * *`.
-- Tela web `/importacao/compras-pagamentos`.
+- Tela web `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
+  Compras/Pagamentos SYDLE` e atalho no portal para administradores.
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
 - Rotas backend SYDLE e tela web restritas a administradores.
 - Sync manual admin-only em `/api/sydle/sync-now`.
 - Normalizador tolerante a campos comuns em PT-BR e ingles.
+- `scripts/deploy.sh` bloqueia deploy quando `SYDLE_SYNC_ENABLED=true`, salvo
+  rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
 Nao implementado por falta de contrato externo:
 
@@ -52,10 +55,14 @@ SYDLE_TIMEOUT_MS=30000
 Para ativar a integracao real:
 
 1. Confirmar contrato/API/exportacao com o responsavel SYDLE.
-2. Preencher variaveis no `.env.sops.yaml`.
-3. Executar deploy oficial.
-4. Rodar sync manual em `/importacao/compras-pagamentos`.
-5. Conferir `sydle_sync_runs`, totais do relatorio e conciliacao com processos.
+2. Confirmar identificador estavel de pagamento, campo incremental, paginacao e
+   payload sanitizado para fixture de teste.
+3. Preencher variaveis no `.env.sops.yaml`.
+4. Executar deploy oficial com `ALLOW_SYDLE_SYNC_DEPLOY=1` apenas no rollout
+   aprovado.
+5. Rodar sync manual em `/importacao/compras-pagamentos`.
+6. Conferir `sydle_sync_runs`, totais do relatorio e conciliacao com processos.
+7. Validar amostra com financeiro/comex antes de manter o job real ligado.
 
 ## Contrato Esperado
 
@@ -153,7 +160,12 @@ Rotas:
 
 Tela:
 
-- `/importacao/compras-pagamentos` admin-only
+- `/importacao/compras-pagamentos` admin-only.
+- Menu: `Importacao > Operacional > Compras/Pagamentos SYDLE`.
+- Portal: atalho `Pagamentos SYDLE` para usuarios admin.
+- Tabela/mobile exibem compra, fornecedor, PI, invoice, status, valores USD,
+  cambio, BRL, banco, contrato, remessa, vencimento, pagamento/agendamento,
+  conciliacao, motivo de match e timestamps SYDLE/Portal.
 
 Checklist de validacao operacional:
 

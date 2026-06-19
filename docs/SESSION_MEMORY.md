@@ -37,9 +37,16 @@ Resultado:
   transacional; fallback de `externalId` prioriza referencias de negocio
   estaveis e tipo de parcela, sem vencimento/fornecedor/marca; rotas API de
   relatorio/export/sync ganharam cobertura.
+- SYDLE UI/operacao: relatorio admin-only disponivel em
+  `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
+Compras/Pagamentos SYDLE` e atalho no portal para admins; tabela/mobile
+  exibem cambio, BRL, banco, contrato, remessa, datas de pagamento/agendamento,
+  motivo de conciliacao e filtros por atualizacao da fonte.
 - Release: `scripts/deploy.sh` valida a rede externa `ia-local-net`, executa
   `cert-volumes-init` explicitamente antes do restart com `--no-deps`, e a
-  imagem API remove `npm`/`npx` do runtime final.
+  imagem API remove `npm`/`npx` do runtime final. O deploy tambem bloqueia
+  `SYDLE_SYNC_ENABLED=true` ate rollout financeiro aprovado com
+  `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
 Testes direcionados:
 
@@ -60,8 +67,9 @@ apps/cert-api`, compileall Python, shell checks, compose prod config, npm
 Pendencias:
 
 - Merge para `master` antes de deploy; `scripts/deploy.sh` exige master limpo.
-- SYDLE segue dependente de contrato/API/payload real, credenciais e UAT
-  financeiro; para dados reais, e bloqueador externo critico.
+- SYDLE segue dependente de contrato/API/payload real, identificador estavel de
+  pagamento, credenciais e UAT financeiro; para dados reais, e bloqueador
+  externo critico.
 - Definir SLA de frescor para `cert_stock` antes de tratar relatorio de estoque
   como 100% operacional.
 

@@ -136,14 +136,23 @@ Estado:
 - Sync automatico agendado a cada 15 minutos.
 - Rotas `/api/sydle/*` e tela `/importacao/compras-pagamentos` restritas a
   administradores.
+- A tela tambem aparece no menu `Importacao > Operacional >
+  Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
+  administradores.
+- A UI do relatorio deve expor os campos financeiros relevantes recebidos da
+  SYDLE: cambio, valor BRL, banco, contrato, remessa, datas de
+  pagamento/agendamento, motivo de conciliacao e timestamps SYDLE/Portal.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor.
 - Matching financeiro nao deve conciliar automaticamente com invoice/PI/pedido
   isolado; exige processo exato, compra forte ou evidencias combinadas.
 - `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns.
+- `scripts/deploy.sh` bloqueia deploy se `SYDLE_SYNC_ENABLED=true`, salvo
+  rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 - Sync real fica desligado ate preencher `SYDLE_SYNC_ENABLED=true`,
-  `SYDLE_BASE_URL`, `SYDLE_API_TOKEN` e contrato do endpoint no SOPS/env.
+  `SYDLE_BASE_URL`, `SYDLE_API_TOKEN`, identificador estavel de pagamento e
+  contrato do endpoint no SOPS/env.
 
 ## Integracao Google Drive
 

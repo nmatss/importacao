@@ -135,6 +135,19 @@ const matchLabels: Record<MatchStatus, string> = {
   unmatched: 'Sem vínculo',
 };
 
+const syncStatusLabels: Record<string, string> = {
+  running: 'Em execução',
+  success: 'Concluída',
+  partial: 'Parcial',
+  failed: 'Falhou',
+  skipped: 'Ignorada',
+};
+
+function syncStatusLabel(status: string | null | undefined): string {
+  if (!status) return 'sem dados';
+  return syncStatusLabels[status] ?? status;
+}
+
 function compactCurrency(value: number, currency = 'USD'): string {
   if (!Number.isFinite(value)) return formatCurrency(0, currency);
   if (Math.abs(value) >= 1_000_000) return `${currency} ${(value / 1_000_000).toFixed(1)}M`;
@@ -255,6 +268,8 @@ export function SydlePaymentsPage() {
   const [matchStatus, setMatchStatus] = useState('');
   const [dueFrom, setDueFrom] = useState('');
   const [dueTo, setDueTo] = useState('');
+  const [updatedFrom, setUpdatedFrom] = useState('');
+  const [updatedTo, setUpdatedTo] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const limit = 50;
@@ -271,8 +286,22 @@ export function SydlePaymentsPage() {
     if (matchStatus) params.set('matchStatus', matchStatus);
     if (dueFrom) params.set('dueFrom', dueFrom);
     if (dueTo) params.set('dueTo', dueTo);
+    if (updatedFrom) params.set('updatedFrom', updatedFrom);
+    if (updatedTo) params.set('updatedTo', updatedTo);
     return params;
-  }, [brand, dueFrom, dueTo, matchStatus, page, paymentStatus, paymentType, search, supplier]);
+  }, [
+    brand,
+    dueFrom,
+    dueTo,
+    matchStatus,
+    page,
+    paymentStatus,
+    paymentType,
+    search,
+    supplier,
+    updatedFrom,
+    updatedTo,
+  ]);
 
   const summaryParams = useMemo(() => {
     const params = new URLSearchParams(queryParams);
@@ -309,7 +338,16 @@ export function SydlePaymentsPage() {
   const rows = report?.data ?? [];
   const pagination = report?.pagination;
   const hasFilters =
-    search || supplier || brand || paymentStatus || paymentType || matchStatus || dueFrom || dueTo;
+    search ||
+    supplier ||
+    brand ||
+    paymentStatus ||
+    paymentType ||
+    matchStatus ||
+    dueFrom ||
+    dueTo ||
+    updatedFrom ||
+    updatedTo;
 
   function resetPageAnd(setter: (value: string) => void, value: string) {
     setter(value);
@@ -325,6 +363,8 @@ export function SydlePaymentsPage() {
     setMatchStatus('');
     setDueFrom('');
     setDueTo('');
+    setUpdatedFrom('');
+    setUpdatedTo('');
     setPage(1);
   }
 
@@ -500,7 +540,7 @@ export function SydlePaymentsPage() {
           <Filter className="h-4 w-4" />
           Filtros
         </div>
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-8">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-10">
           <label className="xl:col-span-2">
             <span className="mb-1 block text-xs font-medium text-slate-500">Busca</span>
             <div className="relative">
@@ -597,6 +637,24 @@ export function SydlePaymentsPage() {
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             />
           </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-slate-500">Atual. início</span>
+            <input
+              type="date"
+              value={updatedFrom}
+              onChange={(event) => resetPageAnd(setUpdatedFrom, event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            />
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-slate-500">Atual. fim</span>
+            <input
+              type="date"
+              value={updatedTo}
+              onChange={(event) => resetPageAnd(setUpdatedTo, event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            />
+          </label>
         </div>
         {hasFilters && (
           <button
@@ -622,7 +680,7 @@ export function SydlePaymentsPage() {
         <span>
           Status:{' '}
           <strong className="text-slate-900 dark:text-slate-100">
-            {summary?.lastRun?.status ?? 'sem dados'}
+            {syncStatusLabel(summary?.lastRun?.status)}
           </strong>
         </span>
       </div>
@@ -641,7 +699,7 @@ export function SydlePaymentsPage() {
         <>
           <div className="hidden overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800 md:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[1280px] w-full divide-y divide-slate-200 dark:divide-slate-700">
+              <table className="min-w-[1680px] w-full divide-y divide-slate-200 dark:divide-slate-700">
                 <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
                     {[
@@ -654,6 +712,9 @@ export function SydlePaymentsPage() {
                       'Pago',
                       'Saldo',
                       'Vencimento',
+                      'Câmbio/BRL',
+                      'Banco',
+                      'Contrato',
                       'Conciliação',
                       'Atualização',
                     ].map((label) => (
@@ -718,10 +779,44 @@ export function SydlePaymentsPage() {
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
                           {dateLabel(row.dueDate)}
                         </td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-slate-700 dark:text-slate-300">
+                          <div>
+                            {row.exchangeRate
+                              ? `PTAX ${Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}`
+                              : '--'}
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {money(row.amountBrl, 'BRL')}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                          <div className="max-w-[180px] truncate">{row.bankName || '--'}</div>
+                          <div className="text-xs text-slate-400">
+                            {row.paidAt
+                              ? `Pago ${dateLabel(row.paidAt)}`
+                              : row.scheduledAt
+                                ? `Ag. ${dateLabel(row.scheduledAt)}`
+                                : '--'}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                          <div className="max-w-[150px] truncate">{row.contractNumber || '--'}</div>
+                          <div className="text-xs text-slate-400">
+                            Remessa {row.remittanceId || '--'}
+                          </div>
+                        </td>
                         <td className="px-4 py-3">
                           <Badge className={matchClass(row.matchStatus)}>
                             {matchLabels[row.matchStatus]}
                           </Badge>
+                          {row.matchReason && (
+                            <div
+                              className="mt-1 max-w-[220px] truncate text-xs text-slate-500 dark:text-slate-400"
+                              title={row.matchReason}
+                            >
+                              {row.matchReason}
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           <div>
@@ -778,12 +873,51 @@ export function SydlePaymentsPage() {
                       </span>
                     </div>
                     <div>
+                      <span className="block text-xs text-slate-500">Pago</span>
+                      <span className="font-semibold text-slate-900 dark:text-slate-100">
+                        {money(row.paidAmount, row.currency)}
+                      </span>
+                    </div>
+                    <div>
                       <span className="block text-xs text-slate-500">Saldo</span>
                       <span className="font-semibold text-slate-900 dark:text-slate-100">
                         {money(row.openAmount, row.currency)}
                       </span>
                     </div>
+                    <div>
+                      <span className="block text-xs text-slate-500">Vencimento</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {dateLabel(row.dueDate)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-slate-500">BRL</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {money(row.amountBrl, 'BRL')}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-slate-500">Banco</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {row.bankName || '--'}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="block text-xs text-slate-500">Contrato</span>
+                      <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {row.contractNumber || row.remittanceId || '--'}
+                      </span>
+                    </div>
                   </div>
+                  {row.matchReason && (
+                    <p className="mt-3 line-clamp-2 text-xs text-slate-500">
+                      Motivo: {row.matchReason}
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-slate-500">
+                    SYDLE {row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--'} ·
+                    Portal {row.syncedAt ? formatDateTime(row.syncedAt) : '--'}
+                  </p>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <Badge className={matchClass(row.matchStatus)}>
                       {matchLabels[row.matchStatus]}
@@ -845,7 +979,7 @@ export function SydlePaymentsPage() {
                 className="flex flex-col gap-1 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"
               >
                 <span className="font-medium text-slate-800 dark:text-slate-200">
-                  #{run.id} · {run.status} · {formatDateTime(run.startedAt)}
+                  #{run.id} · {syncStatusLabel(run.status)} · {formatDateTime(run.startedAt)}
                 </span>
                 <span className="text-xs text-slate-500">
                   {run.fetched ?? 0} lidos · {run.created ?? 0} novos · {run.updated ?? 0}{' '}

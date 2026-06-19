@@ -291,7 +291,7 @@ export function PortalPage() {
                     Importação
                   </h2>
                   <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                    Processos, documentos, validação, câmbios e follow-up
+                    Processos, documentos, validação, câmbios, pagamentos SYDLE e follow-up
                   </p>
                 </div>
               </div>
@@ -333,6 +333,13 @@ export function PortalPage() {
               <QuickLink to="/importacao/processos/novo" icon={Plus} label="Novo" />
               <QuickLink to="/importacao/processos" icon={Eye} label="Processos" />
               <QuickLink to="/importacao/follow-up" icon={CalendarClock} label="Follow-Up" />
+              {user?.role === 'admin' && (
+                <QuickLink
+                  to="/importacao/compras-pagamentos"
+                  icon={FileBarChart}
+                  label="Pagamentos SYDLE"
+                />
+              )}
             </div>
           </div>
 

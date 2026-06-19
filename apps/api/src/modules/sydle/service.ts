@@ -252,7 +252,7 @@ export const sydleService = {
           },
         });
 
-        auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
+        await auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
 
         if (trigger === 'manual') {
           alertService
@@ -282,7 +282,7 @@ export const sydleService = {
           errorMessage: message,
           metadata: { failure: message },
         });
-        auditService.log(userId, 'sydle_sync_failed', 'sydle', run.id, { message }, null);
+        await auditService.log(userId, 'sydle_sync_failed', 'sydle', run.id, { message }, null);
         throw Object.assign(new Error(message), { syncRun: completed });
       }
     });

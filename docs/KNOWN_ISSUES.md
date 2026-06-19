@@ -68,6 +68,11 @@ Descricao:
   com overlap, lock transacional de sync, rotas restritas a admin, redaction de
   `raw_payload`, export CSV paginado, ID externo derivado de referencias de
   negocio e match por todos identificadores conhecidos.
+- O relatorio operacional esta disponivel para administradores em
+  `/importacao/compras-pagamentos` e no menu `Importacao > Operacional >
+Compras/Pagamentos SYDLE`, mas a sincronizacao real permanece desabilitada.
+- `scripts/deploy.sh` aborta se `SYDLE_SYNC_ENABLED=true` no `.env` remoto,
+  salvo rollout aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
 Evidencias:
 
@@ -82,13 +87,14 @@ Impacto:
 - O risco restante e externo: sem contrato/payload real nao ha garantia sobre
   nomes de campo, semantica de status, cursor/paginacao oficial e timezone.
 - Para go-live com dados financeiros reais, isto e bloqueador externo critico:
-  exige contrato/API/exportacao oficial, credenciais reais e UAT financeiro com
-  amostra conciliada.
+  exige contrato/API/exportacao oficial, identificador estavel de pagamento,
+  credenciais reais e UAT financeiro com amostra conciliada.
 
 Status:
 
-- Aberto. Requer contrato/API/exportacao real da SYDLE, payload sanitizado,
-  credenciais em SOPS e teste de UAT com amostra conciliada pelo financeiro.
+- Aberto. Requer contrato/API/exportacao real da SYDLE, identificador estavel de
+  pagamento, payload sanitizado, credenciais em SOPS e teste de UAT com amostra
+  conciliada pelo financeiro.
 
 ## MEDIO - Pasta Raiz Do Google Drive Ausente Em Producao
 

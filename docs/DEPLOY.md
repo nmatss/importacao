@@ -36,22 +36,24 @@ O script:
    e logs remotos.
 8. Gera `.env` remoto via SOPS + age a partir de `.env.sops.yaml`; se falhar,
    o deploy aborta para evitar subir com segredo remoto obsoleto.
-9. Renderiza `infra/alertmanager/alertmanager.yml` a partir de
-   `infra/alertmanager/alertmanager.webhook.yml.template` quando
-   `ALERTMANAGER_WEBHOOK_URL` esta configurado; se estiver vazio, mantem o
-   receiver `noop`.
-10. Valida `docker compose -f docker-compose.prod.yml config --quiet` no
+9. Bloqueia deploy se o `.env` remoto estiver com `SYDLE_SYNC_ENABLED=true`,
+   salvo rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
+10. Renderiza `infra/alertmanager/alertmanager.yml` a partir de
+    `infra/alertmanager/alertmanager.webhook.yml.template` quando
+    `ALERTMANAGER_WEBHOOK_URL` esta configurado; se estiver vazio, mantem o
+    receiver `noop`.
+11. Valida `docker compose -f docker-compose.prod.yml config --quiet` no
     servidor e confirma a existencia da rede externa `ia-local-net` antes de
     migrations/restart.
-11. Aplica migrations pendentes e aborta se falharem.
-12. Executa `cert-volumes-init` explicitamente para corrigir ownership dos
+12. Aplica migrations pendentes e aborta se falharem.
+13. Executa `cert-volumes-init` explicitamente para corrigir ownership dos
     volumes `cert-reports` e `cert-certs` para o usuario 1001 da cert-api,
     mesmo com o restart principal usando `--no-deps`.
-13. Rebuilda `api`, `web` e `cert-api`.
-14. Executa health check da API, readiness do `cert-api` e health do `web`.
-15. Atualiza Prometheus/Alertmanager/Grafana para carregar configuracoes novas.
-16. Grava `REVISION` com o SHA implantado.
-17. Faz rollback de codigo se health falhar.
+14. Rebuilda `api`, `web` e `cert-api`.
+15. Executa health check da API, readiness do `cert-api` e health do `web`.
+16. Atualiza Prometheus/Alertmanager/Grafana para carregar configuracoes novas.
+17. Grava `REVISION` com o SHA implantado.
+18. Faz rollback de codigo se health falhar.
 
 Evidencia:
 
@@ -87,6 +89,10 @@ Requisito de segredo:
 - `ALERTMANAGER_WEBHOOK_URL` e opcional, mas se existir deve apontar para um
   bridge compatível com payload nativo do Alertmanager, nao diretamente para
   Google Chat.
+- `SYDLE_SYNC_ENABLED` deve permanecer `false` para go-live sem contrato/API
+  real da SYDLE. O deploy aborta se encontrar `true`, a menos que
+  `ALLOW_SYDLE_SYNC_DEPLOY=1` seja usado em um rollout aprovado apos UAT
+  financeiro com identificador estavel de pagamento e payload mapeado.
 
 ## Exposicao HTTP/TLS
 

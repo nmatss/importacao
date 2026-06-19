@@ -14,6 +14,7 @@
 #   HEALTH_ENDPOINT       API health URL (default: http://localhost:3050/health/ready)
 #   WEB_HEALTH_ENDPOINT   Web health URL (default: http://localhost:8085/)
 #   PUBLIC_WEB_HEALTH_ENDPOINT Optional public HTTPS/frontend URL to validate
+#   ALLOW_SYDLE_SYNC_DEPLOY Set to "1" to allow SYDLE_SYNC_ENABLED=true after UAT
 #   HEALTH_RETRIES        Health check retries (default: 30)
 #   HEALTH_INTERVAL       Seconds between retries (default: 2)
 #   SKIP_BACKUP           Set to "1" to skip DB backup (NOT recommended)
@@ -30,6 +31,7 @@ COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-http://localhost:3050/health/ready}"
 WEB_HEALTH_ENDPOINT="${WEB_HEALTH_ENDPOINT:-http://localhost:8085/}"
 PUBLIC_WEB_HEALTH_ENDPOINT="${PUBLIC_WEB_HEALTH_ENDPOINT:-}"
+ALLOW_SYDLE_SYNC_DEPLOY="${ALLOW_SYDLE_SYNC_DEPLOY:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
 HEALTH_INTERVAL="${HEALTH_INTERVAL:-2}"
 LOG_FILE="deploy.log"
@@ -184,6 +186,32 @@ else
   notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: .env.sops.yaml missing"
   exit 1
 fi
+
+info "Checking SYDLE sync rollout flag..."
+SYDLE_SYNC_REMOTE="$(
+  ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && awk -F= '
+    BEGIN { IGNORECASE = 1 }
+    /^[[:space:]]*SYDLE_SYNC_ENABLED[[:space:]]*=/ {
+      v = \$2
+      gsub(/[[:space:]\"'\'']/, \"\", v)
+      print tolower(v)
+    }
+  ' .env 2>/dev/null | tail -n 1"
+)"
+case "${SYDLE_SYNC_REMOTE}" in
+  true|1|yes)
+    if [[ "${ALLOW_SYDLE_SYNC_DEPLOY}" != "1" ]]; then
+      error "SYDLE_SYNC_ENABLED=true in remote .env. Deploy blocked until SYDLE contract, stable payment ID, payload mapping and finance UAT are approved."
+      error "Set ALLOW_SYDLE_SYNC_DEPLOY=1 only for the approved real SYDLE rollout."
+      notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: SYDLE sync enabled without rollout approval"
+      exit 1
+    fi
+    warn "SYDLE_SYNC_ENABLED=true allowed by ALLOW_SYDLE_SYNC_DEPLOY=1."
+    ;;
+  *)
+    success "SYDLE sync remains disabled for this deploy."
+    ;;
+esac
 
 info "[4/8] Rendering Alertmanager config..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && python3 -" <<'PY'

@@ -77,6 +77,15 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
     parcela, sem depender de vencimento/fornecedor/marca, antes de recorrer ao
     hash do payload completo.
   - Rotas API de relatorio/export/sync ganharam cobertura de autorizacao e CSV.
+  - Relatorio admin-only esta acessivel em
+    `/importacao/compras-pagamentos`, pelo menu `Importacao > Operacional >
+Compras/Pagamentos SYDLE` e por atalho no portal para administradores.
+  - Tela agora exibe campos financeiros vindos da SYDLE que ja estavam no
+    contrato interno: cambio, valor BRL, banco, contrato, remessa, datas de
+    pagamento/agendamento, motivo de conciliacao e filtros por atualizacao da
+    fonte.
+  - `scripts/deploy.sh` bloqueia deploy quando `SYDLE_SYNC_ENABLED=true`,
+    exceto rollout aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
 ## Testes Direcionados Ja Executados
 
@@ -91,8 +100,8 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
 
 - Branch precisa ser mesclada em `master` limpo e sincronizado antes de
   `scripts/deploy.sh`.
-- SYDLE segue aguardando contrato/API/payload real e credenciais em SOPS para
-  habilitar sync real.
+- SYDLE segue aguardando contrato/API/payload real, identificador estavel de
+  pagamento, credenciais em SOPS e UAT financeiro para habilitar sync real.
 - Destinatarios operacionais devem ser confirmados/cadastrados na tela, ou
   `COMMUNICATION_ALLOWED_RECIPIENTS` deve ser preenchido como fallback.
 - HTTPS publico deve terminar no reverse proxy externo; o compose publica o web
