@@ -78,7 +78,10 @@ export function ProformasTab({ processId }: { processId: string }) {
   if ((isError || error) && !data) {
     return <ErrorState message="Erro ao carregar proformas." onRetry={() => refetch()} />;
   }
-  if (!data || data.proformaCount === 0) {
+  // Guard every array/object the payload "promises" but may omit on a partial
+  // or stale read — the same unguarded-array class that crashed the espelho.
+  const proformas = data?.proformas ?? [];
+  if (!data || data.proformaCount === 0 || proformas.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <FileText className="h-10 w-10 text-slate-300 dark:text-slate-700 mb-3" />
@@ -115,7 +118,7 @@ export function ProformasTab({ processId }: { processId: string }) {
             Itens (soma)
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            {data.totals.itemCount}
+            {data.totals?.itemCount ?? 0}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
@@ -123,12 +126,17 @@ export function ProformasTab({ processId }: { processId: string }) {
             FOB Total (PIs)
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
-            ${data.totals.totalFobValue.toFixed(2)}
+            ${(data.totals?.totalFobValue ?? 0).toFixed(2)}
           </p>
         </div>
       </div>
 
-      {data.proformas.map((pi) => (
+      {proformas.map((pi) => {
+        // Guard the items array at render: a Proforma whose extraction is still
+        // pending (or failed) can arrive with items undefined — accessing
+        // .length/.map directly would crash the whole tab.
+        const its = pi.items ?? [];
+        return (
         <div
           key={pi.documentId}
           className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden"
@@ -191,7 +199,7 @@ export function ProformasTab({ processId }: { processId: string }) {
             </div>
           </div>
 
-          {pi.items.length > 0 ? (
+          {its.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
@@ -205,7 +213,7 @@ export function ProformasTab({ processId }: { processId: string }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {pi.items.map((it, i) => (
+                  {its.map((it, i) => (
                     <tr
                       key={i}
                       className="border-b last:border-b-0 border-slate-100 dark:border-slate-800"
@@ -240,7 +248,8 @@ export function ProformasTab({ processId }: { processId: string }) {
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

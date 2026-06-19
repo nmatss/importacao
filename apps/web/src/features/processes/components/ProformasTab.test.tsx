@@ -140,4 +140,18 @@ describe('ProformasTab', () => {
 
     expect(screen.getByText(/Itens nao extraidos desta Proforma/i)).toBeInTheDocument();
   });
+
+  it('does not crash and shows the empty state when a proforma has undefined items', () => {
+    // A Proforma still being extracted (or a partial/stale read) can arrive
+    // with items undefined. The render-time guard must treat it as empty
+    // instead of crashing on pi.items.length / pi.items.map.
+    const proforma = makeProforma({ confidence: 0.9 });
+    // Force the unguarded shape the backend can emit before extraction lands.
+    delete (proforma as { items?: unknown }).items;
+    mockAggregate([proforma]);
+
+    expect(() => render(<ProformasTab processId="1" />)).not.toThrow();
+
+    expect(screen.getByText(/Itens nao extraidos desta Proforma/i)).toBeInTheDocument();
+  });
 });

@@ -688,21 +688,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-4 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
-          <CheckCircle className="h-3.5 w-3.5" /> {counts.match} conformes
-        </span>
-        {counts.warning > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700">
-            <AlertTriangle className="h-3.5 w-3.5" /> {counts.warning} atencoes
-          </span>
-        )}
-        {counts.divergent > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700">
-            <XCircle className="h-3.5 w-3.5" /> {counts.divergent} falhas
-          </span>
-        )}
-      </div>
+      {/*
+        The per-status counts already live on the filter buttons above, so the
+        standalone summary-badge strip was a second, parallel count system that
+        duplicated (and could visually contradict) them. Removed to leave a
+        single source of counts per panel and avoid confusing the operator.
+      */}
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600 flex items-center justify-between gap-2">

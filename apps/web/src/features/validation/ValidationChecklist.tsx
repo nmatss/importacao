@@ -640,23 +640,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
           </div>
         )}
 
-        {/* Summary badges */}
-        {checks && checks.length > 0 && (
-          <div className="flex items-center gap-2 ml-auto text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
-              <CheckCircle className="h-3 w-3" /> {passedCount}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-2.5 py-1 font-medium text-primary-700">
-              <Wrench className="h-3 w-3" /> {acceptedCount}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2.5 py-1 font-medium text-danger-700">
-              <XCircle className="h-3 w-3" /> {openFailedCount}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
-              <AlertTriangle className="h-3 w-3" /> {openWarningCount}
-            </span>
-          </div>
-        )}
+        {/*
+          The status counts already live on the filter buttons above, so the
+          duplicate summary-badge strip here was a parallel count system that
+          overlapped with both those buttons and the Cruzamento panel below.
+          Removed to keep a single, unambiguous set of counts per panel.
+        */}
       </div>
 
       {/* Checks grid */}
