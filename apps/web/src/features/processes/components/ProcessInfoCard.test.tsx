@@ -116,4 +116,52 @@ describe('ProcessInfoCard', () => {
     expect(screen.queryByText('FORNECEDOR ESPELHO')).not.toBeInTheDocument();
     expect(screen.getAllByTitle('Fonte: Invoice').length).toBeGreaterThanOrEqual(4);
   });
+
+  it('falls back to BL espelho summary for Data Embarque, Frete and Container', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            espelho: {
+              summary: {
+                shipmentDate: '2026-02-10T00:00:00.000Z',
+                etd: '2026-02-08T00:00:00.000Z',
+                freightValue: 3200,
+                freightCurrency: 'USD',
+                containerNumber: 'MSKU1234567',
+              },
+              items: [],
+            },
+          },
+        })}
+      />,
+    );
+
+    // Data Embarque from espelho.summary.shipmentDate (timezone-tolerant)
+    expect(screen.getByText(/0[19]\/02\/2026|10\/02\/2026/)).toBeInTheDocument();
+    // Frete formatted with the espelho currency
+    expect(screen.getByText(/3\.200,00/)).toBeInTheDocument();
+    // Container number (ISO 6346) distinct from containerType
+    expect(screen.getByText('MSKU1234567')).toBeInTheDocument();
+    expect(screen.getByText('Numero Container')).toBeInTheDocument();
+    // Labelled as sourced from Espelho
+    expect(screen.getAllByTitle('Fonte: Espelho').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('falls back to espelho.summary.etd for Data Embarque when shipmentDate is absent', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            espelho: {
+              summary: { etd: '2026-02-08T00:00:00.000Z' },
+              items: [],
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/0[78]\/02\/2026/)).toBeInTheDocument();
+  });
 });

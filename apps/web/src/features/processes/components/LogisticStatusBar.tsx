@@ -488,18 +488,47 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
   );
 }
 
+/**
+ * Read the BL espelho summary projected by the backend (build-espelho.ts).
+ * Shape: process.aiExtractedData.espelho.summary.{ etd, eta, shipmentDate, ... }
+ */
+function readEspelhoSummary(process: ImportProcess): Record<string, unknown> | null {
+  const aiData = process.aiExtractedData;
+  if (!aiData || typeof aiData !== 'object' || Array.isArray(aiData)) return null;
+  const espelho = (aiData as Record<string, unknown>).espelho;
+  if (!espelho || typeof espelho !== 'object' || Array.isArray(espelho)) return null;
+  const summary = (espelho as Record<string, unknown>).summary;
+  if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
+    return summary as Record<string, unknown>;
+  }
+  return espelho as Record<string, unknown>;
+}
+
+function asDateString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 /** Build LogisticStatusBar props from an ImportProcess object. */
 export function buildLogisticProps(process: ImportProcess): LogisticStatusBarProps {
+  const summary = readEspelhoSummary(process);
+
+  // Fall back to the BL espelho milestones so the transport cycle advances to
+  // "Em Transito" when the BL ETD is already in the past, even when the
+  // process-level etd/shipmentDate are still null (Eduarda feedback).
+  const etd = process.etd ?? asDateString(summary?.etd);
+  const eta = process.eta ?? asDateString(summary?.eta);
+  const shipmentDate = process.shipmentDate ?? asDateString(summary?.shipmentDate);
+
   return {
     processId: process.id,
     currentStatus: process.status,
     logisticStatus: process.logisticStatus,
-    etd: process.etd,
-    eta: process.eta,
+    etd,
+    eta,
     etaActual: process.etaActual,
     customsClearanceAt: process.customsClearanceAt,
     cdArrivalAt: process.cdArrivalAt,
-    shipmentDate: process.shipmentDate,
+    shipmentDate,
     customsChannel: process.customsChannel,
     diNumber: process.diNumber,
     inspectionType: process.inspectionType,

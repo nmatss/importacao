@@ -1,6 +1,5 @@
 import { DocumentComparison } from '@/features/documents/DocumentComparison';
 import { ValidationChecklist } from '@/features/validation/ValidationChecklist';
-import { FupComparisonPanel } from '@/features/validation/FupComparisonPanel';
 
 export interface ComparisonTabProps {
   processId: string;
@@ -23,13 +22,6 @@ export function ComparisonTab({ processId }: ComparisonTabProps) {
           Validação e e-mail de correção
         </h4>
         <ValidationChecklist processId={processId} />
-      </section>
-
-      <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Cruzamento entre documentos
-        </h4>
-        <FupComparisonPanel processId={processId} />
       </section>
 
       <DocumentComparison processId={processId} />

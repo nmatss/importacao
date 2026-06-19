@@ -872,10 +872,44 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       </span>
                     </div>
                   </td>
-                  <StatusCell value={row.expected} status={row.displayStatus} />
-                  <td className="px-3 py-2.5" colSpan={2} />
-                  <StatusCell value={row.actual} status={row.displayStatus} />
-                  <td className="px-3 py-2.5" />
+                  {/*
+                    Cross-document checks compare a derived expected value against
+                    what was found, not a per-document value. Render them as an
+                    explicit Esperado/Encontrado pair spanning the
+                    Invoice/PL/BL/Espelho/Sistema columns so a reader does not
+                    misread them under the document-specific headers.
+                  */}
+                  <td className="px-3 py-2.5" colSpan={5}>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                          Esperado
+                        </span>
+                        <span className="font-mono text-slate-700 dark:text-slate-300">
+                          {row.expected ?? '-'}
+                        </span>
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                          Encontrado
+                        </span>
+                        <span
+                          className={cn(
+                            'font-mono',
+                            row.displayStatus === 'divergent'
+                              ? 'text-danger-700 dark:text-danger-400 font-semibold'
+                              : row.displayStatus === 'warning'
+                                ? 'text-amber-700 dark:text-amber-400 font-medium'
+                                : row.displayStatus === 'accepted'
+                                  ? 'text-primary-700 dark:text-primary-300 font-medium'
+                                  : 'text-slate-700 dark:text-slate-300',
+                          )}
+                        >
+                          {row.actual ?? '-'}
+                        </span>
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-3 py-2.5">
                     <StatusPill status={row.displayStatus} />
                   </td>

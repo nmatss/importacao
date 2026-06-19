@@ -235,8 +235,16 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
   ]);
   const freightValue = pickValue<number | string>([
     { source: 'invoice', value: readPath(invoice, 'freightValue') as number | string | null },
+    {
+      source: 'espelho',
+      value: readPath(espelhoSummary, 'freightValue') as number | string | null,
+    },
     { source: 'processo', value: process.freightValue },
   ]);
+  const freightCurrency =
+    (readPath(invoice, 'freightCurrency') as string | null) ??
+    (readPath(espelhoSummary, 'freightCurrency') as string | null) ??
+    undefined;
   const totalBoxes = pickValue<number | string>([
     { source: 'invoice', value: readPath(invoice, 'totalBoxes') as number | string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'totalBoxes') as number | string | null },
@@ -267,9 +275,15 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
     { source: 'processo', value: process.containerType },
   ]);
+  const containerNumber = pickValue<string>([
+    { source: 'invoice', value: readPath(invoice, 'containerNumber') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'containerNumber') as string | null },
+  ]);
   const shipmentDate = pickValue<string>([
     { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
     { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
     { source: 'processo', value: process.shipmentDate },
   ]);
   const exporterAddress = pickValue<string>([
@@ -335,7 +349,11 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
           <InfoField
             icon={Truck}
             label="Frete"
-            value={freightValue.value != null ? formatCurrency(freightValue.value) : null}
+            value={
+              freightValue.value != null
+                ? formatCurrency(freightValue.value, freightCurrency)
+                : null
+            }
             source={freightValue.source}
           />
           <InfoField
@@ -368,6 +386,14 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             value={containerType.value}
             source={containerType.source}
           />
+          {containerNumber.value && (
+            <InfoField
+              icon={Box}
+              label="Numero Container"
+              value={containerNumber.value}
+              source={containerNumber.source}
+            />
+          )}
           <InfoField
             icon={CalendarDays}
             label="Data Embarque"

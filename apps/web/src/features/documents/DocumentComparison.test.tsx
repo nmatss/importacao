@@ -217,6 +217,13 @@ describe('DocumentComparison', () => {
     expect(screen.getByText(/Verificação de Portos/i)).toBeInTheDocument();
     expect(screen.getByText(/Portos divergentes/i)).toBeInTheDocument();
     expect(screen.getByText(/cruzamento/i)).toBeInTheDocument();
+    // The expected/actual values are presented with explicit
+    // Esperado/Encontrado labels rather than reusing the Invoice/Espelho
+    // document columns, so the header/value semantics match.
+    expect(screen.getByText(/^Esperado$/i)).toBeInTheDocument();
+    expect(screen.getByText(/^Encontrado$/i)).toBeInTheDocument();
+    expect(screen.getByText('Santos')).toBeInTheDocument();
+    expect(screen.getByText('Itajai')).toBeInTheDocument();
   });
 
   it('exposes the acceptance resolution note via a hover tooltip', () => {
