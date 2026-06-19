@@ -47,6 +47,13 @@ Compras/Pagamentos SYDLE` e atalho no portal para admins; tabela/mobile
   imagem API remove `npm`/`npx` do runtime final. O deploy tambem bloqueia
   `SYDLE_SYNC_ENABLED=true` ate rollout financeiro aprovado com
   `ALLOW_SYDLE_SYNC_DEPLOY=1`.
+- SOPS/deploy: primeira tentativa de deploy do SHA `49aea2a` abortou antes de
+  migrations/restart porque o compose remoto detectou
+  `GOOGLE_SHEETS_SPREADSHEET_ID` e `GRAFANA_ADMIN_PASSWORD` ausentes no SOPS.
+  Containers existentes seguiram saudaveis. O SOPS remoto e versionado foi
+  corrigido com o spreadsheet ID preservado do `cert-api` em execucao e uma nova
+  senha forte de Grafana; `docker compose -f docker-compose.prod.yml config
+--quiet` passou no servidor.
 
 Testes direcionados:
 
