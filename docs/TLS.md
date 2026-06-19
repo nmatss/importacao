@@ -13,9 +13,22 @@ host, but the `web` container does not currently mount `letsencrypt` or
 `certbot-webroot`. Do not assume the compose file alone activates HTTPS inside
 the app container.
 
+## Current Production Status - 2026-06-19
+
+- The application is deployed internally on
+  `3f36137a697fee9f4f1011bc3eace3417467d5be`.
+- Internal web health is OK at `http://127.0.0.1:8085/`.
+- The shared Traefik receives `Host: importacao.grupounico.com` over HTTP and
+  redirects to HTTPS, but it does not have an ACME certificate for that SNI.
+- Public `https://importacao.grupounico.com/` still returns `HTTP/2 502` from
+  an external `nginx` layer.
+- ACME logs showed the challenge being answered by another public IP/proxy with 404. Fix DNS/NAT/proxy ownership before declaring public go-live.
+
 ## Prerequisites
 
-- Domain A record pointing to server IP
+- Domain A record or edge proxy pointing 80/443 to the component that owns TLS.
+  If Traefik owns TLS, ACME HTTP challenge paths must reach the Traefik
+  container without interception.
 - Ports 80 and 443 open in firewall
 - Docker Compose v2
 
@@ -37,6 +50,8 @@ curl -I https://${DOMAIN}
 
 When using `scripts/deploy.sh`, set `PUBLIC_WEB_HEALTH_ENDPOINT=https://importacao.grupounico.com/`
 so the deploy validates the public HTTPS path after the container health checks.
+Do this for final go-live validation; a deploy with only internal health checks
+means the release is installed, not that public HTTPS is available.
 
 ## Optional Certbot Profile
 
@@ -79,6 +94,16 @@ docker compose -f docker-compose.prod.yml --profile tls run --rm certbot \
 ## Troubleshooting
 
 ```bash
+# Verify the app container directly on the production host
+curl -I http://127.0.0.1:8085/
+
+# Verify Traefik HTTP routing on the production host
+curl -I -H 'Host: importacao.grupounico.com' http://127.0.0.1/
+
+# Check whether Traefik has an ACME certificate entry without printing secrets
+docker exec n8n-enterprise-traefik-1 sh -lc \
+  "grep -o 'importacao.grupounico.com' /letsencrypt/acme.json | sort -u"
+
 # Check certificate status
 docker compose -f docker-compose.prod.yml run --rm certbot certbot certificates
 

@@ -2,6 +2,51 @@
 
 Ultima atualizacao: 2026-06-19
 
+## CRITICO - Go-live Publico Bloqueado Por DNS/Edge/TLS
+
+Descricao:
+
+- O deploy operacional do SHA `3f36137a697fee9f4f1011bc3eace3417467d5be`
+  concluiu em `192.168.168.124` com backup, migrations, containers e health
+  interno OK.
+- A URL publica `https://importacao.grupounico.com/` ainda retorna `HTTP/2 502`
+  com header `server: nginx`, portanto o acesso externo nao esta apto para
+  go-live.
+- O Traefik compartilhado local reconhece o Host em HTTP e redireciona para
+  HTTPS, mas nao possui certificado emitido para `importacao.grupounico.com`.
+- A validacao ACME observada no log chegou em outro IP/proxy publico
+  (`177.36.181.21`) e recebeu 404 em
+  `/.well-known/acme-challenge/*`, indicando bloqueio fora do container da
+  aplicacao.
+
+Evidencias:
+
+- `REVISION` remoto: `3f36137a697fee9f4f1011bc3eace3417467d5be`.
+- `importacao-api`, `importacao-web` e `importacao-cert-api` em estado
+  `healthy` no servidor.
+- API interna `http://127.0.0.1:3050/health/ready` retorna `status=ok`.
+- Web interna `http://127.0.0.1:8085/` retorna 200.
+- Cert-api readiness passou dentro do container em `/api/ready` com
+  `ready=True`.
+- `curl https://importacao.grupounico.com/` retorna 502 `server: nginx`.
+- HTTPS direto no Traefik por SNI falha com `tlsv1 unrecognized name`; nao ha
+  entrada de `importacao.grupounico.com` em `/letsencrypt/acme.json`.
+
+Impacto:
+
+- Usuarios externos continuam sem acesso confiavel pela URL oficial, apesar de
+  a aplicacao estar saudavel internamente.
+- O sistema nao deve ser declarado em go-live publico ate o dominio responder
+  200 em HTTPS e uma chamada API autenticavel via dominio publico funcionar.
+
+Status:
+
+- Aberto. Requer escolher e concluir uma rota:
+  1. Fazer DNS/NAT/proxy encaminhar `importacao.grupounico.com` nas portas
+     80/443 para o Traefik do servidor `192.168.168.124`, sem interceptar ACME.
+  2. Ou configurar o nginx/edge externo como dono do TLS e proxy reverso para
+     `http://192.168.168.124:8085` ou para o Traefik interno.
+
 ## ALTO - Extração De Cabeçalho, Portos E Datas Pode Depender Do Provider
 
 Descricao:

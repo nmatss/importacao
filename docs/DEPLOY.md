@@ -98,9 +98,16 @@ Requisito de segredo:
 
 - O container `web` publica `127.0.0.1:8085:80` no compose de producao. Nao
   exponha esta porta diretamente para a rede.
-- TLS publico deve terminar no Nginx externo descrito em `infra/nginx/prod.conf`
-  e `docs/TLS.md`.
+- O mesmo container entra na rede externa `n8n_enterprise_web` e declara labels
+  Traefik para `importacao.grupounico.com`.
+- A camada publica precisa ter um unico dono claro de TLS: ou o Traefik
+  compartilhado do servidor recebe o trafego 80/443 e emite ACME, ou o
+  nginx/edge externo termina TLS e faz proxy reverso para o app/Traefik.
 - Com JWT no browser, HTTP publico e bloqueador de go-live.
+- Em 2026-06-19, o deploy interno do SHA `3f36137a697f` concluiu com health
+  OK, mas `https://importacao.grupounico.com/` ainda retornava 502 de `nginx`.
+  Nao considere go-live publico concluido ate o endpoint publico responder
+  200 e uma chamada API via dominio oficial funcionar.
 
 ## Backup E Restore
 

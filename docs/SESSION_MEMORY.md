@@ -59,6 +59,25 @@ Compras/Pagamentos SYDLE` e atalho no portal para admins; tabela/mobile
   roteava `importacao.grupounico.com` para um router generico de n8n. O compose
   de producao passou a conectar o `web` na rede externa `n8n_enterprise_web` e a
   declarar labels Traefik dedicadas para `importacao.grupounico.com`.
+- Deploy operacional final: SHA `3f36137a697fee9f4f1011bc3eace3417467d5be`
+  publicado em `192.168.168.124` por `scripts/deploy.sh` em 2026-06-19
+  19:16 BRT. Backup validado em
+  `/home/nicolas/backups/importacao/importacao_2026-06-19_221502*`, migrations
+  idempotentes aplicadas, `REVISION` remoto gravado e containers
+  `importacao-api`, `importacao-web`, `importacao-cert-api`, Prometheus,
+  Grafana e Alertmanager iniciados.
+- Health pos-deploy: API interna `http://127.0.0.1:3050/health/ready`
+  retornou `status=ok` com DB/Redis OK; web interna
+  `http://127.0.0.1:8085/` retornou 200; readiness da cert-api passou dentro
+  do container em `/api/ready` com `ready=True`.
+- Bloqueio publico remanescente: `https://importacao.grupounico.com/` ainda
+  retorna `HTTP/2 502` com header `server: nginx`. O host local resolve o
+  dominio para `10.106.185.28`; o Traefik do servidor responde ao Host em HTTP
+  com 302, mas HTTPS direto por SNI falha com `tlsv1 unrecognized name` e
+  `/letsencrypt/acme.json` nao contem certificado para o dominio. Logs ACME
+  indicaram que a validacao publica chegou em `177.36.181.21` e recebeu 404 no
+  challenge. Portanto o app esta implantado internamente, mas o go-live publico
+  depende de DNS/proxy/certificado fora do compose da aplicacao.
 
 Testes direcionados:
 
@@ -78,7 +97,10 @@ apps/cert-api`, compileall Python, shell checks, compose prod config, npm
 
 Pendencias:
 
-- Merge para `master` antes de deploy; `scripts/deploy.sh` exige master limpo.
+- Go-live publico bloqueado ate `curl -fS https://importacao.grupounico.com/`
+  retornar 200 e uma chamada API via dominio publico funcionar. Corrigir
+  DNS/NAT/proxy/ACME para que `importacao.grupounico.com` chegue no Traefik do
+  servidor ou configurar o nginx/edge externo como dono do TLS e proxy reverso.
 - SYDLE segue dependente de contrato/API/payload real, identificador estavel de
   pagamento, credenciais e UAT financeiro; para dados reais, e bloqueador
   externo critico.

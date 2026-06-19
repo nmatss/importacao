@@ -24,6 +24,22 @@ husky`; a imagem API tambem precisava expor os deps do workspace para
   vulnerabilidade em pacotes globais.
   E2E de documentos tinha timeout local menor que o config global.
 
+## Status De Deploy Em Producao
+
+- SHA implantado operacionalmente:
+  `3f36137a697fee9f4f1011bc3eace3417467d5be`.
+- Deploy concluido por `scripts/deploy.sh` em 2026-06-19 19:16 BRT com backup
+  validado em `/home/nicolas/backups/importacao/importacao_2026-06-19_221502*`,
+  migrations aplicadas, `REVISION` remoto gravado e containers internos
+  saudaveis.
+- Health interno aprovado:
+  - API `http://127.0.0.1:3050/health/ready` com DB/Redis OK.
+  - Web `http://127.0.0.1:8085/` com HTTP 200.
+  - Cert-api `/api/ready` dentro do container com `ready=True`.
+- Health publico reprovado: `https://importacao.grupounico.com/` retorna
+  `HTTP/2 502` com header `server: nginx`. O bloqueio remanescente esta na
+  camada DNS/proxy/TLS externa, nao no container web nem na API.
+
 ## Alteracoes
 
 - Docker/CI/deploy:
@@ -98,8 +114,12 @@ Compras/Pagamentos SYDLE` e por atalho no portal para administradores.
 
 ## Bloqueios Para Go-live
 
-- Branch precisa ser mesclada em `master` limpo e sincronizado antes de
-  `scripts/deploy.sh`.
+- Go-live publico ainda esta bloqueado ate
+  `curl -fS https://importacao.grupounico.com/` retornar 200 e uma chamada API
+  via dominio publico funcionar. Em 2026-06-19, o dominio publico respondia por
+  uma camada `nginx` externa com 502; o Traefik local nao tinha certificado
+  ACME emitido para esse SNI porque o challenge publico era respondido por
+  outro IP/proxy com 404.
 - SYDLE segue aguardando contrato/API/payload real, identificador estavel de
   pagamento, credenciais em SOPS e UAT financeiro para habilitar sync real.
 - Destinatarios operacionais devem ser confirmados/cadastrados na tela, ou

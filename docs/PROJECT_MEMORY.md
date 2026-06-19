@@ -137,7 +137,7 @@ Estado:
 - Rotas `/api/sydle/*` e tela `/importacao/compras-pagamentos` restritas a
   administradores.
 - A tela tambem aparece no menu `Importacao > Operacional >
-  Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
+Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   administradores.
 - A UI do relatorio deve expor os campos financeiros relevantes recebidos da
   SYDLE: cambio, valor BRL, banco, contrato, remessa, datas de
@@ -202,6 +202,13 @@ Grau de confianca: alto para estado de codigo; medio para estrategia futura, poi
 - Deploy atual por `scripts/deploy.sh`.
 - O script faz backup PostgreSQL, snapshot de rollback, rsync, rebuild de `api` e `web`, migrations pendentes e health check.
 - Banco e Redis expostos apenas localmente/internamente conforme compose prod.
+- SHA `3f36137a697fee9f4f1011bc3eace3417467d5be` foi implantado com sucesso
+  operacional em 2026-06-19: backup, migrations, API/web/cert-api healthy,
+  observabilidade iniciada e `REVISION` remoto gravado.
+- O go-live publico ainda esta bloqueado: `https://importacao.grupounico.com/`
+  retornou 502 de uma camada `nginx` externa, enquanto o Traefik local nao tinha
+  certificado ACME para o SNI. Corrigir DNS/proxy/TLS antes de liberar acesso
+  externo.
 
 Evidencias:
 
