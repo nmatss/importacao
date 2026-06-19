@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -46,6 +46,8 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
 
   const issues: string[] = [];
   const warnings: string[] = [];
+  let itemPairsValidated = 0;
+  let totalPairValidated = false;
 
   // Check individual item ratios
   if (items && items.length > 0) {
@@ -59,6 +61,7 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
       const code = String(item.itemCode ?? item.code ?? 'unknown');
 
       if (gross <= 0 || net <= 0) continue;
+      itemPairsValidated++;
 
       if (gross < net) {
         impossibleCount++;
@@ -91,6 +94,7 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
 
   // Check aggregate ratio
   if (totalGross > 0 && totalNet > 0) {
+    totalPairValidated = true;
     if (totalGross < totalNet) {
       issues.push(
         `Total gross (${totalGross.toFixed(3)} kg) < total net (${totalNet.toFixed(3)} kg)`,
@@ -103,6 +107,18 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
         );
       }
     }
+  }
+
+  if (itemPairsValidated === 0 && !totalPairValidated) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: 'Pesos bruto e liquido por item ou no total',
+      actualValue: 'Nenhum par bruto/liquido valido encontrado',
+      documentsCompared: 'INV / PL',
+      message:
+        'Itens/documentos existem, mas nenhum par de peso bruto e liquido valido foi encontrado para validar as proporcoes.',
+    };
   }
 
   if (issues.length > 0) {

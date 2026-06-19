@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { extractSydleRecords, normalizeSydlePayment, parseSydleNumber } from '../normalizer.js';
+import {
+  extractSydleRecords,
+  normalizeSydlePayment,
+  parseSydleDateTime,
+  parseSydleNumber,
+  sanitizeSydleRawPayload,
+} from '../normalizer.js';
 
 describe('SYDLE payment normalizer', () => {
   it.each([
@@ -57,9 +63,52 @@ describe('SYDLE payment normalizer', () => {
     expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T10:30:00.000Z');
   });
 
+  it('parses Brazilian date-time values without losing the time component', () => {
+    const parsed = parseSydleDateTime('18/06/2026 10:10:00');
+    const result = normalizeSydlePayment({
+      codigoPagamento: 'PAY-BR-DATE',
+      ultimaAtualizacao: '18/06/2026 10:10:00',
+    });
+
+    expect(parsed?.toISOString()).toBe('2026-06-18T10:10:00.000Z');
+    expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T10:10:00.000Z');
+  });
+
   it('extracts array payloads from common API envelopes', () => {
     expect(extractSydleRecords({ data: [{ id: 1 }, { id: 2 }] })).toHaveLength(2);
     expect(extractSydleRecords({ results: [{ id: 1 }] })).toHaveLength(1);
     expect(extractSydleRecords([{ id: 1 }])).toHaveLength(1);
+  });
+
+  it('redacts sensitive keys from raw payload snapshots', () => {
+    const result = normalizeSydlePayment({
+      codigoPagamento: 'PAY-123',
+      invoice: 'INV-101',
+      apiToken: 'secret-token',
+      nested: {
+        conta: '12345-6',
+        keep: 'visible',
+        items: [{ authorization: 'Bearer abc' }],
+      },
+    });
+
+    expect(result.rawPayload).toMatchObject({
+      codigoPagamento: 'PAY-123',
+      invoice: 'INV-101',
+      apiToken: '[REDACTED]',
+      nested: {
+        conta: '[REDACTED]',
+        keep: 'visible',
+        items: [{ authorization: '[REDACTED]' }],
+      },
+    });
+  });
+
+  it('sanitizes raw payloads without mutating the source object', () => {
+    const source = { token: 'secret', keep: 'ok' };
+    const sanitized = sanitizeSydleRawPayload(source);
+
+    expect(sanitized).toEqual({ token: '[REDACTED]', keep: 'ok' });
+    expect(source).toEqual({ token: 'secret', keep: 'ok' });
   });
 });

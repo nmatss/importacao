@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## ALTO - Extração De Cabeçalho, Portos E Datas Pode Depender Do Provider
 
@@ -60,6 +60,9 @@ Descricao:
   SYDLE.
 - Enquanto `SYDLE_SYNC_ENABLED=false` ou faltarem `SYDLE_BASE_URL` /
   `SYDLE_API_TOKEN`, o job de 15 minutos registra `status=skipped`.
+- Em 2026-06-19 foram mitigados riscos internos: cursor por `sourceUpdatedAt`
+  com overlap, rotas restritas a admin, redaction de `raw_payload`, export CSV
+  paginado e match por todos identificadores conhecidos.
 
 Evidencias:
 
@@ -71,10 +74,13 @@ Impacto:
 
 - A tela e o relatorio funcionam, mas permanecem sem dados reais ate a
   configuracao da fonte SYDLE.
+- O risco restante e externo: sem contrato/payload real nao ha garantia sobre
+  nomes de campo, semantica de status, cursor/paginacao oficial e timezone.
 
 Status:
 
-- Aberto. Requer contrato/API/exportacao real da SYDLE e credenciais em SOPS.
+- Aberto. Requer contrato/API/exportacao real da SYDLE, payload sanitizado,
+  credenciais em SOPS e teste de UAT com amostra conciliada pelo financeiro.
 
 ## MEDIO - Pasta Raiz Do Google Drive Ausente Em Producao
 

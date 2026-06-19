@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, inArray, lte, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   importProcesses,
@@ -31,6 +31,10 @@ interface MatchResult {
   matchScore: number | null;
   matchReason: string;
 }
+
+const SYDLE_CURSOR_OVERLAP_MS = 5 * 60 * 1000;
+const CSV_EXPORT_PAGE_SIZE = 200;
+const SYDLE_MATCH_THRESHOLD = 0.7;
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -136,6 +140,10 @@ function csvLine(values: unknown[]): string {
   return values.map(sanitizeForCsv).join(',');
 }
 
+function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 export const sydleService = {
   getConfigStatus() {
     return getSydleConfigStatus();
@@ -193,20 +201,27 @@ export const sydleService = {
     }
 
     try {
-      const cursorFrom = await this.resolveLastCursor();
+      const previousCursor = await this.resolveLastCursor();
+      const cursorFrom = this.applyCursorOverlap(previousCursor);
       const client = new SydleClient();
       const fetched = await client.fetchPayments(cursorFrom);
       const normalized = fetched.records.map((record) => normalizeSydlePayment(record));
+      const cursorTo = this.resolveCursorTo(previousCursor, normalized, fetched.cursorTo);
       const result = await this.upsertPayments(normalized);
 
       const completed = await this.completeRun(run.id, started, {
         status: result.errors > 0 ? 'partial' : 'success',
         cursorFrom,
-        cursorTo: fetched.cursorTo,
+        cursorTo,
         fetched: normalized.length,
         ...result,
         errorMessage: null,
-        metadata: fetched.metadata,
+        metadata: {
+          ...fetched.metadata,
+          previousCursor: previousCursor?.toISOString() ?? null,
+          cursorOverlapMs: SYDLE_CURSOR_OVERLAP_MS,
+          cursorSource: cursorTo ? 'source_updated_at' : 'none',
+        },
       });
 
       auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
@@ -267,11 +282,33 @@ export const sydleService = {
     const [last] = await db
       .select({ cursorTo: sydleSyncRuns.cursorTo })
       .from(sydleSyncRuns)
-      .where(eq(sydleSyncRuns.status, 'success'))
+      .where(and(eq(sydleSyncRuns.status, 'success'), isNotNull(sydleSyncRuns.cursorTo)))
       .orderBy(desc(sydleSyncRuns.cursorTo))
       .limit(1);
 
     return toDate(last?.cursorTo);
+  },
+
+  applyCursorOverlap(cursor: Date | null): Date | null {
+    if (!cursor) return null;
+    return new Date(cursor.getTime() - SYDLE_CURSOR_OVERLAP_MS);
+  },
+
+  resolveCursorTo(
+    previousCursor: Date | null,
+    records: Pick<NormalizedSydlePayment, 'sourceUpdatedAt'>[],
+    fetchedCursor: Date | null = null,
+  ): Date | null {
+    let cursor = previousCursor;
+    for (const record of records) {
+      if (record.sourceUpdatedAt && (!cursor || record.sourceUpdatedAt > cursor)) {
+        cursor = record.sourceUpdatedAt;
+      }
+    }
+    if (fetchedCursor && (!cursor || fetchedCursor > cursor)) {
+      cursor = fetchedCursor;
+    }
+    return cursor;
   },
 
   async completeRun(
@@ -446,13 +483,17 @@ export const sydleService = {
     ].filter((value): value is string => Boolean(value));
 
     if (lookupValues.length) {
+      const aiLookupConditions = lookupValues.map((value) => {
+        const pattern = `%${escapeLikePattern(value)}%`;
+        return sql`${importProcesses.aiExtractedData}::text ILIKE ${pattern} ESCAPE ${'\\'}`;
+      });
       const rows = await db
         .select()
         .from(importProcesses)
         .where(
           or(
             inArray(importProcesses.purchaseRef, lookupValues),
-            sql`${importProcesses.aiExtractedData}::text ILIKE ${`%${lookupValues[0]}%`}`,
+            ...aiLookupConditions,
           ),
         )
         .limit(10);
@@ -464,19 +505,49 @@ export const sydleService = {
       const current = scored.get(row.id) ?? { row, score: 0, reasons: [] };
 
       if (record.purchaseRef && row.purchaseRef === record.purchaseRef) {
-        current.score += 0.75;
+        current.score += 0.8;
         current.reasons.push('purchase_ref');
       }
       if (record.brand && normalizeText(row.brand) === normalizeText(record.brand)) {
-        current.score += 0.05;
+        current.score += 0.15;
         current.reasons.push('brand');
       }
       if (
         record.supplierName &&
         normalizeText(row.exporterName).includes(normalizeText(record.supplierName))
       ) {
-        current.score += 0.1;
+        current.score += 0.2;
         current.reasons.push('supplier');
+      }
+
+      const purchaseOrder = extractAiString(row.aiExtractedData, [
+        'purchaseOrder',
+        'poNumber',
+        'pedidoCompra',
+        'ordemCompra',
+      ]);
+      if (
+        record.purchaseOrder &&
+        purchaseOrder &&
+        normalizeText(purchaseOrder) === normalizeText(record.purchaseOrder)
+      ) {
+        current.score += 0.45;
+        current.reasons.push('purchase_order');
+      }
+
+      const proforma = extractAiString(row.aiExtractedData, [
+        'proformaNumber',
+        'piNumber',
+        'numeroPi',
+        'proformaInvoice',
+      ]);
+      if (
+        record.proformaNumber &&
+        proforma &&
+        normalizeText(proforma) === normalizeText(record.proformaNumber)
+      ) {
+        current.score += 0.45;
+        current.reasons.push('proforma');
       }
 
       const invoice = extractAiString(row.aiExtractedData, ['invoiceNumber', 'ciNumber']);
@@ -485,7 +556,7 @@ export const sydleService = {
         invoice &&
         normalizeText(invoice) === normalizeText(record.invoiceNumber)
       ) {
-        current.score += 0.2;
+        current.score += 0.45;
         current.reasons.push('invoice');
       }
 
@@ -495,7 +566,7 @@ export const sydleService = {
         record.purchaseAmount !== null &&
         Math.abs(fob - record.purchaseAmount) <= 1
       ) {
-        current.score += 0.1;
+        current.score += 0.2;
         current.reasons.push('amount');
       }
 
@@ -504,7 +575,7 @@ export const sydleService = {
 
     const ranked = [...scored.values()].sort((a, b) => b.score - a.score);
     const best = ranked[0];
-    if (!best || best.score < 0.7) {
+    if (!best || best.score < SYDLE_MATCH_THRESHOLD) {
       return {
         processId: null,
         matchStatus: 'unmatched',
@@ -581,7 +652,7 @@ export const sydleService = {
         .from(sydlePurchasePayments)
         .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
         .where(where)
-        .orderBy(sort(sortMap[filters.sortBy]))
+        .orderBy(sort(sortMap[filters.sortBy]), sort(sydlePurchasePayments.id))
         .limit(filters.limit)
         .offset(offset),
       db
@@ -638,7 +709,17 @@ export const sydleService = {
   },
 
   async exportCsv(filters: SydleReportQuery): Promise<string> {
-    const result = await this.list({ ...filters, page: 1, limit: 5000 });
+    const firstPage = await this.list({ ...filters, page: 1, limit: CSV_EXPORT_PAGE_SIZE });
+    const rows = [...firstPage.data];
+    let page = 2;
+
+    while (rows.length < firstPage.total) {
+      const nextPage = await this.list({ ...filters, page, limit: CSV_EXPORT_PAGE_SIZE });
+      if (nextPage.data.length === 0) break;
+      rows.push(...nextPage.data);
+      page += 1;
+    }
+
     const header = [
       'Processo',
       'Compra',
@@ -665,7 +746,7 @@ export const sydleService = {
 
     return [
       csvLine(header),
-      ...result.data.map((row) =>
+      ...rows.map((row) =>
         csvLine([
           row.processCode || row.portalProcessCode || '',
           row.purchaseRef || '',

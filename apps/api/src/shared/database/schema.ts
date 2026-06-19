@@ -208,6 +208,9 @@ export const validationResults = pgTable(
     processId: integer('process_id')
       .references(() => importProcesses.id, { onDelete: 'cascade' })
       .notNull(),
+    validationRunId: integer('validation_run_id').references(() => validationRuns.id, {
+      onDelete: 'set null',
+    }),
     checkName: varchar('check_name', { length: 100 }).notNull(),
     status: validationStatusEnum('status').notNull(),
     expectedValue: text('expected_value'),
@@ -224,6 +227,7 @@ export const validationResults = pgTable(
   },
   (table) => [
     index('validation_results_process_id_idx').on(table.processId),
+    index('validation_results_run_id_idx').on(table.validationRunId),
     index('validation_results_process_status_resolved_idx').on(
       table.processId,
       table.status,
@@ -806,6 +810,9 @@ export const validationResultHistory = pgTable(
     processId: integer('process_id')
       .references(() => importProcesses.id, { onDelete: 'cascade' })
       .notNull(),
+    validationRunId: integer('validation_run_id').references(() => validationRuns.id, {
+      onDelete: 'set null',
+    }),
     runAt: timestamp('run_at', { withTimezone: true }).defaultNow().notNull(),
     checkName: varchar('check_name', { length: 100 }).notNull(),
     status: varchar('status', { length: 20 }).notNull(),
@@ -817,6 +824,7 @@ export const validationResultHistory = pgTable(
   },
   (table) => [
     index('validation_result_history_process_id_idx').on(table.processId),
+    index('validation_result_history_run_id_idx').on(table.validationRunId),
     index('validation_result_history_process_run_idx').on(table.processId, table.runAt),
   ],
 );
@@ -833,15 +841,20 @@ export const documentExtractionHistory = pgTable(
   'document_extraction_history',
   {
     id: serial('id').primaryKey(),
-    documentId: integer('document_id')
-      .references(() => documents.id, { onDelete: 'cascade' })
-      .notNull(),
+    documentId: integer('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'cascade' }),
+    documentType: varchar('document_type', { length: 50 }),
+    originalFilename: varchar('original_filename', { length: 255 }),
+    storagePath: text('storage_path'),
     aiParsedData: jsonb('ai_parsed_data'),
     confidence: numeric('confidence', { precision: 5, scale: 4 }),
     archivedAt: timestamp('archived_at', { withTimezone: true }).defaultNow().notNull(),
     reason: text('reason').default('reprocess').notNull(),
   },
-  (table) => [index('document_extraction_history_document_id_idx').on(table.documentId)],
+  (table) => [
+    index('document_extraction_history_document_id_idx').on(table.documentId),
+    index('document_extraction_history_process_id_idx').on(table.processId),
+  ],
 );
 
 export type DocumentExtractionHistory = typeof documentExtractionHistory.$inferSelect;

@@ -1,6 +1,7 @@
 import { FileText, Package, AlertTriangle, Link as LinkIcon } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { cn } from '@/shared/lib/utils';
 
 interface ProformaItem {
@@ -36,12 +37,15 @@ interface AggregateData {
 }
 
 export function ProformasTab({ processId }: { processId: string }) {
-  const { data, isLoading } = useApiQuery<AggregateData>(
+  const { data, isLoading, isError, error, refetch } = useApiQuery<AggregateData>(
     ['proformas-aggregate', processId],
     `/api/documents/process/${processId}/proformas`,
   );
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
+  if ((isError || error) && !data) {
+    return <ErrorState message="Erro ao carregar proformas." onRetry={() => refetch()} />;
+  }
   if (!data || data.proformaCount === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
@@ -59,6 +63,12 @@ export function ProformasTab({ processId }: { processId: string }) {
 
   return (
     <div className="space-y-5">
+      {(isError || error) && data && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Falha ao atualizar as proformas. Exibindo a ultima leitura disponivel.
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
           <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">

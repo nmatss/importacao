@@ -3,6 +3,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 const checkLabel = (name: string) =>
   VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
@@ -109,12 +110,22 @@ function CheckRow({ check, index }: { check: ValidationCheck; index: number }) {
 }
 
 export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
-  const { data: report, isLoading } = useApiQuery<ValidationReport>(
+  const {
+    data: report,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useApiQuery<ValidationReport>(
     ['validation-report', processId],
     `/api/validation/${processId}/report`,
   );
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
+
+  if ((isError || error) && !report) {
+    return <ErrorState message="Erro ao carregar relatório de validação." onRetry={() => refetch()} />;
+  }
 
   if (!report) {
     return (
@@ -141,6 +152,12 @@ export function FupComparisonPanel({ processId }: FupComparisonPanelProps) {
 
   return (
     <div className="space-y-6">
+      {(isError || error) && report && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Falha ao atualizar o relatorio. Exibindo a ultima leitura disponivel.
+        </div>
+      )}
+
       {/* Summary */}
       <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm">
         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">

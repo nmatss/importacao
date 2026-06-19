@@ -3,6 +3,7 @@ import { db } from '../../shared/database/connection.js';
 import {
   validationResults,
   validationResultHistory,
+  validationRuns,
   documents,
   importProcesses,
   followUpTracking,
@@ -35,6 +36,13 @@ type DocumentWithAiData = {
 };
 
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+type ValidationRunMode = 'final' | 'partial';
+
+type RunAllChecksOptions = {
+  mode?: ValidationRunMode;
+  triggerType?: 'manual' | 'auto_full' | 'auto_partial';
+};
+
 const AI_META_KEYS = new Set([
   'budgetExceeded',
   'confidence',
@@ -46,6 +54,7 @@ const AI_META_KEYS = new Set([
   'rawText',
   'skipped',
   'source',
+  '_trust',
   'warnings',
 ]);
 
@@ -119,13 +128,57 @@ function findValidationBlDocument<T extends DocumentWithAiData>(docs: T[]): T | 
   return selectValidationDoc(docs, 'ohbl') ?? selectValidationDoc(docs, 'draft_bl');
 }
 
+function buildDocumentSetCompletenessResult(input: {
+  invoiceDoc?: DocumentWithAiData;
+  packingListDoc?: DocumentWithAiData;
+  blDoc?: DocumentWithAiData;
+  mode: ValidationRunMode;
+}): CheckResult {
+  const missing: string[] = [];
+  if (!input.invoiceDoc) missing.push('Invoice utilizavel');
+  if (!input.packingListDoc) missing.push('Packing List utilizavel');
+  if (!input.blDoc) missing.push('OHBL ou Draft BL utilizavel');
+
+  if (missing.length === 0) {
+    return {
+      checkName: 'document-set-completeness',
+      status: 'passed',
+      expectedValue: 'Invoice + Packing List + BL utilizaveis',
+      actualValue: 'Conjunto documental completo',
+      documentsCompared: 'Sistema',
+      message: 'Conjunto documental minimo disponivel para validacao completa.',
+    };
+  }
+
+  const message =
+    `Validacao ${input.mode === 'partial' ? 'parcial' : 'final'} sem conjunto documental completo: ` +
+    `${missing.join(', ')}. Documento utilizavel exige extracao concluida, dados uteis e confianca operacional >= ${(MIN_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}%.`;
+
+  return {
+    checkName: 'document-set-completeness',
+    status: input.mode === 'partial' ? 'warning' : 'failed',
+    expectedValue: 'Invoice + Packing List + BL utilizaveis',
+    actualValue: missing.join(', '),
+    documentsCompared: 'Sistema',
+    message,
+  };
+}
+
 export const validationService = {
-  async runAllChecks(processId: number, userId: number | null = null): Promise<CheckResult[]> {
+  async runAllChecks(
+    processId: number,
+    userId: number | null = null,
+    options: RunAllChecksOptions = {},
+  ): Promise<CheckResult[]> {
     if (!processId || isNaN(processId)) {
       throw new Error('ID do processo invalido');
     }
 
-    logger.info({ processId }, 'Starting validation checks');
+    const mode: ValidationRunMode = options.mode ?? 'final';
+    const triggerType = options.triggerType ?? (mode === 'partial' ? 'auto_partial' : 'manual');
+    const startedAt = Date.now();
+
+    logger.info({ processId, mode, triggerType }, 'Starting validation checks');
 
     // 1. Verify process exists
     const [process] = await db
@@ -143,6 +196,12 @@ export const validationService = {
     const invoiceDoc = selectValidationDoc(docs, 'invoice');
     const packingListDoc = selectValidationDoc(docs, 'packing_list');
     const blDoc = findValidationBlDocument(docs);
+    const documentSetResult = buildDocumentSetCompletenessResult({
+      invoiceDoc,
+      packingListDoc,
+      blDoc,
+      mode,
+    });
 
     // Get follow-up data
     const [followUp] = await db
@@ -164,24 +223,31 @@ export const validationService = {
       followUpData: followUp ? { ...followUp } : undefined,
     };
 
-    // 4. Update process status to 'validating'
-    // Capture the originating status so we can roll back if the run fails
-    // mid-flight — otherwise the process would stay stuck in 'validating'.
+    // 4. Final validations own the process state machine. Partial validations
+    // are diagnostic only: they must not promote status, open correction flows,
+    // move Drive folders, or overwrite live final results.
     const originStatus = process.status as ProcessStatus;
-    assertTransition(originStatus, 'validating');
-    await db
-      .update(importProcesses)
-      .set({ status: 'validating', updatedAt: new Date() })
-      .where(eq(importProcesses.id, processId));
+    if (mode === 'final') {
+      // Capture the originating status so we can roll back if the run fails
+      // mid-flight — otherwise the process would stay stuck in 'validating'.
+      assertTransition(originStatus, 'validating');
+      await db
+        .update(importProcesses)
+        .set({ status: 'validating', updatedAt: new Date() })
+        .where(eq(importProcesses.id, processId));
+    }
 
     let results: CheckResult[];
+    let validationRunId: number | null = null;
     try {
       // 5. Run all checks (supports async checks like Odoo)
-      results = await Promise.all(allChecks.map((check) => check(checkInput)));
+      const checkResults = await Promise.all(allChecks.map((check) => check(checkInput)));
+      results = [documentSetResult, ...checkResults];
 
       logger.info(
         {
           processId,
+          mode,
           total: results.length,
           passed: results.filter((r) => r.status === 'passed').length,
           failed: results.filter((r) => r.status === 'failed').length,
@@ -191,6 +257,41 @@ export const validationService = {
         'Validation checks completed',
       );
 
+      const passedCount = results.filter((r) => r.status === 'passed').length;
+      const failedCount = results.filter((r) => r.status === 'failed').length;
+      const warningCount = results.filter((r) => r.status === 'warning').length;
+      const duration = Date.now() - startedAt;
+
+      try {
+        const [run] = await db
+          .insert(validationRuns)
+          .values({
+            processId,
+            triggeredBy: userId,
+            triggerType,
+            totalChecks: results.length,
+            passedChecks: passedCount,
+            failedChecks: failedCount,
+            warningChecks: warningCount,
+            duration,
+          })
+          .returning({ id: validationRuns.id });
+        validationRunId = run?.id ?? null;
+      } catch (runErr) {
+        logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
+        throw runErr;
+      }
+
+      if (!validationRunId) {
+        throw new Error('Falha ao registrar validation_runs para a validacao');
+      }
+
+      if (mode === 'partial') {
+        logger.info(
+          { processId, validationRunId, total: results.length },
+          'Partial validation completed without final side effects',
+        );
+      } else {
       // 6. Atomic: snapshot previous results to history, then delete old
       // results + insert new ones — all in one transaction. The history
       // snapshot (append-only, regulatory audit — backlog #12) preserves what
@@ -207,6 +308,7 @@ export const validationService = {
           await tx.insert(validationResultHistory).values(
             previous.map((r) => ({
               processId,
+              validationRunId: r.validationRunId ?? null,
               // run_at = moment the previous run was recorded, when available.
               runAt: r.createdAt ?? now,
               checkName: r.checkName,
@@ -231,6 +333,7 @@ export const validationService = {
         await tx.insert(validationResults).values(
           results.map((r) => ({
             processId,
+            validationRunId,
             checkName: r.checkName,
             status: r.status as 'passed' | 'failed' | 'warning' | 'skipped',
             expectedValue: r.expectedValue ?? null,
@@ -293,6 +396,7 @@ export const validationService = {
           logger.error({ err, processId }, 'Failed to move to correction folder');
         }
       }
+      }
     } catch (err) {
       // The run failed mid-flight after we moved the process into
       // 'validating'. Roll the status back to where it came from so the
@@ -305,7 +409,7 @@ export const validationService = {
           .select()
           .from(importProcesses)
           .where(eq(importProcesses.id, processId));
-        if (current && current.status === 'validating') {
+        if (mode === 'final' && current && current.status === 'validating') {
           await db
             .update(importProcesses)
             .set({ status: originStatus, updatedAt: new Date() })
@@ -330,6 +434,9 @@ export const validationService = {
       'process',
       processId,
       {
+        mode,
+        triggerType,
+        validationRunId,
         total: results.length,
         passed: results.filter((r) => r.status === 'passed').length,
         failed: results.filter((r) => r.status === 'failed').length,
@@ -347,13 +454,16 @@ export const validationService = {
       processId,
       {
         eventType: 'validation_run',
-        title: `Validacao executada: ${passed}/${results.length} aprovadas`,
-        metadata: { passed, failed, warnings, skipped, total: results.length },
+        title:
+          mode === 'partial'
+            ? `Validacao parcial executada: ${passed}/${results.length} aprovadas`
+            : `Validacao executada: ${passed}/${results.length} aprovadas`,
+        metadata: { mode, triggerType, validationRunId, passed, failed, warnings, skipped, total: results.length },
       },
       userId,
     );
 
-    if (failed > 0) {
+    if (mode === 'final' && failed > 0) {
       const errorTypes = getErrorTypesFromChecks(
         results.filter((r) => r.status === 'failed').map((r) => r.checkName),
       );
@@ -370,7 +480,7 @@ export const validationService = {
 
     // 8. Create alert with severity based on failure count
     const failedChecks = results.filter((r) => r.status === 'failed');
-    if (failedChecks.length > 0) {
+    if (mode === 'final' && failedChecks.length > 0) {
       const severity: 'warning' | 'critical' = failedChecks.length > 3 ? 'critical' : 'warning';
       const criticalItems = failedChecks.filter((c) =>
         ['fob-value-match', 'total-value-match', 'net-weight-match', 'gross-weight-match'].includes(
@@ -394,6 +504,7 @@ export const validationService = {
         'freight-vs-fup',
         'cbm-vs-fup',
         'container-type-vs-fup',
+        'document-set-completeness',
       ];
       const invPlFailedChecks = failedChecks.filter((c) => !nonKiomChecks.includes(c.checkName));
 
@@ -437,12 +548,14 @@ export const validationService = {
     const failedCheckNames = results.filter((r) => r.status === 'failed').map((r) => r.checkName);
     const errorTypes = getErrorTypesFromChecks(failedCheckNames);
 
+    if (mode === 'final') {
     try {
       // Upsert: delete old + insert new correction record for this process
       await db.delete(documentCorrections).where(eq(documentCorrections.processId, processId));
 
       await db.insert(documentCorrections).values({
         processId,
+        validationRunId,
         correctionNeeded: failedCheckNames.length > 0,
         errorCount: failedCheckNames.length,
         errorTypes: errorTypes,
@@ -460,6 +573,7 @@ export const validationService = {
       );
     } catch (corrErr) {
       logger.error({ err: corrErr, processId }, 'Failed to update document corrections');
+    }
     }
 
     return results;
@@ -557,6 +671,9 @@ export const validationService = {
     if (!current) {
       throw new NotFoundError('Resultado de validação', resultId);
     }
+    if (current.checkName === 'document-set-completeness') {
+      throw new Error('Completude documental nao pode ser resolvida manualmente; envie/reprocesse os documentos obrigatorios.');
+    }
 
     const [updated] = await db
       .update(validationResults)
@@ -615,9 +732,14 @@ export const validationService = {
 
     const failed = results.filter((r) => r.status === 'failed');
     const unresolvedFailed = failed.filter((r) => !r.resolvedManually);
+    const documentSet = results.find((r) => r.checkName === 'document-set-completeness');
 
     // Nothing failed, or still has unresolved failures → no promotion.
-    if (failed.length === 0 || unresolvedFailed.length > 0) {
+    if (
+      failed.length === 0 ||
+      unresolvedFailed.length > 0 ||
+      (documentSet && documentSet.status !== 'passed')
+    ) {
       return;
     }
 

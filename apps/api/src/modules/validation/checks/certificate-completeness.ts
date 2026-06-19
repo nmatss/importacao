@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -19,7 +19,29 @@ export default function certificateCompleteness(input: CheckInput): CheckResult 
   const checkName = 'certificate-completeness';
 
   const hasCertification = input.processData?.hasCertification === true;
-  const items = input.invoiceData?.items ?? [];
+  if (!input.invoiceData) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'INV / Certificado',
+      message:
+        'Invoice ausente ou nao utilizavel; nao e possivel concluir se o processo requer certificacao.',
+    };
+  }
+
+  const items = input.invoiceData.items ?? [];
+  if (!Array.isArray(items) || items.length === 0) {
+    return {
+      checkName,
+      status: hasCertification ? 'failed' : 'warning',
+      expectedValue: hasCertification ? 'Certificado presente' : 'Itens da Invoice disponiveis',
+      actualValue: 'Invoice sem itens extraidos',
+      documentsCompared: 'INV / Certificado',
+      message: hasCertification
+        ? 'Processo marcado como requer certificacao, mas a Invoice nao tem itens extraidos para conferir escopo.'
+        : 'Invoice sem itens extraidos; requisito de certificacao nao pode ser confirmado com seguranca.',
+    };
+  }
 
   // Check if any items require certification
   const itemsRequiringCert = items.filter(

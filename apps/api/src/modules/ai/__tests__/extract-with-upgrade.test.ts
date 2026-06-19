@@ -34,6 +34,36 @@ vi.mock('../cost-tracker.js', async (importOriginal) => {
 
 const { aiService } = await import('../service.js');
 
+function cf<T>(value: T, confidence: number) {
+  return { value, confidence };
+}
+
+function invoiceResponse(confidence: number, overrides: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    invoiceNumber: cf('INV-001', confidence),
+    invoiceDate: cf('2026-06-01', confidence),
+    exporterName: cf('X', confidence),
+    exporterAddress: cf('Exporter address', confidence),
+    importerName: cf('Y', confidence),
+    importerAddress: cf('Importer address', confidence),
+    incoterm: cf('FOB', confidence),
+    currency: cf('USD', confidence),
+    portOfLoading: cf('NINGBO', confidence),
+    portOfDischarge: cf('ITAPOA', confidence),
+    totalFobValue: cf(100, confidence),
+    items: [
+      {
+        itemCode: cf('A1', confidence),
+        description: cf('Item A1', confidence),
+        quantity: cf(10, confidence),
+        unitPrice: cf(10, confidence),
+        totalPrice: cf(100, confidence),
+      },
+    ],
+    ...overrides,
+  });
+}
+
 describe('extractWithUpgrade behavior (invoice path)', () => {
   beforeEach(() => {
     delete process.env.AI_UPGRADE_ON_LOW_CONFIDENCE;
@@ -69,16 +99,7 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
 
   it('returns primary result when confidence is above threshold (no upgrade call)', async () => {
     // Stub the AIService's internal chat to return a high-confidence response.
-    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(
-      JSON.stringify({
-        invoiceNumber: { value: 'INV-001', confidence: 0.95 },
-        exporterName: { value: 'X', confidence: 0.9 },
-        importerName: { value: 'Y', confidence: 0.9 },
-        currency: { value: 'USD', confidence: 0.9 },
-        totalFobValue: { value: 100, confidence: 0.9 },
-        items: [],
-      }),
-    );
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(invoiceResponse(0.95));
     const result = await aiService.extractInvoiceData('fake text');
     expect(spy).toHaveBeenCalledTimes(1);
     expect(result.confidenceScore).toBeGreaterThanOrEqual(0.7);
@@ -90,26 +111,8 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
     process.env.AI_UPGRADE_MIN_DELTA = '0.05';
     const spy = vi
       .spyOn(aiService as any, 'chat')
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          invoiceNumber: { value: 'INV', confidence: 0.5 },
-          exporterName: { value: 'X', confidence: 0.5 },
-          importerName: { value: 'Y', confidence: 0.5 },
-          currency: { value: 'USD', confidence: 0.5 },
-          totalFobValue: { value: 100, confidence: 0.5 },
-          items: [],
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          invoiceNumber: { value: 'INV', confidence: 0.85 },
-          exporterName: { value: 'X', confidence: 0.85 },
-          importerName: { value: 'Y', confidence: 0.85 },
-          currency: { value: 'USD', confidence: 0.85 },
-          totalFobValue: { value: 100, confidence: 0.85 },
-          items: [],
-        }),
-      );
+      .mockResolvedValueOnce(invoiceResponse(0.5))
+      .mockResolvedValueOnce(invoiceResponse(0.85));
     const result = await aiService.extractInvoiceData('fake');
     expect(spy).toHaveBeenCalledTimes(2);
     // Adopted the upgrade result (delta = 0.35 >> 0.05).
@@ -124,26 +127,8 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
     process.env.AI_UPGRADE_MIN_DELTA = '0.05';
     const spy = vi
       .spyOn(aiService as any, 'chat')
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          invoiceNumber: { value: 'INV', confidence: 0.5 },
-          exporterName: { value: 'X', confidence: 0.5 },
-          importerName: { value: 'Y', confidence: 0.5 },
-          currency: { value: 'USD', confidence: 0.5 },
-          totalFobValue: { value: 100, confidence: 0.5 },
-          items: [],
-        }),
-      )
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          invoiceNumber: { value: 'INV', confidence: 0.52 },
-          exporterName: { value: 'X', confidence: 0.52 },
-          importerName: { value: 'Y', confidence: 0.52 },
-          currency: { value: 'USD', confidence: 0.52 },
-          totalFobValue: { value: 100, confidence: 0.52 },
-          items: [],
-        }),
-      );
+      .mockResolvedValueOnce(invoiceResponse(0.5))
+      .mockResolvedValueOnce(invoiceResponse(0.52));
     const result = await aiService.extractInvoiceData('fake');
     expect(spy).toHaveBeenCalledTimes(2);
     // Stayed with primary (0.50) because upgrade (0.52) did not beat by 0.05.
@@ -155,16 +140,7 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
     process.env.AI_UPGRADE_CONFIDENCE_THRESHOLD = '0.7';
     const spy = vi
       .spyOn(aiService as any, 'chat')
-      .mockResolvedValueOnce(
-        JSON.stringify({
-          invoiceNumber: { value: 'INV', confidence: 0.5 },
-          exporterName: { value: 'X', confidence: 0.5 },
-          importerName: { value: 'Y', confidence: 0.5 },
-          currency: { value: 'USD', confidence: 0.5 },
-          totalFobValue: { value: 100, confidence: 0.5 },
-          items: [],
-        }),
-      )
+      .mockResolvedValueOnce(invoiceResponse(0.5))
       .mockRejectedValueOnce(new Error('upgrade timed out'));
     const result = await aiService.extractInvoiceData('fake');
     expect(spy).toHaveBeenCalledTimes(2);
@@ -173,18 +149,27 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
 
   it('disabling AI_UPGRADE_ON_LOW_CONFIDENCE skips upgrade entirely', async () => {
     process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
-    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(
-      JSON.stringify({
-        invoiceNumber: { value: 'INV', confidence: 0.4 },
-        exporterName: { value: 'X', confidence: 0.4 },
-        importerName: { value: 'Y', confidence: 0.4 },
-        currency: { value: 'USD', confidence: 0.4 },
-        totalFobValue: { value: 100, confidence: 0.4 },
-        items: [],
-      }),
-    );
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(invoiceResponse(0.4));
     const result = await aiService.extractInvoiceData('fake');
     expect(spy).toHaveBeenCalledTimes(1);
     expect(result.confidenceScore).toBeCloseTo(0.4, 2);
+  });
+
+  it('caps confidence below operational threshold when AI response fails Zod contract', async () => {
+    process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(
+      JSON.stringify({
+        invoiceNumber: { value: 'INV-001', confidence: 0.95 },
+        exporterName: { value: 'X', confidence: 0.95 },
+        items: [],
+      }),
+    );
+
+    const result = await aiService.extractInvoiceData('fake');
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(result.confidenceScore).toBeLessThan(0.4);
+    expect(result.fieldsWithLowConfidence).toContain('_contract');
+    expect((result.data as Record<string, any>)._trust.contractFailure).toBe(true);
   });
 });

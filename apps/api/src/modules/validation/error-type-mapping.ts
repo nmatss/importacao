@@ -43,6 +43,7 @@ export type CorrectionErrorType = (typeof CORRECTION_ERROR_TYPES)[number];
  * Um check pode mapear para multiplos tipos (ex: item-level-match detecta qtd + peso + valor).
  */
 export const CHECK_TO_ERROR_TYPES: Record<string, CorrectionErrorType[]> = {
+  'document-set-completeness': ['outros'],
   'exporter-match': ['exportador'],
   'importer-match': ['importador'],
   'process-reference': ['referencia'],

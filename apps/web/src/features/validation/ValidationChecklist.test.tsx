@@ -138,7 +138,9 @@ describe('ValidationChecklist', () => {
 
     expect(screen.getByRole('button', { name: /Falhas: 0/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aceitos: 1/i })).toBeInTheDocument();
-    expect(screen.getByText(/2 de 2 verificações aprovadas ou aceitas/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/2 de 2 verificações acionáveis aprovadas ou aceitas/i),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole('button', { name: /Gerar e-mail correcao/i }),
     ).not.toBeInTheDocument();
@@ -146,6 +148,24 @@ describe('ValidationChecklist', () => {
     fireEvent.click(screen.getByRole('button', { name: /Falhas: 0/i }));
 
     expect(screen.getByText(/Nenhuma falha aberta neste processo/i)).toBeInTheDocument();
+  });
+
+  it('highlights skipped checks as blocked in progress without counting them as actionable', () => {
+    renderChecklist([
+      { id: 1, checkName: 'ports-match', status: 'passed' },
+      {
+        id: 2,
+        checkName: 'dates-match',
+        status: 'skipped',
+        message: 'Bill of Lading ausente.',
+      },
+    ]);
+
+    expect(
+      screen.getByText(/1 de 1 verificações acionáveis aprovadas ou aceitas/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/1 bloqueada/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bloqueados por documento ausente/i)).toBeInTheDocument();
   });
 
   it('shows correction actions only for unresolved failures', () => {

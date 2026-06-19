@@ -71,7 +71,7 @@ export const openapiSpec = {
     { name: 'Dashboard', description: 'Dashboard and analytics' },
     { name: 'Espelhos', description: 'Mirror documents (espelhos)' },
     { name: 'Currency Exchange', description: 'Currency exchange records' },
-    { name: 'SYDLE', description: 'Purchase and international payment report' },
+    { name: 'SYDLE', description: 'Purchase and international payment report (admin)' },
     { name: 'Settings', description: 'System settings (admin)' },
     { name: 'Audit', description: 'Audit logs (admin)' },
   ],
@@ -1025,7 +1025,7 @@ export const openapiSpec = {
     '/api/sydle/payments-report': {
       get: {
         tags: ['SYDLE'],
-        summary: 'List SYDLE purchase/payment report rows',
+        summary: 'List SYDLE purchase/payment report rows (admin)',
         parameters: [
           { name: 'search', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'supplier', in: 'query' as const, schema: { type: 'string' as const } },
@@ -1038,35 +1038,50 @@ export const openapiSpec = {
           { name: 'page', in: 'query' as const, schema: { type: 'integer' as const } },
           { name: 'limit', in: 'query' as const, schema: { type: 'integer' as const } },
         ],
-        responses: { '200': { description: 'Paginated SYDLE report rows' } },
+        responses: {
+          '200': { description: 'Paginated SYDLE report rows' },
+          '403': { description: 'Admin role required' },
+        },
       },
     },
     '/api/sydle/payments-report/summary': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Get SYDLE purchase/payment report summary',
-        responses: { '200': { description: 'SYDLE report summary' } },
+        summary: 'Get SYDLE purchase/payment report summary (admin)',
+        responses: {
+          '200': { description: 'SYDLE report summary' },
+          '403': { description: 'Admin role required' },
+        },
       },
     },
     '/api/sydle/payments-report/export.csv': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Export SYDLE purchase/payment report as CSV',
-        responses: { '200': { description: 'CSV export' } },
+        summary: 'Export SYDLE purchase/payment report as CSV (admin)',
+        responses: {
+          '200': { description: 'CSV export' },
+          '403': { description: 'Admin role required' },
+        },
       },
     },
     '/api/sydle/sync-runs': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Get recent SYDLE sync runs',
-        responses: { '200': { description: 'Sync runs' } },
+        summary: 'Get recent SYDLE sync runs (admin)',
+        responses: {
+          '200': { description: 'Sync runs' },
+          '403': { description: 'Admin role required' },
+        },
       },
     },
     '/api/sydle/sync-now': {
       post: {
         tags: ['SYDLE'],
         summary: 'Run SYDLE sync now (admin)',
-        responses: { '200': { description: 'Sync result' } },
+        responses: {
+          '200': { description: 'Sync result' },
+          '403': { description: 'Admin role required' },
+        },
       },
     },
     '/api/settings/{key}': {

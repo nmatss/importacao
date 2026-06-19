@@ -62,6 +62,12 @@ vi.mock('../../integrations/google-drive.service.js', () => ({
 
 const { validationService } = await import('../service.js');
 
+const completeCoreDocs = [
+  { type: 'invoice', isProcessed: true, aiParsedData: { invoiceNumber: 'INV-001' } },
+  { type: 'packing_list', isProcessed: true, aiParsedData: { packingListNumber: 'PL-001' } },
+  { type: 'ohbl', isProcessed: true, aiParsedData: { blNumber: 'BL-001' } },
+];
+
 describe('validation history (backlog #12)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -83,6 +89,7 @@ describe('validation history (backlog #12)', () => {
         {
           id: 10,
           processId: 1,
+          validationRunId: 401,
           checkName: 'fob-value-match',
           status: 'failed',
           expectedValue: '1000',
@@ -99,6 +106,7 @@ describe('validation history (backlog #12)', () => {
         {
           id: 11,
           processId: 1,
+          validationRunId: 401,
           checkName: 'ports-match',
           status: 'passed',
           expectedValue: null,
@@ -115,9 +123,10 @@ describe('validation history (backlog #12)', () => {
       ];
 
       queryQueue.push(createResolvedChain([mockProcess])); // select process
-      queryQueue.push(createResolvedChain([])); // select documents
+      queryQueue.push(createResolvedChain(completeCoreDocs)); // select documents
       queryQueue.push(createResolvedChain([])); // select followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 501 }])); // insert validation run
 
       const selectPrevChain = createResolvedChain(previousResults); // tx select previous
       const historyInsertChain = createResolvedChain(undefined); // tx insert history
@@ -130,7 +139,7 @@ describe('validation history (backlog #12)', () => {
 
       const results = await validationService.runAllChecks(1, 1);
 
-      expect(results).toHaveLength(1);
+      expect(results).toHaveLength(2);
       expect(mockDb.transaction).toHaveBeenCalledOnce();
 
       // History insert happened (1st tx insert) with one snapshot row per check
@@ -138,6 +147,7 @@ describe('validation history (backlog #12)', () => {
       expect(historyInsertChain.values).toHaveBeenCalledWith([
         expect.objectContaining({
           processId: 1,
+          validationRunId: 401,
           runAt: previousRunAt,
           checkName: 'fob-value-match',
           status: 'failed',
@@ -153,6 +163,7 @@ describe('validation history (backlog #12)', () => {
         }),
         expect.objectContaining({
           processId: 1,
+          validationRunId: 401,
           runAt: previousRunAt,
           checkName: 'ports-match',
           status: 'passed',
@@ -168,9 +179,10 @@ describe('validation history (backlog #12)', () => {
 
     it('does not write history when there are no previous results (first run)', async () => {
       queryQueue.push(createResolvedChain([mockProcess])); // select process
-      queryQueue.push(createResolvedChain([])); // select documents
+      queryQueue.push(createResolvedChain(completeCoreDocs)); // select documents
       queryQueue.push(createResolvedChain([])); // select followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 502 }])); // insert validation run
 
       txQueue.push(createResolvedChain([])); // tx select previous → empty
       txQueue.push(createResolvedChain(undefined)); // tx delete

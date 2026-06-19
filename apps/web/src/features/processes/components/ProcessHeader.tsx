@@ -15,6 +15,8 @@ import { StatusBadge } from '@/shared/components/StatusBadge';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import type { ImportProcess } from '@/shared/types';
 
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
 export interface ProcessHeaderProps {
   process: ImportProcess;
   processId: string;
@@ -68,6 +70,7 @@ function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
   const data = doc.aiParsedData;
   if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) return false;
   if (data.extractionFailed || data.error || data.skipped) return false;
+  if (!hasOperationalConfidence(doc.confidenceScore)) return false;
 
   const metaKeys = new Set([
     'budgetExceeded',
@@ -80,6 +83,7 @@ function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
     'rawText',
     'skipped',
     'source',
+    '_trust',
     'warnings',
   ]);
 
@@ -96,6 +100,13 @@ function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
   };
 
   return hasValue(data);
+}
+
+function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
+  if (confidenceScore == null) return true;
+  const confidence =
+    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
+  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHeaderProps) {

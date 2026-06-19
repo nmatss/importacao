@@ -1,4 +1,4 @@
-import { extractSydleRecords } from './normalizer.js';
+import { extractSydleRecords, parseSydleDateTime } from './normalizer.js';
 
 export interface SydleClientConfig {
   enabled: boolean;
@@ -16,7 +16,7 @@ export interface SydleClientConfig {
 
 export interface SydleFetchResult {
   records: Record<string, unknown>[];
-  cursorTo: Date;
+  cursorTo: Date | null;
   metadata: Record<string, unknown>;
 }
 
@@ -66,7 +66,6 @@ export class SydleClient {
     }
 
     const allRecords: Record<string, unknown>[] = [];
-    const startedAt = new Date();
     let page = 1;
     let pagesFetched = 0;
 
@@ -111,7 +110,7 @@ export class SydleClient {
 
     return {
       records: allRecords,
-      cursorTo: startedAt,
+      cursorTo: resolveRawSourceCursor(allRecords),
       metadata: {
         pagesFetched,
         pageSize: this.config.pageSize,
@@ -137,4 +136,25 @@ function hasNextPage(payload: unknown, returned: number, pageSize: number): bool
   }
 
   return returned >= pageSize;
+}
+
+function resolveRawSourceCursor(records: Record<string, unknown>[]): Date | null {
+  let cursor: Date | null = null;
+  for (const record of records) {
+    const sourceUpdatedAt = parseRawDateTime(
+      record.sourceUpdatedAt ??
+        record.updatedAt ??
+        record.ultimaAtualizacao ??
+        record.modifiedAt ??
+        record.alteradoEm,
+    );
+    if (sourceUpdatedAt && (!cursor || sourceUpdatedAt > cursor)) {
+      cursor = sourceUpdatedAt;
+    }
+  }
+  return cursor;
+}
+
+function parseRawDateTime(value: unknown): Date | null {
+  return parseSydleDateTime(value);
 }

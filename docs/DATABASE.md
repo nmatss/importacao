@@ -1,6 +1,6 @@
 # Database
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## Fonte Canonica
 
@@ -25,6 +25,7 @@ Ultima atualizacao: 2026-06-18
 - `import_processes`
 - `documents`
 - `process_items`
+- `validation_runs`
 - `validation_results`
 - `validation_result_history`
 - `document_extraction_history`
@@ -40,7 +41,7 @@ Ultima atualizacao: 2026-06-18
 
 ## Migrations Fora Do Journal Drizzle
 
-- `0011_proforma_invoice.sql` ate `0017_sydle_purchase_payments.sql` sao SQL
+- `0011_proforma_invoice.sql` ate `0018_validation_run_links.sql` sao SQL
   idempotentes aplicados pelo fluxo pendente (`scripts/apply-pending-migrations.sh`)
   e pelo setup E2E apos `migrate()`.
 - `0016_pre_cons_tables.sql` cria `pre_cons_items` e `pre_cons_sync_log`,
@@ -49,6 +50,9 @@ Ultima atualizacao: 2026-06-18
 - `0017_sydle_purchase_payments.sql` cria `sydle_purchase_payments` e
   `sydle_sync_runs` para staging/auditoria da integracao SYDLE de compras e
   pagamentos internacionais.
+- `0018_validation_run_links.sql` adiciona `validation_run_id` em resultados
+  atuais/historicos de validacao e altera `document_extraction_history` para
+  preservar historico mesmo apos delete do documento.
 
 ## Indices Observados
 
@@ -67,6 +71,8 @@ Exemplos no schema:
 - Antes de migration: backup obrigatorio em producao via deploy script.
 - Evitar migration destrutiva sem plano de reversao.
 - Historico de validacao e extracao existe para auditoria regulatoria.
+  `validation_runs` e a entidade canonica de execucao; delete de documento deve
+  arquivar extracao antes da remocao.
 - Alteracoes em enums precisam de migration idempotente e atencao a deploy.
 
 ## Pendencias

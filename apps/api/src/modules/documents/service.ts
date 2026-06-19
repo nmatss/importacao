@@ -79,6 +79,7 @@ const AI_META_KEYS = new Set([
   'rawText',
   'skipped',
   'source',
+  '_trust',
   'warnings',
 ]);
 
@@ -564,12 +565,24 @@ export const documentService = {
    * regulatory audit, backlog #12. No-op when there is nothing to archive.
    */
   async archiveExtraction(
-    doc: { id: number; aiParsedData: unknown; confidenceScore: string | null },
-    reason: 'reprocess' | 'reextract',
+    doc: {
+      id: number;
+      processId?: number | null;
+      type?: string | null;
+      originalFilename?: string | null;
+      storagePath?: string | null;
+      aiParsedData: unknown;
+      confidenceScore: string | null;
+    },
+    reason: 'reprocess' | 'reextract' | 'delete',
   ) {
     if (doc.aiParsedData == null) return;
     await db.insert(documentExtractionHistory).values({
       documentId: doc.id,
+      processId: doc.processId ?? null,
+      documentType: doc.type ?? null,
+      originalFilename: doc.originalFilename ?? null,
+      storagePath: doc.storagePath ?? null,
       aiParsedData: doc.aiParsedData,
       confidence: doc.confidenceScore ?? null,
       reason,
@@ -982,7 +995,9 @@ export const documentService = {
     // dado útil contava como "presente" e suprimia o alerta "Aguardando INV".
     const hasInvoice = hasMeaningfulAiData(mergedAiData.invoice);
     const hasPackingList = hasMeaningfulAiData(mergedAiData.packing_list);
-    const hasBl = hasMeaningfulAiData(mergedAiData.ohbl);
+    const hasOhbl = hasMeaningfulAiData(mergedAiData.ohbl);
+    const hasDraftBl = hasMeaningfulAiData(mergedAiData.draft_bl);
+    const hasBl = hasOhbl || hasDraftBl;
     const allThree = hasInvoice && hasPackingList && hasBl;
 
     // Nothing core extracted yet (e.g. only a proforma/espelho/cert so far) —
@@ -994,9 +1009,12 @@ export const documentService = {
     // surfaces the divergences it CAN compute instead of going silent.
     try {
       const { validationService } = await import('../validation/service.js');
-      await validationService.runAllChecks(processId);
+      await validationService.runAllChecks(processId, null, {
+        mode: allThree ? 'final' : 'partial',
+        triggerType: allThree ? 'auto_full' : 'auto_partial',
+      });
       logger.info(
-        { processId, hasInvoice, hasPackingList, hasBl, partial: !allThree },
+        { processId, hasInvoice, hasPackingList, hasOhbl, hasDraftBl, hasBl, partial: !allThree },
         allThree
           ? 'Auto-validation triggered (all 3 core documents present)'
           : 'Partial auto-validation triggered (core document(s) missing)',
@@ -1097,7 +1115,9 @@ export const documentService = {
 
     const inv = existingProcessAi.invoice as Record<string, any> | undefined;
     const pl = existingProcessAi.packing_list as Record<string, any> | undefined;
-    const bl = existingProcessAi.ohbl as Record<string, any> | undefined;
+    const bl = (existingProcessAi.ohbl ?? existingProcessAi.draft_bl) as
+      | Record<string, any>
+      | undefined;
     if (!inv || !pl || !bl) return;
 
     const { summary, items: espelhoItems } = buildEspelhoFromAiData(inv, pl, bl);
@@ -1683,6 +1703,10 @@ export const documentService = {
       if (doc.aiParsedData != null) {
         await tx.insert(documentExtractionHistory).values({
           documentId: doc.id,
+          processId: doc.processId,
+          documentType: doc.type,
+          originalFilename: doc.originalFilename,
+          storagePath: doc.storagePath,
           aiParsedData: doc.aiParsedData,
           confidence: doc.confidenceScore ?? null,
           reason: 'reprocess',
@@ -1731,6 +1755,20 @@ export const documentService = {
     }
 
     await db.transaction(async (tx) => {
+      if (doc.aiParsedData != null) {
+        await tx.insert(documentExtractionHistory).values({
+          documentId: doc.id,
+          processId: doc.processId,
+          documentType: doc.type,
+          originalFilename: doc.originalFilename,
+          storagePath: doc.storagePath,
+          aiParsedData: doc.aiParsedData,
+          confidence: doc.confidenceScore ?? null,
+          reason: 'delete',
+        });
+        logger.info({ documentId: doc.id, reason: 'delete' }, 'AI extraction archived before document delete');
+      }
+
       await tx.delete(documents).where(eq(documents.id, id));
       await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });

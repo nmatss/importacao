@@ -86,15 +86,16 @@ Evidencias:
 ## SYDLE - Compras E Pagamentos
 
 Relatorio operacional de compras e pagamentos internacionais sincronizado da
-SYDLE a cada 15 minutos. A sincronizacao real depende das variaveis
-`SYDLE_*`; sem configuracao, o job registra `skipped`.
+SYDLE a cada 15 minutos. Todas as rotas `/api/sydle/*` exigem usuario
+administrador. A sincronizacao real depende das variaveis `SYDLE_*`; sem
+configuracao, o job registra `skipped`.
 
 Endpoints:
 
-- `GET /api/sydle/payments-report`
-- `GET /api/sydle/payments-report/summary`
-- `GET /api/sydle/payments-report/export.csv`
-- `GET /api/sydle/sync-runs`
+- `GET /api/sydle/payments-report` admin-only
+- `GET /api/sydle/payments-report/summary` admin-only
+- `GET /api/sydle/payments-report/export.csv` admin-only
+- `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 
 Filtros principais:

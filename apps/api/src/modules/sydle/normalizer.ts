@@ -202,13 +202,51 @@ function parseDateOnly(value: unknown): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
-function parseDateTime(value: unknown): Date | null {
-  const dateOnly = parseDateOnly(value);
-  if (!dateOnly) return null;
+export function parseSydleDateTime(value: unknown): Date | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
 
-  const raw = String(value ?? '').trim();
-  const parsed = raw.includes(':') ? new Date(raw) : new Date(`${dateOnly}T00:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ? new Date(`${dateOnly}T00:00:00Z`) : parsed;
+  if (typeof value === 'number' && Number.isFinite(value) && value > 1000) {
+    const date = new Date((value - 25569) * 86400 * 1000);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  const raw = String(value).trim();
+  const brDateTime = raw.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:[ T](\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  );
+  if (brDateTime) {
+    const [, day, month, year, hour = '0', minute = '0', second = '0'] = brDateTime;
+    const date = new Date(
+      Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second),
+      ),
+    );
+    if (
+      !Number.isNaN(date.getTime()) &&
+      date.getUTCFullYear() === Number(year) &&
+      date.getUTCMonth() === Number(month) - 1 &&
+      date.getUTCDate() === Number(day)
+    ) {
+      return date;
+    }
+    return null;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  const dateOnly = parseDateOnly(value);
+  return dateOnly ? new Date(`${dateOnly}T00:00:00Z`) : null;
+}
+
+function parseDateTime(value: unknown): Date | null {
+  return parseSydleDateTime(value);
 }
 
 function normalizeCurrency(value: unknown): string {
@@ -263,6 +301,46 @@ function isRawRecord(value: unknown): value is RawRecord {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
+const SENSITIVE_RAW_PAYLOAD_KEY = new RegExp(
+  [
+    'authorization',
+    'bearer',
+    'token',
+    'secret',
+    'password',
+    'senha',
+    'apikey',
+    'api_key',
+    'cookie',
+    'account(number)?',
+    'conta',
+    'agency',
+    'agencia',
+    'iban',
+    'routing',
+    'pix',
+    'chavepix',
+  ].join('|'),
+  'i',
+);
+
+export function sanitizeSydleRawPayload(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeSydleRawPayload(item));
+  }
+
+  if (!isRawRecord(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value).map(([key, nestedValue]) => [
+      key,
+      SENSITIVE_RAW_PAYLOAD_KEY.test(normalizeKey(key))
+        ? '[REDACTED]'
+        : sanitizeSydleRawPayload(nestedValue),
+    ]),
+  );
+}
+
 export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment {
   const externalId =
     stringOrNull(findValue(record, FIELD_KEYS.externalId), 255) ??
@@ -305,6 +383,6 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
     contractNumber: stringOrNull(findValue(record, FIELD_KEYS.contractNumber), 100),
     remittanceId: stringOrNull(findValue(record, FIELD_KEYS.remittanceId), 100),
     sourceUpdatedAt: parseDateTime(findValue(record, FIELD_KEYS.sourceUpdatedAt)),
-    rawPayload: record,
+    rawPayload: sanitizeSydleRawPayload(record) as Record<string, unknown>,
   };
 }

@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## Objetivo
 
@@ -63,6 +63,13 @@ Grau de confianca: alto.
 - Invoice tem prioridade sobre espelho para campos equivalentes no card do processo.
 - Espelho pode preencher campos antes da invoice; fonte visual amarela para espelho, verde para invoice.
 - Validacao possui status `passed`, `failed`, `warning`, `skipped`.
+- Validacao parcial e diagnostica: pode gerar evidencias e alerta operacional,
+  mas nao deve promover processo, abrir correcao final, mover pasta ou gerar
+  comunicacao KIOM.
+- Validacao final exige o check sistemico `document-set-completeness` aprovado:
+  Invoice, Packing List e OHBL/Draft BL utilizaveis.
+- Cada validacao final deve registrar uma linha canonica em `validation_runs` e
+  vincular resultados atuais/historicos/correcoes ao `validation_run_id`.
 - Aceite manual exige justificativa e nao altera o dado original.
 - FOC/desconto nao deve reabrir falso positivo de FOB quando identificado.
 - Portos precisam ser normalizados para pais/sufixo, mas sem aceitar prefixo inseguro.
@@ -70,6 +77,9 @@ Grau de confianca: alto.
 - Documentos com falha de extracao, sem dados uteis ou abaixo da confianca
   operacional minima nao devem alimentar `aiExtractedData`, comparativo,
   validacao ou indicadores verdes de documento extraido.
+- Falha de contrato Zod da IA deve ser preservada em `_trust.contractFailure` e
+  derrubar a confianca abaixo do piso operacional, mantendo evidencia para
+  revisao humana sem alimentar validacao automatica.
 - Comunicacoes nunca devem aceitar anexo por `path` livre do cliente; anexo precisa ser resolvido por documento/espelho autorizado do mesmo processo.
 - Trigger, varredura historica e reprocessamento manual de e-mail ingestion sao operacoes administrativas.
 - Exportacoes CSV de alertas e atendimentos devem refletir os filtros atuais da tela, evitando relatorios duplicados com o mesmo dado.
@@ -89,7 +99,7 @@ Grau de confianca: alto.
 Fonte principal:
 
 - `apps/api/src/shared/database/schema.ts`
-- migrations `apps/api/drizzle/0000` ate `0015`
+- migrations `apps/api/drizzle/0000` ate `0018`
 
 Tabelas centrais observadas:
 
@@ -98,6 +108,7 @@ Tabelas centrais observadas:
 - `documents`
 - `process_items`
 - `validation_results`
+- `validation_runs`
 - `validation_result_history`
 - `document_extraction_history`
 - `follow_up_tracking`
@@ -119,6 +130,10 @@ Estado:
 
 - Modulo tecnico entregue em 2026-06-18.
 - Sync automatico agendado a cada 15 minutos.
+- Rotas `/api/sydle/*` restritas a administradores.
+- Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
+  overlap de 5 minutos; nao usa horario local de inicio como cursor.
+- `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns.
 - Sync real fica desligado ate preencher `SYDLE_SYNC_ENABLED=true`,
   `SYDLE_BASE_URL`, `SYDLE_API_TOKEN` e contrato do endpoint no SOPS/env.
 

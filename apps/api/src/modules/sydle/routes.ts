@@ -9,6 +9,7 @@ const router = Router();
 const syncLimiter = createRateLimiter(5, 60_000);
 
 router.use(authMiddleware);
+router.use(adminMiddleware);
 
 router.get('/config', sydleController.config);
 router.get(
@@ -27,6 +28,6 @@ router.get(
   sydleController.exportCsv,
 );
 router.get('/sync-runs', validate(syncRunsQuerySchema, 'query'), sydleController.syncRuns);
-router.post('/sync-now', adminMiddleware, syncLimiter, sydleController.syncNow);
+router.post('/sync-now', syncLimiter, sydleController.syncNow);
 
 export { router as sydleRoutes };

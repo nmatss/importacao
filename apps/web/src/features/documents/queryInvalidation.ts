@@ -3,6 +3,7 @@ import type { QueryClient } from '@tanstack/react-query';
 export function invalidateDocumentWorkflow(queryClient: QueryClient, processId: string) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: ['documents', processId] }),
+    queryClient.invalidateQueries({ queryKey: ['proformas-aggregate', processId] }),
     queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] }),
     queryClient.invalidateQueries({ queryKey: ['validation', processId] }),
     queryClient.invalidateQueries({ queryKey: ['validation-report', processId] }),

@@ -1,6 +1,6 @@
 # SYDLE - Compras E Pagamentos Internacionais
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## Objetivo
 
@@ -17,6 +17,7 @@ Implementado no portal:
 - Job agendado `sydle-sync` em `*/15 * * * *`.
 - Tela web `/importacao/compras-pagamentos`.
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
+- Rotas backend SYDLE e tela web restritas a administradores.
 - Sync manual admin-only em `/api/sydle/sync-now`.
 - Normalizador tolerante a campos comuns em PT-BR e ingles.
 
@@ -103,18 +104,28 @@ sanitizada em teste.
 - Contadores de lidos, criados, atualizados, conciliados, nao conciliados e erros.
 - Cursor incremental `cursor_from` / `cursor_to`.
 
+O cursor incremental usa o maior `sourceUpdatedAt`/`updatedAt` recebido da
+fonte, nao o horario local de inicio da sync. A proxima consulta aplica overlap
+de 5 minutos sobre o ultimo cursor gravado para reduzir risco de perda por
+empate de timestamp ou atraso de commit na SYDLE.
+
+Datas de cursor aceitam ISO e formatos brasileiros como
+`18/06/2026 10:10:00`, preservando hora/minuto/segundo para evitar avancos
+incorretos do cursor incremental.
+
 ## Conciliacao
 
 Prioridade de match:
 
 1. `processCode` exato.
 2. `purchaseRef` em `import_processes.purchase_ref`.
-3. PI/invoice em dados extraidos do processo.
+3. PI/invoice/pedido em dados extraidos do processo.
 4. Marca, fornecedor/exportador e valor como reforco de score.
 
-Se houver mais de um candidato ou score insuficiente, o registro fica
-`ambiguous` ou `unmatched`. O modulo nao sobrescreve `currency_exchanges` nem
-dados manuais de processo.
+PI, invoice ou pedido isolado nao bastam para vinculo automatico. Se houver
+mais de um candidato ou score insuficiente, o registro fica `ambiguous` ou
+`unmatched`. O modulo nao sobrescreve `currency_exchanges` nem dados manuais de
+processo.
 
 ## Seguranca
 
@@ -123,23 +134,26 @@ Classificacao de risco:
 - `ALTO`: credencial SYDLE em SOPS/env.
 - `ALTO`: payload financeiro sensivel em `raw_payload`; nao logar token, dados
   bancarios ou payload completo.
-- `ALTO`: sync manual exige admin.
-- `MEDIO`: CSV exportado protege contra formula injection em Excel.
+- `ALTO`: `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns
+  como token, senha, authorization, conta, agencia, IBAN, routing e PIX.
+- `ALTO`: rotas SYDLE exigem admin.
+- `MEDIO`: CSV exportado protege contra formula injection em Excel e pagina
+  todos os registros filtrados em lotes internos.
 - `MEDIO`: falha SYDLE nao quebra o portal; fica registrada em `sydle_sync_runs`.
 
 ## Operacao
 
 Rotas:
 
-- `GET /api/sydle/payments-report`
-- `GET /api/sydle/payments-report/summary`
-- `GET /api/sydle/payments-report/export.csv`
-- `GET /api/sydle/sync-runs`
+- `GET /api/sydle/payments-report` admin-only
+- `GET /api/sydle/payments-report/summary` admin-only
+- `GET /api/sydle/payments-report/export.csv` admin-only
+- `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 
 Tela:
 
-- `/importacao/compras-pagamentos`
+- `/importacao/compras-pagamentos` admin-only
 
 Checklist de validacao operacional:
 

@@ -46,7 +46,13 @@ interface DocumentListProps {
   processId: string;
 }
 
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
 const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
+
+function hasOperationalConfidence(value: number | null | undefined): boolean {
+  return value == null || value >= MIN_OPERATIONAL_CONFIDENCE;
+}
 
 const TYPE_COLORS: Record<string, string> = {
   invoice: 'bg-primary-50 text-primary-700 border-primary-200',
@@ -63,8 +69,11 @@ const TYPE_COLORS: Record<string, string> = {
 
 function ConfidenceBadge({ value }: { value: number }) {
   const pct = Math.round(value * 100);
+  const usable = hasOperationalConfidence(value);
   const color =
-    pct >= 80
+    !usable
+      ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200'
+      : pct >= 80
       ? 'text-emerald-700 bg-emerald-50'
       : pct >= 50
         ? 'text-amber-700 bg-amber-50'
@@ -76,13 +85,33 @@ function ConfidenceBadge({ value }: { value: number }) {
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
         color,
       )}
+      title={
+        usable
+          ? `Confiança da extração: ${pct}%`
+          : `Confiança ${pct}% abaixo do piso operacional; documento não utilizável automaticamente`
+      }
     >
-      {pct}%
+      {usable ? `${pct}%` : `${pct}% não utilizável`}
     </span>
   );
 }
 
-function AiStatus({ status }: { status: Document['aiProcessingStatus'] }) {
+function AiStatus({
+  status,
+  confidence,
+}: {
+  status: Document['aiProcessingStatus'];
+  confidence?: number | null;
+}) {
+  if (status === 'completed' && !hasOperationalConfidence(confidence)) {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-danger-500">
+        <AlertTriangle className="h-3 w-3" />
+        Não utilizável
+      </span>
+    );
+  }
+
   switch (status) {
     case 'processing':
     case 'pending':
@@ -111,7 +140,19 @@ function AiStatus({ status }: { status: Document['aiProcessingStatus'] }) {
   }
 }
 
+function isOperationallyExtracted(doc: Document): boolean {
+  return (
+    doc.aiProcessingStatus === 'completed' &&
+    hasOperationalConfidence(doc.aiConfidence) &&
+    !!doc.aiParsedData
+  );
+}
+
 function extractionFailureMessage(doc: Document): string | null {
+  if (doc.aiProcessingStatus === 'completed' && !hasOperationalConfidence(doc.aiConfidence)) {
+    const pct = Math.round((doc.aiConfidence ?? 0) * 100);
+    return `Confiança da extração (${pct}%) abaixo do piso operacional. Dados ficam apenas para revisão e não devem ser usados automaticamente.`;
+  }
   if (doc.aiProcessingStatus !== 'failed') return null;
   const data = doc.aiParsedData;
   if (!data || typeof data !== 'object') {
@@ -316,12 +357,15 @@ export function DocumentList({ processId }: DocumentListProps) {
 
   // Status summary
   const totalDocs = visibleDocuments.length;
-  const completedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'completed').length;
+  const completedDocs = visibleDocuments.filter(isOperationallyExtracted).length;
+  const lowConfidenceDocs = visibleDocuments.filter(
+    (d) => d.aiProcessingStatus === 'completed' && !hasOperationalConfidence(d.aiConfidence),
+  ).length;
   const failedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'failed').length;
   const coreTypes = ['invoice', 'packing_list', 'ohbl'];
   const hasAllCoreDocs = coreTypes.every((type) => Boolean(grouped[type]?.length));
   const hasAllCoreExtracted = coreTypes.every((type) =>
-    (grouped[type] ?? []).some((doc) => doc.aiProcessingStatus === 'completed'),
+    (grouped[type] ?? []).some(isOperationallyExtracted),
   );
 
   return (
@@ -341,6 +385,15 @@ export function DocumentList({ processId }: DocumentListProps) {
             <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600">
               <AlertTriangle className="h-3 w-3" />
               {failedDocs} com erro
+            </span>
+          </>
+        )}
+        {lowConfidenceDocs > 0 && (
+          <>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600">
+              <AlertTriangle className="h-3 w-3" />
+              {lowConfidenceDocs} não utilizável{lowConfidenceDocs !== 1 ? 's' : ''}
             </span>
           </>
         )}
@@ -421,7 +474,10 @@ export function DocumentList({ processId }: DocumentListProps) {
                           <span className="text-[11px] text-slate-400">
                             {formatDate(doc.uploadedAt)}
                           </span>
-                          <AiStatus status={doc.aiProcessingStatus} />
+                          <AiStatus
+                            status={doc.aiProcessingStatus}
+                            confidence={doc.aiConfidence}
+                          />
                           {doc.aiConfidence != null && <ConfidenceBadge value={doc.aiConfidence} />}
                         </div>
                         {source && (

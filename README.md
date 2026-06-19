@@ -95,10 +95,10 @@ Acesse: `http://localhost:8085`
 | **Meu Dia**               | Cockpit pessoal com tarefas pendentes, alertas e LIs urgentes                                                   |
 | **Processos**             | CRUD completo com workflow de status (state machine)                                                            |
 | **Documentos**            | Upload com validacao magic-byte, gestao e comparacao side-by-side                                               |
-| **Validacao**             | 27+ checks automatizados (status `skipped` por doc ausente, aceite manual com justificativa, historico por run) |
+| **Validacao**             | 27+ checks automatizados, gate de completude documental, modo parcial diagnostico e historico por run           |
 | **Espelhos**              | Geracao de espelhos com templates por marca (join por EAN com fallback itemCode)                                |
 | **Financeiro**            | Valor aduaneiro, numerario (x0,6) e %numerario; alertas de invoice baixa, seguro e demurrage (job diario 08:30) |
-| **Compras e Pagamentos**  | Relatorio SYDLE de compras e pagamentos internacionais com sync a cada 15 minutos                               |
+| **Compras e Pagamentos**  | Relatorio SYDLE admin-only de compras/pagamentos internacionais com sync incremental a cada 15 minutos          |
 | **LI Tracking**           | Rastreamento de Licencas de Importacao                                                                          |
 | **Desembaraco**           | Acompanhamento de desembaraco aduaneiro                                                                         |
 | **Numerario**             | Controle de numerario                                                                                           |

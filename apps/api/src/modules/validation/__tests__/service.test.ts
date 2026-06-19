@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, queryQueue, txQueue } = createMockDb();
@@ -66,6 +66,12 @@ const mockFailingCheck = vi.fn().mockReturnValue({
   message: 'Mismatch',
 });
 
+const completeCoreDocs = [
+  { type: 'invoice', isProcessed: true, aiParsedData: { invoiceNumber: 'INV-001' } },
+  { type: 'packing_list', isProcessed: true, aiParsedData: { packingListNumber: 'PL-001' } },
+  { type: 'ohbl', isProcessed: true, aiParsedData: { blNumber: 'BL-001' } },
+];
+
 vi.mock('../checks/index.js', () => ({
   allChecks: [mockPassingCheck],
 }));
@@ -98,6 +104,13 @@ describe('validationService', () => {
     (allChecks as any).push(mockPassingCheck);
   });
 
+  afterEach(async () => {
+    // runAllChecks intentionally fires Google Chat/Drive notifications in the
+    // background. Let those promises consume the mock DB fallback before the
+    // next test resets and repopulates queryQueue.
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
   describe('runAllChecks()', () => {
     it('should throw error for invalid processId', async () => {
       await expect(validationService.runAllChecks(NaN)).rejects.toThrow('ID do processo invalido');
@@ -121,30 +134,104 @@ describe('validationService', () => {
       // 1. select process
       queryQueue.push(createResolvedChain([mockProcess]));
       // 2. select documents
-      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain(completeCoreDocs));
       // 3. select followUp
       queryQueue.push(createResolvedChain([]));
       // 4. update process to validating
       queryQueue.push(createResolvedChain(undefined));
-      // 5. transaction (delete + insert) - handled via txQueue
+      // 5. insert validation run
+      queryQueue.push(createResolvedChain([{ id: 100 }]));
+      // 6. transaction (delete + insert) - handled via txQueue
       txQueue.push(createResolvedChain(undefined)); // delete
       txQueue.push(createResolvedChain(undefined)); // insert
-      // 6. update process to validated (no failures)
+      // 7. update process to validated (no failures)
       queryQueue.push(createResolvedChain(undefined));
-      // 7. update followUp preInspection
+      // 8. update followUp preInspection
       queryQueue.push(createResolvedChain(undefined));
 
       const results = await validationService.runAllChecks(1, 1);
 
-      expect(results).toHaveLength(1);
-      expect(results[0].status).toBe('passed');
+      expect(results).toHaveLength(2);
+      expect(results[0]).toMatchObject({
+        checkName: 'document-set-completeness',
+        status: 'passed',
+      });
       expect(mockDb.transaction).toHaveBeenCalledOnce();
       expect(auditService.log).toHaveBeenCalledWith(
         1,
         'validation_run',
         'process',
         1,
-        expect.objectContaining({ total: 1, passed: 1, failed: 0 }),
+        expect.objectContaining({ total: 2, passed: 2, failed: 0, validationRunId: 100 }),
+        null,
+      );
+    });
+
+    it('should fail final validation when core documents are not usable', async () => {
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(createResolvedChain([])); // no usable documents
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 106 }])); // insert validation run
+      txQueue.push(createResolvedChain([])); // tx select previous
+      txQueue.push(createResolvedChain(undefined)); // tx delete
+      txQueue.push(createResolvedChain(undefined)); // tx insert
+      queryQueue.push(createResolvedChain(undefined)); // update correctionStatus
+
+      const results = await validationService.runAllChecks(1, 1);
+
+      expect(results[0]).toMatchObject({
+        checkName: 'document-set-completeness',
+        status: 'failed',
+      });
+      expect(results.some((r) => r.status === 'failed')).toBe(true);
+      expect(alertService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          title: expect.stringContaining('Falhas na Validacao'),
+        }),
+      );
+    });
+
+    it('should keep partial validation diagnostic without final side effects', async () => {
+      const mockProcess = {
+        id: 1,
+        processCode: 'IMP-001',
+        status: 'documents_received',
+        correctionStatus: null,
+      };
+
+      queryQueue.push(createResolvedChain([mockProcess])); // process
+      queryQueue.push(
+        createResolvedChain([
+          { type: 'invoice', isProcessed: true, aiParsedData: { invoiceNumber: 'INV-001' } },
+        ]),
+      ); // partial documents
+      queryQueue.push(createResolvedChain([])); // followUp
+      queryQueue.push(createResolvedChain([{ id: 107 }])); // insert validation run
+
+      const results = await validationService.runAllChecks(1, null, { mode: 'partial' });
+
+      expect(results[0]).toMatchObject({
+        checkName: 'document-set-completeness',
+        status: 'warning',
+      });
+      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(alertService.create).not.toHaveBeenCalled();
+      expect(auditService.log).toHaveBeenCalledWith(
+        null,
+        'validation_run',
+        'process',
+        1,
+        expect.objectContaining({ mode: 'partial', validationRunId: 107 }),
         null,
       );
     });
@@ -179,6 +266,7 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 101 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
@@ -222,6 +310,7 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 102 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
@@ -329,6 +418,7 @@ describe('validationService', () => {
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 103 }])); // insert validation run
       txQueue.push(createResolvedChain([])); // tx select previous
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
@@ -355,9 +445,10 @@ describe('validationService', () => {
       };
 
       queryQueue.push(createResolvedChain([mockProcess])); // process
-      queryQueue.push(createResolvedChain([])); // docs
+      queryQueue.push(createResolvedChain(completeCoreDocs)); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 104 }])); // insert validation run
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
       queryQueue.push(createResolvedChain(undefined)); // update to validated
@@ -382,9 +473,10 @@ describe('validationService', () => {
       };
 
       queryQueue.push(createResolvedChain([mockProcess])); // process
-      queryQueue.push(createResolvedChain([])); // docs
+      queryQueue.push(createResolvedChain(completeCoreDocs)); // docs
       queryQueue.push(createResolvedChain([])); // followUp
       queryQueue.push(createResolvedChain(undefined)); // update to validating
+      queryQueue.push(createResolvedChain([{ id: 105 }])); // insert validation run
       txQueue.push(createResolvedChain(undefined)); // tx delete
       txQueue.push(createResolvedChain(undefined)); // tx insert
       queryQueue.push(createResolvedChain(undefined)); // update correctionStatus

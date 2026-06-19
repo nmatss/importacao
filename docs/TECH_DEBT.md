@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-06-18
+Ultima atualizacao: 2026-06-19
 
 ## Validacao E Comparativo
 
@@ -11,7 +11,7 @@ Ultima atualizacao: 2026-06-18
   amostras. Em 2026-06-17 foi adicionada cobertura representativa sem mock de
   `allChecks`.
 - Persistir contrato relacional para aceite do comparativo, em vez de depender apenas de evento de timeline.
-- Ao revalidar, definir se aceites manuais devem sobreviver ao novo run quando a divergencia persistir.
+- Ao revalidar, definir se aceites manuais devem sobreviver ao novo run quando a divergencia persistir. Em 2026-06-19 a validacao final passou a ter `validation_runs` canonico, mas a reutilizacao de aceite ainda precisa de politica por hash de evidencia.
 - Fortalecer E2E do fluxo documental com upload multipart real, magic-byte
   negativo, preview/download, permissao admin para reprocess/delete, processo
   travado e validacao ponta a ponta usando as rotas reais.
@@ -24,9 +24,6 @@ Ultima atualizacao: 2026-06-18
   em 2026-06-18 a Invoice KIOM foi resolvida por parser deterministico, mas a
   chamada multimodal ao gateway local ainda pode bater `Headers Timeout Error`
   em ~300s quando realmente precisar de VLM/OCR.
-- Decidir contrato final para falha de schema Zod da IA: manter fallback
-  permissivo com trust downgrade explicito ou tornar extracao estrita por tipo
-  de documento.
 - Implementar classificador por conteudo para anexos genericos de e-mail que
   hoje chegam como `other` quando nome/contexto nao resolvem tipo.
 - Deduplicar reprocessamentos concorrentes com update condicional atomico,
@@ -96,3 +93,16 @@ Concluido em 2026-06-18:
 - Rotas internas invalidas com fallback contextual em Importacao/Certificacoes.
 - Linhas navegaveis por teclado nas tabelas operacionais revisadas.
 - Validacao positiva/coerente em processos, cambios e cron de agendamentos.
+
+Concluido em 2026-06-19:
+
+- Falha de schema Zod da IA manteve fallback permissivo com downgrade explicito:
+  `_trust.contractFailure` e confianca capada abaixo de 40%.
+- Validacao parcial automatica deixou de executar efeitos finais; validacao
+  final ganhou check `document-set-completeness`.
+- `validation_runs` passou a ser entidade canonica vinculada a resultados,
+  historico e correcoes.
+- Historico de extracao deixou de depender de `ON DELETE CASCADE` do documento;
+  delete arquiva a extracao com metadados antes da remocao.
+- SYDLE mitigou riscos internos de cursor, matching, CSV truncado, acesso amplo
+  e `raw_payload` sensivel.

@@ -77,6 +77,8 @@ interface ValidationCheck {
   status: 'passed' | 'failed' | 'warning' | 'skipped';
 }
 
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
 type EmailLogsResponse = { data: EmailLog[]; pagination: unknown };
 
 type CambiosTotalsResponse = {
@@ -111,10 +113,16 @@ function TabIndicator({
 
   if (tabKey === 'documentos') {
     const docs = process.documents ?? [];
+    const hasOperationalConfidence = (confidenceScore?: string | null) => {
+      if (!confidenceScore) return true;
+      const confidence = Number(confidenceScore);
+      return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
+    };
     const hasUsableDoc = (aliases: string[]) =>
       docs.some((doc) => {
         const type = doc.type?.toLowerCase();
         if (!type || !aliases.includes(type)) return false;
+        if (!hasOperationalConfidence(doc.confidenceScore)) return false;
         const data = doc.aiParsedData;
         if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) {
           return false;

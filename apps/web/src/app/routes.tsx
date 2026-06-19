@@ -106,6 +106,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (user?.role !== 'admin') {
+    return (
+      <ModuleNotFound
+        title="Acesso restrito"
+        message="Essa tela e restrita a administradores."
+        to="/importacao/dashboard"
+        action="Ir para o dashboard"
+      />
+    );
+  }
+  return <>{children}</>;
+}
+
 function LazyFallback() {
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-3 animate-fade-in">
@@ -185,7 +200,14 @@ export function AppRoutes() {
                   <Route path="/processos/:id" element={<ProcessDetailPage />} />
                   <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
                   <Route path="/pre-cons" element={<PreConsPage />} />
-                  <Route path="/compras-pagamentos" element={<SydlePaymentsPage />} />
+                  <Route
+                    path="/compras-pagamentos"
+                    element={
+                      <AdminRoute>
+                        <SydlePaymentsPage />
+                      </AdminRoute>
+                    }
+                  />
                   <Route path="/cambios" element={<CurrencyExchangePage />} />
                   <Route path="/lis" element={<LiTrackingPage />} />
                   <Route path="/desembaraco" element={<DesembaracoPage />} />

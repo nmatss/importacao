@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ElementType } from 'react';
 import { NavLink, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -29,7 +29,14 @@ import { cn } from '@/shared/lib/utils';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import { AssistantBubble } from '@/shared/components/AssistantBubble';
 
-const navSections = [
+type NavItem = {
+  to: string;
+  label: string;
+  icon: ElementType;
+  adminOnly?: boolean;
+};
+
+const navSections: { label: string; items: NavItem[] }[] = [
   {
     label: 'Principal',
     items: [
@@ -43,7 +50,12 @@ const navSections = [
     label: 'Operacional',
     items: [
       { to: '/importacao/pre-cons', label: 'Pré-Conferência', icon: ClipboardList },
-      { to: '/importacao/compras-pagamentos', label: 'Compras e Pagamentos', icon: ReceiptText },
+      {
+        to: '/importacao/compras-pagamentos',
+        label: 'Compras e Pagamentos',
+        icon: ReceiptText,
+        adminOnly: true,
+      },
       { to: '/importacao/cambios', label: 'Câmbios', icon: DollarSign },
       { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },
       { to: '/importacao/desembaraco', label: 'Desembaraço', icon: Building2 },
@@ -147,6 +159,12 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
 
   const pageTitle = getPageTitle(location.pathname);
   const breadcrumbs = getBreadcrumb(location.pathname);
+  const visibleNavSections = navSections
+    .map((section) => ({
+      ...section,
+      items: section.items.filter((item) => !item.adminOnly || user?.role === 'admin'),
+    }))
+    .filter((section) => section.items.length > 0);
 
   return (
     <div className="flex h-screen overflow-hidden bg-page">
@@ -207,7 +225,7 @@ export function ImportacaoLayout({ children }: { children: React.ReactNode }) {
 
         {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-          {navSections.map((section) => (
+          {visibleNavSections.map((section) => (
             <div key={section.label}>
               {!collapsed && (
                 <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-200/30">

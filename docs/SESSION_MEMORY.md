@@ -1,5 +1,59 @@
 # Session Memory
 
+## 2026-06-19 - Hardening De Validacao Documental E SYDLE
+
+Escopo:
+
+- Executar revisao enterprise com subagentes e aplicar correcoes prioritarias
+  para impedir falso "100%" documental e elevar o relatorio SYDLE de
+  pagamentos internacionais.
+
+Correcoes aplicadas:
+
+- `runAllChecks` passou a aceitar modo `partial` ou `final`.
+- Validacao parcial automatica agora e diagnostica: nao promove processo para
+  `validated`, nao move pasta de correcao, nao gera rascunho KIOM, nao atualiza
+  follow-up final e nao sobrescreve resultados finais.
+- Validacao final ganhou check sistemico `document-set-completeness`, bloqueando
+  validacao quando Invoice, Packing List e OHBL/Draft BL utilizaveis nao estao
+  presentes.
+- `validation_runs` passou a ser registrado por execucao e vinculado a
+  `validation_results`, `validation_result_history` e `document_corrections`
+  via migration `0018_validation_run_links.sql`.
+- Historico de extracao passou a preservar `process_id`, tipo, nome original e
+  `storage_path`; delete de documento arquiva a extracao antes de remover a
+  linha e a FK passa a `ON DELETE SET NULL`.
+- Falha de schema Zod da IA agora marca `_trust.contractFailure` e derruba a
+  confianca abaixo de 40%, mantendo evidencia auditavel sem uso automatico.
+- Checks `certificate-completeness` e `weight-ratio-check` deixaram de retornar
+  `passed` sem evidencia documental minima.
+- SYDLE passou a usar cursor por `sourceUpdatedAt`/`updatedAt` da fonte com
+  overlap de 5 minutos, matching por todos identificadores relevantes,
+  exportacao CSV paginada completa, redaction de `raw_payload` e rotas
+  restritas a admin.
+- Frontend passou a mostrar documentos de baixa confianca como "nao
+  utilizaveis", checks `skipped` como bloqueados, erros de API como erro/retry
+  e datas SYDLE `YYYY-MM-DD` sem shift de timezone.
+
+Validacoes executadas:
+
+- `npm test -w apps/api -- src/modules/validation/checks/__tests__ src/modules/validation/__tests__/service.test.ts src/modules/validation/__tests__/history.test.ts`
+- `npm test -w apps/api -- src/modules/documents/__tests__/extraction-history.test.ts`
+- `npm test -w apps/api -- src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/service.test.ts`
+- `npm test -w apps/web -- src/features/sydle-payments/SydlePaymentsPage.test.tsx src/features/documents/DocumentList.test.tsx src/features/documents/DocumentComparison.test.tsx src/features/processes/components/ProformasTab.test.tsx src/features/validation/ValidationChecklist.test.tsx`
+- `npm run -w apps/api typecheck`
+- `npm run -w apps/web typecheck`
+- `npm run lint`
+
+Pendencias externas:
+
+- SYDLE ainda depende de contrato/API/payload sanitizado real e credenciais em
+  SOPS para habilitar `SYDLE_SYNC_ENABLED=true`.
+- Segregacao fina de acesso por papel/escopo na `cert-api` segue decisao de
+  negocio/arquitetura.
+- Aceite relacional do comparativo documental ainda deve ser modelado em tabela
+  propria com hash/versao de evidencias.
+
 ## 2026-06-18 - Reprocessamento Invoice DEMO E Resiliencia Documental
 
 Escopo:

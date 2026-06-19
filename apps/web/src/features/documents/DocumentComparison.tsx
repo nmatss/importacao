@@ -14,6 +14,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { ProcessEvent } from '@/shared/types';
 
@@ -267,7 +268,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
   const [acceptNote, setAcceptNote] = useState('');
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
 
-  const { data, isLoading } = useApiQuery<ComparisonData>(
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useApiQuery<ComparisonData>(
     ['doc-comparison', processId],
     `/api/documents/process/${processId}/comparison`,
   );
@@ -348,6 +355,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       !data.hasEspelho ? 'Espelho' : null,
     ].filter(Boolean) as string[];
   }, [data]);
+  const hasBackgroundError = Boolean((isError || error) && data);
 
   const submitAcceptance = async () => {
     if (!acceptTarget) return;
@@ -454,6 +462,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
 
+  if ((isError || error) && !data) {
+    return <ErrorState message="Erro ao carregar comparativo documental." onRetry={() => refetch()} />;
+  }
+
   if (!data) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
@@ -493,6 +505,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
               reprocesse o documento para liberar os campos e itens dependentes.
             </p>
           </div>
+        </div>
+      )}
+
+      {hasBackgroundError && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>Falha ao atualizar o comparativo. Exibindo a ultima leitura disponivel.</p>
         </div>
       )}
 

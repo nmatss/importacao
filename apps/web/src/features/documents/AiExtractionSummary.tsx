@@ -8,6 +8,8 @@ interface AiExtractionSummaryProps {
   confidence: number | null;
 }
 
+const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+
 // Field label mapping per document type
 const FIELD_LABELS: Record<string, Record<string, string>> = {
   invoice: {
@@ -218,9 +220,10 @@ function renderSecondaryFields(
   );
 }
 
-export function AiExtractionSummary({ documentType, data }: AiExtractionSummaryProps) {
+export function AiExtractionSummary({ documentType, data, confidence }: AiExtractionSummaryProps) {
   const labels = FIELD_LABELS[documentType] || FIELD_LABELS.invoice;
   const priority = PRIORITY_FIELDS[documentType] || [];
+  const lowDocumentConfidence = confidence != null && confidence < MIN_OPERATIONAL_CONFIDENCE;
 
   // Separate priority fields from secondary
   const allEntries = Object.entries(data).filter(
@@ -258,6 +261,13 @@ export function AiExtractionSummary({ documentType, data }: AiExtractionSummaryP
 
   return (
     <div className="space-y-2.5">
+      {lowDocumentConfidence && (
+        <div className="rounded-lg border border-danger-100 bg-danger-50/70 px-3 py-2 text-xs text-danger-700">
+          <strong>Baixa confiança</strong> — extração com {Math.round(confidence * 100)}%, abaixo
+          do piso operacional. Use estes dados apenas para revisão manual.
+        </div>
+      )}
+
       {/* Key fields */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
         {priorityEntries.map(([key, val]) => {

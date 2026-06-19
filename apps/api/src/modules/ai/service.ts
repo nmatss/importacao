@@ -509,7 +509,11 @@ class AIService {
       }
     }
 
-    const score = fieldCount > 0 ? totalConfidence / fieldCount : 0;
+    let score = fieldCount > 0 ? totalConfidence / fieldCount : 0;
+    if (data._trust?.contractFailure === true) {
+      score = Math.min(score, 0.39);
+      lowConfidenceFields.push('_contract');
+    }
     return { score, lowConfidenceFields };
   }
 
@@ -586,7 +590,11 @@ class AIService {
       sourceText ?? '',
       new Date().toISOString(),
     );
-    (result.data as Record<string, any>)._trust = report;
+    const dataRecord = result.data as Record<string, any>;
+    const existingTrust = dataRecord._trust && typeof dataRecord._trust === 'object'
+      ? dataRecord._trust
+      : {};
+    dataRecord._trust = { ...report, ...existingTrust };
 
     if (report.findings.length > 0) {
       logger.info(
@@ -635,11 +643,31 @@ class AIService {
       return result.data;
     }
 
+    const markedRaw =
+      raw && typeof raw === 'object'
+        ? {
+            ...raw,
+            _trust: {
+              ...(raw as Record<string, any>)._trust,
+              contractFailure: true,
+              contractContext: context,
+              contractErrors: result.error.issues.slice(0, 10).map((issue) => ({
+                path: issue.path.join('.'),
+                code: issue.code,
+              })),
+            },
+          }
+        : raw;
+
     logger.warn(
-      { context, errors: result.error.issues.slice(0, 5), rawKeys: Object.keys(raw) },
+      {
+        context,
+        errors: result.error.issues.slice(0, 5),
+        rawKeys: raw && typeof raw === 'object' ? Object.keys(raw) : [],
+      },
       'AI response Zod validation failed, using raw parsed data — downstream may see unexpected shapes',
     );
-    return raw as T;
+    return markedRaw as T;
   }
 
   private strictZodParse<T>(response: string, context: string, schema: ZodType<T>): T {

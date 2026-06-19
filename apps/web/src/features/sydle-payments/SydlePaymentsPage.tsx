@@ -150,7 +150,14 @@ function money(value: string | number | null, currency = 'USD'): string {
 
 function dateLabel(value: string | null): string {
   if (!value) return '--';
-  return new Date(value).toLocaleDateString('pt-BR');
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    return `${day}/${month}/${year}`;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--';
+  return parsed.toLocaleDateString('pt-BR');
 }
 
 function statusClass(status: PaymentStatus): string {
@@ -283,19 +290,20 @@ export function SydlePaymentsPage() {
     error,
     refetch,
   } = useApiQuery<PaginatedResponse>(['sydle-payments', queryParams.toString()], reportUrl, {
-    refetchInterval: REFRESH_INTERVAL_MS,
+    enabled: isAdmin,
+    refetchInterval: isAdmin ? REFRESH_INTERVAL_MS : false,
   });
 
   const { data: summary } = useApiQuery<SydleSummary>(
     ['sydle-payments-summary', summaryParams.toString()],
     summaryUrl,
-    { refetchInterval: REFRESH_INTERVAL_MS },
+    { enabled: isAdmin, refetchInterval: isAdmin ? REFRESH_INTERVAL_MS : false },
   );
 
   const { data: syncRuns } = useApiQuery<SyncRun[]>(
     ['sydle-sync-runs'],
     '/api/sydle/sync-runs?limit=5',
-    { refetchInterval: REFRESH_INTERVAL_MS },
+    { enabled: isAdmin, refetchInterval: isAdmin ? REFRESH_INTERVAL_MS : false },
   );
 
   const rows = report?.data ?? [];
@@ -370,6 +378,10 @@ export function SydlePaymentsPage() {
     } finally {
       setExporting(false);
     }
+  }
+
+  if (!isAdmin) {
+    return <ErrorState message="Relatorio SYDLE restrito a administradores." />;
   }
 
   if (isLoading && !report) {

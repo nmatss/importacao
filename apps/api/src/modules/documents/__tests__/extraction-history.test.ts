@@ -109,6 +109,8 @@ describe('document extraction history (backlog #12)', () => {
       expect(historyInsertChain.values).toHaveBeenCalledWith(
         expect.objectContaining({
           documentId: 7,
+          processId: 1,
+          documentType: 'invoice',
           aiParsedData: previousExtraction,
           confidence: '0.9000',
           reason: 'reprocess',
@@ -190,6 +192,49 @@ describe('document extraction history (backlog #12)', () => {
         'reprocess',
       );
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('delete()', () => {
+    it('archives the current extraction before deleting the document row', async () => {
+      const previousExtraction = { invoiceNumber: 'INV-DELETE' };
+      const doc = {
+        id: 10,
+        processId: 1,
+        type: 'invoice',
+        originalFilename: 'invoice-delete.pdf',
+        storagePath: '/tmp/invoice-delete.pdf',
+        aiParsedData: previousExtraction,
+        confidenceScore: '0.8500',
+      };
+
+      queryQueue.push(createResolvedChain([doc])); // select document
+      queryQueue.push(createResolvedChain([])); // assert process not locked
+      const historyInsertChain = createResolvedChain(undefined);
+      txQueue.push(historyInsertChain); // archive history
+      txQueue.push(createResolvedChain(undefined)); // delete document
+      txQueue.push(createResolvedChain([])); // rebuild: remaining docs
+      txQueue.push(createResolvedChain([{ aiExtractedData: { invoice: previousExtraction } }])); // process
+      txQueue.push(createResolvedChain(undefined)); // update process projection
+
+      await documentService.delete(10, 1);
+
+      expect(historyInsertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          documentId: 10,
+          processId: 1,
+          documentType: 'invoice',
+          originalFilename: 'invoice-delete.pdf',
+          storagePath: '/tmp/invoice-delete.pdf',
+          aiParsedData: previousExtraction,
+          confidence: '0.8500',
+          reason: 'delete',
+        }),
+      );
+
+      const insertOrder = mockTx.insert.mock.invocationCallOrder[0];
+      const deleteOrder = mockTx.delete.mock.invocationCallOrder[0];
+      expect(insertOrder).toBeLessThan(deleteOrder);
     });
   });
 

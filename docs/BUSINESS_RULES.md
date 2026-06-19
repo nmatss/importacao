@@ -1,6 +1,6 @@
 # Business Rules
 
-Ultima atualizacao: 2026-06-17
+Ultima atualizacao: 2026-06-19
 
 ## Processo De Importacao
 
@@ -34,6 +34,11 @@ Regras:
 - Upload manual e email ingestion devem validar tipo real do arquivo.
 - AI/extracao deve gerar dados estruturados e auditaveis.
 - Documento com extracao falha nao deve bloquear auto-espelho quando outros documentos confiaveis existem.
+- Documento com confianca abaixo de 40% fica armazenado como evidencia, mas nao
+  e utilizavel automaticamente para card, comparativo, validacao final ou
+  espelho automatico.
+- Delete de documento deve preservar historico de extracao com metadados
+  suficientes para auditoria posterior.
 
 ## Card Do Processo
 
@@ -58,6 +63,12 @@ Evidencias:
 
 - Checks podem ser `passed`, `failed`, `warning` ou `skipped`.
 - `skipped` indica falta de fonte ou bloqueio, nao erro.
+- Validacao parcial e somente diagnostica; nao promove processo, nao abre fluxo
+  final de correcao, nao move pasta e nao gera rascunho KIOM.
+- Validacao final exige `document-set-completeness` aprovado: Invoice, Packing
+  List e OHBL/Draft BL utilizaveis.
+- Cada validacao final deve gerar `validation_runs` canonico e vincular
+  resultados, historico e correcao ao run.
 - Aceite manual exige justificativa e deve ser auditado.
 - Aceite manual suprime pendencia operacional, mas nao altera o dado fonte.
 - Email de correcao deve considerar apenas falhas abertas.

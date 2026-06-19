@@ -22,6 +22,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
 import { CHECKLIST_STEPS } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 interface FollowUpData {
   id: number;
@@ -72,6 +73,8 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   const {
     data: followUp,
     isLoading,
+    isError,
+    error,
     refetch,
   } = useApiQuery<FollowUpData>(['follow-up', processId], `/api/follow-up/${processId}`);
 
@@ -115,12 +118,24 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
     return <LoadingSpinner className="py-8" />;
   }
 
+  if ((isError || error) && !followUp) {
+    return <ErrorState message="Erro ao carregar checklist documental." onRetry={() => refetch()} />;
+  }
+
+  const hasBackgroundError = Boolean((isError || error) && followUp);
+
   const completedCount = CHECKLIST_STEPS.filter((s) => followUp && followUp[s.key]).length;
   const totalSteps = CHECKLIST_STEPS.length;
   const progressPct = Math.round((completedCount / totalSteps) * 100);
 
   return (
     <div className="space-y-4">
+      {hasBackgroundError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Falha ao atualizar o checklist. Exibindo a ultima leitura disponivel.
+        </div>
+      )}
+
       {/* Progress header */}
       <div className="flex items-center gap-4 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-3">
         <div className="flex-1">

@@ -28,6 +28,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `sydle_purchase_payments`/`sydle_sync_runs`, API `/api/sydle`,
   tela `/importacao/compras-pagamentos`, exportacao CSV backend e sync
   agendado a cada 15 minutos com no-op seguro quando desconfigurado.
+- `document-set-completeness` como check sistemico de validacao, bloqueando
+  validacao final quando Invoice, Packing List e BL utilizaveis nao existem.
+- Migration `0018_validation_run_links.sql` ligando resultados atuais/historicos
+  a `validation_runs` e preservando historico de extracao apos delete de
+  documento.
 - Exportacao CSV para Central de Alertas e Atendimentos usando os filtros
   ativos da tela.
 - Utilitario compartilhado `apps/web/src/shared/lib/csv.ts`.
@@ -170,6 +175,27 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   `/api/auth/me` antes de injetar a chave interna da cert-api; downloads,
   exports, upload de certificado e stream de validacao agora usam fetch
   autenticado.
+- Validacao automatica parcial agora e diagnostica: nao promove processo para
+  `validated`, nao move pasta de correcao, nao gera rascunho KIOM e nao
+  sobrescreve resultados finais.
+- Validacao final passou a gravar `validation_runs` canonico com trigger,
+  duracao e contadores, vinculando resultados atuais, historico e
+  `document_corrections`.
+- Falha de contrato Zod da IA passou a marcar `_trust.contractFailure` e capar a
+  confianca abaixo do piso operacional, mantendo evidencia auditavel sem
+  alimentar validacao automatica.
+- Checks de certificado e proporcao de peso deixaram de aprovar quando faltam
+  evidencias minimas de Invoice/itens/pesos.
+- Historico de extracao e arquivado tambem antes de delete fisico de documento,
+  com `process_id`, tipo, nome original e caminho do arquivo.
+- SYDLE passou a usar cursor incremental por `sourceUpdatedAt` da fonte com
+  overlap, matching por todos os identificadores relevantes, export CSV paginado
+  sem truncamento silencioso, redaction de `raw_payload` e rotas restritas a
+  administradores.
+- Tela SYDLE passou a formatar `YYYY-MM-DD` sem shift de timezone; documentos de
+  baixa confianca aparecem como nao utilizaveis; checks `skipped` aparecem como
+  bloqueados no progresso; telas documentais distinguem erro de API de estado
+  vazio.
 
 ### Tests
 
@@ -197,6 +223,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Playwright MCP validou o balao do Assistente IA em Importacao/Certificacoes
   desktop/mobile, incluindo envio mockado, fontes, Escape, inferencia de ID de
   processo, ausencia de overflow e ausencia de warnings/erros de console.
+- Validacao de 2026-06-19: testes focados de validacao/checks (`97` testes),
+  historico de extracao (`7` testes), SYDLE API (`15` testes), frontend
+  documental/SYDLE (`14` testes), typecheck API/Web e lint raiz.
 
 ### Security
 
