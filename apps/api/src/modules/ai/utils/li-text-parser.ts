@@ -1,3 +1,5 @@
+import { findLabeledDate } from './dates.js';
+
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
 const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.82): ConfidenceField<T> => ({
@@ -10,12 +12,12 @@ export function tryParseLIText(text: string): Record<string, any> | null {
   if (!/\b(LICEN[ÇC]A\s+DE\s+IMPORTA[ÇC][AÃ]O|LI\s*[:#-])\b/i.test(source)) return null;
 
   const liNumber = matchFirst(source, [/\bLI\s*[:#-]\s*([0-9]{2}\/[0-9]{6,7}-?[0-9])\b/i]);
-  const registrationDate = parseDate(
-    matchFirst(source, [
-      /\bData\s+Registro\s*[:#-]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})/i,
-      /\bRegistro\s*[:#-]\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})/i,
-    ]),
-  );
+  const registrationDate = findLabeledDate(source, [
+    'data registro',
+    'data de registro',
+    'registro',
+    'data',
+  ]);
   const importerLine = matchFirst(source, [/\bImportador\s*[:#-]\s*(.+)/i]);
   const importerCnpj = matchFirst(source, [
     /\bCNPJ\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/i,
@@ -76,17 +78,6 @@ function cleanupLine(value: string | null): string | null {
 function cleanImporter(value: string | null): string | null {
   if (!value) return null;
   return value.replace(/\bCNPJ\b.*$/i, '').trim() || null;
-}
-
-function parseDate(value: string | null): string | null {
-  if (!value) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const match = value.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (!match) return null;
-  const day = match[1].padStart(2, '0');
-  const month = match[2].padStart(2, '0');
-  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
-  return `${year}-${month}-${day}`;
 }
 
 function parseNumber(value: string | null | undefined): number | null {

@@ -1,3 +1,5 @@
+import { findLabeledDate } from './dates.js';
+
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
 const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.8): ConfidenceField<T> => ({
@@ -19,11 +21,9 @@ export function tryParsePackingListText(text: string): Record<string, any> | nul
     /\binvoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
     /\binv(?:oice)?\s*[:#-]\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
   ]);
-  const date = parseDate(
-    matchFirst(source, [
-      /\bdate\s*[:#-]?\s*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})/i,
-    ]),
-  );
+  // Packing lists carry the shipment/ship/on-board date as often as a plain
+  // "date" — anchor on the broad label set and normalize many formats to ISO.
+  const date = findLabeledDate(source);
   const exporterName = normalizePartyLine(
     extractLabeledValue(source, ['exporter', 'shipper', 'seller']),
   );
@@ -194,18 +194,6 @@ function extractPort(text: string, kind: 'loading' | 'discharge'): string | null
     if (match?.[1]) return match[1].trim().replace(/[.,;]+$/, '') || null;
   }
   return null;
-}
-
-function parseDate(value: string | null): string | null {
-  if (!value) return null;
-  const raw = value.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
-  if (!match) return null;
-  const day = match[1].padStart(2, '0');
-  const month = match[2].padStart(2, '0');
-  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
-  return `${year}-${month}-${day}`;
 }
 
 function parseNumber(value: string | null | undefined): number | null {

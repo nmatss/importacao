@@ -131,6 +131,12 @@ function buildCorpus(ns: string): KbEntry[] {
       for (const [type, v] of Object.entries<any>(kb.cbmByContainer ?? {})) {
         out.push(makeEntry(`CBM ${type}: nominal ${v?.nominal} / real ${v?.real}`, type));
       }
+      // Generic format premissas (date normalization, currency) — reference
+      // guidance only, never business data. Keyed on broad tokens so they
+      // surface when the query mentions a date/currency.
+      for (const note of (kb.formatNotes ?? []) as string[]) {
+        out.push(makeEntry(note, 'data date formato format moeda currency iso'));
+      }
       break;
     }
     default:
@@ -156,8 +162,29 @@ export function scoreEntry(queryNorm: string, queryTokens: Set<string>, e: KbEnt
   // Threshold matches tokenize() (>= 2) so 2-char tokens that count toward the
   // length divisor can also score, instead of only inflating it.
   let overlap = 0;
-  for (const t of e.tokens) if (t.length >= 2 && queryTokens.has(t)) overlap++;
+  let distinctiveOverlap = 0;
+  for (const t of e.tokens) {
+    if (t.length >= 2 && queryTokens.has(t)) {
+      overlap++;
+      // Longer/code-like tokens (>= 4 chars, e.g. "ningbo", "maersk", a port or
+      // carrier name) are far more discriminative for grounding header/party/
+      // port/carrier fields than generic glue words ("porto", "de") — weight
+      // them so a single distinctive hit outranks several common-word hits.
+      if (t.length >= 4) distinctiveOverlap++;
+    }
+  }
+  if (overlap === 0) return score;
   if (e.tokens.size > 0) score += overlap / Math.sqrt(e.tokens.size);
+  // Distinctive-token bonus, length-normalized the same way so long entries
+  // don't win by sheer size.
+  if (distinctiveOverlap > 0 && e.tokens.size > 0) {
+    score += (0.5 * distinctiveOverlap) / Math.sqrt(e.tokens.size);
+  }
+  // Full-phrase bonus: every token of a (short) entry appears in the query —
+  // a strong signal the doc names this exact port/carrier/party.
+  if (overlap === e.tokens.size && e.tokens.size > 0 && e.tokens.size <= 6) {
+    score += 1;
+  }
   return score;
 }
 

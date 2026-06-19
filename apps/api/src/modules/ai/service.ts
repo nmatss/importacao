@@ -39,6 +39,7 @@ import {
 } from './utils/invoice-text-parser.js';
 import { tryParsePackingListText } from './utils/packing-list-text-parser.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
+import { tryParseProformaText } from './utils/proforma-text-parser.js';
 
 export { AIBudgetExceededError };
 
@@ -54,6 +55,25 @@ const USE_STRUCTURED_OUTPUT = process.env.AI_STRUCTURED_OUTPUT !== '0';
 function useSpecialistPrompts(): boolean {
   return process.env.AI_USE_SPECIALIST === '1';
 }
+
+/**
+ * Self-repair loop config. After the deterministic+LLM extraction and the
+ * confidence harness, fields that came back null/empty OR below this threshold
+ * AND that the harness considers groundable get ONE bounded, targeted re-ask.
+ * Read at call time so it is hot-toggleable and testable.
+ *  - AI_SELF_REPAIR: '0' to disable (default ON).
+ *  - AI_SELF_REPAIR_THRESHOLD: confidence floor below which a field is repaired
+ *    (default 0.5).
+ */
+function selfRepairEnabled(): boolean {
+  return process.env.AI_SELF_REPAIR !== '0';
+}
+function selfRepairThreshold(): number {
+  const v = Number(process.env.AI_SELF_REPAIR_THRESHOLD ?? '0.5');
+  return Number.isFinite(v) ? v : 0.5;
+}
+/** Bounded to a single repair round — never loop. */
+const SELF_REPAIR_MAX_ROUNDS = 1;
 
 interface OpenRouterMessage {
   role: 'system' | 'user' | 'assistant';
@@ -620,6 +640,136 @@ class AIService {
     return { ...result, confidenceScore, fieldsWithLowConfidence };
   }
 
+  /**
+   * Whether the current provider can serve an extra LLM call right now. The
+   * self-repair pass must degrade cleanly when running offline / with the local
+   * gateway unavailable — we never want a failed repair to corrupt a good
+   * primary result. Heuristic: the provider object exists and exposes
+   * callModel; the actual reachability failure is still caught around the call.
+   */
+  private providerAvailable(): boolean {
+    return !!this.provider && typeof this.provider.callModel === 'function';
+  }
+
+  /**
+   * Top-level scalar field paths the harness can verify against the source
+   * (grounded / dates / ports / suppliers). These are exactly the fields a
+   * targeted re-ask can be grounded on, so we restrict self-repair to them and
+   * never re-ask for item-array internals.
+   */
+  private groundableFieldPaths(docType: string): string[] {
+    const config = getVerificationConfig(docType);
+    if (!config) return [];
+    const paths = new Set<string>();
+    for (const p of config.groundedFields ?? []) paths.add(p);
+    for (const p of config.dateFields ?? []) paths.add(p);
+    for (const { field } of config.portFields ?? []) paths.add(field);
+    for (const p of config.supplierFields ?? []) paths.add(p);
+    // Only header-level scalars — drop item-array paths from the repair set.
+    return [...paths].filter((p) => !p.startsWith('items[]'));
+  }
+
+  /**
+   * SELF-REPAIR LOOP (bounded to 1 round). After the harness, collect the
+   * groundable header fields that are null/empty OR below the low-confidence
+   * threshold, run ONE targeted LLM call that asks for ONLY those fields (fenced
+   * with the source text + RAG context), and merge back any value that the
+   * second pass returns with strictly higher confidence. Skipped cleanly when
+   * disabled, when the provider is unavailable, or when nothing needs repair.
+   */
+  private async selfRepairExtraction(
+    registryKey: string,
+    result: ExtractionResult,
+    sourceText: string,
+  ): Promise<ExtractionResult> {
+    if (!selfRepairEnabled() || !this.providerAvailable()) return result;
+    const groundingViable = (sourceText ?? '').replace(/\s/g, '').length >= 50;
+    if (!groundingViable) return result;
+
+    const threshold = selfRepairThreshold();
+    const data = result.data as Record<string, any>;
+    const candidates = this.groundableFieldPaths(registryKey).filter((path) => {
+      const field = data[path];
+      if (!field || typeof field !== 'object' || !('confidence' in field)) {
+        // Missing entirely → repairable.
+        return field === undefined || field === null;
+      }
+      const value = (field as { value: unknown }).value;
+      const conf = (field as { confidence: number }).confidence;
+      const empty = value === null || value === undefined || value === '';
+      return empty || conf < threshold;
+    });
+
+    if (candidates.length === 0) return result;
+
+    const skill = getSkill(registryKey);
+    const ragSnippets = skill?.retrieval ? retrieveContext(sourceText, skill.retrieval) : [];
+    const ragBlock =
+      ragSnippets.length > 0
+        ? `\n\nContexto de referência (NUNCA é licença para inventar):\n- ${ragSnippets.join('\n- ')}`
+        : '';
+
+    const messages: OpenRouterMessage[] = [
+      {
+        role: 'system',
+        content: `Você é um extrator de campos faltantes de documentos de importação do Grupo Uni.co.
+Extraia APENAS os campos solicitados a partir do documento fornecido.
+Use SOMENTE o que está literalmente no documento — não invente, não deduza valores ausentes.
+Datas em ISO-8601 (YYYY-MM-DD). Se um campo não estiver no documento, retorne value:null e confidence:0.
+Responda SOMENTE com JSON estrito no formato:
+{ "campo": { "value": <valor|null>, "confidence": 0.0 } }`,
+      },
+      {
+        role: 'user',
+        content: `Campos a extrair: ${candidates.join(', ')}${ragBlock}\n\n=== DOCUMENTO ===\n${sourceText}\n=== FIM ===`,
+      },
+    ];
+
+    try {
+      const model = this.analysisModel();
+      const response = await this.chat(model, messages, true, `${registryKey}_self_repair`);
+      const repaired = this.safeJsonParse(response, `${registryKey} self-repair`);
+      if (!repaired || typeof repaired !== 'object') return result;
+
+      let mergedAny = false;
+      for (const path of candidates) {
+        const incoming = (repaired as Record<string, any>)[path];
+        if (!incoming || typeof incoming !== 'object' || !('value' in incoming)) continue;
+        const incomingValue = incoming.value;
+        const incomingConf = typeof incoming.confidence === 'number' ? incoming.confidence : 0;
+        if (incomingValue === null || incomingValue === undefined || incomingValue === '') continue;
+        const current = data[path];
+        const currentConf =
+          current && typeof current === 'object' && 'confidence' in current
+            ? (current as { confidence: number }).confidence
+            : 0;
+        // Only adopt a strictly higher-confidence, source-grounded value.
+        if (incomingConf > currentConf) {
+          data[path] = { value: incomingValue, confidence: incomingConf };
+          mergedAny = true;
+        }
+      }
+
+      if (!mergedAny) return result;
+
+      logger.info(
+        { registryKey, repairedFields: candidates },
+        'Self-repair merged higher-confidence fields',
+      );
+      // Recompute confidence + re-run the harness over the merged data so the
+      // trust verdict reflects the repaired values.
+      const { score, lowConfidenceFields } = this.calculateConfidence(data);
+      return this.applyHarness(
+        registryKey,
+        { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+        sourceText,
+      );
+    } catch (err) {
+      logger.warn({ err, registryKey }, 'Self-repair pass failed — keeping primary result');
+      return result;
+    }
+  }
+
   private safeJsonParse(response: string, context: string): any {
     try {
       return JSON.parse(response);
@@ -728,7 +878,7 @@ class AIService {
       );
     }
     const messages = this.buildExtractionMessages('invoice', msgs, text, imageOpts);
-    return this.extractWithUpgrade(
+    const extracted = await this.extractWithUpgrade(
       'invoice',
       'gemini-2.5-flash',
       'gemini-2.5-pro',
@@ -772,12 +922,39 @@ class AIService {
         );
       },
     );
+    return this.selfRepairExtraction('invoice', extracted, text);
   }
 
   async extractProformaData(
     text: string,
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
+    // Deterministic-first: mirror the invoice path. The proforma carries the
+    // PI number (Pre-Cons link) + NCM-anchored line items + FOB total directly
+    // in the text layer, which the local model frequently missed.
+    const deterministic = tryParseProformaText(text);
+    if (deterministic && Array.isArray(deterministic.items) && deterministic.items.length > 0) {
+      stripSpuriousItemPrefix(deterministic.items);
+      const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
+      logger.info(
+        {
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+          itemCount: deterministic.items.length,
+        },
+        'Proforma invoice data extracted by deterministic text parser',
+      );
+      return this.applyHarness(
+        'proforma_invoice',
+        {
+          data: deterministic,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        },
+        text,
+      );
+    }
+
     const msgs: OpenRouterMessage[] = buildProformaPrompt(text) as OpenRouterMessage[];
     if (imageOpts) {
       msgs[msgs.length - 1] = this.buildUserMessage(
@@ -786,7 +963,7 @@ class AIService {
       );
     }
     const messages = this.buildExtractionMessages('proforma_invoice', msgs, text, imageOpts);
-    return this.extractWithUpgrade(
+    const extracted = await this.extractWithUpgrade(
       'proforma',
       'gemini-2.5-flash',
       'gemini-2.5-pro',
@@ -826,6 +1003,7 @@ class AIService {
         );
       },
     );
+    return this.selfRepairExtraction('proforma_invoice', extracted, text);
   }
 
   async extractPackingListData(
@@ -863,7 +1041,7 @@ class AIService {
       );
     }
     const messages = this.buildExtractionMessages('packing_list', msgs, text, imageOpts);
-    return this.extractWithUpgrade(
+    const extracted = await this.extractWithUpgrade(
       'packing_list',
       'gemini-2.5-flash',
       'gemini-2.5-pro',
@@ -897,6 +1075,7 @@ class AIService {
         );
       },
     );
+    return this.selfRepairExtraction('packing_list', extracted, text);
   }
 
   async extractBLData(text: string, imageOpts?: ImageExtractionOpts): Promise<ExtractionResult> {
@@ -908,7 +1087,11 @@ class AIService {
       );
     }
     const messages = this.buildExtractionMessages('ohbl', msgs, text, imageOpts);
-    return this.extractWithUpgrade('bl', 'gemini-2.5-flash', 'gemini-2.5-pro', async (model) => {
+    const extracted = await this.extractWithUpgrade(
+      'bl',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
       const response = await this.chat(
         model,
         messages,
@@ -927,12 +1110,14 @@ class AIService {
         },
         'Bill of Lading data extracted',
       );
-      return this.applyHarness(
-        'ohbl',
-        { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
-        text,
-      );
-    });
+        return this.applyHarness(
+          'ohbl',
+          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          text,
+        );
+      },
+    );
+    return this.selfRepairExtraction('ohbl', extracted, text);
   }
 
   async extractDraftBLData(

@@ -1328,5 +1328,11 @@
       "2023-11-15 00:00:00"
     ]
   ],
-  "note": "Parâmetros de custo da aba 'Premissas'. Valores monetários em BRL salvo indicado. AFRMM = 0,08 (8%) sobre frete internacional + taxa fixa BRL 21,20/processo. Seguro Internacional = 0,0004 (0,04%) sobre FOB+Frete+10% despesas+10% lucros+impostos. Armazenagem IOA (0,00687) e NVT (0,0064) são frações sobre o CIF, com valor mínimo em BRL (campo note). transitTimeDays = coluna 'Média' do bloco Transit Time China 2022/2023 (Ready Date→ETA CD, em dias). cbmByContainer: CBM nominal e real por tipo de container. 'raw' = dump bruto das linhas não vazias (cols A–S) preservando blocos extras (datas ETD/ETA por embarque específico, taxas Portonave/Itapoá FCL 2025, etc.). Taxa Siscomex sem valor recuperável."
+  "note": "Parâmetros de custo da aba 'Premissas'. Valores monetários em BRL salvo indicado. AFRMM = 0,08 (8%) sobre frete internacional + taxa fixa BRL 21,20/processo. Seguro Internacional = 0,0004 (0,04%) sobre FOB+Frete+10% despesas+10% lucros+impostos. Armazenagem IOA (0,00687) e NVT (0,0064) são frações sobre o CIF, com valor mínimo em BRL (campo note). transitTimeDays = coluna 'Média' do bloco Transit Time China 2022/2023 (Ready Date→ETA CD, em dias). cbmByContainer: CBM nominal e real por tipo de container. 'raw' = dump bruto das linhas não vazias (cols A–S) preservando blocos extras (datas ETD/ETA por embarque específico, taxas Portonave/Itapoá FCL 2025, etc.). Taxa Siscomex sem valor recuperável.",
+  "formatNotes": [
+    "Datas de documentos de importacao normalizam para ISO-8601 (YYYY-MM-DD).",
+    "Datas numericas dd/mm/yyyy sao lidas como dia/mes/ano por padrao (fornecedores Asia/UE e lado brasileiro usam dd/mm); so inverte para mm/dd quando o primeiro componente for impossivel como dia.",
+    "Meses por extenso aceitos em ingles (Jan..Dec) e portugues (jan..dez); formatos dd-MMM-yyyy, 15 de marco de 2024 e March 15, 2024 sao validos.",
+    "Moeda de faturas comerciais internacionais e tipicamente USD (ISO 4217); documentos fiscais domesticos em BRL/R$ nao sao faturas de importacao."
+  ]
 }

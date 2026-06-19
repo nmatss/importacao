@@ -3,6 +3,33 @@ interface OpenRouterMessage {
   content: string;
 }
 
+/**
+ * Anomaly text contract (consumed by validation/service.ts reconciliation).
+ *
+ * The AI/deterministic anomaly stream and the deterministic document-comparison
+ * panel ("Itens no Packing List sem correspondencia na Invoice") MUST agree on
+ * how many items are unmatched. The AI uses fuzzy matching and frequently
+ * over-reports (e.g. "7 itens nao encontrados no Packing List" while the
+ * deterministic panel shows 1). To keep both surfaces consistent, the
+ * deterministic comparison is the single source of truth: validation/service
+ * drops any AI-emitted item-presence anomaly and re-emits a single anomaly
+ * whose count comes from the deterministic unmatched-items set.
+ *
+ * These markers let the reconciler identify (a) AI item-presence anomalies to
+ * suppress, and (b) the canonical field name to use for the re-emitted one.
+ */
+export const ITEM_MATCH_ANOMALY_FIELD = 'items.unmatched';
+
+/** A `field` belongs to the per-item match family (e.g. "items.PI7752Y"). */
+export function isItemMatchAnomalyField(field: string | undefined): boolean {
+  if (!field) return false;
+  // "items", "items.<code>", "items.unmatched" — but NOT "items.<code>.quantity"
+  // (quantity divergences are a separate, kept signal).
+  if (!/^items(\.|$)/.test(field)) return false;
+  if (/\.quantity$/.test(field)) return false;
+  return true;
+}
+
 export function buildAnomalyPrompt(
   invoiceData: Record<string, any>,
   packingListData: Record<string, any>,
