@@ -30,8 +30,11 @@ Auditoria paralela por dimensão. Achados classificados:
 
 ### Security — 1 P0
 
-- **P0:** `sydle/client.ts` `signIn` enviava login/senha na **query string** →
-  vazam em access logs de proxy/WAF (redaction do pino não alcança URL).
+- **P0 (ABERTO):** `sydle/client.ts` `signIn` envia login/senha na **query string** →
+  vazam em access logs de proxy/WAF. **Tentativa de fix (POST body) FALHOU em prod
+  com `HTTP 405` — a SYDLE só aceita GET no signIn (verificado 2026-06-20).**
+  Revertido para GET funcional; mitigação requer suporte da SYDLE (token/POST).
+  Ver `KNOWN_ISSUES.md`.
 
 ### DBA — 2 P1
 
