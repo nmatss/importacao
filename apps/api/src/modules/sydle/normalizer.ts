@@ -75,7 +75,14 @@ const FIELD_KEYS = {
     'ordemCompra',
   ],
   proformaNumber: ['proformaNumber', 'proforma', 'piNumber', 'pi', 'numeroPi', 'proformaInvoice'],
-  invoiceNumber: ['invoiceNumber', 'invoice', 'commercialInvoice', 'ciNumber', 'numeroInvoice'],
+  invoiceNumber: [
+    'invoiceNumber',
+    'invoice',
+    'invoiceCode',
+    'commercialInvoice',
+    'ciNumber',
+    'numeroInvoice',
+  ],
   supplierName: ['supplierName', 'supplier', 'fornecedor', 'exportador', 'shipper', 'vendor'],
   brand: ['brand', 'marca', 'businessUnit', 'unidade'],
   currency: ['currency', 'moeda'],
@@ -419,6 +426,13 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
     rawPayload: sanitizeSydleRawPayload(record) as Record<string, unknown>,
   };
 }
+
+/**
+ * Exposto para o caminho Sydle One (client.ts) reusar a mesma busca flexível e as
+ * mesmas listas de chaves candidatas ao aflorar campos complementares do request.
+ */
+export { findValue as findSydleField };
+export const SYDLE_FIELD_KEYS = FIELD_KEYS;
 
 function deriveFallbackExternalId(
   record: RawRecord,
