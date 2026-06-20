@@ -1,4 +1,9 @@
-import { extractSydleRecords, parseSydleDateTime } from './normalizer.js';
+import {
+  extractSydleRecords,
+  findSydleField,
+  parseSydleDateTime,
+  SYDLE_FIELD_KEYS,
+} from './normalizer.js';
 
 type SydleSourceType = 'generic' | 'sydle_one_class';
 
@@ -23,6 +28,7 @@ export interface SydleClientConfig {
   ticketClassId: string;
   ticketStatusClassId: string;
   currencyClassId: string;
+  enrichFields: boolean;
 }
 
 export interface SydleFetchResult {
@@ -59,6 +65,13 @@ export function getSydleClientConfig(): SydleClientConfig {
     ticketClassId: process.env.SYDLE_TICKET_CLASS_ID ?? '5d446dfc62d9656275a47d69',
     ticketStatusClassId: process.env.SYDLE_TICKET_STATUS_CLASS_ID ?? '5cacdc04a50bfe4c0d3e5c74',
     currencyClassId: process.env.SYDLE_CURRENCY_CLASS_ID ?? '000000000000000000000059',
+    // Default OFF: integração financeira, deploy-gated. Liga em staging só depois
+    // que o probe (scripts/sydle-class-discovery.mjs) confirmar que os campos
+    // complementares realmente vêm no payload do request/ticket. Ver
+    // docs/SYDLE-ENRICHMENT-PLAN.md.
+    enrichFields: ['1', 'true', 'yes'].includes(
+      String(process.env.SYDLE_ONE_ENRICH_FIELDS ?? '').toLowerCase(),
+    ),
   };
 }
 
@@ -180,6 +193,7 @@ export class SydleClient {
           ticketById,
           statusById,
           currencyById,
+          enrichFields: this.config.enrichFields,
         }),
       );
 
@@ -499,6 +513,7 @@ function flattenSydleOneInternationalPaymentRows(
     ticketById: Map<string, Record<string, unknown>>;
     statusById: Map<string, Record<string, unknown>>;
     currencyById: Map<string, Record<string, unknown>>;
+    enrichFields?: boolean;
   },
 ): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
@@ -514,6 +529,10 @@ function flattenSydleOneInternationalPaymentRows(
     const status =
       (ticket && lookups.statusById.get(getNestedString(ticket, ['status', '_id']) ?? '')) ?? null;
     const ticketClosed = isClosedTicket(status, ticket);
+    // Campos complementares aflorados do request/ticket (flag-gated, default off).
+    const enrichment = lookups.enrichFields
+      ? extractComplementaryFields(record, ticket, status)
+      : {};
 
     payments.forEach((payment, index) => {
       const paymentId = stringValue(payment?._id) ?? `payment-${index + 1}`;
@@ -527,6 +546,8 @@ function flattenSydleOneInternationalPaymentRows(
       const searchCode = stringValue(ticket?.searchCode);
 
       rows.push({
+        // Campos complementares primeiro: os explícitos abaixo sempre prevalecem.
+        ...enrichment,
         externalId: `sydle-one:${stringValue(record._id) ?? 'unknown'}:${paymentId}`,
         purchaseRef: ticketCode ? `SYDLE-${ticketCode}` : searchCode ? `SYDLE-${searchCode}` : null,
         currency: stringValue(currency?.iso) ?? stringValue(currency?.symbol) ?? 'USD',
@@ -559,6 +580,53 @@ function flattenSydleOneInternationalPaymentRows(
   }
 
   return rows;
+}
+
+// Campos complementares promovidos a colunas tipadas/indexadas de
+// sydle_purchase_payments. As colunas JÁ existem (migration 0017); o caminho
+// Sydle One é que não as populava. São lidos do request/ticket e o normalizer
+// faz a coerção (stringOrNull/parseSydleNumber) e o matchProcess os usa.
+const COMPLEMENTARY_FIELDS = [
+  'processCode',
+  'purchaseOrder',
+  'proformaNumber',
+  'invoiceNumber',
+  'supplierName',
+  'brand',
+  'exchangeRate',
+  'amountBrl',
+  'contractNumber',
+  'remittanceId',
+] as const;
+
+function extractComplementaryFields(
+  request: Record<string, unknown>,
+  ticket: Record<string, unknown> | null,
+  status: Record<string, unknown> | null,
+): Record<string, unknown> {
+  // Superfície de busca: ticket -> openForm do ticket -> status -> request, com o
+  // request sobrescrevendo (é autoritativo). findSydleField casa por chave exata e
+  // por chave normalizada (sem acento/caixa), igual ao caminho genérico.
+  const openForm =
+    ticket && typeof ticket.openForm === 'object' && !Array.isArray(ticket.openForm)
+      ? (ticket.openForm as Record<string, unknown>)
+      : null;
+  const surface: Record<string, unknown> = {
+    ...(ticket ?? {}),
+    ...(openForm ?? {}),
+    ...(status ?? {}),
+    ...request,
+  };
+
+  const out: Record<string, unknown> = {};
+  for (const field of COMPLEMENTARY_FIELDS) {
+    const value = findSydleField(surface, SYDLE_FIELD_KEYS[field]);
+    // Só escalares: evita poluir colunas com objetos (ex.: um campo "process" que
+    // seja o objeto inteiro viraria "[object Object]" no stringOrNull do normalizer).
+    if (typeof value === 'string' && value.trim() !== '') out[field] = value;
+    else if (typeof value === 'number' && Number.isFinite(value)) out[field] = value;
+  }
+  return out;
 }
 
 function isClosedTicket(

@@ -420,6 +420,13 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
   };
 }
 
+/**
+ * Exposto para o caminho Sydle One (client.ts) reusar a mesma busca flexível e as
+ * mesmas listas de chaves candidatas ao aflorar campos complementares do request.
+ */
+export { findValue as findSydleField };
+export const SYDLE_FIELD_KEYS = FIELD_KEYS;
+
 function deriveFallbackExternalId(
   record: RawRecord,
   identity: {
