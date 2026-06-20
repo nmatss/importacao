@@ -976,7 +976,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         </div>
       </div>
 
-      {data.itemComparison.length > 0 && (
+      {(data.itemComparison ?? []).length > 0 && (
         <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
@@ -984,10 +984,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
               Comparativo por Item - Invoice vs Packing List vs Espelho
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {data.itemComparison.filter((i) => i.matched).length} de {data.itemComparison.length}{' '}
-              itens encontrados no Packing List
+              {(data.itemComparison ?? []).filter((i) => i.matched).length} de{' '}
+              {(data.itemComparison ?? []).length} itens encontrados no Packing List
               {data.hasEspelho
-                ? ` · ${data.itemComparison.filter((i) => i.espelhoMatched).length} no Espelho`
+                ? ` · ${(data.itemComparison ?? []).filter((i) => i.espelhoMatched).length} no Espelho`
                 : ''}
             </p>
           </div>
@@ -1158,7 +1158,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
         quadro preserves a single source of truth instead of scattering a second
         panel elsewhere.
       */}
-      {(data.unmatchedPlItems.length > 0 || (data.unmatchedInvoiceItems?.length ?? 0) > 0) && (
+      {((data.unmatchedPlItems ?? []).length > 0 ||
+        (data.unmatchedInvoiceItems?.length ?? 0) > 0) && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 overflow-hidden">
           <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
             <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
@@ -1167,10 +1168,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
             </h4>
           </div>
           <div className="divide-y divide-amber-200 dark:divide-amber-800">
-            {data.unmatchedPlItems.length > 0 && (
+            {(data.unmatchedPlItems ?? []).length > 0 && (
               <UnmatchedItemsTable
-                title={`Itens no Packing List sem correspondencia na Invoice (${data.unmatchedPlItems.length})`}
-                items={data.unmatchedPlItems}
+                title={`Itens no Packing List sem correspondencia na Invoice (${(data.unmatchedPlItems ?? []).length})`}
+                items={data.unmatchedPlItems ?? []}
               />
             )}
             {(data.unmatchedInvoiceItems?.length ?? 0) > 0 && (

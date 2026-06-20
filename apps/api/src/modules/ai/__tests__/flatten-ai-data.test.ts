@@ -28,6 +28,28 @@ describe('flattenAiData', () => {
     expect(flat.items[0].isFreeOfCharge).toBe(true);
   });
 
+  it('unwraps confidence fields nested inside objects (e.g. paymentTerms)', () => {
+    const flat = flattenAiData({
+      paymentTerms: {
+        depositPercent: { value: 30, confidence: 0.8 },
+        balancePercent: { value: 70, confidence: 0.8 },
+        description: { value: '30% deposit / 70% balance', confidence: 0.7 },
+      },
+    });
+    expect(flat.paymentTerms).toEqual({
+      depositPercent: 30,
+      balancePercent: 70,
+      description: '30% deposit / 70% balance',
+    });
+  });
+
+  it('unwraps a confidence field whose value is an array (e.g. ncmList)', () => {
+    const flat = flattenAiData({
+      ncmList: { value: ['6115.95.00', '9503.00.99'], confidence: 0.85 },
+    });
+    expect(flat.ncmList).toEqual(['6115.95.00', '9503.00.99']);
+  });
+
   it('drops harness meta (_trust and any _-prefixed key) so it never reaches validation/UI', () => {
     const flat = flattenAiData({
       invoiceNumber: { value: 'INV-1', confidence: 0.9 },

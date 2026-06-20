@@ -117,6 +117,12 @@ function buildWhere(filters: SydleReportQuery, includeSearch = true) {
   if (filters.supplier)
     conditions.push(ilike(sydlePurchasePayments.supplierName, `%${filters.supplier}%`));
   if (filters.brand) conditions.push(eq(sydlePurchasePayments.brand, filters.brand));
+  if (filters.currency)
+    conditions.push(eq(sydlePurchasePayments.currency, filters.currency.toUpperCase()));
+  // Phase filter references the joined process — every buildWhere consumer must
+  // leftJoin importProcesses (list/count/summary/breakdown all do).
+  if (filters.logisticStatus)
+    conditions.push(eq(importProcesses.logisticStatus, filters.logisticStatus));
   if (filters.paymentStatus) {
     conditions.push(eq(sydlePurchasePayments.paymentStatus, filters.paymentStatus));
   }
@@ -124,6 +130,19 @@ function buildWhere(filters: SydleReportQuery, includeSearch = true) {
     conditions.push(eq(sydlePurchasePayments.paymentType, filters.paymentType));
   if (filters.matchStatus)
     conditions.push(eq(sydlePurchasePayments.matchStatus, filters.matchStatus));
+  if (filters.dueBucket === 'overdue') {
+    conditions.push(
+      sql`${sydlePurchasePayments.dueDate} < current_date and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled', 'overdue')`,
+    );
+  } else if (filters.dueBucket === 'due7') {
+    conditions.push(
+      sql`${sydlePurchasePayments.dueDate} between current_date and current_date + interval '7 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
+    );
+  } else if (filters.dueBucket === 'due30') {
+    conditions.push(
+      sql`${sydlePurchasePayments.dueDate} between current_date and current_date + interval '30 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
+    );
+  }
   if (filters.dueFrom) conditions.push(gte(sydlePurchasePayments.dueDate, filters.dueFrom));
   if (filters.dueTo) conditions.push(lte(sydlePurchasePayments.dueDate, filters.dueTo));
   if (filters.updatedFrom) {
@@ -170,6 +189,27 @@ function csvLine(values: unknown[]): string {
 
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
+// Phase labels mirror the frontend LOGISTIC_STAGES so the CSV reads the same as
+// the screen ("em qual fase o processo está").
+const LOGISTIC_STATUS_LABELS: Record<string, string> = {
+  consolidation: 'Em Consolidacao',
+  waiting_shipment: 'Ag. Embarque',
+  in_transit: 'Em Transito',
+  berthing: 'Em Atracacao',
+  registered: 'Registrado',
+  customs_inspection: 'Conf. Aduaneira',
+  port_release: 'Lib. Portuaria',
+  waiting_loading: 'Ag. Carregamento',
+  traveling_cd: 'Em Viagem CD',
+  waiting_entry: 'Ag. Entrada',
+  internalized: 'Internalizado',
+};
+
+function phaseLabel(status: string | null | undefined): string {
+  if (!status) return '';
+  return LOGISTIC_STATUS_LABELS[status] ?? status;
 }
 
 export const sydleService = {
@@ -671,6 +711,9 @@ export const sydleService = {
           updatedAt: sydlePurchasePayments.updatedAt,
           portalProcessCode: importProcesses.processCode,
           portalBrand: importProcesses.brand,
+          // Fase logística do processo casado — "em qual fase o processo está".
+          logisticStatus: importProcesses.logisticStatus,
+          processStatus: importProcesses.status,
         })
         .from(sydlePurchasePayments)
         .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
@@ -681,6 +724,7 @@ export const sydleService = {
       db
         .select({ total: sql<number>`count(*)::int` })
         .from(sydlePurchasePayments)
+        .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
         .where(where),
     ]);
 
@@ -703,6 +747,7 @@ export const sydleService = {
         paid: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} = 'paid')::int`,
       })
       .from(sydlePurchasePayments)
+      .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
       .where(where);
 
     // Per-currency breakdown so payments in EUR/CNY (or any non-USD currency)
@@ -717,6 +762,7 @@ export const sydleService = {
         records: sql<number>`count(*)::int`,
       })
       .from(sydlePurchasePayments)
+      .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
       .where(where)
       .groupBy(sydlePurchasePayments.currency)
       .orderBy(desc(sql`sum(${sydlePurchasePayments.purchaseAmount})`));
@@ -774,6 +820,7 @@ export const sydleService = {
       'Invoice',
       'Fornecedor',
       'Marca',
+      'Fase Processo',
       'Moeda',
       'Valor Compra',
       'Valor Pago',
@@ -801,6 +848,7 @@ export const sydleService = {
           row.invoiceNumber || '',
           row.supplierName || '',
           row.brand || row.portalBrand || '',
+          phaseLabel(row.logisticStatus),
           row.currency,
           row.purchaseAmount || '',
           row.paidAmount || '',

@@ -1,4 +1,5 @@
 import { findLabeledDate } from './dates.js';
+import { parseDecimal } from './numbers.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
@@ -81,19 +82,5 @@ function cleanImporter(value: string | null): string | null {
 }
 
 function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  let clean = String(value).replace(/[^\d,.-]/g, '');
-  if (!clean) return null;
-  const lastComma = clean.lastIndexOf(',');
-  const lastDot = clean.lastIndexOf('.');
-  if (lastComma > -1 && lastDot > -1) {
-    const decimal = lastComma > lastDot ? ',' : '.';
-    const thousands = decimal === ',' ? '.' : ',';
-    clean = clean.replace(new RegExp(`\\${thousands}`, 'g'), '');
-    if (decimal === ',') clean = clean.replace(',', '.');
-  } else if (lastComma > -1) {
-    clean = clean.replace(',', '.');
-  }
-  const parsed = Number(clean);
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseDecimal(value);
 }

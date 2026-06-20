@@ -67,7 +67,27 @@ interface SydlePayment {
   syncedAt: string;
   portalProcessCode: string | null;
   portalBrand: string | null;
+  logisticStatus: string | null;
+  processStatus: string | null;
 }
+
+// Logistic phase labels — mirror @/shared/lib/constants LOGISTIC_STAGES so the
+// report shows "em qual fase o processo está".
+const LOGISTIC_PHASES: { key: string; label: string }[] = [
+  { key: 'consolidation', label: 'Em Consolidação' },
+  { key: 'waiting_shipment', label: 'Ag. Embarque' },
+  { key: 'in_transit', label: 'Em Trânsito' },
+  { key: 'berthing', label: 'Em Atracação' },
+  { key: 'registered', label: 'Registrado' },
+  { key: 'customs_inspection', label: 'Conf. Aduaneira' },
+  { key: 'port_release', label: 'Lib. Portuária' },
+  { key: 'waiting_loading', label: 'Ag. Carregamento' },
+  { key: 'traveling_cd', label: 'Em Viagem CD' },
+  { key: 'waiting_entry', label: 'Ag. Entrada' },
+  { key: 'internalized', label: 'Internalizado' },
+];
+const phaseLabel = (status: string | null): string =>
+  LOGISTIC_PHASES.find((p) => p.key === status)?.label ?? '--';
 
 interface PaginatedResponse {
   data: SydlePayment[];
@@ -272,6 +292,9 @@ export function SydlePaymentsPage() {
   const [search, setSearch] = useState('');
   const [supplier, setSupplier] = useState('');
   const [brand, setBrand] = useState('');
+  const [currency, setCurrency] = useState('');
+  const [logisticStatus, setLogisticStatus] = useState('');
+  const [dueBucket, setDueBucket] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
   const [paymentType, setPaymentType] = useState('');
   const [matchStatus, setMatchStatus] = useState('');
@@ -290,6 +313,9 @@ export function SydlePaymentsPage() {
     if (search) params.set('search', search);
     if (supplier) params.set('supplier', supplier);
     if (brand) params.set('brand', brand);
+    if (currency) params.set('currency', currency);
+    if (logisticStatus) params.set('logisticStatus', logisticStatus);
+    if (dueBucket) params.set('dueBucket', dueBucket);
     if (paymentStatus) params.set('paymentStatus', paymentStatus);
     if (paymentType) params.set('paymentType', paymentType);
     if (matchStatus) params.set('matchStatus', matchStatus);
@@ -300,6 +326,9 @@ export function SydlePaymentsPage() {
     return params;
   }, [
     brand,
+    currency,
+    logisticStatus,
+    dueBucket,
     dueFrom,
     dueTo,
     matchStatus,
@@ -350,6 +379,9 @@ export function SydlePaymentsPage() {
     search ||
     supplier ||
     brand ||
+    currency ||
+    logisticStatus ||
+    dueBucket ||
     paymentStatus ||
     paymentType ||
     matchStatus ||
@@ -367,6 +399,9 @@ export function SydlePaymentsPage() {
     setSearch('');
     setSupplier('');
     setBrand('');
+    setCurrency('');
+    setLogisticStatus('');
+    setDueBucket('');
     setPaymentStatus('');
     setPaymentType('');
     setMatchStatus('');
@@ -656,6 +691,31 @@ export function SydlePaymentsPage() {
               ))}
             </select>
           </label>
+          <label className="xl:col-span-2">
+            <span className="mb-1 block text-xs font-medium text-slate-500">Fase do processo</span>
+            <select
+              value={logisticStatus}
+              onChange={(event) => resetPageAnd(setLogisticStatus, event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+            >
+              <option value="">Todas</option>
+              {LOGISTIC_PHASES.map((p) => (
+                <option key={p.key} value={p.key}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-xs font-medium text-slate-500">Moeda</span>
+            <input
+              value={currency}
+              onChange={(event) => resetPageAnd(setCurrency, event.target.value.toUpperCase())}
+              maxLength={3}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm uppercase text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              placeholder="USD"
+            />
+          </label>
           <label>
             <span className="mb-1 block text-xs font-medium text-slate-500">Venc. início</span>
             <input
@@ -692,6 +752,29 @@ export function SydlePaymentsPage() {
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             />
           </label>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-slate-500">Vencimento:</span>
+          {(
+            [
+              { key: 'overdue', label: 'Vencidos' },
+              { key: 'due7', label: 'Vence em 7 dias' },
+              { key: 'due30', label: 'Vence em 30 dias' },
+            ] as const
+          ).map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => resetPageAnd(setDueBucket, dueBucket === b.key ? '' : b.key)}
+              className={
+                dueBucket === b.key
+                  ? 'rounded-full bg-primary-600 px-3 py-1 text-xs font-semibold text-white'
+                  : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900'
+              }
+            >
+              {b.label}
+            </button>
+          ))}
         </div>
         {hasFilters && (
           <button
@@ -736,11 +819,12 @@ export function SydlePaymentsPage() {
         <>
           <div className="hidden overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800 md:block">
             <div className="overflow-x-auto">
-              <table className="min-w-[1680px] w-full divide-y divide-slate-200 dark:divide-slate-700">
+              <table className="min-w-[1800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
                 <thead className="bg-slate-50 dark:bg-slate-900">
                   <tr>
                     {[
                       'Processo',
+                      'Fase',
                       'Compra',
                       'Fornecedor',
                       'Tipo',
@@ -780,6 +864,15 @@ export function SydlePaymentsPage() {
                             </Link>
                           ) : (
                             processCode || '--'
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
+                          {row.logisticStatus ? (
+                            <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                              {phaseLabel(row.logisticStatus)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">--</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">

@@ -10,6 +10,7 @@
  */
 
 import { findLabeledDate } from './dates.js';
+import { parseDecimal } from './numbers.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
@@ -37,12 +38,7 @@ export function tryParseProformaText(text: string): Record<string, any> | null {
     /\binvoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
   ]);
   const invoiceDate = findLabeledDate(source);
-  const validUntil = findLabeledDate(source, [
-    'valid until',
-    'validity',
-    'valido ate',
-    'validade',
-  ]);
+  const validUntil = findLabeledDate(source, ['valid until', 'validity', 'valido ate', 'validade']);
   const exporterName = normalizePartyLine(
     extractLabeledValue(source, ['exporter', 'shipper', 'seller', 'supplier']),
   );
@@ -224,21 +220,5 @@ function parseItems(text: string): Record<string, any>[] {
 }
 
 function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  let clean = String(value).replace(/[^\d,.-]/g, '');
-  if (!clean || clean === '-' || clean === '.') return null;
-
-  const lastComma = clean.lastIndexOf(',');
-  const lastDot = clean.lastIndexOf('.');
-  if (lastComma > -1 && lastDot > -1) {
-    const decimal = lastComma > lastDot ? ',' : '.';
-    const thousands = decimal === ',' ? '.' : ',';
-    clean = clean.replace(new RegExp(`\\${thousands}`, 'g'), '');
-    if (decimal === ',') clean = clean.replace(',', '.');
-  } else if (lastComma > -1) {
-    clean = clean.replace(',', '.');
-  }
-
-  const parsed = Number(clean);
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseDecimal(value);
 }

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VALID_LOGISTIC_STATUSES } from '../processes/schema.js';
 
 const dateString = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato de data invalido (YYYY-MM-DD)');
 
@@ -9,11 +10,16 @@ export const sydleReportQuerySchema = z.object({
   processCode: z.string().trim().max(50).optional(),
   supplier: z.string().trim().max(255).optional(),
   brand: z.enum(['puket', 'imaginarium']).optional(),
+  currency: z.string().trim().max(8).optional(),
+  // Fase logística do processo casado (qual etapa do ciclo de importação).
+  logisticStatus: z.enum(VALID_LOGISTIC_STATUSES).optional(),
   paymentStatus: z
     .enum(['open', 'scheduled', 'paid', 'overdue', 'cancelled', 'unknown'])
     .optional(),
   paymentType: z.enum(['deposit', 'balance', 'fee', 'refund', 'other']).optional(),
   matchStatus: z.enum(['matched', 'ambiguous', 'unmatched']).optional(),
+  // Atalho profissional de vencimento: vencidos / vence em 7 / vence em 30 dias.
+  dueBucket: z.enum(['overdue', 'due7', 'due30']).optional(),
   dueFrom: dateString.optional(),
   dueTo: dateString.optional(),
   updatedFrom: dateString.optional(),
