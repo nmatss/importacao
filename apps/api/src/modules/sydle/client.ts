@@ -188,12 +188,19 @@ export class SydleClient {
       const { ticketById, statusById, currencyById, failures } =
         await this.lookupSydleOneReferences(records, authHeaders);
       lookupFailures.push(...failures);
+      // Caso B (docs/SYDLE-ENRICHMENT-PLAN.md): resolve classes vizinhas
+      // referenciadas por {_id,_classId}. Config-driven e inerte enquanto
+      // SYDLE_ENRICHMENT_CLASSES estiver vazio (nenhum fetch extra).
+      const enrichmentClasses = this.config.enrichFields
+        ? await this.resolveEnrichmentClasses(records, authHeaders, ticketById, lookupFailures)
+        : [];
       allRecords.push(
         ...flattenSydleOneInternationalPaymentRows(records, {
           ticketById,
           statusById,
           currencyById,
           enrichFields: this.config.enrichFields,
+          enrichmentClasses,
         }),
       );
 
@@ -212,6 +219,10 @@ export class SydleClient {
         pagesFetched,
         pageSize: this.config.pageSize,
         updatedAfter: updatedAfter?.toISOString() ?? null,
+        enrichFields: this.config.enrichFields || undefined,
+        enrichClasses: this.config.enrichFields
+          ? SYDLE_ENRICHMENT_CLASSES.filter((spec) => spec.classId).length || undefined
+          : undefined,
         lookupFailures: lookupFailures.length ? lookupFailures : undefined,
       },
     };
@@ -382,6 +393,52 @@ export class SydleClient {
 
     return map;
   }
+
+  /**
+   * Caso B: para cada spec em SYDLE_ENRICHMENT_CLASSES, coleta os _id referenciados
+   * (no request ou no ticket) e busca a classe vizinha em lote. Reusa
+   * lookupSydleOneByIds, então erros/403 viram entradas em `failures` sem derrubar
+   * o sync. Retorna [] quando não há specs válidas (inerte por padrão).
+   */
+  private async resolveEnrichmentClasses(
+    records: Record<string, unknown>[],
+    headers: Record<string, string>,
+    ticketById: Map<string, Record<string, unknown>>,
+    failures: Record<string, unknown>[],
+  ): Promise<EnrichmentResolved[]> {
+    const specs = SYDLE_ENRICHMENT_CLASSES.filter(
+      (spec) => spec.classId && spec.refPath.length > 0 && Object.keys(spec.map).length > 0,
+    );
+    if (!specs.length) return [];
+
+    const resolved: EnrichmentResolved[] = [];
+    for (const spec of specs) {
+      const ids = uniqueStrings(
+        records.map((record) => {
+          const sourceObj =
+            spec.source === 'ticket'
+              ? (ticketById.get(getNestedString(record, ['ticket', '_id']) ?? '') ?? null)
+              : record;
+          return getNestedString(sourceObj, [...spec.refPath, '_id']);
+        }),
+      );
+      const includes = uniqueStrings([
+        '_id',
+        ...spec.includes,
+        ...Object.keys(spec.map).map((field) => field.split('.')[0]),
+      ]);
+      const byId = await this.lookupSydleOneByIds(
+        spec.classId,
+        ids,
+        includes,
+        `enrich:${spec.label}`,
+        headers,
+        failures,
+      );
+      resolved.push({ spec, byId });
+    }
+    return resolved;
+  }
 }
 
 function normalizeSourceType(value: unknown): SydleSourceType {
@@ -514,6 +571,7 @@ function flattenSydleOneInternationalPaymentRows(
     statusById: Map<string, Record<string, unknown>>;
     currencyById: Map<string, Record<string, unknown>>;
     enrichFields?: boolean;
+    enrichmentClasses?: EnrichmentResolved[];
   },
 ): Record<string, unknown>[] {
   const rows: Record<string, unknown>[] = [];
@@ -533,6 +591,11 @@ function flattenSydleOneInternationalPaymentRows(
     const enrichment = lookups.enrichFields
       ? extractComplementaryFields(record, ticket, status)
       : {};
+    // Caso B: campos vindos de classes vizinhas resolvidas (mais autoritativo que
+    // o enriquecimento por campo de texto livre, então prevalece sobre ele).
+    const classEnrichment = lookups.enrichmentClasses?.length
+      ? applyEnrichmentClasses(record, ticket, lookups.enrichmentClasses)
+      : {};
 
     payments.forEach((payment, index) => {
       const paymentId = stringValue(payment?._id) ?? `payment-${index + 1}`;
@@ -546,8 +609,10 @@ function flattenSydleOneInternationalPaymentRows(
       const searchCode = stringValue(ticket?.searchCode);
 
       rows.push({
-        // Campos complementares primeiro: os explícitos abaixo sempre prevalecem.
+        // Complementares primeiro (classe vizinha > campo de texto); os explícitos
+        // abaixo sempre prevalecem.
         ...enrichment,
+        ...classEnrichment,
         externalId: `sydle-one:${stringValue(record._id) ?? 'unknown'}:${paymentId}`,
         purchaseRef: ticketCode ? `SYDLE-${ticketCode}` : searchCode ? `SYDLE-${searchCode}` : null,
         currency: stringValue(currency?.iso) ?? stringValue(currency?.symbol) ?? 'USD',
@@ -629,6 +694,68 @@ function extractComplementaryFields(
   return out;
 }
 
+/**
+ * Caso B (docs/SYDLE-ENRICHMENT-PLAN.md): dado complementar que mora numa CLASSE
+ * VIZINHA referenciada por {_id, _classId}. Preencha SYDLE_ENRICHMENT_CLASSES
+ * DEPOIS que o probe (scripts/sydle-class-discovery.mjs) revelar o classId, o
+ * caminho da referência e os nomes dos campos. Lista vazia => nenhum fetch extra,
+ * comportamento idêntico ao de hoje.
+ */
+export interface SydleEnrichmentClassSpec {
+  /** Rótulo único (vai para metadata/failures como `enrich:<label>`). */
+  label: string;
+  /** classId da classe vizinha a buscar (ex.: SYDLE_SUPPLIER_CLASS_ID). */
+  classId: string;
+  /** Onde mora a referência {_id}: no request (default) ou no ticket. */
+  source?: 'request' | 'ticket';
+  /** Caminho até o objeto-referência. Ex.: ['supplier'] => <source>.supplier._id */
+  refPath: string[];
+  /** Campos do _source a pedir na classe vizinha. */
+  includes: string[];
+  /** Mapa campoDaClasseVizinha (dot-path) -> coluna complementar da linha. */
+  map: Record<string, string>;
+}
+
+interface EnrichmentResolved {
+  spec: SydleEnrichmentClassSpec;
+  byId: Map<string, Record<string, unknown>>;
+}
+
+/**
+ * Vazio por padrão (inerte). Exemplo a confirmar com o probe:
+ *   {
+ *     label: 'supplier',
+ *     classId: process.env.SYDLE_SUPPLIER_CLASS_ID ?? '',
+ *     source: 'request',
+ *     refPath: ['supplier'],          // request.supplier._id
+ *     includes: ['name', 'tradeName', 'country'],
+ *     map: { name: 'supplierName' },  // campo da classe -> coluna complementar
+ *   }
+ */
+export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [];
+
+function applyEnrichmentClasses(
+  request: Record<string, unknown>,
+  ticket: Record<string, unknown> | null,
+  resolved: EnrichmentResolved[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const { spec, byId } of resolved) {
+    const sourceObj = spec.source === 'ticket' ? ticket : request;
+    const refId = getNestedString(sourceObj, [...spec.refPath, '_id']);
+    if (!refId) continue;
+    const neighbor = byId.get(refId);
+    if (!neighbor) continue;
+    for (const [neighborField, column] of Object.entries(spec.map)) {
+      const value = getNestedValue(neighbor, neighborField.split('.'));
+      // Só escalares (mesma regra do enriquecimento por campo): evita objetos.
+      if (typeof value === 'string' && value.trim() !== '') out[column] = value;
+      else if (typeof value === 'number' && Number.isFinite(value)) out[column] = value;
+    }
+  }
+  return out;
+}
+
 function isClosedTicket(
   status: Record<string, unknown> | null,
   ticket: Record<string, unknown> | null,
@@ -645,12 +772,16 @@ function uniqueStrings(values: (string | null | undefined)[]): string[] {
 }
 
 function getNestedString(record: Record<string, unknown> | null, path: string[]): string | null {
+  return stringValue(getNestedValue(record, path));
+}
+
+function getNestedValue(record: Record<string, unknown> | null, path: string[]): unknown {
   let current: unknown = record;
   for (const segment of path) {
-    if (!current || typeof current !== 'object' || Array.isArray(current)) return null;
+    if (!current || typeof current !== 'object' || Array.isArray(current)) return undefined;
     current = (current as Record<string, unknown>)[segment];
   }
-  return stringValue(current);
+  return current;
 }
 
 function stringValue(value: unknown): string | null {

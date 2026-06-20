@@ -24,14 +24,14 @@ saber se fornecedor/PI/invoice/processo/câmbio vêm no payload do request/ticke
    Descobre campos (amostra com `_source` completo), auto-descobre `_classId`
    vizinhos e testa acesso (200 vs 403) por classe. Não escreve nada.
 
-2. **Enriquecimento flag-gated** — `flattenSydleOneInternationalPaymentRows`
-   passa a aflorar os campos complementares do `request` + `ticket` +
-   `ticket.openForm` como chaves de topo da linha, reusando as listas de
-   candidatos do normalizer (`SYDLE_FIELD_KEYS`) via `findSydleField`. Só
-   escalares (string/number) são promovidos. Os campos calculados **sempre
-   prevalecem** (enrichment é espalhado antes). Controlado por
-   `SYDLE_ONE_ENRICH_FIELDS` (**default `false`** → comportamento idêntico ao
-   de hoje, zero regressão no deploy).
+2. **Enriquecimento por campo (Caso A) flag-gated** —
+   `flattenSydleOneInternationalPaymentRows` passa a aflorar os campos
+   complementares do `request` + `ticket` + `ticket.openForm` como chaves de topo
+   da linha, reusando as listas de candidatos do normalizer (`SYDLE_FIELD_KEYS`)
+   via `findSydleField`. Só escalares (string/number) são promovidos. Os campos
+   calculados **sempre prevalecem** (enrichment é espalhado antes). Controlado por
+   `SYDLE_ONE_ENRICH_FIELDS` (**default `false`** → comportamento idêntico ao de
+   hoje, zero regressão no deploy).
    - **Sem migration**: as colunas já existem.
    - **Sem nova chamada de classe**: lê do payload já buscado (os campos
      complementares não estão nos `excludes` do `_search`, então já chegam — ao
@@ -39,6 +39,16 @@ saber se fornecedor/PI/invoice/processo/câmbio vêm no payload do request/ticke
    - **Ganho automático no matching**: `matchProcess` já pondera
      `purchase_order`/`proforma_number`/`invoice_number`/`supplier_name`; populá-las
      melhora a conciliação automática.
+
+3. **Resolvedor de classe vizinha (Caso B) — já pré-codado** — mecanismo
+   genérico e config-driven em `client.ts`:
+   `SydleClient.resolveEnrichmentClasses` coleta os `_id` referenciados (no
+   request ou no ticket), busca a classe vizinha em lote (reusa
+   `lookupSydleOneByIds`, então 403 vira `failures` sem derrubar o sync) e
+   `applyEnrichmentClasses` mapeia os campos resolvidos nas colunas. Também
+   gated por `SYDLE_ONE_ENRICH_FIELDS`. **Inerte por padrão**: a lista
+   `SYDLE_ENRICHMENT_CLASSES` está vazia → nenhum fetch extra. A classe vizinha
+   resolvida **prevalece** sobre o enriquecimento por campo (entidade > texto livre).
 
 ## Árvore de decisão a partir do resultado do probe
 
@@ -67,15 +77,33 @@ O dado está no request/ticket, só não era promovido.
 ### Caso B — dado está numa classe vizinha legível (status 200 no probe)
 
 Ex.: fornecedor numa classe própria referenciada por `{_id, _classId}`.
+**O mecanismo já está pronto** (não precisa escrever código de fetch). Basta
+preencher a constante `SYDLE_ENRICHMENT_CLASSES` em
+`apps/api/src/modules/sydle/client.ts` com uma entrada por classe vizinha:
 
-1. Adicione a busca da classe em `client.ts` (espelhe `lookupSydleOneByIds`):
-   colete os `_id` referenciados, faça `_search` com `_source.includes` mínimo,
-   monte um `Map`, e injete no `flattenSydleOneInternationalPaymentRows`
-   (como `ticketById`/`currencyById` já fazem).
-2. Exponha o(s) campo(s) na linha e/ou em `SYDLE_FIELD_KEYS`.
-3. Considere uma migration **só** se quiser coluna nova indexada (a maioria já
-   tem coluna). Caso contrário, reuse a coluna existente.
-4. Valide em staging como no Caso A.
+```ts
+export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [
+  {
+    label: 'supplier',
+    classId: process.env.SYDLE_SUPPLIER_CLASS_ID ?? '', // do probe
+    source: 'request', // 'request' (default) ou 'ticket'
+    refPath: ['supplier'], // request.supplier._id (caminho confirmado no probe)
+    includes: ['name', 'country'],
+    map: { name: 'supplierName' }, // campo da classe vizinha -> coluna complementar
+  },
+];
+```
+
+Regras do spec:
+
+- `refPath` aponta para o objeto-referência `{_id}` no `request` (ou `ticket` se
+  `source: 'ticket'`). O `_id` é coletado e a classe é buscada em lote.
+- `map` liga um campo (dot-path) da classe vizinha a uma coluna complementar da
+  linha (que o normalizer reconhece). Só escalares são promovidos.
+- 403/erro na classe vira `failures` no metadata, sem derrubar o sync.
+- Coluna nova indexada → migration (a maioria já existe; reuse). Senão, sem migration.
+
+Depois: `SYDLE_ONE_ENRICH_FIELDS=true` em staging, `sync-now`, validar drawer.
 
 ### Caso C — 403 (forms `InternationalPaymentOpenForm` / `RequestData`)
 

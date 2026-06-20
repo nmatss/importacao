@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getSydleConfigStatus, SydleClient } from '../client.js';
+import { getSydleConfigStatus, SYDLE_ENRICHMENT_CLASSES, SydleClient } from '../client.js';
 
 describe('SydleClient', () => {
   const originalEnv = { ...process.env };
@@ -306,5 +306,79 @@ describe('SydleClient', () => {
       purchaseAmount: 4460,
       paymentStatus: 'open',
     });
+  });
+
+  // ── Caso B: classe vizinha referenciada por {_id, _classId} ───────────────
+  it('resolves a neighbor enrichment class and maps its fields onto the row', async () => {
+    process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
+
+    const requestWithSupplierRef = {
+      _id: 'REQ-1',
+      _lastUpdateDate: '2026-06-18T20:20:31.914Z',
+      approved: true,
+      ticket: { _id: 'TICKET-1' },
+      // fornecedor é uma referência a outra classe (não um campo de texto)
+      supplier: { _id: 'SUP-1', _classId: 'SUP-CLASS' },
+      paymentData: [
+        {
+          _id: 'PAY-1',
+          paymentAmount: 4460,
+          expirationDate: '2026-06-18T00:00:00Z',
+          paymentDeadlineAfterShipment: 30,
+          paymentCurrency: { _id: 'USD-ID' },
+        },
+      ],
+    };
+
+    mockSydleOneSequence(requestWithSupplierRef, {
+      _id: 'TICKET-1',
+      code: '5337',
+      status: { _id: 'OPEN' },
+      _lastUpdateDate: '2026-06-18T20:30:00.000Z',
+    });
+    // 6ª chamada: busca da classe vizinha de fornecedor
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          hits: { hits: [{ _id: 'SUP-1', _source: { _id: 'SUP-1', name: 'ACME FACTORY LTD' } }] },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    // injeta a spec (restaurada no finally para não vazar entre testes)
+    SYDLE_ENRICHMENT_CLASSES.push({
+      label: 'supplier',
+      classId: 'SUP-CLASS',
+      source: 'request',
+      refPath: ['supplier'],
+      includes: ['name'],
+      map: { name: 'supplierName' },
+    });
+
+    try {
+      const result = await new SydleClient().fetchPayments(null);
+
+      expect(result.records).toHaveLength(1);
+      expect(result.records[0].supplierName).toBe('ACME FACTORY LTD');
+
+      // a classe vizinha foi consultada pelo classId e pelos _id referenciados
+      const supplierUrl = String(fetchMock.mock.calls[5][0]);
+      expect(supplierUrl).toContain('/api/1/main/_classId/SUP-CLASS/_search');
+      const supplierBody = JSON.parse(String(fetchMock.mock.calls[5][1]?.body));
+      expect(supplierBody.query).toEqual({ terms: { _id: ['SUP-1'] } });
+    } finally {
+      SYDLE_ENRICHMENT_CLASSES.splice(0);
+    }
+  });
+
+  it('does not query neighbor classes when SYDLE_ENRICHMENT_CLASSES is empty', async () => {
+    process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
+    mockSydleOneSequence(REQUEST_WITH_EXTRA, TICKET_WITH_OPENFORM);
+
+    await new SydleClient().fetchPayments(null);
+
+    // só as 5 chamadas base (signIn + payment + ticket + status + currency)
+    expect(fetchMock.mock.calls).toHaveLength(5);
   });
 });
