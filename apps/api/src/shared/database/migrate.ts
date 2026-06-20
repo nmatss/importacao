@@ -12,6 +12,7 @@ const PENDING_SQL_MIGRATIONS = [
   '0016_pre_cons_tables.sql',
   '0017_sydle_purchase_payments.sql',
   '0018_validation_run_links.sql',
+  '0019_logistic_status_index.sql',
 ];
 
 async function applyPendingSqlMigrations(migrationsFolder: string) {

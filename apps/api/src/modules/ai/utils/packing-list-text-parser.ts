@@ -1,4 +1,6 @@
 import { findLabeledDate } from './dates.js';
+import { parseDecimal } from './numbers.js';
+import { normalizeGtin } from '../harness/format.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
@@ -90,13 +92,17 @@ function parseItems(text: string): Record<string, any>[] {
     if (/\b(USD|EUR|CNY|PRICE|AMOUNT|FOB|VALUE)\b/i.test(line)) continue;
 
     const tokens = line.trim().split(/\s+/).filter(Boolean);
-    const ean = line.match(/\b\d{8,14}\b/)?.[0] ?? null;
+    // Raw run of 8-14 digits is a GTIN candidate; only keep it as `ean` when the
+    // GS1 check digit is valid, so a product code / weight / phone number can't
+    // be mislabelled as an EAN (DocIntel audit 2026-06-20, finding A4).
+    const eanRaw = line.match(/\b\d{8,14}\b/)?.[0] ?? null;
+    const ean = normalizeGtin(eanRaw);
     const rawNumberEntries = tokens
       .map((token, index) => ({ token, index, value: parseNumber(token) }))
       .filter((entry) => entry.value != null);
     const numberEntries =
       rawNumberEntries.length > 4
-        ? rawNumberEntries.filter((entry) => entry.token !== ean)
+        ? rawNumberEntries.filter((entry) => entry.token !== eanRaw)
         : rawNumberEntries;
     if (numberEntries.length < 4) continue;
 
@@ -109,16 +115,29 @@ function parseItems(text: string): Record<string, any>[] {
       .slice(codeIndex + 1, qtyEntry.index)
       .join(' ')
       .trim();
+
+    // Gross weight is always >= net weight; many PLs print G.W. before N.W., so
+    // the fixed-column slice can pick them up swapped. Correct the obvious
+    // inversion and lower confidence so the swap surfaces for review (Eduarda
+    // 2026-06-19: peso liquido/bruto por item).
+    let netWeight = netEntry.value;
+    let grossWeight = grossEntry.value;
+    let weightConfidence = 0.78;
+    if (netWeight != null && grossWeight != null && netWeight > grossWeight) {
+      [netWeight, grossWeight] = [grossWeight, netWeight];
+      weightConfidence = 0.6;
+    }
+
     rows.push({
       itemCode: cf(code, 0.78),
-      ean: cf(ean, ean ? 0.82 : 0),
+      ean: cf(ean, ean ? 0.86 : 0),
       description: cf(description || null, description ? 0.72 : 0),
       color: EMPTY_STRING,
       size: EMPTY_STRING,
       quantity: cf(qtyEntry.value, 0.78),
       boxQuantity: cf(boxEntry.value, 0.78),
-      netWeight: cf(netEntry.value, 0.78),
-      grossWeight: cf(grossEntry.value, 0.78),
+      netWeight: cf(netWeight, weightConfidence),
+      grossWeight: cf(grossWeight, weightConfidence),
     });
   }
   return rows;
@@ -197,21 +216,7 @@ function extractPort(text: string, kind: 'loading' | 'discharge'): string | null
 }
 
 function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  let clean = String(value).replace(/[^\d,.-]/g, '');
-  if (!clean || clean === '-' || clean === '.') return null;
-  const lastComma = clean.lastIndexOf(',');
-  const lastDot = clean.lastIndexOf('.');
-  if (lastComma > -1 && lastDot > -1) {
-    const decimal = lastComma > lastDot ? ',' : '.';
-    const thousands = decimal === ',' ? '.' : ',';
-    clean = clean.replace(new RegExp(`\\${thousands}`, 'g'), '');
-    if (decimal === ',') clean = clean.replace(',', '.');
-  } else if (lastComma > -1) {
-    clean = clean.replace(',', '.');
-  }
-  const parsed = Number(clean);
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseDecimal(value);
 }
 
 function sumField(items: Record<string, any>[], key: string): number | null {

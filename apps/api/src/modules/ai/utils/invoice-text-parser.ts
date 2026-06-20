@@ -1,4 +1,6 @@
 import { DATE_VALUE_PATTERN, findLabeledDate, normalizeDate } from './dates.js';
+import { parseDecimal } from './numbers.js';
+import { normalizeGtin } from '../harness/format.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
@@ -65,6 +67,7 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
     ]),
   );
   const items = parseItems(source);
+  const paymentTerms = parsePaymentTerms(source);
 
   if (!invoiceNumber && !totalFobValue && items.length === 0) return null;
   if (items.length === 0 && (!invoiceNumber || !totalFobValue)) return null;
@@ -85,10 +88,9 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
     items,
     manufacturerName: EMPTY_STRING,
     manufacturerAddress: EMPTY_STRING,
-    paymentTerms: cf(
-      { depositPercent: null, balancePercent: null, paymentDays: null, description: null },
-      0,
-    ),
+    paymentTerms: paymentTerms
+      ? cf(paymentTerms, 0.7)
+      : cf({ depositPercent: null, balancePercent: null, paymentDays: null, description: null }, 0),
     totalFobValue: cf(totalFobValue, totalFobValue != null ? 0.86 : 0),
     totalBoxes: EMPTY_NUMBER,
     totalNetWeight: EMPTY_NUMBER,
@@ -203,6 +205,75 @@ export function repairInvoiceExtractionFromText(
   };
 }
 
+/**
+ * Deterministic payment-terms extraction (deposit % / balance % / days).
+ * Central to the payment cross-check ("30% deposito, 70% saldo") which the
+ * deterministic path never filled before. Conservative: a deposit+balance that
+ * does not sum to ~100% is treated as OCR noise (the compact KIOM layout emits
+ * multiple stray "BALANCE n%" lines) and discarded rather than trusted.
+ */
+function parsePaymentTerms(text: string): {
+  depositPercent: number | null;
+  balancePercent: number | null;
+  paymentDays: number | null;
+  description: string | null;
+} | null {
+  // Prefer the "N% deposit" phrasing (number precedes the label); fall back to
+  // "deposit N%" / "depositN%" with only whitespace/colon between label and
+  // number so the deposit pattern cannot jump a comma into the balance clause.
+  let depositPercent =
+    parseDecimal(
+      text.match(/([\d.,]{1,5})\s*%\s*(?:deposit|sinal|adiantamento|down\s*payment)/i)?.[1] ?? null,
+    ) ??
+    parseDecimal(text.match(/(?:deposit|sinal|adiantamento)[\s:]*([\d.,]{1,6})\s*%/i)?.[1] ?? null);
+  let balancePercent =
+    parseDecimal(text.match(/([\d.,]{1,5})\s*%\s*(?:balance|saldo)/i)?.[1] ?? null) ??
+    parseDecimal(text.match(/(?:balance|saldo)[\s:]*([\d.,]{1,6})\s*%/i)?.[1] ?? null);
+
+  // Infer the missing half when only one is present and plausible.
+  if (
+    depositPercent != null &&
+    balancePercent == null &&
+    depositPercent > 0 &&
+    depositPercent < 100
+  ) {
+    balancePercent = Number((100 - depositPercent).toFixed(2));
+  } else if (
+    balancePercent != null &&
+    depositPercent == null &&
+    balancePercent > 0 &&
+    balancePercent < 100
+  ) {
+    depositPercent = Number((100 - balancePercent).toFixed(2));
+  }
+
+  // Reject implausible pairs (OCR noise) — must sum to ~100%.
+  if (depositPercent != null && balancePercent != null) {
+    const sum = depositPercent + balancePercent;
+    if (sum < 95 || sum > 105) {
+      depositPercent = null;
+      balancePercent = null;
+    }
+  }
+
+  const daysMatch = text.match(/\b(\d{1,3})\s*(?:days?|dias?)\b/i);
+  const paymentDays = daysMatch ? parseInt(daysMatch[1], 10) : null;
+
+  if (depositPercent == null && balancePercent == null && paymentDays == null) return null;
+
+  const parts: string[] = [];
+  if (depositPercent != null) parts.push(`${depositPercent}% deposit`);
+  if (balancePercent != null) parts.push(`${balancePercent}% balance`);
+  if (paymentDays != null) parts.push(`${paymentDays} days`);
+
+  return {
+    depositPercent,
+    balancePercent,
+    paymentDays,
+    description: parts.join(' / ') || null,
+  };
+}
+
 function isCommercialInvoice(text: string): boolean {
   const upper = text.toUpperCase();
   if (
@@ -298,7 +369,9 @@ function parseItems(text: string): Record<string, any>[] {
     const ncmMatch = line.match(/\b\d{4}\.?\d{2}\.?\d{2}\b/);
     if (!ncmMatch || ncmMatch.index == null) continue;
     const beforeNcm = line.slice(0, ncmMatch.index).trim();
-    const ean = line.slice(ncmMatch.index + ncmMatch[0].length).match(/\b\d{8,14}\b/)?.[0] ?? null;
+    const ean = normalizeGtin(
+      line.slice(ncmMatch.index + ncmMatch[0].length).match(/\b\d{8,14}\b/)?.[0] ?? null,
+    );
     const tokens = beforeNcm.split(/\s+/).filter(Boolean);
     if (tokens.length < 5) continue;
 
@@ -388,23 +461,7 @@ function parseCompactKiomItems(text: string): Record<string, any>[] {
 }
 
 function parseNumber(value: string | null | undefined): number | null {
-  if (!value) return null;
-  let clean = String(value).replace(/[^\d,.-]/g, '');
-  if (!clean || clean === '-' || clean === '.') return null;
-
-  const lastComma = clean.lastIndexOf(',');
-  const lastDot = clean.lastIndexOf('.');
-  if (lastComma > -1 && lastDot > -1) {
-    const decimal = lastComma > lastDot ? ',' : '.';
-    const thousands = decimal === ',' ? '.' : ',';
-    clean = clean.replace(new RegExp(`\\${thousands}`, 'g'), '');
-    if (decimal === ',') clean = clean.replace(',', '.');
-  } else if (lastComma > -1) {
-    clean = clean.replace(',', '.');
-  }
-
-  const parsed = Number(clean);
-  return Number.isFinite(parsed) ? parsed : null;
+  return parseDecimal(value);
 }
 
 function getConfidenceValue<T>(field: unknown): T | null {

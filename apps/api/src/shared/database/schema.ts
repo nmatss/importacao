@@ -143,6 +143,8 @@ export const importProcesses = pgTable(
     index('import_processes_brand_idx').on(table.brand),
     index('import_processes_status_brand_idx').on(table.status, table.brand),
     index('import_processes_status_updated_idx').on(table.status, table.updatedAt),
+    // Supports the Sydle report's "process phase" filter (join + logistic_status).
+    index('import_processes_logistic_status_idx').on(table.logisticStatus),
   ],
 );
 

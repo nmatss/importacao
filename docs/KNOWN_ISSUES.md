@@ -1,6 +1,27 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-19
+Ultima atualizacao: 2026-06-20
+
+## Follow-ups do review enterprise 2026-06-20 (nao bloqueantes p/ staging)
+
+- **Sydle signIn (P0 corrigido no codigo, validar antes de prod):** credenciais
+  movidas p/ POST body em `sydle/client.ts`. **Acao:** validar contra o ambiente
+  Sydle real e **rotacionar `SYDLE_PASSWORD`** (logs de proxy antigos podem ter a senha).
+- **DBA P1 — matchProcess full scan:** `importProcesses.aiExtractedData::text ILIKE`
+  no sync varre a tabela. **Fix:** `pg_trgm` + indice GIN, ou promover PO/PI/CI a
+  colunas indexaveis. (`sydle/service.ts` matchProcess.)
+- **QA P1-A sistemico — erro vira "tela vazia":** ~11 telas com `useApiQuery` que
+  nao releem `error`/`isError` (EspelhoPreview, FollowUpTab, CambiosTab, EmailsTab,
+  DraftBLTab, AuditLogPage, ExecutiveDashboardPage, etc.). Corrigidos nesta rodada:
+  Certificacao "Verificar" (P1-B) e DocumentComparison (P1-G). **Fix restante:**
+  padronizar `ErrorState`+retry (modelo: `SydlePaymentsPage`).
+- **Sydle regra de pagamento (negocio):** pago/aberto/tipo por parcela derivam do
+  estado do ticket, nao da parcela → totais podem divergir. Decisao financeira;
+  ver `SYDLE-INTEGRATION.md`.
+- **DBA P2 — journal Drizzle parado em 0010:** migrations 0011-0019 aplicadas por
+  runner manual (`migrate.ts` + `apply-pending-migrations.sh`). Reconciliar journal/snapshots.
+- **DevOps:** rede Docker externa `ia-local-net` e `.env` de producao sao pre-requisitos
+  de staging; destinatarios de e-mail (#78) e Drive root precisam de config.
 
 ## CRITICO - Go-live Publico Bloqueado Por Upstream Do Nginx/Edge
 

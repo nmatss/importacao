@@ -242,21 +242,40 @@ export function flattenAiData(data: Record<string, any>): Record<string, any> {
     // Campos meta (ex.: _trust do harness) não são dados extraídos — não devem
     // poluir validação/comparativo/UI.
     if (key.startsWith('_')) continue;
-    if (key === 'items' && Array.isArray(val)) {
-      result[key] = val.map((item: Record<string, any>) => {
-        const flatItem: Record<string, any> = {};
-        for (const [k, v] of Object.entries(item)) {
-          flatItem[k] = v && typeof v === 'object' && 'value' in v ? v.value : v;
-        }
-        return flatItem;
-      });
-    } else if (val && typeof val === 'object' && 'value' in val) {
-      result[key] = val.value;
-    } else {
-      result[key] = val;
-    }
+    result[key] = flattenValue(val);
   }
   return result;
+}
+
+/**
+ * Recursively unwrap `{ value, confidence }` confidence fields at ANY depth.
+ *
+ * The previous implementation only unwrapped top-level fields and `items[]`,
+ * leaving nested structures (e.g. `paymentTerms.depositPercent`, or arrays of
+ * confidence fields like `ncmList`) as raw `{ value, confidence }` objects in
+ * `import_processes.aiExtractedData`. Downstream comparators that read those
+ * fields directly then saw `[object Object]` and produced false mismatches /
+ * null cross-references (DocIntel audit 2026-06-20, finding A2). Unwrapping
+ * recursively keeps the persisted shape flat for every field.
+ */
+function flattenValue(val: unknown): unknown {
+  if (Array.isArray(val)) {
+    return val.map((item) => flattenValue(item));
+  }
+  if (val && typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    // Confidence field — unwrap and keep flattening (value may itself be an
+    // array or nested object).
+    if ('value' in obj && 'confidence' in obj) {
+      return flattenValue(obj.value);
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(obj)) {
+      out[k] = flattenValue(v);
+    }
+    return out;
+  }
+  return val;
 }
 
 class AIService {

@@ -39,4 +39,38 @@ Total CBM: 2.34`;
     const parsed = tryParsePackingListText('DANFE NOTA FISCAL ELETRONICA BRL R$ PACKING LIST');
     expect(parsed).toBeNull();
   });
+
+  it('corrects net/gross weights printed in swapped order (net must be <= gross)', () => {
+    // PI7752Y line prints G.W. before N.W. (200.0 then 180.5) -> the parser picks
+    // them up swapped and must flip them, lowering confidence for review.
+    const text = `PACKING LIST
+Item Code Description Qty Cartons NW GW EAN
+1 PI7752Y ROBE 1000 40 200.0 180.5 7909692093303
+2 AC2285Y BAG 600 20 90.0 100.0 1234567890123`;
+
+    const parsed = tryParsePackingListText(text);
+    const robe = parsed?.items.find((i: any) => i.itemCode.value === 'PI7752Y');
+    const bag = parsed?.items.find((i: any) => i.itemCode.value === 'AC2285Y');
+
+    expect(robe.netWeight.value).toBe(180.5);
+    expect(robe.grossWeight.value).toBe(200);
+    expect(robe.netWeight.confidence).toBeLessThan(0.78);
+    // Already-ordered weights are left untouched at full confidence.
+    expect(bag.netWeight.value).toBe(90);
+    expect(bag.grossWeight.value).toBe(100);
+    expect(bag.netWeight.confidence).toBe(0.78);
+  });
+
+  it('accepts a valid GS1 EAN and rejects an invalid check digit', () => {
+    const text = `PACKING LIST
+Item Code Description Qty Cartons NW GW EAN
+1 PI7752Y ROBE 1000 40 180.5 200.0 7909692093303
+2 AC2285Y BAG 600 20 90.0 100.0 1234567890123`;
+
+    const parsed = tryParsePackingListText(text);
+    const robe = parsed?.items.find((i: any) => i.itemCode.value === 'PI7752Y');
+    const bag = parsed?.items.find((i: any) => i.itemCode.value === 'AC2285Y');
+    expect(robe.ean.value).toBe('7909692093303');
+    expect(bag.ean.value).toBeNull(); // 1234567890123 has a bad check digit
+  });
 });

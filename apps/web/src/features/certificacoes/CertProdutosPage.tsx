@@ -1,5 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
+import { toast } from 'sonner';
 import { Link, useSearchParams } from 'react-router-dom';
+import { getErrorMessage } from '@/shared/utils/errors';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import { fetchCertProducts, verifyCertProduct } from '@/shared/lib/cert-api-client';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
@@ -297,8 +299,11 @@ export default function CertProdutosPage() {
             : p,
         ),
       );
-    } catch {
-      // Silently handle
+    } catch (err) {
+      // Surface the failure instead of leaving the row silently unchanged — the
+      // verify endpoint hits an external site and is the most-clicked action on
+      // this screen (QA audit 2026-06-20, P1-B).
+      toast.error(getErrorMessage(err));
     } finally {
       setVerifying(null);
     }

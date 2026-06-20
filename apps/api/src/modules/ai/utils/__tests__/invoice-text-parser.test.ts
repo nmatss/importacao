@@ -126,6 +126,42 @@ TOTAL FOB4.912,00`;
     expect(filled.invoiceDate.value).toBeNull();
   });
 
+  it('extracts deposit/balance payment terms deterministically', () => {
+    const text = `${invoiceText}
+PAYMENT TERMS: 30% DEPOSIT, 70% BALANCE within 60 days`;
+    const parsed = tryParseInvoiceText(text);
+    expect(parsed?.paymentTerms.value.depositPercent).toBe(30);
+    expect(parsed?.paymentTerms.value.balancePercent).toBe(70);
+    expect(parsed?.paymentTerms.value.paymentDays).toBe(60);
+  });
+
+  it('infers the balance when only the deposit percent is present', () => {
+    const text = `${invoiceText}
+DEPOSIT 40%`;
+    const parsed = tryParseInvoiceText(text);
+    expect(parsed?.paymentTerms.value.depositPercent).toBe(40);
+    expect(parsed?.paymentTerms.value.balancePercent).toBe(60);
+  });
+
+  it('discards implausible payment-term percentages (OCR noise that does not sum to ~100)', () => {
+    const text = `${invoiceText}
+DEPOSIT15,81% BALANCE 163,69%`;
+    const parsed = tryParseInvoiceText(text);
+    // 15.81 + 163.69 is nonsense -> both dropped, not trusted.
+    expect(parsed?.paymentTerms.value.depositPercent).toBeNull();
+    expect(parsed?.paymentTerms.value.balancePercent).toBeNull();
+  });
+
+  it('rejects an EAN with an invalid GS1 check digit (never used as a join key)', () => {
+    const text = `COMMERCIAL INVOICE
+Invoice No: IM-X        Date: 2026-05-12
+TOTAL FOB: USD 100.00
+1  PI0001Y  PRODUTO  10  10.00  100.00  6115.95.00  1234567890123`;
+    const parsed = tryParseInvoiceText(text);
+    // 1234567890123 has a bad check digit -> ean must be null.
+    expect(parsed?.items[0]?.ean.value).toBeNull();
+  });
+
   it('repairs exporterName when a carrier/vessel name was selected', () => {
     const repaired = repairInvoiceExtractionFromText(
       { exporterName: { value: 'COSCO SHIPPING ARGENTINA', confidence: 0.7 } },

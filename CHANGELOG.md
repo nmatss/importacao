@@ -5,6 +5,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-06-20 - Extracao 1000% + relatorio Sydle + review enterprise
+
+### Added
+
+- `apps/api/src/modules/ai/utils/numbers.ts`: parser decimal unico (`parseDecimal`)
+  compartilhado pelos 4 parsers deterministicos (invoice/PL/LI/proforma).
+- Extracao deterministica de `paymentTerms` (deposit/balance/%) na invoice.
+- Relatorio Sydle: coluna/filtro de **Fase do processo** (logisticStatus), filtro
+  de **moeda** e atalhos de **vencimento** (vencidos / 7d / 30d); coluna Fase no CSV.
+- Indice `import_processes_logistic_status_idx` (migration `0019`) para o filtro de fase.
+- `docs/ENTERPRISE-REVIEW-2026-06-20.md` com o review do time de 10 papeis e P0/P1.
+
+### Fixed
+
+- **Seguranca (P0):** credenciais SYDLE saiam na query string do `signIn` →
+  movidas para o body POST (`sydle/client.ts`). Rotacionar `SYDLE_PASSWORD`.
+- `parseNumber`: numeros com multiplos separadores de milhar (`1.234.567`) viravam
+  `NaN`/`null` (perda de dado); agora lidos corretamente.
+- `flattenAiData` agora desempacota `{value,confidence}` aninhados (paymentTerms,
+  arrays) → fim de cruzamentos nulos por objetos crus.
+- EAN validado por check digit GS1 (`normalizeGtin`) nos parsers — sem EAN invalido.
+- Packing List: peso liquido/bruto por item corrige inversao (net <= gross).
+- Certificacao "Verificar" deixou de engolir erros (toast).
+- `DocumentComparison`: guardas `?? []` evitam tela branca em resposta parcial.
+- Sydle: upsert `onConflictDoUpdate` (idempotencia) + `currencyBreakdown` (multi-moeda).
+
+---
+
 ## [Unreleased] - 2026-06-17 - Harness operacional e validacao documental
 
 ### Added
