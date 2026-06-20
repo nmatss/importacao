@@ -12,8 +12,16 @@ const FILE_TYPES = [
   { value: 'proforma_invoice', label: 'Proforma', keywords: ['proforma', 'pro forma'] },
   { value: 'invoice', label: 'Invoice', keywords: ['invoice', 'inv', 'fatura', 'commercial'] },
   { value: 'packing_list', label: 'Packing List', keywords: ['packing', 'pl', 'pack'] },
-  { value: 'ohbl', label: 'BL', keywords: ['bl', 'bill', 'lading', 'conhecimento', 'ohbl'] },
-  { value: 'draft_bl', label: 'Draft BL', keywords: ['draft bl', 'draft_bl', 'rascunho bl'] },
+  {
+    value: 'draft_bl',
+    label: 'Draft BL',
+    keywords: ['draft bl', 'draft_bl', 'draft-bl', 'draftbl', 'draft bill', 'rascunho bl'],
+  },
+  {
+    value: 'ohbl',
+    label: 'BL',
+    keywords: ['ohbl', 'original bl', 'bill', 'lading', 'conhecimento', 'bl'],
+  },
   { value: 'espelho', label: 'Espelho', keywords: ['espelho', 'mirror'] },
   { value: 'li', label: 'LI', keywords: ['li', 'licen'] },
   { value: 'certificate', label: 'Certificado', keywords: ['cert', 'certificado', 'certificate'] },
@@ -26,10 +34,23 @@ const MAX_FILE_SIZE = 50 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 45_000;
 const ALLOWED_EXTENSIONS = ACCEPT.split(',');
 
-function detectDocType(filename: string): string {
-  const lower = filename.toLowerCase();
+function normalizeFilenameForDetection(filename: string): string {
+  return ` ${filename
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[_\-.]+/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()} `;
+}
+
+export function detectDocType(filename: string): string {
+  const normalizedName = normalizeFilenameForDetection(filename);
   for (const ft of FILE_TYPES) {
-    if (ft.keywords.some((kw) => lower.includes(kw))) return ft.value;
+    if (ft.keywords.some((kw) => normalizedName.includes(normalizeFilenameForDetection(kw)))) {
+      return ft.value;
+    }
   }
   return 'other';
 }

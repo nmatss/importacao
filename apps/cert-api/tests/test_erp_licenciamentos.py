@@ -5,7 +5,6 @@ fallback NAO_APLICAVEL quando a aba não existe e VENCIDO/data quando há linha.
 """
 
 import gspread
-import pytest
 
 import app.services.erp_service as erp_service
 

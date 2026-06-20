@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-06-19
+Ultima atualizacao: 2026-06-20
 
 ## Validacao E Comparativo
 
@@ -15,6 +15,9 @@ Ultima atualizacao: 2026-06-19
 - Fortalecer E2E do fluxo documental com upload multipart real, magic-byte
   negativo, preview/download, permissao admin para reprocess/delete, processo
   travado e validacao ponta a ponta usando as rotas reais.
+- Tornar o intake por e-mail idempotente antes do ack/mark-as-read: hoje a
+  auditoria indica risco de mensagem marcada como lida antes do processamento
+  completo em caso de crash entre leitura e upload/processamento.
 
 ## IA E Extracao
 
@@ -33,6 +36,9 @@ Ultima atualizacao: 2026-06-19
 
 - Criar documento de indices por tabela e queries criticas.
 - Auditar indices redundantes e queries com risco de full scan.
+- Sydle: obter catalogo/permissao ou view/API consolidada para dados
+  complementares de compra/pagamento internacional, com fixture sanitizada e
+  testes de normalizacao antes de ativar campos sensiveis adicionais.
 - Avaliar historizacao e origem por campo para dados projetados no card do processo.
 - Padronizar query keys do frontend com `processKeys`, `documentKeys`, `followUpKeys` e equivalentes de validacao.
 - Unificar cache de `/api/documents/process/:id/comparison` entre comparativo e Draft BL.
@@ -44,9 +50,10 @@ Ultima atualizacao: 2026-06-19
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
 - Adicionar alerta externo para falha do `scripts/restore-test.sh` e medir RTO em
   execucao recorrente. Restore manual e cron semanal validados em 2026-06-17.
-- Evoluir autorizacao fina do proxy `/cert-api/`: hoje o Nginx exige JWT valido
-  antes de injetar `X-API-Key`, mas a separacao por papel/escopo do modulo de
-  certificacoes deve ser definida com o negocio.
+- Evoluir autorizacao fina do proxy `/cert-api/`: em 2026-06-20 o Nginx passou
+  a exigir admin via `/api/auth/cert-api-access` antes de injetar `X-API-Key`.
+  Ainda falta separar escopos como `cert.read`, `cert.write`, `cert.sync` e
+  `cert.admin` quando o negocio definir usuarios leitores/escritores.
 - Formalizar frescor minimo do estoque: o relatorio `Estoque Detalhado` exporta
   o cache `cert_stock`; se `/api/sync-stock` falhar parcialmente, WMS e
   e-commerce podem ter timestamps diferentes. Em 2026-06-19 o XLSX passou a

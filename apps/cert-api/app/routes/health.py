@@ -1,11 +1,20 @@
 """Health check routes."""
 
+from contextlib import suppress
 from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter
 
-from app.config import DATABASE_URL, REPORTS_DIR, VTEX_STORES
+from app.config import (
+    CERTS_DIR,
+    DATABASE_URL,
+    REPORTS_DIR,
+    SHEETS_CLIENT_EMAIL,
+    SHEETS_PRIVATE_KEY,
+    SHEETS_SPREADSHEET_ID,
+    VTEX_STORES,
+)
 from app.db.postgres import db
 
 router = APIRouter()
@@ -26,7 +35,7 @@ def health() -> dict:
             result["database"] = "connected"
         except Exception:
             result["database"] = "disconnected"
-    result["sheets_configured"] = bool(DATABASE_URL)
+    result["sheets_configured"] = bool(SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY and SHEETS_SPREADSHEET_ID)
     result["vtex_stores"] = list(VTEX_STORES.keys())
     return result
 
@@ -43,11 +52,15 @@ def ready() -> dict:
     try:
         with db() as (conn, cur):
             cur.execute("SELECT 1")
-        probe = REPORTS_DIR / f".ready-{uuid4().hex}.tmp"
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink(missing_ok=True)
+        for label, directory in (("REPORTS_DIR", REPORTS_DIR), ("CERTS_DIR", CERTS_DIR)):
+            probe = directory / f".ready-{uuid4().hex}.tmp"
+            try:
+                probe.write_text("ok", encoding="utf-8")
+            except PermissionError:
+                return {"ready": False, "reason": f"{label} not writable"}
+            finally:
+                with suppress(Exception):
+                    probe.unlink(missing_ok=True)
         return {"ready": True}
-    except PermissionError:
-        return {"ready": False, "reason": "REPORTS_DIR not writable"}
     except Exception as e:
         return {"ready": False, "reason": str(e)}

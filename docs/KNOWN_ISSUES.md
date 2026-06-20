@@ -137,6 +137,12 @@ Descricao:
   `RequestData` retornaram 403. Assim, fornecedor, PI, invoice e processo de
   importacao podem permanecer vazios ate haver permissao adicional ou uma visao
   SYDLE consolidada.
+- Nao ha evidencia local suficiente para afirmar que nao existem outras classes
+  SYDLE relevantes; a confirmacao depende de catalogo/permissao da SYDLE. A
+  alternativa preferida e uma view/API read-only consolidada, sanitizada, com
+  `processCode`, `purchaseRef`, `purchaseOrder`, `piNumber`, `invoiceNumber`,
+  `supplierName`, status/tipo real da parcela, pagamento/liquidacao, cambio,
+  BRL, banco, contrato e remessa.
 - Enquanto `SYDLE_SYNC_ENABLED=false` ou faltar alguma variavel de
   `sydle_one_class`, o job de 15 minutos registra `status=skipped`.
 - `scripts/deploy.sh` aborta se `SYDLE_SYNC_ENABLED=true` no `.env` remoto,
@@ -160,8 +166,9 @@ Impacto:
 
 Status:
 
-- Aberto. Requer UAT financeiro e, se necessario, ajuste de permissao/API para
-  campos complementares de formulario.
+- Aberto. Requer UAT financeiro e ajuste de permissao/API para campos
+  complementares, preferencialmente por view/API consolidada da SYDLE em vez de
+  ampliar leitura de payload bruto sensivel.
 
 ## MEDIO - Pasta Raiz Do Google Drive Ausente Em Producao
 

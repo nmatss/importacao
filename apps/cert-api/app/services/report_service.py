@@ -45,6 +45,7 @@ _STATUS_LABELS: dict[str, str] = {
     "NO_EXPECTED": "Sem Certificacao",
     "EXPIRED": "Vencido",
 }
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 def _fetch_stock_map() -> dict[str, dict[str, int]]:
@@ -95,12 +96,17 @@ def _safe_int(value: Any) -> int:
 
 
 def _safe_text(value: Any) -> str:
-    """Normalize nullable values for Excel cells."""
+    """Normalize nullable values and neutralize formula-like text for Excel cells."""
     if value is None:
         return ""
     if hasattr(value, "isoformat"):
-        return value.isoformat()
-    return str(value)
+        text = value.isoformat()
+    else:
+        text = str(value)
+    stripped = text.lstrip(" \t\r\n")
+    if stripped.startswith(_FORMULA_PREFIXES):
+        return f"'{text}"
+    return text
 
 
 def _apply_header_row(
@@ -161,16 +167,29 @@ def generate_products_report(rows: list[dict], brand: str = "", status: str = ""
     ws.append([f"Gerado em: {now.strftime('%d/%m/%Y %H:%M')}"])
     ws.append([f"Total: {len(rows)} produtos"])
     ws.append([])
-    ws.append([
-        f"Conforme: {ok_count} | Nao Encontrado: {not_found_count} "
-        f"| Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"
-    ])
+    ws.append(
+        [
+            f"Conforme: {ok_count} | Nao Encontrado: {not_found_count} "
+            f"| Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"
+        ]
+    )
     ws.append([])
 
     headers = [
-        "SKU", "Nome", "Marca", "Status", "Pontuacao", "Tipo Certificacao",
-        "Texto Esperado", "Texto Encontrado", "URL", "Prazo Venda", "Vencido",
-        "Estoque CD", "Estoque E-commerce", "Total Estoque",
+        "SKU",
+        "Nome",
+        "Marca",
+        "Status",
+        "Pontuacao",
+        "Tipo Certificacao",
+        "Texto Esperado",
+        "Texto Encontrado",
+        "URL",
+        "Prazo Venda",
+        "Vencido",
+        "Estoque CD",
+        "Estoque E-commerce",
+        "Total Estoque",
     ]
     header_row = _apply_header_row(ws, headers, _HEADER_FONT_CERT, _HEADER_FILL_CERT)
 
@@ -185,11 +204,20 @@ def generate_products_report(rows: list[dict], brand: str = "", status: str = ""
         sku = r.get("sku", "")
         stock = stock_map.get(sku, {"cd": 0, "ecommerce": 0})
         row_data = [
-            sku, r.get("name", ""), r.get("brand", ""), label, score_str,
-            r.get("certification_type", ""), r.get("expected_cert_text", ""),
-            r.get("actual_cert_text", ""), r.get("last_validation_url", ""),
-            r.get("sale_deadline", ""), "Sim" if is_exp else "",
-            stock["cd"], stock["ecommerce"], stock["cd"] + stock["ecommerce"],
+            _safe_text(sku),
+            _safe_text(r.get("name", "")),
+            _safe_text(r.get("brand", "")),
+            _safe_text(label),
+            _safe_text(score_str),
+            _safe_text(r.get("certification_type", "")),
+            _safe_text(r.get("expected_cert_text", "")),
+            _safe_text(r.get("actual_cert_text", "")),
+            _safe_text(r.get("last_validation_url", "")),
+            _safe_text(r.get("sale_deadline", "")),
+            "Sim" if is_exp else "",
+            stock["cd"],
+            stock["ecommerce"],
+            stock["cd"] + stock["ecommerce"],
         ]
         ws.append(row_data)
         row_idx = ws.max_row
@@ -237,8 +265,18 @@ def generate_stock_report(rows: list, brand: str = "") -> Path:
     ws.append([])
 
     headers = [
-        "SKU", "Nome", "Marca", "Origem", "Localização", "Quantidade",
-        "Disponível", "Reserva", "Trânsito", "Situação", "Status Cert", "Prazo Venda",
+        "SKU",
+        "Nome",
+        "Marca",
+        "Origem",
+        "Localização",
+        "Quantidade",
+        "Disponível",
+        "Reserva",
+        "Trânsito",
+        "Situação",
+        "Status Cert",
+        "Prazo Venda",
         "Sincronizado em",
     ]
     header_row = _apply_header_row(ws, headers, _HEADER_FONT_STOCK, _HEADER_FILL_STOCK)
@@ -312,16 +350,28 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
     ws.merge_cells("A1:H1")
     ws["A1"].font = Font(bold=True, size=14, color="059669")
     ws.append([f"Data: {report_data.get('date', '')}"])
-    ws.append([
-        f"Total: {summary.get('total', len(products))} | OK: {summary.get('ok', 0)} "
-        f"| Ausente: {summary.get('missing', 0)} | Inconsistente: {summary.get('inconsistent', 0)} "
-        f"| Não Encontrado: {summary.get('not_found', 0)}"
-    ])
+    ws.append(
+        [
+            f"Total: {summary.get('total', len(products))} | OK: {summary.get('ok', 0)} "
+            f"| Ausente: {summary.get('missing', 0)} | Inconsistente: {summary.get('inconsistent', 0)} "
+            f"| Não Encontrado: {summary.get('not_found', 0)}"
+        ]
+    )
     ws.append([])
 
     headers = [
-        "SKU", "Nome", "Marca", "Status", "Pontuacao", "Texto Esperado",
-        "Texto Encontrado", "URL", "Erro", "Estoque CD", "Estoque E-commerce", "Total Estoque",
+        "SKU",
+        "Nome",
+        "Marca",
+        "Status",
+        "Pontuacao",
+        "Texto Esperado",
+        "Texto Encontrado",
+        "URL",
+        "Erro",
+        "Estoque CD",
+        "Estoque E-commerce",
+        "Total Estoque",
     ]
     header_row = _apply_header_row(ws, headers, _HEADER_FONT_CERT, _HEADER_FILL_CERT)
 
@@ -333,10 +383,18 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
         p_sku = p.get("sku", "")
         stock = stock_map.get(p_sku, {"cd": 0, "ecommerce": 0})
         row = [
-            p_sku, p.get("name", ""), p.get("brand", ""), status_label, score_str,
-            p.get("expected_cert_text", ""), p.get("actual_cert_text", ""),
-            p.get("url", ""), p.get("error", ""),
-            stock["cd"], stock["ecommerce"], stock["cd"] + stock["ecommerce"],
+            _safe_text(p_sku),
+            _safe_text(p.get("name", "")),
+            _safe_text(p.get("brand", "")),
+            _safe_text(status_label),
+            _safe_text(score_str),
+            _safe_text(p.get("expected_cert_text", "")),
+            _safe_text(p.get("actual_cert_text", "")),
+            _safe_text(p.get("url", "")),
+            _safe_text(p.get("error", "")),
+            stock["cd"],
+            stock["ecommerce"],
+            stock["cd"] + stock["ecommerce"],
         ]
         ws.append(row)
         row_idx = ws.max_row

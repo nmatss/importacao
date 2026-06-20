@@ -52,14 +52,8 @@ def cleanup_old_validations(max_age_seconds: int = 3600, stuck_timeout: int = 72
     to_remove = [
         rid
         for rid, state in _running_validations.items()
-        if (
-            state.get("status") in ("completed", "error")
-            and now - state.get("_finished_at", now) > max_age_seconds
-        )
-        or (
-            state.get("status") == "running"
-            and now - state.get("_started_at", now) > stuck_timeout
-        )
+        if (state.get("status") in ("completed", "error") and now - state.get("_finished_at", now) > max_age_seconds)
+        or (state.get("status") == "running" and now - state.get("_started_at", now) > stuck_timeout)
     ]
     for rid in to_remove:
         del _running_validations[rid]
@@ -108,14 +102,10 @@ def _matches_derived_filters(
         return False
     if site_statuses and str(product.get("site_status") or "").strip().lower() not in site_statuses:
         return False
-    if license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses:
-        return False
-    return True
+    return not (license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses)
 
 
-def _run_validation(
-    run_id: str, brand_filter: str | None, limit: int | None, source: str | None = None
-) -> None:
+def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, source: str | None = None) -> None:
     """Background worker that validates each product against VTEX.
 
     Args:
@@ -165,7 +155,9 @@ def _run_validation(
             p_sale_deadline = str(p["sale_deadline_date"]) if p.get("sale_deadline_date") else ""
 
             vresult = validate_single_product(
-                sku, brand, expected_cert,
+                sku,
+                brand,
+                expected_cert,
                 product_name=p.get("name", ""),
                 ecommerce_description=ecommerce_desc,
                 sheet_status=p.get("sheet_status", "") or "",
@@ -184,24 +176,28 @@ def _run_validation(
                 not_found += 1
 
             state["processed"] = i + 1
-            state["events"].append({
-                "type": "progress",
-                "current": i + 1,
-                "total": len(products),
-                "product": {"sku": sku, "name": p["name"], "status": status, "score": score},
-            })
+            state["events"].append(
+                {
+                    "type": "progress",
+                    "current": i + 1,
+                    "total": len(products),
+                    "product": {"sku": sku, "name": p["name"], "status": status, "score": score},
+                }
+            )
 
-            report_products.append({
-                "sku": sku,
-                "name": p["name"],
-                "brand": brand,
-                "status": status,
-                "score": score,
-                "url": vresult.get("url"),
-                "actual_cert_text": vresult.get("actual_cert_text"),
-                "expected_cert_text": expected_cert,
-                "error": vresult.get("error"),
-            })
+            report_products.append(
+                {
+                    "sku": sku,
+                    "name": p["name"],
+                    "brand": brand,
+                    "status": status,
+                    "score": score,
+                    "url": vresult.get("url"),
+                    "actual_cert_text": vresult.get("actual_cert_text"),
+                    "expected_cert_text": expected_cert,
+                    "error": vresult.get("error"),
+                }
+            )
 
             if DATABASE_URL:
                 try:
@@ -214,8 +210,16 @@ def _run_validation(
                                 last_validation_error=%s, actual_cert_text=%s, updated_at=%s
                             WHERE sku=%s
                             """,
-                            [status, score, vresult.get("url"), now,
-                             vresult.get("error"), vresult.get("actual_cert_text"), now, sku],
+                            [
+                                status,
+                                score,
+                                vresult.get("url"),
+                                now,
+                                vresult.get("error"),
+                                vresult.get("actual_cert_text"),
+                                now,
+                                sku,
+                            ],
                         )
                 except Exception:
                     pass
@@ -251,8 +255,7 @@ def _run_validation(
                             inconsistent=%s, not_found=%s, finished_at=%s, report_file=%s
                         WHERE id=%s
                         """,
-                        [len(products), ok, inconsistent, not_found,
-                         datetime.now(UTC), report_filename, run_id],
+                        [len(products), ok, inconsistent, not_found, datetime.now(UTC), report_filename, run_id],
                     )
             except Exception:
                 pass
@@ -407,9 +410,7 @@ def list_expired_products(
             )
             all_serialized = (_serialize_product(dict(r), license_map) for r in cur.fetchall())
             filtered = [
-                p
-                for p in all_serialized
-                if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
+                p for p in all_serialized if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
             ]
             total = len(filtered)
             rows = filtered[offset : offset + per_page]
@@ -457,7 +458,14 @@ def list_products(
         total_pages, last_validation_date.
     """
     if not DATABASE_URL:
-        return {"products": [], "total": 0, "page": 1, "per_page": per_page, "total_pages": 0, "last_validation_date": None}
+        return {
+            "products": [],
+            "total": 0,
+            "page": 1,
+            "per_page": per_page,
+            "total_pages": 0,
+            "last_validation_date": None,
+        }
 
     cert_statuses = _parse_csv_filter(cert_status)
     site_statuses = _parse_csv_filter(site_status)
@@ -480,17 +488,13 @@ def list_products(
                 statuses.remove("EXPIRED")
                 if statuses:
                     conditions.append(
-                        "(last_validation_status IN ({}) OR is_expired = TRUE)".format(
-                            ",".join(["%s"] * len(statuses))
-                        )
+                        "(last_validation_status IN ({}) OR is_expired = TRUE)".format(",".join(["%s"] * len(statuses)))
                     )
                     params.extend(statuses)
                 else:
                     conditions.append("is_expired = TRUE")
             elif statuses:
-                conditions.append(
-                    "last_validation_status IN ({})".format(",".join(["%s"] * len(statuses)))
-                )
+                conditions.append("last_validation_status IN ({})".format(",".join(["%s"] * len(statuses))))
                 params.extend(statuses)
 
         if start_date:
@@ -516,9 +520,7 @@ def list_products(
             )
             all_serialized = (_serialize_product(dict(r), license_map) for r in cur.fetchall())
             filtered = [
-                p
-                for p in all_serialized
-                if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
+                p for p in all_serialized if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
             ]
             total = len(filtered)
             products_raw = filtered[offset : offset + per_page]
@@ -654,9 +656,14 @@ def verify_product(req: VerifyRequest) -> dict:
             pass
 
     result = validate_single_product(
-        req.sku, req.brand, expected_cert,
-        product_name=product_name, ecommerce_description=ecommerce_desc,
-        sheet_status=sheet_status, is_expired=is_expired, sale_deadline_date=sale_deadline_date_str,
+        req.sku,
+        req.brand,
+        expected_cert,
+        product_name=product_name,
+        ecommerce_description=ecommerce_desc,
+        sheet_status=sheet_status,
+        is_expired=is_expired,
+        sale_deadline_date=sale_deadline_date_str,
     )
 
     if DATABASE_URL:
@@ -670,8 +677,16 @@ def verify_product(req: VerifyRequest) -> dict:
                         last_validation_error=%s, actual_cert_text=%s, updated_at=%s
                     WHERE sku=%s
                     """,
-                    [result["status"], result["score"], result["url"],
-                     now, result["error"], result.get("actual_cert_text"), now, req.sku],
+                    [
+                        result["status"],
+                        result["score"],
+                        result["url"],
+                        now,
+                        result["error"],
+                        result.get("actual_cert_text"),
+                        now,
+                        req.sku,
+                    ],
                 )
         except Exception as e:
             log.error(f"Failed to update product {req.sku}: {e}")
@@ -701,11 +716,13 @@ def start_validation(request: Request, req: ValidateRequest) -> dict:
 
     cleanup_old_validations()
     _running_validations[run_id] = {
-        "status": "running", "events": [], "processed": 0, "total": 0, "_started_at": time.time()
+        "status": "running",
+        "events": [],
+        "processed": 0,
+        "total": 0,
+        "_started_at": time.time(),
     }
-    thread = threading.Thread(
-        target=_run_validation, args=(run_id, req.brand, req.limit, req.source), daemon=True
-    )
+    thread = threading.Thread(target=_run_validation, args=(run_id, req.brand, req.limit, req.source), daemon=True)
     thread.start()
 
     return {"run_id": run_id, "status": "running"}

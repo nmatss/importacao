@@ -242,32 +242,34 @@ export function AppRoutes() {
         path="/certificacoes/*"
         element={
           <ProtectedRoute>
-            <CertificacoesLayout>
-              <Suspense fallback={<LazyFallback />}>
-                <Routes>
-                  <Route path="/" element={<CertDashboardPage />} />
-                  <Route path="/validacao" element={<CertValidacaoPage />} />
-                  <Route path="/produtos" element={<CertProdutosPage />} />
-                  <Route path="/produtos/:sku" element={<CertProdutoDetailPage />} />
-                  <Route path="/cadastro" element={<CertCadastroPage />} />
-                  <Route path="/relatorios" element={<CertRelatoriosPage />} />
-                  <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
-                  <Route path="/agendamentos" element={<CertAgendamentosPage />} />
-                  <Route path="/configuracoes" element={<CertConfiguracoesPage />} />
-                  <Route
-                    path="*"
-                    element={
-                      <ModuleNotFound
-                        title="Rota de certificacoes invalida"
-                        message="Essa tela nao existe no modulo de certificacoes. Volte para o dashboard ou use o menu lateral."
-                        to="/certificacoes"
-                        action="Ir para certificacoes"
-                      />
-                    }
-                  />
-                </Routes>
-              </Suspense>
-            </CertificacoesLayout>
+            <AdminRoute>
+              <CertificacoesLayout>
+                <Suspense fallback={<LazyFallback />}>
+                  <Routes>
+                    <Route path="/" element={<CertDashboardPage />} />
+                    <Route path="/validacao" element={<CertValidacaoPage />} />
+                    <Route path="/produtos" element={<CertProdutosPage />} />
+                    <Route path="/produtos/:sku" element={<CertProdutoDetailPage />} />
+                    <Route path="/cadastro" element={<CertCadastroPage />} />
+                    <Route path="/relatorios" element={<CertRelatoriosPage />} />
+                    <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
+                    <Route path="/agendamentos" element={<CertAgendamentosPage />} />
+                    <Route path="/configuracoes" element={<CertConfiguracoesPage />} />
+                    <Route
+                      path="*"
+                      element={
+                        <ModuleNotFound
+                          title="Rota de certificacoes invalida"
+                          message="Essa tela nao existe no modulo de certificacoes. Volte para o dashboard ou use o menu lateral."
+                          to="/certificacoes"
+                          action="Ir para certificacoes"
+                        />
+                      }
+                    />
+                  </Routes>
+                </Suspense>
+              </CertificacoesLayout>
+            </AdminRoute>
           </ProtectedRoute>
         }
       />

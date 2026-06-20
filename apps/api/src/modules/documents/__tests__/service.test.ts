@@ -570,6 +570,70 @@ describe('documentService', () => {
       ).toMatchObject({ invoice: null, packingList: 'KIOM GLOBAL LIMITED' });
     });
 
+    it('uses Draft BL as the operational BL in comparison when final BL is absent', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              portOfDischarge: 'ITAPOA',
+            },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              portOfDischarge: 'ITAPOA, BRAZIL',
+            },
+          },
+          {
+            id: 3,
+            type: 'draft_bl',
+            isProcessed: true,
+            confidenceScore: '0.88',
+            createdAt: new Date('2026-01-03T00:00:00Z'),
+            updatedAt: new Date('2026-01-03T00:00:00Z'),
+            aiParsedData: {
+              shipper: 'KIOM GLOBAL LIMITED',
+              portOfDischarge: 'ITAPOA',
+              blNumber: 'DRAFT-001',
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+      const dischargePort = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Porto Destino',
+      );
+      const blNumber = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'BL Number (shipping)',
+      );
+
+      expect(comparison).toMatchObject({
+        hasBl: true,
+        hasFinalBl: false,
+        hasOperationalBl: true,
+        operationalBlSource: 'draft_bl',
+        blConfidence: '0.88',
+        draftBlConfidence: '0.88',
+      });
+      expect(dischargePort).toMatchObject({ bl: 'ITAPOA', status: 'match' });
+      expect(blNumber).toMatchObject({ bl: 'DRAFT-001' });
+    });
+
     it('exposes separate net + gross weights per item (peso liquido x peso bruto)', async () => {
       queryQueue.push(
         createResolvedChain([

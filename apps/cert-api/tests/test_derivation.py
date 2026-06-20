@@ -21,16 +21,28 @@ from app.services.derivation import (
     derive_site_status,
 )
 
-
 # ---------------------------------------------------------------------------
 # cert_status: somente ATIVO | ENCERRADO
 # ---------------------------------------------------------------------------
 
+
 class TestCertStatusCollapsed:
     SHEET_TEXTS = [
-        "Ativo", "ativo", "Em andamento", "andamento", "SKU excluído",
-        "Encerrado", "EXPIRED", "EXPIRING", "Vencido", "Finalizado",
-        "", None, "01/09/25 - Registro concedido", "Desconhecido", "qualquer texto",
+        "Ativo",
+        "ativo",
+        "Em andamento",
+        "andamento",
+        "SKU excluído",
+        "Encerrado",
+        "EXPIRED",
+        "EXPIRING",
+        "Vencido",
+        "Finalizado",
+        "",
+        None,
+        "01/09/25 - Registro concedido",
+        "Desconhecido",
+        "qualquer texto",
     ]
     DEADLINES = [None, "", "Vencido", "Fim do lote", "Venda até fim do lote", "2030-01-01"]
 
@@ -51,15 +63,10 @@ class TestCertStatusCollapsed:
         # fora do prazo de venda". SKU excluído SEMPRE é ENCERRADO, mesmo dentro
         # da janela de venda (a verificação de exclusão precede o short-circuit
         # de within_window).
-        assert (
-            derive_cert_status("SKU excluído", False, "Venda até fim do lote")
-            == "ENCERRADO"
-        )
+        assert derive_cert_status("SKU excluído", False, "Venda até fim do lote") == "ENCERRADO"
 
     def test_excluido_precedes_sale_window_not_expired(self):
-        assert (
-            derive_cert_status("SKU excluido", False, "fim do lote") == "ENCERRADO"
-        )
+        assert derive_cert_status("SKU excluido", False, "fim do lote") == "ENCERRADO"
 
     def test_andamento_defaults_encerrado(self):
         assert derive_cert_status("Em andamento", False, None) == "ENCERRADO"
@@ -119,10 +126,18 @@ class TestKnownBadProcesses:
 # site_status: somente CONFORME | NAO_CONFORME (+ frase obrigatória)
 # ---------------------------------------------------------------------------
 
+
 class TestSiteStatusCollapsed:
     VALIDATION_STATES = [
-        None, "", "OK", "EXPIRED", "URL_NOT_FOUND", "NO_EXPECTED",
-        "MISSING", "INCONSISTENT", "API_ERROR",
+        None,
+        "",
+        "OK",
+        "EXPIRED",
+        "URL_NOT_FOUND",
+        "NO_EXPECTED",
+        "MISSING",
+        "INCONSISTENT",
+        "API_ERROR",
     ]
 
     @pytest.mark.parametrize("vs", VALIDATION_STATES)
@@ -185,6 +200,7 @@ class TestSiteStatusCollapsed:
 # license_status: aba 'Licenciamentos Vencidos'
 # ---------------------------------------------------------------------------
 
+
 class TestLicenseStatus:
     def test_no_row_is_nao_aplicavel(self):
         status, deadline = derive_license_status(None)
@@ -192,16 +208,12 @@ class TestLicenseStatus:
         assert deadline is None
 
     def test_vencido_row(self):
-        status, deadline = derive_license_status(
-            {"status": "VENCIDO", "valid_until": "2024-01-01"}
-        )
+        status, deadline = derive_license_status({"status": "VENCIDO", "valid_until": "2024-01-01"})
         assert status == "VENCIDO"
         assert deadline == "2024-01-01"
 
     def test_valido_row(self):
-        status, deadline = derive_license_status(
-            {"status": "VALIDO", "valid_until": "2030-12-31"}
-        )
+        status, deadline = derive_license_status({"status": "VALIDO", "valid_until": "2030-12-31"})
         assert status == "VALIDO"
         assert deadline == "2030-12-31"
 

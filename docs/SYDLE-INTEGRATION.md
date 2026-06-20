@@ -142,6 +142,42 @@ Regras atuais de normalizacao Sydle One:
 - `paymentStatus`: `paid` para ticket concluido; caso contrario `open`.
 - `sourceUpdatedAt`: `_lastUpdateDate` da solicitacao.
 
+### Descoberta De Dados Complementares Sydle
+
+Estado comprovado no repositorio e na validacao operacional:
+
+- Confirmado/acessivel: classe `Solicitacao de Pagamento Internacional/current`
+  (`68bf1179b042c72f03993928`), `paymentData[]`, ticket, status do ticket e
+  moeda.
+- Bloqueado por permissao em 2026-06-19/20: buscas diretas em
+  `InternationalPaymentOpenForm` e `RequestData` retornaram `403`.
+- Inferencia de alta confianca: `InternationalPaymentOpenForm`, `RequestData`,
+  `ticket.openForm` e/ou uma view/API consolidada da SYDLE sao as fontes mais
+  provaveis para fornecedor, PI, invoice, processo de importacao e dados
+  bancarios/cambio.
+- Nao ha evidencia local suficiente para afirmar que nao existem outras tabelas
+  ou classes SYDLE; essa confirmacao depende de acesso ao catalogo/contrato da
+  SYDLE ou apoio do time responsavel pela plataforma.
+
+Campos que devem ser solicitados na view/API consolidada:
+
+- Chaves de conciliacao: `processCode`, `purchaseRef`, `purchaseOrder`,
+  `proformaNumber`/`piNumber`, `invoiceNumber`, `supplierName`/exportador e
+  marca quando existir.
+- Parcela/liquidacao: status real da parcela, tipo real (`deposit`/`balance`),
+  data de vencimento, data de pagamento/liquidacao, valor pago e valor aberto.
+- Financeiro: moeda, valor original, taxa de cambio, valor BRL, banco, contrato
+  de cambio, remessa/remittance e referencia de comprovante quando permitido.
+- Auditoria: `_id`, `_lastUpdateDate`, usuario/sistema de atualizacao e status
+  de aprovacao.
+
+Enquanto essa fonte nao existir, o portal deve manter as regras atuais como
+provisorias e visiveis para UAT financeiro: pago/aberto vem do status do ticket
+e tipo de pagamento vem de `paymentDeadlineAfterShipment === 0 ? deposit :
+balance`. Nao expandir os `_source.excludes` para anexos, documentos ou campos
+bancarios sem aprovacao de seguranca/financeiro; preferir view/API ja sanitizada
+pela SYDLE.
+
 Campos reconhecidos pelo normalizador:
 
 | Campo Interno     | Exemplos aceitos                                                  |

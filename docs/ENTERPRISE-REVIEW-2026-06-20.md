@@ -54,17 +54,17 @@ Auditoria paralela por dimensão. Achados classificados:
 
 ## Ciclo 3 — Correções implementadas nesta rodada
 
-| Sev         | Item                               | Correção                                                                                                                       | Arquivos                                                                       |
-| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| A1/A2       | parseNumber duplicado + bug milhar | `utils/numbers.ts` único (`parseDecimal`), corrige milhar multi-grupo, negativos/parênteses, rejeita ranges; 4 parsers delegam | `ai/utils/numbers.ts` + 4 parsers                                              |
-| A2          | flatten aninhado                   | `flattenAiData` recursivo (desempacota `{value,confidence}` em qualquer profundidade)                                          | `ai/service.ts`                                                                |
-| A4          | EAN sem checksum                   | valida `normalizeGtin` nos parsers invoice/PL                                                                                  | `invoice/packing-list-text-parser.ts`                                          |
-| PL          | peso net/gross trocado             | corrige swap (net≤gross) e baixa confiança                                                                                     | `packing-list-text-parser.ts`                                                  |
-| Invoice     | paymentTerms                       | extrai deposit/balance/% determinístico (sanity-check soma≈100)                                                                | `invoice-text-parser.ts`                                                       |
-| **P0 Sec**  | signIn na query string             | credenciais movidas para **POST body** (+ nota: rotacionar senha)                                                              | `sydle/client.ts`                                                              |
-| **P1 DBA**  | índice de fase                     | índice `import_processes_logistic_status_idx` (migration 0019 + schema + runners)                                              | `drizzle/0019_*.sql`, `migrate.ts`, `apply-pending-migrations.sh`, `schema.ts` |
-| **P1-B QA** | Verificar engolia erro             | `toast.error(getErrorMessage)`                                                                                                 | `CertProdutosPage.tsx`                                                         |
-| **P1-G QA** | render sem guarda                  | `?? []` em `itemComparison`/`unmatchedPlItems`                                                                                 | `DocumentComparison.tsx`                                                       |
+| Sev         | Item                               | Correção                                                                                                                        | Arquivos                                                                       |
+| ----------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A1/A2       | parseNumber duplicado + bug milhar | `utils/numbers.ts` único (`parseDecimal`), corrige milhar multi-grupo, negativos/parênteses, rejeita ranges; 4 parsers delegam  | `ai/utils/numbers.ts` + 4 parsers                                              |
+| A2          | flatten aninhado                   | `flattenAiData` recursivo (desempacota `{value,confidence}` em qualquer profundidade)                                           | `ai/service.ts`                                                                |
+| A4          | EAN sem checksum                   | valida `normalizeGtin` nos parsers invoice/PL                                                                                   | `invoice/packing-list-text-parser.ts`                                          |
+| PL          | peso net/gross trocado             | corrige swap (net≤gross) e baixa confiança                                                                                      | `packing-list-text-parser.ts`                                                  |
+| Invoice     | paymentTerms                       | extrai deposit/balance/% determinístico (sanity-check soma≈100)                                                                 | `invoice-text-parser.ts`                                                       |
+| **P0 Sec**  | signIn na query string             | tentativa de POST body falhou em prod (`HTTP 405`); client voltou ao GET funcional, com risco registrado para mitigacao externa | `sydle/client.ts`, `KNOWN_ISSUES.md`                                           |
+| **P1 DBA**  | índice de fase                     | índice `import_processes_logistic_status_idx` (migration 0019 + schema + runners)                                               | `drizzle/0019_*.sql`, `migrate.ts`, `apply-pending-migrations.sh`, `schema.ts` |
+| **P1-B QA** | Verificar engolia erro             | `toast.error(getErrorMessage)`                                                                                                  | `CertProdutosPage.tsx`                                                         |
+| **P1-G QA** | render sem guarda                  | `?? []` em `itemComparison`/`unmatchedPlItems`                                                                                  | `DocumentComparison.tsx`                                                       |
 
 ### Relatório Sydle — "super completo" (pedido da usuária)
 
@@ -86,8 +86,10 @@ Auditoria paralela por dimensão. Achados classificados:
 
 - **Sydle regra pago/aberto por parcela** (vem do estado do ticket, não da parcela)
   → decisão de **negócio/financeiro**; documentado em `SYDLE-INTEGRATION.md`. Não chutar.
-- **Sydle signIn**: o fix (POST body) precisa ser **validado contra o ambiente Sydle**
-  antes de deploy (não temos acesso ao contrato real); e **rotacionar `SYDLE_PASSWORD`**.
+- **Sydle signIn**: POST body foi testado e falhou em produção (`HTTP 405`);
+  o GET funcional continua exigido pela SYDLE One. Precisa de auth por
+  token/header/POST no fornecedor; até lá, scrub/restrição de logs e rotação de
+  `SYDLE_PASSWORD`.
 - **DBA P1 matchProcess full scan**: requer `pg_trgm` + GIN ou promover PO/PI/CI a
   colunas — maior escopo; registrado em `TECH_DEBT`/`KNOWN_ISSUES`.
 - **QA P1-A sistêmico** (erro→vazio em ~11 telas): corrigimos o pior (P1-B) e o
@@ -98,10 +100,11 @@ Auditoria paralela por dimensão. Achados classificados:
 
 ## Status final
 
-**APTO PARA STAGING CONTROLADO.** Não há P0 de código aberto após esta rodada
-(o P0 de segurança foi corrigido no código; resta validar contra Sydle + rotacionar
-senha antes de produção). A liberação ampla a usuários depende das ações externas de
-DevOps/config (e-mails #78, Vertex #60, `ia-local-net`, aba "Licenciamentos Vencidos")
-e da validação de negócio da regra de pagamento Sydle.
+**APTO PARA STAGING CONTROLADO COM EXCECAO FORMAL.** Ha P0 de seguranca externo
+aberto na autenticacao SYDLE (`signIn` por GET com credenciais na query string).
+A liberacao ampla a usuarios depende das acoes externas de DevOps/config
+(e-mails #78, Vertex #60, `ia-local-net`, aba "Licenciamentos Vencidos"), da
+mitigacao/aceite do risco SYDLE e da validacao de negocio da regra de pagamento
+Sydle.
 
 _Gerado em 2026-06-20. Times: ver `AGENTS.md`. Anterior: `docs/STATUS-2026-06-20.md`._

@@ -1977,6 +1977,9 @@ export const documentService = {
     const pl = rawPl ? flattenAiData(rawPl) : null;
     const bl = rawBl ? flattenAiData(rawBl) : null;
     const draftBl = rawDraftBl ? flattenAiData(rawDraftBl) : null;
+    const operationalBl = bl ?? draftBl;
+    const operationalBlDoc = blDoc ?? draftBlDoc;
+    const operationalBlSource = bl ? 'ohbl' : draftBl ? 'draft_bl' : null;
 
     // Espelho data lives in importProcesses.aiExtractedData.espelho (atomic merge target).
     // Fallback: read from the espelho document's aiParsedData if process column is empty.
@@ -1993,10 +1996,10 @@ export const documentService = {
     // Pre-extract structured party parts from each document
     const invExporter = extractPartyParts(inv?.exporterName);
     const plExporter = extractPartyParts(pl?.exporterName);
-    const blShipper = extractPartyParts(bl?.shipper ?? bl?.shipperName);
+    const blShipper = extractPartyParts(operationalBl?.shipper ?? operationalBl?.shipperName);
     const invImporter = extractPartyParts(inv?.importerName);
     const plImporter = extractPartyParts(pl?.importerName);
-    const blConsignee = extractPartyParts(bl?.consignee ?? bl?.consigneeName);
+    const blConsignee = extractPartyParts(operationalBl?.consignee ?? operationalBl?.consigneeName);
 
     // Build aggregate field comparison — `kind` drives comparison semantics
     type Kind = 'string' | 'numeric' | 'port' | 'date' | 'name';
@@ -2021,7 +2024,7 @@ export const documentService = {
         label: 'Exportador / Shipper',
         inv: invExporter.name || inv?.exporterName,
         pl: plExporter.name || pl?.exporterName,
-        bl: blShipper.name || (bl?.shipper ?? bl?.shipperName),
+        bl: blShipper.name || (operationalBl?.shipper ?? operationalBl?.shipperName),
         espelho: espelhoSummary?.exporterName ?? processRow[0]?.exporterName,
         kind: 'name',
       },
@@ -2046,7 +2049,7 @@ export const documentService = {
         label: 'Importador / Consignee',
         inv: invImporter.name || inv?.importerName,
         pl: plImporter.name || pl?.importerName,
-        bl: blConsignee.name || (bl?.consignee ?? bl?.consigneeName),
+        bl: blConsignee.name || (operationalBl?.consignee ?? operationalBl?.consigneeName),
         espelho: espelhoSummary?.importerName,
         kind: 'name',
       },
@@ -2070,28 +2073,28 @@ export const documentService = {
         label: 'Invoice Number / Order Ref',
         inv: inv?.invoiceNumber,
         pl: pl?.packingListNumber,
-        bl: bl?.customerReference,
+        bl: operationalBl?.customerReference,
       },
       {
         label: 'BL Number (shipping)',
         inv: null,
         pl: null,
-        bl: bl?.blNumber,
+        bl: operationalBl?.blNumber,
       },
       { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
-      { label: 'Moeda', inv: inv?.currency, pl: null, bl: bl?.freightCurrency },
+      { label: 'Moeda', inv: inv?.currency, pl: null, bl: operationalBl?.freightCurrency },
       {
         label: 'Porto Embarque',
         inv: inv?.portOfLoading,
         pl: pl?.portOfLoading,
-        bl: bl?.portOfLoading,
+        bl: operationalBl?.portOfLoading,
         kind: 'port',
       },
       {
         label: 'Porto Destino',
         inv: inv?.portOfDischarge,
         pl: pl?.portOfDischarge,
-        bl: bl?.portOfDischarge,
+        bl: operationalBl?.portOfDischarge,
         kind: 'port',
       },
       {
@@ -2106,7 +2109,7 @@ export const documentService = {
         label: 'Frete',
         inv: null,
         pl: null,
-        bl: bl?.freightValue,
+        bl: operationalBl?.freightValue,
         kind: 'numeric',
         criticality: 'info',
       },
@@ -2114,7 +2117,7 @@ export const documentService = {
         label: 'Total Caixas',
         inv: inv?.totalBoxes,
         pl: pl?.totalBoxes,
-        bl: bl?.totalBoxes,
+        bl: operationalBl?.totalBoxes,
         espelho: espelhoSummary?.totalBoxes,
         kind: 'numeric',
       },
@@ -2131,7 +2134,7 @@ export const documentService = {
         label: 'Peso Bruto (kg)',
         inv: inv?.totalGrossWeight,
         pl: pl?.totalGrossWeight,
-        bl: bl?.totalGrossWeight,
+        bl: operationalBl?.totalGrossWeight,
         espelho: espelhoSummary?.totalGrossWeight,
         kind: 'numeric',
         criticality: 'secondary',
@@ -2140,7 +2143,7 @@ export const documentService = {
         label: 'CBM (m3)',
         inv: inv?.totalCbm,
         pl: pl?.totalCbm,
-        bl: bl?.totalCbm,
+        bl: operationalBl?.totalCbm,
         espelho: espelhoSummary?.totalCbm,
         kind: 'numeric',
         criticality: 'secondary',
@@ -2161,21 +2164,38 @@ export const documentService = {
           pl?.dateOfShipment ??
           pl?.shippedOnBoardDate ??
           pl?.onBoardDate,
-        bl: bl?.shipmentDate ?? bl?.shippedOnBoardDate ?? bl?.onBoardDate ?? bl?.etd,
+        bl:
+          operationalBl?.shipmentDate ??
+          operationalBl?.shippedOnBoardDate ??
+          operationalBl?.onBoardDate ??
+          operationalBl?.etd,
         espelho: null,
         kind: 'date',
       },
-      { label: 'ETA', inv: null, pl: null, bl: bl?.eta, kind: 'date', criticality: 'info' },
-      { label: 'Container', inv: null, pl: null, bl: bl?.containerNumber, criticality: 'info' },
+      {
+        label: 'ETA',
+        inv: null,
+        pl: null,
+        bl: operationalBl?.eta,
+        kind: 'date',
+        criticality: 'info',
+      },
+      {
+        label: 'Container',
+        inv: null,
+        pl: null,
+        bl: operationalBl?.containerNumber,
+        criticality: 'info',
+      },
       {
         label: 'Tipo Container',
         inv: null,
         pl: null,
-        bl: bl?.containerType,
+        bl: operationalBl?.containerType,
         espelho: espelhoSummary?.containerType,
         criticality: 'info',
       },
-      { label: 'Navio', inv: null, pl: null, bl: bl?.vesselName, criticality: 'info' },
+      { label: 'Navio', inv: null, pl: null, bl: operationalBl?.vesselName, criticality: 'info' },
     ];
 
     // Compute match status for each field — supports 4 docs (inv/pl/bl/espelho).
@@ -2370,8 +2390,11 @@ export const documentService = {
     return {
       hasInvoice: !!inv,
       hasPackingList: !!pl,
-      hasBl: !!bl,
+      hasBl: !!operationalBl,
+      hasFinalBl: !!bl,
       hasDraftBl: !!draftBl,
+      hasOperationalBl: !!operationalBl,
+      operationalBlSource,
       hasEspelho: !!espelhoSummary || espelhoItems.length > 0,
       aggregateComparison,
       itemComparison,
@@ -2381,7 +2404,8 @@ export const documentService = {
       draftBlRevisions,
       invoiceConfidence: invoiceDoc?.confidenceScore,
       plConfidence: plDoc?.confidenceScore,
-      blConfidence: blDoc?.confidenceScore,
+      blConfidence: operationalBlDoc?.confidenceScore,
+      finalBlConfidence: blDoc?.confidenceScore,
       draftBlConfidence: draftBlDoc?.confidenceScore,
       espelhoConfidence: espelhoDoc?.confidenceScore ?? (espelhoSummary ? 0.99 : null),
     };

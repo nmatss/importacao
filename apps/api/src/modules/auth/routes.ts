@@ -20,6 +20,9 @@ router.post(
   authController.loginWithGoogle,
 );
 router.get('/me', authMiddleware, authController.getMe);
+router.get('/cert-api-access', authMiddleware, adminMiddleware, (_req, res) => {
+  res.status(204).send();
+});
 
 // User management (admin only)
 router.get('/users', authMiddleware, adminMiddleware, authController.listUsers);

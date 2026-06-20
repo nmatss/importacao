@@ -228,6 +228,29 @@ describe('DocumentComparison', () => {
     expect(screen.getAllByText(/sem dados do sistema/i).length).toBeGreaterThan(0);
   });
 
+  it('treats Draft BL as operational BL in the partial comparison warning', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        hasBl: true,
+        hasFinalBl: false,
+        hasOperationalBl: true,
+        hasDraftBl: true,
+        operationalBlSource: 'draft_bl',
+        hasEspelho: false,
+        blConfidence: 0.88,
+        draftBlConfidence: 0.88,
+      },
+    });
+
+    renderComparison();
+
+    expect(screen.getByText(/Draft BL \(operacional\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Comparativo parcial/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Bill of Lading ou Draft BL ausente/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Espelho ausente/i)).toBeInTheDocument();
+  });
+
   it('absorbs cross-document checks into the aggregate comparison', () => {
     mockQueries({
       comparison: { ...baseComparison, aggregateComparison: [] },

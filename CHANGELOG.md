@@ -22,8 +22,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
-- **Seguranca (P0):** credenciais SYDLE saiam na query string do `signIn` →
-  movidas para o body POST (`sydle/client.ts`). Rotacionar `SYDLE_PASSWORD`.
+- **Seguranca (P0 ainda aberto):** tentativa de mover credenciais SYDLE do
+  `signIn` para POST body falhou em producao (`HTTP 405`); o client voltou ao
+  GET funcional exigido pela SYDLE One. Mitigacao depende de token/header/POST
+  no fornecedor, scrub/restricao de logs e rotacao de `SYDLE_PASSWORD`.
 - `parseNumber`: numeros com multiplos separadores de milhar (`1.234.567`) viravam
   `NaN`/`null` (perda de dado); agora lidos corretamente.
 - `flattenAiData` agora desempacota `{value,confidence}` aninhados (paymentTerms,

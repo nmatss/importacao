@@ -86,6 +86,9 @@ interface ComparisonData {
   hasInvoice: boolean;
   hasPackingList: boolean;
   hasBl: boolean;
+  hasFinalBl?: boolean;
+  hasOperationalBl?: boolean;
+  operationalBlSource?: 'ohbl' | 'draft_bl' | null;
   hasDraftBl?: boolean;
   hasEspelho?: boolean;
   aggregateComparison: AggregateField[];
@@ -98,6 +101,7 @@ interface ComparisonData {
   invoiceConfidence: number | null;
   plConfidence: number | null;
   blConfidence: number | null;
+  finalBlConfidence?: number | null;
   draftBlConfidence?: number | null;
   espelhoConfidence?: number | null;
 }
@@ -509,10 +513,11 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   const missingComparisonDocs = useMemo(() => {
     if (!data) return [];
+    const hasOperationalBl = data.hasOperationalBl ?? data.hasBl;
     return [
       !data.hasInvoice ? 'Invoice' : null,
       !data.hasPackingList ? 'Packing List' : null,
-      !data.hasBl ? 'Bill of Lading' : null,
+      !hasOperationalBl ? 'Bill of Lading ou Draft BL' : null,
       !data.hasEspelho ? 'Espelho' : null,
     ].filter(Boolean) as string[];
   }, [data]);
@@ -662,9 +667,21 @@ export function DocumentComparison({ processId }: { processId: string }) {
           available={data.hasPackingList}
           confidence={data.plConfidence}
         />
-        <DocBadge label="Bill of Lading" available={data.hasBl} confidence={data.blConfidence} />
+        <DocBadge
+          label="Bill of Lading"
+          available={data.hasFinalBl ?? (data.operationalBlSource !== 'draft_bl' && data.hasBl)}
+          confidence={
+            (data.hasFinalBl ?? (data.operationalBlSource !== 'draft_bl' && data.hasBl))
+              ? (data.finalBlConfidence ?? data.blConfidence)
+              : null
+          }
+        />
         {data.hasDraftBl && (
-          <DocBadge label="Draft BL" available={true} confidence={data.draftBlConfidence ?? null} />
+          <DocBadge
+            label={data.operationalBlSource === 'draft_bl' ? 'Draft BL (operacional)' : 'Draft BL'}
+            available={true}
+            confidence={data.draftBlConfidence ?? null}
+          />
         )}
         <DocBadge
           label="Espelho"

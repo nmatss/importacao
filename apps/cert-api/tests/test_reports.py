@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 import openpyxl
 import pytest
 
-from app.services.report_service import generate_stock_report
+from app.services.report_service import generate_products_report, generate_stock_report
 
 
 def _patch_reports_db(mocker, rows=None):
@@ -20,9 +20,7 @@ def _patch_reports_db(mocker, rows=None):
 
 
 @pytest.mark.asyncio
-async def test_export_stock_normalizes_brand_and_keeps_wms_join(
-    test_client, api_key_headers, mocker, tmp_path
-):
+async def test_export_stock_normalizes_brand_and_keeps_wms_join(test_client, api_key_headers, mocker, tmp_path):
     """Stock export should filter by product brand alias, not raw cert_stock.brand."""
     mocker.patch("app.routes.reports.DATABASE_URL", "postgres://test")
     cursor = _patch_reports_db(mocker, rows=[{"sku": "PI4257Y", "source": "wms_biguacu"}])
@@ -42,9 +40,7 @@ async def test_export_stock_normalizes_brand_and_keeps_wms_join(
 
 
 @pytest.mark.asyncio
-async def test_export_stock_permission_error_is_actionable(
-    test_client, api_key_headers, mocker
-):
+async def test_export_stock_permission_error_is_actionable(test_client, api_key_headers, mocker):
     """Permission errors on cert-reports should return a clear operational message."""
     mocker.patch("app.routes.reports.DATABASE_URL", "postgres://test")
     _patch_reports_db(mocker)
@@ -111,3 +107,37 @@ def test_generate_stock_report_writes_synced_at_column(mocker, tmp_path):
     headers = [cell.value for cell in ws[5]]
     assert "Sincronizado em" in headers
     assert ws["M6"].value.startswith("2026-06-19T12:00:00")
+
+
+def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
+    """User-controlled text exported to XLSX must not execute as formulas."""
+    mocker.patch("app.services.report_service.REPORTS_DIR", tmp_path)
+    mocker.patch("app.services.report_service._fetch_stock_map", return_value={})
+
+    output = generate_products_report(
+        [
+            {
+                "sku": "=2+2",
+                "name": "+Produto",
+                "brand": "@Marca",
+                "last_validation_status": "OK",
+                "certification_type": "-Tipo",
+                "expected_cert_text": "=Esperado",
+                "actual_cert_text": "+Encontrado",
+                "last_validation_url": "@https://example.invalid",
+                "sale_deadline": "-2026-12-31",
+            }
+        ]
+    )
+
+    wb = openpyxl.load_workbook(output, data_only=False)
+    ws = wb["Produtos"]
+
+    assert ws["A8"].value == "'=2+2"
+    assert ws["B8"].value == "'+Produto"
+    assert ws["C8"].value == "'@Marca"
+    assert ws["F8"].value == "'-Tipo"
+    assert ws["G8"].value == "'=Esperado"
+    assert ws["H8"].value == "'+Encontrado"
+    assert ws["I8"].value == "'@https://example.invalid"
+    assert ws["J8"].value == "'-2026-12-31"
