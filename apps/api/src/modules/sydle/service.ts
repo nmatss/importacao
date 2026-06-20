@@ -430,7 +430,14 @@ export const sydleService = {
           .limit(1);
 
         if (!existing) {
-          await db.insert(sydlePurchasePayments).values(values);
+          // onConflictDoUpdate makes the insert idempotent: if a concurrent
+          // writer (or a duplicate externalId within this same batch) inserted
+          // the row between the SELECT above and here, we update instead of
+          // throwing a unique-violation that would be miscounted as an error.
+          await db
+            .insert(sydlePurchasePayments)
+            .values(values)
+            .onConflictDoUpdate({ target: sydlePurchasePayments.externalId, set: values });
           created += 1;
           continue;
         }
@@ -698,6 +705,22 @@ export const sydleService = {
       .from(sydlePurchasePayments)
       .where(where);
 
+    // Per-currency breakdown so payments in EUR/CNY (or any non-USD currency)
+    // are not silently dropped from the totals — the USD-only KPIs above would
+    // otherwise hide them entirely from a financial report.
+    const breakdownRows = await db
+      .select({
+        currency: sydlePurchasePayments.currency,
+        totalPurchase: sql<string>`coalesce(sum(${sydlePurchasePayments.purchaseAmount}), 0)`,
+        totalPaid: sql<string>`coalesce(sum(${sydlePurchasePayments.paidAmount}), 0)`,
+        totalOpen: sql<string>`coalesce(sum(${sydlePurchasePayments.openAmount}), 0)`,
+        records: sql<number>`count(*)::int`,
+      })
+      .from(sydlePurchasePayments)
+      .where(where)
+      .groupBy(sydlePurchasePayments.currency)
+      .orderBy(desc(sql`sum(${sydlePurchasePayments.purchaseAmount})`));
+
     const [lastRun] = await db
       .select()
       .from(sydleSyncRuns)
@@ -709,6 +732,13 @@ export const sydleService = {
       totalPaidUsd: Number(row?.totalPaidUsd ?? 0),
       totalOpenUsd: Number(row?.totalOpenUsd ?? 0),
       totalBrl: Number(row?.totalBrl ?? 0),
+      currencyBreakdown: breakdownRows.map((r) => ({
+        currency: r.currency ?? 'USD',
+        totalPurchase: Number(r.totalPurchase ?? 0),
+        totalPaid: Number(r.totalPaid ?? 0),
+        totalOpen: Number(r.totalOpen ?? 0),
+        records: Number(r.records ?? 0),
+      })),
       records: Number(row?.records ?? 0),
       matched: Number(row?.matched ?? 0),
       unmatched: Number(row?.unmatched ?? 0),

@@ -41,6 +41,34 @@ export function isItemMatchAnomalyField(field: string | undefined): boolean {
   return true;
 }
 
+/**
+ * True when an anomaly is an item PRESENCE/correspondence finding ("item X nao
+ * localizado no Packing List", "7 itens sem correspondencia"). The model does
+ * NOT reliably prefix the `field` with "items." — it freely emits labels like
+ * "itens", "consistencia_numerica" or "quantidades" — so relying on the field
+ * alone let the fuzzy "7 itens" leak past the reconciler while the deterministic
+ * panel showed "1". We therefore ALSO inspect the description, while being
+ * careful NOT to swallow quantity-VALUE divergences (a separate kept signal).
+ */
+export function isItemPresenceAnomaly(anomaly: { field?: string; description?: string }): boolean {
+  if (isItemMatchAnomalyField(anomaly.field)) return true;
+
+  const desc = (anomaly.description ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); // strip accents: "correspondência" -> "correspondencia"
+  if (!desc) return false;
+
+  // Must be about items/products/SKUs...
+  if (!/\bite(m|ns)\b|\bprodutos?\b|\bsku\b/.test(desc)) return false;
+
+  // ...AND about presence/correspondence — NOT a quantity-value mismatch.
+  const isPresence =
+    /nao (foi|foram|consta|constam|localizad|encontrad|present)/.test(desc) ||
+    /sem correspondencia/.test(desc) ||
+    /(ausente|faltando|faltante|inexistente)/.test(desc) ||
+    /(a mais|a menos|adicional|extra)\b.*(packing|invoice|fatura|pl\b)/.test(desc) ||
+    /\d+\s+ite(m|ns)\b.*(nao|sem)/.test(desc);
+  return isPresence;
+}
+
 export function buildAnomalyPrompt(
   invoiceData: Record<string, any>,
   packingListData: Record<string, any>,
@@ -87,6 +115,12 @@ Responda com JSON estrito:
     }
   ]
 }
+
+REGRA DE CAMPO (obrigatoria): para anomalias de PRESENCA/correspondencia de itens
+(item nao encontrado / sem correspondencia entre Invoice e Packing List), o
+"field" DEVE comecar com "items." (ex.: "items.PI7752Y" ou "items.unmatched").
+NAO use rotulos livres como "itens" ou "consistencia_numerica" para esse tipo.
+Divergencias de QUANTIDADE de um item existente usam "items.<codigo>.quantity".
 
 Niveis de severidade:
 - **low**: Diferencas de formatacao, dados nao-criticos faltantes, arredondamentos

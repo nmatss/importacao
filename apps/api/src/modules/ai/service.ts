@@ -34,6 +34,7 @@ import { getVerificationConfig, getSkill } from './skills/registry.js';
 import { assembleSpecialistMessages } from './skills/assemble.js';
 import { retrieveContext } from './rag/retriever.js';
 import {
+  fillInvoiceNullsFromText,
   repairInvoiceExtractionFromText,
   tryParseInvoiceText,
 } from './utils/invoice-text-parser.js';
@@ -611,9 +612,8 @@ class AIService {
       new Date().toISOString(),
     );
     const dataRecord = result.data as Record<string, any>;
-    const existingTrust = dataRecord._trust && typeof dataRecord._trust === 'object'
-      ? dataRecord._trust
-      : {};
+    const existingTrust =
+      dataRecord._trust && typeof dataRecord._trust === 'object' ? dataRecord._trust : {};
     dataRecord._trust = { ...report, ...existingTrust };
 
     if (report.findings.length > 0) {
@@ -739,7 +739,8 @@ Responda SOMENTE com JSON estrito no formato:
           if (!incoming || typeof incoming !== 'object' || !('value' in incoming)) continue;
           const incomingValue = incoming.value;
           const incomingConf = typeof incoming.confidence === 'number' ? incoming.confidence : 0;
-          if (incomingValue === null || incomingValue === undefined || incomingValue === '') continue;
+          if (incomingValue === null || incomingValue === undefined || incomingValue === '')
+            continue;
           const current = data[path];
           const currentConf =
             current && typeof current === 'object' && 'confidence' in current
@@ -894,11 +895,14 @@ Responda SOMENTE com JSON estrito no formato:
           'invoice_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.invoice : undefined,
         );
-        const data = repairInvoiceExtractionFromText(
-          this.zodParse(response, 'invoice extraction', invoiceResponseSchema) as Record<
-            string,
-            any
-          >,
+        const data = fillInvoiceNullsFromText(
+          repairInvoiceExtractionFromText(
+            this.zodParse(response, 'invoice extraction', invoiceResponseSchema) as Record<
+              string,
+              any
+            >,
+            text,
+          ),
           text,
         );
         const dataAsRecord = data as Record<string, any>;
@@ -1096,24 +1100,24 @@ Responda SOMENTE com JSON estrito no formato:
       'gemini-2.5-flash',
       'gemini-2.5-pro',
       async (model) => {
-      const response = await this.chat(
-        model,
-        messages,
-        true,
-        'bl_extraction',
-        USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.bl : undefined,
-      );
-      const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
-      const { score, lowConfidenceFields } = this.calculateConfidence(data);
-      logger.info(
-        {
+        const response = await this.chat(
           model,
-          confidenceScore: score,
-          lowConfidenceCount: lowConfidenceFields.length,
-          hasImage: !!imageOpts,
-        },
-        'Bill of Lading data extracted',
-      );
+          messages,
+          true,
+          'bl_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.bl : undefined,
+        );
+        const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
+        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+        logger.info(
+          {
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'Bill of Lading data extracted',
+        );
         return this.applyHarness(
           'ohbl',
           { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },

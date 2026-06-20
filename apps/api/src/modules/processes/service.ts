@@ -205,6 +205,7 @@ export const processService = {
     if (!process) return { updated: false as const, current: null };
 
     const espelhoSummary = getEspelhoSummary(process.aiExtractedData);
+    const blData = getBlData(process.aiExtractedData);
 
     const [followUp] = await db
       .select()
@@ -214,12 +215,19 @@ export const processService = {
 
     const derived = deriveLogisticStatus({
       process: {
-        etd: process.etd ?? readString(espelhoSummary, 'etd') ?? null,
-        eta: process.eta ?? readString(espelhoSummary, 'eta') ?? null,
+        etd:
+          process.etd ??
+          readString(espelhoSummary, 'etd') ??
+          readString(blData, 'etd') ??
+          readString(blData, 'shipmentDate') ??
+          null,
+        eta: process.eta ?? readString(espelhoSummary, 'eta') ?? readString(blData, 'eta') ?? null,
         shipmentDate:
           process.shipmentDate ??
           readString(espelhoSummary, 'shipmentDate') ??
           readString(espelhoSummary, 'shippedOnBoardDate') ??
+          readString(blData, 'shipmentDate') ??
+          readString(blData, 'etd') ??
           null,
         customsChannel: process.customsChannel ?? null,
         diNumber: process.diNumber ?? null,
@@ -618,4 +626,18 @@ function getEspelhoSummary(value: unknown): Record<string, unknown> | null {
 function readString(source: Record<string, unknown> | null, key: string): string | null {
   const value = source?.[key];
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+// The BL (ohbl / draft_bl) carries the real shipping milestones (etd /
+// shipmentDate). They live inside aiExtractedData and — until the espelho is
+// auto-built — are NOT promoted to the process columns nor the espelho summary.
+// Reading them here lets the logistic status advance to "in_transit" as soon as
+// the BL is extracted, instead of waiting for the espelho build (Eduarda
+// 2026-06-19: "já deveria ter atualizado para em trânsito porque o ETD é de
+// fevereiro").
+function getBlData(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null;
+  const root = value as Record<string, unknown>;
+  const bl = root.ohbl ?? root.draft_bl;
+  return bl && typeof bl === 'object' ? (bl as Record<string, unknown>) : null;
 }

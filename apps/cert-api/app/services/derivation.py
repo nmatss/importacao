@@ -41,7 +41,10 @@ COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_A
 
 # Frase obrigatória exibida na UI quando o site_status fica NAO_CONFORME por
 # indefinição/erro de validação (não pode haver terceiro estado silencioso).
-SITE_REASON_PENDING = "Verificacao pendente - revisar"
+# Eduarda 2026-06-19 baniu a palavra "Pendente" como status; este é apenas a
+# FRASE explicativa de um item NAO_CONFORME — usamos "a confirmar" para não dar
+# impressão de um terceiro status remanescente.
+SITE_REASON_PENDING = "Verificacao a confirmar - revisar"
 
 
 # ---------- Helpers ----------

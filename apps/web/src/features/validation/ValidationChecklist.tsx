@@ -41,6 +41,7 @@ interface ValidationCheck {
   actualValue?: string;
   message?: string;
   resolvedBy?: string | number | null;
+  resolvedByName?: string | null;
   resolvedAt?: string | null;
   resolvedManually?: boolean;
   resolutionNote?: string | null;
@@ -716,10 +717,17 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                         )}
                       </div>
                     )}
-                    {check.resolvedManually && check.resolvedBy && (
-                      <div className="mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700">
+                    {check.resolvedManually && (check.resolvedByName || check.resolvedBy) && (
+                      <div
+                        className="group relative mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700"
+                        title={
+                          check.resolutionNote
+                            ? `Justificativa: ${check.resolutionNote}`
+                            : undefined
+                        }
+                      >
                         <Wrench className="h-3 w-3" />
-                        Aceito por {check.resolvedBy}
+                        Aceito por {check.resolvedByName ?? check.resolvedBy}
                         {check.resolvedAt && (
                           <span className="text-primary-500">
                             em{' '}
@@ -731,6 +739,15 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                               minute: '2-digit',
                             })}
                           </span>
+                        )}
+                        {check.resolutionNote && (
+                          <>
+                            <span className="ml-0.5 cursor-help text-primary-400">(?)</span>
+                            <span className="pointer-events-none absolute bottom-full left-0 z-20 mb-1 hidden w-64 rounded-md bg-slate-800 px-3 py-2 text-[11px] leading-snug text-white shadow-lg group-hover:block dark:bg-slate-700">
+                              <span className="font-semibold">Justificativa do aceite:</span>{' '}
+                              {check.resolutionNote}
+                            </span>
+                          </>
                         )}
                       </div>
                     )}
