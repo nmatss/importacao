@@ -205,16 +205,19 @@ export class SydleClient {
 
   private async authenticateSydleOne(): Promise<Record<string, string>> {
     const url = new URL(`/api/1/${this.config.app}/sys/auth/signIn`, this.config.baseUrl);
+    url.searchParams.set('login', this.config.user);
+    url.searchParams.set('password', this.config.password);
 
-    // Credentials go in the POST body, never the query string: URLs are logged
-    // by proxies/WAFs/access logs where pino's redaction does not reach, so a
-    // single leaked access log would expose SYDLE_USER/SYDLE_PASSWORD in clear
-    // text (security audit 2026-06-20, P0). Rotate SYDLE_PASSWORD after deploy
-    // since older proxy logs may still hold it.
+    // SECURITY CAVEAT (audit 2026-06-20, P0 — NOT closed): SYDLE One's signIn only
+    // accepts GET with credentials in the query string (POST -> HTTP 405, verified
+    // in production 2026-06-20). URLs can be logged by proxies/WAFs where pino's
+    // redaction does not reach, so SYDLE_USER/SYDLE_PASSWORD may leak into access
+    // logs. Mitigation cannot be done client-side here without breaking auth and
+    // requires SYDLE-side support (token/header/POST auth) — tracked in
+    // docs/KNOWN_ISSUES.md. Until then: restrict/scrub proxy access logs and
+    // rotate SYDLE_PASSWORD periodically.
     const response = await timedFetch(url, this.config.timeoutMs, {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login: this.config.user, password: this.config.password }),
+      headers: { Accept: 'application/json' },
     });
     const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
 

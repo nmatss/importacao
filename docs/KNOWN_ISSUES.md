@@ -4,9 +4,13 @@ Ultima atualizacao: 2026-06-20
 
 ## Follow-ups do review enterprise 2026-06-20 (nao bloqueantes p/ staging)
 
-- **Sydle signIn (P0 corrigido no codigo, validar antes de prod):** credenciais
-  movidas p/ POST body em `sydle/client.ts`. **Acao:** validar contra o ambiente
-  Sydle real e **rotacionar `SYDLE_PASSWORD`** (logs de proxy antigos podem ter a senha).
+- **Sydle signIn (P0 ABERTO — bloqueio externo):** credenciais (login/senha) vao na
+  QUERY STRING do `signIn`, podendo vazar em logs de proxy/WAF. Tentativa de mover
+  para POST body FALHOU em producao (`HTTP 405` — a SYDLE One so aceita GET no
+  signIn, verificado 2026-06-20). Mitigacao client-side quebra a auth. **Acao
+  (externa):** verificar se a SYDLE oferece auth por TOKEN/header/POST; ate la,
+  restringir/limpar access logs do proxy e **rotacionar `SYDLE_PASSWORD`**
+  periodicamente. Codigo revertido para GET funcional em `sydle/client.ts`.
 - **DBA P1 — matchProcess full scan:** `importProcesses.aiExtractedData::text ILIKE`
   no sync varre a tabela. **Fix:** `pg_trgm` + indice GIN, ou promover PO/PI/CI a
   colunas indexaveis. (`sydle/service.ts` matchProcess.)
