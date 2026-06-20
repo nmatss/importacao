@@ -14,6 +14,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Extracao deterministica de `paymentTerms` (deposit/balance/%) na invoice.
 - Relatorio Sydle: coluna/filtro de **Fase do processo** (logisticStatus), filtro
   de **moeda** e atalhos de **vencimento** (vencidos / 7d / 30d); coluna Fase no CSV.
+- Relatorio Sydle: **abrir a compra** — clique na linha/card abre um drawer com
+  TODOS os detalhes (compra, pagamento, cambio/banco, conciliacao, auditoria e o
+  **payload bruto da SYDLE**). Endpoint `GET /api/sydle/payments-report/:id`.
 - Indice `import_processes_logistic_status_idx` (migration `0019`) para o filtro de fase.
 - `docs/ENTERPRISE-REVIEW-2026-06-20.md` com o review do time de 10 papeis e P0/P1.
 

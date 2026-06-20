@@ -15,6 +15,23 @@ export const sydleController = {
     }
   },
 
+  async getById(req: Request, res: Response) {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      if (!Number.isInteger(id) || id <= 0) {
+        return sendError(res, 'ID de pagamento invalido', 400);
+      }
+      const payment = await sydleService.getPaymentById(id);
+      if (!payment) {
+        return sendError(res, 'Pagamento SYDLE nao encontrado', 404);
+      }
+      sendSuccess(res, payment);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao buscar pagamento SYDLE';
+      sendError(res, message, 400);
+    }
+  },
+
   async summary(req: Request, res: Response) {
     try {
       const filters = sydleReportQuerySchema.parse(req.query);

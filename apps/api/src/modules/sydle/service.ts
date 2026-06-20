@@ -1,4 +1,17 @@
-import { and, asc, desc, eq, gte, ilike, inArray, isNotNull, lte, or, sql } from 'drizzle-orm';
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gte,
+  ilike,
+  inArray,
+  isNotNull,
+  lte,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   importProcesses,
@@ -729,6 +742,25 @@ export const sydleService = {
     ]);
 
     return { data, total: Number(countRow?.total ?? 0), page: filters.page, limit: filters.limit };
+  },
+
+  // Full single-payment detail (all columns incl. the sanitized rawPayload) plus
+  // the matched process context, for the "abrir compra" drawer.
+  async getPaymentById(id: number) {
+    const [row] = await db
+      .select({
+        ...getTableColumns(sydlePurchasePayments),
+        portalProcessCode: importProcesses.processCode,
+        portalBrand: importProcesses.brand,
+        logisticStatus: importProcesses.logisticStatus,
+        processStatus: importProcesses.status,
+        processExporter: importProcesses.exporterName,
+      })
+      .from(sydlePurchasePayments)
+      .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
+      .where(eq(sydlePurchasePayments.id, id))
+      .limit(1);
+    return row ?? null;
   },
 
   async summary(filters: SydleReportQuery) {

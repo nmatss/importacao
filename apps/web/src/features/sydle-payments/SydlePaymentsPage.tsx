@@ -11,7 +11,10 @@ import {
   ChevronRight,
   Download,
   ExternalLink,
+  Eye,
+  FileText,
   Filter,
+  Landmark,
   Link2,
   Loader2,
   RefreshCw,
@@ -69,6 +72,14 @@ interface SydlePayment {
   portalBrand: string | null;
   logisticStatus: string | null;
   processStatus: string | null;
+}
+
+interface SydlePaymentDetail extends SydlePayment {
+  sourceSystem: string;
+  rawPayload: Record<string, unknown> | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  processExporter: string | null;
 }
 
 // Logistic phase labels — mirror @/shared/lib/constants LOGISTIC_STAGES so the
@@ -284,6 +295,194 @@ function KpiCard({
   );
 }
 
+function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  const empty = value === null || value === undefined || value === '';
+  return (
+    <div className="flex justify-between gap-4 border-b border-slate-100 py-1.5 text-sm last:border-0 dark:border-slate-700/50">
+      <span className="shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="break-words text-right font-medium text-slate-800 dark:text-slate-100">
+        {empty ? <span className="text-slate-400">--</span> : value}
+      </span>
+    </div>
+  );
+}
+
+function DetailSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+      <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {Icon && <Icon className="h-3.5 w-3.5" />}
+        {title}
+      </h4>
+      <div>{children}</div>
+    </section>
+  );
+}
+
+function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClose: () => void }) {
+  const { data, isLoading, isError, refetch } = useApiQuery<SydlePaymentDetail>(
+    ['sydle-payment', String(paymentId)],
+    `/api/sydle/payments-report/${paymentId}`,
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative flex h-full w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-800">
+        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+          <div className="min-w-0">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              Detalhe da compra / pagamento
+            </h3>
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              {data?.purchaseRef || data?.externalId || `#${paymentId}`}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Fechar"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <LoadingSpinner />
+            </div>
+          ) : isError || !data ? (
+            <ErrorState message="Falha ao carregar o detalhe da compra." onRetry={refetch} />
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge className={statusClass(data.paymentStatus)}>
+                  {paymentStatusLabels[data.paymentStatus]}
+                </Badge>
+                <Badge className={matchClass(data.matchStatus)}>
+                  {matchLabels[data.matchStatus]}
+                </Badge>
+                {data.logisticStatus && (
+                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                    {phaseLabel(data.logisticStatus)}
+                  </span>
+                )}
+              </div>
+
+              <DetailSection title="Compra" icon={FileText}>
+                <DetailRow
+                  label="Processo"
+                  value={
+                    data.processId ? (
+                      <Link
+                        to={`/importacao/processos/${data.processId}`}
+                        className="inline-flex items-center gap-1 text-primary-700 hover:underline dark:text-primary-300"
+                      >
+                        {data.portalProcessCode || data.processCode}
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </Link>
+                    ) : (
+                      data.processCode
+                    )
+                  }
+                />
+                <DetailRow
+                  label="Fase do processo"
+                  value={data.logisticStatus ? phaseLabel(data.logisticStatus) : null}
+                />
+                <DetailRow label="Referencia da compra" value={data.purchaseRef} />
+                <DetailRow label="Pedido (PO)" value={data.purchaseOrder} />
+                <DetailRow label="Proforma (PI)" value={data.proformaNumber} />
+                <DetailRow label="Invoice" value={data.invoiceNumber} />
+                <DetailRow label="Fornecedor" value={data.supplierName} />
+                <DetailRow label="Marca" value={data.brand || data.portalBrand} />
+              </DetailSection>
+
+              <DetailSection title="Pagamento" icon={Banknote}>
+                <DetailRow label="Moeda" value={data.currency} />
+                <DetailRow
+                  label="Valor da compra"
+                  value={money(data.purchaseAmount, data.currency)}
+                />
+                <DetailRow label="Pago" value={money(data.paidAmount, data.currency)} />
+                <DetailRow label="Em aberto" value={money(data.openAmount, data.currency)} />
+                <DetailRow label="Tipo" value={paymentTypeLabels[data.paymentType]} />
+                <DetailRow label="Status" value={paymentStatusLabels[data.paymentStatus]} />
+                <DetailRow label="Vencimento" value={dateLabel(data.dueDate)} />
+                <DetailRow label="Pago em" value={dateLabel(data.paidAt)} />
+                <DetailRow label="Agendado para" value={dateLabel(data.scheduledAt)} />
+              </DetailSection>
+
+              <DetailSection title="Cambio e banco" icon={Landmark}>
+                <DetailRow
+                  label="Taxa de cambio"
+                  value={
+                    data.exchangeRate
+                      ? Number(data.exchangeRate).toLocaleString('pt-BR', {
+                          maximumFractionDigits: 6,
+                        })
+                      : null
+                  }
+                />
+                <DetailRow label="Valor em BRL" value={money(data.amountBrl, 'BRL')} />
+                <DetailRow label="Banco" value={data.bankName} />
+                <DetailRow label="Contrato" value={data.contractNumber} />
+                <DetailRow label="Remessa" value={data.remittanceId} />
+              </DetailSection>
+
+              <DetailSection title="Conciliacao" icon={Link2}>
+                <DetailRow label="Status" value={matchLabels[data.matchStatus]} />
+                <DetailRow
+                  label="Score"
+                  value={data.matchScore != null ? Number(data.matchScore).toFixed(4) : null}
+                />
+                <DetailRow label="Motivo" value={data.matchReason} />
+              </DetailSection>
+
+              <DetailSection title="Origem e auditoria">
+                <DetailRow label="External ID" value={data.externalId} />
+                <DetailRow label="Sistema" value={data.sourceSystem} />
+                <DetailRow
+                  label="Atualizado na SYDLE"
+                  value={data.sourceUpdatedAt ? formatDateTime(data.sourceUpdatedAt) : null}
+                />
+                <DetailRow
+                  label="Sincronizado em"
+                  value={data.syncedAt ? formatDateTime(data.syncedAt) : null}
+                />
+                <DetailRow
+                  label="Criado em"
+                  value={data.createdAt ? formatDateTime(data.createdAt) : null}
+                />
+              </DetailSection>
+
+              {data.rawPayload && (
+                <details className="rounded-lg border border-slate-200 dark:border-slate-700">
+                  <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    Payload bruto (SYDLE)
+                  </summary>
+                  <pre className="max-h-80 overflow-auto border-t border-slate-200 bg-slate-50 p-3 text-[11px] leading-snug text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                    {JSON.stringify(data.rawPayload, null, 2)}
+                  </pre>
+                </details>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SydlePaymentsPage() {
   const queryClient = useQueryClient();
   const { user, getToken } = useAuth();
@@ -304,6 +503,7 @@ export function SydlePaymentsPage() {
   const [updatedTo, setUpdatedTo] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const limit = 50;
 
   const queryParams = useMemo(() => {
@@ -852,11 +1052,17 @@ export function SydlePaymentsPage() {
                   {rows.map((row) => {
                     const processCode = row.portalProcessCode || row.processCode;
                     return (
-                      <tr key={row.id} className="hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                      <tr
+                        key={row.id}
+                        onClick={() => setSelectedId(row.id)}
+                        title="Ver detalhes da compra"
+                        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/60"
+                      >
                         <td className="px-4 py-3 text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {row.processId ? (
                             <Link
                               to={`/importacao/processos/${row.processId}`}
+                              onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center gap-1.5 text-primary-700 hover:underline dark:text-primary-300"
                             >
                               {processCode}
@@ -949,10 +1155,16 @@ export function SydlePaymentsPage() {
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
-                          <div>
-                            SYDLE {row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--'}
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div>
+                                SYDLE{' '}
+                                {row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--'}
+                              </div>
+                              <div>Portal {row.syncedAt ? formatDateTime(row.syncedAt) : '--'}</div>
+                            </div>
+                            <Eye className="h-4 w-4 shrink-0 text-slate-400" />
                           </div>
-                          <div>Portal {row.syncedAt ? formatDateTime(row.syncedAt) : '--'}</div>
                         </td>
                       </tr>
                     );
@@ -968,7 +1180,8 @@ export function SydlePaymentsPage() {
               return (
                 <div
                   key={row.id}
-                  className="rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-800"
+                  onClick={() => setSelectedId(row.id)}
+                  className="cursor-pointer rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-800"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -1055,6 +1268,7 @@ export function SydlePaymentsPage() {
                     {row.processId && (
                       <Link
                         to={`/importacao/processos/${row.processId}`}
+                        onClick={(e) => e.stopPropagation()}
                         className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-700 dark:text-primary-300"
                       >
                         Abrir processo
@@ -1120,6 +1334,10 @@ export function SydlePaymentsPage() {
           </div>
         </div>
       ) : null}
+
+      {selectedId != null && (
+        <PaymentDetailDrawer paymentId={selectedId} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }
