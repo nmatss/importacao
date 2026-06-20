@@ -346,7 +346,8 @@ describe('SydleClient', () => {
       ),
     );
 
-    // injeta a spec (restaurada no finally para não vazar entre testes)
+    // isola: troca os specs default por um único spec de teste e restaura depois
+    const savedSpecs = SYDLE_ENRICHMENT_CLASSES.splice(0);
     SYDLE_ENRICHMENT_CLASSES.push({
       label: 'supplier',
       classId: 'SUP-CLASS',
@@ -368,12 +369,108 @@ describe('SydleClient', () => {
       const supplierBody = JSON.parse(String(fetchMock.mock.calls[5][1]?.body));
       expect(supplierBody.query).toEqual({ terms: { _id: ['SUP-1'] } });
     } finally {
-      SYDLE_ENRICHMENT_CLASSES.splice(0);
+      SYDLE_ENRICHMENT_CLASSES.splice(0, SYDLE_ENRICHMENT_CLASSES.length, ...savedSpecs);
     }
   });
 
-  it('does not query neighbor classes when SYDLE_ENRICHMENT_CLASSES is empty', async () => {
+  it('resolves a chained neighbor class (supplier: recipient -> enterprise -> legalName)', async () => {
     process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
+
+    // usa os specs default SHIPPED (brand + supplier 2-hop) com os classIds reais
+    const BRAND_CLASS = '685179c16732f5038aaed372';
+    const RECIPIENT_CLASS = '689cd3bd27624d322604be16';
+    const ENTERPRISE_CLASS = '591365fef5ca53284cd8d159';
+
+    const requestWithRequestData = {
+      _id: 'REQ-1',
+      _lastUpdateDate: '2026-06-18T20:20:31.914Z',
+      approved: true,
+      ticket: { _id: 'TICKET-1' },
+      requestData: {
+        processCode: 'IMP-0099',
+        invoiceCode: 'INV-555',
+        brand: { _id: 'BR-1', _classId: BRAND_CLASS },
+        recipient: { _id: 'REC-1', _classId: RECIPIENT_CLASS },
+      },
+      paymentData: [
+        {
+          _id: 'PAY-1',
+          paymentAmount: 4460,
+          expirationDate: '2026-06-18T00:00:00Z',
+          paymentDeadlineAfterShipment: 30,
+          paymentCurrency: { _id: 'USD-ID' },
+        },
+      ],
+    };
+
+    mockSydleOneSequence(requestWithRequestData, {
+      _id: 'TICKET-1',
+      code: '5337',
+      status: { _id: 'OPEN' },
+      _lastUpdateDate: '2026-06-18T20:30:00.000Z',
+    });
+    // 6: brand class -> name
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          hits: { hits: [{ _id: 'BR-1', _source: { _id: 'BR-1', name: 'Imaginarium' } }] },
+        }),
+        { status: 200 },
+      ),
+    );
+    // 7: recipient class -> enterprise ref
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          hits: {
+            hits: [
+              {
+                _id: 'REC-1',
+                _source: { _id: 'REC-1', enterprise: { _id: 'ENT-1', _classId: ENTERPRISE_CLASS } },
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+    // 8: enterprise class -> legalName
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          hits: {
+            hits: [
+              {
+                _id: 'ENT-1',
+                _source: { _id: 'ENT-1', legalName: 'ACME ENTERPRISES INC', name: 'ACME' },
+              },
+            ],
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await new SydleClient().fetchPayments(null);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      processCode: 'IMP-0099', // Caso A: requestData.processCode
+      invoiceNumber: 'INV-555', // Caso A: requestData.invoiceCode
+      brand: 'Imaginarium', // Caso B 1-hop
+      supplierName: 'ACME ENTERPRISES INC', // Caso B 2-hop: legalName da enterprise
+    });
+
+    // a cadeia recipient -> enterprise foi seguida
+    const enterpriseUrl = String(fetchMock.mock.calls[7][0]);
+    expect(enterpriseUrl).toContain(`/_classId/${ENTERPRISE_CLASS}/_search`);
+    const enterpriseBody = JSON.parse(String(fetchMock.mock.calls[7][1]?.body));
+    expect(enterpriseBody.query).toEqual({ terms: { _id: ['ENT-1'] } });
+  });
+
+  it('does not query neighbor classes when the request has no referenced objects', async () => {
+    process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
+    // REQUEST_WITH_EXTRA não tem requestData => os specs default não encontram refs
     mockSydleOneSequence(REQUEST_WITH_EXTRA, TICKET_WITH_OPENFORM);
 
     await new SydleClient().fetchPayments(null);

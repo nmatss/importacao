@@ -50,6 +50,38 @@ saber se fornecedor/PI/invoice/processo/câmbio vêm no payload do request/ticke
    `SYDLE_ENRICHMENT_CLASSES` está vazia → nenhum fetch extra. A classe vizinha
    resolvida **prevalece** sobre o enriquecimento por campo (entidade > texto livre).
 
+## Resultado do probe (executado em produção 2026-06-20)
+
+Rodado dentro do container `importacao-api` em `192.168.168.124` (host sem node;
+container tem node v22 + env SYDLE). Instância: `grupounico.sydle.one`, app `main`.
+Amostra de 3 registros, **120 campos** distintos no payload da classe de pagamentos.
+
+**Onde os campos realmente estão** (a maior parte sob `requestData`, o form):
+
+| Campo                                              | Origem real                                                                      | Caso       | Acesso  |
+| -------------------------------------------------- | -------------------------------------------------------------------------------- | ---------- | ------- |
+| Código do processo                                 | `requestData.processCode`                                                        | A (inline) | 200     |
+| Invoice / CI                                       | `requestData.invoiceCode`                                                        | A (inline) | 200     |
+| Marca                                              | `requestData.brand` → classe `685179c1…` → `name`                                | B (1-hop)  | 200     |
+| Fornecedor                                         | `requestData.recipient` → `689cd3bd…` → `enterprise` → `591365fe…` → `legalName` | B (2-hop)  | 200     |
+| Proforma/PI, câmbio, BRL, banco, contrato, remessa | não estão no payload; provavelmente nas classes `68bf…5efb` / `64f22b57…`        | C          | **403** |
+
+Classes legíveis (200): pagamentos, ticket, ticket_status, currency, brand,
+recipient, enterprise (+ genéricas de sistema). Bloqueadas (403): `68bf…5efb`,
+`64f22b57e85f4a4b92376c43` (forms detalhadas — onde devem estar PI/câmbio/banco).
+
+**Implementado a partir disso** (já nos commits desta rodada, gated por
+`SYDLE_ONE_ENRICH_FIELDS`): Caso A passou a buscar dentro de `requestData`
+(`invoiceCode` adicionado a `SYDLE_FIELD_KEYS`); Caso B ganhou encadeamento
+(2-hop) e `SYDLE_ENRICHMENT_CLASSES` já vem preenchido com **brand** e
+**supplier** (recipient→enterprise→legalName), classIds com override por env
+(`SYDLE_BRAND_CLASS_ID`, `SYDLE_RECIPIENT_CLASS_ID`, `SYDLE_ENTERPRISE_CLASS_ID`).
+
+Resultado líquido com a flag ligada: **process_code, invoice_number, brand e
+supplier_name** passam a ser populados — destravando match exato por processo e
+os pesos de invoice (+0.45) e fornecedor (+0.2) no `matchProcess`. Faltam só os
+campos atrás do 403 (Caso C).
+
 ## Árvore de decisão a partir do resultado do probe
 
 Rode o probe onde as credenciais existem (servidor de produção, onde o `.env` é
@@ -105,13 +137,18 @@ Regras do spec:
 
 Depois: `SYDLE_ONE_ENRICH_FIELDS=true` em staging, `sync-now`, validar drawer.
 
-### Caso C — 403 (forms `InternationalPaymentOpenForm` / `RequestData`)
+### Caso C — 403 (classes detalhadas bloqueadas)
 
-Não há solução client-side. Ação **externa** com a SYDLE:
+Confirmado pelo probe: as classes `68bf1179b042c72f03995efb` e
+`64f22b57e85f4a4b92376c43` retornam **403** para a `SYDLE_USER`. São as candidatas
+a conter proforma/PI, taxa de câmbio, valor BRL, banco, contrato de câmbio e
+remessa (campos ausentes do payload). Não há solução client-side. Ação **externa**:
 
-- Pedir permissão de leitura (read-only) à `SYDLE_USER` sobre a classe/form, **ou**
-- Pedir uma **view/API consolidada** expondo os campos com permissão de leitura.
-  Documente o que ficou faltando e mantenha as colunas nulas até a liberação.
+- Pedir à SYDLE permissão de leitura (read-only) à `SYDLE_USER` sobre essas duas
+  classes (IDs acima), **ou** uma view/API consolidada expondo os campos.
+- Quando liberar: rode o probe de novo (passarão a 200), descubra o caminho dos
+  campos e adicione-os via Caso A (se inline) ou Caso B (se referência).
+- Até lá, essas colunas seguem nulas (sem impacto no resto).
 
 ## Campos-alvo e colunas de destino
 

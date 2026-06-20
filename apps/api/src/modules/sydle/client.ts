@@ -413,7 +413,11 @@ export class SydleClient {
 
     const resolved: EnrichmentResolved[] = [];
     for (const spec of specs) {
-      const ids = uniqueStrings(
+      const chain = [spec.classId, ...(spec.via ?? []).map((hop) => hop.classId)];
+      const maps: Map<string, Record<string, unknown>>[] = [];
+
+      // ids do primeiro elo: vêm do request/ticket no caminho refPath.
+      let ids = uniqueStrings(
         records.map((record) => {
           const sourceObj =
             spec.source === 'ticket'
@@ -422,20 +426,33 @@ export class SydleClient {
           return getNestedString(sourceObj, [...spec.refPath, '_id']);
         }),
       );
-      const includes = uniqueStrings([
-        '_id',
-        ...spec.includes,
-        ...Object.keys(spec.map).map((field) => field.split('.')[0]),
-      ]);
-      const byId = await this.lookupSydleOneByIds(
-        spec.classId,
-        ids,
-        includes,
-        `enrich:${spec.label}`,
-        headers,
-        failures,
-      );
-      resolved.push({ spec, byId });
+
+      for (let i = 0; i < chain.length; i += 1) {
+        const isLast = i === chain.length - 1;
+        const refField = spec.via?.[i]?.refField; // campo que aponta para o próximo elo
+        const includes = isLast
+          ? uniqueStrings([
+              '_id',
+              ...spec.includes,
+              ...Object.keys(spec.map).map((field) => field.split('.')[0]),
+            ])
+          : uniqueStrings(['_id', refField ?? '']);
+        const byId = await this.lookupSydleOneByIds(
+          chain[i],
+          ids,
+          includes,
+          `enrich:${spec.label}:${i}`,
+          headers,
+          failures,
+        );
+        maps.push(byId);
+        if (!isLast) {
+          ids = uniqueStrings(
+            [...byId.values()].map((rec) => getNestedString(rec, [refField ?? '', '_id'])),
+          );
+        }
+      }
+      resolved.push({ spec, maps });
     }
     return resolved;
   }
@@ -669,18 +686,25 @@ function extractComplementaryFields(
   ticket: Record<string, unknown> | null,
   status: Record<string, unknown> | null,
 ): Record<string, unknown> {
-  // Superfície de busca: ticket -> openForm do ticket -> status -> request, com o
-  // request sobrescrevendo (é autoritativo). findSydleField casa por chave exata e
-  // por chave normalizada (sem acento/caixa), igual ao caminho genérico.
+  // Superfície de busca: ticket -> openForm do ticket -> status -> request ->
+  // request.requestData (o form é autoritativo: processCode/invoiceCode moram nele).
+  // findSydleField casa por chave exata e por chave normalizada (sem acento/caixa).
   const openForm =
     ticket && typeof ticket.openForm === 'object' && !Array.isArray(ticket.openForm)
       ? (ticket.openForm as Record<string, unknown>)
+      : null;
+  const requestData =
+    request.requestData &&
+    typeof request.requestData === 'object' &&
+    !Array.isArray(request.requestData)
+      ? (request.requestData as Record<string, unknown>)
       : null;
   const surface: Record<string, unknown> = {
     ...(ticket ?? {}),
     ...(openForm ?? {}),
     ...(status ?? {}),
     ...request,
+    ...(requestData ?? {}),
   };
 
   const out: Record<string, unknown> = {};
@@ -701,38 +725,68 @@ function extractComplementaryFields(
  * caminho da referência e os nomes dos campos. Lista vazia => nenhum fetch extra,
  * comportamento idêntico ao de hoje.
  */
+/** Hop adicional para encadear referências (ex.: recipient -> enterprise). */
+export interface SydleEnrichmentHop {
+  /** classId do próximo objeto na cadeia. */
+  classId: string;
+  /** Campo do registro atual que referencia o próximo objeto ({_id}). Ex.: 'enterprise'. */
+  refField: string;
+}
+
 export interface SydleEnrichmentClassSpec {
   /** Rótulo único (vai para metadata/failures como `enrich:<label>`). */
   label: string;
-  /** classId da classe vizinha a buscar (ex.: SYDLE_SUPPLIER_CLASS_ID). */
+  /** classId da PRIMEIRA classe a buscar. */
   classId: string;
   /** Onde mora a referência {_id}: no request (default) ou no ticket. */
   source?: 'request' | 'ticket';
-  /** Caminho até o objeto-referência. Ex.: ['supplier'] => <source>.supplier._id */
+  /** Caminho até o objeto-referência. Ex.: ['requestData','recipient']. */
   refPath: string[];
-  /** Campos do _source a pedir na classe vizinha. */
+  /** Hops extras para seguir a cadeia até a classe final (ex.: enterprise). */
+  via?: SydleEnrichmentHop[];
+  /** Campos do _source a pedir na classe FINAL. */
   includes: string[];
-  /** Mapa campoDaClasseVizinha (dot-path) -> coluna complementar da linha. */
+  /** Mapa campoDaClasseFinal (dot-path) -> coluna complementar da linha. */
   map: Record<string, string>;
 }
 
 interface EnrichmentResolved {
   spec: SydleEnrichmentClassSpec;
-  byId: Map<string, Record<string, unknown>>;
+  /** Um Map por elo da cadeia: [classe0, ...via]. */
+  maps: Map<string, Record<string, unknown>>[];
 }
 
 /**
- * Vazio por padrão (inerte). Exemplo a confirmar com o probe:
- *   {
- *     label: 'supplier',
- *     classId: process.env.SYDLE_SUPPLIER_CLASS_ID ?? '',
- *     source: 'request',
- *     refPath: ['supplier'],          // request.supplier._id
- *     includes: ['name', 'tradeName', 'country'],
- *     map: { name: 'supplierName' },  // campo da classe -> coluna complementar
- *   }
+ * Classes vizinhas confirmadas pelo probe (scripts/sydle-class-discovery.mjs) na
+ * instância grupounico.sydle.one. Só ativa quando SYDLE_ONE_ENRICH_FIELDS=true.
+ * classIds com override por env (mesmo padrão de ticketClassId etc.).
+ *  - marca:     requestData.brand -> classe brand -> name
+ *  - fornecedor: requestData.recipient -> classe recipient -> enterprise -> legalName
  */
-export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [];
+export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [
+  {
+    label: 'brand',
+    classId: process.env.SYDLE_BRAND_CLASS_ID ?? '685179c16732f5038aaed372',
+    source: 'request',
+    refPath: ['requestData', 'brand'],
+    includes: ['name'],
+    map: { name: 'brand' },
+  },
+  {
+    label: 'supplier',
+    classId: process.env.SYDLE_RECIPIENT_CLASS_ID ?? '689cd3bd27624d322604be16',
+    source: 'request',
+    refPath: ['requestData', 'recipient'],
+    via: [
+      {
+        classId: process.env.SYDLE_ENTERPRISE_CLASS_ID ?? '591365fef5ca53284cd8d159',
+        refField: 'enterprise',
+      },
+    ],
+    includes: ['legalName', 'name'],
+    map: { legalName: 'supplierName' },
+  },
+];
 
 function applyEnrichmentClasses(
   request: Record<string, unknown>,
@@ -740,11 +794,17 @@ function applyEnrichmentClasses(
   resolved: EnrichmentResolved[],
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const { spec, byId } of resolved) {
+  for (const { spec, maps } of resolved) {
     const sourceObj = spec.source === 'ticket' ? ticket : request;
     const refId = getNestedString(sourceObj, [...spec.refPath, '_id']);
     if (!refId) continue;
-    const neighbor = byId.get(refId);
+    // Caminha a cadeia: classe0[refId] -> via[0].refField -> classe1[...] -> ...
+    let neighbor = maps[0]?.get(refId);
+    for (let i = 1; i < maps.length && neighbor; i += 1) {
+      const refField = spec.via?.[i - 1]?.refField;
+      const nextId = refField ? getNestedString(neighbor, [refField, '_id']) : null;
+      neighbor = nextId ? maps[i].get(nextId) : undefined;
+    }
     if (!neighbor) continue;
     for (const [neighborField, column] of Object.entries(spec.map)) {
       const value = getNestedValue(neighbor, neighborField.split('.'));
