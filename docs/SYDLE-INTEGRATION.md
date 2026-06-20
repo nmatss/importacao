@@ -222,6 +222,10 @@ Rotas:
 - `GET /api/sydle/payments-report` admin-only
 - `GET /api/sydle/payments-report/summary` admin-only
 - `GET /api/sydle/payments-report/export.csv` admin-only
+- `GET /api/sydle/payments-report/:id` admin-only — detalhe completo de UMA
+  compra/pagamento (todas as colunas + `rawPayload` da SYDLE + contexto do
+  processo casado). Consumido pelo drawer "abrir a compra" no relatorio.
+  Registrado APOS `/summary` e `/export.csv` para o `:id` nao captura-los.
 - `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 

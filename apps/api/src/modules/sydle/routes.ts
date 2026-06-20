@@ -27,6 +27,9 @@ router.get(
   validate(sydleReportQuerySchema, 'query'),
   sydleController.exportCsv,
 );
+// Single-payment detail. Registered AFTER the literal /summary and /export.csv
+// routes so the ":id" param cannot capture them.
+router.get('/payments-report/:id', sydleController.getById);
 router.get('/sync-runs', validate(syncRunsQuerySchema, 'query'), sydleController.syncRuns);
 router.post('/sync-now', syncLimiter, sydleController.syncNow);
 
