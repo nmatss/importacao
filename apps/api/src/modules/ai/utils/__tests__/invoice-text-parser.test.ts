@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { repairInvoiceExtractionFromText, tryParseInvoiceText } from '../invoice-text-parser.js';
+import {
+  fillInvoiceNullsFromText,
+  repairInvoiceExtractionFromText,
+  tryParseInvoiceText,
+} from '../invoice-text-parser.js';
 
 const invoiceText = `COMMERCIAL INVOICE
 Invoice No: IM0712602NB        Date: 2026-05-12
@@ -72,6 +76,54 @@ TOTAL FOB4.912,00`;
     expect(parsed?.items[6].itemCode.value).toBe('AC 2285Y');
     expect(parsed?.items[6].totalPrice.value).toBe(266.4);
     expect(parsed?.items[6].isFreeOfCharge.value).toBe(true);
+  });
+
+  it('fills invoiceDate, portOfLoading and exporterName left null by the model', () => {
+    // Simulates a weak-model extraction: items present, header scalars null.
+    const llmData = {
+      invoiceNumber: { value: 'IM0712602NB', confidence: 0.9 },
+      invoiceDate: { value: null, confidence: 0 },
+      exporterName: { value: null, confidence: 0 },
+      portOfLoading: { value: null, confidence: 0 },
+      portOfDischarge: { value: null, confidence: 0 },
+      currency: { value: null, confidence: 0 },
+      importerCnpj: { value: null, confidence: 0 },
+      items: [{ itemCode: { value: 'PI7752Y', confidence: 0.8 } }],
+    };
+
+    const filled = fillInvoiceNullsFromText(llmData, invoiceText);
+
+    expect(filled.invoiceDate.value).toBe('2026-05-12');
+    expect(filled.exporterName.value).toBe('KIOM GLOBAL LIMITED');
+    expect(filled.portOfLoading.value).toBe('NINGBO');
+    expect(filled.portOfDischarge.value).toBe('ITAPOA, BRAZIL');
+    expect(filled.currency.value).toBe('USD');
+    expect(filled.importerCnpj.value).toBe('00.399.603/0006-12');
+    // Filled fields carry a modest confidence so the UI flags them for a glance.
+    expect(filled.invoiceDate.confidence).toBeLessThan(0.82);
+  });
+
+  it('never overwrites values the model already extracted', () => {
+    const llmData = {
+      invoiceDate: { value: '2026-01-01', confidence: 0.95 },
+      exporterName: { value: 'SOME OTHER EXPORTER LTD', confidence: 0.9 },
+      portOfLoading: { value: 'SHANGHAI', confidence: 0.9 },
+    };
+
+    const filled = fillInvoiceNullsFromText(llmData, invoiceText);
+
+    expect(filled.invoiceDate.value).toBe('2026-01-01');
+    expect(filled.exporterName.value).toBe('SOME OTHER EXPORTER LTD');
+    expect(filled.portOfLoading.value).toBe('SHANGHAI');
+  });
+
+  it('is a no-op when the text does not look like a commercial invoice', () => {
+    const llmData = { invoiceDate: { value: null, confidence: 0 } };
+    const filled = fillInvoiceNullsFromText(
+      llmData,
+      'random unrelated text without invoice markers',
+    );
+    expect(filled.invoiceDate.value).toBeNull();
   });
 
   it('repairs exporterName when a carrier/vessel name was selected', () => {

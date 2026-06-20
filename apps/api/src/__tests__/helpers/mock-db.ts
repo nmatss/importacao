@@ -25,6 +25,8 @@ function createChain() {
     'leftJoin',
     'innerJoin',
     'returning',
+    'onConflictDoUpdate',
+    'onConflictDoNothing',
   ];
 
   for (const method of methods) {

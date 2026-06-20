@@ -788,6 +788,48 @@ describe('validationService', () => {
       expect(itemAnomalies[0].description).toContain('1 item');
     });
 
+    it('reconciles item-presence anomalies labeled with free-form fields (not "items.")', async () => {
+      // The model frequently does NOT prefix item-presence anomalies with
+      // "items." — it emits free-form labels. The reconciler must still collapse
+      // them to the deterministic count instead of leaking the fuzzy "7".
+      aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
+        anomalies: [
+          {
+            field: 'consistencia_numerica',
+            description: '7 itens nao foram encontrados no Packing List',
+            severity: 'high',
+          },
+          {
+            field: 'itens',
+            description: 'Itens da Invoice sem correspondencia no Packing List',
+            severity: 'medium',
+          },
+          { field: 'totalFobValue', description: 'Divergencia FOB', severity: 'high' },
+        ],
+      });
+      mockGetComparison.mockResolvedValueOnce({
+        unmatchedPlItems: [{ itemCode: 'X', source: 'packing_list' }],
+        unmatchedInvoiceItems: [],
+      });
+      queryQueue.push(itemDocs());
+
+      const result = await validationService.runAnomalyDetection(261);
+
+      // Free-form item-presence anomalies are dropped and replaced by the single
+      // deterministic count; the non-item anomaly survives untouched.
+      expect(result.anomalies).toContainEqual({
+        field: 'totalFobValue',
+        description: 'Divergencia FOB',
+        severity: 'high',
+      });
+      const itemAnomalies = result.anomalies.filter((a: any) =>
+        String(a.field).startsWith('items'),
+      );
+      expect(itemAnomalies).toHaveLength(1);
+      expect(itemAnomalies[0].description).toContain('1 item');
+      expect(result.anomalies).toHaveLength(2);
+    });
+
     it('re-emits BOTH directions when PL and Invoice each have unmatched items', async () => {
       aiServiceMocks.detectAnomalies.mockResolvedValueOnce({
         anomalies: [

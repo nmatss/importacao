@@ -72,13 +72,24 @@ describe('invoice-pl-date-tolerance check', () => {
     expect(result.status).toBe('skipped');
   });
 
-  it('does not treat the invoice issue date as a shipment date', () => {
+  it('falls back to the invoice emission date with a widened tolerance (Eduarda 2026-06-19)', () => {
     const result = invoicePlDateTolerance({
-      // Only an issue date — not a logistics/shipment date.
+      // Only an emission date — now used as a fallback so the comparison still runs.
       invoiceData: { invoiceDate: '2026-06-01' },
       packingListData: { shipmentDate: '2026-06-05' },
     });
 
-    expect(result.status).toBe('skipped');
+    expect(result.status).toBe('passed');
+    expect(result.message).toContain('emissao');
+  });
+
+  it('still flags an emission-date comparison only when very divergent', () => {
+    const result = invoicePlDateTolerance({
+      invoiceData: { invoiceDate: '2026-06-01' },
+      // ~70 days apart — beyond the widened 60-day emission tolerance.
+      packingListData: { date: '2026-08-10' },
+    });
+
+    expect(result.status).toBe('warning');
   });
 });

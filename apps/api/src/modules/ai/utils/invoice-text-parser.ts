@@ -97,6 +97,96 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
   };
 }
 
+/**
+ * Fill scalar header fields the model left NULL using the deterministic
+ * extractors, WITHOUT touching values the model did extract.
+ *
+ * Eduarda 2026-06-19: the local model frequently returns exporterName /
+ * invoiceDate / portOfLoading as null even when the invoice has a clean text
+ * layer ("leu 78% da Invoice e ficou sem puxar alguns campos"). The
+ * deterministic library already knows how to read these labels — wiring it as a
+ * post-LLM null-fill recovers them independently of the model (and of the Vertex
+ * migration, #60). Filled fields get a modest confidence (0.6) so the UI flags
+ * them as needing a glance rather than presenting them as high-confidence.
+ */
+export function fillInvoiceNullsFromText(
+  data: Record<string, any>,
+  text: string,
+): Record<string, any> {
+  const source = text ?? '';
+  // Only recover on documents that actually look like a commercial invoice.
+  if (!source.trim() || !isCommercialInvoice(source)) return data;
+
+  const out = { ...data };
+  const isNull = (field: unknown) => getConfidenceValue(field) == null;
+  const FILLED = 0.6;
+
+  if (isNull(out.invoiceDate)) {
+    const date =
+      normalizeDate(
+        matchFirst(source, [
+          new RegExp(String.raw`CI\s*DATE\s*(${DATE_VALUE_PATTERN})(?=FREIGHT|PAYMENT|$)`, 'i'),
+        ]),
+      ) ?? findLabeledDate(source);
+    if (date) out.invoiceDate = cf(date, FILLED);
+  }
+
+  if (isNull(out.exporterName)) {
+    const exporter = normalizePartyLine(
+      extractLabeledValue(source, ['exporter', 'shipper', 'seller']) ??
+        extractCompactExporter(source),
+    );
+    if (exporter && !CARRIER_RE.test(exporter)) out.exporterName = cf(exporter, FILLED);
+  }
+
+  if (isNull(out.portOfLoading)) {
+    const port = extractPort(source, 'loading');
+    if (port) out.portOfLoading = cf(port, FILLED);
+  }
+
+  if (isNull(out.portOfDischarge)) {
+    const port = extractPort(source, 'discharge');
+    if (port) out.portOfDischarge = cf(port, FILLED);
+  }
+
+  if (isNull(out.incoterm)) {
+    const incoterm = matchFirst(source, [
+      /INCOTERM\s*(FOB|CIF|CFR|EXW|FCA)/i,
+      /\b(FOB|CIF|CFR|EXW|FCA)\b/i,
+    ]);
+    if (incoterm) out.incoterm = cf(incoterm.toUpperCase(), FILLED);
+  }
+
+  if (isNull(out.currency)) {
+    const currency = matchFirst(source, [
+      /\bTOTAL\s*FOB\s*(USD|EUR|CNY)/i,
+      /\bcurrency\s*[:#-]?\s*(USD|EUR|CNY)\b/i,
+      /\b(USD|EUR|CNY)\b/i,
+    ]);
+    if (currency) out.currency = cf(currency.toUpperCase(), FILLED);
+  }
+
+  if (isNull(out.importerCnpj)) {
+    const cnpj = matchFirst(source, [
+      /\bCNPJ\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/i,
+    ]);
+    if (cnpj) out.importerCnpj = cf(cnpj, 0.7);
+  }
+
+  if (isNull(out.totalFobValue)) {
+    const fob = parseNumber(
+      matchFirst(source, [
+        /\btotal\s*FOB\s*(?:USD|EUR|CNY)\s*([\d.,]+)/i,
+        /\btotal\s*FOB\b[^\d]{0,20}(?:USD|EUR|CNY)?\s*([\d.,]+)/i,
+        /\bFOB\s*total\b[^\d]{0,20}(?:USD|EUR|CNY)?\s*([\d.,]+)/i,
+      ]),
+    );
+    if (fob != null) out.totalFobValue = cf(fob, FILLED);
+  }
+
+  return out;
+}
+
 export function repairInvoiceExtractionFromText(
   data: Record<string, any>,
   text: string,

@@ -52,13 +52,33 @@ const BL_SHIPMENT_DATE_KEYS = [
   'etd',
 ];
 
-function firstDate(source: Record<string, any> | undefined, keys: string[]): string {
-  if (!source) return '';
-  for (const key of keys) {
+// Eduarda 2026-06-19: "Considerar a data da Invoice e do Packing List para a aba
+// de Comparativo, mas considerar errado apenas se forem muito divergentes". When
+// a document carries no logistics/shipment date we therefore fall back to its
+// own emission date (invoice issue date / PL date) so the comparison still
+// happens — and widen the tolerance, since an emission date is expected to drift
+// further from the on-board date than two shipment dates would.
+const INVOICE_EMISSION_DATE_KEYS = ['invoiceDate', 'issueDate', 'date'];
+const PACKING_LIST_EMISSION_DATE_KEYS = ['date', 'packingListDate', 'issueDate'];
+const BL_EMISSION_DATE_KEYS = ['issueDate'];
+
+type ResolvedDate = { value: string; fallback: boolean };
+
+function resolveDate(
+  source: Record<string, any> | undefined,
+  shipmentKeys: string[],
+  emissionKeys: string[],
+): ResolvedDate {
+  if (!source) return { value: '', fallback: false };
+  for (const key of shipmentKeys) {
     const raw = normalize(source[key]);
-    if (raw) return normalizeDate(raw);
+    if (raw) return { value: normalizeDate(raw), fallback: false };
   }
-  return '';
+  for (const key of emissionKeys) {
+    const raw = normalize(source[key]);
+    if (raw) return { value: normalizeDate(raw), fallback: true };
+  }
+  return { value: '', fallback: false };
 }
 
 function normalizeDate(value: string): string {
@@ -79,32 +99,29 @@ export default function datesMatch(input: CheckInput): CheckResult {
     };
   }
 
-  const invShipment = firstDate(input.invoiceData, INVOICE_SHIPMENT_DATE_KEYS);
-  const plShipment = firstDate(input.packingListData, PACKING_LIST_SHIPMENT_DATE_KEYS);
-  const blShipment = firstDate(input.blData, BL_SHIPMENT_DATE_KEYS);
-  const invoiceDateIgnored = !invShipment && normalize(input.invoiceData?.invoiceDate);
-  const present: DateEntry[] = [
-    { label: 'INV', value: invShipment },
-    { label: 'PL', value: plShipment },
-    { label: 'BL', value: blShipment },
+  const inv = resolveDate(
+    input.invoiceData,
+    INVOICE_SHIPMENT_DATE_KEYS,
+    INVOICE_EMISSION_DATE_KEYS,
+  );
+  const pl = resolveDate(
+    input.packingListData,
+    PACKING_LIST_SHIPMENT_DATE_KEYS,
+    PACKING_LIST_EMISSION_DATE_KEYS,
+  );
+  const bl = resolveDate(input.blData, BL_SHIPMENT_DATE_KEYS, BL_EMISSION_DATE_KEYS);
+  const present: Array<DateEntry & { fallback: boolean }> = [
+    { label: 'INV', ...inv },
+    { label: 'PL', ...pl },
+    { label: 'BL', ...bl },
   ].filter((entry) => entry.value);
-
-  if (present.length === 0 && invoiceDateIgnored) {
-    return {
-      checkName,
-      status: 'skipped',
-      documentsCompared: 'INV vs PL vs BL',
-      message:
-        'A invoice possui apenas data de emissao; nenhuma data de ETD ou embarque foi encontrada para comparar.',
-    };
-  }
 
   if (present.length === 0) {
     return {
       checkName,
       status: 'skipped',
       documentsCompared: 'INV vs PL vs BL',
-      message: 'Nenhuma data de ETD ou embarque encontrada nos documentos.',
+      message: 'Nenhuma data de embarque/ETD ou de emissao encontrada nos documentos.',
     };
   }
 
@@ -119,14 +136,18 @@ export default function datesMatch(input: CheckInput): CheckResult {
     };
   }
 
+  // When any date is an emission-date fallback, only flag VERY divergent dates —
+  // emission and on-board dates legitimately differ by more than two shipment
+  // dates would (Eduarda: "nao precisam necessariamente ser iguais").
+  const usedFallback = present.some((entry) => entry.fallback);
   const status = compareDates(
     present.map((entry) => entry.value),
-    { matchDays: 10, warnDays: 30 },
+    usedFallback ? { matchDays: 30, warnDays: 60 } : { matchDays: 10, warnDays: 30 },
   );
   const actualValue = present.map((entry) => `${entry.label}=${entry.value}`).join('; ');
   const expectedValue = present[0].value;
-  const ignoredInvoiceDateNote = invoiceDateIgnored
-    ? ' Data de emissao da invoice nao foi usada como data logistica.'
+  const ignoredInvoiceDateNote = usedFallback
+    ? ' Considerada a data de emissao da Invoice/PL na ausencia de data de embarque.'
     : '';
 
   if (status === 'match') {

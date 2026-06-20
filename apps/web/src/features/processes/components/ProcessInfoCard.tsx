@@ -23,7 +23,7 @@ export interface ProcessInfoCardProps {
   process: ImportProcess;
 }
 
-type ProcessInfoSource = 'invoice' | 'espelho' | 'processo';
+type ProcessInfoSource = 'invoice' | 'espelho' | 'processo' | 'bl';
 
 interface SourcedValue<T = unknown> {
   value: T | null;
@@ -42,6 +42,12 @@ const sourceStyles: Record<ProcessInfoSource, { label: string; badge: string; ic
     badge:
       'bg-amber-50 text-amber-700 ring-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-800',
     icon: 'bg-amber-50 text-amber-500 dark:bg-amber-950/40 dark:text-amber-300',
+  },
+  bl: {
+    label: 'BL',
+    badge:
+      'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800',
+    icon: 'bg-sky-50 text-sky-500 dark:bg-sky-950/40 dark:text-sky-300',
   },
   processo: {
     label: 'Processo',
@@ -85,15 +91,22 @@ function firstEspelhoExporter(aiData: AiExtractedData | null | undefined) {
 }
 
 function getAiSources(process: ImportProcess) {
-  const aiData = process.aiExtractedData;
+  const aiData = process.aiExtractedData as Record<string, unknown> | null | undefined;
   const invoice = isRecord(aiData?.invoice) ? aiData.invoice : null;
   const espelho = isRecord(aiData?.espelho) ? aiData.espelho : null;
   const summary = isRecord(espelho?.summary) ? espelho.summary : espelho;
+  // The BL document carries shipping/freight/container fields that are not in
+  // the invoice and only reach the espelho summary once it is built. Surface it
+  // directly so "Data Embarque / Frete / Container" populate as soon as the BL
+  // is extracted (Eduarda 2026-06-19).
+  const blRaw = aiData?.ohbl ?? aiData?.draft_bl;
+  const bl = isRecord(blRaw) ? blRaw : null;
 
   return {
     invoice,
     espelhoSummary: summary,
-    espelhoExporter: firstEspelhoExporter(aiData),
+    espelhoExporter: firstEspelhoExporter(process.aiExtractedData),
+    bl,
   };
 }
 
@@ -109,7 +122,7 @@ function InfoField({
   source?: ProcessInfoSource | null;
 }) {
   const sourceStyle = source ? sourceStyles[source] : null;
-  const showSource = source === 'invoice' || source === 'espelho';
+  const showSource = source === 'invoice' || source === 'espelho' || source === 'bl';
 
   return (
     <div className="flex items-start gap-3 py-2">
@@ -200,7 +213,7 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
 }
 
 export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
-  const { invoice, espelhoSummary, espelhoExporter } = getAiSources(process);
+  const { invoice, espelhoSummary, espelhoExporter, bl } = getAiSources(process);
 
   const exporterName = pickValue<string>([
     { source: 'invoice', value: readPath(invoice, 'exporterName') as string | null },
@@ -215,10 +228,12 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
   ]);
   const portOfLoading = pickValue<string>([
     { source: 'invoice', value: readPath(invoice, 'portOfLoading') as string | null },
+    { source: 'bl', value: readPath(bl, 'portOfLoading') as string | null },
     { source: 'processo', value: process.portOfLoading },
   ]);
   const portOfDischarge = pickValue<string>([
     { source: 'invoice', value: readPath(invoice, 'portOfDischarge') as string | null },
+    { source: 'bl', value: readPath(bl, 'portOfDischarge') as string | null },
     { source: 'processo', value: process.portOfDischarge },
   ]);
   const incoterm = pickValue<string>([
@@ -238,6 +253,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
       source: 'espelho',
       value: readPath(espelhoSummary, 'freightValue') as number | string | null,
     },
+    { source: 'bl', value: readPath(bl, 'freightValue') as number | string | null },
     { source: 'invoice', value: readPath(invoice, 'freightValue') as number | string | null },
     { source: 'processo', value: process.freightValue },
   ]);
@@ -250,10 +266,13 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
       ? ((readPath(invoice, 'freightCurrency') as string | null) ?? undefined)
       : freightValue.source === 'espelho'
         ? ((readPath(espelhoSummary, 'freightCurrency') as string | null) ?? undefined)
-        : undefined;
+        : freightValue.source === 'bl'
+          ? ((readPath(bl, 'freightCurrency') as string | null) ?? undefined)
+          : undefined;
   const totalBoxes = pickValue<number | string>([
     { source: 'invoice', value: readPath(invoice, 'totalBoxes') as number | string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'totalBoxes') as number | string | null },
+    { source: 'bl', value: readPath(bl, 'totalBoxes') as number | string | null },
     { source: 'processo', value: process.totalBoxes },
   ]);
   const totalNetWeight = pickValue<number | string>([
@@ -270,25 +289,31 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
       source: 'espelho',
       value: readPath(espelhoSummary, 'totalGrossWeight') as number | string | null,
     },
+    { source: 'bl', value: readPath(bl, 'totalGrossWeight') as number | string | null },
     { source: 'processo', value: process.totalGrossWeight },
   ]);
   const totalCbm = pickValue<number | string>([
     { source: 'invoice', value: readPath(invoice, 'totalCbm') as number | string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'totalCbm') as number | string | null },
+    { source: 'bl', value: readPath(bl, 'totalCbm') as number | string | null },
     { source: 'processo', value: process.totalCbm },
   ]);
   const containerType = pickValue<string>([
     { source: 'espelho', value: readPath(espelhoSummary, 'containerType') as string | null },
+    { source: 'bl', value: readPath(bl, 'containerType') as string | null },
     { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
     { source: 'processo', value: process.containerType },
   ]);
   const containerNumber = pickValue<string>([
     { source: 'espelho', value: readPath(espelhoSummary, 'containerNumber') as string | null },
+    { source: 'bl', value: readPath(bl, 'containerNumber') as string | null },
     { source: 'invoice', value: readPath(invoice, 'containerNumber') as string | null },
   ]);
   const shipmentDate = pickValue<string>([
     { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
+    { source: 'bl', value: readPath(bl, 'shipmentDate') as string | null },
+    { source: 'bl', value: readPath(bl, 'etd') as string | null },
     { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
     { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
     { source: 'processo', value: process.shipmentDate },

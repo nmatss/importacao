@@ -170,6 +170,32 @@ describe('ProcessInfoCard', () => {
     expect(screen.queryByText(/€\s?1\.500,00/)).not.toBeInTheDocument();
   });
 
+  it('reads Data Embarque, Frete and Container straight from the BL doc before the espelho is built', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            // No espelho summary yet — only the extracted BL (ohbl). The card
+            // must still surface shipping/freight/container from the BL.
+            ohbl: {
+              shipmentDate: '2026-02-10T00:00:00.000Z',
+              freightValue: 3200,
+              freightCurrency: 'USD',
+              containerNumber: 'MSKU1234567',
+              containerType: '40HQ',
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText(/0[19]\/02\/2026|10\/02\/2026/)).toBeInTheDocument();
+    expect(screen.getByText(/3\.200,00/)).toBeInTheDocument();
+    expect(screen.getByText('MSKU1234567')).toBeInTheDocument();
+    // Labelled as sourced from the BL
+    expect(screen.getAllByTitle('Fonte: BL').length).toBeGreaterThanOrEqual(3);
+  });
+
   it('falls back to espelho.summary.etd for Data Embarque when shipmentDate is absent', () => {
     render(
       <ProcessInfoCard

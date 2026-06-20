@@ -91,11 +91,20 @@ interface SyncRun {
   metadata: Record<string, unknown> | null;
 }
 
+interface SydleCurrencyBreakdown {
+  currency: string;
+  totalPurchase: number;
+  totalPaid: number;
+  totalOpen: number;
+  records: number;
+}
+
 interface SydleSummary {
   totalPurchaseUsd: number;
   totalPaidUsd: number;
   totalOpenUsd: number;
   totalBrl: number;
+  currencyBreakdown?: SydleCurrencyBreakdown[];
   records: number;
   matched: number;
   unmatched: number;
@@ -534,6 +543,34 @@ export function SydlePaymentsPage() {
           tone="amber"
         />
       </div>
+
+      {/* Per-currency breakdown: the KPIs above only total USD, so any EUR/CNY
+          (or other) payments would otherwise be invisible in the report. */}
+      {(summary?.currencyBreakdown?.filter((c) => c.currency !== 'USD').length ?? 0) > 0 && (
+        <div className="rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
+          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <Banknote className="h-4 w-4" />
+            Totais por moeda
+          </div>
+          <div className="flex flex-wrap gap-3 text-xs">
+            {summary?.currencyBreakdown?.map((c) => (
+              <div
+                key={c.currency}
+                className="rounded-md border border-slate-200 px-3 py-2 dark:border-slate-700"
+              >
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {c.currency}
+                </span>{' '}
+                <span className="text-slate-500 dark:text-slate-400">
+                  Comprado {c.totalPurchase.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ·
+                  Aberto {c.totalOpen.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} ·{' '}
+                  {c.records} parcela(s)
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">

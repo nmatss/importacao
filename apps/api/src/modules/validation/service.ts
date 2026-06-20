@@ -1,4 +1,4 @@
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, getTableColumns } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   validationResults,
@@ -8,6 +8,7 @@ import {
   importProcesses,
   followUpTracking,
   documentCorrections,
+  users,
 } from '../../shared/database/schema.js';
 import type { ValidationResult } from '../../shared/database/schema.js';
 import { allChecks } from './checks/index.js';
@@ -657,7 +658,14 @@ export const validationService = {
   },
 
   async getResults(processId: number) {
-    return db.select().from(validationResults).where(eq(validationResults.processId, processId));
+    // Resolve the accepting user's name so the checklist can show "Aceito por
+    // <Nome>" instead of the raw user id (Eduarda 2026-06-19: "Incluir o nome da
+    // pessoa no log quando esta clica em feito").
+    return db
+      .select({ ...getTableColumns(validationResults), resolvedByName: users.name })
+      .from(validationResults)
+      .leftJoin(users, eq(validationResults.resolvedBy, users.id))
+      .where(eq(validationResults.processId, processId));
   },
 
   /**
@@ -927,11 +935,15 @@ export const validationService = {
     processId: number,
     anomalies: Array<{ field: string; description: string; severity: string }>,
   ): Promise<Array<{ field: string; description: string; severity: string }>> {
-    const { isItemMatchAnomalyField, ITEM_MATCH_ANOMALY_FIELD, ITEM_MATCH_ANOMALY_FIELD_INVOICE } =
+    const { isItemPresenceAnomaly, ITEM_MATCH_ANOMALY_FIELD, ITEM_MATCH_ANOMALY_FIELD_INVOICE } =
       await import('../ai/prompts/anomaly.js');
 
-    const itemPresenceAnomalies = anomalies.filter((a) => isItemMatchAnomalyField(a.field));
-    const passthrough = anomalies.filter((a) => !isItemMatchAnomalyField(a.field));
+    // Detect item-presence anomalies by field AND description: the model often
+    // labels them with free-form fields ("itens", "consistencia_numerica")
+    // instead of the "items." prefix, which previously let the fuzzy "7 itens"
+    // bypass reconciliation and contradict the deterministic panel's "1".
+    const itemPresenceAnomalies = anomalies.filter((a) => isItemPresenceAnomaly(a));
+    const passthrough = anomalies.filter((a) => !isItemPresenceAnomaly(a));
 
     let unmatchedPlCount = 0;
     let unmatchedInvoiceCount = 0;
