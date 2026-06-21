@@ -127,6 +127,47 @@ describe('DocumentComparison', () => {
     expect(screen.getAllByText(/15,00/).length).toBeGreaterThan(0);
   });
 
+  it('renders a Caixas column with per-source box counts', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        itemComparison: [
+          {
+            itemCode: 'SKU-1',
+            description: 'Produto A',
+            ncm: '1234',
+            invoiceQty: 10,
+            plQty: 10,
+            espelhoQty: 10,
+            invoiceUnitPrice: 5,
+            invoiceTotal: 50,
+            invoiceBoxes: 3,
+            plBoxes: 4,
+            espelhoBoxes: 5,
+            invoiceNetWeight: 12.5,
+            plNetWeight: 12.5,
+            espelhoNetWeight: 12.5,
+            invoiceGrossWeight: 15,
+            plGrossWeight: 15,
+            espelhoGrossWeight: 15,
+            qtyMatch: true,
+            matched: true,
+            espelhoMatched: true,
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    expect(screen.getByRole('columnheader', { name: /^Caixas$/i })).toBeInTheDocument();
+    const row = screen.getByText('Produto A').closest('tr') as HTMLTableRowElement;
+    // Box counts are integers (no decimals) and shown per source.
+    expect(within(row).getByText('3')).toBeInTheDocument();
+    expect(within(row).getByText('4')).toBeInTheDocument();
+    expect(within(row).getByText('5')).toBeInTheDocument();
+  });
+
   it('shows a Sistema column with inline system values when system data is available', () => {
     mockQueries({
       comparison: {

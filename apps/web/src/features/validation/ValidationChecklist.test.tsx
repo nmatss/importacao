@@ -264,9 +264,39 @@ describe('ValidationChecklist', () => {
       screen.getByText(/Ver a lista completa em "Itens no Packing List sem correspondencia/i),
     ).toBeInTheDocument();
     // The header makes clear this surface does not report its own number.
+    expect(screen.getByText(/esta lista nao reporta um numero proprio/i)).toBeInTheDocument();
+  });
+
+  it('treats the Invoice-direction unmatched variant (items.unmatched.invoice) as an item anomaly', async () => {
+    // The backend emits the Invoice→PL direction under `items.unmatched.invoice`.
+    // The panel must detect it by prefix and give it the same friendly grouped
+    // treatment — pointing to the Comparativo Geral list, NOT the raw field name
+    // or an independent percentage.
+    vi.mocked(api.post).mockResolvedValueOnce({
+      anomalies: [
+        {
+          field: 'items.unmatched.invoice',
+          description:
+            '1 item na Invoice sem correspondencia no Packing List (comparacao deterministica).',
+          severity: 'medium',
+          confidence: 0.9,
+        },
+      ],
+    });
+    renderChecklist([{ id: 1, checkName: 'ports-match', status: 'passed' }]);
+
+    fireEvent.click(screen.getByRole('button', { name: /Analisar divergências/i }));
+
+    expect(await screen.findByText(/Anomalias Detectadas pela IA/i)).toBeInTheDocument();
+    // Friendly grouped label is shown instead of the raw field key.
+    expect(screen.getByText('Itens sem correspondencia')).toBeInTheDocument();
+    expect(screen.queryByText('items.unmatched.invoice')).not.toBeInTheDocument();
+    // It points back to the single canonical list.
     expect(
-      screen.getByText(/esta lista nao reporta um numero proprio/i),
+      screen.getByText(/Ver a lista completa em "Itens no Packing List sem correspondencia/i),
     ).toBeInTheDocument();
+    // No independent confidence percentage is surfaced for the reconciled signal.
+    expect(screen.queryByText('90%')).not.toBeInTheDocument();
   });
 
   it('saves the current draft body HTML even when the editor has not blurred', async () => {

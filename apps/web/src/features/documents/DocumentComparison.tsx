@@ -275,16 +275,20 @@ function StatusCell({ value, status }: { value: string | null; status?: DisplayS
   );
 }
 
+// Per-source value cell stacking INV/PL/Esp. Used for net/gross weight (2
+// decimals) and, with digits=0, for box counts which are whole numbers.
 function WeightCell({
   invoice,
   pl,
   espelho,
   hasEspelho,
+  digits = 2,
 }: {
   invoice: number | null | undefined;
   pl: number | null | undefined;
   espelho: number | null | undefined;
   hasEspelho: boolean;
+  digits?: number;
 }) {
   const parts: Array<{ key: string; label: string; value: number | null | undefined }> = [
     { key: 'inv', label: 'INV', value: invoice },
@@ -301,7 +305,7 @@ function WeightCell({
         {visible.map((p) => (
           <span key={p.key}>
             <span className="text-[9px] uppercase text-slate-400 mr-1">{p.label}</span>
-            {formatNumber(p.value)}
+            {formatNumber(p.value, digits)}
           </span>
         ))}
       </div>
@@ -1038,6 +1042,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     Total INV
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Caixas
+                  </th>
+                  <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Peso Liquido
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -1122,6 +1129,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       {formatMoney(item.invoiceTotal)}
                     </td>
                     <WeightCell
+                      invoice={item.invoiceBoxes}
+                      pl={item.plBoxes}
+                      espelho={item.espelhoBoxes}
+                      hasEspelho={!!data.hasEspelho}
+                      digits={0}
+                    />
+                    <WeightCell
                       invoice={item.invoiceNetWeight}
                       pl={item.plNetWeight}
                       espelho={item.espelhoNetWeight}
@@ -1158,7 +1172,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 ))}
                 {filteredItemRows.length === 0 && (
                   <tr>
-                    <td colSpan={15} className="px-3 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={16} className="px-3 py-8 text-center text-sm text-slate-400">
                       Nenhum item no filtro selecionado.
                     </td>
                   </tr>
