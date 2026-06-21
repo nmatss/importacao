@@ -28,6 +28,9 @@ export const draftBLResponseSchema = z.object({
   totalCbm: confidenceField(z.number()),
   freightValue: confidenceField(z.number()),
   freightCurrency: confidenceField(z.string()),
+  // Tipo de container (40'HQ, 40'NOR, 20'GP, LCL) — espelha o BL Final para que o
+  // Draft BL também preencha "Container" no quadro de Informações do Processo.
+  containerType: confidenceField(z.string()).optional(),
   cargoDescription: confidenceField(z.string()),
   freeTime: confidenceField(z.number()),
   woodDeclaration: confidenceField(z.boolean()),

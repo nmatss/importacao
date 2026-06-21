@@ -468,7 +468,7 @@ describe('documentService', () => {
   });
 
   describe('getComparison()', () => {
-    it('does not compare invoice issue date as ETD and uses strict port normalization', async () => {
+    it('uses invoice issue date as a wide-tolerance ETD fallback and strict port normalization', async () => {
       queryQueue.push(
         createResolvedChain([
           {
@@ -521,8 +521,12 @@ describe('documentService', () => {
         (row: any) => row.label === 'Porto Destino',
       );
 
+      // Invoice has no ETD/shipmentDate, so its issue date (2026-01-01) is used as
+      // a fallback. The ~31-day gap to the BL shipment date (2026-02-01) is within
+      // the widened tolerance (matchDays 45) and must NOT flag as divergent —
+      // per Eduarda, these dates do not need to be equal.
       expect(etd).toMatchObject({
-        invoice: null,
+        invoice: '2026-01-01',
         packingList: '2026-02-01',
         bl: '2026-02-01',
         status: 'match',
