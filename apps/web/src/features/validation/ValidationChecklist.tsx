@@ -876,7 +876,12 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               // The reconciled item-presence anomaly carries the deterministic
               // count; it is the canonical unmatched-items signal, so we point
               // back to the Comparativo Geral list instead of re-stating a count.
-              const isReconciledItemMatch = anomaly.field === ITEM_MATCH_ANOMALY_FIELD;
+              // The backend emits this in BOTH directions under variant fields
+              // (`items.unmatched`, `items.unmatched.invoice`, `items.unmatched.pl`),
+              // so match by prefix instead of strict equality to cover them all.
+              const isReconciledItemMatch =
+                anomaly.field === ITEM_MATCH_ANOMALY_FIELD ||
+                anomaly.field?.startsWith(`${ITEM_MATCH_ANOMALY_FIELD}.`) === true;
               return (
                 <div
                   key={i}

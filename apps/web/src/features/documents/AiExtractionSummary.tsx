@@ -30,14 +30,19 @@ const LOW_FIELD_CONFIDENCE = 0.5;
 // Field label mapping per document type
 const FIELD_LABELS: Record<string, Record<string, string>> = {
   invoice: {
-    invoiceNumber: 'Nº Fatura',
+    invoiceNumber: 'Nº Invoice',
     invoiceDate: 'Data',
     exporterName: 'Exportador',
+    exporterTaxId: 'CNPJ/Tax ID Exportador',
     importerName: 'Importador',
+    importerCnpj: 'CNPJ Importador',
     incoterm: 'Incoterm',
     currency: 'Moeda',
-    portOfLoading: 'Porto Embarque',
-    portOfDischarge: 'Porto Destino',
+    portOfLoading: 'Porto de Embarque',
+    portOfDischarge: 'Porto de Descarga',
+    shipmentDate: 'Data de Embarque',
+    etd: 'ETD',
+    shippedOnBoardDate: 'Shipped On Board',
     totalFobValue: 'Valor FOB Total',
     totalBoxes: 'Total Caixas',
     totalNetWeight: 'Peso Líquido (kg)',
@@ -51,7 +56,14 @@ const FIELD_LABELS: Record<string, Record<string, string>> = {
     invoiceNumber: 'Nº Invoice Ref',
     date: 'Data',
     exporterName: 'Exportador',
+    exporterTaxId: 'CNPJ/Tax ID Exportador',
     importerName: 'Importador',
+    importerCnpj: 'CNPJ Importador',
+    portOfLoading: 'Porto de Embarque',
+    portOfDischarge: 'Porto de Descarga',
+    shipmentDate: 'Data de Embarque',
+    etd: 'ETD',
+    shippedOnBoardDate: 'Shipped On Board',
     totalBoxes: 'Total Caixas',
     totalNetWeight: 'Peso Líquido (kg)',
     totalGrossWeight: 'Peso Bruto (kg)',
@@ -467,23 +479,59 @@ export function AiExtractionSummary({
               const desc = extractValue(item.description).value;
               const qty = extractValue(item.quantity).value;
               const unit = extractValue(item.unitType || item.unit).value;
+              // Secondary per-item attributes (only rendered when present) so the
+              // EAN/cor/tamanho/peso/NCM the user reported as "missing" are visible
+              // without cluttering the primary line.
+              const ean = extractValue(item.ean).value;
+              const color = extractValue(item.color).value;
+              const size = extractValue(item.size).value;
+              const netWeight = extractValue(item.netWeight).value;
+              const grossWeight = extractValue(item.grossWeight).value;
+              const ncm = extractValue(item.ncmCode || item.ncm).value;
+              const chips: Array<{ label: string; value: string }> = [];
+              if (ean) chips.push({ label: 'EAN', value: String(ean) });
+              if (color) chips.push({ label: 'Cor', value: String(color) });
+              if (size) chips.push({ label: 'Tam', value: String(size) });
+              if (netWeight != null && netWeight !== '')
+                chips.push({
+                  label: 'Líq',
+                  value: `${Number(netWeight).toLocaleString('pt-BR')} kg`,
+                });
+              if (grossWeight != null && grossWeight !== '')
+                chips.push({
+                  label: 'Bruto',
+                  value: `${Number(grossWeight).toLocaleString('pt-BR')} kg`,
+                });
+              if (ncm) chips.push({ label: 'NCM', value: String(ncm) });
               return (
-                <div
-                  key={idx}
-                  className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-400"
-                >
-                  <span className="font-mono text-slate-400 w-5 text-right">{idx + 1}.</span>
-                  {code ? (
-                    <span className="font-medium text-slate-700 dark:text-slate-300">
-                      {String(code)}
-                    </span>
+                <div key={idx} className="text-xs text-slate-600 dark:text-slate-400">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-400 w-5 text-right">{idx + 1}.</span>
+                    {code ? (
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {String(code)}
+                      </span>
+                    ) : null}
+                    <span className="truncate flex-1">{desc ? String(desc) : '—'}</span>
+                    {qty != null && (
+                      <span className="shrink-0 font-medium">
+                        {Number(qty).toLocaleString('pt-BR')} {unit ? String(unit) : ''}
+                      </span>
+                    )}
+                  </div>
+                  {chips.length > 0 ? (
+                    <div className="ml-7 mt-0.5 flex flex-wrap gap-1">
+                      {chips.map((chip) => (
+                        <span
+                          key={chip.label}
+                          className="rounded bg-slate-100 dark:bg-slate-700/50 px-1.5 py-0.5 text-[10px] text-slate-500 dark:text-slate-400"
+                        >
+                          <span className="text-slate-400 dark:text-slate-500">{chip.label}</span>{' '}
+                          {chip.value}
+                        </span>
+                      ))}
+                    </div>
                   ) : null}
-                  <span className="truncate flex-1">{desc ? String(desc) : '—'}</span>
-                  {qty != null && (
-                    <span className="shrink-0 font-medium">
-                      {Number(qty).toLocaleString('pt-BR')} {unit ? String(unit) : ''}
-                    </span>
-                  )}
                 </div>
               );
             })}
