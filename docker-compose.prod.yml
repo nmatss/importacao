@@ -126,6 +126,14 @@ services:
       SYDLE_TICKET_CLASS_ID: ${SYDLE_TICKET_CLASS_ID:-5d446dfc62d9656275a47d69}
       SYDLE_TICKET_STATUS_CLASS_ID: ${SYDLE_TICKET_STATUS_CLASS_ID:-5cacdc04a50bfe4c0d3e5c74}
       SYDLE_CURRENCY_CLASS_ID: ${SYDLE_CURRENCY_CLASS_ID:-000000000000000000000059}
+      # Caso B (enriquecimento): classes vizinhas confirmadas pelo probe em grupounico.sydle.one.
+      SYDLE_BRAND_CLASS_ID: ${SYDLE_BRAND_CLASS_ID:-685179c16732f5038aaed372}
+      SYDLE_RECIPIENT_CLASS_ID: ${SYDLE_RECIPIENT_CLASS_ID:-689cd3bd27624d322604be16}
+      SYDLE_ENTERPRISE_CLASS_ID: ${SYDLE_ENTERPRISE_CLASS_ID:-591365fef5ca53284cd8d159}
+      # Liga o join da 2a tabela (requestData + classes vizinhas): processCode,
+      # invoiceNumber, brand, supplierName. Validado read-only em 2026-06-21
+      # (8/8 fornecedor+invoice, 6/8 processCode). Default OFF; ligar via SOPS.
+      SYDLE_ONE_ENRICH_FIELDS: ${SYDLE_ONE_ENRICH_FIELDS:-false}
       GOOGLE_ADMIN_EMAIL: ${GOOGLE_ADMIN_EMAIL:-}
       GOOGLE_GROUP_ALLOWED: ${GOOGLE_GROUP_ALLOWED:?GOOGLE_GROUP_ALLOWED is required}
       GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET: ${GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET:-false}

@@ -82,6 +82,40 @@ supplier_name** passam a ser populados — destravando match exato por processo 
 os pesos de invoice (+0.45) e fornecedor (+0.2) no `matchProcess`. Faltam só os
 campos atrás do 403 (Caso C).
 
+## Reauditoria 2026-06-21 (validação read-only do join + mapa completo)
+
+Rodado `scripts/sydle-flow-audit.mjs` dentro do container `importacao-api`
+(read-only). Amostra de 8 registros recentes (os que aparecem na tela hoje).
+
+**Mapa completo das classes do fluxo** (todo `_classId` referenciado):
+
+| Classe                         | Papel / referência                                          | Acesso  |
+| ------------------------------ | ----------------------------------------------------------- | ------- |
+| `68bf1179b042c72f03993928`     | pagamentos (classe base)                                    | 200     |
+| `5d446dfc62d9656275a47d69`     | ticket                                                      | 200     |
+| `5cacdc04a50bfe4c0d3e5c74`     | ticket_status                                               | 200     |
+| `000000000000000000000059`     | currency (`paymentData.paymentCurrency`)                    | 200     |
+| `685179c16732f5038aaed372`     | brand (`requestData.brand`)                                 | 200     |
+| `689cd3bd27624d322604be16`     | recipient (`requestData.recipient`)                         | 200     |
+| `591365fef5ca53284cd8d159`     | enterprise (`recipient.enterprise`)                         | 200     |
+| `595c20500000000000000110/190` | processVersion / process status                             | 200     |
+| `0000…0002` / `0000…0000`      | usuário / classe de sistema                                 | 200     |
+| **`68bf1179b042c72f03995efb`** | **`_concreteObject`** (form detalhado)                      | **403** |
+| **`64f22b57e85f4a4b92376c43`** | **`processInstanceControl.activeElements`** (atividade BPM) | **403** |
+
+**Validação do enriquecimento (dry-run, o que a flag ligada preencheria):**
+nos 8 registros — **8/8 supplierName**, **8/8 invoiceNumber**, **8/8 brand**,
+**6/8 processCode** (2 têm `requestData.processCode` nulo, mas têm invoiceCode).
+Ex.: `SYDLE-5337` → processCode `PK2082605SZ`, supplier `KIOM GLOBAL LIMITED`,
+brand `Puket`. Câmbio/BRL/banco/contrato/proforma/remessa: **vazios nos 8**
+(confirmado: estão atrás das 2 classes 403). Pedido de acesso em
+`docs/SYDLE-ACESSO-CLASSES-403.md`.
+
+**Conclusão:** ligar `SYDLE_ONE_ENRICH_FIELDS=true` destrava processo + invoice +
+marca + fornecedor e a conciliação (hoje 0/20). O bloco financeiro depende da
+SYDLE liberar as 2 classes 403. Rollout: flag em SOPS → deploy → resync completo
+(cursor zerado) → validar drawer → rotacionar `SYDLE_PASSWORD`.
+
 ## Árvore de decisão a partir do resultado do probe
 
 Rode o probe onde as credenciais existem (servidor de produção, onde o `.env` é
