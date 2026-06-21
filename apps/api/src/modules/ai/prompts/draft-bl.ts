@@ -29,6 +29,7 @@ ATENCAO ESPECIAL PARA DRAFT BL:
 - "Shipped on Board" ou "On Board Date" = data real de embarque (shipmentDate)
 - Container number: formato ISO 6346 = 4 letras + 7 numeros (ex: TCLU1234567)
 - Se houver mais de 1 container, liste todos separados por virgula
+- containerType = TIPO do container (ex: "40'HQ", "40'NOR", "20'GP", "LCL"). NAO confunda com containerNumber.
 - cargoDescription = descricao completa das mercadorias como aparece no BL
 
 REGRAS DE EXTRACAO — BL:
@@ -62,6 +63,7 @@ Responda com JSON estrito:
   "totalCbm": { "value": 0.0, "confidence": 0.0 },
   "freightValue": { "value": 0.0, "confidence": 0.0 },
   "freightCurrency": { "value": "", "confidence": 0.0 },
+  "containerType": { "value": "", "confidence": 0.0 },
   "cargoDescription": { "value": "", "confidence": 0.0 },
   "freeTime": { "value": null, "confidence": 0.0 },
   "woodDeclaration": { "value": false, "confidence": 0.0 },

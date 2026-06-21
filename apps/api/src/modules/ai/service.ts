@@ -40,7 +40,7 @@ import {
 } from './utils/invoice-text-parser.js';
 import { tryParsePackingListText } from './utils/packing-list-text-parser.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
-import { tryParseProformaText } from './utils/proforma-text-parser.js';
+import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 
 export { AIBudgetExceededError };
 
@@ -1002,7 +1002,16 @@ Responda SOMENTE com JSON estrito no formato:
           'proforma_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.proforma : undefined,
         );
-        const data = this.zodParse(response, 'proforma extraction', proformaResponseSchema);
+        // Fill nulls from the deterministic parse so PI/FOB/currency are not lost
+        // when the model misses them — covers proformas WITHOUT NCM line items,
+        // where the deterministic short-circuit above does not fire.
+        const data = fillProformaNullsFromText(
+          this.zodParse(response, 'proforma extraction', proformaResponseSchema) as Record<
+            string,
+            any
+          >,
+          text,
+        );
         const dataAsRecord = data as Record<string, any>;
         if (Array.isArray(dataAsRecord.items)) {
           stripSpuriousItemPrefix(dataAsRecord.items);

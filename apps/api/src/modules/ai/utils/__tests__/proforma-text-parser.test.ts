@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tryParseProformaText } from '../proforma-text-parser.js';
+import { tryParseProformaText, fillProformaNullsFromText } from '../proforma-text-parser.js';
 
 const proformaText = `PROFORMA INVOICE
 PI No: PI7765Y        Date: 15/03/2024
@@ -52,5 +52,45 @@ TOTAL FOB: USD 1020.00`);
 NOTA FISCAL ELETRONICA NF-E
 Valor Total R$ 1.234,56`);
     expect(parsed).toBeNull();
+  });
+});
+
+describe('fillProformaNullsFromText', () => {
+  // Proforma carrying PI + FOB but NO NCM line items: the deterministic
+  // short-circuit does not fire, so the model path must still recover the
+  // scalars instead of dropping them (Eduarda: proforma "não preencheu FOB").
+  const piOnlyText = `PROFORMA INVOICE
+PI No: PI9001Y        Date: 10/02/2026
+Incoterm: FOB        Currency: USD
+TOTAL FOB: USD 4500.00`;
+
+  it('fills null PI number and FOB from the deterministic parse', () => {
+    const modelData: Record<string, any> = {
+      piNumber: { value: null, confidence: 0 },
+      totalFobValue: { value: null, confidence: 0 },
+      currency: { value: null, confidence: 0 },
+      items: [],
+    };
+    const filled = fillProformaNullsFromText(modelData, piOnlyText);
+    expect(filled.piNumber.value).toBe('PI9001Y');
+    expect(filled.totalFobValue.value).toBe(4500);
+    expect(filled.currency.value).toBe('USD');
+  });
+
+  it('does not overwrite values the model already extracted', () => {
+    const modelData: Record<string, any> = {
+      piNumber: { value: 'PI-MODEL', confidence: 0.9 },
+      totalFobValue: { value: null, confidence: 0 },
+      items: [],
+    };
+    const filled = fillProformaNullsFromText(modelData, piOnlyText);
+    expect(filled.piNumber.value).toBe('PI-MODEL');
+    expect(filled.totalFobValue.value).toBe(4500);
+  });
+
+  it('returns the data untouched when the text is not a proforma', () => {
+    const modelData: Record<string, any> = { piNumber: { value: null, confidence: 0 } };
+    const filled = fillProformaNullsFromText(modelData, 'COMMERCIAL INVOICE only');
+    expect(filled.piNumber.value).toBeNull();
   });
 });

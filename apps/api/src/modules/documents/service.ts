@@ -2017,6 +2017,10 @@ export const documentService = {
       espelho?: unknown;
       kind?: Kind;
       criticality?: Criticality;
+      // Per-row date tolerance (only used when kind === 'date'). Lets the ETD row
+      // widen tolerance so an Invoice/PL issue date used as a fallback is only
+      // flagged when VERY divergent from the BL shipment date.
+      dateOpts?: { matchDays?: number; warnDays?: number };
     }
 
     const aggregateFields: AggregateRow[] = [
@@ -2149,6 +2153,11 @@ export const documentService = {
         criticality: 'secondary',
       },
       {
+        // Eduarda: considerar a data da Invoice e do Packing List aqui, mas marcar
+        // divergente apenas se MUITO divergentes (não precisam ser iguais). A data
+        // de embarque real (ETD/shipmentDate) tem precedência; a data de EMISSÃO da
+        // Invoice / data do Packing List entram só como fallback, com tolerância
+        // ampla (match ≤45d, warning ≤90d, divergente acima disso).
         label: 'ETD / Shipped On Board',
         inv:
           inv?.etd ??
@@ -2156,14 +2165,17 @@ export const documentService = {
           inv?.shippingDate ??
           inv?.dateOfShipment ??
           inv?.shippedOnBoardDate ??
-          inv?.onBoardDate,
+          inv?.onBoardDate ??
+          inv?.invoiceDate,
         pl:
           pl?.etd ??
           pl?.shipmentDate ??
           pl?.shippingDate ??
           pl?.dateOfShipment ??
           pl?.shippedOnBoardDate ??
-          pl?.onBoardDate,
+          pl?.onBoardDate ??
+          pl?.packingListDate ??
+          pl?.date,
         bl:
           operationalBl?.shipmentDate ??
           operationalBl?.shippedOnBoardDate ??
@@ -2171,6 +2183,7 @@ export const documentService = {
           operationalBl?.etd,
         espelho: null,
         kind: 'date',
+        dateOpts: { matchDays: 45, warnDays: 90 },
       },
       {
         label: 'ETA',
@@ -2204,7 +2217,7 @@ export const documentService = {
     const aggregateComparison = aggregateFields.map((f, index) => {
       const rawValues = [f.inv, f.pl, f.bl, f.espelho];
       const values = rawValues.filter((v) => v != null && v !== '');
-      let status = computeRowStatus(values, f.kind ?? 'string');
+      let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
       const criticality: Criticality = f.criticality ?? 'critical';
       if (criticality === 'secondary' && status === 'divergent') status = 'warning';
       return {
@@ -2490,12 +2503,16 @@ function itemComparisonMessage(
   return `${divergence}; requer correcao ou aceite.`;
 }
 
-function computeRowStatus(values: unknown[], kind: string): RowStatus {
+function computeRowStatus(
+  values: unknown[],
+  kind: string,
+  dateOpts?: { matchDays?: number; warnDays?: number },
+): RowStatus {
   if (values.length === 0) return 'empty';
   if (values.length === 1) return 'match';
 
   if (kind === 'date') {
-    return compareDates(values) as RowStatus;
+    return compareDates(values, dateOpts) as RowStatus;
   }
 
   if (kind === 'port') {

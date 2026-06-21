@@ -102,6 +102,63 @@ export function tryParseProformaText(text: string): Record<string, any> | null {
   };
 }
 
+/**
+ * Fill NULL proforma fields from the deterministic text parse — mirrors
+ * fillInvoiceNullsFromText. Used on the LLM path so that scalars the parser
+ * recovers (piNumber/totalFobValue/currency/...) are NOT lost when the LLM
+ * returns them null. Critical for proformas WITHOUT NCM line items: the
+ * deterministic short-circuit only fires when items.length > 0, so a proforma
+ * carrying only PI + FOB would otherwise drop both on the model path.
+ */
+const PROFORMA_FILL_KEYS = [
+  'piNumber',
+  'invoiceNumber',
+  'invoiceDate',
+  'validUntil',
+  'exporterName',
+  'importerName',
+  'importerCnpj',
+  'incoterm',
+  'currency',
+  'portOfLoading',
+  'portOfDischarge',
+  'totalFobValue',
+  'totalBoxes',
+  'totalNetWeight',
+  'totalGrossWeight',
+  'totalCbm',
+] as const;
+
+export function fillProformaNullsFromText(
+  data: Record<string, any>,
+  text: string,
+): Record<string, any> {
+  const parsed = tryParseProformaText(text);
+  if (!parsed) return data;
+  const out: Record<string, any> = { ...data };
+  for (const key of PROFORMA_FILL_KEYS) {
+    const par = parsed[key] as ConfidenceField<unknown> | undefined;
+    const cur = out[key] as ConfidenceField<unknown> | undefined;
+    if (
+      par &&
+      par.value != null &&
+      par.value !== '' &&
+      (!cur || cur.value == null || cur.value === '')
+    ) {
+      out[key] = par;
+    }
+  }
+  // Recover line items only when the model returned none and the parser found some.
+  if (
+    (!Array.isArray(out.items) || out.items.length === 0) &&
+    Array.isArray(parsed.items) &&
+    parsed.items.length > 0
+  ) {
+    out.items = parsed.items;
+  }
+  return out;
+}
+
 function isProforma(text: string): boolean {
   const upper = text.toUpperCase();
   if (
