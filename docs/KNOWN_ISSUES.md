@@ -1,6 +1,23 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-20
+Ultima atualizacao: 2026-06-21
+
+## Backlog do feedback da Eduarda 2026-06-21 (nao bloqueante; pos PR #99)
+
+- **Packing List sem null-fill deterministico:** a Invoice tem `fillInvoiceNullsFromText`
+  (recupera data/porto/exportador via regex), mas o Packing List nao tem equivalente —
+  campos de header do PL dependem 100% do modelo. **Fix:** `fillPackingListNullsFromText`
+  simetrico (`ai/utils`). Teto maior (PL escaneado/itens) depende de Vertex (#60).
+- **Coluna "Sistema" no comparativo POR ITEM:** o painel agregado "Documentos vs Sistema"
+  ja existe, mas a sugestao da Eduarda de ter a coluna Sistema tambem no quadro por item
+  exige validacoes de sistema em **nivel de item** no backend (`documents/service.ts`
+  `getComparison` so produz checks de sistema agregados). Redesenho, nao bug.
+- **Reconcile de anomalias (7-vs-1) sob erro de BD — NAO e bug:** `reconcileItemAnomalies`
+  faz fail-open (mantem anomalias da IA se `getComparison` falhar) em vez de esconde-las
+  durante um outage. Comportamento intencional/documentado; sem acao.
+- **Extracao "78% da Invoice" / datas Invoice+PL:** parcialmente coberto por
+  `fillInvoiceNullsFromText` + comparativo ETD com tolerancia ampla (PR #99). O teto de
+  qualidade (invoices escaneadas sem OCR, itens) continua no modelo local → Vertex (#60).
 
 ## Follow-ups do review enterprise 2026-06-20 (nao bloqueantes p/ staging)
 

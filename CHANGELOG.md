@@ -5,6 +5,43 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-06-21 - Feedback Eduarda: finalizacao + verificacao adversarial (PR #99)
+
+Auditoria multi-agente (18 itens do feedback: audit + verificacao adversarial)
+contra o codigo ja em producao. Maioria ja estava em `master`; deploy de `fa75ffe`
+ja havia ocorrido. Verificadores derrubaram 4 "done" para defeitos reais — corrigidos.
+Doc canonico: `docs/STATUS-2026-06-21.md`. Prod `fa75ffe` -> `df13229`.
+
+### Added
+
+- `fillProformaNullsFromText` (`ai/utils/proforma-text-parser.ts`): preenche
+  escalares (piNumber/totalFobValue/currency/...) no caminho do LLM a partir do
+  parse deterministico — proforma com PI+FOB mas SEM itens NCM nao perde mais os dados.
+- `containerType` no schema + prompt do **Draft BL** (`draft-bl-response.ts`,
+  `prompts/draft-bl.ts`) — antes so o BL Final/OHBL extraia; processos so com Draft
+  BL ficavam sem "Container".
+- `dateOpts` por linha em `computeRowStatus` (`documents/service.ts`) — tolerancia
+  de data configuravel por linha do comparativo.
+- Teste de regressao `processes/__tests__/logistic-auto-advance.test.ts` (transicao
+  automatica para "em transito" quando o ETD/embarque esta no passado).
+
+### Fixed
+
+- **Comparativo "ETD / Shipped On Board"** voltou a considerar as datas de emissao
+  da Invoice e do Packing List como fallback (removidas em `fdd17d9`), com
+  **tolerancia ampla** (match <=45d, warning <=90d): divergente so se MUITO
+  divergente (pedido da Eduarda — "nao precisam ser iguais").
+- Draft BL preenche "Container" em Informacoes do Processo (via `containerType`).
+- Proforma sem linhas NCM nao perde mais PI/FOB no caminho do modelo.
+
+### Notes
+
+- Itens externos pendentes: Vertex IAM 403 (#60) e destinatarios operacionais (#78).
+- Backlog: `fillPackingListNullsFromText` simetrico; coluna "Sistema" no comparativo
+  POR ITEM (exige validacao de sistema em nivel de item no backend).
+
+---
+
 ## [Unreleased] - 2026-06-20 - Extracao 1000% + relatorio Sydle + review enterprise
 
 ### Added
