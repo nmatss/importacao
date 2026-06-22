@@ -51,29 +51,83 @@ export async function getMonthlySpendUSD(): Promise<number> {
 }
 
 /**
+ * Soma de cost_usd do DIA corrente (America/Sao_Paulo). Base do teto diario em
+ * R$ (Nicolas 2026-06-22). Mesmo fail-open do mensal: 0 em erro de BD.
+ */
+export async function getDailySpendUSD(): Promise<number> {
+  try {
+    const rows = await db
+      .select({
+        total: sql<string>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+      })
+      .from(aiUsageLog)
+      .where(
+        sql`${aiUsageLog.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+      );
+    const value = Number(rows[0]?.total ?? 0);
+    return Number.isFinite(value) ? value : 0;
+  } catch (err) {
+    logger.error({ err }, 'getDailySpendUSD failed — assuming 0 to avoid blocking calls');
+    return 0;
+  }
+}
+
+/**
  * Throws AIBudgetExceededError when the monthly cap has been hit.
  * Also sends an 80%-threshold warning alert (idempotent per day via
  * alert title fingerprint — alertService handles dedup).
  */
 export async function assertBudgetAvailable(): Promise<void> {
-  const budgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
-  if (!Number.isFinite(budgetUSD) || budgetUSD <= 0) return; // cap disabled
-
-  const spent = await getMonthlySpendUSD();
-  if (spent >= budgetUSD) {
-    throw new AIBudgetExceededError(spent, budgetUSD);
+  // ── Teto MENSAL (USD) — AI_MONTHLY_BUDGET_USD (0 desativa). ──
+  const monthlyBudgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
+  if (Number.isFinite(monthlyBudgetUSD) && monthlyBudgetUSD > 0) {
+    const spent = await getMonthlySpendUSD();
+    if (spent >= monthlyBudgetUSD) {
+      throw new AIBudgetExceededError(spent, monthlyBudgetUSD, 'mensal');
+    }
+    if (spent >= monthlyBudgetUSD * 0.8) {
+      const today = new Date().toISOString().slice(0, 10);
+      alertService
+        .create({
+          severity: 'warning',
+          title: `IA: 80% do orçamento mensal consumido (${today})`,
+          message: `Gasto até agora: $${spent.toFixed(2)} de $${monthlyBudgetUSD.toFixed(2)} (≈ R$ ${(spent * 5).toFixed(0)} de R$ ${(monthlyBudgetUSD * 5).toFixed(0)}). Acompanhe o consumo em /api/ai/usage ou suspenda novas extrações ajustando AI_MONTHLY_BUDGET_USD=0 temporariamente.`,
+        })
+        .catch((err) => logger.warn({ err }, 'Failed to create 80%-budget alert (dedup expected)'));
+    }
   }
 
-  // 80% warning — fire once per day
-  if (spent >= budgetUSD * 0.8) {
-    const today = new Date().toISOString().slice(0, 10);
-    alertService
-      .create({
-        severity: 'warning',
-        title: `IA: 80% do orçamento mensal consumido (${today})`,
-        message: `Gasto até agora: $${spent.toFixed(2)} de $${budgetUSD.toFixed(2)} (≈ R$ ${(spent * 5).toFixed(0)} de R$ ${(budgetUSD * 5).toFixed(0)}). Acompanhe o consumo em /api/ai/usage ou suspenda novas extrações ajustando AI_MONTHLY_BUDGET_USD=0 temporariamente.`,
-      })
-      .catch((err) => logger.warn({ err }, 'Failed to create 80%-budget alert (dedup expected)'));
+  // ── Teto DIÁRIO (R$) — Nicolas 2026-06-22: "limitar o uso por dia de 100 reais". ──
+  // O custo é rastreado em USD; convertemos o limite em R$ via AI_BRL_PER_USD
+  // (default 5, a mesma taxa conservadora do teto mensal). AI_DAILY_BUDGET_BRL=0
+  // desativa. A IA local é grátis (custo 0), então este teto só morde providers
+  // pagos (Vertex/OpenRouter) — é a trava de custo antes de ligar o Vertex.
+  const dailyBudgetBRL = Number(process.env.AI_DAILY_BUDGET_BRL ?? '100');
+  const brlPerUsd = Number(process.env.AI_BRL_PER_USD ?? '5');
+  if (
+    Number.isFinite(dailyBudgetBRL) &&
+    dailyBudgetBRL > 0 &&
+    Number.isFinite(brlPerUsd) &&
+    brlPerUsd > 0
+  ) {
+    const dailyBudgetUSD = dailyBudgetBRL / brlPerUsd;
+    const spentTodayUSD = await getDailySpendUSD();
+    if (spentTodayUSD >= dailyBudgetUSD) {
+      throw new AIBudgetExceededError(spentTodayUSD, dailyBudgetUSD, 'diário');
+    }
+    if (spentTodayUSD >= dailyBudgetUSD * 0.8) {
+      const today = new Date().toISOString().slice(0, 10);
+      const spentBRL = spentTodayUSD * brlPerUsd;
+      alertService
+        .create({
+          severity: 'warning',
+          title: `IA: 80% do teto diário consumido (${today})`,
+          message: `Gasto hoje: ≈ R$ ${spentBRL.toFixed(0)} de R$ ${dailyBudgetBRL.toFixed(0)} (limite diário). Novas extrações serão bloqueadas ao atingir o teto; ele reseta amanhã. Ajuste AI_DAILY_BUDGET_BRL para mudar.`,
+        })
+        .catch((err) =>
+          logger.warn({ err }, 'Failed to create 80%-daily-budget alert (dedup expected)'),
+        );
+    }
   }
 }
 
@@ -115,6 +169,11 @@ export async function getUsageSummary(): Promise<{
   monthlySpendUSD: number;
   budgetUSD: number;
   budgetPctUsed: number;
+  dailySpendUSD: number;
+  dailySpendBRL: number;
+  dailyBudgetBRL: number;
+  dailyBudgetUSD: number;
+  dailyPctUsed: number;
   byModel: Array<{
     model: string;
     calls: number;
@@ -125,6 +184,11 @@ export async function getUsageSummary(): Promise<{
 }> {
   const budgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
   const monthlySpendUSD = await getMonthlySpendUSD();
+
+  const dailyBudgetBRL = Number(process.env.AI_DAILY_BUDGET_BRL ?? '100');
+  const brlPerUsd = Number(process.env.AI_BRL_PER_USD ?? '5');
+  const dailyBudgetUSD = brlPerUsd > 0 ? dailyBudgetBRL / brlPerUsd : 0;
+  const dailySpendUSD = await getDailySpendUSD();
 
   const byModelRaw = await db
     .select({
@@ -144,6 +208,11 @@ export async function getUsageSummary(): Promise<{
     monthlySpendUSD,
     budgetUSD,
     budgetPctUsed: budgetUSD > 0 ? (monthlySpendUSD / budgetUSD) * 100 : 0,
+    dailySpendUSD,
+    dailySpendBRL: dailySpendUSD * brlPerUsd,
+    dailyBudgetBRL,
+    dailyBudgetUSD,
+    dailyPctUsed: dailyBudgetUSD > 0 ? (dailySpendUSD / dailyBudgetUSD) * 100 : 0,
     byModel: byModelRaw.map((r) => ({
       model: r.model,
       calls: Number(r.calls),

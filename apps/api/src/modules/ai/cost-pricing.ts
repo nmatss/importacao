@@ -20,9 +20,11 @@ export const MODEL_PRICING_USD_PER_1M: Record<string, { input: number; output: n
 
 export class AIBudgetExceededError extends Error {
   readonly statusCode = 429;
-  constructor(spentUSD: number, budgetUSD: number) {
+  constructor(spentUSD: number, budgetUSD: number, period: 'mensal' | 'diário' = 'mensal') {
+    const envVar = period === 'diário' ? 'AI_DAILY_BUDGET_BRL' : 'AI_MONTHLY_BUDGET_USD';
+    const wait = period === 'diário' ? 'aguarde amanhã' : 'aguarde o próximo mês';
     super(
-      `Orçamento mensal de IA esgotado: gasto $${spentUSD.toFixed(2)} >= limite $${budgetUSD.toFixed(2)}. Aumente AI_MONTHLY_BUDGET_USD ou aguarde o próximo mês.`,
+      `Orçamento ${period} de IA esgotado: gasto $${spentUSD.toFixed(2)} >= limite $${budgetUSD.toFixed(2)}. Aumente ${envVar} ou ${wait}.`,
     );
     this.name = 'AIBudgetExceededError';
   }

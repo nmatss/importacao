@@ -40,4 +40,12 @@ describe('AIBudgetExceededError', () => {
     expect(err.message).toContain('220');
     expect(err.message).toContain('200');
   });
+
+  it('supports a daily (diário) period with the daily env var hint', () => {
+    const err = new AIBudgetExceededError(20, 18.5, 'diário');
+    expect(err.statusCode).toBe(429);
+    expect(err.message).toContain('Orçamento diário');
+    expect(err.message).toContain('AI_DAILY_BUDGET_BRL');
+    expect(err.message).toContain('amanhã');
+  });
 });
