@@ -103,12 +103,14 @@ function toVertexBody(
   const generationConfig: Record<string, unknown> = {
     temperature: 0,
   };
+  // (toVertexSchema defined below — converts the shared JSON Schema to the
+  // restricted OpenAPI-3 subset Vertex's responseSchema accepts.)
   if (options.maxOutputTokens && options.maxOutputTokens > 0) {
     generationConfig.maxOutputTokens = options.maxOutputTokens;
   }
   if (options.responseSchema) {
     generationConfig.responseMimeType = 'application/json';
-    generationConfig.responseSchema = options.responseSchema;
+    generationConfig.responseSchema = toVertexSchema(options.responseSchema);
   } else if (options.jsonMode !== false) {
     generationConfig.responseMimeType = 'application/json';
   }
@@ -118,6 +120,36 @@ function toVertexBody(
     contents,
     generationConfig,
   };
+}
+
+/**
+ * Converte o JSON Schema compartilhado (gerado por zod-to-json-schema, usado tal
+ * qual pelo OpenRouter) para o subset OpenAPI-3 que o `responseSchema` do Vertex
+ * aceita. Sem isso, TODA extracao com structured output falha com HTTP 400
+ * (incidente 2026-06-22):
+ *   - remove campos nao suportados ($schema/$ref/$id/definitions/additionalProperties/default);
+ *   - converte `type: ['string','null']` (uniao nullable do Zod) em
+ *     `type: 'string'` + `nullable: true` (o Vertex rejeita `type` como array).
+ */
+export function toVertexSchema(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(toVertexSchema);
+  if (node && typeof node === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (['$schema', '$ref', '$id', 'definitions', 'additionalProperties', 'default'].includes(k)) {
+        continue;
+      }
+      if (k === 'type' && Array.isArray(v)) {
+        const concrete = (v as string[]).filter((t) => t !== 'null');
+        out.type = concrete[0] ?? 'string';
+        if ((v as string[]).includes('null')) out.nullable = true;
+        continue;
+      }
+      out[k] = toVertexSchema(v);
+    }
+    return out;
+  }
+  return node;
 }
 
 export class VertexAIProvider implements AIProvider {

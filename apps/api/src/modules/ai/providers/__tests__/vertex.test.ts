@@ -127,3 +127,27 @@ describe('VertexAIProvider', () => {
     ).rejects.toThrow(/GOOGLE_VERTEX_PROJECT/);
   });
 });
+
+
+describe('toVertexSchema (incidente 2026-06-22 — Vertex 400 no structured output)', () => {
+  it('converte type-array nullable do Zod e remove campos nao suportados', async () => {
+    const { toVertexSchema } = await import('../vertex.js');
+    const input = {
+      $schema: 'http://json-schema.org/draft-07/schema#',
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        blNumber: { type: ['string', 'null'] },
+        total: { type: 'number' },
+      },
+      required: ['blNumber'],
+    };
+    const out: any = toVertexSchema(input);
+    expect(out.$schema).toBeUndefined();
+    expect(out.additionalProperties).toBeUndefined();
+    expect(out.properties.blNumber.type).toBe('string');
+    expect(out.properties.blNumber.nullable).toBe(true);
+    expect(out.properties.total.type).toBe('number');
+    expect(out.required).toEqual(['blNumber']);
+  });
+});
