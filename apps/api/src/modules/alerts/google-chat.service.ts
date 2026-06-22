@@ -57,10 +57,21 @@ export function formatGoogleChatCard(alert: Alert) {
   };
 }
 
+// Circuit-breaker p/ webhook invalido (incidente 2026-06-22: key invalida ->
+// logger.error a cada validacao = spam). Apos N falhas consecutivas, para de
+// tentar por um cooldown e loga UMA vez em warn (em vez de error a cada chamada).
+let chatConsecutiveFailures = 0;
+let chatSkipUntil = 0;
+const CHAT_FAIL_THRESHOLD = 3;
+const CHAT_COOLDOWN_MS = 30 * 60_000;
+
 export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promise<boolean> {
   if (!webhookUrl) {
     logger.warn('Google Chat webhook URL not configured');
     return false;
+  }
+  if (Date.now() < chatSkipUntil) {
+    return false; // webhook em cooldown apos falhas repetidas — evita spam de log
   }
 
   const controller = new AbortController();
@@ -76,15 +87,30 @@ export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promis
     });
 
     if (!response.ok) {
-      const responseBody = (await response.text().catch(() => '')).slice(0, 500);
-      logger.error({ status: response.status, responseBody }, 'Google Chat webhook failed');
+      const responseBody = (await response.text().catch(() => '')).slice(0, 300);
+      chatConsecutiveFailures += 1;
+      if (chatConsecutiveFailures >= CHAT_FAIL_THRESHOLD) {
+        chatSkipUntil = Date.now() + CHAT_COOLDOWN_MS;
+        logger.warn(
+          { status: response.status, responseBody, cooldownMin: CHAT_COOLDOWN_MS / 60_000 },
+          'Google Chat webhook falhando (verifique GOOGLE_CHAT_WEBHOOK_URL/key) — pausando notificacoes pelo cooldown',
+        );
+      } else {
+        logger.warn({ status: response.status, responseBody }, 'Google Chat webhook failed');
+      }
       return false;
     }
 
+    chatConsecutiveFailures = 0;
+    chatSkipUntil = 0;
     logger.info({ alertTitle: alert.title }, 'Alert sent to Google Chat');
     return true;
   } catch (error: any) {
-    logger.error({ error: error.message }, 'Google Chat webhook error');
+    chatConsecutiveFailures += 1;
+    if (chatConsecutiveFailures >= CHAT_FAIL_THRESHOLD) {
+      chatSkipUntil = Date.now() + CHAT_COOLDOWN_MS;
+    }
+    logger.warn({ error: error.message }, 'Google Chat webhook error');
     return false;
   } finally {
     clearTimeout(timeout);
