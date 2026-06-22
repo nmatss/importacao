@@ -224,3 +224,90 @@ function sumField(items: Record<string, any>[], key: string): number | null {
   const sum = items.reduce((total, item) => total + (item[key]?.value ?? 0), 0);
   return Number.isFinite(sum) && sum > 0 ? Number(sum.toFixed(3)) : null;
 }
+
+/**
+ * Backfill de escalares de header que o modelo deixou NULL, usando os mesmos
+ * extractores deterministicos do parser — sem tocar no que o modelo extraiu.
+ * Simetrico a fillInvoiceNullsFromText/fillProformaNullsFromText. Eduarda
+ * 2026-06-22: "algumas informacoes da Invoice e do Packing List ainda nao foram
+ * lidas". O PL era o unico dos tres sem rede de seguranca deterministica no
+ * caminho do LLM. Campos preenchidos recebem confianca modesta (0.6) para a UI
+ * sinalizar que merecem conferencia.
+ */
+export function fillPackingListNullsFromText(
+  data: Record<string, any>,
+  text: string,
+): Record<string, any> {
+  const source = text ?? '';
+  if (!source.trim() || !isPackingList(source)) return data;
+
+  const out = { ...data };
+  const isNull = (field: unknown) => getConfidenceValue(field) == null;
+  const FILLED = 0.6;
+
+  if (isNull(out.packingListNumber)) {
+    const v = matchFirst(source, [
+      /\bpacking\s*list\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
+      /\bpl\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
+    ]);
+    if (v) out.packingListNumber = cf(v, FILLED);
+  }
+  if (isNull(out.invoiceNumber)) {
+    const v = matchFirst(source, [
+      /\binvoice\s*(?:no\.?|number|#)\s*[:#-]?\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
+      /\binv(?:oice)?\s*[:#-]\s*([A-Z0-9][A-Z0-9./_-]{2,})/i,
+    ]);
+    if (v) out.invoiceNumber = cf(v, FILLED);
+  }
+  if (isNull(out.date)) {
+    const v = findLabeledDate(source);
+    if (v) out.date = cf(v, FILLED);
+  }
+  if (isNull(out.exporterName)) {
+    const v = normalizePartyLine(extractLabeledValue(source, ['exporter', 'shipper', 'seller']));
+    if (v) out.exporterName = cf(v, FILLED);
+  }
+  if (isNull(out.importerName)) {
+    const v = normalizeImporterName(extractLabeledValue(source, ['importer', 'consignee', 'buyer']));
+    if (v) out.importerName = cf(v, FILLED);
+  }
+  if (isNull(out.importerCnpj)) {
+    const v = matchFirst(source, [/\bCNPJ\s*[:#-]?\s*(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\b/i]);
+    if (v) out.importerCnpj = cf(v, 0.7);
+  }
+  if (isNull(out.portOfLoading)) {
+    const v = extractPort(source, 'loading');
+    if (v) out.portOfLoading = cf(v, FILLED);
+  }
+  if (isNull(out.portOfDischarge)) {
+    const v = extractPort(source, 'discharge');
+    if (v) out.portOfDischarge = cf(v, FILLED);
+  }
+  if (isNull(out.totalBoxes)) {
+    const v = parseNumber(
+      matchFirst(source, [/\btotal\s*(?:cartons|boxes|packages|volumes)\b[^\d]{0,20}([\d.,]+)/i]),
+    );
+    if (v != null) out.totalBoxes = cf(v, FILLED);
+  }
+  if (isNull(out.totalNetWeight)) {
+    const v = parseNumber(matchFirst(source, [/\btotal\s*net\s*weight\b[^\d]{0,20}([\d.,]+)/i]));
+    if (v != null) out.totalNetWeight = cf(v, FILLED);
+  }
+  if (isNull(out.totalGrossWeight)) {
+    const v = parseNumber(matchFirst(source, [/\btotal\s*gross\s*weight\b[^\d]{0,20}([\d.,]+)/i]));
+    if (v != null) out.totalGrossWeight = cf(v, FILLED);
+  }
+  if (isNull(out.totalCbm)) {
+    const v = parseNumber(matchFirst(source, [/\btotal\s*(?:cbm|m3|m\u00b3|volume)\b[^\d]{0,20}([\d.,]+)/i]));
+    if (v != null) out.totalCbm = cf(v, FILLED);
+  }
+
+  return out;
+}
+
+function getConfidenceValue<T>(field: unknown): T | null {
+  if (field && typeof field === 'object' && 'value' in field) {
+    return (field as ConfidenceField<T>).value ?? null;
+  }
+  return (field as T | null) ?? null;
+}

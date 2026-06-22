@@ -38,7 +38,10 @@ import {
   repairInvoiceExtractionFromText,
   tryParseInvoiceText,
 } from './utils/invoice-text-parser.js';
-import { tryParsePackingListText } from './utils/packing-list-text-parser.js';
+import {
+  tryParsePackingListText,
+  fillPackingListNullsFromText,
+} from './utils/packing-list-text-parser.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 
@@ -1089,12 +1092,14 @@ Responda SOMENTE com JSON estrito no formato:
           'packing_list_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.packing_list : undefined,
         );
-        const data = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
-        const dataAsRecord = data as Record<string, any>;
+        const parsed = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
+        // Backfill deterministico de escalares de header que o modelo deixou NULL
+        // (simetrico a fillInvoiceNullsFromText). Eduarda 2026-06-22.
+        const dataAsRecord = fillPackingListNullsFromText(parsed as Record<string, any>, text);
         if (Array.isArray(dataAsRecord.items)) {
           stripSpuriousItemPrefix(dataAsRecord.items);
         }
-        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+        const { score, lowConfidenceFields } = this.calculateConfidence(dataAsRecord);
         logger.info(
           {
             model,
@@ -1106,7 +1111,7 @@ Responda SOMENTE com JSON estrito no formato:
         );
         return this.applyHarness(
           'packing_list',
-          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          { data: dataAsRecord, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
           text,
         );
       },

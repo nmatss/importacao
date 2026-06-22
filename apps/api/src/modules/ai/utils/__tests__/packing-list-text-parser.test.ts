@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { tryParsePackingListText } from '../packing-list-text-parser.js';
+import {
+  tryParsePackingListText,
+  fillPackingListNullsFromText,
+} from '../packing-list-text-parser.js';
 
 describe('tryParsePackingListText', () => {
   it('extracts a tabular packing list without calling the LLM', () => {
@@ -72,5 +75,48 @@ Item Code Description Qty Cartons NW GW EAN
     const bag = parsed?.items.find((i: any) => i.itemCode.value === 'AC2285Y');
     expect(robe.ean.value).toBe('7909692093303');
     expect(bag.ean.value).toBeNull(); // 1234567890123 has a bad check digit
+  });
+});
+
+
+describe('fillPackingListNullsFromText', () => {
+  const cf = (value: unknown, confidence = 0.9) => ({ value, confidence });
+
+  it('preenche escalares de header NULL a partir do texto sem tocar no que o modelo extraiu', () => {
+    const text = [
+      'PACKING LIST',
+      'Packing List No: PL-2026-001',
+      'Date: 22-Feb-2026',
+      'Exporter: KIOM GLOBAL CO., LTD',
+      'Port of Loading: NINGBO',
+      'Port of Discharge: SANTOS',
+      'Total Net Weight 1.234,56',
+      'Total Gross Weight 1.500,00',
+    ].join('\n');
+
+    const modelData: Record<string, any> = {
+      packingListNumber: cf(null, 0),
+      date: cf(null, 0),
+      exporterName: cf('JA EXTRAIDO', 0.9),
+      portOfLoading: cf(null, 0),
+      totalNetWeight: cf(null, 0),
+      totalGrossWeight: cf(null, 0),
+      items: [],
+    };
+
+    const filled = fillPackingListNullsFromText(modelData, text);
+
+    expect(filled.packingListNumber.value).toBe('PL-2026-001');
+    expect(filled.portOfLoading.value).toBe('NINGBO');
+    expect(filled.totalNetWeight.value).toBe(1234.56);
+    expect(filled.totalGrossWeight.value).toBe(1500);
+    // nao sobrescreve o que o modelo ja trouxe
+    expect(filled.exporterName.value).toBe('JA EXTRAIDO');
+  });
+
+  it('nao altera dados quando o texto nao e um packing list', () => {
+    const modelData: Record<string, any> = { packingListNumber: cf(null, 0), items: [] };
+    const filled = fillPackingListNullsFromText(modelData, 'COMMERCIAL INVOICE only');
+    expect(filled.packingListNumber.value).toBeNull();
   });
 });
