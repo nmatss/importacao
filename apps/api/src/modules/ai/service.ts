@@ -115,7 +115,10 @@ interface ExtractionResult {
 
 // ── Model fallback chains ────────────────────────────────────────────
 // Ordered list of models to try — primary first, then fallbacks in order
-const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
+// gemini-2.0-flash removido: retorna HTTP 404 no projeto Vertex n8n-grupo-unico
+// (modelo indisponivel na regiao) — so adicionava uma tentativa de fallback inutil
+// + ruido de log (incidente 2026-06-22). 2.5-flash -> 2.5-pro cobrem o caminho.
+const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 const LOCAL_DEFAULT_MODEL = 'unico-docintel';
 
 function hasConfidenceValue(value: unknown): boolean {
