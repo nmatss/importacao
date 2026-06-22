@@ -87,7 +87,10 @@ export class IALocalProvider implements AIProvider {
     // zod-validates, so json_object is the safe, broadly-compatible choice.
     const wantsJson = options.responseSchema != null || options.jsonMode !== false;
     const responseFormat = wantsJson ? { type: 'json_object' } : { type: 'text' };
-    const numPredict = Number(process.env.IA_LOCAL_NUM_PREDICT || '1536');
+    const numPredict =
+      options.maxOutputTokens && options.maxOutputTokens > 0
+        ? options.maxOutputTokens
+        : Number(process.env.IA_LOCAL_NUM_PREDICT || '1536');
     const numCtx = Number(process.env.IA_LOCAL_NUM_CTX || '8192');
 
     const body = {

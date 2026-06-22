@@ -103,6 +103,9 @@ function toVertexBody(
   const generationConfig: Record<string, unknown> = {
     temperature: 0,
   };
+  if (options.maxOutputTokens && options.maxOutputTokens > 0) {
+    generationConfig.maxOutputTokens = options.maxOutputTokens;
+  }
   if (options.responseSchema) {
     generationConfig.responseMimeType = 'application/json';
     generationConfig.responseSchema = options.responseSchema;

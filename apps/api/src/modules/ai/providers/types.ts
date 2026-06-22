@@ -14,6 +14,10 @@ export interface ChatOptions {
   /** Optional JSON Schema for structured-output mode. When set, both providers
    *  constrain the model to produce a JSON value matching the schema. */
   responseSchema?: Record<string, unknown>;
+  /** Cap de tokens de saida desta chamada (guarda de custo POR pergunta).
+   *  Mapeado p/ Vertex generationConfig.maxOutputTokens, OpenRouter max_tokens
+   *  e IA_LOCAL num_predict. */
+  maxOutputTokens?: number;
   signal?: AbortSignal;
 }
 

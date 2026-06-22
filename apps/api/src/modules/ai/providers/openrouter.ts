@@ -52,6 +52,9 @@ export class OpenRouterProvider implements AIProvider {
       messages,
       temperature: 0,
       response_format: responseFormat,
+      ...(options.maxOutputTokens && options.maxOutputTokens > 0
+        ? { max_tokens: options.maxOutputTokens }
+        : {}),
     };
 
     const response = await fetch(url, {

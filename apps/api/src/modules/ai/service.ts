@@ -335,6 +335,7 @@ class AIService {
     jsonMode = true,
     context = 'unknown',
     responseSchema?: Record<string, unknown>,
+    maxOutputTokens?: number,
   ): Promise<string> {
     const promptVersion = PROMPT_VERSIONS[context] || 'v1.0';
 
@@ -378,6 +379,7 @@ class AIService {
                 this.provider.callModel(currentModel, messages, {
                   jsonMode,
                   responseSchema,
+                  maxOutputTokens,
                   signal,
                 } satisfies ChatOptions),
               this.chatTimeoutMs(),
@@ -1523,11 +1525,17 @@ ${sourceBlock}`,
       },
     ];
 
+    // Guarda de custo POR pergunta: limita o tamanho da analise (default 768
+    // tokens, configuravel via ASSISTANT_MAX_OUTPUT_TOKENS). Soma-se ao teto
+    // diario de R$100 (assertBudgetAvailable em this.chat) — defesa em profundidade.
+    const assistantMaxTokens = Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || '768');
     const response = await this.chat(
       this.analysisModel(),
       messages,
       false,
       'operational_assistant',
+      undefined,
+      Number.isFinite(assistantMaxTokens) && assistantMaxTokens > 0 ? assistantMaxTokens : 768,
     );
     return response.trim();
   }
