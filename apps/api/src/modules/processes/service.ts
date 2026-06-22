@@ -313,6 +313,27 @@ export const processService = {
 
     if (!process) throw new NotFoundError('Processo', id);
     auditService.log(userId, 'update', 'process', id, { fields: Object.keys(input) }, null);
+
+    // Re-deriva a fase logistica quando um campo que a governa muda (Eduarda
+    // 2026-06-22: editar o ETD deve mover o processo imediatamente, sem esperar
+    // o cron). Idempotente: advanceLogisticStatus so avanca para frente.
+    const logisticFields = [
+      'etd',
+      'eta',
+      'shipmentDate',
+      'customsChannel',
+      'diNumber',
+      'customsClearanceAt',
+      'cdArrivalAt',
+    ];
+    if (logisticFields.some((field) => (input as Record<string, unknown>)[field] !== undefined)) {
+      try {
+        await this.advanceLogisticStatus(id, userId);
+      } catch (advErr) {
+        logger.error({ err: advErr, id }, 'Auto-advance logistic status after update failed');
+      }
+    }
+
     return process;
   },
 

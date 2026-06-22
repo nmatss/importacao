@@ -1090,6 +1090,18 @@ export const documentService = {
       logger.error({ err: valErr, processId }, 'Auto-validation failed');
     }
 
+    // Avanca a fase logistica assim que um BL e extraido (ETD/data de embarque
+    // ja disponiveis), em vez de esperar ate 30min pelo cron logistic-sync.
+    // Eduarda 2026-06-22: processo com ETD de fevereiro nunca foi para "em transito".
+    if (hasBl) {
+      try {
+        const { processService } = await import('../processes/service.js');
+        await processService.advanceLogisticStatus(processId);
+      } catch (advErr) {
+        logger.error({ err: advErr, processId }, 'Auto-advance logistic status failed');
+      }
+    }
+
     if (allThree) {
       // Auto-generate espelho from invoice + PL + BL data (deterministic,
       // no AI). Nicolas (2026-05-21): "primeiro que ele não tá criando
