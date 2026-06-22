@@ -443,7 +443,9 @@ def read_licenciamentos_vencidos() -> dict[str, dict]:
         return {}
 
     headers = rows[0]
-    process_col = _find_col_by_header(headers, "processo", "process", "sku", "código", "codigo", "ref")
+    process_col = _find_col_by_header(
+        headers, "processo", "process", "produto", "item", "sku", "código", "codigo", "ref"
+    )
     status_col = _find_col_by_header(headers, "status", "situação", "situacao")
     valid_col = _find_col_by_header(
         headers, "validade", "vencimento", "valid_until", "prazo", "data"
