@@ -5,6 +5,33 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-06-22 - Vertex ligado + fixes (login, licenciamento, custo)
+
+Deployado em prod (`e170b43`). Doc: `docs/STATUS-2026-06-22.md`.
+
+### Added
+- **Vertex AI em producao** (`AI_PROVIDER=vertex`, #60 resolvida) com tetos de custo:
+  diario R$100 (`AI_DAILY_BUDGET_BRL`), mensal R$1.000, e cap por pergunta no assistente
+  (`ASSISTANT_MAX_OUTPUT_TOKENS=768`).
+- Eduarda #1 (auto "em transito" ao extrair BL / editar ETD) e #3b (`fillPackingListNullsFromText`).
+
+### Fixed
+- **`ai/providers/vertex.ts`**: `toVertexSchema()` converte o JSON Schema para o subset
+  do Vertex (`type` array nullable + remove `$schema/additionalProperties/...`) — corrige
+  HTTP 400 em TODA extracao com structured output. Removido `gemini-2.0-flash` do fallback (404).
+- **`web/nginx.conf`**: `/api` via upstream em variavel + resolver — corrige 502 no login
+  quando a API e recriada (IP novo) sem recriar o web.
+- **cert-api**: aba "Licenciamentos Vencidos" passa a reconhecer a coluna "Produto"
+  (Status Licenciamento #10; 1845 linhas; antes "--").
+
+### Notes
+- Teto de extracao e DADO, nao IA: docs ruins (xlsx-como-invoice, screenshots,
+  misclassificados, scans grandes) ficam em 0 com qualquer modelo. Ver STATUS §3-4.
+- Pendente (dado/config, nao codigo): higienizar documentos, destinatarios #78, coluna de
+  data na aba de licenciamentos #11, acesso Sydle #3a, key do webhook Google Chat.
+
+---
+
 ## [Unreleased] - 2026-06-21 - Feedback Eduarda: finalizacao + verificacao adversarial (PR #99)
 
 Auditoria multi-agente (18 itens do feedback: audit + verificacao adversarial)

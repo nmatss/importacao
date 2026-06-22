@@ -1,6 +1,24 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-21
+Ultima atualizacao: 2026-06-22
+
+## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
+
+Vertex ligado e funcionando (prod `e170b43`). O teto de extracao agora e a QUALIDADE DO
+INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe resolve:
+
+- **Higienizar documentos**: re-subir `.xlsx` classificados como invoice/PL como **PDF**;
+  reclassificar docs no tipo errado (ex.: OHBL marcado como invoice); trocar **screenshots**
+  por documentos reais. Sem isso ficam em 0% (testado em 33 docs reais). PDFs escaneados
+  grandes dao timeout (180s) — avaliar dividir/otimizar.
+- **Destinatarios de e-mail (#78)**: cadastrar em Configuracoes > Destinatarios operacionais.
+- **Aba "Licenciamentos Vencidos" sem coluna de data**: "Licen. - Prazo" (#11) fica vazio
+  ate a planilha ganhar uma coluna de validade (o Status #10 ja funciona via coluna "Produto").
+- **Sydle (#3a)**: campos de referencia (cambio/financeiro) em 403 — liberar acesso para
+  popular "Documentos vs Sistema".
+- **Webhook Google Chat**: key invalida nas notificacoes (`chat.googleapis.com` 400) — config.
+- **Vertex SA dedicada** (opcao profissional): mover Vertex p/ `gemini-n8n` (least-privilege)
+  com `roles/aiplatform.user` — hoje reusa a SA compartilhada `n8n-automacao`.
 
 ## Backlog do feedback da Eduarda 2026-06-21 (nao bloqueante; pos PR #99)
 
