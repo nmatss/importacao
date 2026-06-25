@@ -6,6 +6,10 @@ import { cn } from '@/shared/lib/utils';
 // we derive an equivalent from the {value,confidence} field data on the client.
 interface CoverageSummary {
   readPercent: number;
+  effectiveReadPercent?: number;
+  trackedMissingFields?: string[];
+  trackedTotalWeight?: number;
+  trackedFilledWeight?: number;
   totalFields: number;
   filledFields: number;
   missingFields: string[];
@@ -226,7 +230,14 @@ function formatValue(val: unknown, key: string): string {
       return parts.length > 0 ? parts.join(', ') : pt.description ? String(pt.description) : '—';
     }
     if (Array.isArray(val)) return `${val.length} itens`;
-    return JSON.stringify(val);
+    const record = val as Record<string, unknown>;
+    if (typeof record.description === 'string' && record.description.trim()) {
+      return record.description;
+    }
+    const filled = Object.values(record).filter(
+      (nested) => nested !== null && nested !== undefined && nested !== '',
+    );
+    return filled.length > 0 ? `${filled.length} campos preenchidos` : '—';
   }
   return String(val);
 }
@@ -288,24 +299,40 @@ function CoverageHeader({
   labels: Record<string, string>;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const { readPercent, missingFields, lowConfidenceFields } = coverage;
-  const toReview = missingFields.length + lowConfidenceFields.length;
+  const {
+    readPercent,
+    effectiveReadPercent,
+    missingFields,
+    lowConfidenceFields,
+    trackedMissingFields,
+  } = coverage;
+  const missingForReview =
+    trackedMissingFields && trackedMissingFields.length > 0 ? trackedMissingFields : missingFields;
+  const toReview = missingForReview.length + lowConfidenceFields.length;
+  const displayedReadPercent =
+    typeof effectiveReadPercent === 'number' && Number.isFinite(effectiveReadPercent)
+      ? effectiveReadPercent
+      : readPercent;
 
   // A full read with nothing to flag does not deserve its own banner.
-  if (readPercent >= 100 && toReview === 0) return null;
+  if (displayedReadPercent >= 100 && toReview === 0) return null;
 
   const tone =
-    readPercent >= 90
+    displayedReadPercent >= 90
       ? 'border-emerald-100 bg-emerald-50/60 text-emerald-700'
-      : readPercent >= 60
+      : displayedReadPercent >= 60
         ? 'border-amber-100 bg-amber-50/60 text-amber-700'
         : 'border-amber-200 bg-amber-50 text-amber-800';
+
+  const readLabel = coverage.effectiveReadPercent == null ? 'Leu' : 'Leu (ponderado)';
 
   return (
     <div className={cn('rounded-lg border px-3 py-2 text-xs', tone)}>
       <div className="flex items-center justify-between gap-2">
         <span>
-          <strong>Leu {readPercent}% dos campos.</strong>{' '}
+          <strong>
+            {readLabel} {displayedReadPercent}% dos campos.
+          </strong>{' '}
           {toReview > 0
             ? `${toReview} ${toReview === 1 ? 'campo precisa' : 'campos precisam'} de revisão manual.`
             : 'Nenhum campo pendente.'}
@@ -324,13 +351,17 @@ function CoverageHeader({
 
       {expanded && toReview > 0 ? (
         <div className="mt-2 space-y-1.5">
-          {missingFields.length > 0 ? (
+          <p className="text-[11px] opacity-80">
+            Ação: revisar o documento original, reenviar arquivo legível ou reprocessar a extração
+            antes de usar estes dados no espelho, validação ou Follow-Up.
+          </p>
+          {missingForReview.length > 0 ? (
             <div>
               <span className="text-[10px] font-semibold uppercase tracking-wider opacity-70">
-                Não lidos ({missingFields.length})
+                Não lidos ({missingForReview.length})
               </span>
               <div className="mt-0.5 flex flex-wrap gap-1">
-                {missingFields.map((key) => (
+                {missingForReview.map((key) => (
                   <span
                     key={key}
                     className="rounded bg-white/70 dark:bg-slate-800/70 px-1.5 py-0.5 text-[11px] font-medium"

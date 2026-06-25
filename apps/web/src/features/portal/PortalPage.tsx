@@ -146,6 +146,7 @@ export function PortalPage() {
   const [certLoading, setCertLoading] = useState(true);
   const [importHealth, setImportHealth] = useState<HealthStatus | null>(null);
   const [certHealth, setCertHealth] = useState<HealthStatus | null>(null);
+  const isAdmin = user?.role === 'admin';
 
   const { data: overview, isLoading: importLoading } = useApiQuery<DashboardOverview>(
     ['portal', 'overview'],
@@ -153,6 +154,26 @@ export function PortalPage() {
   );
 
   useEffect(() => {
+    async function checkImportHealth() {
+      const start = performance.now();
+      try {
+        const res = await fetch('/api/health');
+        setImportHealth({ connected: res.ok, latencyMs: Math.round(performance.now() - start) });
+      } catch {
+        setImportHealth({ connected: false, latencyMs: Math.round(performance.now() - start) });
+      }
+    }
+
+    checkImportHealth();
+
+    if (!isAdmin) {
+      setCertStats(null);
+      setCertHealth(null);
+      setCertLoading(false);
+      return;
+    }
+
+    setCertLoading(true);
     fetchCertStats()
       .then((data: any) => {
         const run = data?.last_run;
@@ -166,19 +187,8 @@ export function PortalPage() {
       .catch(() => setCertStats(null))
       .finally(() => setCertLoading(false));
 
-    async function checkImportHealth() {
-      const start = performance.now();
-      try {
-        const res = await fetch('/api/health');
-        setImportHealth({ connected: res.ok, latencyMs: Math.round(performance.now() - start) });
-      } catch {
-        setImportHealth({ connected: false, latencyMs: Math.round(performance.now() - start) });
-      }
-    }
-
-    checkImportHealth();
     checkCertApiHealth().then(setCertHealth);
-  }, []);
+  }, [isAdmin]);
 
   const problems = (certStats?.missing || 0) + (certStats?.inconsistent || 0);
   const firstName = user?.name?.split(' ')[0] || '';
@@ -264,9 +274,9 @@ export function PortalPage() {
               </>
             ) : null}
 
-            {certLoading ? (
+            {isAdmin && certLoading ? (
               <Skeleton className="h-7 w-40 rounded-full" />
-            ) : certStats ? (
+            ) : isAdmin && certStats ? (
               <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-400">
                 <Package className="h-3 w-3" />
                 {certStats.total_products} produtos monitorados
@@ -383,37 +393,46 @@ export function PortalPage() {
                 )}
               </div>
 
-              <Link
-                to="/certificacoes"
-                className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-sm"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Acessar Certificações
-                <ArrowRight className="h-4 w-4 ml-auto opacity-60 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
+              {isAdmin ? (
+                <Link
+                  to="/certificacoes"
+                  className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-sm"
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Acessar Certificações
+                  <ArrowRight className="h-4 w-4 ml-auto opacity-60 group-hover:translate-x-0.5 transition-transform" />
+                </Link>
+              ) : (
+                <div className="flex items-center justify-center gap-2 w-full rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-medium text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+                  <ShieldCheck className="h-4 w-4" />
+                  Acesso restrito
+                </div>
+              )}
             </div>
 
             {/* Quick links */}
-            <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-5 py-2 flex flex-wrap items-center gap-1">
-              <QuickLink
-                to="/certificacoes/validacao"
-                icon={Play}
-                label="Validar"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
-              />
-              <QuickLink
-                to="/certificacoes/produtos"
-                icon={Package}
-                label="Produtos"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
-              />
-              <QuickLink
-                to="/certificacoes/relatorios"
-                icon={FileBarChart}
-                label="Relatórios"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
-              />
-            </div>
+            {isAdmin && (
+              <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 px-5 py-2 flex flex-wrap items-center gap-1">
+                <QuickLink
+                  to="/certificacoes/validacao"
+                  icon={Play}
+                  label="Validar"
+                  hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                />
+                <QuickLink
+                  to="/certificacoes/produtos"
+                  icon={Package}
+                  label="Produtos"
+                  hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                />
+                <QuickLink
+                  to="/certificacoes/relatorios"
+                  icon={FileBarChart}
+                  label="Relatórios"
+                  hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -439,25 +458,27 @@ export function PortalPage() {
                   <span className="text-danger-500">offline</span>
                 ))}
             </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <span
-                className={cn(
-                  'h-2 w-2 rounded-full',
-                  certHealth === null
-                    ? 'bg-slate-300 animate-pulse'
-                    : certHealth.connected
-                      ? 'bg-emerald-500'
-                      : 'bg-danger-500',
-                )}
-              />
-              <span className="font-medium">Certificações</span>
-              {certHealth &&
-                (certHealth.connected ? (
-                  <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
-                ) : (
-                  <span className="text-danger-500">offline</span>
-                ))}
-            </div>
+            {isAdmin && (
+              <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span
+                  className={cn(
+                    'h-2 w-2 rounded-full',
+                    certHealth === null
+                      ? 'bg-slate-300 animate-pulse'
+                      : certHealth.connected
+                        ? 'bg-emerald-500'
+                        : 'bg-danger-500',
+                  )}
+                />
+                <span className="font-medium">Certificações</span>
+                {certHealth &&
+                  (certHealth.connected ? (
+                    <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
+                  ) : (
+                    <span className="text-danger-500">offline</span>
+                  ))}
+              </div>
+            )}
           </div>
           <p className="text-[11px] text-slate-400 font-medium">v1.0.0</p>
         </footer>

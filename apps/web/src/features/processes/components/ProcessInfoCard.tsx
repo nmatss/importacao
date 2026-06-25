@@ -61,8 +61,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
+function unwrapAiValue(value: unknown): unknown {
+  if (isRecord(value) && 'value' in value) return value.value;
+  return value;
+}
+
 function isEmptyValue(value: unknown) {
-  return value == null || value === '';
+  const unwrapped = unwrapAiValue(value);
+  return unwrapped == null || unwrapped === '';
+}
+
+function displayScalar(value: unknown): string | null {
+  const unwrapped = unwrapAiValue(value);
+  if (unwrapped == null || unwrapped === '') return null;
+  if (Array.isArray(unwrapped)) return `${unwrapped.length} itens`;
+  if (typeof unwrapped === 'object') {
+    if (isRecord(unwrapped)) {
+      if (typeof unwrapped.description === 'string' && unwrapped.description.trim()) {
+        return unwrapped.description;
+      }
+      const filled = Object.entries(unwrapped).filter(([, nested]) => !isEmptyValue(nested));
+      return filled.length > 0 ? `${filled.length} campos` : null;
+    }
+    return null;
+  }
+  return String(unwrapped);
 }
 
 function readPath(source: Record<string, unknown> | null | undefined, ...path: string[]) {
@@ -71,7 +94,8 @@ function readPath(source: Record<string, unknown> | null | undefined, ...path: s
     if (!isRecord(current)) return null;
     current = current[key];
   }
-  return isEmptyValue(current) ? null : current;
+  const unwrapped = unwrapAiValue(current);
+  return isEmptyValue(unwrapped) ? null : unwrapped;
 }
 
 function pickValue<T = unknown>(
@@ -203,7 +227,7 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
             key={f.label}
             icon={f.icon}
             label={f.label}
-            value={String(f.data.value)}
+            value={displayScalar(f.data.value)}
             source={f.data.source}
           />
         ))}
@@ -391,7 +415,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
           <InfoField
             icon={Box}
             label="Caixas"
-            value={totalBoxes.value != null ? String(totalBoxes.value) : null}
+            value={displayScalar(totalBoxes.value)}
             source={totalBoxes.source}
           />
           <InfoField

@@ -27,7 +27,12 @@ import { OpenRouterProvider } from './providers/openrouter.js';
 import { VertexAIProvider } from './providers/vertex.js';
 import { IALocalProvider } from './providers/ialocal.js';
 import type { AIProvider, ChatOptions } from './providers/types.js';
-import { assertBudgetAvailable, logUsage, AIBudgetExceededError } from './cost-tracker.js';
+import {
+  assertBudgetAvailable,
+  logUsage,
+  AIBudgetExceededError,
+  estimateCostUSD,
+} from './cost-tracker.js';
 import { EXTRACTION_SCHEMAS } from './extraction-schemas.js';
 import { verifyExtraction } from './harness/index.js';
 import { getVerificationConfig, getSkill } from './skills/registry.js';
@@ -42,6 +47,7 @@ import {
   tryParsePackingListText,
   fillPackingListNullsFromText,
 } from './utils/packing-list-text-parser.js';
+import { fillBLNullsFromText } from './utils/bl-text-parser.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 
@@ -69,8 +75,10 @@ function useSpecialistPrompts(): boolean {
  *  - AI_SELF_REPAIR_THRESHOLD: confidence floor below which a field is repaired
  *    (default 0.5).
  */
-function selfRepairEnabled(): boolean {
-  return process.env.AI_SELF_REPAIR !== '0';
+function selfRepairEnabled(providerName: AIProvider['name']): boolean {
+  if (process.env.AI_SELF_REPAIR === '0') return false;
+  if (providerName !== 'ialocal' && process.env.AI_SELF_REPAIR_PAID !== '1') return false;
+  return true;
 }
 function selfRepairThreshold(): number {
   const v = Number(process.env.AI_SELF_REPAIR_THRESHOLD ?? '0.5');
@@ -120,6 +128,50 @@ interface ExtractionResult {
 // + ruido de log (incidente 2026-06-22). 2.5-flash -> 2.5-pro cobrem o caminho.
 const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 const LOCAL_DEFAULT_MODEL = 'unico-docintel';
+const APPROX_CHARS_PER_TOKEN = 4;
+
+const CONTEXT_OUTPUT_TOKEN_CAPS: Array<[RegExp, number, string]> = [
+  [
+    /invoice_extraction|packing_list_extraction|proforma_extraction/,
+    16_384,
+    'AI_EXTRACTION_TABLE_MAX_OUTPUT_TOKENS',
+  ],
+  [/espelho_extraction/, 12_288, 'AI_ESPELHO_MAX_OUTPUT_TOKENS'],
+  [/bl_extraction|draft_bl_extraction/, 6_144, 'AI_BL_MAX_OUTPUT_TOKENS'],
+  [/certificate_extraction|li_extraction/, 4_096, 'AI_EXTRACTION_SMALL_MAX_OUTPUT_TOKENS'],
+  [/_self_repair$/, 768, 'AI_SELF_REPAIR_MAX_OUTPUT_TOKENS'],
+  [/email_analysis|ncm_validation/, 512, 'AI_ANALYSIS_SMALL_MAX_OUTPUT_TOKENS'],
+  [/anomaly_detection|email_draft|correction_email/, 1_024, 'AI_ANALYSIS_MAX_OUTPUT_TOKENS'],
+  [/operational_assistant/, 768, 'ASSISTANT_MAX_OUTPUT_TOKENS'],
+];
+
+function messageTextLength(message: OpenRouterMessage): number {
+  if (typeof message.content === 'string') return message.content.length;
+  return message.content.reduce((sum, part) => {
+    if (part.type === 'text') return sum + (part.text?.length ?? 0);
+    // Base64 image tokens are provider-dependent. Use a conservative floor so
+    // budget preflight does not treat image-only extractions as free.
+    if (part.type === 'image_url') return sum + 4_000;
+    return sum;
+  }, 0);
+}
+
+function estimatePromptTokens(messages: OpenRouterMessage[]): number {
+  const chars = messages.reduce((sum, message) => sum + messageTextLength(message), 0);
+  return Math.max(1, Math.ceil(chars / APPROX_CHARS_PER_TOKEN));
+}
+
+function outputTokenCapForContext(context: string, explicit?: number): number | undefined {
+  if (explicit && explicit > 0) return explicit;
+  for (const [pattern, fallback, envName] of CONTEXT_OUTPUT_TOKEN_CAPS) {
+    if (!pattern.test(context)) continue;
+    const configured = Number(process.env[envName]);
+    if (Number.isFinite(configured) && configured > 0) return Math.floor(configured);
+    return fallback;
+  }
+  const fallback = Number(process.env.AI_DEFAULT_MAX_OUTPUT_TOKENS);
+  return Number.isFinite(fallback) && fallback > 0 ? Math.floor(fallback) : undefined;
+}
 
 function hasConfidenceValue(value: unknown): boolean {
   if (value === null || value === undefined || value === '') return false;
@@ -342,11 +394,6 @@ class AIService {
   ): Promise<string> {
     const promptVersion = PROMPT_VERSIONS[context] || 'v1.0';
 
-    // Budget gate: when the monthly cap is in effect (AI_MONTHLY_BUDGET_USD),
-    // refuse the call before it goes out. The error is treated by callers as
-    // "extraction failed" — same path as a low-confidence response.
-    await assertBudgetAvailable();
-
     // Build fallback chain starting from the requested model position
     const startIdx = MODEL_FALLBACK_CHAIN.indexOf(model);
     const rawChain =
@@ -364,6 +411,7 @@ class AIService {
       const currentModel = modelsToTry[i];
       const isRetry = i > 0;
       const attemptContext = isRetry ? `${context}:fallback-${currentModel}` : context;
+      const effectiveMaxOutputTokens = outputTokenCapForContext(context, maxOutputTokens);
 
       if (isRetry) {
         logger.warn(
@@ -374,6 +422,16 @@ class AIService {
 
       const attemptStart = Date.now();
       try {
+        const estimatedCostUSD = estimateCostUSD(
+          currentModel,
+          estimatePromptTokens(messages),
+          effectiveMaxOutputTokens ?? 0,
+        );
+        // Budget gate: block before the provider call when the current spend
+        // plus this call's conservative estimate would exceed the monthly/daily
+        // cap. This is especially important for the R$100/day Vertex guard.
+        await assertBudgetAvailable({ estimatedCostUSD });
+
         const retryAttempts = this.provider.name === 'ialocal' ? 1 : 2;
         const result = await withRetry(
           () =>
@@ -382,7 +440,7 @@ class AIService {
                 this.provider.callModel(currentModel, messages, {
                   jsonMode,
                   responseSchema,
-                  maxOutputTokens,
+                  maxOutputTokens: effectiveMaxOutputTokens,
                   signal,
                 } satisfies ChatOptions),
               this.chatTimeoutMs(),
@@ -709,7 +767,7 @@ class AIService {
     result: ExtractionResult,
     sourceText: string,
   ): Promise<ExtractionResult> {
-    if (!selfRepairEnabled() || !this.providerAvailable()) return result;
+    if (!selfRepairEnabled(this.provider.name) || !this.providerAvailable()) return result;
     const groundingViable = (sourceText ?? '').replace(/\s/g, '').length >= 50;
     if (!groundingViable) return result;
 
@@ -1097,7 +1155,11 @@ Responda SOMENTE com JSON estrito no formato:
           'packing_list_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.packing_list : undefined,
         );
-        const parsed = this.zodParse(response, 'packing list extraction', packingListResponseSchema);
+        const parsed = this.zodParse(
+          response,
+          'packing list extraction',
+          packingListResponseSchema,
+        );
         // Backfill deterministico de escalares de header que o modelo deixou NULL
         // (simetrico a fillInvoiceNullsFromText). Eduarda 2026-06-22.
         const dataAsRecord = fillPackingListNullsFromText(parsed as Record<string, any>, text);
@@ -1116,7 +1178,11 @@ Responda SOMENTE com JSON estrito no formato:
         );
         return this.applyHarness(
           'packing_list',
-          { data: dataAsRecord, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          {
+            data: dataAsRecord,
+            confidenceScore: score,
+            fieldsWithLowConfidence: lowConfidenceFields,
+          },
           text,
         );
       },
@@ -1145,7 +1211,8 @@ Responda SOMENTE com JSON estrito no formato:
           'bl_extraction',
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.bl : undefined,
         );
-        const data = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
+        const parsed = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
+        const data = fillBLNullsFromText(parsed as Record<string, any>, text);
         const { score, lowConfidenceFields } = this.calculateConfidence(data);
         logger.info(
           {
@@ -1178,30 +1245,44 @@ Responda SOMENTE com JSON estrito no formato:
       );
     }
     const messages = this.buildExtractionMessages('draft_bl', msgs, text, imageOpts);
-    const response = await this.chat(
-      'gemini-2.5-flash',
-      messages,
-      true,
-      'draft_bl_extraction',
-      USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.draft_bl : undefined,
-    );
-    const data = this.zodParse(response, 'draft bill of lading extraction', draftBLResponseSchema);
-    const { score, lowConfidenceFields } = this.calculateConfidence(data);
-
-    logger.info(
-      {
-        confidenceScore: score,
-        lowConfidenceCount: lowConfidenceFields.length,
-        hasImage: !!imageOpts,
-      },
-      'Draft BL data extracted',
-    );
-
-    return this.applyHarness(
+    const extracted = await this.extractWithUpgrade(
       'draft_bl',
-      { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
-      text,
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          messages,
+          true,
+          'draft_bl_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.draft_bl : undefined,
+        );
+        const parsed = this.zodParse(
+          response,
+          'draft bill of lading extraction',
+          draftBLResponseSchema,
+        );
+        const data = fillBLNullsFromText(parsed as Record<string, any>, text);
+        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+
+        logger.info(
+          {
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'Draft BL data extracted',
+        );
+
+        return this.applyHarness(
+          'draft_bl',
+          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          text,
+        );
+      },
     );
+    return this.selfRepairExtraction('draft_bl', extracted, text);
   }
 
   /**

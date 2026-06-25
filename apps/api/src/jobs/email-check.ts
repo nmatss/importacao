@@ -2,6 +2,15 @@ import { logger } from '../shared/utils/logger.js';
 
 let isRunning = false;
 
+function buildAllowedSenderFilter(): string | null {
+  const allowedSenders =
+    process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) || [];
+  if (allowedSenders.length === 0) return null;
+  return `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`;
+}
+
 export async function checkEmails() {
   const enabled = process.env.EMAIL_INGESTION_ENABLED === 'true';
   if (!enabled) return;
@@ -13,9 +22,9 @@ export async function checkEmails() {
 
   // Check if at least one method is configured (Gmail API or IMAP)
   const gmailConfigured = !!(
-    process.env.GOOGLE_DRIVE_CLIENT_EMAIL
-    && process.env.GOOGLE_DRIVE_PRIVATE_KEY
-    && process.env.GMAIL_SHARED_MAILBOX
+    process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
+    process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
+    process.env.GMAIL_SHARED_MAILBOX
   );
   const imapConfigured = !!(process.env.IMAP_USER && process.env.IMAP_PASS);
 
@@ -48,9 +57,9 @@ export async function doubleCheckEmails() {
   }
 
   const gmailConfigured = !!(
-    process.env.GOOGLE_DRIVE_CLIENT_EMAIL
-    && process.env.GOOGLE_DRIVE_PRIVATE_KEY
-    && process.env.GMAIL_SHARED_MAILBOX
+    process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
+    process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
+    process.env.GMAIL_SHARED_MAILBOX
   );
 
   if (!gmailConfigured) {
@@ -60,15 +69,21 @@ export async function doubleCheckEmails() {
 
   isRunning = true;
   try {
-    // Build query for today's emails with attachments (all senders)
+    // Build query for today's emails with attachments, still constrained by
+    // EMAIL_ALLOWED_SENDERS. Sender allowlist is fail-closed across all scans.
+    const senderFilter = buildAllowedSenderFilter();
+    if (!senderFilter) {
+      logger.warn('Skipping double-check: EMAIL_ALLOWED_SENDERS is not configured');
+      return;
+    }
     const today = new Date();
     const yyyy = today.getFullYear();
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const todayStr = `${yyyy}/${mm}/${dd}`;
 
-    const gmailQuery = `has:attachment after:${todayStr}`;
-    logger.info({ gmailQuery }, 'Running end-of-day email double-check (all senders, includeRead=true)');
+    const gmailQuery = `has:attachment after:${todayStr} ${senderFilter}`;
+    logger.info({ gmailQuery }, 'Running end-of-day email double-check (includeRead=true)');
 
     const { emailProcessor } = await import('../modules/email-ingestion/processor.js');
     await emailProcessor.processNewEmails(true, gmailQuery);

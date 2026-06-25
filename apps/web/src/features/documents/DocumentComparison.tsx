@@ -82,6 +82,14 @@ interface DraftBlRevision {
   isRevised: boolean;
 }
 
+interface ExtractionCoverageSummary {
+  readPercent: number;
+  effectiveReadPercent?: number;
+  trackedMissingFields?: string[];
+  missingFields: string[];
+  lowConfidenceFields: string[];
+}
+
 interface ComparisonData {
   hasInvoice: boolean;
   hasPackingList: boolean;
@@ -104,6 +112,12 @@ interface ComparisonData {
   finalBlConfidence?: number | null;
   draftBlConfidence?: number | null;
   espelhoConfidence?: number | null;
+  extractionCoverage?: {
+    invoice?: ExtractionCoverageSummary | null;
+    packingList?: ExtractionCoverageSummary | null;
+    bl?: ExtractionCoverageSummary | null;
+    draftBl?: ExtractionCoverageSummary | null;
+  };
 }
 
 interface ValidationCheck {
@@ -129,6 +143,77 @@ interface AcceptTarget {
   fieldLabel: string;
   itemCode?: string | null;
   previousStatus: RowStatus;
+}
+
+const COVERAGE_LABELS: Record<string, string> = {
+  invoice: 'Invoice',
+  packingList: 'Packing List',
+  bl: 'BL Final',
+  draftBl: 'Draft BL',
+};
+
+function ExtractionCoveragePanel({ coverage }: { coverage: ComparisonData['extractionCoverage'] }) {
+  if (!coverage) return null;
+  const rows = Object.entries(coverage)
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => {
+      const summary = value as ExtractionCoverageSummary;
+      const missing = summary.trackedMissingFields?.length
+        ? summary.trackedMissingFields
+        : summary.missingFields;
+      const percent =
+        typeof summary.effectiveReadPercent === 'number'
+          ? summary.effectiveReadPercent
+          : summary.readPercent;
+      return {
+        key,
+        label: COVERAGE_LABELS[key] ?? key,
+        percent,
+        missing,
+        lowConfidence: summary.lowConfidenceFields,
+      };
+    })
+    .filter((row) => row.percent < 100 || row.missing.length > 0 || row.lowConfidence.length > 0);
+
+  if (rows.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Diagnostico da extracao documental</p>
+          <p className="mt-0.5 text-xs leading-5 text-amber-800">
+            Revise campos nao lidos ou de baixa confianca antes de aceitar divergencias, gerar
+            espelho ou sincronizar Follow-Up.
+          </p>
+          <div className="mt-2 grid gap-2 md:grid-cols-2">
+            {rows.map((row) => (
+              <div key={row.key} className="rounded-md bg-white/70 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold">{row.label}</span>
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold">
+                    {row.percent}%
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-amber-800">
+                  {row.missing.length > 0
+                    ? `Nao lidos: ${row.missing.slice(0, 5).join(', ')}${row.missing.length > 5 ? '...' : ''}`
+                    : 'Campos obrigatorios lidos.'}
+                </p>
+                {row.lowConfidence.length > 0 ? (
+                  <p className="mt-0.5 text-[11px] text-amber-800">
+                    Baixa confianca: {row.lowConfidence.slice(0, 5).join(', ')}
+                    {row.lowConfidence.length > 5 ? '...' : ''}
+                  </p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function rowKey(scope: 'aggregate' | 'item', value: string | undefined | null, index: number) {
@@ -693,6 +778,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
           confidence={data.espelhoConfidence ?? null}
         />
       </div>
+
+      <ExtractionCoveragePanel coverage={data.extractionCoverage} />
 
       {missingComparisonDocs.length > 0 && (
         <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">

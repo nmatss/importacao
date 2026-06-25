@@ -380,7 +380,8 @@ describe('processWithAI — extraction failure resilience', () => {
         title: 'Extração IA com Confiança Muito Baixa',
       }),
     );
-    expect(mockDb.update).toHaveBeenCalledTimes(1);
+    // document update + comparison acceptance invalidation after a new extraction
+    expect(mockDb.update).toHaveBeenCalledTimes(2);
   });
 });
 

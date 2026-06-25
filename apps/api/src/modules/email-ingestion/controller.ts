@@ -3,6 +3,15 @@ import { emailProcessor } from './processor.js';
 import { sendSuccess, sendError, sendPaginated } from '../../shared/utils/response.js';
 import { logger } from '../../shared/utils/logger.js';
 
+function allowedSenderFilter(): string | null {
+  const allowedSenders =
+    process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) || [];
+  if (allowedSenders.length === 0) return null;
+  return `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`;
+}
+
 export const emailIngestionController = {
   async getStatus(_req: Request, res: Response) {
     try {
@@ -39,28 +48,21 @@ export const emailIngestionController = {
       const after = typeof req.query.after === 'string' ? req.query.after : undefined;
       const before = typeof req.query.before === 'string' ? req.query.before : undefined;
       const rawQuery = typeof req.query.q === 'string' ? req.query.q : undefined;
-      const skipSenderFilter = (req.query.allSenders as unknown) === true;
+      const senderFilter = allowedSenderFilter();
+      if (!senderFilter) {
+        return sendError(
+          res,
+          'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura de e-mails',
+          400,
+        );
+      }
       let gmailQuery: string | undefined;
       if (rawQuery) {
-        gmailQuery = rawQuery;
+        gmailQuery = `${rawQuery} ${senderFilter}`;
       } else if (after || before) {
-        const parts = ['has:attachment'];
+        const parts = ['has:attachment', senderFilter];
         if (after) parts.push(`after:${after}`);
         if (before) parts.push(`before:${before}`);
-        if (!skipSenderFilter) {
-          const allowedSenders =
-            process.env.EMAIL_ALLOWED_SENDERS?.split(',')
-              .map((s) => s.trim())
-              .filter(Boolean) || [];
-          if (allowedSenders.length === 0) {
-            return sendError(
-              res,
-              'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura de e-mails',
-              400,
-            );
-          }
-          parts.push(`{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`);
-        }
         gmailQuery = parts.join(' ');
       }
       await emailProcessor.processNewEmails(includeRead, gmailQuery);
@@ -80,22 +82,15 @@ export const emailIngestionController = {
       logger.info({ months, daysBack }, 'Starting historical email scan');
 
       const parts = ['has:attachment', `newer_than:${daysBack}d`];
-
-      const skipSenderFilter = (req.query.allSenders as unknown) === true;
-      if (!skipSenderFilter) {
-        const allowedSenders =
-          process.env.EMAIL_ALLOWED_SENDERS?.split(',')
-            .map((s: string) => s.trim())
-            .filter(Boolean) || [];
-        if (allowedSenders.length === 0) {
-          return sendError(
-            res,
-            'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura historica',
-            400,
-          );
-        }
-        parts.push(`{${allowedSenders.map((s: string) => `from:${s}`).join(' ')}}`);
+      const senderFilter = allowedSenderFilter();
+      if (!senderFilter) {
+        return sendError(
+          res,
+          'EMAIL_ALLOWED_SENDERS deve estar configurado para varredura historica',
+          400,
+        );
       }
+      parts.push(senderFilter);
 
       const gmailQuery = parts.join(' ');
 

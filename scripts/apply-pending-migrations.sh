@@ -39,5 +39,6 @@ apply 0016_pre_cons_tables.sql
 apply 0017_sydle_purchase_payments.sql
 apply 0018_validation_run_links.sql
 apply 0019_logistic_status_index.sql
+apply 0020_document_lineage_and_email_dedupe.sql
 
 echo "[$(date '+%H:%M:%S')] done — pending migrations applied"

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'fs/promises';
@@ -8,6 +9,9 @@ import { db } from '../../shared/database/connection.js';
 import {
   documents,
   documentExtractionHistory,
+  documentExtractionRuns,
+  documentExtractedFields,
+  comparisonAcceptances,
   importProcesses,
   followUpTracking,
   emailIngestionLogs,
@@ -83,6 +87,206 @@ const AI_META_KEYS = new Set([
   'warnings',
 ]);
 
+const COVERAGE_EXCLUDED_KEYS = new Set(['items', 'ncmList']);
+
+type CoverageProfile = {
+  required: string[];
+  important?: string[];
+};
+
+const CRITICAL_COVERAGE_FIELDS = 4;
+const IMPORTANT_COVERAGE_FIELDS = 2;
+const NORMAL_COVERAGE_FIELDS = 1;
+
+const COVERAGE_PROFILES: Record<string, CoverageProfile> = {
+  invoice: {
+    required: [
+      'invoiceNumber',
+      'invoiceDate',
+      'exporterName',
+      'importerName',
+      'incoterm',
+      'currency',
+      'totalFobValue',
+      'totalBoxes',
+      'totalGrossWeight',
+      'portOfLoading',
+      'portOfDischarge',
+    ],
+    important: ['totalCbm', 'shippedOnBoardDate', 'etd', 'shipmentDate', 'manufacturerName'],
+  },
+  proforma_invoice: {
+    required: [
+      'piNumber',
+      'invoiceNumber',
+      'invoiceDate',
+      'exporterName',
+      'importerName',
+      'currency',
+      'totalFobValue',
+      'totalBoxes',
+      'totalGrossWeight',
+      'portOfLoading',
+      'portOfDischarge',
+    ],
+    important: ['totalCbm', 'validUntil'],
+  },
+  packing_list: {
+    required: [
+      'packingListNumber',
+      'date',
+      'exporterName',
+      'importerName',
+      'totalBoxes',
+      'totalGrossWeight',
+      'portOfLoading',
+      'portOfDischarge',
+    ],
+    important: [
+      'invoiceNumber',
+      'totalNetWeight',
+      'totalCbm',
+      'etd',
+      'shippedOnBoardDate',
+      'shipmentDate',
+    ],
+  },
+  ohbl: {
+    required: [
+      'blNumber',
+      'customerReference',
+      'portOfLoading',
+      'portOfDischarge',
+      'vesselName',
+      'voyageNumber',
+      'shipmentDate',
+      'etd',
+      'eta',
+      'containerNumber',
+      'totalBoxes',
+      'totalGrossWeight',
+      'cargoDescription',
+    ],
+    important: [
+      'totalCbm',
+      'freightValue',
+      'freightCurrency',
+      'issueDate',
+      'sealNumber',
+      'containerType',
+    ],
+  },
+  draft_bl: {
+    required: [
+      'blNumber',
+      'customerReference',
+      'portOfLoading',
+      'portOfDischarge',
+      'vesselName',
+      'voyageNumber',
+      'shipmentDate',
+      'etd',
+      'eta',
+      'containerNumber',
+      'totalBoxes',
+      'totalGrossWeight',
+      'cargoDescription',
+    ],
+    important: [
+      'totalCbm',
+      'freightValue',
+      'freightCurrency',
+      'issueDate',
+      'sealNumber',
+      'containerType',
+    ],
+  },
+  certificate: {
+    required: [
+      'certificateType',
+      'certificateNumber',
+      'issueDate',
+      'issuingAuthority',
+      'importerName',
+    ],
+  },
+  li: {
+    required: [
+      'liNumber',
+      'registrationDate',
+      'status',
+      'importerName',
+      'importerCnpj',
+      'exporterName',
+      'totalValue',
+      'currency',
+    ],
+    important: ['deferralDate', 'items', 'anuentes'],
+  },
+};
+
+function getCoverageProfile(documentType: string): CoverageProfile | null {
+  return COVERAGE_PROFILES[documentType] ?? null;
+}
+
+function getCoverageWeight(documentType: string, fieldName: string): number {
+  const profile = getCoverageProfile(documentType);
+  if (!profile) return NORMAL_COVERAGE_FIELDS;
+  if (profile.required.includes(fieldName)) return CRITICAL_COVERAGE_FIELDS;
+  if (profile.important?.includes(fieldName)) return IMPORTANT_COVERAGE_FIELDS;
+  return NORMAL_COVERAGE_FIELDS;
+}
+
+function unwrapAiFieldValue(value: unknown): unknown {
+  if (isRecord(value) && 'value' in value) return value.value;
+  return value;
+}
+
+function sha256Text(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+function extractConfidence(value: unknown): number | null {
+  if (isRecord(value) && typeof value.confidence === 'number') return value.confidence;
+  return null;
+}
+
+function collectExtractedFields(
+  value: unknown,
+  prefix = '',
+  out: Array<{ fieldPath: string; valueJson: unknown; confidence: number | null }> = [],
+): Array<{ fieldPath: string; valueJson: unknown; confidence: number | null }> {
+  if (prefix && isRecord(value) && 'value' in value) {
+    out.push({
+      fieldPath: prefix,
+      valueJson: value.value ?? null,
+      confidence: extractConfidence(value),
+    });
+    return out;
+  }
+
+  if (Array.isArray(value)) {
+    value.slice(0, 500).forEach((item, index) => {
+      collectExtractedFields(item, `${prefix}[${index}]`, out);
+    });
+    return out;
+  }
+
+  if (isRecord(value)) {
+    for (const [key, nested] of Object.entries(value)) {
+      if (AI_META_KEYS.has(key) || key.startsWith('_')) continue;
+      const nextPath = prefix ? `${prefix}.${key}` : key;
+      collectExtractedFields(nested, nextPath, out);
+    }
+    return out;
+  }
+
+  if (prefix) {
+    out.push({ fieldPath: prefix, valueJson: value ?? null, confidence: null });
+  }
+  return out;
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -133,6 +337,10 @@ const LOW_CONFIDENCE_FIELD_THRESHOLD = 0.5;
 
 export interface ExtractionCoverageSummary {
   readPercent: number;
+  effectiveReadPercent: number;
+  trackedMissingFields: string[];
+  trackedTotalWeight: number;
+  trackedFilledWeight: number;
   totalFields: number;
   filledFields: number;
   missingFields: string[];
@@ -150,21 +358,44 @@ export interface ExtractionCoverageSummary {
  *   - "missing" when its value is null/empty (per hasMeaningfulAiValue), and
  *   - "lowConfidence" when its { value, confidence } carries confidence < 0.5.
  * readPercent = filledFields / totalFields, rounded to a whole percent.
+ * effectiveReadPercent = weighted coverage with profile for known document types.
  */
-function computeExtractionCoverage(aiParsedData: unknown): ExtractionCoverageSummary | null {
+function computeExtractionCoverage(
+  aiParsedData: unknown,
+  documentType: string,
+): ExtractionCoverageSummary | null {
   if (!isRecord(aiParsedData)) return null;
   if (aiParsedData.extractionFailed || aiParsedData.skipped || aiParsedData.error) return null;
 
   const missingFields: string[] = [];
   const lowConfidenceFields: string[] = [];
+  const trackedMissingFields: string[] = [];
   let totalFields = 0;
   let filledFields = 0;
+  let trackedTotalWeight = 0;
+  let trackedFilledWeight = 0;
+
+  const profile = getCoverageProfile(documentType);
+  const trackedFields = profile ? [...profile.required, ...(profile.important ?? [])] : [];
+  const trackedSet = profile ? new Set(trackedFields) : null;
+
+  if (profile) {
+    for (const key of trackedFields) {
+      const raw = aiParsedData[key];
+      const weight = getCoverageWeight(documentType, key);
+      trackedTotalWeight += weight;
+      if (hasMeaningfulAiValue(raw)) {
+        trackedFilledWeight += weight;
+      } else {
+        trackedMissingFields.push(key);
+      }
+    }
+  }
 
   for (const [key, raw] of Object.entries(aiParsedData)) {
-    if (AI_META_KEYS.has(key) || key.startsWith('_')) continue;
-    // Items are a separate collection (line-item matching has its own surface);
-    // coverage tracks the scalar/document-level fields the operator expects.
-    if (key === 'items') continue;
+    if (AI_META_KEYS.has(key) || key.startsWith('_') || COVERAGE_EXCLUDED_KEYS.has(key)) continue;
+    // Items and aggregate arrays (ncmList) are separate collections and should
+    // not dilute a scalar field coverage score.
 
     totalFields += 1;
 
@@ -175,18 +406,44 @@ function computeExtractionCoverage(aiParsedData: unknown): ExtractionCoverageSum
       missingFields.push(key);
     }
 
+    if (!trackedSet) {
+      const weight = getCoverageWeight(documentType, key);
+      trackedTotalWeight += weight;
+      if (filled) {
+        trackedFilledWeight += weight;
+      } else {
+        trackedMissingFields.push(key);
+      }
+    }
+
     if (isRecord(raw) && 'value' in raw && typeof raw.confidence === 'number') {
-      if (filled && raw.confidence < LOW_CONFIDENCE_FIELD_THRESHOLD) {
+      if (
+        hasMeaningfulAiValue(unwrapAiFieldValue(raw)) &&
+        raw.confidence < LOW_CONFIDENCE_FIELD_THRESHOLD
+      ) {
         lowConfidenceFields.push(key);
       }
     }
   }
 
   const readPercent = totalFields > 0 ? Math.round((filledFields / totalFields) * 100) : 0;
+  const effectiveReadPercent =
+    trackedSet && trackedTotalWeight > 0
+      ? Math.round((trackedFilledWeight / trackedTotalWeight) * 100)
+      : readPercent;
 
-  return { readPercent, totalFields, filledFields, missingFields, lowConfidenceFields };
+  return {
+    readPercent,
+    effectiveReadPercent,
+    trackedMissingFields,
+    trackedTotalWeight,
+    trackedFilledWeight,
+    totalFields,
+    filledFields,
+    missingFields,
+    lowConfidenceFields,
+  };
 }
-
 function standardizeDocumentName(
   type: string,
   processCode: string,
@@ -235,6 +492,66 @@ function standardizeDocumentName(
     return `CERT ${String(certType).toUpperCase()} ${certNumber ? certNumber + ' ' : ''}${processCode}.pdf`;
   }
   return null;
+}
+
+async function persistExtractionLineage(params: {
+  documentId: number;
+  processId: number;
+  documentType: string;
+  data: Record<string, any>;
+  confidenceScore: number;
+  sourceText: string;
+}) {
+  const sourceTextHash = sha256Text(params.sourceText ?? '');
+  const [run] = await db
+    .insert(documentExtractionRuns)
+    .values({
+      documentId: params.documentId,
+      processId: params.processId,
+      documentType: params.documentType,
+      provider: process.env.AI_PROVIDER ?? null,
+      model: process.env.AI_MODEL ?? process.env.AI_ANALYSIS_MODEL ?? null,
+      confidence: String(params.confidenceScore),
+      sourceTextHash,
+      sourceTextLength: params.sourceText.length,
+      extractionStatus: 'completed',
+    })
+    .returning({ id: documentExtractionRuns.id });
+
+  const fields = collectExtractedFields(params.data)
+    .filter((field) => field.fieldPath.length <= 255)
+    .slice(0, 1000);
+
+  if (fields.length === 0) return;
+
+  await db.insert(documentExtractedFields).values(
+    fields.map((field) => ({
+      runId: run.id,
+      documentId: params.documentId,
+      processId: params.processId,
+      documentType: params.documentType,
+      fieldPath: field.fieldPath,
+      valueJson: field.valueJson as any,
+      confidence: field.confidence == null ? null : String(field.confidence),
+      sourceTextHash,
+    })),
+  );
+}
+
+async function invalidateComparisonAcceptances(processId: number, reason: string) {
+  await db
+    .update(comparisonAcceptances)
+    .set({
+      invalidatedAt: new Date(),
+      invalidationReason: reason,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(comparisonAcceptances.processId, processId),
+        sql`${comparisonAcceptances.invalidatedAt} IS NULL`,
+      ),
+    );
 }
 
 const DEFAULT_PROCESSING_STALE_MINUTES = 30;
@@ -337,6 +654,7 @@ function toDocumentResponse(row: {
   const uploadedAt =
     row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt ?? null);
   const confidence = row.confidenceScore != null ? Number(row.confidenceScore) : null;
+  const extractionCoverage = computeExtractionCoverage(row.aiParsedData, row.type);
 
   return {
     id: row.id,
@@ -352,6 +670,7 @@ function toDocumentResponse(row: {
     }),
     aiParsedData: row.aiParsedData,
     aiConfidence: confidence,
+    extractionCoverage,
     driveFileId: row.driveFileId,
     storagePath: row.storagePath,
     mimeType: row.mimeType,
@@ -755,6 +1074,7 @@ export const documentService = {
     }
 
     let result;
+    let sourceText = '';
     try {
       const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
 
@@ -764,6 +1084,7 @@ export const documentService = {
         : undefined;
 
       const text = extracted.text;
+      sourceText = text;
       const runExtraction = async () => {
         switch (type) {
           case 'invoice':
@@ -885,6 +1206,17 @@ export const documentService = {
         updatedAt: new Date(),
       })
       .where(eq(documents.id, documentId));
+
+    await persistExtractionLineage({
+      documentId,
+      processId: doc.processId,
+      documentType: type,
+      data: result.data as Record<string, any>,
+      confidenceScore: result.confidenceScore,
+      sourceText,
+    });
+
+    await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
 
     const veryLowConfidence = result.confidenceScore < MIN_OPERATIONAL_CONFIDENCE;
     const lowConfidenceFields = Array.isArray(result.fieldsWithLowConfidence)
@@ -1925,6 +2257,48 @@ export const documentService = {
 
     const fieldLabel = input.fieldLabel ?? input.rowKey;
     const itemSuffix = input.itemCode ? ` item ${input.itemCode}` : '';
+    const evidenceHash = sha256Text(
+      JSON.stringify({
+        processId,
+        scope: input.scope,
+        rowKey: input.rowKey,
+        fieldLabel,
+        itemCode: input.itemCode ?? null,
+        previousStatus: input.previousStatus ?? null,
+        resolution_note: input.resolution_note,
+      }),
+    );
+
+    await db
+      .insert(comparisonAcceptances)
+      .values({
+        processId,
+        scope: input.scope,
+        rowKey: input.rowKey,
+        fieldLabel,
+        itemCode: input.itemCode ?? null,
+        previousStatus: input.previousStatus ?? null,
+        evidenceHash,
+        resolutionNote: input.resolution_note,
+        acceptedBy: userId ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [
+          comparisonAcceptances.processId,
+          comparisonAcceptances.scope,
+          comparisonAcceptances.rowKey,
+          comparisonAcceptances.evidenceHash,
+        ],
+        set: {
+          resolutionNote: input.resolution_note,
+          acceptedBy: userId ?? null,
+          acceptedAt: new Date(),
+          invalidatedAt: null,
+          invalidationReason: null,
+          updatedAt: new Date(),
+        },
+      });
+
     await recordProcessEvent(
       processId,
       {
@@ -1937,6 +2311,7 @@ export const documentService = {
           fieldLabel,
           itemCode: input.itemCode ?? null,
           previousStatus: input.previousStatus ?? null,
+          evidenceHash,
           acceptedAt: new Date().toISOString(),
         },
       },
@@ -2403,10 +2778,10 @@ export const documentService = {
     // EXISTING raw extracted data ({ value, confidence }) — no AI re-run. Lets
     // the UI tell the operator exactly which fields were not read.
     const extractionCoverage = {
-      invoice: computeExtractionCoverage(rawInv),
-      packingList: computeExtractionCoverage(rawPl),
-      bl: computeExtractionCoverage(rawBl),
-      draftBl: computeExtractionCoverage(rawDraftBl),
+      invoice: computeExtractionCoverage(rawInv, 'invoice'),
+      packingList: computeExtractionCoverage(rawPl, 'packing_list'),
+      bl: computeExtractionCoverage(rawBl, 'ohbl'),
+      draftBl: computeExtractionCoverage(rawDraftBl, 'draft_bl'),
     };
 
     // Draft BL vs Final BL ("Revisado") — only when both are present

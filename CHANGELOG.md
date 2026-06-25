@@ -5,17 +5,81 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-06-25 - Otimizacao de custo IA/Vertex
+
+### Added
+
+- Preflight de custo projetado por chamada no `aiService.chat()`, estimando tokens de entrada/saida
+  antes de chamar provider pago.
+- Caps configuraveis de `maxOutputTokens` por contexto (`AI_EXTRACTION_TABLE_MAX_OUTPUT_TOKENS`,
+  `AI_BL_MAX_OUTPUT_TOKENS`, `AI_ANALYSIS_*`, `AI_SELF_REPAIR_MAX_OUTPUT_TOKENS`, etc.).
+- Teste de regressao para o teto diario: chamada e bloqueada quando `gasto atual + estimativa`
+  ultrapassa `AI_DAILY_BUDGET_BRL`.
+
+### Changed
+
+- Bloqueio mensal/diario de IA agora considera custo projetado da proxima chamada, nao apenas
+  gasto ja registrado. Isso evita passar do teto de R$100/dia por uma chamada grande.
+- Self-repair continua habilitado no IA_LOCAL, mas em provider pago (`vertex`/`openrouter`) fica
+  desligado por padrao; para autorizar a chamada extra, usar `AI_SELF_REPAIR_PAID=1`.
+- Variaveis de custo, caps, upgrade e self-repair passaram a ser validadas no schema de ambiente.
+
+### Fixed
+
+- Login Google de usuarios `analyst` deixava o portal abrir e voltar ao login: o portal chamava
+  `/cert-api/api/stats` mesmo para nao-admin, o proxy da cert-api exigia admin e mascarava `403`
+  como `401`; o cliente apagava o JWT. Portal agora nao chama cert-api para analistas e o nginx
+  preserva `403 Forbidden`.
+
+## [Unreleased] - 2026-06-24 - Revisao profunda de documentos, IA, e-mails e insights
+
+### Added
+
+- Parser deterministico/testes para BL (`bl-text-parser`) cobrindo campos criticos como
+  BL, referencia, portos, navio, viagem, container, pesos, free time e NCM.
+- Painel de diagnostico de extracao no comparativo documental, usando
+  `extractionCoverage` ja retornado pela API.
+- Metadados recuperaveis no JSON de anexos de e-mail: hash SHA-256, origem da mensagem,
+  indice do anexo, caminho local, Drive inbox e flag de orfao.
+- Migration `0020_document_lineage_and_email_dedupe.sql` com:
+  `email_attachment_documents`, `document_extraction_runs`,
+  `document_extracted_fields` e `comparison_acceptances`.
+- Linhagem relacional por campo para novas extrações documentais.
+- Deduplicacao forte de anexo por `process_id + content_sha256` antes de criar novo documento.
+- Aceite relacional de comparativo com hash de evidencia e invalidação por reprocessamento.
+- Classificacao textual de anexos genericos por conteudo PDF/XLSX antes de cair em `other`.
+
+### Changed
+
+- Cobertura ponderada de extracao passa a contar campos obrigatorios ausentes do JSON,
+  nao apenas campos que a IA retornou.
+- Draft BL passa a usar upgrade por baixa confianca e self-repair, alinhado ao BL final.
+- Ingestao Gmail/IMAP deixou de marcar mensagens como lidas durante o fetch; agora marca
+  somente apos log terminal persistido.
+- Varreduras manuais/historicas/double-check de Gmail permanecem fail-closed em
+  `EMAIL_ALLOWED_SENDERS`.
+- Reprocessamento de documentos invalida aceites ativos do comparativo.
+
+### Fixed
+
+- Corrigido `[object Object]` na aba Documentos/Dados Consolidados.
+- Cards de processo, Draft BL e resumo de IA agora desembrulham `{ value, confidence }`
+  legado e renderizam resumo humano para objetos.
+- Corrigido regex/captura de `vesselName` no parser de BL.
+
 ## [Unreleased] - 2026-06-22 - Vertex ligado + fixes (login, licenciamento, custo)
 
 Deployado em prod (`e170b43`). Doc: `docs/STATUS-2026-06-22.md`.
 
 ### Added
+
 - **Vertex AI em producao** (`AI_PROVIDER=vertex`, #60 resolvida) com tetos de custo:
   diario R$100 (`AI_DAILY_BUDGET_BRL`), mensal R$1.000, e cap por pergunta no assistente
   (`ASSISTANT_MAX_OUTPUT_TOKENS=768`).
 - Eduarda #1 (auto "em transito" ao extrair BL / editar ETD) e #3b (`fillPackingListNullsFromText`).
 
 ### Fixed
+
 - **`ai/providers/vertex.ts`**: `toVertexSchema()` converte o JSON Schema para o subset
   do Vertex (`type` array nullable + remove `$schema/additionalProperties/...`) — corrige
   HTTP 400 em TODA extracao com structured output. Removido `gemini-2.0-flash` do fallback (404).
@@ -25,6 +89,7 @@ Deployado em prod (`e170b43`). Doc: `docs/STATUS-2026-06-22.md`.
   (Status Licenciamento #10; 1845 linhas; antes "--").
 
 ### Notes
+
 - Teto de extracao e DADO, nao IA: docs ruins (xlsx-como-invoice, screenshots,
   misclassificados, scans grandes) ficam em 0 com qualquer modelo. Ver STATUS §3-4.
 - Pendente (dado/config, nao codigo): higienizar documentos, destinatarios #78, coluna de

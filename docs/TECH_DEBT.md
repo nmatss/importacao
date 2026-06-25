@@ -83,6 +83,25 @@ Ultima atualizacao: 2026-06-20
   Cert Produtos, Pre-Cons, Email Ingestion e Follow-Up.
 - Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como anotacao local.
 
+## Documentos, IA E E-mail Ingestion
+
+- Adicionar OCR/preprocessamento para PDFs escaneados, screenshots e documentos
+  de baixa qualidade. O pipeline atual usa texto extraido/base64/IA, mas ainda
+  nao tem etapa OCR dedicada com qualidade mensuravel por pagina.
+
+Concluido em 2026-06-24:
+
+- Linhagem relacional de extração em `document_extraction_runs` e
+  `document_extracted_fields`, incluindo `document_id`, `field_path`, valor,
+  confiança, hash do texto fonte, provider/modelo e versão de parser.
+- Deduplicação de anexos de e-mail em `email_attachment_documents` por
+  `process_id + content_sha256`, com origem, caminho local, Drive inbox,
+  documento vinculado e estado de órfão/recuperável.
+- Aceite de comparativos em `comparison_acceptances`, com escopo, linha/campo,
+  hash de evidência, usuário, nota e invalidação quando há nova extração.
+- Classificação textual de anexos PDF/XLSX genéricos antes de marcar como
+  `other`.
+
 Concluido em 2026-06-18:
 
 - Ordenacao acessivel na tabela de Produtos de Certificacoes com botoes focaveis

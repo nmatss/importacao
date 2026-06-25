@@ -77,6 +77,21 @@ function getFieldValue(data: Record<string, any> | undefined, key: string): any 
   return val ?? null;
 }
 
+function displayExtractedValue(value: unknown): string | null {
+  if (value == null || value === '') return null;
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Nao';
+  if (Array.isArray(value)) return `${value.length} ${value.length === 1 ? 'item' : 'itens'}`;
+  if (typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    if (typeof record.description === 'string' && record.description.trim()) {
+      return record.description;
+    }
+    const filled = Object.values(record).filter((nested) => nested != null && nested !== '');
+    return filled.length > 0 ? `${filled.length} campos` : null;
+  }
+  return String(value);
+}
+
 function getFieldConfidence(data: Record<string, any> | undefined, key: string): number | null {
   if (!data) return null;
   const val = data[key];
@@ -341,7 +356,7 @@ interface ExtractedFieldProps {
 }
 
 function ExtractedField({ label, value, confidence, icon: Icon, warning }: ExtractedFieldProps) {
-  const displayValue = value != null && value !== '' ? String(value) : '--';
+  const displayValue = displayExtractedValue(value) ?? '--';
   const isPlaceholder = displayValue === '--';
 
   return (

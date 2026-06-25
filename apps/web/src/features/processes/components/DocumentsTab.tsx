@@ -62,6 +62,50 @@ const FIELD_LABELS: Record<string, string> = {
 
 const HIDDEN_FIELDS = new Set(['importedAt', 'importedFromSheet']);
 
+const DOCUMENT_BLOCK_LABELS: Record<string, string> = {
+  invoice: 'Invoice',
+  proforma_invoice: 'Proforma Invoice',
+  packing_list: 'Packing List',
+  ohbl: 'BL Final',
+  draft_bl: 'Draft BL',
+  espelho: 'Espelho',
+  li: 'Licença de Importação',
+  certificate: 'Certificado',
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function unwrapAiValue(value: unknown): unknown {
+  if (isRecord(value) && 'value' in value) return value.value;
+  return value;
+}
+
+function formatExtractedValue(value: unknown): string {
+  const unwrapped = unwrapAiValue(value);
+  if (typeof unwrapped === 'number') {
+    return unwrapped.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+  if (Array.isArray(unwrapped)) {
+    return `${unwrapped.length} ${unwrapped.length === 1 ? 'item' : 'itens'}`;
+  }
+  if (isRecord(unwrapped)) {
+    const itemCount = Array.isArray(unwrapped.items) ? unwrapped.items.length : null;
+    const summary = isRecord(unwrapped.summary) ? unwrapped.summary : null;
+    const visibleKeys = Object.keys(summary ?? unwrapped).filter((key) => !HIDDEN_FIELDS.has(key));
+    const parts = [];
+    if (itemCount != null) parts.push(`${itemCount} ${itemCount === 1 ? 'item' : 'itens'}`);
+    if (visibleKeys.length > 0) parts.push(`${visibleKeys.length} campos`);
+    if (parts.length > 0) return parts.join(' · ');
+    return JSON.stringify(unwrapped);
+  }
+  return String(unwrapped);
+}
+
 export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) {
   const queryClient = useQueryClient();
   const { getToken, user } = useAuth();
@@ -205,7 +249,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
       {/* Document list — main content */}
       <DocumentList processId={processId} />
 
-      {/* Sheet-imported data — shown when aiExtractedData exists */}
+      {/* Consolidated extracted data — shown when aiExtractedData exists */}
       {aiExtractedData && Object.keys(aiExtractedData).length > 0 && (
         <div className="rounded-2xl border border-cyan-200/60 dark:border-cyan-800/60 bg-gradient-to-r from-cyan-50/50 to-white dark:from-cyan-950/20 dark:to-slate-800 shadow-sm overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3 border-b border-cyan-100 dark:border-cyan-800/40">
@@ -214,10 +258,10 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                Dados Importados da Planilha
+                Dados Consolidados
               </p>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Informacoes extraidas do Follow-Up Google Sheets
+                Informacoes extraidas de documentos e Follow-Up Google Sheets
                 {aiExtractedData.importedAt
                   ? ` em ${new Date(aiExtractedData.importedAt as string).toLocaleDateString('pt-BR')}`
                   : ''}
@@ -230,15 +274,12 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
               .map(([key, value]) => (
                 <div key={key} className="min-w-0">
                   <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    {FIELD_LABELS[key] || key.replace(/([A-Z])/g, ' $1').trim()}
+                    {DOCUMENT_BLOCK_LABELS[key] ||
+                      FIELD_LABELS[key] ||
+                      key.replace(/([A-Z])/g, ' $1').trim()}
                   </p>
                   <p className="mt-0.5 text-sm text-slate-800 dark:text-slate-200 break-words whitespace-pre-line">
-                    {typeof value === 'number'
-                      ? value.toLocaleString('pt-BR', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2,
-                        })
-                      : String(value)}
+                    {formatExtractedValue(value)}
                   </p>
                 </div>
               ))}

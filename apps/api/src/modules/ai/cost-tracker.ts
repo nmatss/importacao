@@ -77,13 +77,18 @@ export async function getDailySpendUSD(): Promise<number> {
  * Also sends an 80%-threshold warning alert (idempotent per day via
  * alert title fingerprint — alertService handles dedup).
  */
-export async function assertBudgetAvailable(): Promise<void> {
+export async function assertBudgetAvailable(
+  options: { estimatedCostUSD?: number } = {},
+): Promise<void> {
+  const estimatedCostUSD = Math.max(0, Number(options.estimatedCostUSD ?? 0) || 0);
+
   // ── Teto MENSAL (USD) — AI_MONTHLY_BUDGET_USD (0 desativa). ──
   const monthlyBudgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
   if (Number.isFinite(monthlyBudgetUSD) && monthlyBudgetUSD > 0) {
     const spent = await getMonthlySpendUSD();
-    if (spent >= monthlyBudgetUSD) {
-      throw new AIBudgetExceededError(spent, monthlyBudgetUSD, 'mensal');
+    const projected = spent + estimatedCostUSD;
+    if (projected >= monthlyBudgetUSD) {
+      throw new AIBudgetExceededError(projected, monthlyBudgetUSD, 'mensal');
     }
     if (spent >= monthlyBudgetUSD * 0.8) {
       const today = new Date().toISOString().slice(0, 10);
@@ -112,8 +117,9 @@ export async function assertBudgetAvailable(): Promise<void> {
   ) {
     const dailyBudgetUSD = dailyBudgetBRL / brlPerUsd;
     const spentTodayUSD = await getDailySpendUSD();
-    if (spentTodayUSD >= dailyBudgetUSD) {
-      throw new AIBudgetExceededError(spentTodayUSD, dailyBudgetUSD, 'diário');
+    const projectedTodayUSD = spentTodayUSD + estimatedCostUSD;
+    if (projectedTodayUSD >= dailyBudgetUSD) {
+      throw new AIBudgetExceededError(projectedTodayUSD, dailyBudgetUSD, 'diário');
     }
     if (spentTodayUSD >= dailyBudgetUSD * 0.8) {
       const today = new Date().toISOString().slice(0, 10);

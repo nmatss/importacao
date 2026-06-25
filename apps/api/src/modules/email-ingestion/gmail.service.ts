@@ -276,18 +276,6 @@ export const gmailService = {
             date: dateStr ? new Date(dateStr) : new Date(),
             attachments,
           });
-
-          // Mark as read immediately (prevents re-fetching on next run)
-          await withTimeout(
-            gmail.users.messages.modify({
-              userId: 'me',
-              id: msg.id!,
-              requestBody: {
-                removeLabelIds: ['UNREAD'],
-              },
-            }),
-            `messages.modify(${msg.id})`,
-          );
         } catch (msgErr) {
           logger.error({ err: msgErr, messageId: msg.id }, 'Failed to process Gmail message');
         }
@@ -299,6 +287,20 @@ export const gmailService = {
 
     logger.info({ count: emails.length }, 'Fetched unread emails via Gmail API');
     return emails;
+  },
+
+  async markAsRead(gmailId: string): Promise<void> {
+    const gmail = getGmailClient();
+    await withTimeout(
+      gmail.users.messages.modify({
+        userId: 'me',
+        id: gmailId,
+        requestBody: {
+          removeLabelIds: ['UNREAD'],
+        },
+      }),
+      `messages.modify(${gmailId})`,
+    );
   },
 
   async testConnection(): Promise<boolean> {

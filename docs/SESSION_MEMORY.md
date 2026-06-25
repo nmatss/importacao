@@ -1,5 +1,35 @@
 # Session Memory
 
+## 2026-06-25 - Login Google De Analista Voltando Para Login
+
+Resultado:
+
+- Investigado caso `mariana.santos@grupounico.com`: usuaria em
+  `importacao@grupounico.com` autenticava via Google, o portal abria e em
+  seguida recarregava para `/login`.
+- Causa raiz identificada no frontend/proxy: o portal executava
+  `fetchCertStats()` e `checkCertApiHealth()` para todos os usuarios; a rota
+  `/cert-api/` valida `GET /api/auth/cert-api-access`, que exige papel `admin`.
+  Usuarios Google auto-criados entram como `analyst`. O nginx mapeava tanto
+  `401` quanto `403` para `401`, e `certApiFetch()` apagava
+  `localStorage.importacao_token` ao receber 401.
+- Corrigido `PortalPage`: chamadas e links de Certificacoes ficam ativos apenas
+  para `admin`; para `analyst`, o card exibe acesso restrito e nao toca na
+  cert-api.
+- Corrigidos `apps/web/nginx.conf` e `infra/nginx/prod.conf`: `401` e `403` da
+  auth_request da cert-api agora sao preservados como respostas distintas.
+- Adicionado teste de regressao `PortalPage.test.tsx` cobrindo que analistas nao
+  disparam cert-api no portal e admins continuam disparando.
+
+Testes:
+
+- `npm --workspace apps/web test -- PortalPage.test.tsx` -> 2 passed.
+- `npm --workspace apps/web run typecheck` -> passed.
+- `npm --workspace apps/web run build` -> passed.
+- `npm run lint` -> passed.
+- `npm run typecheck` -> passed.
+- `npm test` -> API 739 passed / 1 skipped; Web 108 passed.
+
 ## 2026-06-19 - SYDLE One Real E Publicacao Via Nginx Interno
 
 Resultado:
@@ -971,6 +1001,95 @@ Evidencias de producao:
   `license_status=NAO_APLICAVEL`, `comercializacao_status=ENCERRADA`.
 
 Correcoes aplicadas nesta sessao:
+
+## 2026-06-24 - Revisao 100% Documentos/IA/E-mails/Insights
+
+Contexto:
+
+- Revisao profunda solicitada para remover `[object Object]`, tornar a extracao
+  documental mais completa, revisar fluxo de coleta de e-mails e expor insights
+  operacionais dos processos.
+- Auditoria dividida em frentes: documentos/IA/OCR, e-mail ingestion, banco/DW
+  e frontend/QA.
+
+Correcoes aplicadas:
+
+- `DocumentsTab` deixou de renderizar objetos com `String(value)` e passou a
+  resumir dados consolidados por tipo documental.
+- `ProcessInfoCard`, `DraftBLTab` e `AiExtractionSummary` passaram a
+  desembrulhar `{ value, confidence }` e renderizar objetos como resumo humano.
+- Comparativo documental ganhou painel de diagnostico de extracao com leitura
+  ponderada, campos nao lidos e baixa confianca.
+- Cobertura ponderada no backend agora contabiliza campos obrigatorios que
+  sequer vieram no JSON da IA.
+- Draft BL passou a usar upgrade por baixa confianca e self-repair.
+- Parser de BL ganhou teste deterministico e correcoes para captura de navio,
+  portos, container, peso, free time e NCM.
+- Gmail/IMAP deixaram de marcar e-mails como lidos durante o fetch; o marcador
+  so e removido apos log terminal persistido.
+- Query manual, historica e double-check de Gmail permanecem restringidas por
+  `EMAIL_ALLOWED_SENDERS`; o processador tambem valida allowlist sempre.
+- Anexos de e-mail passam a registrar SHA-256, origem da mensagem, indice do
+  anexo, caminho local, Drive inbox e flag de orfao/recuperavel no JSONB.
+- Migration `0020_document_lineage_and_email_dedupe.sql` adiciona tabelas para
+  anexos de e-mail, runs de extracao, campos extraidos e aceite relacional.
+- Ingestao por e-mail passou a deduplicar anexos por `processId + SHA-256`
+  antes de chamar `documentService.upload`.
+- Novas extracoes documentais passam a persistir run e campos extraidos em
+  tabelas relacionais com hash do texto fonte, provider/modelo e confianca.
+- Aceite de comparativo passou a persistir em `comparison_acceptances` com hash
+  de evidencia; reprocessamento/insercao de nova extracao invalida aceites
+  ativos do processo.
+- Anexos genericos (`other`) agora tentam classificacao textual por conteudo
+  PDF/XLSX antes de ficarem para revisao manual.
+
+Validacoes executadas:
+
+- `npm run typecheck -w apps/api`
+- `npm run typecheck -w apps/web`
+- `npm test -w apps/api -- src/modules/ai/utils/__tests__/bl-text-parser.test.ts src/modules/documents/__tests__/service.test.ts src/modules/email-ingestion/__tests__/sender-policy.test.ts src/modules/email-ingestion/__tests__/classify-document.test.ts --run`
+- `npm test -w apps/web -- src/features/documents/AiExtractionSummary.test.tsx src/features/documents/DocumentComparison.test.tsx src/features/processes/components/ProcessInfoCard.test.tsx --run`
+- `npm test -w apps/api -- src/modules/email-ingestion/__tests__/schema.test.ts src/modules/email-ingestion/__tests__/sender-policy.test.ts src/modules/email-ingestion/__tests__/classify-document.test.ts src/modules/email-ingestion/__tests__/processor-codes.test.ts src/modules/email-ingestion/__tests__/vimbar-detection.test.ts --run`
+- `git diff --check`
+- `npm run lint`
+- `npm test`
+- `npm run build`
+
+Pendencias estruturais:
+
+- OCR/preprocessamento dedicado para PDFs escaneados e screenshots continua
+  pendente porque nao ha engine OCR local configurada no projeto; o fluxo atual
+  cobre texto PDF/XLSX, parsers deterministicos, IA/VLM quando aplicavel e
+  classificacao textual de conteudo.
+
+## 2026-06-25 - Otimizacao IA/Vertex e teto diario
+
+Contexto:
+
+- Nicolas pediu revisao da IA com Vertex para otimizar uso e nao gastar tokens a toa,
+  incluindo revisao do bloqueio de R$100/dia.
+
+Decisoes/correcoes:
+
+- `assertBudgetAvailable` passou a receber `estimatedCostUSD` e bloquear por
+  `gasto atual + custo estimado da proxima chamada`, tanto no teto mensal quanto
+  no diario (`AI_DAILY_BUDGET_BRL`).
+- `aiService.chat()` agora estima tokens de entrada por tamanho do prompt e aplica
+  caps de saida por contexto antes de chamar provider pago.
+- Caps default: Invoice/PL/Proforma 16384, Espelho 12288, BL/Draft BL 6144,
+  Cert/LI 4096, analises 1024/512, self-repair 768, assistente 768.
+- Self-repair continua disponivel, mas em Vertex/OpenRouter fica desligado por
+  padrao (`AI_SELF_REPAIR_PAID=0`) para evitar reenviar documento inteiro em uma
+  segunda chamada sem autorizacao explicita.
+- `.env.example` e schema de ambiente documentam/validam os novos controles.
+
+Verificacoes:
+
+- `npm test -w apps/api -- --run src/modules/ai/__tests__/cost-tracker-budget.test.ts src/modules/ai/__tests__/provider-selection.test.ts src/modules/ai/__tests__/extract-with-upgrade.test.ts src/modules/ai/providers/__tests__/vertex.test.ts src/modules/ai/__tests__/cost-tracker.test.ts`
+- `npm run typecheck -w apps/api`
+- `npm run lint`
+- `npm test -w apps/api`
+- `npm run build`
 
 - Documento processado sem dado util extraido deixou de contar como lido.
 - `aiParsedData` vazio, com campos `{ value: null }`, string vazia ou lista de

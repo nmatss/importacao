@@ -54,6 +54,7 @@ function configureLocalEnv(): void {
 describe('AI provider selection', () => {
   beforeEach(() => {
     vi.resetModules();
+    vi.clearAllMocks();
     for (const key of ENV_KEYS) {
       originalEnv.set(key, process.env[key]);
       delete process.env[key];
@@ -174,5 +175,43 @@ describe('AI provider selection', () => {
     await expect(mod.aiService.detectAnomalies({}, {}, {})).rejects.toThrow(
       'AI response for anomaly detection failed contract validation',
     );
+  });
+
+  it('applies per-context output cap and preflights projected budget before paid calls', async () => {
+    process.env.AI_PROVIDER = 'openrouter';
+    process.env.AI_ALLOW_EXTERNAL = 'true';
+    process.env.OPENROUTER_API_KEY = 'test-key';
+
+    let capturedBody: any;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (_url, init) => {
+        capturedBody = JSON.parse((init as RequestInit).body as string);
+        return {
+          ok: true,
+          json: async () => ({
+            choices: [{ message: { content: JSON.stringify({ ok: true }) } }],
+            usage: { prompt_tokens: 12, completion_tokens: 4 },
+          }),
+          text: async () => '',
+        };
+      }),
+    );
+
+    const mod = await import('../service.js');
+    const costTracker = await import('../cost-tracker.js');
+    await (mod.aiService as any).chat(
+      'gemini-2.5-flash',
+      [{ role: 'user', content: 'Analise este e-mail.' }],
+      true,
+      'email_analysis',
+    );
+
+    expect(capturedBody.max_tokens).toBe(512);
+    expect(costTracker.assertBudgetAvailable).toHaveBeenCalledWith(
+      expect.objectContaining({ estimatedCostUSD: expect.any(Number) }),
+    );
+    const [{ estimatedCostUSD }] = (costTracker.assertBudgetAvailable as any).mock.calls[0];
+    expect(estimatedCostUSD).toBeGreaterThan(0);
   });
 });

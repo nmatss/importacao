@@ -238,6 +238,42 @@ export const validationResults = pgTable(
   ],
 );
 
+export const comparisonAcceptances = pgTable(
+  'comparison_acceptances',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    validationRunId: integer('validation_run_id').references(() => validationRuns.id, {
+      onDelete: 'set null',
+    }),
+    scope: varchar('scope', { length: 20 }).notNull(),
+    rowKey: varchar('row_key', { length: 160 }).notNull(),
+    fieldLabel: varchar('field_label', { length: 160 }).notNull(),
+    itemCode: varchar('item_code', { length: 80 }),
+    previousStatus: varchar('previous_status', { length: 30 }),
+    evidenceHash: varchar('evidence_hash', { length: 64 }).notNull(),
+    resolutionNote: text('resolution_note').notNull(),
+    acceptedBy: integer('accepted_by').references(() => users.id, { onDelete: 'set null' }),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).defaultNow().notNull(),
+    invalidatedAt: timestamp('invalidated_at', { withTimezone: true }),
+    invalidationReason: text('invalidation_reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('comparison_acceptances_process_id_idx').on(table.processId),
+    index('comparison_acceptances_process_row_idx').on(table.processId, table.rowKey),
+    uniqueIndex('comparison_acceptances_active_evidence_uidx').on(
+      table.processId,
+      table.scope,
+      table.rowKey,
+      table.evidenceHash,
+    ),
+  ],
+);
+
 export const currencyExchanges = pgTable(
   'currency_exchanges',
   {
@@ -411,6 +447,47 @@ export const emailIngestionLogs = pgTable(
   (table) => [
     index('email_ingestion_logs_process_id_idx').on(table.processId),
     index('email_ingestion_logs_status_idx').on(table.status),
+  ],
+);
+
+export const emailAttachmentDocuments = pgTable(
+  'email_attachment_documents',
+  {
+    id: serial('id').primaryKey(),
+    emailLogId: integer('email_log_id').references(() => emailIngestionLogs.id, {
+      onDelete: 'cascade',
+    }),
+    documentId: integer('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'cascade' }),
+    processCode: varchar('process_code', { length: 50 }),
+    messageId: varchar('message_id', { length: 500 }).notNull(),
+    transportId: varchar('transport_id', { length: 255 }),
+    attachmentIndex: integer('attachment_index').notNull(),
+    filename: varchar('filename', { length: 500 }).notNull(),
+    contentSha256: varchar('content_sha256', { length: 64 }).notNull(),
+    fileSize: integer('file_size'),
+    storagePath: text('storage_path'),
+    sistemaFileId: varchar('sistema_file_id', { length: 255 }),
+    documentType: varchar('document_type', { length: 50 }),
+    status: varchar('status', { length: 30 }).default('processed').notNull(),
+    orphaned: boolean('orphaned').default(false).notNull(),
+    recoverable: boolean('recoverable').default(false).notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('email_attachment_documents_email_log_id_idx').on(table.emailLogId),
+    index('email_attachment_documents_document_id_idx').on(table.documentId),
+    index('email_attachment_documents_process_id_idx').on(table.processId),
+    index('email_attachment_documents_hash_idx').on(table.contentSha256),
+    uniqueIndex('email_attachment_documents_message_attachment_uidx').on(
+      table.messageId,
+      table.attachmentIndex,
+    ),
+    uniqueIndex('email_attachment_documents_process_hash_uidx').on(
+      table.processId,
+      table.contentSha256,
+    ),
   ],
 );
 
@@ -859,5 +936,56 @@ export const documentExtractionHistory = pgTable(
   ],
 );
 
+export const documentExtractionRuns = pgTable(
+  'document_extraction_runs',
+  {
+    id: serial('id').primaryKey(),
+    documentId: integer('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'cascade' }),
+    documentType: varchar('document_type', { length: 50 }).notNull(),
+    provider: varchar('provider', { length: 50 }),
+    model: varchar('model', { length: 100 }),
+    parserVersion: varchar('parser_version', { length: 50 }).default('2026-06-24').notNull(),
+    confidence: numeric('confidence', { precision: 5, scale: 4 }),
+    sourceTextHash: varchar('source_text_hash', { length: 64 }),
+    sourceTextLength: integer('source_text_length'),
+    extractionStatus: varchar('extraction_status', { length: 30 }).default('completed').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('document_extraction_runs_document_id_idx').on(table.documentId),
+    index('document_extraction_runs_process_id_idx').on(table.processId),
+    index('document_extraction_runs_process_created_idx').on(table.processId, table.createdAt),
+  ],
+);
+
+export const documentExtractedFields = pgTable(
+  'document_extracted_fields',
+  {
+    id: serial('id').primaryKey(),
+    runId: integer('run_id')
+      .references(() => documentExtractionRuns.id, { onDelete: 'cascade' })
+      .notNull(),
+    documentId: integer('document_id').references(() => documents.id, { onDelete: 'set null' }),
+    processId: integer('process_id').references(() => importProcesses.id, { onDelete: 'cascade' }),
+    documentType: varchar('document_type', { length: 50 }).notNull(),
+    fieldPath: varchar('field_path', { length: 255 }).notNull(),
+    valueJson: jsonb('value_json'),
+    confidence: numeric('confidence', { precision: 5, scale: 4 }),
+    sourcePage: integer('source_page'),
+    sourceTextHash: varchar('source_text_hash', { length: 64 }),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('document_extracted_fields_run_id_idx').on(table.runId),
+    index('document_extracted_fields_document_id_idx').on(table.documentId),
+    index('document_extracted_fields_process_field_idx').on(table.processId, table.fieldPath),
+  ],
+);
+
 export type DocumentExtractionHistory = typeof documentExtractionHistory.$inferSelect;
 export type NewDocumentExtractionHistory = typeof documentExtractionHistory.$inferInsert;
+export type DocumentExtractionRun = typeof documentExtractionRuns.$inferSelect;
+export type NewDocumentExtractionRun = typeof documentExtractionRuns.$inferInsert;
+export type DocumentExtractedField = typeof documentExtractedFields.$inferSelect;
+export type NewDocumentExtractedField = typeof documentExtractedFields.$inferInsert;

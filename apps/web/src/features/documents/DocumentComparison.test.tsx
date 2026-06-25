@@ -206,6 +206,31 @@ describe('DocumentComparison', () => {
     expect(screen.getByText('$1.200,00')).toBeInTheDocument();
   });
 
+  it('shows extraction coverage diagnostics returned by the API', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        extractionCoverage: {
+          invoice: {
+            readPercent: 80,
+            effectiveReadPercent: 62,
+            trackedMissingFields: ['portOfLoading', 'totalGrossWeight'],
+            missingFields: ['portOfLoading'],
+            lowConfidenceFields: ['exporterName'],
+          },
+        },
+      },
+    });
+
+    renderComparison();
+
+    expect(screen.getByText(/Diagnostico da extracao documental/i)).toBeInTheDocument();
+    expect(screen.getAllByText('Invoice').length).toBeGreaterThan(1);
+    expect(screen.getByText('62%')).toBeInTheDocument();
+    expect(screen.getByText(/portOfLoading, totalGrossWeight/i)).toBeInTheDocument();
+    expect(screen.getByText(/exporterName/i)).toBeInTheDocument();
+  });
+
   it('marks the aggregate row as failed when the system check fails', () => {
     mockQueries({
       comparison: {

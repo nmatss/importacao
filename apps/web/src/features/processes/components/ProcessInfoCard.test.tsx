@@ -117,6 +117,27 @@ describe('ProcessInfoCard', () => {
     expect(screen.getAllByTitle('Fonte: Invoice').length).toBeGreaterThanOrEqual(4);
   });
 
+  it('unwraps legacy AI { value, confidence } fields instead of rendering object text', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            invoice: {
+              exporterName: { value: 'FORNECEDOR WRAPPER', confidence: 0.95 },
+              importerName: { value: 'IMPORTADOR WRAPPER', confidence: 0.94 },
+              totalBoxes: { value: 12, confidence: 0.9 },
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('FORNECEDOR WRAPPER')).toBeInTheDocument();
+    expect(screen.getByText('IMPORTADOR WRAPPER')).toBeInTheDocument();
+    expect(screen.getByText('12')).toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+  });
+
   it('falls back to BL espelho summary for Data Embarque, Frete and Container', () => {
     render(
       <ProcessInfoCard

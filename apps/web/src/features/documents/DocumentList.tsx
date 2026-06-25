@@ -35,6 +35,17 @@ interface Document {
   aiParsedData?: Record<string, unknown>;
   aiConfidence?: number | null;
   driveFileId?: string | null;
+  extractionCoverage?: {
+    readPercent: number;
+    effectiveReadPercent?: number;
+    trackedMissingFields?: string[];
+    trackedTotalWeight?: number;
+    trackedFilledWeight?: number;
+    totalFields: number;
+    filledFields: number;
+    missingFields: string[];
+    lowConfidenceFields: string[];
+  } | null;
 }
 
 interface DocumentSource {
@@ -70,10 +81,9 @@ const TYPE_COLORS: Record<string, string> = {
 function ConfidenceBadge({ value }: { value: number }) {
   const pct = Math.round(value * 100);
   const usable = hasOperationalConfidence(value);
-  const color =
-    !usable
-      ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200'
-      : pct >= 80
+  const color = !usable
+    ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200'
+    : pct >= 80
       ? 'text-emerald-700 bg-emerald-50'
       : pct >= 50
         ? 'text-amber-700 bg-amber-50'
@@ -474,10 +484,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           <span className="text-[11px] text-slate-400">
                             {formatDate(doc.uploadedAt)}
                           </span>
-                          <AiStatus
-                            status={doc.aiProcessingStatus}
-                            confidence={doc.aiConfidence}
-                          />
+                          <AiStatus status={doc.aiProcessingStatus} confidence={doc.aiConfidence} />
                           {doc.aiConfidence != null && <ConfidenceBadge value={doc.aiConfidence} />}
                         </div>
                         {source && (
@@ -658,6 +665,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           documentType={doc.documentType}
                           data={doc.aiParsedData as Record<string, unknown>}
                           confidence={doc.aiConfidence ?? null}
+                          coverage={doc.extractionCoverage}
                         />
                       </div>
                     )}

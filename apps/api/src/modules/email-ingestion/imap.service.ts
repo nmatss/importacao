@@ -75,16 +75,13 @@ export const imapService = {
             const msgId = parsed.messageId || `${Date.now()}-${Math.random()}`;
             emails.push({
               messageId: msgId,
-              gmailId: msgId,
+              gmailId: String(message.uid),
               from: parsed.from?.text || 'unknown',
               subject: parsed.subject || '(sem assunto)',
               body: parsed.text || '',
               date: parsed.date || new Date(),
               attachments,
             });
-
-            // Mark as seen
-            await client.messageFlagsAdd(message.uid, ['\\Seen'], { uid: true });
           } catch (parseErr) {
             logger.error({ err: parseErr, uid: message.uid }, 'Failed to parse email');
           }
@@ -106,6 +103,28 @@ export const imapService = {
 
     logger.info({ count: emails.length }, 'Fetched unseen emails');
     return emails;
+  },
+
+  async markAsRead(uid: string): Promise<void> {
+    const client = createClient();
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        await client.messageFlagsAdd(Number(uid), ['\\Seen'], { uid: true });
+      } finally {
+        lock.release();
+      }
+      await client.logout();
+    } catch (err) {
+      logger.error({ err, uid }, 'Failed to mark IMAP message as seen');
+      try {
+        await client.logout();
+      } catch {
+        /* ignore */
+      }
+      throw err;
+    }
   },
 
   async testConnection(): Promise<boolean> {

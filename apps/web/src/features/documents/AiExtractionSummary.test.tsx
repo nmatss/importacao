@@ -142,6 +142,39 @@ describe('AiExtractionSummary coverage header', () => {
     expect(within(itemRow).getByText(/15 kg/)).toBeInTheDocument();
   });
 
+  it('renders legacy object fields as a human summary instead of raw JSON', () => {
+    render(
+      <AiExtractionSummary
+        documentType="invoice"
+        confidence={0.9}
+        data={{
+          invoiceNumber: { value: 'INV-1', confidence: 0.95 },
+          paymentTerms: {
+            value: {
+              depositPercent: 30,
+              balancePercent: 70,
+              paymentDays: 60,
+            },
+            confidence: 0.8,
+          },
+          customObject: { foo: 'bar', baz: 1 },
+        }}
+        coverage={{
+          readPercent: 100,
+          totalFields: 3,
+          filledFields: 3,
+          missingFields: [],
+          lowConfidenceFields: [],
+        }}
+      />,
+    );
+
+    expect(screen.getByText(/30% depósito, 70% saldo, 60 dias/i)).toBeInTheDocument();
+    expect(screen.getByText('2 campos preenchidos')).toBeInTheDocument();
+    expect(screen.queryByText(/\{"foo":"bar"/)).not.toBeInTheDocument();
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+  });
+
   it('hides the coverage header when everything was read with no fields to review', () => {
     render(
       <AiExtractionSummary

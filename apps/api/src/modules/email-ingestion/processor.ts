@@ -1,10 +1,13 @@
 import fs from 'fs/promises';
 import path from 'path';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { fileTypeFromBuffer } from 'file-type';
+import pdfParse from 'pdf-parse';
+import * as XLSX from 'xlsx';
 import { eq, desc, count, sql, ilike, and, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
+  emailAttachmentDocuments,
   emailIngestionLogs,
   importProcesses,
   followUpTracking,
@@ -48,6 +51,99 @@ type EmailAttachment = {
   content: Buffer;
   size?: number;
 };
+
+type FetchedEmailForProcessing = {
+  messageId: string;
+  gmailId: string;
+  from: string;
+  subject: string;
+  body: string;
+  date: Date;
+  attachments: EmailAttachment[];
+};
+
+async function markEmailAsReadAfterDurableLog(
+  email: FetchedEmailForProcessing,
+  usingGmail: boolean,
+): Promise<void> {
+  try {
+    if (usingGmail) {
+      await gmailService.markAsRead(email.gmailId);
+    } else {
+      await imapService.markAsRead(email.gmailId);
+    }
+  } catch (err) {
+    logger.warn(
+      { err, messageId: email.messageId, transportId: email.gmailId, usingGmail },
+      'Email processed but could not be marked as read',
+    );
+  }
+}
+
+function sha256(buffer: Buffer): string {
+  return createHash('sha256').update(buffer).digest('hex');
+}
+
+async function findExistingAttachmentDocument(processId: number, contentSha256: string) {
+  const [existing] = await db
+    .select({
+      documentId: emailAttachmentDocuments.documentId,
+      filename: emailAttachmentDocuments.filename,
+      messageId: emailAttachmentDocuments.messageId,
+    })
+    .from(emailAttachmentDocuments)
+    .where(
+      and(
+        eq(emailAttachmentDocuments.processId, processId),
+        eq(emailAttachmentDocuments.contentSha256, contentSha256),
+        sql`${emailAttachmentDocuments.documentId} IS NOT NULL`,
+      ),
+    )
+    .limit(1);
+  return existing ?? null;
+}
+
+async function recordEmailAttachmentDocument(values: {
+  emailLogId: number;
+  documentId?: number | null;
+  processId?: number | null;
+  processCode?: string | null;
+  messageId: string;
+  transportId?: string | null;
+  attachmentIndex: number;
+  filename: string;
+  contentSha256: string;
+  fileSize?: number | null;
+  storagePath?: string | null;
+  sistemaFileId?: string | null;
+  documentType?: string | null;
+  status: string;
+  orphaned: boolean;
+  recoverable: boolean;
+}) {
+  await db
+    .insert(emailAttachmentDocuments)
+    .values({
+      emailLogId: values.emailLogId,
+      documentId: values.documentId ?? null,
+      processId: values.processId ?? null,
+      processCode: values.processCode ?? null,
+      messageId: values.messageId,
+      transportId: values.transportId ?? null,
+      attachmentIndex: values.attachmentIndex,
+      filename: values.filename,
+      contentSha256: values.contentSha256,
+      fileSize: values.fileSize ?? null,
+      storagePath: values.storagePath ?? null,
+      sistemaFileId: values.sistemaFileId ?? null,
+      documentType: values.documentType ?? null,
+      status: values.status,
+      orphaned: values.orphaned,
+      recoverable: values.recoverable,
+      updatedAt: new Date(),
+    })
+    .onConflictDoNothing();
+}
 
 function isDetectedEmailAttachmentAllowed(filename: string, detectedMime: string): boolean {
   const ext = path.extname(filename).toLowerCase();
@@ -151,7 +247,6 @@ function isStrongUnicoCode(code: string): boolean {
 import { classifyDocument } from './classify-document.js';
 export { classifyDocument };
 
-
 // ── AI-enhanced document classification using email body context ─────────
 
 function classifyDocumentWithContext(
@@ -222,6 +317,37 @@ function classifyDocumentWithContext(
   }
 
   return filenameType;
+}
+
+async function extractAttachmentTextForClassification(att: EmailAttachment): Promise<string> {
+  const filename = att.filename.toLowerCase();
+  const contentType = att.contentType?.toLowerCase() ?? '';
+  try {
+    if (filename.endsWith('.pdf') || contentType.includes('pdf')) {
+      const parsed = await pdfParse(att.content);
+      return parsed.text ?? '';
+    }
+    if (
+      filename.endsWith('.xlsx') ||
+      filename.endsWith('.xls') ||
+      contentType.includes('spreadsheet') ||
+      contentType.includes('excel')
+    ) {
+      const workbook = XLSX.read(att.content, { type: 'buffer' });
+      return workbook.SheetNames.slice(0, 5)
+        .map((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          return `--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`;
+        })
+        .join('\n');
+    }
+  } catch (err) {
+    logger.warn(
+      { err, filename: att.filename },
+      'Attachment text classification extraction failed',
+    );
+  }
+  return '';
 }
 
 // ── Regex-based document type extraction from text ──────────────────────
@@ -425,8 +551,9 @@ async function analyzeEmailWithAI(
 export const emailProcessor = {
   async processNewEmails(includeRead = false, gmailQuery?: string) {
     // Prefer Gmail API (service account), fall back to IMAP
-    let emails;
-    if (gmailService.isConfigured()) {
+    let emails: FetchedEmailForProcessing[];
+    const usingGmail = gmailService.isConfigured();
+    if (usingGmail) {
       logger.info({ includeRead, gmailQuery }, 'Using Gmail API for email ingestion');
       emails = await gmailService.fetchUnseenEmails(includeRead, gmailQuery);
     } else {
@@ -443,11 +570,13 @@ export const emailProcessor = {
 
       if (existing) {
         logger.debug({ messageId: email.messageId }, 'Email already processed, skipping');
+        await markEmailAsReadAfterDurableLog(email, usingGmail);
         continue;
       }
 
-      // Filter by allowed senders (skip if custom query was provided)
-      if (!gmailQuery && !isAllowedSender(email.from)) {
+      // Filter by allowed senders. This is enforced even for manual Gmail
+      // queries to prevent an operator query from bypassing the allowlist.
+      if (!isAllowedSender(email.from)) {
         logger.debug({ from: email.from }, 'Email from non-allowed sender, ignoring');
         await db.insert(emailIngestionLogs).values({
           messageId: email.messageId,
@@ -458,6 +587,7 @@ export const emailProcessor = {
           status: 'ignored',
           errorMessage: 'Remetente não autorizado',
         });
+        await markEmailAsReadAfterDurableLog(email, usingGmail);
         continue;
       }
 
@@ -484,6 +614,7 @@ export const emailProcessor = {
             .update(emailIngestionLogs)
             .set({ status: 'ignored', errorMessage: 'Sem anexos relevantes' })
             .where(eq(emailIngestionLogs.id, logEntry.id));
+          await markEmailAsReadAfterDurableLog(email, usingGmail);
           continue;
         }
 
@@ -642,6 +773,7 @@ export const emailProcessor = {
                     'Processo nao encontrado e FOLLOW_UP_AUTO_CREATE=0 — criacao automatica desativada',
                 })
                 .where(eq(emailIngestionLogs.id, logEntry.id));
+              await markEmailAsReadAfterDurableLog(email, usingGmail);
               continue;
             }
 
@@ -736,6 +868,7 @@ export const emailProcessor = {
             },
             'KIOM email processed (no attachments)',
           );
+          await markEmailAsReadAfterDurableLog(email, usingGmail);
           continue;
         }
 
@@ -858,6 +991,7 @@ export const emailProcessor = {
                   })
                   .where(eq(emailIngestionLogs.id, logEntry.id));
 
+                await markEmailAsReadAfterDurableLog(email, usingGmail);
                 continue; // Skip normal attachment processing
               }
             } catch (preConsErr) {
@@ -876,9 +1010,26 @@ export const emailProcessor = {
           status?: 'processed' | 'skipped';
           skipReason?: string;
           documentId?: number;
+          sourceMessageId?: string;
+          sourceTransportId?: string;
+          sourceAttachmentIndex?: number;
+          contentSha256?: string;
+          size?: number;
+          storagePath?: string;
+          sistemaFileId?: string;
+          orphaned?: boolean;
+          recoverable?: boolean;
         }> = [];
 
-        for (const att of email.attachments) {
+        for (const [attachmentIndex, att] of email.attachments.entries()) {
+          const contentSha256 = sha256(att.content);
+          const sourceMetadata = {
+            sourceMessageId: email.messageId,
+            sourceTransportId: email.gmailId,
+            sourceAttachmentIndex: attachmentIndex,
+            contentSha256,
+            size: att.size ?? att.content.byteLength,
+          };
           const validation = await validateEmailAttachment(att);
           if (!validation.ok) {
             logger.warn(
@@ -894,14 +1045,25 @@ export const emailProcessor = {
               type: 'unsupported',
               status: 'skipped',
               skipReason: validation.skipReason,
+              ...sourceMetadata,
+            });
+            await recordEmailAttachmentDocument({
+              emailLogId: logEntry.id,
+              processId,
+              processCode,
+              messageId: email.messageId,
+              transportId: email.gmailId,
+              attachmentIndex,
+              filename: att.filename,
+              contentSha256,
+              fileSize: sourceMetadata.size,
+              documentType: 'unsupported',
+              status: 'skipped',
+              orphaned: processId == null,
+              recoverable: false,
             });
             continue;
           }
-
-          await fs.mkdir(UPLOAD_DIR, { recursive: true });
-          const safeName = `${Date.now()}-${randomUUID()}-${att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-          const filePath = path.join(UPLOAD_DIR, safeName);
-          await fs.writeFile(filePath, att.content);
 
           // Use AI-enhanced classification (falls back to filename-only).
           let docType = classifyDocumentWithContext(att.filename, aiAnalysis);
@@ -922,17 +1084,65 @@ export const emailProcessor = {
           }
 
           if (docType === 'other') {
-            // TODO(content-classifier): when an attachment named only with the
-            // process code (e.g. IM0712602NB.pdf) reaches here, neither the
-            // filename nor the email body resolved a type. The robust fix is a
-            // content/IA classifier over the file bytes (aiService has no such
-            // method yet). Until then we degrade safely: keep type 'other' and
-            // log loudly so the operator can reclassify, instead of dropping it.
+            const attachmentText = await extractAttachmentTextForClassification(att);
+            const contentTypes = extractDocumentTypesFromText(attachmentText.slice(0, 10000));
+            if (contentTypes.length === 1) {
+              docType = contentTypes[0];
+              logger.info(
+                { filename: att.filename, docType },
+                'Recovered attachment type from attachment content',
+              );
+            }
+          }
+
+          if (docType === 'other') {
             logger.warn(
               { filename: att.filename, processCode },
-              "Attachment classified as 'other' — no content classifier available; flagged for manual review",
+              "Attachment classified as 'other' after filename, email-context and content checks; flagged for manual review",
             );
           }
+
+          if (processId) {
+            const duplicate = await findExistingAttachmentDocument(processId, contentSha256);
+            if (duplicate?.documentId) {
+              processedAttachments.push({
+                filename: att.filename,
+                type: docType,
+                status: 'skipped',
+                skipReason: `duplicate:${duplicate.documentId}`,
+                documentId: duplicate.documentId,
+                orphaned: false,
+                recoverable: false,
+                ...sourceMetadata,
+              });
+              await recordEmailAttachmentDocument({
+                emailLogId: logEntry.id,
+                documentId: duplicate.documentId,
+                processId,
+                processCode,
+                messageId: email.messageId,
+                transportId: email.gmailId,
+                attachmentIndex,
+                filename: att.filename,
+                contentSha256,
+                fileSize: sourceMetadata.size,
+                documentType: docType,
+                status: 'duplicate',
+                orphaned: false,
+                recoverable: false,
+              });
+              logger.info(
+                { processId, documentId: duplicate.documentId, filename: att.filename },
+                'Email attachment skipped: duplicate content hash for process',
+              );
+              continue;
+            }
+          }
+
+          await fs.mkdir(UPLOAD_DIR, { recursive: true });
+          const safeName = `${Date.now()}-${randomUUID()}-${att.filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+          const filePath = path.join(UPLOAD_DIR, safeName);
+          await fs.writeFile(filePath, att.content);
 
           // Upload to Sistema Automatico INBOX
           let sistemaFileId: string | undefined;
@@ -979,12 +1189,57 @@ export const emailProcessor = {
               type: docType,
               status: 'processed',
               documentId: doc.id,
+              storagePath: filePath,
+              sistemaFileId,
+              orphaned: false,
+              recoverable: false,
+              ...sourceMetadata,
+            });
+            await recordEmailAttachmentDocument({
+              emailLogId: logEntry.id,
+              documentId: doc.id,
+              processId,
+              processCode,
+              messageId: email.messageId,
+              transportId: email.gmailId,
+              attachmentIndex,
+              filename: att.filename,
+              contentSha256,
+              fileSize: sourceMetadata.size,
+              storagePath: filePath,
+              sistemaFileId,
+              documentType: docType,
+              status: 'processed',
+              orphaned: false,
+              recoverable: false,
             });
           } else {
             processedAttachments.push({
               filename: att.filename,
               type: docType,
               status: 'processed',
+              storagePath: filePath,
+              sistemaFileId,
+              orphaned: true,
+              recoverable: true,
+              ...sourceMetadata,
+            });
+            await recordEmailAttachmentDocument({
+              emailLogId: logEntry.id,
+              processId: null,
+              processCode,
+              messageId: email.messageId,
+              transportId: email.gmailId,
+              attachmentIndex,
+              filename: att.filename,
+              contentSha256,
+              fileSize: sourceMetadata.size,
+              storagePath: filePath,
+              sistemaFileId,
+              documentType: docType,
+              status: 'orphaned',
+              orphaned: true,
+              recoverable: true,
             });
           }
         }
@@ -1057,12 +1312,14 @@ export const emailProcessor = {
           },
           'Email processed successfully',
         );
+        await markEmailAsReadAfterDurableLog(email, usingGmail);
       } catch (error: any) {
         await db
           .update(emailIngestionLogs)
           .set({ status: 'failed', errorMessage: error.message })
           .where(eq(emailIngestionLogs.id, logEntry.id));
         logger.error({ err: error, messageId: email.messageId }, 'Failed to process email');
+        await markEmailAsReadAfterDurableLog(email, usingGmail);
       }
     }
   },
