@@ -105,6 +105,10 @@ function renderPage(role: 'admin' | 'analyst' = 'admin') {
     } as unknown as ReturnType<typeof useApiQuery>;
   });
 
+  return renderTree(role);
+}
+
+function renderTree(role: 'admin' | 'analyst' = 'admin') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MemoryRouter>
@@ -145,5 +149,58 @@ describe('SydlePaymentsPage', () => {
 
     expect(screen.getByText('Relatorio SYDLE restrito a administradores.')).toBeInTheDocument();
     expect(vi.mocked(useApiQuery).mock.calls[0]?.[2]).toMatchObject({ enabled: false });
+  });
+
+  it('warns that the financial block is pending when no SYDLE BRL is available', () => {
+    renderPage();
+    expect(screen.getByText(/Bloco financeiro da SYDLE pendente/i)).toBeInTheDocument();
+  });
+
+  it('renders filtered totalizers in the table footer', () => {
+    renderPage();
+    expect(screen.getByText(/Totais USD/i)).toBeInTheDocument();
+  });
+
+  it('tags câmbio/BRL filled from the portal as an estimate (≈)', () => {
+    const estimated = {
+      ...report,
+      data: [
+        {
+          ...report.data[0],
+          exchangeRate: '5.4321',
+          exchangeRateSource: 'portal_estimate',
+          amountBrl: '543.21',
+          amountBrlSource: 'portal_estimate',
+        },
+      ],
+    };
+    vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
+      const key = Array.isArray(queryKey) ? queryKey[0] : null;
+      return {
+        data:
+          key === 'sydle-payments' ? estimated : key === 'sydle-payments-summary' ? summary : [],
+        isLoading: false,
+        refetch: mockRefetch,
+        error: null,
+        isError: false,
+      } as unknown as ReturnType<typeof useApiQuery>;
+    });
+    renderTree();
+    expect(screen.getAllByText('≈ 5,4321').length).toBeGreaterThan(0);
+  });
+
+  it('shows a specific message when the report fails with HTTP 403', () => {
+    vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
+      const key = Array.isArray(queryKey) ? queryKey[0] : null;
+      return {
+        data: undefined,
+        isLoading: false,
+        refetch: mockRefetch,
+        error: key === 'sydle-payments' ? new Error('HTTP 403 Forbidden') : null,
+        isError: key === 'sydle-payments',
+      } as unknown as ReturnType<typeof useApiQuery>;
+    });
+    renderTree();
+    expect(screen.getByText(/Acesso negado ao relatório SYDLE/i)).toBeInTheDocument();
   });
 });

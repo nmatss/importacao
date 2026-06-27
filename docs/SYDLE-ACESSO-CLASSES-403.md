@@ -1,6 +1,8 @@
 # Pedido de acesso de leitura — classes financeiras (SYDLE One)
 
-Rascunho para enviar ao suporte/admin da SYDLE. **Não enviado** — revisar antes.
+Rascunho para enviar ao suporte/admin da SYDLE. **Rascunho criado no Gmail em
+2026-06-27 — revisar destinatário e enviar.** Versão pronta na seção
+[E-mail pronto](#e-mail-pronto) ao final.
 
 ## Contexto
 
@@ -49,3 +51,39 @@ O `signIn` da SYDLE One só aceita **GET com login/senha na query string**
 (POST → HTTP 405). Isso expõe a credencial a logs de proxy/WAF. Pedimos também,
 se possível, um método de **autenticação por token/header ou POST**, para
 eliminarmos esse risco. Enquanto isso, rotacionamos a senha periodicamente.
+
+## E-mail pronto
+
+**Destinatário:** gerente de conta / suporte SYDLE (preencher).
+**Assunto:** Grupo Uni.co — pedido de acesso de leitura a 2 classes financeiras (instância grupounico.sydle.one)
+
+> Olá, tudo bem?
+>
+> Sou o Nicolas, da TI do Grupo Uni.co. Integramos nosso portal de Importação à
+> nossa instância `grupounico.sydle.one` (app `main`) para montar um relatório
+> de **Compras e Pagamentos Internacionais**, lendo em **modo somente leitura**
+> (`signIn` + `_search`) a classe de pagamentos `68bf1179b042c72f03993928` e as
+> classes vizinhas do fluxo.
+>
+> Já conseguimos ler pagamentos, ticket, status, moeda, marca, fornecedor e
+> empresa — com isso trazemos código do processo, invoice, marca e fornecedor.
+> Porém, os dados **financeiros** (taxa de câmbio, valor em BRL, banco, contrato
+> de câmbio, proforma/PI e remessa/SWIFT) retornam **HTTP 403** para o nosso
+> usuário de integração, pois vivem em duas classes às quais não temos acesso:
+>
+> - `68bf1179b042c72f03995efb` (`_concreteObject` do registro de pagamento)
+> - `64f22b57e85f4a4b92376c43` (`processInstanceControl.activeElements` do BPM)
+>
+> **Poderiam conceder permissão de leitura (read-only)** a essas duas classes
+> para o nosso usuário de integração — ou, se preferirem, expor uma view/API
+> consolidada com os campos `exchange_rate`, `amount_brl`, `bank_name`,
+> `contract_number`, `proforma_number` e `remittance_id`? O uso é estritamente
+> read-only; não escrevemos nada na SYDLE. Se houver restrição a dados bancários,
+> uma view só com câmbio/BRL/contrato/proforma já resolve a maior parte.
+>
+> Aproveitando: o `signIn` da instância só aceita GET com login/senha na query
+> string (POST retorna 405), o que expõe a credencial em logs. Vocês oferecem
+> autenticação por **token/header ou POST**? Ajudaria bastante na segurança.
+>
+> Obrigado!
+> Nicolas Matsuda — Tecnologia da Informação — Grupo Uni.co
