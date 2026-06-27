@@ -146,6 +146,26 @@ export const documentController = {
     }
   },
 
+  async reconcileProcess(req: Request, res: Response) {
+    try {
+      const results = await documentService.reconcileProcess(Number(req.params.processId));
+      sendSuccess(res, { processId: Number(req.params.processId), results });
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async reconcileAll(_req: Request, res: Response) {
+    try {
+      const summary = await documentService.reconcileAllProcesses();
+      sendSuccess(res, summary);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async comparison(req: Request, res: Response) {
     try {
       const result = await documentService.getComparison(Number(req.params.processId));

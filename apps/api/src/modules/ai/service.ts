@@ -48,6 +48,7 @@ import {
   fillPackingListNullsFromText,
 } from './utils/packing-list-text-parser.js';
 import { fillBLNullsFromText } from './utils/bl-text-parser.js';
+import { computeConfidenceScore } from './utils/confidence.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 
@@ -173,13 +174,6 @@ function outputTokenCapForContext(context: string, explicit?: number): number | 
   return Number.isFinite(fallback) && fallback > 0 ? Math.floor(fallback) : undefined;
 }
 
-function hasConfidenceValue(value: unknown): boolean {
-  if (value === null || value === undefined || value === '') return false;
-  if (Array.isArray(value)) return value.some(hasConfidenceValue);
-  if (typeof value === 'object') return Object.values(value).some(hasConfidenceValue);
-  return true;
-}
-
 const anomalyDetectionSchema = z.object({
   anomalies: z.array(
     z.object({
@@ -290,51 +284,10 @@ function stripSpuriousItemPrefix(items: any[]): void {
   }
 }
 
-/**
- * Flatten AI response from { value, confidence } structure to plain values.
- * Validation checks and comparison logic need plain values, not nested objects.
- */
-export function flattenAiData(data: Record<string, any>): Record<string, any> {
-  const result: Record<string, any> = {};
-  for (const [key, val] of Object.entries(data)) {
-    // Campos meta (ex.: _trust do harness) não são dados extraídos — não devem
-    // poluir validação/comparativo/UI.
-    if (key.startsWith('_')) continue;
-    result[key] = flattenValue(val);
-  }
-  return result;
-}
-
-/**
- * Recursively unwrap `{ value, confidence }` confidence fields at ANY depth.
- *
- * The previous implementation only unwrapped top-level fields and `items[]`,
- * leaving nested structures (e.g. `paymentTerms.depositPercent`, or arrays of
- * confidence fields like `ncmList`) as raw `{ value, confidence }` objects in
- * `import_processes.aiExtractedData`. Downstream comparators that read those
- * fields directly then saw `[object Object]` and produced false mismatches /
- * null cross-references (DocIntel audit 2026-06-20, finding A2). Unwrapping
- * recursively keeps the persisted shape flat for every field.
- */
-function flattenValue(val: unknown): unknown {
-  if (Array.isArray(val)) {
-    return val.map((item) => flattenValue(item));
-  }
-  if (val && typeof val === 'object') {
-    const obj = val as Record<string, unknown>;
-    // Confidence field — unwrap and keep flattening (value may itself be an
-    // array or nested object).
-    if ('value' in obj && 'confidence' in obj) {
-      return flattenValue(obj.value);
-    }
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(obj)) {
-      out[k] = flattenValue(v);
-    }
-    return out;
-  }
-  return val;
-}
+// flattenAiData lives in ./utils/flatten.ts (pure, no DB) so reconciliation and
+// other db-free code can import it without pulling the database connection.
+// Re-exported here for back-compat with existing import sites.
+export { flattenAiData } from './utils/flatten.js';
 
 class AIService {
   private provider: AIProvider;
@@ -578,49 +531,7 @@ class AIService {
     score: number;
     lowConfidenceFields: string[];
   } {
-    const lowConfidenceFields: string[] = [];
-    let totalConfidence = 0;
-    let fieldCount = 0;
-
-    for (const [key, value] of Object.entries(data)) {
-      if (key === 'items' && Array.isArray(value)) {
-        for (let i = 0; i < value.length; i++) {
-          for (const [itemKey, itemValue] of Object.entries(value[i] as Record<string, any>)) {
-            if (itemValue && typeof itemValue === 'object' && 'confidence' in itemValue) {
-              if (
-                'value' in itemValue &&
-                !hasConfidenceValue((itemValue as { value: unknown }).value)
-              ) {
-                continue;
-              }
-              const conf = (itemValue as { confidence: number }).confidence;
-              totalConfidence += conf;
-              fieldCount++;
-              if (conf < 0.7) {
-                lowConfidenceFields.push(`items[${i}].${itemKey}`);
-              }
-            }
-          }
-        }
-      } else if (value && typeof value === 'object' && 'confidence' in value) {
-        if ('value' in value && !hasConfidenceValue((value as { value: unknown }).value)) {
-          continue;
-        }
-        const conf = (value as { confidence: number }).confidence;
-        totalConfidence += conf;
-        fieldCount++;
-        if (conf < 0.7) {
-          lowConfidenceFields.push(key);
-        }
-      }
-    }
-
-    let score = fieldCount > 0 ? totalConfidence / fieldCount : 0;
-    if (data._trust?.contractFailure === true) {
-      score = Math.min(score, 0.39);
-      lowConfidenceFields.push('_contract');
-    }
-    return { score, lowConfidenceFields };
+    return computeConfidenceScore(data);
   }
 
   /**

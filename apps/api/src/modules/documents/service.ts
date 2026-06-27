@@ -35,6 +35,7 @@ import { compareDates } from '../validation/utils/date-compare.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
 import type { AcceptComparisonInput } from './schema.js';
 import { normalizeGtin } from '../ai/harness/format.js';
+import { reconcileProcessConfidence } from './reconcile.js';
 
 /**
  * Convert an XLSX buffer to plain CSV-style text — used as input to the
@@ -1378,6 +1379,15 @@ export const documentService = {
     // Proforma never participates here (it's pre-shipment); we only consider
     // the three core customs documents.
     await this.runDegradableGate(doc.processId, mergedAiData);
+
+    // Cross-document confidence reconciliation (Levers 1+2): recalibrate the
+    // invoice/PL/proforma confidence from arithmetic self-consistency and
+    // corroboration against the operator-uploaded espelho. Runs on every doc
+    // change so a sibling arriving later (e.g. the espelho after the invoice)
+    // re-lifts the others. Non-fatal — never blocks extraction.
+    await reconcileProcessConfidence(doc.processId).catch((err) =>
+      logger.error({ err, processId: doc.processId }, 'Reconciliation after extraction failed'),
+    );
   },
 
   /**
@@ -1897,6 +1907,12 @@ export const documentService = {
       },
       'Espelho parsed successfully',
     );
+
+    // The uploaded espelho is the trusted 0.99 source — recalibrate the
+    // invoice/PL/proforma of this process against it now that it is available.
+    await reconcileProcessConfidence(doc.processId).catch((err) =>
+      logger.error({ err, processId: doc.processId }, 'Reconciliation after espelho failed'),
+    );
   },
 
   async extractText(
@@ -2155,6 +2171,26 @@ export const documentService = {
       confidenceScore: null,
       updatedAt: new Date(),
     });
+  },
+
+  /** Manually re-run cross-document confidence reconciliation for a process. */
+  async reconcileProcess(processId: number) {
+    return reconcileProcessConfidence(processId);
+  },
+
+  /** Backfill: reconcile every existing process. Returns an aggregate summary. */
+  async reconcileAllProcesses() {
+    const procs = await db.select({ id: importProcesses.id }).from(importProcesses);
+    let processesChanged = 0;
+    let documentsChanged = 0;
+    for (const proc of procs) {
+      const results = await reconcileProcessConfidence(proc.id);
+      if (results.length > 0) {
+        processesChanged++;
+        documentsChanged += results.length;
+      }
+    }
+    return { processesScanned: procs.length, processesChanged, documentsChanged };
   },
 
   async delete(id: number, userId: number | null = null) {

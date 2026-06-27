@@ -32,6 +32,9 @@ router.get('/:id/source', documentController.getSource);
 router.get('/:id/extraction-history', documentController.getExtractionHistory);
 router.get('/:id/file', documentController.getFile);
 router.post('/:id/reprocess', adminMiddleware, documentController.reprocess);
+// Re-run cross-document confidence reconciliation for a process (or all).
+router.post('/process/:processId/reconcile', adminMiddleware, documentController.reconcileProcess);
+router.post('/reconcile-all', adminMiddleware, documentController.reconcileAll);
 router.delete('/:id', adminMiddleware, documentController.delete);
 
 export { router as documentRoutes };
