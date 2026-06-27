@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -34,6 +34,16 @@ import { getErrorMessage } from '@/shared/utils/errors';
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
+/** Debounce a fast-changing value (used for free-text filters). */
+function useDebouncedValue<T>(value: T, delayMs = 350): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const handle = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(handle);
+  }, [value, delayMs]);
+  return debounced;
+}
+
 type PaymentStatus = 'open' | 'scheduled' | 'paid' | 'overdue' | 'cancelled' | 'unknown';
 type PaymentType = 'deposit' | 'balance' | 'fee' | 'refund' | 'other';
 type MatchStatus = 'matched' | 'ambiguous' | 'unmatched';
@@ -63,6 +73,11 @@ interface SydlePayment {
   scheduledAt: string | null;
   exchangeRate: string | null;
   amountBrl: string | null;
+  // Provenance of the exchange/BRL values: 'sydle' = came from SYDLE,
+  // 'portal_estimate' = derived from the process's currency_exchanges (the
+  // financial block is behind the SYDLE 403 classes — see docs).
+  exchangeRateSource?: 'sydle' | 'portal_estimate' | null;
+  amountBrlSource?: 'sydle' | 'portal_estimate' | null;
   bankName: string | null;
   contractNumber: string | null;
   remittanceId: string | null;
@@ -135,6 +150,9 @@ interface SydleSummary {
   totalPaidUsd: number;
   totalOpenUsd: number;
   totalBrl: number;
+  // BRL total including portal-estimated rows (currency_exchanges fallback) for
+  // matched USD payments whose SYDLE amount_brl is null.
+  totalBrlEstimated?: number;
   currencyBreakdown?: SydleCurrencyBreakdown[];
   records: number;
   matched: number;
@@ -188,10 +206,23 @@ function syncStatusLabel(status: string | null | undefined): string {
   return syncStatusLabels[status] ?? status;
 }
 
+// Compact display for KPI cards. Uses Intl compact notation (locale-correct)
+// instead of hand-rolled K/M strings that silently dropped magnitude
+// (e.g. 1.234.567 → "1.2M", losing 567K). The exact value is always shown in
+// the card's tooltip via `fullCurrency`, so no precision is hidden.
 function compactCurrency(value: number, currency = 'USD'): string {
-  if (!Number.isFinite(value)) return formatCurrency(0, currency);
-  if (Math.abs(value) >= 1_000_000) return `${currency} ${(value / 1_000_000).toFixed(1)}M`;
-  if (Math.abs(value) >= 1_000) return `${currency} ${(value / 1_000).toFixed(1)}K`;
+  if (!Number.isFinite(value)) value = 0;
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency,
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value);
+}
+
+/** Exact, fully-grouped currency string (KPI tooltip / totalizers). */
+function fullCurrency(value: number, currency = 'USD'): string {
+  if (!Number.isFinite(value)) value = 0;
   return formatCurrency(value, currency);
 }
 
@@ -259,11 +290,13 @@ function KpiCard({
   value,
   icon: Icon,
   tone,
+  title,
 }: {
   label: string;
   value: string | number;
   icon: typeof Banknote;
   tone: 'blue' | 'green' | 'amber' | 'red' | 'slate';
+  title?: string;
 }) {
   const toneClass = {
     blue: 'bg-primary-50 text-primary-700 ring-primary-200/70',
@@ -286,7 +319,10 @@ function KpiCard({
         </span>
         <div className="min-w-0">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
-          <p className="truncate text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
+          <p
+            title={title}
+            className="truncate text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100"
+          >
             {value}
           </p>
         </div>
@@ -334,12 +370,20 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex justify-end"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sydle-payment-drawer-title"
+    >
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
       <div className="relative flex h-full w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-800">
         <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
           <div className="min-w-0">
-            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h3
+              id="sydle-payment-drawer-title"
+              className="text-base font-semibold text-slate-900 dark:text-slate-100"
+            >
               Detalhe da compra / pagamento
             </h3>
             <p className="truncate text-xs text-slate-500 dark:text-slate-400">
@@ -426,24 +470,57 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                 <DetailRow
                   label="Taxa de cambio"
                   value={
-                    data.exchangeRate
-                      ? Number(data.exchangeRate).toLocaleString('pt-BR', {
+                    data.exchangeRate ? (
+                      <span>
+                        {data.exchangeRateSource === 'portal_estimate' && '≈ '}
+                        {Number(data.exchangeRate).toLocaleString('pt-BR', {
                           maximumFractionDigits: 6,
-                        })
-                      : null
+                        })}
+                        {data.exchangeRateSource === 'portal_estimate' && (
+                          <span className="ml-1 text-xs font-normal text-amber-600">
+                            estimado · portal
+                          </span>
+                        )}
+                      </span>
+                    ) : null
                   }
                 />
-                <DetailRow label="Valor em BRL" value={money(data.amountBrl, 'BRL')} />
+                <DetailRow
+                  label="Valor em BRL"
+                  value={
+                    data.amountBrl ? (
+                      <span>
+                        {data.amountBrlSource === 'portal_estimate' && '≈ '}
+                        {money(data.amountBrl, 'BRL')}
+                        {data.amountBrlSource === 'portal_estimate' && (
+                          <span className="ml-1 text-xs font-normal text-amber-600">
+                            estimado · portal
+                          </span>
+                        )}
+                      </span>
+                    ) : null
+                  }
+                />
                 <DetailRow label="Banco" value={data.bankName} />
                 <DetailRow label="Contrato" value={data.contractNumber} />
                 <DetailRow label="Remessa" value={data.remittanceId} />
+                {!data.bankName && !data.contractNumber && !data.remittanceId && (
+                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                    Dados bancários, contrato e remessa da SYDLE ainda não disponíveis — o acesso de
+                    leitura às classes financeiras está pendente de liberação pela SYDLE.
+                  </p>
+                )}
               </DetailSection>
 
               <DetailSection title="Conciliacao" icon={Link2}>
                 <DetailRow label="Status" value={matchLabels[data.matchStatus]} />
                 <DetailRow
-                  label="Score"
-                  value={data.matchScore != null ? Number(data.matchScore).toFixed(4) : null}
+                  label="Confiança"
+                  value={
+                    data.matchScore != null
+                      ? `${(Number(data.matchScore) * 100).toFixed(1)}%`
+                      : null
+                  }
                 />
                 <DetailRow label="Motivo" value={data.matchReason} />
               </DetailSection>
@@ -501,17 +578,37 @@ export function SydlePaymentsPage() {
   const [dueTo, setDueTo] = useState('');
   const [updatedFrom, setUpdatedFrom] = useState('');
   const [updatedTo, setUpdatedTo] = useState('');
+  const [sortBy, setSortBy] = useState<
+    'dueDate' | 'sourceUpdatedAt' | 'purchaseAmount' | 'paidAmount' | 'openAmount' | 'supplierName'
+  >('dueDate');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const limit = 50;
 
+  // Debounce the free-text filters so we don't fire a request per keystroke.
+  const debouncedSearch = useDebouncedValue(search, 350);
+  const debouncedSupplier = useDebouncedValue(supplier, 350);
+
+  function toggleSort(column: typeof sortBy) {
+    if (sortBy === column) {
+      setSortOrder((current) => (current === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+    setPage(1);
+  }
+
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('limit', String(limit));
-    if (search) params.set('search', search);
-    if (supplier) params.set('supplier', supplier);
+    params.set('sortBy', sortBy);
+    params.set('sortOrder', sortOrder);
+    if (debouncedSearch) params.set('search', debouncedSearch);
+    if (debouncedSupplier) params.set('supplier', debouncedSupplier);
     if (brand) params.set('brand', brand);
     if (currency) params.set('currency', currency);
     if (logisticStatus) params.set('logisticStatus', logisticStatus);
@@ -535,8 +632,10 @@ export function SydlePaymentsPage() {
     page,
     paymentStatus,
     paymentType,
-    search,
-    supplier,
+    debouncedSearch,
+    debouncedSupplier,
+    sortBy,
+    sortOrder,
     updatedFrom,
     updatedTo,
   ]);
@@ -673,7 +772,18 @@ export function SydlePaymentsPage() {
   }
 
   if (error) {
-    return <ErrorState message="Erro ao carregar relatório SYDLE." onRetry={() => refetch()} />;
+    const msg = getErrorMessage(error);
+    const isForbidden = /403|forbidden|permiss/i.test(msg);
+    return (
+      <ErrorState
+        message={
+          isForbidden
+            ? 'Acesso negado ao relatório SYDLE. A credencial de integração pode ter expirado ou perdido permissão — verifique SYDLE_USER/SYDLE_PASSWORD ou contate o administrador.'
+            : `Erro ao carregar relatório SYDLE. ${msg}`
+        }
+        onRetry={() => refetch()}
+      />
+    );
   }
 
   return (
@@ -744,18 +854,21 @@ export function SydlePaymentsPage() {
         <KpiCard
           label="Comprado USD"
           value={compactCurrency(summary?.totalPurchaseUsd ?? 0)}
+          title={fullCurrency(summary?.totalPurchaseUsd ?? 0)}
           icon={Banknote}
           tone="blue"
         />
         <KpiCard
           label="Pago USD"
           value={compactCurrency(summary?.totalPaidUsd ?? 0)}
+          title={fullCurrency(summary?.totalPaidUsd ?? 0)}
           icon={CheckCircle2}
           tone="green"
         />
         <KpiCard
           label="Aberto USD"
           value={compactCurrency(summary?.totalOpenUsd ?? 0)}
+          title={fullCurrency(summary?.totalOpenUsd ?? 0)}
           icon={CalendarClock}
           tone="amber"
         />
@@ -778,6 +891,22 @@ export function SydlePaymentsPage() {
           tone="amber"
         />
       </div>
+
+      {summary && summary.records > 0 && (summary.totalBrl ?? 0) === 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+          <Landmark className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            <p className="font-semibold">Bloco financeiro da SYDLE pendente de liberação</p>
+            <p className="mt-0.5">
+              Banco, contrato de câmbio e remessa vivem em classes da SYDLE sem acesso de leitura
+              (403). Os valores de Câmbio/BRL marcados com <strong>≈</strong> são estimados pelo
+              câmbio do processo cadastrado no portal — não são a taxa bancária real da SYDLE.
+              {(summary.totalBrlEstimated ?? 0) > 0 &&
+                ` Equivalente estimado: ${fullCurrency(summary.totalBrlEstimated ?? 0, 'BRL')}.`}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Per-currency breakdown: the KPIs above only total USD, so any EUR/CNY
           (or other) payments would otherwise be invisible in the report. */}
@@ -1020,30 +1149,45 @@ export function SydlePaymentsPage() {
           <div className="hidden overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800 md:block">
             <div className="overflow-x-auto">
               <table className="min-w-[1800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
-                <thead className="bg-slate-50 dark:bg-slate-900">
+                <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
                   <tr>
-                    {[
-                      'Processo',
-                      'Fase',
-                      'Compra',
-                      'Fornecedor',
-                      'Tipo',
-                      'Status',
-                      'Valor',
-                      'Pago',
-                      'Saldo',
-                      'Vencimento',
-                      'Câmbio/BRL',
-                      'Banco',
-                      'Contrato',
-                      'Conciliação',
-                      'Atualização',
-                    ].map((label) => (
+                    {(
+                      [
+                        { label: 'Processo' },
+                        { label: 'Fase' },
+                        { label: 'Compra' },
+                        { label: 'Fornecedor', sort: 'supplierName' },
+                        { label: 'Tipo' },
+                        { label: 'Status' },
+                        { label: 'Valor', sort: 'purchaseAmount' },
+                        { label: 'Pago', sort: 'paidAmount' },
+                        { label: 'Saldo', sort: 'openAmount' },
+                        { label: 'Vencimento', sort: 'dueDate' },
+                        { label: 'Câmbio/BRL' },
+                        { label: 'Banco' },
+                        { label: 'Contrato' },
+                        { label: 'Conciliação' },
+                        { label: 'Atualização', sort: 'sourceUpdatedAt' },
+                      ] as const
+                    ).map((col) => (
                       <th
-                        key={label}
+                        key={col.label}
                         className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                       >
-                        {label}
+                        {'sort' in col && col.sort ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleSort(col.sort)}
+                            className="inline-flex items-center gap-1 hover:text-slate-800 dark:hover:text-slate-200"
+                          >
+                            {col.label}
+                            <span className="text-slate-400">
+                              {sortBy === col.sort ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
+                            </span>
+                          </button>
+                        ) : (
+                          col.label
+                        )}
                       </th>
                     ))}
                   </tr>
@@ -1116,12 +1260,19 @@ export function SydlePaymentsPage() {
                           {dateLabel(row.dueDate)}
                         </td>
                         <td className="px-4 py-3 text-sm tabular-nums text-slate-700 dark:text-slate-300">
-                          <div>
+                          <div
+                            title={
+                              row.exchangeRateSource === 'portal_estimate'
+                                ? 'Câmbio estimado pelo portal (currency_exchanges) — SYDLE indisponível'
+                                : undefined
+                            }
+                          >
                             {row.exchangeRate
-                              ? `PTAX ${Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}`
+                              ? `${row.exchangeRateSource === 'portal_estimate' ? '≈ ' : 'PTAX '}${Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}`
                               : '--'}
                           </div>
                           <div className="text-xs text-slate-400">
+                            {row.amountBrlSource === 'portal_estimate' && row.amountBrl ? '≈ ' : ''}
                             {money(row.amountBrl, 'BRL')}
                           </div>
                         </td>
@@ -1170,6 +1321,32 @@ export function SydlePaymentsPage() {
                     );
                   })}
                 </tbody>
+                {summary && (
+                  <tfoot className="border-t-2 border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+                    <tr className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      <td
+                        colSpan={6}
+                        className="px-4 py-3 text-right text-xs uppercase tracking-wider text-slate-500"
+                      >
+                        Totais USD · filtro atual ({summary.records})
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {fullCurrency(summary.totalPurchaseUsd)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {fullCurrency(summary.totalPaidUsd)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums">
+                        {fullCurrency(summary.totalOpenUsd)}
+                      </td>
+                      <td colSpan={2} className="px-4 py-3 text-xs font-normal text-slate-500">
+                        {(summary.totalBrlEstimated ?? summary.totalBrl) > 0 &&
+                          `BRL ${fullCurrency(summary.totalBrlEstimated ?? summary.totalBrl, 'BRL')}`}
+                      </td>
+                      <td colSpan={4} />
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           </div>
@@ -1236,6 +1413,7 @@ export function SydlePaymentsPage() {
                     <div>
                       <span className="block text-xs text-slate-500">BRL</span>
                       <span className="font-medium text-slate-800 dark:text-slate-200">
+                        {row.amountBrlSource === 'portal_estimate' && row.amountBrl ? '≈ ' : ''}
                         {money(row.amountBrl, 'BRL')}
                       </span>
                     </div>

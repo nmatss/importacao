@@ -20,8 +20,47 @@ vi.mock('../../alerts/service.js', () => ({
   alertService: { create: vi.fn().mockResolvedValue(undefined) },
 }));
 
-const { sydleService } = await import('../service.js');
+const { sydleService, applyPortalExchange } = await import('../service.js');
 type NormalizedPayment = Parameters<typeof sydleService.upsertPayments>[0][number];
+
+describe('applyPortalExchange', () => {
+  const base = {
+    processId: 7,
+    currency: 'USD',
+    purchaseAmount: '1000',
+    exchangeRate: null as string | null,
+    amountBrl: null as string | null,
+  };
+
+  it('fills exchange rate and BRL from the process rate, tagged portal_estimate', () => {
+    const out = applyPortalExchange({ ...base }, new Map([[7, 5.5]]));
+    expect(out.exchangeRate).toBe('5.500000');
+    expect(out.amountBrl).toBe('5500.00');
+    expect(out.exchangeRateSource).toBe('portal_estimate');
+    expect(out.amountBrlSource).toBe('portal_estimate');
+  });
+
+  it('keeps SYDLE values untouched and tags them as sydle', () => {
+    const out = applyPortalExchange(
+      { ...base, exchangeRate: '5.20', amountBrl: '5200.00' },
+      new Map([[7, 5.5]]),
+    );
+    expect(out.exchangeRate).toBe('5.20');
+    expect(out.amountBrl).toBe('5200.00');
+    expect(out.exchangeRateSource).toBe('sydle');
+    expect(out.amountBrlSource).toBe('sydle');
+  });
+
+  it('never invents data: no process rate, no match, or non-USD → stays null', () => {
+    expect(applyPortalExchange({ ...base }, new Map()).exchangeRate).toBeNull();
+    expect(
+      applyPortalExchange({ ...base, processId: null }, new Map([[7, 5.5]])).amountBrl,
+    ).toBeNull();
+    expect(
+      applyPortalExchange({ ...base, currency: 'EUR' }, new Map([[7, 5.5]])).exchangeRateSource,
+    ).toBeNull();
+  });
+});
 
 function makePayment(overrides: Partial<NormalizedPayment> = {}): NormalizedPayment {
   return {
