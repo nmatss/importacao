@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { estimateCostUSD, AIBudgetExceededError } from '../cost-pricing.js';
 
 describe('estimateCostUSD', () => {
-  it('prices Flash @ $0.15/1M input + $0.60/1M output (2026 rates)', () => {
-    expect(estimateCostUSD('gemini-2.5-flash', 1_000_000, 1_000_000)).toBeCloseTo(0.75, 5);
+  it('prices Flash @ $0.30/1M input + $2.50/1M output (official GA rates)', () => {
+    expect(estimateCostUSD('gemini-2.5-flash', 1_000_000, 1_000_000)).toBeCloseTo(2.8, 5);
   });
 
-  it('prices Pro @ $1.25/1M input + $10.00/1M output (2026 rates)', () => {
+  it('prices Pro @ $1.25/1M input + $10.00/1M output (≤200k tier)', () => {
     expect(estimateCostUSD('gemini-2.5-pro', 1_000_000, 1_000_000)).toBeCloseTo(11.25, 5);
   });
 
@@ -20,10 +20,10 @@ describe('estimateCostUSD', () => {
     expect(estimateCostUSD('unknown-model-xyz', 1000, 1000)).toBe(0);
   });
 
-  it('typical-document cost is roughly $0.002 (Flash, 5k in / 2k out)', () => {
+  it('typical-document cost is roughly $0.0065 (Flash, 5k in / 2k out)', () => {
+    // (5000*0.30 + 2000*2.50) / 1e6 = 0.0065
     const cost = estimateCostUSD('gemini-2.5-flash', 5_000, 2_000);
-    expect(cost).toBeGreaterThan(0.0015);
-    expect(cost).toBeLessThan(0.003);
+    expect(cost).toBeCloseTo(0.0065, 5);
   });
 
   it('Pro-upgrade cost on a worst-case (10k in / 4k out) stays under $0.06', () => {

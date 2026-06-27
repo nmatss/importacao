@@ -130,6 +130,10 @@ interface ExtractionResult {
 const MODEL_FALLBACK_CHAIN: string[] = ['gemini-2.5-flash', 'gemini-2.5-pro'];
 const LOCAL_DEFAULT_MODEL = 'unico-docintel';
 const APPROX_CHARS_PER_TOKEN = 4;
+// Conservative output-token floor used ONLY by the budget pre-flight estimate
+// when a call has no explicit output cap — keeps the R$/day gate from assuming
+// a zero-cost output. Real usage is logged with exact token counts afterwards.
+const BUDGET_OUTPUT_TOKEN_FLOOR = 4096;
 
 const CONTEXT_OUTPUT_TOKEN_CAPS: Array<[RegExp, number, string]> = [
   [
@@ -375,10 +379,15 @@ class AIService {
 
       const attemptStart = Date.now();
       try {
+        // Output-token estimate for the gate. When a context has no explicit
+        // cap, do NOT assume 0 output (that would under-estimate the call's cost
+        // and let it slip past the hard cap) — floor it at a conservative
+        // default so the R$/day guard always accounts for output cost.
+        const estimatedOutputTokens = effectiveMaxOutputTokens ?? BUDGET_OUTPUT_TOKEN_FLOOR;
         const estimatedCostUSD = estimateCostUSD(
           currentModel,
           estimatePromptTokens(messages),
-          effectiveMaxOutputTokens ?? 0,
+          estimatedOutputTokens,
         );
         // Budget gate: block before the provider call when the current spend
         // plus this call's conservative estimate would exceed the monthly/daily
