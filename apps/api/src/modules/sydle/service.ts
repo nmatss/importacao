@@ -12,6 +12,7 @@ import {
   or,
   sql,
 } from 'drizzle-orm';
+import * as XLSX from 'xlsx';
 import { db } from '../../shared/database/connection.js';
 import {
   importProcesses,
@@ -49,6 +50,11 @@ interface MatchResult {
 const SYDLE_CURSOR_OVERLAP_MS = 5 * 60 * 1000;
 const CSV_EXPORT_PAGE_SIZE = 200;
 const SYDLE_MATCH_THRESHOLD = 0.7;
+const PDF_LINE_HEIGHT = 12;
+const PDF_MARGIN_X = 28;
+const PDF_MARGIN_TOP = 548;
+const PDF_PAGE_WIDTH = 842;
+const PDF_PAGE_HEIGHT = 595;
 
 function toDate(value: unknown): Date | null {
   if (!value) return null;
@@ -201,6 +207,26 @@ function csvLine(values: unknown[]): string {
   return values.map(sanitizeForCsv).join(',');
 }
 
+function sanitizeForSpreadsheet(value: unknown): string | number {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'number') return Number.isFinite(value) ? value : '';
+  const raw = String(value);
+  return /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+}
+
+function pdfEscape(value: unknown): string {
+  return String(value ?? '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
+    .replace(/[\r\n\t]+/g, ' ');
+}
+
+function truncate(value: unknown, length: number): string {
+  const text = String(value ?? '');
+  return text.length > length ? `${text.slice(0, Math.max(0, length - 1))}…` : text;
+}
+
 function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
@@ -224,6 +250,113 @@ const LOGISTIC_STATUS_LABELS: Record<string, string> = {
 function phaseLabel(status: string | null | undefined): string {
   if (!status) return '';
   return LOGISTIC_STATUS_LABELS[status] ?? status;
+}
+
+type SydleExportRow = Awaited<ReturnType<typeof sydleService.list>>['data'][number];
+
+const EXPORT_COLUMNS = [
+  { key: 'process', header: 'Processo' },
+  { key: 'phase', header: 'Fase Processo' },
+  { key: 'purchaseRef', header: 'Compra' },
+  { key: 'purchaseOrder', header: 'PO' },
+  { key: 'proformaNumber', header: 'PI' },
+  { key: 'invoiceNumber', header: 'Invoice' },
+  { key: 'supplierName', header: 'Fornecedor' },
+  { key: 'brand', header: 'Marca' },
+  { key: 'currency', header: 'Moeda' },
+  { key: 'purchaseAmount', header: 'Valor Compra' },
+  { key: 'paidAmount', header: 'Valor Pago' },
+  { key: 'openAmount', header: 'Saldo Aberto' },
+  { key: 'paymentType', header: 'Tipo Pagamento' },
+  { key: 'paymentStatus', header: 'Status Pagamento' },
+  { key: 'dueDate', header: 'Vencimento' },
+  { key: 'paidAt', header: 'Pago Em' },
+  { key: 'scheduledAt', header: 'Agendado Para' },
+  { key: 'exchangeRate', header: 'Taxa Cambio' },
+  { key: 'exchangeRateSource', header: 'Origem Cambio' },
+  { key: 'amountBrl', header: 'Valor BRL' },
+  { key: 'amountBrlSource', header: 'Origem BRL' },
+  { key: 'bankName', header: 'Banco' },
+  { key: 'contractNumber', header: 'Contrato' },
+  { key: 'remittanceId', header: 'Remessa' },
+  { key: 'matchStatus', header: 'Match Portal' },
+  { key: 'matchReason', header: 'Motivo Match' },
+  { key: 'sourceUpdatedAt', header: 'Atualizado Na SYDLE' },
+  { key: 'syncedAt', header: 'Sincronizado Em' },
+] as const;
+
+function exportValue(row: SydleExportRow, key: (typeof EXPORT_COLUMNS)[number]['key']) {
+  switch (key) {
+    case 'process':
+      return row.portalProcessCode || row.processCode || '';
+    case 'phase':
+      return phaseLabel(row.logisticStatus);
+    case 'brand':
+      return row.brand || row.portalBrand || '';
+    case 'dueDate':
+      return dateOnly(row.dueDate);
+    case 'paidAt':
+      return dateOnly(row.paidAt);
+    case 'scheduledAt':
+      return dateOnly(row.scheduledAt);
+    case 'sourceUpdatedAt':
+      return dateOnly(row.sourceUpdatedAt);
+    case 'syncedAt':
+      return dateOnly(row.syncedAt);
+    default:
+      return row[key] ?? '';
+  }
+}
+
+function pdfLine(y: number, fontSize: number, text: string): string {
+  return `BT /F1 ${fontSize} Tf ${PDF_MARGIN_X} ${y} Td (${pdfEscape(text)}) Tj ET`;
+}
+
+function buildSimplePdf(lines: string[]): Buffer {
+  const pages: string[] = [];
+  let current: string[] = [];
+  let y = PDF_MARGIN_TOP;
+
+  for (const line of lines) {
+    current.push(pdfLine(y, 8, line));
+    y -= PDF_LINE_HEIGHT;
+    if (y < 34) {
+      pages.push(current.join('\n'));
+      current = [];
+      y = PDF_MARGIN_TOP;
+    }
+  }
+  if (current.length) pages.push(current.join('\n'));
+
+  const objects: string[] = [];
+  objects.push('<< /Type /Catalog /Pages 2 0 R >>');
+  const kids = pages.map((_page, index) => `${3 + index * 2} 0 R`).join(' ');
+  objects.push(`<< /Type /Pages /Kids [${kids}] /Count ${pages.length} >>`);
+
+  pages.forEach((content, index) => {
+    const pageObj = 3 + index * 2;
+    const contentObj = pageObj + 1;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PDF_PAGE_WIDTH} ${PDF_PAGE_HEIGHT}] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents ${contentObj} 0 R >>`,
+    );
+    objects.push(
+      `<< /Length ${Buffer.byteLength(content, 'utf8')} >>\nstream\n${content}\nendstream`,
+    );
+  });
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((obj, index) => {
+    offsets.push(Buffer.byteLength(pdf, 'utf8'));
+    pdf += `${index + 1} 0 obj\n${obj}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(pdf, 'utf8');
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i < offsets.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(pdf, 'utf8');
 }
 
 // ── Portal exchange-rate fallback ────────────────────────────────────────
@@ -937,7 +1070,7 @@ export const sydleService = {
     return db.select().from(sydleSyncRuns).orderBy(desc(sydleSyncRuns.startedAt)).limit(limit);
   },
 
-  async exportCsv(filters: SydleReportQuery): Promise<string> {
+  async exportRows(filters: SydleReportQuery) {
     const firstPage = await this.list({ ...filters, page: 1, limit: CSV_EXPORT_PAGE_SIZE });
     const rows = [...firstPage.data];
     let page = 2;
@@ -949,59 +1082,63 @@ export const sydleService = {
       page += 1;
     }
 
-    const header = [
-      'Processo',
-      'Compra',
-      'PO',
-      'PI',
-      'Invoice',
-      'Fornecedor',
-      'Marca',
-      'Fase Processo',
-      'Moeda',
-      'Valor Compra',
-      'Valor Pago',
-      'Saldo Aberto',
-      'Tipo Pagamento',
-      'Status Pagamento',
-      'Vencimento',
-      'Pago Em',
-      'Taxa Cambio',
-      'Valor BRL',
-      'Match Portal',
-      'Motivo Match',
-      'Atualizado Na SYDLE',
-      'Sincronizado Em',
-    ];
+    return rows;
+  },
+
+  async exportCsv(filters: SydleReportQuery): Promise<string> {
+    const rows = await this.exportRows(filters);
+    const header = EXPORT_COLUMNS.map((column) => column.header);
 
     return [
       csvLine(header),
-      ...rows.map((row) =>
-        csvLine([
-          row.processCode || row.portalProcessCode || '',
-          row.purchaseRef || '',
-          row.purchaseOrder || '',
-          row.proformaNumber || '',
-          row.invoiceNumber || '',
-          row.supplierName || '',
-          row.brand || row.portalBrand || '',
-          phaseLabel(row.logisticStatus),
-          row.currency,
-          row.purchaseAmount || '',
-          row.paidAmount || '',
-          row.openAmount || '',
-          row.paymentType,
-          row.paymentStatus,
-          dateOnly(row.dueDate),
-          dateOnly(row.paidAt),
-          row.exchangeRate || '',
-          row.amountBrl || '',
-          row.matchStatus,
-          row.matchReason || '',
-          dateOnly(row.sourceUpdatedAt),
-          dateOnly(row.syncedAt),
-        ]),
-      ),
+      ...rows.map((row) => csvLine(EXPORT_COLUMNS.map((column) => exportValue(row, column.key)))),
     ].join('\n');
+  },
+
+  async exportXlsx(filters: SydleReportQuery): Promise<Buffer> {
+    const rows = await this.exportRows(filters);
+    const aoa = [
+      EXPORT_COLUMNS.map((column) => column.header),
+      ...rows.map((row) =>
+        EXPORT_COLUMNS.map((column) => sanitizeForSpreadsheet(exportValue(row, column.key))),
+      ),
+    ];
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    worksheet['!cols'] = EXPORT_COLUMNS.map((column) => ({
+      wch: Math.min(Math.max(column.header.length + 4, 12), 32),
+    }));
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Compras SYDLE');
+    return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+  },
+
+  async exportPdf(filters: SydleReportQuery): Promise<Buffer> {
+    const rows = await this.exportRows(filters);
+    const generatedAt = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const lines = [
+      'Relatorio SYDLE - Compras e Pagamentos Internacionais',
+      `Gerado em ${generatedAt} | Registros: ${rows.length}`,
+      '',
+      'Processo | Fase | Compra | Fornecedor | Moeda | Valor | Pago | Saldo | Status | Vencimento | Banco | Contrato | Match',
+      '-'.repeat(150),
+      ...rows.map((row) =>
+        [
+          truncate(exportValue(row, 'process'), 14),
+          truncate(exportValue(row, 'phase'), 16),
+          truncate(row.purchaseRef || row.purchaseOrder || '', 16),
+          truncate(row.supplierName || '', 28),
+          row.currency,
+          truncate(row.purchaseAmount || '', 12),
+          truncate(row.paidAmount || '', 12),
+          truncate(row.openAmount || '', 12),
+          truncate(row.paymentStatus, 10),
+          dateOnly(row.dueDate) || '',
+          truncate(row.bankName || '', 16),
+          truncate(row.contractNumber || '', 14),
+          truncate(row.matchStatus, 10),
+        ].join(' | '),
+      ),
+    ];
+    return buildSimplePdf(lines);
   },
 };

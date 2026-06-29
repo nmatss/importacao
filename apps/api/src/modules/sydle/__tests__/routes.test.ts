@@ -8,6 +8,8 @@ const serviceMock = vi.hoisted(() => ({
   list: vi.fn(),
   summary: vi.fn(),
   exportCsv: vi.fn(),
+  exportXlsx: vi.fn(),
+  exportPdf: vi.fn(),
   sync: vi.fn(),
   getSyncRuns: vi.fn(),
 }));
@@ -89,6 +91,36 @@ describe('sydleRoutes', () => {
     expect(res.text.charCodeAt(0)).toBe(0xfeff);
     expect(res.text).toContain('"IM0712602NB"');
     expect(serviceMock.exportCsv).toHaveBeenCalledWith(
+      expect.objectContaining({ brand: 'puket', page: 1, limit: 200 }),
+    );
+  });
+
+  it('exports XLSX with download and sniffing headers', async () => {
+    serviceMock.exportXlsx.mockResolvedValueOnce(Buffer.from('PK\x03\x04xlsx'));
+
+    const res = await request(makeApp()).get('/api/sydle/payments-report/export.xlsx?brand=puket');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain(
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    expect(res.headers['content-disposition']).toContain('sydle-compras-pagamentos-');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(serviceMock.exportXlsx).toHaveBeenCalledWith(
+      expect.objectContaining({ brand: 'puket', page: 1, limit: 200 }),
+    );
+  });
+
+  it('exports PDF with download and sniffing headers', async () => {
+    serviceMock.exportPdf.mockResolvedValueOnce(Buffer.from('%PDF-1.4'));
+
+    const res = await request(makeApp()).get('/api/sydle/payments-report/export.pdf?brand=puket');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('application/pdf');
+    expect(res.headers['content-disposition']).toContain('sydle-compras-pagamentos-');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(serviceMock.exportPdf).toHaveBeenCalledWith(
       expect.objectContaining({ brand: 'puket', page: 1, limit: 200 }),
     );
   });

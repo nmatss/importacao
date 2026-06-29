@@ -81,4 +81,37 @@ export const sydleController = {
       sendError(res, message, 400);
     }
   },
+
+  async exportXlsx(req: Request, res: Response) {
+    try {
+      const filters = sydleReportQuerySchema.parse({ ...req.query, page: 1, limit: 200 });
+      const workbook = await sydleService.exportXlsx(filters);
+      const filename = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.status(200).send(workbook);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao exportar XLSX SYDLE';
+      sendError(res, message, 400);
+    }
+  },
+
+  async exportPdf(req: Request, res: Response) {
+    try {
+      const filters = sydleReportQuerySchema.parse({ ...req.query, page: 1, limit: 200 });
+      const pdf = await sydleService.exportPdf(filters);
+      const filename = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.status(200).send(pdf);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao exportar PDF SYDLE';
+      sendError(res, message, 400);
+    }
+  },
 };

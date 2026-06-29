@@ -161,6 +161,16 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getByText(/Totais USD/i)).toBeInTheDocument();
   });
 
+  it('offers table view and CSV/Excel/PDF export actions', () => {
+    renderPage();
+
+    expect(screen.getByRole('button', { name: /Tabela/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Cards/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^CSV$/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Excel/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^PDF$/i })).toBeInTheDocument();
+  });
+
   it('tags câmbio/BRL filled from the portal as an estimate (≈)', () => {
     const estimated = {
       ...report,

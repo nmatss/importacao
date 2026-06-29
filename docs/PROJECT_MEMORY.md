@@ -142,6 +142,8 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
 - A UI do relatorio deve expor os campos financeiros relevantes recebidos da
   SYDLE: cambio, valor BRL, banco, contrato, remessa, datas de
   pagamento/agendamento, motivo de conciliacao e timestamps SYDLE/Portal.
+- O relatorio SYDLE deve manter visão em tabela para leitura operacional e
+  permitir exportar o filtro ativo em CSV, Excel (.xlsx) e PDF.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor.

@@ -12,14 +12,17 @@ import {
   Download,
   ExternalLink,
   Eye,
+  FileSpreadsheet,
   FileText,
   Filter,
+  LayoutGrid,
   Landmark,
   Link2,
   Loader2,
   RefreshCw,
   Search,
   Settings,
+  Table2,
   Unlink,
   X,
 } from 'lucide-react';
@@ -583,7 +586,8 @@ export function SydlePaymentsPage() {
   >('dueDate');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [syncing, setSyncing] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [exporting, setExporting] = useState<'csv' | 'xlsx' | 'pdf' | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const limit = 50;
 
@@ -732,13 +736,13 @@ export function SydlePaymentsPage() {
     }
   }
 
-  async function handleExportCsv() {
-    setExporting(true);
+  async function handleExport(format: 'csv' | 'xlsx' | 'pdf') {
+    setExporting(format);
     try {
       const params = new URLSearchParams(summaryParams);
       const baseUrl = import.meta.env.VITE_API_URL || '';
       const response = await fetch(
-        `${baseUrl}/api/sydle/payments-report/export.csv?${params.toString()}`,
+        `${baseUrl}/api/sydle/payments-report/export.${format}?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${getToken() ?? ''}`,
@@ -750,16 +754,16 @@ export function SydlePaymentsPage() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.${format}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast.success('Relatório SYDLE exportado em CSV.');
+      toast.success(`Relatório SYDLE exportado em ${format.toUpperCase()}.`);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
-      setExporting(false);
+      setExporting(null);
     }
   }
 
@@ -807,16 +811,42 @@ export function SydlePaymentsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={handleExportCsv}
-            disabled={exporting || !rows.length}
+            onClick={() => handleExport('csv')}
+            disabled={exporting !== null || !rows.length}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
-            {exporting ? (
+            {exporting === 'csv' ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
               <Download className="h-4 w-4" />
             )}
-            {exporting ? 'Exportando' : 'CSV'}
+            CSV
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport('xlsx')}
+            disabled={exporting !== null || !rows.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            {exporting === 'xlsx' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-4 w-4" />
+            )}
+            Excel
+          </button>
+          <button
+            type="button"
+            onClick={() => handleExport('pdf')}
+            disabled={exporting !== null || !rows.length}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          >
+            {exporting === 'pdf' ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <FileText className="h-4 w-4" />
+            )}
+            PDF
           </button>
           {isAdmin && (
             <button
@@ -1134,6 +1164,45 @@ export function SydlePaymentsPage() {
         </span>
       </div>
 
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200/70 bg-white px-4 py-3 shadow-sm dark:border-slate-700/70 dark:bg-slate-800 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+            Visão do relatório
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {pagination?.total ?? rows.length} registro(s) no filtro atual
+          </p>
+        </div>
+        <div className="inline-flex w-fit rounded-lg border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900">
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+              viewMode === 'table'
+                ? 'bg-white text-primary-700 shadow-sm dark:bg-slate-800 dark:text-primary-300'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+            )}
+          >
+            <Table2 className="h-4 w-4" />
+            Tabela
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors',
+              viewMode === 'cards'
+                ? 'bg-white text-primary-700 shadow-sm dark:bg-slate-800 dark:text-primary-300'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
+            )}
+          >
+            <LayoutGrid className="h-4 w-4" />
+            Cards
+          </button>
+        </div>
+      </div>
+
       {!rows.length ? (
         <EmptyState
           icon={Unlink}
@@ -1146,7 +1215,12 @@ export function SydlePaymentsPage() {
         />
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800 md:block">
+          <div
+            className={cn(
+              'overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800',
+              viewMode === 'table' ? 'block' : 'hidden',
+            )}
+          >
             <div className="overflow-x-auto">
               <table className="min-w-[1800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
                 <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
@@ -1351,7 +1425,7 @@ export function SydlePaymentsPage() {
             </div>
           </div>
 
-          <div className="space-y-3 md:hidden">
+          <div className={cn('space-y-3', viewMode === 'cards' ? 'block' : 'hidden')}>
             {rows.map((row) => {
               const processCode = row.portalProcessCode || row.processCode;
               return (

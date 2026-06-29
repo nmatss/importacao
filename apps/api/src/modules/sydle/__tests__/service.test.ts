@@ -435,4 +435,97 @@ describe('sydleService', () => {
 
     listSpy.mockRestore();
   });
+
+  it('exports the filtered report as XLSX', async () => {
+    const listSpy = vi.spyOn(sydleService, 'list').mockResolvedValueOnce({
+      data: [
+        {
+          processCode: 'IM1',
+          portalProcessCode: null,
+          logisticStatus: 'in_transit',
+          purchaseRef: 'C1',
+          purchaseOrder: null,
+          proformaNumber: 'PI-1',
+          invoiceNumber: 'INV-1',
+          supplierName: 'Supplier 1',
+          brand: 'puket',
+          portalBrand: null,
+          currency: 'USD',
+          purchaseAmount: '10.00',
+          paidAmount: '0.00',
+          openAmount: '10.00',
+          paymentType: 'deposit',
+          paymentStatus: 'open',
+          dueDate: '2026-06-10',
+          paidAt: null,
+          scheduledAt: null,
+          exchangeRate: null,
+          exchangeRateSource: null,
+          amountBrl: null,
+          amountBrlSource: null,
+          bankName: null,
+          contractNumber: null,
+          remittanceId: null,
+          matchStatus: 'matched',
+          matchReason: 'process_code',
+          sourceUpdatedAt: null,
+          syncedAt: null,
+        } as any,
+      ],
+      total: 1,
+      page: 1,
+      limit: 200,
+    });
+
+    const xlsx = await sydleService.exportXlsx({
+      page: 1,
+      limit: 50,
+      sortBy: 'dueDate',
+      sortOrder: 'asc',
+    });
+
+    expect(xlsx.subarray(0, 2).toString()).toBe('PK');
+    expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 200 }));
+
+    listSpy.mockRestore();
+  });
+
+  it('exports the filtered report as PDF', async () => {
+    const listSpy = vi.spyOn(sydleService, 'list').mockResolvedValueOnce({
+      data: [
+        {
+          processCode: 'IM1',
+          portalProcessCode: null,
+          logisticStatus: 'in_transit',
+          purchaseRef: 'C1',
+          purchaseOrder: null,
+          supplierName: 'Supplier 1',
+          currency: 'USD',
+          purchaseAmount: '10.00',
+          paidAmount: '0.00',
+          openAmount: '10.00',
+          paymentStatus: 'open',
+          dueDate: '2026-06-10',
+          bankName: 'Banco',
+          contractNumber: 'CON-1',
+          matchStatus: 'matched',
+        } as any,
+      ],
+      total: 1,
+      page: 1,
+      limit: 200,
+    });
+
+    const pdf = await sydleService.exportPdf({
+      page: 1,
+      limit: 50,
+      sortBy: 'dueDate',
+      sortOrder: 'asc',
+    });
+
+    expect(pdf.subarray(0, 5).toString()).toBe('%PDF-');
+    expect(pdf.toString()).toContain('/BaseFont /Helvetica');
+
+    listSpy.mockRestore();
+  });
 });

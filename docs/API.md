@@ -115,6 +115,8 @@ Endpoints:
 - `GET /api/sydle/payments-report` admin-only
 - `GET /api/sydle/payments-report/summary` admin-only
 - `GET /api/sydle/payments-report/export.csv` admin-only
+- `GET /api/sydle/payments-report/export.xlsx` admin-only
+- `GET /api/sydle/payments-report/export.pdf` admin-only
 - `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 

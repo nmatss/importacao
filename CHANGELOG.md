@@ -146,6 +146,8 @@ Doc canonico: `docs/STATUS-2026-06-21.md`. Prod `fa75ffe` -> `df13229`.
 - Relatorio Sydle: **abrir a compra** — clique na linha/card abre um drawer com
   TODOS os detalhes (compra, pagamento, cambio/banco, conciliacao, auditoria e o
   **payload bruto da SYDLE**). Endpoint `GET /api/sydle/payments-report/:id`.
+- Relatorio Sydle: seletor de visão **Tabela/Cards** e exportação com filtros
+  ativos em **CSV, Excel (.xlsx) e PDF**.
 - Indice `import_processes_logistic_status_idx` (migration `0019`) para o filtro de fase.
 - `docs/ENTERPRISE-REVIEW-2026-06-20.md` com o review do time de 10 papeis e P0/P1.
 
