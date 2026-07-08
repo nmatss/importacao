@@ -18,11 +18,13 @@ Implementado no portal:
 - Tela web `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
 Compras/Pagamentos SYDLE` e atalho no portal para usuários autenticados do
   módulo de importação.
-- A tela exibe uma visão operacional e uma visão unificada com as mesmas colunas
-  e ordem do Excel/CSV.
+- A tela exibe uma visão operacional e uma visão unificada alinhada ao Excel/CSV,
+  mas sem duplicidades internas (`Código do processo` e `Compra`) e com
+  conciliação em linguagem de negócio (`Conciliação Portal` e `Evidência conciliação`).
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
 - Exportacoes CSV/XLSX/PDF preservam as colunas do relatório Analytics/CSV da
-  SYDLE quando a fonte as fornece.
+  SYDLE quando a fonte as fornece; CSV/PDF saem formatados para leitura e XLSX
+  usa células nativas de data/moeda para análise no Excel.
 - Leitura/exportação do relatório SYDLE liberadas para usuários autenticados do
   módulo de importação.
 - Sync manual, configuração, histórico de sync e payload bruto admin-only.

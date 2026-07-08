@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as XLSX from 'xlsx';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, mockTx, queryQueue } = createMockDb();
@@ -427,6 +428,13 @@ describe('sydleService', () => {
     expect(listSpy).toHaveBeenNthCalledWith(2, expect.objectContaining({ page: 2, limit: 200 }));
     expect(csv).toContain('"IM1"');
     expect(csv).toContain('"IM2"');
+    expect(csv).toContain('"Conciliação Portal"');
+    expect(csv).toContain('"Evidência conciliação"');
+    expect(csv).not.toContain('"Código do processo"');
+    expect(csv).not.toContain('"Compra"');
+    expect(csv).toContain('"US$ 10,00"');
+    expect(csv).toContain('"Aberto"');
+    expect(csv).toContain('"Referência da compra"');
 
     listSpy.mockRestore();
   });
@@ -480,6 +488,21 @@ describe('sydleService', () => {
     });
 
     expect(xlsx.subarray(0, 2).toString()).toBe('PK');
+    const workbook = XLSX.read(xlsx, { type: 'buffer', cellDates: true });
+    const worksheet = workbook.Sheets['Compras SYDLE'];
+    const displayRows = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, raw: false });
+    const rawRows = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, raw: true });
+    const header = displayRows[0];
+    expect(header).toContain('Conciliação Portal');
+    expect(header).toContain('Evidência conciliação');
+    expect(header).not.toContain('Código do processo');
+    expect(header).not.toContain('Compra');
+    const dueDateIndex = header.indexOf('Data de vencimento');
+    const purchaseAmountIndex = header.indexOf('Valor a Pagar');
+    const paymentStatusIndex = header.indexOf('Status Pagamento');
+    expect(displayRows[1][dueDateIndex]).toBe('10/06/2026');
+    expect(rawRows[1][purchaseAmountIndex]).toBe(10);
+    expect(displayRows[1][paymentStatusIndex]).toBe('Aberto');
     expect(listSpy).toHaveBeenCalledWith(expect.objectContaining({ page: 1, limit: 200 }));
 
     listSpy.mockRestore();

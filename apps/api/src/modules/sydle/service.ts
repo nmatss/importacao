@@ -75,10 +75,79 @@ function toDecimalString(value: number | null | undefined, scale = 2): string | 
   return value.toFixed(scale);
 }
 
-function dateOnly(value: Date | string | null): string | null {
+function parseDateOnly(value: Date | string | null): Date | null {
   if (!value) return null;
-  if (typeof value === 'string') return value.slice(0, 10);
-  return value.toISOString().slice(0, 10);
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const dateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+    return new Date(Number(year), Number(month) - 1, Number(day));
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseDateTime(value: Date | string | null): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? parseDateOnly(value) : parsed;
+}
+
+function formatDateBr(value: Date | string | null): string {
+  const parsed = parseDateOnly(value);
+  if (!parsed) return '';
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(parsed);
+}
+
+function formatDateTimeBr(value: Date | string | null): string {
+  const parsed = parseDateTime(value);
+  if (!parsed) return '';
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(parsed);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
+}
+
+function formatCurrencyBr(value: unknown, currency = 'USD'): string {
+  const numeric = toNumber(value);
+  if (numeric === null) return '';
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+      .format(numeric)
+      .replace(/\u00a0/g, ' ');
+  } catch {
+    return numeric.toLocaleString('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+}
+
+function formatDecimalBr(value: unknown, maximumFractionDigits = 6): string {
+  const numeric = toNumber(value);
+  if (numeric === null) return '';
+  return numeric.toLocaleString('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits,
+  });
 }
 
 function normalizeText(value: unknown): string {
@@ -261,6 +330,15 @@ const PAYMENT_TYPE_LABELS: Record<string, string> = {
   other: 'Other',
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  open: 'Aberto',
+  scheduled: 'Agendado',
+  paid: 'Pago',
+  overdue: 'Vencido',
+  cancelled: 'Cancelado',
+  unknown: 'Desconhecido',
+};
+
 function phaseLabel(status: string | null | undefined): string {
   if (!status) return '';
   return LOGISTIC_STATUS_LABELS[status] ?? status;
@@ -272,8 +350,6 @@ const EXPORT_COLUMNS = [
   { key: 'sydleProtocol', header: 'Protocolo' },
   { key: 'process', header: 'Processo' },
   { key: 'phase', header: 'Fase Processo' },
-  { key: 'processCode', header: 'Código do processo' },
-  { key: 'purchaseRef', header: 'Compra' },
   { key: 'purchaseOrder', header: 'PO' },
   { key: 'proformaNumber', header: 'PI' },
   { key: 'invoiceNumber', header: 'Número Invoice' },
@@ -294,20 +370,70 @@ const EXPORT_COLUMNS = [
   { key: 'paymentStatus', header: 'Status Pagamento' },
   { key: 'paidAt', header: 'Pago Em' },
   { key: 'scheduledAt', header: 'Agendado Para' },
-  { key: 'exchangeRate', header: 'Taxa Cambio' },
-  { key: 'exchangeRateSource', header: 'Origem Cambio' },
+  { key: 'exchangeRate', header: 'Taxa Câmbio' },
+  { key: 'exchangeRateSource', header: 'Origem Câmbio' },
   { key: 'amountBrl', header: 'Valor BRL' },
   { key: 'amountBrlSource', header: 'Origem BRL' },
   { key: 'bankName', header: 'Banco' },
   { key: 'contractNumber', header: 'Contrato' },
   { key: 'remittanceId', header: 'Remessa' },
-  { key: 'matchStatus', header: 'Match Portal' },
-  { key: 'matchReason', header: 'Motivo Match' },
+  { key: 'matchStatus', header: 'Conciliação Portal' },
+  { key: 'matchReason', header: 'Evidência conciliação' },
   { key: 'sourceUpdatedAt', header: 'Data da última alteração' },
   { key: 'syncedAt', header: 'Sincronizado Em' },
 ] as const;
 
-function exportValue(row: SydleExportRow, key: (typeof EXPORT_COLUMNS)[number]['key']) {
+type ExportColumnKey = (typeof EXPORT_COLUMNS)[number]['key'];
+
+const MATCH_STATUS_LABELS: Record<MatchStatus, string> = {
+  matched: 'Conciliado',
+  ambiguous: 'Ambíguo',
+  unmatched: 'Sem vínculo',
+};
+
+const MATCH_REASON_LABELS: Record<string, string> = {
+  process_code: 'Processo',
+  process_code_multiple_matches: 'Processo com múltiplos vínculos',
+  purchase_ref: 'Referência da compra',
+  purchase_order: 'Pedido de compra',
+  proforma: 'PI',
+  invoice: 'Invoice',
+  supplier: 'Beneficiário',
+  brand: 'Marca',
+  amount: 'Valor',
+  no_confident_match: 'Sem evidência suficiente',
+};
+
+function matchReasonLabel(value: string | null | undefined): string {
+  if (!value) return '';
+  const ambiguous = value.startsWith('ambiguous:');
+  const raw = ambiguous ? value.replace(/^ambiguous:/, '') : value;
+  const labels = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => MATCH_REASON_LABELS[part] ?? part);
+  if (!labels.length) return '';
+  return `${ambiguous ? 'Ambíguo: ' : ''}${labels.join(' + ')}`;
+}
+
+function xlsxCurrencyFormat(currency: string | null | undefined): string {
+  switch ((currency ?? '').toUpperCase()) {
+    case 'BRL':
+      return '"R$" #,##0.00';
+    case 'USD':
+      return '"US$" #,##0.00';
+    case 'EUR':
+      return '"€" #,##0.00';
+    case 'CNY':
+    case 'RMB':
+      return '"¥" #,##0.00';
+    default:
+      return '#,##0.00';
+  }
+}
+
+function exportValue(row: SydleExportRow, key: ExportColumnKey) {
   switch (key) {
     case 'process':
       return row.portalProcessCode || row.processCode || '';
@@ -317,24 +443,95 @@ function exportValue(row: SydleExportRow, key: (typeof EXPORT_COLUMNS)[number]['
       return row.brand || row.portalBrand || '';
     case 'paymentType':
       return PAYMENT_TYPE_LABELS[row.paymentType] ?? row.paymentType ?? '';
+    case 'paymentStatus':
+      return PAYMENT_STATUS_LABELS[row.paymentStatus] ?? row.paymentStatus ?? '';
     case 'dueDate':
-      return dateOnly(row.dueDate);
+      return formatDateBr(row.dueDate);
     case 'invoiceIssuedDate':
-      return dateOnly(row.invoiceIssuedDate);
+      return formatDateBr(row.invoiceIssuedDate);
     case 'taskCreatedAt':
-      return dateOnly(row.taskCreatedAt);
+      return formatDateTimeBr(row.taskCreatedAt);
     case 'shipmentDate':
-      return dateOnly(row.shipmentDate);
+      return formatDateBr(row.shipmentDate);
+    case 'purchaseAmount':
+      return formatCurrencyBr(row.purchaseAmount, row.currency);
+    case 'paidAmount':
+      return formatCurrencyBr(row.paidAmount, row.currency);
+    case 'openAmount':
+      return formatCurrencyBr(row.openAmount, row.currency);
     case 'paidAt':
-      return dateOnly(row.paidAt);
+      return formatDateBr(row.paidAt);
     case 'scheduledAt':
-      return dateOnly(row.scheduledAt);
+      return formatDateBr(row.scheduledAt);
+    case 'exchangeRate':
+      return formatDecimalBr(row.exchangeRate, 6);
+    case 'amountBrl':
+      return formatCurrencyBr(row.amountBrl, 'BRL');
+    case 'exchangeRateSource':
+    case 'amountBrlSource':
+      return row[key] === 'sydle' ? 'SYDLE' : '';
+    case 'matchStatus':
+      return MATCH_STATUS_LABELS[row.matchStatus as MatchStatus] ?? row.matchStatus ?? '';
+    case 'matchReason':
+      return matchReasonLabel(row.matchReason);
     case 'sourceUpdatedAt':
-      return dateOnly(row.sourceUpdatedAt);
+      return formatDateTimeBr(row.sourceUpdatedAt);
     case 'syncedAt':
-      return dateOnly(row.syncedAt);
+      return formatDateTimeBr(row.syncedAt);
     default:
       return row[key] ?? '';
+  }
+}
+
+function exportXlsxValue(row: SydleExportRow, key: ExportColumnKey): Date | number | string {
+  switch (key) {
+    case 'dueDate':
+    case 'invoiceIssuedDate':
+    case 'shipmentDate':
+    case 'paidAt':
+    case 'scheduledAt':
+      return parseDateOnly(row[key]) ?? '';
+    case 'taskCreatedAt':
+    case 'sourceUpdatedAt':
+    case 'syncedAt':
+      return parseDateTime(row[key]) ?? '';
+    case 'purchaseAmount':
+    case 'paidAmount':
+    case 'openAmount':
+    case 'amountBrl':
+    case 'exchangeRate':
+      return toNumber(row[key]) ?? '';
+    case 'paymentDeadlineAfterShipment':
+      return row.paymentDeadlineAfterShipment ?? '';
+    default:
+      return sanitizeForSpreadsheet(exportValue(row, key));
+  }
+}
+
+function xlsxNumberFormat(row: SydleExportRow, key: ExportColumnKey): string | null {
+  switch (key) {
+    case 'dueDate':
+    case 'invoiceIssuedDate':
+    case 'shipmentDate':
+    case 'paidAt':
+    case 'scheduledAt':
+      return 'dd/mm/yyyy';
+    case 'taskCreatedAt':
+    case 'sourceUpdatedAt':
+    case 'syncedAt':
+      return 'dd/mm/yyyy hh:mm';
+    case 'purchaseAmount':
+    case 'paidAmount':
+    case 'openAmount':
+      return xlsxCurrencyFormat(row.currency);
+    case 'amountBrl':
+      return '"R$" #,##0.00';
+    case 'exchangeRate':
+      return '0.000000';
+    case 'paymentDeadlineAfterShipment':
+      return '0';
+    default:
+      return null;
   }
 }
 
@@ -1072,12 +1269,19 @@ export const sydleService = {
     const rows = await this.exportRows(filters);
     const aoa = [
       EXPORT_COLUMNS.map((column) => column.header),
-      ...rows.map((row) =>
-        EXPORT_COLUMNS.map((column) => sanitizeForSpreadsheet(exportValue(row, column.key))),
-      ),
+      ...rows.map((row) => EXPORT_COLUMNS.map((column) => exportXlsxValue(row, column.key))),
     ];
     const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.aoa_to_sheet(aoa);
+    const worksheet = XLSX.utils.aoa_to_sheet(aoa, { cellDates: true });
+    rows.forEach((row, rowIndex) => {
+      EXPORT_COLUMNS.forEach((column, columnIndex) => {
+        const address = XLSX.utils.encode_cell({ r: rowIndex + 1, c: columnIndex });
+        const cell = worksheet[address];
+        if (!cell) return;
+        const format = xlsxNumberFormat(row, column.key);
+        if (format) cell.z = format;
+      });
+    });
     worksheet['!cols'] = EXPORT_COLUMNS.map((column) => ({
       wch: Math.min(Math.max(column.header.length + 4, 12), 32),
     }));
@@ -1087,28 +1291,27 @@ export const sydleService = {
 
   async exportPdf(filters: SydleReportQuery): Promise<Buffer> {
     const rows = await this.exportRows(filters);
-    const generatedAt = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const generatedAt = formatDateTimeBr(new Date());
     const lines = [
       'Relatorio SYDLE - Compras e Pagamentos Internacionais',
       `Gerado em ${generatedAt} | Registros: ${rows.length}`,
       '',
-      'Processo | Fase | Compra | Fornecedor | Moeda | Valor | Pago | Saldo | Status | Vencimento | Banco | Contrato | Match',
+      'Processo | Fase | Fornecedor | Moeda | Valor | Pago | Saldo | Status | Vencimento | Banco | Contrato | Conciliacao',
       '-'.repeat(150),
       ...rows.map((row) =>
         [
           truncate(exportValue(row, 'process'), 14),
           truncate(exportValue(row, 'phase'), 16),
-          truncate(row.purchaseRef || row.purchaseOrder || '', 16),
           truncate(row.supplierName || '', 28),
           row.currency,
-          truncate(row.purchaseAmount || '', 12),
-          truncate(row.paidAmount || '', 12),
-          truncate(row.openAmount || '', 12),
-          truncate(row.paymentStatus, 10),
-          dateOnly(row.dueDate) || '',
+          truncate(exportValue(row, 'purchaseAmount'), 14),
+          truncate(exportValue(row, 'paidAmount'), 14),
+          truncate(exportValue(row, 'openAmount'), 14),
+          truncate(exportValue(row, 'paymentStatus'), 12),
+          exportValue(row, 'dueDate'),
           truncate(row.bankName || '', 16),
           truncate(row.contractNumber || '', 14),
-          truncate(row.matchStatus, 10),
+          truncate(exportValue(row, 'matchStatus'), 14),
         ].join(' | '),
       ),
     ];

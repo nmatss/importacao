@@ -129,6 +129,11 @@ criação da tarefa, exceção, motivo da exceção, código do processo, embarq
 prazo pós-embarque e última alteração.
 Valores de câmbio/BRL, banco, contrato e remessa só são exibidos quando vêm da
 SYDLE; o relatório não preenche esses campos com estimativas do portal.
+A visão/exportação unificada remove colunas operacionais duplicadas do staging
+(`Código do processo` e `Compra`) e exibe a conciliação com linguagem de negócio:
+`Conciliação Portal` e `Evidência conciliação`. CSV/PDF saem com datas e valores
+formatados para leitura; XLSX usa células nativas de data/moeda para filtros,
+somatórios e auditoria no Excel.
 
 Filtros principais:
 

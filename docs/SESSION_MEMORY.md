@@ -1,5 +1,24 @@
 # Session Memory
 
+## 2026-07-08 - Feedback Odett Relatorio SYDLE
+
+Resultado:
+
+- Ajustada a visão unificada SYDLE para remover as colunas duplicadas `Código do
+processo` e `Compra`, preservando esses campos no JSON da API para auditoria e
+  integrações.
+- `Match Portal`/`Motivo Match` foram substituídos por `Conciliação Portal` e
+  `Evidência conciliação`; motivos técnicos como `process_code`,
+  `brand,invoice` e `no_confident_match` passam a aparecer em português na tela
+  e nas exportações.
+- Cards financeiros do topo passam a exibir valores completos em USD, sem
+  abreviação em "mil".
+- Datas da tela SYDLE usam padrão `dd/mm/aaaa hh:mm`; CSV/PDF exportam datas,
+  valores e status já formatados; XLSX usa células nativas de data/moeda.
+- Campos financeiros de classe SYDLE ainda pendentes permanecem sem estimativa
+  do portal: banco, contrato, remessa, câmbio e BRL só aparecem quando a própria
+  SYDLE liberar/fornecer os dados.
+
 ## 2026-07-08 - Paridade Do Relatorio SYDLE Analytics/CSV
 
 Resultado:

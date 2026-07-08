@@ -153,6 +153,11 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   menu lateral e atalho do portal sao para usuarios autenticados com acesso ao
   modulo de importacao; sincronizacao manual, configuracao, historico de sync e
   payload bruto ficam restritos a admin.
+- Feedback Odett 2026-07-08: a visão/exportação unificada SYDLE nao deve exibir
+  as colunas duplicadas `Código do processo` e `Compra`; conciliação deve ficar
+  como `Conciliação Portal`/`Evidência conciliação`, com evidências traduzidas
+  para linguagem de negócio. Cards financeiros devem exibir valores completos,
+  não abreviados, e exports devem usar datas/valores formatados para Excel.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor. Quando mapeamento muda, usar full resync administrativo

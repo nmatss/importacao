@@ -39,6 +39,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Relatório SYDLE deixa de preencher câmbio/BRL com estimativas do portal; os
   cards, tabelas e detalhe passam a exibir valores financeiros apenas quando a
   própria SYDLE fornece os campos.
+- Relatório SYDLE ajustado com feedback operacional: cards financeiros exibem
+  valores completos, datas usam `dd/mm/aaaa hh:mm`, CSV/PDF exportam valores e
+  status formatados, XLSX usa células nativas de data/moeda, a visão unificada
+  remove as colunas duplicadas `Código do processo`/`Compra` e troca
+  `Match Portal`/`Motivo Match` por `Conciliação Portal` e `Evidência conciliação`.
 
 ## [Unreleased] - 2026-06-29 - Feedback Odett/Eduarda: espelho, Draft BL e configuracoes
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MockAuthProvider, mockUser } from '@/test/mocks/auth';
@@ -151,7 +151,7 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getAllByText('Remessa REM-1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Taxa 5,4321').length).toBeGreaterThan(0);
     expect(screen.getAllByText('R$ 543,21').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('invoice,supplier,amount').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Invoice + Beneficiário + Valor').length).toBeGreaterThan(0);
     expect(screen.getByText('Ignorada')).toBeInTheDocument();
   });
 
@@ -208,11 +208,20 @@ describe('SydlePaymentsPage', () => {
   it('renders the unified SYDLE view with Excel-compatible columns', () => {
     renderPage();
 
-    expect(screen.getByText('Visão unificada SYDLE')).toBeInTheDocument();
-    expect(screen.getByText('Protocolo')).toBeInTheDocument();
-    expect(screen.getByText('Data criação da tarefa')).toBeInTheDocument();
+    const unifiedSection = screen.getByText('Visão unificada SYDLE').closest('section');
+    expect(unifiedSection).not.toBeNull();
+    const unified = within(unifiedSection as HTMLElement);
+    expect(unified.getByText('Protocolo')).toBeInTheDocument();
+    expect(unified.getByText('Data criação da tarefa')).toBeInTheDocument();
+    expect(unified.getByText('Conciliação Portal')).toBeInTheDocument();
+    expect(unified.getByText('Evidência conciliação')).toBeInTheDocument();
+    expect(unified.queryByText('Código do processo')).not.toBeInTheDocument();
+    expect(unified.queryByText('Match Portal')).not.toBeInTheDocument();
+    expect(unified.queryByText('Motivo Match')).not.toBeInTheDocument();
     expect(screen.getAllByText('5317').length).toBeGreaterThan(0);
     expect(screen.getAllByText('30').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Invoice + Beneficiário + Valor').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('US$ 100,00').length).toBeGreaterThan(0);
   });
 
   it('does not show portal-estimated financial markers in the SYDLE report', () => {

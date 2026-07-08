@@ -32,7 +32,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
-import { cn, formatCurrency, formatDateTime } from '@/shared/lib/utils';
+import { cn, formatCurrency } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
@@ -208,6 +208,19 @@ const matchLabels: Record<MatchStatus, string> = {
   unmatched: 'Sem vínculo',
 };
 
+const matchReasonLabels: Record<string, string> = {
+  process_code: 'Processo',
+  process_code_multiple_matches: 'Processo com múltiplos vínculos',
+  purchase_ref: 'Referência da compra',
+  purchase_order: 'Pedido de compra',
+  proforma: 'PI',
+  invoice: 'Invoice',
+  supplier: 'Beneficiário',
+  brand: 'Marca',
+  amount: 'Valor',
+  no_confident_match: 'Sem evidência suficiente',
+};
+
 const syncStatusLabels: Record<string, string> = {
   running: 'Em execução',
   success: 'Concluída',
@@ -225,8 +238,6 @@ const unifiedColumns = [
   { key: 'sydleProtocol', header: 'Protocolo', width: 'w-[96px]' },
   { key: 'process', header: 'Processo', width: 'w-[140px]' },
   { key: 'phase', header: 'Fase Processo', width: 'w-[150px]' },
-  { key: 'processCode', header: 'Código do processo', width: 'w-[150px]' },
-  { key: 'purchaseRef', header: 'Compra', width: 'w-[130px]' },
   { key: 'purchaseOrder', header: 'PO', width: 'w-[120px]' },
   { key: 'proformaNumber', header: 'PI', width: 'w-[120px]' },
   { key: 'invoiceNumber', header: 'Número Invoice', width: 'w-[150px]' },
@@ -252,15 +263,15 @@ const unifiedColumns = [
   { key: 'paymentStatus', header: 'Status Pagamento', width: 'w-[150px]' },
   { key: 'paidAt', header: 'Pago Em', width: 'w-[120px]' },
   { key: 'scheduledAt', header: 'Agendado Para', width: 'w-[140px]' },
-  { key: 'exchangeRate', header: 'Taxa Cambio', width: 'w-[120px]', align: 'right' },
-  { key: 'exchangeRateSource', header: 'Origem Cambio', width: 'w-[130px]' },
+  { key: 'exchangeRate', header: 'Taxa Câmbio', width: 'w-[120px]', align: 'right' },
+  { key: 'exchangeRateSource', header: 'Origem Câmbio', width: 'w-[130px]' },
   { key: 'amountBrl', header: 'Valor BRL', width: 'w-[130px]', align: 'right' },
   { key: 'amountBrlSource', header: 'Origem BRL', width: 'w-[120px]' },
   { key: 'bankName', header: 'Banco', width: 'w-[160px]' },
   { key: 'contractNumber', header: 'Contrato', width: 'w-[130px]' },
   { key: 'remittanceId', header: 'Remessa', width: 'w-[130px]' },
-  { key: 'matchStatus', header: 'Match Portal', width: 'w-[130px]' },
-  { key: 'matchReason', header: 'Motivo Match', width: 'w-[200px]' },
+  { key: 'matchStatus', header: 'Conciliação Portal', width: 'w-[150px]' },
+  { key: 'matchReason', header: 'Evidência conciliação', width: 'w-[200px]' },
   { key: 'sourceUpdatedAt', header: 'Data da última alteração', width: 'w-[170px]' },
   { key: 'syncedAt', header: 'Sincronizado Em', width: 'w-[170px]' },
 ] as const;
@@ -271,6 +282,19 @@ type UnifiedColumnKey = UnifiedColumn['key'];
 function sourceLabel(value: SydlePayment['exchangeRateSource'] | SydlePayment['amountBrlSource']) {
   if (value === 'sydle') return 'SYDLE';
   return '--';
+}
+
+function matchReasonLabel(value: string | null | undefined): string {
+  if (!value) return '--';
+  const ambiguous = value.startsWith('ambiguous:');
+  const raw = ambiguous ? value.replace(/^ambiguous:/, '') : value;
+  const labels = raw
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => matchReasonLabels[part] ?? part);
+  if (!labels.length) return '--';
+  return `${ambiguous ? 'Ambíguo: ' : ''}${labels.join(' + ')}`;
 }
 
 function textOrDash(value: string | number | null | undefined): string {
@@ -295,7 +319,7 @@ function unifiedValue(row: SydlePayment, key: UnifiedColumnKey): React.ReactNode
     case 'invoiceIssuedDate':
       return dateLabel(row.invoiceIssuedDate);
     case 'taskCreatedAt':
-      return row.taskCreatedAt ? formatDateTime(row.taskCreatedAt) : '--';
+      return dateTimeLabel(row.taskCreatedAt);
     case 'shipmentDate':
       return dateLabel(row.shipmentDate);
     case 'paymentDeadlineAfterShipment':
@@ -322,30 +346,17 @@ function unifiedValue(row: SydlePayment, key: UnifiedColumnKey): React.ReactNode
       return sourceLabel(row.amountBrlSource);
     case 'matchStatus':
       return matchLabels[row.matchStatus];
+    case 'matchReason':
+      return matchReasonLabel(row.matchReason);
     case 'sourceUpdatedAt':
-      return row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--';
+      return dateTimeLabel(row.sourceUpdatedAt);
     case 'syncedAt':
-      return row.syncedAt ? formatDateTime(row.syncedAt) : '--';
+      return dateTimeLabel(row.syncedAt);
     default:
       return textOrDash(row[key]);
   }
 }
 
-// Compact display for KPI cards. Uses Intl compact notation (locale-correct)
-// instead of hand-rolled K/M strings that silently dropped magnitude
-// (e.g. 1.234.567 → "1.2M", losing 567K). The exact value is always shown in
-// the card's tooltip via `fullCurrency`, so no precision is hidden.
-function compactCurrency(value: number, currency = 'USD'): string {
-  if (!Number.isFinite(value)) value = 0;
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency,
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
-}
-
-/** Exact, fully-grouped currency string (KPI tooltip / totalizers). */
 function fullCurrency(value: number, currency = 'USD'): string {
   if (!Number.isFinite(value)) value = 0;
   return formatCurrency(value, currency);
@@ -367,6 +378,24 @@ function dateLabel(value: string | null): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return '--';
   return parsed.toLocaleDateString('pt-BR');
+}
+
+function dateTimeLabel(value: string | Date | null | undefined): string {
+  if (!value) return '--';
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '--';
+  const parts = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(parsed);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('day')}/${get('month')}/${get('year')} ${get('hour')}:${get('minute')}`;
 }
 
 function statusClass(status: PaymentStatus): string {
@@ -446,7 +475,7 @@ function KpiCard({
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
           <p
             title={title}
-            className="truncate text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100"
+            className="text-base font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-100"
           >
             {value}
           </p>
@@ -589,10 +618,7 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                 <DetailRow label="Status" value={paymentStatusLabels[data.paymentStatus]} />
                 <DetailRow label="Vencimento" value={dateLabel(data.dueDate)} />
                 <DetailRow label="Emissão Invoice/PI" value={dateLabel(data.invoiceIssuedDate)} />
-                <DetailRow
-                  label="Criação da tarefa"
-                  value={data.taskCreatedAt ? formatDateTime(data.taskCreatedAt) : null}
-                />
+                <DetailRow label="Criação da tarefa" value={dateTimeLabel(data.taskCreatedAt)} />
                 <DetailRow label="Embarque" value={dateLabel(data.shipmentDate)} />
                 <DetailRow
                   label="Prazo pós-embarque"
@@ -646,7 +672,7 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                       : null
                   }
                 />
-                <DetailRow label="Motivo" value={data.matchReason} />
+                <DetailRow label="Evidência" value={matchReasonLabel(data.matchReason)} />
               </DetailSection>
 
               <DetailSection title="Origem e auditoria">
@@ -654,16 +680,10 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                 <DetailRow label="Sistema" value={data.sourceSystem} />
                 <DetailRow
                   label="Atualizado na SYDLE"
-                  value={data.sourceUpdatedAt ? formatDateTime(data.sourceUpdatedAt) : null}
+                  value={dateTimeLabel(data.sourceUpdatedAt)}
                 />
-                <DetailRow
-                  label="Sincronizado em"
-                  value={data.syncedAt ? formatDateTime(data.syncedAt) : null}
-                />
-                <DetailRow
-                  label="Criado em"
-                  value={data.createdAt ? formatDateTime(data.createdAt) : null}
-                />
+                <DetailRow label="Sincronizado em" value={dateTimeLabel(data.syncedAt)} />
+                <DetailRow label="Criado em" value={dateTimeLabel(data.createdAt)} />
               </DetailSection>
 
               {data.rawPayload && (
@@ -1000,22 +1020,19 @@ export function SydlePaymentsPage() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <KpiCard
           label="Comprado USD"
-          value={compactCurrency(summary?.totalPurchaseUsd ?? 0)}
-          title={fullCurrency(summary?.totalPurchaseUsd ?? 0)}
+          value={fullCurrency(summary?.totalPurchaseUsd ?? 0)}
           icon={Banknote}
           tone="blue"
         />
         <KpiCard
           label="Pago USD"
-          value={compactCurrency(summary?.totalPaidUsd ?? 0)}
-          title={fullCurrency(summary?.totalPaidUsd ?? 0)}
+          value={fullCurrency(summary?.totalPaidUsd ?? 0)}
           icon={CheckCircle2}
           tone="green"
         />
         <KpiCard
           label="Aberto USD"
-          value={compactCurrency(summary?.totalOpenUsd ?? 0)}
-          title={fullCurrency(summary?.totalOpenUsd ?? 0)}
+          value={fullCurrency(summary?.totalOpenUsd ?? 0)}
           icon={CalendarClock}
           tone="amber"
         />
@@ -1266,7 +1283,7 @@ export function SydlePaymentsPage() {
           Última sync:{' '}
           <strong className="text-slate-900 dark:text-slate-100">
             {summary?.lastRun?.startedAt
-              ? formatDateTime(summary.lastRun.startedAt)
+              ? dateTimeLabel(summary.lastRun.startedAt)
               : 'sem execução'}
           </strong>
         </span>
@@ -1482,18 +1499,15 @@ export function SydlePaymentsPage() {
                               className="mt-1 max-w-[220px] truncate text-xs text-slate-500 dark:text-slate-400"
                               title={row.matchReason}
                             >
-                              {row.matchReason}
+                              {matchReasonLabel(row.matchReason)}
                             </div>
                           )}
                         </td>
                         <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400">
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <div>
-                                SYDLE{' '}
-                                {row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--'}
-                              </div>
-                              <div>Portal {row.syncedAt ? formatDateTime(row.syncedAt) : '--'}</div>
+                              <div>SYDLE {dateTimeLabel(row.sourceUpdatedAt)}</div>
+                              <div>Portal {dateTimeLabel(row.syncedAt)}</div>
                             </div>
                             <Eye className="h-4 w-4 shrink-0 text-slate-400" />
                           </div>
@@ -1611,12 +1625,12 @@ export function SydlePaymentsPage() {
                   </div>
                   {row.matchReason && (
                     <p className="mt-3 line-clamp-2 text-xs text-slate-500">
-                      Motivo: {row.matchReason}
+                      Evidência: {matchReasonLabel(row.matchReason)}
                     </p>
                   )}
                   <p className="mt-2 text-xs text-slate-500">
-                    SYDLE {row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--'} ·
-                    Portal {row.syncedAt ? formatDateTime(row.syncedAt) : '--'}
+                    SYDLE {dateTimeLabel(row.sourceUpdatedAt)} · Portal{' '}
+                    {dateTimeLabel(row.syncedAt)}
                   </p>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <Badge className={matchClass(row.matchStatus)}>
@@ -1749,7 +1763,7 @@ export function SydlePaymentsPage() {
                 className="flex flex-col gap-1 rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"
               >
                 <span className="font-medium text-slate-800 dark:text-slate-200">
-                  #{run.id} · {syncStatusLabel(run.status)} · {formatDateTime(run.startedAt)}
+                  #{run.id} · {syncStatusLabel(run.status)} · {dateTimeLabel(run.startedAt)}
                 </span>
                 <span className="text-xs text-slate-500">
                   {run.fetched ?? 0} lidos · {run.created ?? 0} novos · {run.updated ?? 0}{' '}
