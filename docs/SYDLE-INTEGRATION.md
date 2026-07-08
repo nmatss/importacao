@@ -39,6 +39,9 @@ Compras/Pagamentos SYDLE` e atalho no portal para usuários autenticados do
 - `scripts/deploy.sh` bloqueia deploy quando `SYDLE_SYNC_ENABLED=true`, salvo
   rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
+Registro auditavel do feedback operacional da Odett, com testes, deploy,
+backup e mensagem de resposta: `docs/STATUS-2026-07-08-SYDLE-FEEDBACK.md`.
+
 Quando a SYDLE nao esta configurada, o job registra `status=skipped` em
 `sydle_sync_runs` com motivo `sydle_not_configured`. Isso e intencional para
 nao gerar erro falso em producao.

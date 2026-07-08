@@ -158,6 +158,10 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   como `Conciliação Portal`/`Evidência conciliação`, com evidências traduzidas
   para linguagem de negócio. Cards financeiros devem exibir valores completos,
   não abreviados, e exports devem usar datas/valores formatados para Excel.
+- Entrega do feedback Odett implantada em producao no commit `716725d`
+  (`716725d285fd` no deploy). Status auditavel registrado em
+  `docs/STATUS-2026-07-08-SYDLE-FEEDBACK.md`, incluindo backup pre-deploy,
+  health checks e mensagem para resposta operacional.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor. Quando mapeamento muda, usar full resync administrativo

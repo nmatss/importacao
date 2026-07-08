@@ -1,11 +1,27 @@
 # Session Memory
 
+## 2026-07-08 - Documentacao Pos-Deploy SYDLE Feedback Odett
+
+Resultado:
+
+- Criado `docs/STATUS-2026-07-08-SYDLE-FEEDBACK.md` como trilha auditavel da
+  entrega do feedback Odett no relatorio `Compras e Pagamentos Internacionais`.
+- Registro consolida objetivo, diagnostico, alteracoes, impacto em dados/API,
+  seguranca, testes, deploy, backup pre-deploy, health checks e mensagem
+  enviavel para Odett.
+- Commit implantado em producao: `716725d fix(sydle): ajusta formatacao do relatorio`.
+- SHA de deploy: `716725d285fd`.
+- Backup pre-deploy registrado:
+  `/home/nicolas/backups/importacao/importacao_2026-07-08_213156*`.
+- Health de API, cert-api, web e health publico passaram no deploy.
+- Repositorio local ficou limpo apos deploy e validacao pos-deploy.
+
 ## 2026-07-08 - Feedback Odett Relatorio SYDLE
 
 Resultado:
 
-- Ajustada a visão unificada SYDLE para remover as colunas duplicadas `Código do
-processo` e `Compra`, preservando esses campos no JSON da API para auditoria e
+- Ajustada a visão unificada SYDLE para remover as colunas duplicadas `Código do processo` e
+  `Compra`, preservando esses campos no JSON da API para auditoria e
   integrações.
 - `Match Portal`/`Motivo Match` foram substituídos por `Conciliação Portal` e
   `Evidência conciliação`; motivos técnicos como `process_code`,
