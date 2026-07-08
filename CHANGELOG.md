@@ -12,6 +12,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Staging SYDLE ganhou colunas aditivas do relatório consolidado/CSV:
   protocolo, emissão Invoice/PI, criação da tarefa, exceção, motivo da exceção,
   embarque e prazo de pagamento pós-embarque.
+- Endpoint administrativo `POST /api/sydle/sync-now?full=1` para full resync
+  auditável quando o mapeamento SYDLE muda e registros antigos precisam ser
+  reprocessados pela API real.
 - Exportações CSV/XLSX do relatório SYDLE passam a incluir as colunas do
   relatório Analytics junto dos campos operacionais do portal.
 - Tela SYDLE ganhou uma visão unificada abaixo da visão operacional, com as
@@ -22,6 +25,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Normalizador SYDLE reconhece aliases do CSV `Relatório Sydle.csv`, trata
   `(vazio)` como nulo e deriva chave estável por protocolo + invoice +
   vencimento + valor + prazo pós-embarque quando a fonte não fornece ID único.
+- Normalizador/conector SYDLE One reconhece aliases reais do payload
+  `requestData.emissionDate`, `requestData.endDateForm` e
+  `requestData.departureDate` para emissão Invoice/PI, criação da tarefa e
+  embarque.
+- Tipo de pagamento da SYDLE One passa a preservar os três valores do relatório
+  (`Deposit in Advance`, `Balance before Shipment`, `Balance after Shipment`)
+  em vez de reduzir tudo para depósito/saldo genérico.
 - Sync automático SYDLE passa de 15 para 10 minutos.
 - Relatório SYDLE deixa de preencher câmbio/BRL com estimativas do portal; os
   cards, tabelas e detalhe passam a exibir valores financeiros apenas quando a

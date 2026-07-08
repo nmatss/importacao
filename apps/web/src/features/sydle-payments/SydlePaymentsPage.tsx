@@ -48,7 +48,15 @@ function useDebouncedValue<T>(value: T, delayMs = 350): T {
 }
 
 type PaymentStatus = 'open' | 'scheduled' | 'paid' | 'overdue' | 'cancelled' | 'unknown';
-type PaymentType = 'deposit' | 'balance' | 'fee' | 'refund' | 'other';
+type PaymentType =
+  | 'deposit'
+  | 'deposit_in_advance'
+  | 'balance'
+  | 'balance_before_shipment'
+  | 'balance_after_shipment'
+  | 'fee'
+  | 'refund'
+  | 'other';
 type MatchStatus = 'matched' | 'ambiguous' | 'unmatched';
 
 interface SydlePayment {
@@ -184,11 +192,14 @@ const paymentStatusLabels: Record<PaymentStatus, string> = {
 };
 
 const paymentTypeLabels: Record<PaymentType, string> = {
-  deposit: 'Sinal',
-  balance: 'Saldo',
-  fee: 'Taxa',
-  refund: 'Estorno',
-  other: 'Outro',
+  deposit: 'Deposit',
+  deposit_in_advance: 'Deposit in Advance',
+  balance: 'Balance',
+  balance_before_shipment: 'Balance before Shipment',
+  balance_after_shipment: 'Balance after Shipment',
+  fee: 'Fee',
+  refund: 'Refund',
+  other: 'Other',
 };
 
 const matchLabels: Record<MatchStatus, string> = {

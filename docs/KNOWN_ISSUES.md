@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-29
+Ultima atualizacao: 2026-07-08
 
 ## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
 
@@ -21,8 +21,9 @@ INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe re
 - **Aba "Licenciamentos Vencidos" sem coluna de data**: "Licen. - Prazo" (#11) fica vazio
   ate a planilha ganhar uma coluna de validade (o Status #10 ja funciona via coluna "Produto").
 - **Sydle (#3a)**: campos financeiros sensiveis (cambio/banco/remessa) seguem em 403 — liberar
-  acesso/view sanitizada para popular "Documentos vs Sistema". As colunas do relatório
-  Analytics/CSV foram preservadas no staging em 2026-07-08.
+  acesso/view sanitizada para popular cambio, BRL, banco, contrato e remessa. As colunas do
+  relatório Analytics/CSV foram preservadas no staging em 2026-07-08 e podem ser reprocessadas
+  por full resync via `POST /api/sydle/sync-now?full=1`.
 - **Webhook Google Chat**: key invalida nas notificacoes (`chat.googleapis.com` 400) — config.
 - **Vertex SA dedicada** (opcao profissional): mover Vertex p/ `gemini-n8n` (least-privilege)
   com `roles/aiplatform.user` — hoje reusa a SA compartilhada `n8n-automacao`.

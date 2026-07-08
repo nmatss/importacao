@@ -1139,6 +1139,16 @@ export const openapiSpec = {
       post: {
         tags: ['SYDLE'],
         summary: 'Run SYDLE sync now (admin)',
+        parameters: [
+          {
+            name: 'full',
+            in: 'query' as const,
+            required: false,
+            schema: { type: 'boolean' as const },
+            description:
+              'When true, ignores the stored cursor and reprocesses all SYDLE rows from the API.',
+          },
+        ],
         responses: {
           '200': { description: 'Sync result' },
           '403': { description: 'Admin role required' },

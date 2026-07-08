@@ -132,6 +132,20 @@ describe('sydleRoutes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ id: 99, status: 'success' });
-    expect(serviceMock.sync).toHaveBeenCalledWith('manual', 1);
+    expect(serviceMock.sync).toHaveBeenCalledWith('manual', 1, { full: false });
+  });
+
+  it('runs a full manual sync when requested by the admin', async () => {
+    serviceMock.sync.mockResolvedValueOnce({
+      id: 100,
+      status: 'success',
+      metadata: { fullResync: true },
+    });
+
+    const res = await request(makeApp()).post('/api/sydle/sync-now?full=1');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: 100, status: 'success' });
+    expect(serviceMock.sync).toHaveBeenCalledWith('manual', 1, { full: true });
   });
 });

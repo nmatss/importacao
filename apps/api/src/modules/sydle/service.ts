@@ -28,6 +28,9 @@ import type { SydleReportQuery } from './schema.js';
 
 type SyncTrigger = 'cron' | 'manual';
 type MatchStatus = 'matched' | 'ambiguous' | 'unmatched';
+interface SyncOptions {
+  full?: boolean;
+}
 
 interface ProcessCandidate {
   id: number;
@@ -247,6 +250,17 @@ const LOGISTIC_STATUS_LABELS: Record<string, string> = {
   internalized: 'Internalizado',
 };
 
+const PAYMENT_TYPE_LABELS: Record<string, string> = {
+  deposit: 'Deposit',
+  deposit_in_advance: 'Deposit in Advance',
+  balance: 'Balance',
+  balance_before_shipment: 'Balance before Shipment',
+  balance_after_shipment: 'Balance after Shipment',
+  fee: 'Fee',
+  refund: 'Refund',
+  other: 'Other',
+};
+
 function phaseLabel(status: string | null | undefined): string {
   if (!status) return '';
   return LOGISTIC_STATUS_LABELS[status] ?? status;
@@ -301,6 +315,8 @@ function exportValue(row: SydleExportRow, key: (typeof EXPORT_COLUMNS)[number]['
       return phaseLabel(row.logisticStatus);
     case 'brand':
       return row.brand || row.portalBrand || '';
+    case 'paymentType':
+      return PAYMENT_TYPE_LABELS[row.paymentType] ?? row.paymentType ?? '';
     case 'dueDate':
       return dateOnly(row.dueDate);
     case 'invoiceIssuedDate':
@@ -399,7 +415,7 @@ export const sydleService = {
     return getSydleConfigStatus();
   },
 
-  async sync(trigger: SyncTrigger, userId: number | null = null) {
+  async sync(trigger: SyncTrigger, userId: number | null = null, options: SyncOptions = {}) {
     const configStatus = getSydleConfigStatus();
     const started = new Date();
     const [run] = await db
@@ -452,11 +468,16 @@ export const sydleService = {
 
       try {
         const previousCursor = await this.resolveLastCursor();
-        const cursorFrom = this.applyCursorOverlap(previousCursor);
+        const fullResync = Boolean(options.full);
+        const cursorFrom = fullResync ? null : this.applyCursorOverlap(previousCursor);
         const client = new SydleClient();
         const fetched = await client.fetchPayments(cursorFrom);
         const normalized = fetched.records.map((record) => normalizeSydlePayment(record));
-        const cursorTo = this.resolveCursorTo(previousCursor, normalized, fetched.cursorTo);
+        const cursorTo = this.resolveCursorTo(
+          fullResync ? null : previousCursor,
+          normalized,
+          fetched.cursorTo,
+        );
         const result = await this.upsertPayments(normalized);
 
         const completed = await this.completeRun(run.id, started, {
@@ -468,6 +489,7 @@ export const sydleService = {
           errorMessage: null,
           metadata: {
             ...fetched.metadata,
+            fullResync: fullResync || undefined,
             previousCursor: previousCursor?.toISOString() ?? null,
             cursorOverlapMs: SYDLE_CURSOR_OVERLAP_MS,
             cursorSource: cursorTo ? 'source_updated_at' : 'none',

@@ -3,6 +3,15 @@ import { sendError, sendPaginated, sendSuccess } from '../../shared/utils/respon
 import { sydleService } from './service.js';
 import { sydleReportQuerySchema, syncRunsQuerySchema } from './schema.js';
 
+function booleanParam(value: unknown): boolean {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return ['1', 'true', 'yes', 'sim'].includes(
+    String(raw ?? '')
+      .trim()
+      .toLowerCase(),
+  );
+}
+
 export const sydleController = {
   async listReport(req: Request, res: Response) {
     try {
@@ -49,7 +58,8 @@ export const sydleController = {
 
   async syncNow(req: Request, res: Response) {
     try {
-      const result = await sydleService.sync('manual', req.user?.id ?? null);
+      const full = booleanParam(req.query.full ?? req.body?.full);
+      const result = await sydleService.sync('manual', req.user?.id ?? null, { full });
       sendSuccess(res, result);
     } catch (error: any) {
       sendError(res, error.message || 'Erro ao sincronizar SYDLE', 500);

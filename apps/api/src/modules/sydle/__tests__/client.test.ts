@@ -225,6 +225,12 @@ describe('SydleClient', () => {
     purchaseOrder: 'PO-777',
     exchangeRate: 5.12,
     valorBrl: 22835.2,
+    requestData: {
+      paymentType: 'afterShipment',
+      emissionDate: '2026-05-07T00:00:00Z',
+      endDateForm: '2026-06-16T12:39:04Z',
+      departureDate: '2026-05-08T00:00:00Z',
+    },
     // ruído não-escalar: deve ser ignorado pelo guard de escalar
     process: { _id: 'X', _classId: 'Y' },
     paymentData: [
@@ -271,6 +277,10 @@ describe('SydleClient', () => {
       remittanceId: 'SWIFT-XY',
       exchangeRate: 5.12,
       amountBrl: 22835.2,
+      paymentType: 'afterShipment',
+      invoiceIssuedDate: '2026-05-07T00:00:00Z',
+      taskCreatedAt: '2026-06-16T12:39:04Z',
+      shipmentDate: '2026-05-08T00:00:00Z',
     });
     // o ruído não-escalar não vira processCode (que veio da chave explícita)
     expect(result.records[0].processCode).toBe('IMP-0099');
@@ -470,7 +480,7 @@ describe('SydleClient', () => {
 
   it('does not query neighbor classes when the request has no referenced objects', async () => {
     process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
-    // REQUEST_WITH_EXTRA não tem requestData => os specs default não encontram refs
+    // REQUEST_WITH_EXTRA não tem refs em requestData => os specs default não consultam vizinhas
     mockSydleOneSequence(REQUEST_WITH_EXTRA, TICKET_WITH_OPENFORM);
 
     await new SydleClient().fetchPayments(null);

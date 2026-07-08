@@ -147,6 +147,18 @@ Filtros principais:
 - `page`
 - `limit`
 
+`paymentType` aceita os valores legados `deposit`/`balance` e os valores
+granulares da SYDLE `deposit_in_advance`, `balance_before_shipment` e
+`balance_after_shipment`, exibidos/exportados como no Excel da SYDLE.
+
+Sincronizacao:
+
+- `POST /api/sydle/sync-now`: sincronizacao manual incremental, mesmo cursor do
+  cron.
+- `POST /api/sydle/sync-now?full=1`: full resync administrativo para reprocessar
+  registros antigos quando o mapeamento SYDLE/API muda. Usa a API real da SYDLE,
+  nao estimativas do portal.
+
 Evidencias:
 
 - `apps/api/src/modules/sydle/routes.ts`

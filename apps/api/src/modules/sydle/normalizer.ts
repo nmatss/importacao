@@ -1,6 +1,14 @@
 import { createHash } from 'node:crypto';
 
-export type SydlePaymentType = 'deposit' | 'balance' | 'fee' | 'refund' | 'other';
+export type SydlePaymentType =
+  | 'deposit'
+  | 'deposit_in_advance'
+  | 'balance'
+  | 'balance_before_shipment'
+  | 'balance_after_shipment'
+  | 'fee'
+  | 'refund'
+  | 'other';
 export type SydlePaymentStatus =
   | 'open'
   | 'scheduled'
@@ -150,6 +158,7 @@ const FIELD_KEYS = {
     'invoiceIssuedDate',
     'invoiceIssueDate',
     'piIssueDate',
+    'emissionDate',
     'dataEmissaoInvoicePi',
     'dataEmissaoInvoicePI',
     'Data de emissão Invoice/PI',
@@ -158,13 +167,21 @@ const FIELD_KEYS = {
   taskCreatedAt: [
     'taskCreatedAt',
     'taskCreationDate',
+    'endDateForm',
     'dataCriacaoTarefa',
     'dataCriacaoDaTarefa',
     'Data criação da tarefa',
     'Data criacao da tarefa',
     '_creationDate',
   ],
-  shipmentDate: ['shipmentDate', 'shippingDate', 'dataEmbarque', 'Data de embarque', 'embarque'],
+  shipmentDate: [
+    'shipmentDate',
+    'shippingDate',
+    'departureDate',
+    'dataEmbarque',
+    'Data de embarque',
+    'embarque',
+  ],
   paymentDeadlineAfterShipment: [
     'paymentDeadlineAfterShipment',
     'sydlePaymentDeadlineAfterShipment',
@@ -389,6 +406,15 @@ function normalizeCurrency(value: unknown): string {
 function normalizePaymentType(value: unknown): SydlePaymentType {
   const raw = normalizeKey(String(value ?? ''));
   if (!raw) return 'other';
+  if (/(depositinadvance|advancepayment|pagamentoantecipado)/.test(raw)) {
+    return 'deposit_in_advance';
+  }
+  if (/(balancebeforeshipment|beforeshipment|antesdoembarque|antesembarque)/.test(raw)) {
+    return 'balance_before_shipment';
+  }
+  if (/(balanceaftershipment|aftershipment|aposembarque|posembarque)/.test(raw)) {
+    return 'balance_after_shipment';
+  }
   if (/(deposit|sinal|entrada|adiantamento)/.test(raw)) return 'deposit';
   if (/(balance|saldo|final|restante)/.test(raw)) return 'balance';
   if (/(fee|taxa|tarifa|despesa|custo)/.test(raw)) return 'fee';

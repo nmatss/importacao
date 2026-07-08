@@ -153,12 +153,11 @@ Estado comprovado no repositorio e na validacao operacional:
 - Confirmado/acessivel: classe `Solicitacao de Pagamento Internacional/current`
   (`68bf1179b042c72f03993928`), `paymentData[]`, ticket, status do ticket e
   moeda.
-- Bloqueado por permissao em 2026-06-19/20: buscas diretas em
-  `InternationalPaymentOpenForm` e `RequestData` retornaram `403`.
-- Inferencia de alta confianca: `InternationalPaymentOpenForm`, `RequestData`,
-  `ticket.openForm` e/ou uma view/API consolidada da SYDLE sao as fontes mais
-  provaveis para fornecedor, PI, invoice, processo de importacao e dados
-  bancarios/cambio.
+- Confirmado/acessivel em 2026-07-08: `requestData` dentro da classe principal,
+  incluindo `invoiceCode`, `processCode`, `paymentType`, `emissionDate`,
+  `endDateForm`, `departureDate`, refs de `brand` e `recipient`.
+- Bloqueado/pendente por permissao em 2026-07-08: classes ou view financeira
+  para cambio, BRL, banco, contrato e remessa.
 - Nao ha evidencia local suficiente para afirmar que nao existem outras tabelas
   ou classes SYDLE; essa confirmacao depende de acesso ao catalogo/contrato da
   SYDLE ou apoio do time responsavel pela plataforma.
@@ -168,42 +167,44 @@ Campos que devem ser solicitados na view/API consolidada:
 - Chaves de conciliacao: `processCode`, `purchaseRef`, `purchaseOrder`,
   `proformaNumber`/`piNumber`, `invoiceNumber`, `supplierName`/exportador e
   marca quando existir.
-- Parcela/liquidacao: status real da parcela, tipo real (`deposit`/`balance`),
+- Parcela/liquidacao: status real da parcela, tipo real da SYDLE
+  (`Deposit in Advance`, `Balance before Shipment`, `Balance after Shipment`),
   data de vencimento, data de pagamento/liquidacao, valor pago e valor aberto.
 - Financeiro: moeda, valor original, taxa de cambio, valor BRL, banco, contrato
   de cambio, remessa/remittance e referencia de comprovante quando permitido.
 - Auditoria: `_id`, `_lastUpdateDate`, usuario/sistema de atualizacao e status
   de aprovacao.
 
-Enquanto essa fonte nao existir, o portal deve manter as regras atuais como
-provisorias e visiveis para UAT financeiro: pago/aberto vem do status do ticket
-e tipo de pagamento vem de `paymentDeadlineAfterShipment === 0 ? deposit :
-balance`. Nao expandir os `_source.excludes` para anexos, documentos ou campos
-bancarios sem aprovacao de seguranca/financeiro; preferir view/API ja sanitizada
-pela SYDLE.
+Enquanto a fonte financeira nao existir, o portal deve manter os campos
+financeiros sensiveis vazios quando a SYDLE nao fornece. Pago/aberto vem do
+status do ticket, e tipo de pagamento vem de `requestData.paymentType`
+(`depositInAdvance`, `beforeShipment`, `afterShipment`). Nao expandir os
+`_source.excludes` para anexos, documentos ou campos bancarios sem aprovacao de
+seguranca/financeiro; preferir view/API ja sanitizada pela SYDLE.
 
 Campos reconhecidos pelo normalizador:
 
-| Campo Interno                  | Exemplos aceitos                                                    |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `externalId`                   | `externalId`, `id`, `_id`, `codigoPagamento`, `paymentId`           |
-| `sydleProtocol`                | `sydleProtocol`, `protocolo`, `ticketCode`, `sydleTicketCode`       |
-| `processCode`                  | `processCode`, `processo`, `codigoProcesso`, `process`              |
-| `purchaseRef`                  | `purchaseRef`, `compra`, `referenciaCompra`                         |
-| `purchaseOrder`                | `purchaseOrder`, `poNumber`, `pedidoCompra`, `ordemCompra`          |
-| `proformaNumber`               | `proformaNumber`, `piNumber`, `numeroPi`, `proformaInvoice`         |
-| `invoiceNumber`                | `invoiceNumber`, `invoice`, `ciNumber`, `numeroInvoice`             |
-| `supplierName`                 | `supplierName`, `supplier`, `fornecedor`, `exportador`, `shipper`   |
-| `purchaseAmount`               | `purchaseAmount`, `valorCompra`, `amountUsd`, `valorInvoice`        |
-| `paidAmount`                   | `paidAmount`, `valorPago`, `amountPaid`, `valorPagoUsd`             |
-| `paymentStatus`                | `paymentStatus`, `statusPagamento`, `status`, `situacao`            |
-| `invoiceIssuedDate`            | `Data de emissão Invoice/PI`, `invoiceIssueDate`, `piIssueDate`     |
-| `taskCreatedAt`                | `Data criação da tarefa`, `taskCreationDate`, `_creationDate`       |
-| `shipmentDate`                 | `Data de embarque`, `shipmentDate`, `shippingDate`                  |
-| `paymentDeadlineAfterShipment` | `Prazo para pagamento pós embarque`, `paymentDeadlineAfterShipment` |
-| `exceptionStatus`              | `Exceção`, `exception`                                              |
-| `exceptionReason`              | `Motivo da exceção`, `reason`                                       |
-| `sourceUpdatedAt`              | `sourceUpdatedAt`, `updatedAt`, `ultimaAtualizacao`                 |
+| Campo Interno                  | Exemplos aceitos                                                                          |
+| ------------------------------ | ----------------------------------------------------------------------------------------- |
+| `externalId`                   | `externalId`, `id`, `_id`, `codigoPagamento`, `paymentId`                                 |
+| `sydleProtocol`                | `sydleProtocol`, `protocolo`, `ticketCode`, `sydleTicketCode`                             |
+| `processCode`                  | `processCode`, `processo`, `codigoProcesso`, `process`                                    |
+| `purchaseRef`                  | `purchaseRef`, `compra`, `referenciaCompra`                                               |
+| `purchaseOrder`                | `purchaseOrder`, `poNumber`, `pedidoCompra`, `ordemCompra`                                |
+| `proformaNumber`               | `proformaNumber`, `piNumber`, `numeroPi`, `proformaInvoice`                               |
+| `invoiceNumber`                | `invoiceNumber`, `invoice`, `ciNumber`, `numeroInvoice`                                   |
+| `supplierName`                 | `supplierName`, `supplier`, `fornecedor`, `exportador`, `shipper`                         |
+| `purchaseAmount`               | `purchaseAmount`, `valorCompra`, `amountUsd`, `valorInvoice`                              |
+| `paidAmount`                   | `paidAmount`, `valorPago`, `amountPaid`, `valorPagoUsd`                                   |
+| `paymentStatus`                | `paymentStatus`, `statusPagamento`, `status`, `situacao`                                  |
+| `paymentType`                  | `paymentType`, `depositInAdvance`, `beforeShipment`, `afterShipment`, `Tipo de pagamento` |
+| `invoiceIssuedDate`            | `Data de emissão Invoice/PI`, `invoiceIssueDate`, `piIssueDate`, `emissionDate`           |
+| `taskCreatedAt`                | `Data criação da tarefa`, `taskCreationDate`, `endDateForm`, `_creationDate`              |
+| `shipmentDate`                 | `Data de embarque`, `shipmentDate`, `shippingDate`, `departureDate`                       |
+| `paymentDeadlineAfterShipment` | `Prazo para pagamento pós embarque`, `paymentDeadlineAfterShipment`                       |
+| `exceptionStatus`              | `Exceção`, `exception`                                                                    |
+| `exceptionReason`              | `Motivo da exceção`, `reason`                                                             |
+| `sourceUpdatedAt`              | `sourceUpdatedAt`, `updatedAt`, `ultimaAtualizacao`                                       |
 
 Se o payload real divergir, ajustar somente `normalizer.ts` e adicionar fixture
 sanitizada em teste.
@@ -220,6 +221,11 @@ pagamento pós-embarque e data da última alteração.
 Quando a fonte não traz identificador único por parcela, o normalizador deriva
 `externalId` por protocolo + invoice + vencimento + valor + prazo pós-embarque,
 evitando colapsar parcelas diferentes do mesmo protocolo.
+
+Quando uma mudança de mapeamento adiciona colunas novas, usar
+`POST /api/sydle/sync-now?full=1` como admin para reprocessar todo o conjunto via
+API SYDLE One. O cron de 10 minutos permanece incremental e continua usando
+cursor `_lastUpdateDate` com overlap de 5 minutos.
 
 ## Banco De Dados
 

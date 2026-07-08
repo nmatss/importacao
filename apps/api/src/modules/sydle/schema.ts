@@ -16,7 +16,18 @@ export const sydleReportQuerySchema = z.object({
   paymentStatus: z
     .enum(['open', 'scheduled', 'paid', 'overdue', 'cancelled', 'unknown'])
     .optional(),
-  paymentType: z.enum(['deposit', 'balance', 'fee', 'refund', 'other']).optional(),
+  paymentType: z
+    .enum([
+      'deposit',
+      'deposit_in_advance',
+      'balance',
+      'balance_before_shipment',
+      'balance_after_shipment',
+      'fee',
+      'refund',
+      'other',
+    ])
+    .optional(),
   matchStatus: z.enum(['matched', 'ambiguous', 'unmatched']).optional(),
   // Atalho profissional de vencimento: vencidos / vence em 7 / vence em 30 dias.
   dueBucket: z.enum(['overdue', 'due7', 'due30']).optional(),

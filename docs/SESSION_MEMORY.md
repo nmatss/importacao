@@ -22,9 +22,19 @@ Resultado:
 - Relatório SYDLE deixou de preencher câmbio/BRL com estimativas do portal
   (`currency_exchanges`); cards, tabelas, detalhe e visão unificada exibem
   valores financeiros apenas quando a SYDLE fornece esses campos.
+- Revisao pos-deploy identificou que as colunas novas ficavam vazias nos
+  registros antigos porque o cron incremental consultava somente itens alterados
+  desde o cursor de 2026-07-07. Corrigido com `POST /api/sydle/sync-now?full=1`
+  para full resync auditavel e aliases reais do payload SYDLE One:
+  `requestData.emissionDate`, `requestData.endDateForm` e
+  `requestData.departureDate`.
+- Tipo de pagamento foi alinhado ao CSV/API: `requestData.paymentType`
+  `depositInAdvance`, `beforeShipment` e `afterShipment` agora aparecem como
+  `Deposit in Advance`, `Balance before Shipment` e `Balance after Shipment`.
 
 Testes:
 
+- `npm test -w apps/api -- src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/client.test.ts src/modules/sydle/__tests__/routes.test.ts --run` -> 31 passed.
 - `npm test -w apps/api -- src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/client.test.ts src/modules/sydle/__tests__/service.test.ts src/modules/sydle/__tests__/routes.test.ts --run` -> 43 passed.
 - `npm test -w apps/web -- src/features/sydle-payments/SydlePaymentsPage.test.tsx --run` -> 9 passed.
 - `npm run lint` -> passed.

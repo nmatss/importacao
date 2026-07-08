@@ -614,6 +614,15 @@ function flattenSydleOneInternationalPaymentRows(
       ? applyEnrichmentClasses(record, ticket, lookups.enrichmentClasses)
       : {};
 
+    const taskCreatedAt =
+      enrichment.taskCreatedAt ??
+      classEnrichment.taskCreatedAt ??
+      ticket?._creationDate ??
+      record._creationDate ??
+      null;
+    const requestPaymentType =
+      getNestedString(record, ['requestData', 'paymentType']) ?? stringValue(record.paymentType);
+
     payments.forEach((payment, index) => {
       const paymentId = stringValue(payment?._id) ?? `payment-${index + 1}`;
       const amount = payment ? parseNumber(payment.paymentAmount) : null;
@@ -638,10 +647,11 @@ function flattenSydleOneInternationalPaymentRows(
         paidAmount: ticketClosed ? amount : 0,
         openAmount: ticketClosed ? 0 : amount,
         paymentType:
-          parseNumber(payment?.paymentDeadlineAfterShipment) === 0 ? 'deposit' : 'balance',
+          requestPaymentType ??
+          (parseNumber(payment?.paymentDeadlineAfterShipment) === 0 ? 'deposit' : 'balance'),
         paymentStatus: ticketClosed ? 'paid' : 'open',
         dueDate,
-        taskCreatedAt: ticket?._creationDate ?? record._creationDate ?? null,
+        taskCreatedAt,
         paymentDeadlineAfterShipment: payment?.paymentDeadlineAfterShipment ?? null,
         exceptionStatus: payment?.exception ?? null,
         exceptionReason: payment?.reason ?? null,
@@ -682,6 +692,7 @@ const COMPLEMENTARY_FIELDS = [
   'supplierName',
   'brand',
   'invoiceIssuedDate',
+  'taskCreatedAt',
   'shipmentDate',
   'paymentDeadlineAfterShipment',
   'exceptionStatus',

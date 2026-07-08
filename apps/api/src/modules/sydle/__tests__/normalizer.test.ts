@@ -184,6 +184,34 @@ describe('SYDLE payment normalizer', () => {
     expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T20:20:31.914Z');
   });
 
+  it('normalizes raw Sydle One report aliases from requestData', () => {
+    const result = normalizeSydlePayment({
+      externalId: 'sydle-one:REQ-5317:PAY-1',
+      sydleProtocol: '5317',
+      processCode: 'IM0742605SZ',
+      invoiceCode: 'IM0742605SZ',
+      paymentType: 'afterShipment',
+      emissionDate: '2026-05-07T00:00:00Z',
+      endDateForm: '2026-06-16T12:39:04Z',
+      departureDate: '2026-05-07T00:00:00Z',
+      paymentDeadlineAfterShipment: 7,
+      currency: 'USD',
+      purchaseAmount: 5887.39,
+      dueDate: '2026-06-17T00:00:00Z',
+    });
+
+    expect(result).toMatchObject({
+      sydleProtocol: '5317',
+      processCode: 'IM0742605SZ',
+      invoiceNumber: 'IM0742605SZ',
+      paymentType: 'balance_after_shipment',
+      invoiceIssuedDate: '2026-05-07',
+      shipmentDate: '2026-05-07',
+      paymentDeadlineAfterShipment: 7,
+    });
+    expect(result.taskCreatedAt?.toISOString()).toBe('2026-06-16T12:39:04.000Z');
+  });
+
   it('normalizes the SYDLE Analytics CSV columns without collapsing installments', () => {
     const first = normalizeSydlePayment({
       Protocolo: '5317',
@@ -217,7 +245,7 @@ describe('SYDLE payment normalizer', () => {
       invoiceNumber: 'IM0742605SZ',
       supplierName: 'KIOM GLOBAL LIMITED',
       brand: 'imaginarium',
-      paymentType: 'balance',
+      paymentType: 'balance_after_shipment',
       dueDate: '2026-06-17',
       currency: 'USD',
       purchaseAmount: 2024.06,

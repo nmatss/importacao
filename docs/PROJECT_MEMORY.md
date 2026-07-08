@@ -152,7 +152,8 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   exibe uma visão unificada com as colunas do Excel/CSV.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
-  inicio como cursor.
+  inicio como cursor. Quando mapeamento muda, usar full resync administrativo
+  (`POST /api/sydle/sync-now?full=1`) para reprocessar historico via API SYDLE.
 - Matching financeiro nao deve conciliar automaticamente com invoice/PI/pedido
   isolado; exige processo exato, compra forte ou evidencias combinadas.
 - `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns.
@@ -163,9 +164,12 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
 Internacional/current`) retornou 14 solicitacoes e `paymentData[]`; o portal
   achata cada parcela em linha financeira com `externalId`
   `sydle-one:{requestId}:{paymentId}`.
-- O usuario/API atual consegue resolver ticket, status e moeda; formularios
-  `InternationalPaymentOpenForm` e `RequestData` retornaram 403, entao
-  fornecedor/PI/invoice dependem de permissao adicional ou visao SYDLE.
+- O usuario/API atual consegue resolver ticket, status, moeda e `requestData`
+  suficiente para invoice, processo, emissao Invoice/PI, criacao da tarefa,
+  embarque, tipo de pagamento real (`depositInAdvance`, `beforeShipment`,
+  `afterShipment`) e prazo por parcela. Campos financeiros sensiveis
+  (cambio/BRL/banco/contrato/remessa) ainda dependem de permissao adicional ou
+  view sanitizada da SYDLE.
 - `scripts/deploy.sh` bloqueia deploy se `SYDLE_SYNC_ENABLED=true`, salvo
   rollout financeiro aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 - Sync real usa SOPS/env com `SYDLE_SYNC_ENABLED=true`,
@@ -195,9 +199,9 @@ Evidencias:
 - `apps/api/src/modules/sydle`
 - `apps/web/src/features/sydle-payments/SydlePaymentsPage.tsx`
 
-Grau de confianca: alto para a arquitetura interna e para a classe Sydle One
-validada; medio para campos complementares de formulario, pois a API atual
-retornou 403 para essas referencias.
+Grau de confianca: alto para a arquitetura interna, classe Sydle One validada e
+campos do `requestData` observados em producao; medio para campos financeiros
+complementares que continuam bloqueados por permissao/view externa.
 
 ## IA E Harness
 
