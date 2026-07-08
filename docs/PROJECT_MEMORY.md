@@ -149,7 +149,10 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   câmbio, BRL, banco, contrato e remessa só aparecem quando a SYDLE fornece.
 - O relatorio SYDLE deve manter visão em tabela para leitura operacional e
   permitir exportar o filtro ativo em CSV, Excel (.xlsx) e PDF; a tela tambem
-  exibe uma visão unificada com as colunas do Excel/CSV.
+  exibe uma visão unificada com as colunas do Excel/CSV. Leitura/exportacao,
+  menu lateral e atalho do portal sao para usuarios autenticados com acesso ao
+  modulo de importacao; sincronizacao manual, configuracao, historico de sync e
+  payload bruto ficam restritos a admin.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor. Quando mapeamento muda, usar full resync administrativo

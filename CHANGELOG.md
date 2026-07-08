@@ -19,6 +19,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   relatório Analytics junto dos campos operacionais do portal.
 - Tela SYDLE ganhou uma visão unificada abaixo da visão operacional, com as
   mesmas colunas e ordem do Excel/CSV.
+- Leitura do módulo SYDLE liberada para todos os usuários autenticados com
+  acesso ao módulo de importação; sincronização manual, configuração e histórico
+  de sync permanecem restritos a admin.
 
 ### Changed
 

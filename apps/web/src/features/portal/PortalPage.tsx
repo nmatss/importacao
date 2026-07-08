@@ -343,13 +343,11 @@ export function PortalPage() {
               <QuickLink to="/importacao/processos/novo" icon={Plus} label="Novo" />
               <QuickLink to="/importacao/processos" icon={Eye} label="Processos" />
               <QuickLink to="/importacao/follow-up" icon={CalendarClock} label="Follow-Up" />
-              {user?.role === 'admin' && (
-                <QuickLink
-                  to="/importacao/compras-pagamentos"
-                  icon={FileBarChart}
-                  label="Pagamentos SYDLE"
-                />
-              )}
+              <QuickLink
+                to="/importacao/compras-pagamentos"
+                icon={FileBarChart}
+                label="Pagamentos SYDLE"
+              />
             </div>
           </div>
 

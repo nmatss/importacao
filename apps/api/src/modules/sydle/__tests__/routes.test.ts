@@ -7,6 +7,7 @@ const serviceMock = vi.hoisted(() => ({
   getConfigStatus: vi.fn(),
   list: vi.fn(),
   summary: vi.fn(),
+  getPaymentById: vi.fn(),
   exportCsv: vi.fn(),
   exportXlsx: vi.fn(),
   exportPdf: vi.fn(),
@@ -50,13 +51,34 @@ describe('sydleRoutes', () => {
     vi.clearAllMocks();
   });
 
-  it('requires admin access for the SYDLE report API', async () => {
+  it('allows analyst users to read the SYDLE report API', async () => {
     authGate.adminAllowed = false;
+    serviceMock.list.mockResolvedValueOnce({
+      data: [{ processCode: 'IM0712602NB', paymentStatus: 'open' }],
+      total: 1,
+      page: 1,
+      limit: 50,
+    });
 
     const res = await request(makeApp()).get('/api/sydle/payments-report');
 
-    expect(res.status).toBe(403);
-    expect(res.body).toEqual({ success: false, error: 'Acesso negado' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(serviceMock.list).toHaveBeenCalled();
+  });
+
+  it('removes raw payload from detail responses for analyst users', async () => {
+    authGate.adminAllowed = false;
+    serviceMock.getPaymentById.mockResolvedValueOnce({
+      id: 10,
+      invoiceNumber: 'INV-1',
+      rawPayload: { rawSydleOne: { request: { id: 'REQ-1' } } },
+    });
+
+    const res = await request(makeApp()).get('/api/sydle/payments-report/10');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ id: 10, invoiceNumber: 'INV-1', rawPayload: null });
   });
 
   it('lists payments using validated report filters', async () => {
@@ -133,6 +155,24 @@ describe('sydleRoutes', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toEqual({ id: 99, status: 'success' });
     expect(serviceMock.sync).toHaveBeenCalledWith('manual', 1, { full: false });
+  });
+
+  it('keeps manual sync restricted to admin users', async () => {
+    authGate.adminAllowed = false;
+
+    const res = await request(makeApp()).post('/api/sydle/sync-now');
+
+    expect(res.status).toBe(403);
+    expect(serviceMock.sync).not.toHaveBeenCalled();
+  });
+
+  it('keeps sync runs restricted to admin users', async () => {
+    authGate.adminAllowed = false;
+
+    const res = await request(makeApp()).get('/api/sydle/sync-runs');
+
+    expect(res.status).toBe(403);
+    expect(serviceMock.getSyncRuns).not.toHaveBeenCalled();
   });
 
   it('runs a full manual sync when requested by the admin', async () => {

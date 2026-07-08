@@ -34,7 +34,7 @@ export const sydleController = {
       if (!payment) {
         return sendError(res, 'Pagamento SYDLE nao encontrado', 404);
       }
-      sendSuccess(res, payment);
+      sendSuccess(res, req.user?.role === 'admin' ? payment : { ...payment, rawPayload: null });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erro ao buscar pagamento SYDLE';
       sendError(res, message, 400);

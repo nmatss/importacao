@@ -9,9 +9,8 @@ const router = Router();
 const syncLimiter = createRateLimiter(5, 60_000);
 
 router.use(authMiddleware);
-router.use(adminMiddleware);
 
-router.get('/config', sydleController.config);
+router.get('/config', adminMiddleware, sydleController.config);
 router.get(
   '/payments-report',
   validate(sydleReportQuerySchema, 'query'),
@@ -40,7 +39,12 @@ router.get(
 // Single-payment detail. Registered AFTER the literal /summary and /export.*
 // routes so the ":id" param cannot capture them.
 router.get('/payments-report/:id', sydleController.getById);
-router.get('/sync-runs', validate(syncRunsQuerySchema, 'query'), sydleController.syncRuns);
-router.post('/sync-now', syncLimiter, sydleController.syncNow);
+router.get(
+  '/sync-runs',
+  adminMiddleware,
+  validate(syncRunsQuerySchema, 'query'),
+  sydleController.syncRuns,
+);
+router.post('/sync-now', adminMiddleware, syncLimiter, sydleController.syncNow);
 
 export { router as sydleRoutes };

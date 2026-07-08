@@ -54,7 +54,6 @@ const navSections: { label: string; items: NavItem[] }[] = [
         to: '/importacao/compras-pagamentos',
         label: 'Compras/Pagamentos SYDLE',
         icon: ReceiptText,
-        adminOnly: true,
       },
       { to: '/importacao/cambios', label: 'Câmbios', icon: DollarSign },
       { to: '/importacao/lis', label: 'LIs / LPCOs', icon: FileCheck },

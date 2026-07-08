@@ -75,6 +75,7 @@ describe('PortalPage auth-sensitive cert-api calls', () => {
 
     await screen.findByText(/Mariana Santos/i);
     expect(screen.getByText(/Acesso restrito/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Pagamentos SYDLE/i).length).toBeGreaterThan(0);
     expect(mockedFetchCertStats).not.toHaveBeenCalled();
     expect(mockedCheckCertApiHealth).not.toHaveBeenCalled();
   });

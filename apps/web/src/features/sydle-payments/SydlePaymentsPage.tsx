@@ -781,14 +781,14 @@ export function SydlePaymentsPage() {
     error,
     refetch,
   } = useApiQuery<PaginatedResponse>(['sydle-payments', queryParams.toString()], reportUrl, {
-    enabled: isAdmin,
-    refetchInterval: isAdmin ? REFRESH_INTERVAL_MS : false,
+    enabled: Boolean(user),
+    refetchInterval: user ? REFRESH_INTERVAL_MS : false,
   });
 
   const { data: summary } = useApiQuery<SydleSummary>(
     ['sydle-payments-summary', summaryParams.toString()],
     summaryUrl,
-    { enabled: isAdmin, refetchInterval: isAdmin ? REFRESH_INTERVAL_MS : false },
+    { enabled: Boolean(user), refetchInterval: user ? REFRESH_INTERVAL_MS : false },
   );
 
   const { data: syncRuns } = useApiQuery<SyncRun[]>(
@@ -888,10 +888,6 @@ export function SydlePaymentsPage() {
     }
   }
 
-  if (!isAdmin) {
-    return <ErrorState message="Relatorio SYDLE restrito a administradores." />;
-  }
-
   if (isLoading && !report) {
     return <LoadingSpinner className="py-24" size="lg" />;
   }
@@ -987,7 +983,7 @@ export function SydlePaymentsPage() {
         </div>
       </div>
 
-      {summary && !summary.config.configured && (
+      {isAdmin && summary && !summary.config.configured && (
         <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
             <Settings className="mt-0.5 h-4 w-4 shrink-0" />

@@ -16,14 +16,16 @@ Implementado no portal:
 - Tabelas `sydle_purchase_payments` e `sydle_sync_runs`.
 - Job agendado `sydle-sync` em `*/10 * * * *`.
 - Tela web `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
-Compras/Pagamentos SYDLE` e atalho no portal para administradores.
+Compras/Pagamentos SYDLE` e atalho no portal para usuários autenticados do
+  módulo de importação.
 - A tela exibe uma visão operacional e uma visão unificada com as mesmas colunas
   e ordem do Excel/CSV.
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
 - Exportacoes CSV/XLSX/PDF preservam as colunas do relatório Analytics/CSV da
   SYDLE quando a fonte as fornece.
-- Rotas backend SYDLE e tela web restritas a administradores.
-- Sync manual admin-only em `/api/sydle/sync-now`.
+- Leitura/exportação do relatório SYDLE liberadas para usuários autenticados do
+  módulo de importação.
+- Sync manual, configuração, histórico de sync e payload bruto admin-only.
 - Normalizador tolerante a campos comuns em PT-BR e ingles.
 - Fonte real Sydle One por `SYDLE_SOURCE_TYPE=sydle_one_class`, com login em
   `sys/auth/signIn`, cookie de sessao e busca `POST _classId/{id}/_search`.
@@ -283,7 +285,9 @@ Classificacao de risco:
   bancarios ou payload completo.
 - `ALTO`: `raw_payload` e sanitizado antes de persistir chaves sensiveis comuns
   como token, senha, authorization, conta, agencia, IBAN, routing e PIX.
-- `ALTO`: rotas SYDLE exigem admin.
+- `MEDIO`: leitura/exportação SYDLE ficam disponíveis a todos os usuários
+  autenticados da importação; payload bruto, configuração e sync seguem
+  admin-only.
 - `MEDIO`: CSV exportado protege contra formula injection em Excel e pagina
   todos os registros filtrados em lotes internos.
 - `MEDIO`: falha SYDLE nao quebra o portal; fica registrada em `sydle_sync_runs`.
@@ -292,21 +296,24 @@ Classificacao de risco:
 
 Rotas:
 
-- `GET /api/sydle/payments-report` admin-only
-- `GET /api/sydle/payments-report/summary` admin-only
-- `GET /api/sydle/payments-report/export.csv` admin-only
-- `GET /api/sydle/payments-report/:id` admin-only — detalhe completo de UMA
-  compra/pagamento (todas as colunas + `rawPayload` da SYDLE + contexto do
-  processo casado). Consumido pelo drawer "abrir a compra" no relatorio.
+- `GET /api/sydle/payments-report` autenticado
+- `GET /api/sydle/payments-report/summary` autenticado
+- `GET /api/sydle/payments-report/export.csv` autenticado
+- `GET /api/sydle/payments-report/export.xlsx` autenticado
+- `GET /api/sydle/payments-report/export.pdf` autenticado
+- `GET /api/sydle/payments-report/:id` autenticado — detalhe de UMA
+  compra/pagamento; `rawPayload` da SYDLE fica oculto para nao-admin. Consumido
+  pelo drawer "abrir a compra" no relatorio.
   Registrado APOS `/summary` e `/export.csv` para o `:id` nao captura-los.
 - `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 
 Tela:
 
-- `/importacao/compras-pagamentos` admin-only.
+- `/importacao/compras-pagamentos` visivel para usuarios autenticados do modulo
+  de importacao.
 - Menu: `Importacao > Operacional > Compras/Pagamentos SYDLE`.
-- Portal: atalho `Pagamentos SYDLE` para usuarios admin.
+- Portal: atalho `Pagamentos SYDLE` para usuarios com acesso a importacao.
 - Tabela/mobile exibem compra, fornecedor, PI, invoice, status, valores USD,
   cambio, BRL, banco, contrato, remessa, vencimento, pagamento/agendamento,
   conciliacao, motivo de match e timestamps SYDLE/Portal.

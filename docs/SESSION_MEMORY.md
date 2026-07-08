@@ -31,6 +31,10 @@ Resultado:
 - Tipo de pagamento foi alinhado ao CSV/API: `requestData.paymentType`
   `depositInAdvance`, `beforeShipment` e `afterShipment` agora aparecem como
   `Deposit in Advance`, `Balance before Shipment` e `Balance after Shipment`.
+- Ajustado controle de acesso do modulo SYDLE: leitura, exportacao, menu lateral
+  e atalho do portal ficam disponiveis para todos os usuarios autenticados com
+  acesso ao modulo de importacao; sync manual, config, historico de sync e
+  payload bruto permanecem admin-only.
 
 Testes:
 

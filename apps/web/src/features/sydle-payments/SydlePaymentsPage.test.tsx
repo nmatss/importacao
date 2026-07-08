@@ -155,11 +155,15 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getByText('Ignorada')).toBeInTheDocument();
   });
 
-  it('blocks the report for analysts before enabling API queries', () => {
+  it('shows the report to analysts but hides admin-only sync controls', () => {
     renderPage('analyst');
 
-    expect(screen.getByText('Relatorio SYDLE restrito a administradores.')).toBeInTheDocument();
-    expect(vi.mocked(useApiQuery).mock.calls[0]?.[2]).toMatchObject({ enabled: false });
+    expect(screen.getByText('Compras e Pagamentos Internacionais')).toBeInTheDocument();
+    expect(screen.getAllByText('Fornecedor').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: /Sincronizar/i })).not.toBeInTheDocument();
+    expect(vi.mocked(useApiQuery).mock.calls[0]?.[2]).toMatchObject({ enabled: true });
+    expect(vi.mocked(useApiQuery).mock.calls[1]?.[2]).toMatchObject({ enabled: true });
+    expect(vi.mocked(useApiQuery).mock.calls[2]?.[2]).toMatchObject({ enabled: false });
   });
 
   it('warns that the financial block is pending when no SYDLE BRL is available', () => {

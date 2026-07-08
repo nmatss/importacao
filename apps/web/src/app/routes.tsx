@@ -113,8 +113,8 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
       <ModuleNotFound
         title="Acesso restrito"
         message="Essa tela e restrita a administradores."
-        to="/importacao/dashboard"
-        action="Ir para o dashboard"
+        to="/portal"
+        action="Ir para o portal"
       />
     );
   }
@@ -200,14 +200,7 @@ export function AppRoutes() {
                   <Route path="/processos/:id" element={<ProcessDetailPage />} />
                   <Route path="/processos/:id/editar" element={<ProcessEditPage />} />
                   <Route path="/pre-cons" element={<PreConsPage />} />
-                  <Route
-                    path="/compras-pagamentos"
-                    element={
-                      <AdminRoute>
-                        <SydlePaymentsPage />
-                      </AdminRoute>
-                    }
-                  />
+                  <Route path="/compras-pagamentos" element={<SydlePaymentsPage />} />
                   <Route path="/cambios" element={<CurrencyExchangePage />} />
                   <Route path="/lis" element={<LiTrackingPage />} />
                   <Route path="/desembaraco" element={<DesembaracoPage />} />

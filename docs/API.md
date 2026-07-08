@@ -102,9 +102,10 @@ Evidencias:
 ## SYDLE - Compras E Pagamentos
 
 Relatorio operacional de compras e pagamentos internacionais sincronizado da
-SYDLE a cada 10 minutos. Todas as rotas `/api/sydle/*` exigem usuario
-administrador. A sincronizacao real depende das variaveis `SYDLE_*`; sem
-configuracao, o job registra `skipped`.
+SYDLE a cada 10 minutos. Rotas de leitura/exportacao exigem usuario autenticado
+com acesso ao modulo de importacao; sincronizacao manual, configuracao e
+historico de sync exigem administrador. A sincronizacao real depende das
+variaveis `SYDLE_*`; sem configuracao, o job registra `skipped`.
 
 O modo real validado para Sydle One usa `SYDLE_SOURCE_TYPE=sydle_one_class`,
 login `sys/auth/signIn` e `POST _classId/{SYDLE_CLASS_ID}/_search`. A classe de
@@ -112,12 +113,12 @@ pagamento internacional validada e `68bf1179b042c72f03993928`.
 
 Endpoints:
 
-- `GET /api/sydle/payments-report` admin-only
-- `GET /api/sydle/payments-report/summary` admin-only
-- `GET /api/sydle/payments-report/export.csv` admin-only
-- `GET /api/sydle/payments-report/export.xlsx` admin-only
-- `GET /api/sydle/payments-report/export.pdf` admin-only
-- `GET /api/sydle/payments-report/:id` admin-only
+- `GET /api/sydle/payments-report` autenticado
+- `GET /api/sydle/payments-report/summary` autenticado
+- `GET /api/sydle/payments-report/export.csv` autenticado
+- `GET /api/sydle/payments-report/export.xlsx` autenticado
+- `GET /api/sydle/payments-report/export.pdf` autenticado
+- `GET /api/sydle/payments-report/:id` autenticado; `rawPayload` apenas para admin
 - `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
 

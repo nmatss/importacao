@@ -1050,7 +1050,7 @@ export const openapiSpec = {
     '/api/sydle/payments-report': {
       get: {
         tags: ['SYDLE'],
-        summary: 'List SYDLE purchase/payment report rows (admin)',
+        summary: 'List SYDLE purchase/payment report rows',
         parameters: [
           { name: 'search', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'processCode', in: 'query' as const, schema: { type: 'string' as const } },
@@ -1070,57 +1070,59 @@ export const openapiSpec = {
         ],
         responses: {
           '200': { description: 'Paginated SYDLE report rows' },
-          '403': { description: 'Admin role required' },
+          '401': { description: 'Authentication required' },
         },
       },
     },
     '/api/sydle/payments-report/summary': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Get SYDLE purchase/payment report summary (admin)',
+        summary: 'Get SYDLE purchase/payment report summary',
         responses: {
           '200': { description: 'SYDLE report summary' },
-          '403': { description: 'Admin role required' },
+          '401': { description: 'Authentication required' },
         },
       },
     },
     '/api/sydle/payments-report/export.csv': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Export SYDLE purchase/payment report as CSV (admin, includes Analytics columns)',
+        summary: 'Export SYDLE purchase/payment report as CSV (includes Analytics columns)',
         responses: {
           '200': { description: 'CSV export' },
-          '403': { description: 'Admin role required' },
+          '401': { description: 'Authentication required' },
         },
       },
     },
     '/api/sydle/payments-report/export.xlsx': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Export SYDLE purchase/payment report as XLSX (admin)',
+        summary: 'Export SYDLE purchase/payment report as XLSX',
         responses: {
           '200': { description: 'XLSX export' },
-          '403': { description: 'Admin role required' },
+          '401': { description: 'Authentication required' },
         },
       },
     },
     '/api/sydle/payments-report/export.pdf': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Export SYDLE purchase/payment report as PDF (admin)',
+        summary: 'Export SYDLE purchase/payment report as PDF',
         responses: {
           '200': { description: 'PDF export' },
-          '403': { description: 'Admin role required' },
+          '401': { description: 'Authentication required' },
         },
       },
     },
     '/api/sydle/payments-report/{id}': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Get one SYDLE purchase/payment row with detail columns (admin)',
+        summary: 'Get one SYDLE purchase/payment row with detail columns',
         responses: {
-          '200': { description: 'SYDLE report row detail' },
-          '403': { description: 'Admin role required' },
+          '200': {
+            description: 'SYDLE report row detail; rawPayload is returned only to admin users',
+          },
+          '401': { description: 'Authentication required' },
           '404': { description: 'Payment row not found' },
         },
       },
