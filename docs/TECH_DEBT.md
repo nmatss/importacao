@@ -37,8 +37,9 @@ Ultima atualizacao: 2026-06-20
 - Criar documento de indices por tabela e queries criticas.
 - Auditar indices redundantes e queries com risco de full scan.
 - Sydle: obter catalogo/permissao ou view/API consolidada para dados
-  complementares de compra/pagamento internacional, com fixture sanitizada e
-  testes de normalizacao antes de ativar campos sensiveis adicionais.
+  financeiros sensiveis de compra/pagamento internacional. As colunas
+  operacionais do relatório Analytics/CSV foram adicionadas ao staging em
+  2026-07-08; cambio/banco/remessa ainda dependem de acesso sanitizado.
 - Avaliar historizacao e origem por campo para dados projetados no card do processo.
 - Padronizar query keys do frontend com `processKeys`, `documentKeys`, `followUpKeys` e equivalentes de validacao.
 - Unificar cache de `/api/documents/process/:id/comparison` entre comparativo e Draft BL.

@@ -115,9 +115,9 @@ export function startScheduler() {
     tz,
   );
 
-  // Every 15 minutes - Sync purchase/payment report from SYDLE (no-op when unconfigured)
+  // Every 10 minutes - Sync purchase/payment report from SYDLE (no-op when unconfigured)
   cron.schedule(
-    '*/15 * * * *',
+    '*/10 * * * *',
     async () => {
       try {
         await runSydleSync();
@@ -145,6 +145,6 @@ export function startScheduler() {
   );
 
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), sydle-sync (*/15 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), sydle-sync (*/10 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
   );
 }

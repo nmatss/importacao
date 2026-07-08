@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-06-19
+Ultima atualizacao: 2026-07-08
 
 ## Objetivo
 
@@ -133,7 +133,7 @@ quando houver mudanca de dados.
 Estado:
 
 - Modulo tecnico entregue em 2026-06-18.
-- Sync automatico agendado a cada 15 minutos.
+- Sync automatico agendado a cada 10 minutos.
 - Rotas `/api/sydle/*` e tela `/importacao/compras-pagamentos` restritas a
   administradores.
 - A tela tambem aparece no menu `Importacao > Operacional >
@@ -142,8 +142,14 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
 - A UI do relatorio deve expor os campos financeiros relevantes recebidos da
   SYDLE: cambio, valor BRL, banco, contrato, remessa, datas de
   pagamento/agendamento, motivo de conciliacao e timestamps SYDLE/Portal.
+- Desde 2026-07-08, `sydle_purchase_payments` tambem preserva as colunas do
+  relatório SYDLE Analytics/CSV: protocolo, datas de emissão/criação/embarque,
+  exceção, motivo e prazo de pagamento pós-embarque.
+- Desde 2026-07-08, o relatorio SYDLE nao usa estimativas financeiras do portal:
+  câmbio, BRL, banco, contrato e remessa só aparecem quando a SYDLE fornece.
 - O relatorio SYDLE deve manter visão em tabela para leitura operacional e
-  permitir exportar o filtro ativo em CSV, Excel (.xlsx) e PDF.
+  permitir exportar o filtro ativo em CSV, Excel (.xlsx) e PDF; a tela tambem
+  exibe uma visão unificada com as colunas do Excel/CSV.
 - Cursor incremental usa maior `sourceUpdatedAt`/`updatedAt` da fonte com
   overlap de 5 minutos e parser de data/hora PT-BR; nao usa horario local de
   inicio como cursor.

@@ -184,6 +184,57 @@ describe('SYDLE payment normalizer', () => {
     expect(result.sourceUpdatedAt?.toISOString()).toBe('2026-06-18T20:20:31.914Z');
   });
 
+  it('normalizes the SYDLE Analytics CSV columns without collapsing installments', () => {
+    const first = normalizeSydlePayment({
+      Protocolo: '5317',
+      'Número Invoice': 'IM0742605SZ',
+      'Beneficiário ': 'KIOM GLOBAL LIMITED',
+      Marca: 'Imaginarium',
+      'Tipo de pagamento ': 'Balance after Shipment',
+      'Data de vencimento ': '17/06/2026',
+      'Moeda de pagamento': 'Dólar / $',
+      'Valor a Pagar': '2.024,06',
+      'Data de emissão Invoice/PI ': '07/05/2026',
+      'Data criação da tarefa ': '16/06/2026 09:39',
+      Exceção: '(vazio)',
+      'Motivo da exceção': '(vazio)',
+      'Código do processo': 'IM0742605SZ',
+      'Data de embarque': '07/05/2026',
+      'Prazo para pagamento pós embarque': '0',
+      'Data da última alteração': '01/07/2026',
+    });
+    const second = normalizeSydlePayment({
+      Protocolo: '5317',
+      'Número Invoice': 'IM0742605SZ',
+      'Data de vencimento ': '17/06/2026',
+      'Moeda de pagamento': 'Dólar / $',
+      'Valor a Pagar': '4.667,04',
+      'Prazo para pagamento pós embarque': '30',
+    });
+
+    expect(first).toMatchObject({
+      sydleProtocol: '5317',
+      invoiceNumber: 'IM0742605SZ',
+      supplierName: 'KIOM GLOBAL LIMITED',
+      brand: 'imaginarium',
+      paymentType: 'balance',
+      dueDate: '2026-06-17',
+      currency: 'USD',
+      purchaseAmount: 2024.06,
+      invoiceIssuedDate: '2026-05-07',
+      shipmentDate: '2026-05-07',
+      paymentDeadlineAfterShipment: 0,
+      exceptionStatus: null,
+      exceptionReason: null,
+      processCode: 'IM0742605SZ',
+    });
+    expect(first.taskCreatedAt?.toISOString()).toBe('2026-06-16T09:39:00.000Z');
+    expect(first.sourceUpdatedAt?.toISOString()).toBe('2026-07-01T00:00:00.000Z');
+    expect(first.externalId).toMatch(/^sydle-report:/);
+    expect(second.externalId).toMatch(/^sydle-report:/);
+    expect(second.externalId).not.toBe(first.externalId);
+  });
+
   it('redacts sensitive keys from raw payload snapshots', () => {
     const result = normalizeSydlePayment({
       codigoPagamento: 'PAY-123',

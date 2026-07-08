@@ -4,7 +4,7 @@
 
 ## Contexto
 
-O job agendado `sydle-sync` (`*/15 * * * *`) **já busca e alimenta a base**
+O job agendado `sydle-sync` (`*/10 * * * *`) **já busca e alimenta a base**
 (`sydle_purchase_payments`). A tabela **já tem** as colunas complementares
 (`supplier_name`, `proforma_number`, `invoice_number`, `purchase_order`,
 `process_code`, `exchange_rate`, `amount_brl`, `bank_name`, `contract_number`,

@@ -1,5 +1,57 @@
 # Session Memory
 
+## 2026-07-08 - Paridade Do Relatorio SYDLE Analytics/CSV
+
+Resultado:
+
+- Analisado o CSV local `Relatório Sydle.csv` como fonte complementar do
+  staging SYDLE: 26 linhas e 16 colunas, com protocolo, invoice, beneficiário,
+  marca, tipo, vencimento, moeda, valor, datas operacionais, exceção, processo,
+  embarque, prazo pós-embarque e última alteração.
+- Adicionada migration idempotente `0021_sydle_report_columns.sql` para
+  preservar essas colunas em `sydle_purchase_payments`.
+- Normalizador SYDLE passou a reconhecer aliases do CSV, tratar `(vazio)` como
+  nulo e derivar chave por protocolo + invoice + vencimento + valor + prazo
+  pós-embarque quando a fonte não fornece ID único de parcela.
+- Listagem, detalhe e exportações SYDLE passam a devolver/exportar as colunas
+  novas; drawer web exibe os campos complementares no detalhe.
+- Scheduler SYDLE alterado de `*/15 * * * *` para `*/10 * * * *`; frontend
+  também atualiza/refaz consulta a cada 10 minutos.
+- Tela SYDLE ganhou visão unificada abaixo da visão operacional, com colunas na
+  mesma ordem do Excel/CSV.
+- Relatório SYDLE deixou de preencher câmbio/BRL com estimativas do portal
+  (`currency_exchanges`); cards, tabelas, detalhe e visão unificada exibem
+  valores financeiros apenas quando a SYDLE fornece esses campos.
+
+Testes:
+
+- `npm test -w apps/api -- src/modules/sydle/__tests__/normalizer.test.ts src/modules/sydle/__tests__/client.test.ts src/modules/sydle/__tests__/service.test.ts src/modules/sydle/__tests__/routes.test.ts --run` -> 43 passed.
+- `npm test -w apps/web -- src/features/sydle-payments/SydlePaymentsPage.test.tsx --run` -> 9 passed.
+- `npm run lint` -> passed.
+- `npm run build` -> passed.
+- `npm run typecheck` -> passed.
+- `npm test` -> API 759 passed / 1 skipped; Web 114 passed.
+
+## 2026-06-29 - Feedback Odett/Eduarda: Espelho, Draft BL E Configuracoes
+
+Resultado:
+
+- Revisado o feedback operacional ponto a ponto contra documentos, comparativo, espelho, Draft BL,
+  configuracoes/e-mail e pendencias registradas.
+- Corrigido parser de espelho XLSX para aceitar aliases ingleses comuns de codigo/SKU e peso
+  liquido/bruto (`Code`, `SKU`, `Net Weight`, `Gross Weight`, `N.W.`, `G.W.`, `GW/NW`).
+- Aba Configuracoes agora expõe "E-mails" e mostra "Destinatarios operacionais" no topo, reduzindo
+  a dificuldade relatada para liberar allowlist de envio.
+- Draft BL ganhou aceite "Draft Recebido" no checklist e botao "Reprocessar" no documento atual.
+
+Testes:
+
+- `npm run typecheck` -> passed.
+- `npm test -w apps/api -- src/modules/espelho-parser/__tests__/parser.test.ts src/modules/ai/utils/__tests__/packing-list-text-parser.test.ts` -> 24 passed.
+- `npm test -w apps/web -- src/features/documents/DocumentComparison.test.tsx` -> 12 passed.
+- `npm run lint` -> passed.
+- `npm run build` -> passed.
+
 ## 2026-06-25 - Login Google De Analista Voltando Para Login
 
 Resultado:

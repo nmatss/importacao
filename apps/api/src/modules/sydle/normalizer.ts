@@ -11,6 +11,7 @@ export type SydlePaymentStatus =
 
 export interface NormalizedSydlePayment {
   externalId: string;
+  sydleProtocol: string | null;
   processCode: string | null;
   purchaseRef: string | null;
   purchaseOrder: string | null;
@@ -25,6 +26,12 @@ export interface NormalizedSydlePayment {
   paymentType: SydlePaymentType;
   paymentStatus: SydlePaymentStatus;
   dueDate: string | null;
+  invoiceIssuedDate: string | null;
+  taskCreatedAt: Date | null;
+  shipmentDate: string | null;
+  paymentDeadlineAfterShipment: number | null;
+  exceptionStatus: string | null;
+  exceptionReason: string | null;
   paidAt: Date | null;
   scheduledAt: Date | null;
   exchangeRate: number | null;
@@ -49,12 +56,23 @@ const FIELD_KEYS = {
     'pagamentoId',
     'identificador',
   ],
+  sydleProtocol: [
+    'sydleProtocol',
+    'protocolo',
+    'protocol',
+    'ticketCode',
+    'sydleTicketCode',
+    'searchCode',
+    'sydleTicketSearchCode',
+  ],
   processCode: [
     'processCode',
     'process_code',
     'processo',
     'codigoProcesso',
     'codProcesso',
+    'Código do processo',
+    'Codigo do processo',
     'process',
   ],
   purchaseRef: [
@@ -82,12 +100,25 @@ const FIELD_KEYS = {
     'commercialInvoice',
     'ciNumber',
     'numeroInvoice',
+    'Número Invoice',
+    'Numero Invoice',
   ],
-  supplierName: ['supplierName', 'supplier', 'fornecedor', 'exportador', 'shipper', 'vendor'],
+  supplierName: [
+    'supplierName',
+    'supplier',
+    'fornecedor',
+    'beneficiário',
+    'beneficiario',
+    'exportador',
+    'shipper',
+    'vendor',
+  ],
   brand: ['brand', 'marca', 'businessUnit', 'unidade'],
-  currency: ['currency', 'moeda'],
+  currency: ['currency', 'moeda', 'Moeda de pagamento', 'moedaPagamento'],
   purchaseAmount: [
     'purchaseAmount',
+    'Valor a Pagar',
+    'valorAPagar',
     'valorCompra',
     'valorComprado',
     'amount',
@@ -98,9 +129,60 @@ const FIELD_KEYS = {
   ],
   paidAmount: ['paidAmount', 'valorPago', 'amountPaid', 'pagoUsd', 'valorPagoUsd'],
   openAmount: ['openAmount', 'saldoAberto', 'saldo', 'valorAberto', 'remainingAmount'],
-  paymentType: ['paymentType', 'tipoPagamento', 'tipo', 'parcela', 'installmentType'],
+  paymentType: [
+    'paymentType',
+    'tipoPagamento',
+    'Tipo de pagamento',
+    'tipo',
+    'parcela',
+    'installmentType',
+  ],
   paymentStatus: ['paymentStatus', 'statusPagamento', 'status', 'situacao'],
-  dueDate: ['dueDate', 'vencimento', 'dataVencimento', 'paymentDeadline', 'prazoPagamento'],
+  dueDate: [
+    'dueDate',
+    'vencimento',
+    'dataVencimento',
+    'Data de vencimento',
+    'paymentDeadline',
+    'prazoPagamento',
+  ],
+  invoiceIssuedDate: [
+    'invoiceIssuedDate',
+    'invoiceIssueDate',
+    'piIssueDate',
+    'dataEmissaoInvoicePi',
+    'dataEmissaoInvoicePI',
+    'Data de emissão Invoice/PI',
+    'Data de emissao Invoice/PI',
+  ],
+  taskCreatedAt: [
+    'taskCreatedAt',
+    'taskCreationDate',
+    'dataCriacaoTarefa',
+    'dataCriacaoDaTarefa',
+    'Data criação da tarefa',
+    'Data criacao da tarefa',
+    '_creationDate',
+  ],
+  shipmentDate: ['shipmentDate', 'shippingDate', 'dataEmbarque', 'Data de embarque', 'embarque'],
+  paymentDeadlineAfterShipment: [
+    'paymentDeadlineAfterShipment',
+    'sydlePaymentDeadlineAfterShipment',
+    'paymentDeadlineAfterShipmentDays',
+    'prazoPagamentoPosEmbarque',
+    'prazoParaPagamentoPosEmbarque',
+    'Prazo para pagamento pós embarque',
+    'Prazo para pagamento pos embarque',
+  ],
+  exceptionStatus: ['exceptionStatus', 'exception', 'excecao', 'Exceção', 'Excecao'],
+  exceptionReason: [
+    'exceptionReason',
+    'reason',
+    'motivoExcecao',
+    'motivoDaExcecao',
+    'Motivo da exceção',
+    'Motivo da excecao',
+  ],
   paidAt: ['paidAt', 'dataPagamento', 'paymentDate', 'pagoEm'],
   scheduledAt: ['scheduledAt', 'dataAgendada', 'scheduledDate', 'agendadoEm'],
   exchangeRate: ['exchangeRate', 'taxaCambio', 'taxa', 'ptax'],
@@ -114,6 +196,8 @@ const FIELD_KEYS = {
     '_creationDate',
     'updatedAt',
     'ultimaAtualizacao',
+    'Data da última alteração',
+    'Data da ultima alteracao',
     'modifiedAt',
     'alteradoEm',
   ],
@@ -163,6 +247,10 @@ function stringOrNull(value: unknown, maxLength = 255): string | null {
   if (value === null || value === undefined) return null;
   const text = String(value).trim();
   if (!text) return null;
+  const normalized = normalizeKey(text);
+  if (['vazio', 'null', 'undefined', 'na', 'nd'].includes(normalized) || text === '-') {
+    return null;
+  }
   return text.slice(0, maxLength);
 }
 
@@ -190,6 +278,11 @@ export function parseSydleNumber(value: unknown): number | null {
 
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseInteger(value: unknown): number | null {
+  const parsed = parseSydleNumber(value);
+  return parsed === null ? null : Math.trunc(parsed);
 }
 
 function round2(value: number): number {
@@ -263,10 +356,34 @@ function parseDateTime(value: unknown): Date | null {
 }
 
 function normalizeCurrency(value: unknown): string {
-  const currency = stringOrNull(value, 3)?.toUpperCase() ?? 'USD';
-  if (currency === 'US$' || currency === '$') return 'USD';
-  if (currency === 'R$') return 'BRL';
-  return /^[A-Z]{3}$/.test(currency) ? currency : 'USD';
+  const text = stringOrNull(value, 32);
+  if (!text) return 'USD';
+  const currency = text.toUpperCase();
+  const normalized = normalizeKey(text);
+  if (
+    normalized.includes('dolar') ||
+    currency.includes('USD') ||
+    currency.includes('US$') ||
+    (currency.includes('$') && !currency.includes('R$'))
+  ) {
+    return 'USD';
+  }
+  if (normalized.includes('real') || currency.includes('BRL') || currency.includes('R$')) {
+    return 'BRL';
+  }
+  if (normalized.includes('euro') || currency.includes('EUR') || currency.includes('€')) {
+    return 'EUR';
+  }
+  if (
+    normalized.includes('yuan') ||
+    normalized.includes('renminbi') ||
+    currency.includes('CNY') ||
+    currency.includes('RMB')
+  ) {
+    return 'CNY';
+  }
+  const iso = currency.match(/[A-Z]{3}/)?.[0];
+  return iso ?? 'USD';
 }
 
 function normalizePaymentType(value: unknown): SydlePaymentType {
@@ -368,6 +485,7 @@ export function sanitizeSydleRawPayload(value: unknown): unknown {
 }
 
 export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment {
+  const sydleProtocol = stringOrNull(findValue(record, FIELD_KEYS.sydleProtocol), 50);
   const processCode = stringOrNull(findValue(record, FIELD_KEYS.processCode), 50);
   const purchaseRef = stringOrNull(findValue(record, FIELD_KEYS.purchaseRef), 100);
   const purchaseOrder = stringOrNull(findValue(record, FIELD_KEYS.purchaseOrder), 100);
@@ -383,19 +501,27 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
     (purchaseAmount !== null && paidAmount !== null ? round2(purchaseAmount - paidAmount) : null);
   const dueDate = parseDateOnly(findValue(record, FIELD_KEYS.dueDate));
   const paymentType = normalizePaymentType(findValue(record, FIELD_KEYS.paymentType));
+  const paymentDeadlineAfterShipment = parseInteger(
+    findValue(record, FIELD_KEYS.paymentDeadlineAfterShipment),
+  );
   const externalId =
     stringOrNull(findValue(record, FIELD_KEYS.externalId), 255) ??
     deriveFallbackExternalId(record, {
+      sydleProtocol,
       processCode,
       purchaseRef,
       purchaseOrder,
       proformaNumber,
       invoiceNumber,
       paymentType,
+      dueDate,
+      purchaseAmount,
+      paymentDeadlineAfterShipment,
     });
 
   return {
     externalId,
+    sydleProtocol,
     processCode,
     purchaseRef,
     purchaseOrder,
@@ -415,6 +541,12 @@ export function normalizeSydlePayment(record: RawRecord): NormalizedSydlePayment
       purchaseAmount,
     ),
     dueDate,
+    invoiceIssuedDate: parseDateOnly(findValue(record, FIELD_KEYS.invoiceIssuedDate)),
+    taskCreatedAt: parseDateTime(findValue(record, FIELD_KEYS.taskCreatedAt)),
+    shipmentDate: parseDateOnly(findValue(record, FIELD_KEYS.shipmentDate)),
+    paymentDeadlineAfterShipment,
+    exceptionStatus: stringOrNull(findValue(record, FIELD_KEYS.exceptionStatus), 50),
+    exceptionReason: stringOrNull(findValue(record, FIELD_KEYS.exceptionReason), 500),
     paidAt: parseDateTime(findValue(record, FIELD_KEYS.paidAt)),
     scheduledAt: parseDateTime(findValue(record, FIELD_KEYS.scheduledAt)),
     exchangeRate: parseSydleNumber(findValue(record, FIELD_KEYS.exchangeRate)),
@@ -437,14 +569,28 @@ export const SYDLE_FIELD_KEYS = FIELD_KEYS;
 function deriveFallbackExternalId(
   record: RawRecord,
   identity: {
+    sydleProtocol: string | null;
     processCode: string | null;
     purchaseRef: string | null;
     purchaseOrder: string | null;
     proformaNumber: string | null;
     invoiceNumber: string | null;
     paymentType: SydlePaymentType;
+    dueDate: string | null;
+    purchaseAmount: number | null;
+    paymentDeadlineAfterShipment: number | null;
   },
 ): string {
+  if (identity.sydleProtocol) {
+    return hashValue('sydle-report', {
+      sydleProtocol: identity.sydleProtocol,
+      invoiceNumber: identity.invoiceNumber,
+      dueDate: identity.dueDate,
+      purchaseAmount: identity.purchaseAmount,
+      paymentDeadlineAfterShipment: identity.paymentDeadlineAfterShipment,
+    });
+  }
+
   const hasBusinessReference = Boolean(
     identity.processCode ||
     identity.purchaseRef ||
@@ -454,7 +600,14 @@ function deriveFallbackExternalId(
   );
 
   if (hasBusinessReference) {
-    return hashValue('derived', identity);
+    return hashValue('derived', {
+      processCode: identity.processCode,
+      purchaseRef: identity.purchaseRef,
+      purchaseOrder: identity.purchaseOrder,
+      proformaNumber: identity.proformaNumber,
+      invoiceNumber: identity.invoiceNumber,
+      paymentType: identity.paymentType,
+    });
   }
 
   return hashValue('hash', record);

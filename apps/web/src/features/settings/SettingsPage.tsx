@@ -53,10 +53,10 @@ interface EmailSignatureData {
   isDefault: boolean;
 }
 
-type TabKey = 'general' | 'users' | 'integrations' | 'signatures';
+type TabKey = 'email' | 'users' | 'integrations' | 'signatures';
 
 const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
-  { key: 'general', label: 'Geral', icon: Settings },
+  { key: 'email', label: 'E-mails', icon: Mail },
   { key: 'users', label: 'Usuarios', icon: Users },
   { key: 'integrations', label: 'Integracoes', icon: Link2 },
   { key: 'signatures', label: 'Assinaturas', icon: FileSignature },
@@ -91,7 +91,7 @@ function invalidEmailListItems(value: string) {
 
 export function SettingsPage() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<TabKey>('general');
+  const [activeTab, setActiveTab] = useState<TabKey>('email');
 
   // Non-admins can only access the signatures tab
   const isNonAdmin = user?.role !== 'admin';
@@ -148,7 +148,7 @@ export function SettingsPage() {
         })}
       </div>
 
-      {effectiveTab === 'general' && <GeneralTab />}
+      {effectiveTab === 'email' && <EmailSettingsTab />}
       {effectiveTab === 'users' && <UsersTab />}
       {effectiveTab === 'integrations' && <IntegrationsTab />}
       {effectiveTab === 'signatures' && <SignaturesTab />}
@@ -221,7 +221,7 @@ function SaveButton({
   );
 }
 
-function GeneralTab() {
+function EmailSettingsTab() {
   const [webhookUrl, setWebhookUrl] = useState('');
   const [smtpHost, setSmtpHost] = useState('');
   const [smtpPort, setSmtpPort] = useState('');
@@ -339,6 +339,67 @@ function GeneralTab() {
   return (
     <div className="space-y-6">
       <SectionCard
+        icon={Users}
+        title="Destinatarios operacionais"
+        description="Allowlist de envio usada por rascunhos e automacoes"
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="min-w-0">
+              <label htmlFor="kiom-email" className={labelClasses}>
+                KIOM
+              </label>
+              <textarea
+                id="kiom-email"
+                value={kiomEmail}
+                onChange={(e) => setKiomEmail(e.target.value)}
+                placeholder="contact@kiomglobal.com"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(kiomEmail).length} destinatário(s)
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="fenicia-email" className={labelClasses}>
+                Fenicia
+              </label>
+              <textarea
+                id="fenicia-email"
+                value={feniciaEmail}
+                onChange={(e) => setFeniciaEmail(e.target.value)}
+                placeholder="bruna@feniciacomex.com.br, fenicia.fin@feniciacomex.com.br"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(feniciaEmail).length} destinatário(s)
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="isa-email" className={labelClasses}>
+                ISA
+              </label>
+              <textarea
+                id="isa-email"
+                value={isaEmail}
+                onChange={(e) => setIsaEmail(e.target.value)}
+                placeholder="email@dominio.com"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(isaEmail).length} destinatário(s)
+              </p>
+            </div>
+          </div>
+          <SaveButton
+            onClick={handleSaveRecipients}
+            saving={savingRecipients}
+            saved={savedRecipients}
+          />
+        </div>
+      </SectionCard>
+
+      <SectionCard
         icon={MessageSquare}
         title="Google Chat Webhook"
         description="Notificacoes via Google Chat"
@@ -422,67 +483,6 @@ function GeneralTab() {
             </div>
           </div>
           <SaveButton onClick={handleSaveSmtp} saving={savingSmtp} saved={savedSmtp} />
-        </div>
-      </SectionCard>
-
-      <SectionCard
-        icon={Users}
-        title="Destinatarios operacionais"
-        description="Listas usadas nos rascunhos e envios automaticos"
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-            <div className="min-w-0">
-              <label htmlFor="kiom-email" className={labelClasses}>
-                KIOM
-              </label>
-              <textarea
-                id="kiom-email"
-                value={kiomEmail}
-                onChange={(e) => setKiomEmail(e.target.value)}
-                placeholder="contact@kiomglobal.com"
-                className={textareaClasses}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                {parseEmailList(kiomEmail).length} destinatário(s)
-              </p>
-            </div>
-            <div className="min-w-0">
-              <label htmlFor="fenicia-email" className={labelClasses}>
-                Fenicia
-              </label>
-              <textarea
-                id="fenicia-email"
-                value={feniciaEmail}
-                onChange={(e) => setFeniciaEmail(e.target.value)}
-                placeholder="bruna@feniciacomex.com.br, fenicia.fin@feniciacomex.com.br"
-                className={textareaClasses}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                {parseEmailList(feniciaEmail).length} destinatário(s)
-              </p>
-            </div>
-            <div className="min-w-0">
-              <label htmlFor="isa-email" className={labelClasses}>
-                ISA
-              </label>
-              <textarea
-                id="isa-email"
-                value={isaEmail}
-                onChange={(e) => setIsaEmail(e.target.value)}
-                placeholder="email@dominio.com"
-                className={textareaClasses}
-              />
-              <p className="mt-1 text-xs text-slate-400">
-                {parseEmailList(isaEmail).length} destinatário(s)
-              </p>
-            </div>
-          </div>
-          <SaveButton
-            onClick={handleSaveRecipients}
-            saving={savingRecipients}
-            saved={savedRecipients}
-          />
         </div>
       </SectionCard>
     </div>

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseLocaleNumber } from '../parser.js';
+import * as XLSX from 'xlsx';
+import { parseEspelhoBuffer, parseLocaleNumber } from '../parser.js';
 
 describe('parseLocaleNumber', () => {
   it('parses Brazilian format with dot grouping and comma decimal', () => {
@@ -70,5 +71,26 @@ describe('parseLocaleNumber', () => {
   it('returns null for non-finite numbers', () => {
     expect(parseLocaleNumber(NaN)).toBeNull();
     expect(parseLocaleNumber(Infinity)).toBeNull();
+  });
+});
+
+describe('parseEspelhoBuffer', () => {
+  it('maps English net/gross weight headers from operator spreadsheets', () => {
+    const rows = [
+      ['IMB TEXTIL S.A.'],
+      [],
+      ['Process', 'Supplier', 'Code', 'Net Weight', 'Gross Weight', 'Qty', 'Amount'],
+      ['IM0712602NB', 'KIOM', 'PI7752Y', '180.50', '200.00', 1000, '2500.00'],
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Espelho');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+
+    const parsed = parseEspelhoBuffer(buffer);
+
+    expect(parsed.items).toHaveLength(1);
+    expect(parsed.items[0].codigo).toBe('PI7752Y');
+    expect(parsed.items[0].pesoLiquidoTotal).toBe(180.5);
+    expect(parsed.items[0].pesoBrutoTotal).toBe(200);
   });
 });

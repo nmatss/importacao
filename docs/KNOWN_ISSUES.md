@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-06-22
+Ultima atualizacao: 2026-06-29
 
 ## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
 
@@ -10,27 +10,29 @@ INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe re
 - **Reclassificar "KIOM PI" existentes (proforma)**: ~30+ docs reais com nome "KIOM PI -..."
   estavam como `invoice`/`other`. O classificador da ingestao foi CORRIGIDO (token `pi` ->
   proforma) — vale p/ NOVOS uploads. Os antigos no banco precisam `type -> proforma_invoice`
-  + reprocesso. ⚠️ Muda estado de validacao (proforma nao conta como invoice recebida) —
-  executar com a operacao ciente. (Relatorio de candidatos disponivel; reclassificacao em
-  lote nao foi auto-aplicada de proposito.)
+  - reprocesso. ⚠️ Muda estado de validacao (proforma nao conta como invoice recebida) —
+    executar com a operacao ciente. (Relatorio de candidatos disponivel; reclassificacao em
+    lote nao foi auto-aplicada de proposito.)
 - **Higienizar documentos**: re-subir `.xlsx` que sao imagem como **PDF**; trocar
   **screenshots** por documentos reais; dividir PDFs escaneados muito grandes (timeout 180s).
   (XLSX em si JA e lido pelo extractText; o problema sao misclassificacao/screenshot/tamanho.)
-- **Destinatarios de e-mail (#78)**: cadastrar em Configuracoes > Destinatarios operacionais.
+- **Destinatarios de e-mail (#78)**: cadastrar em Configuracoes > E-mails > Destinatarios
+  operacionais. A tela foi reorganizada em 2026-06-29 para deixar a allowlist no topo.
 - **Aba "Licenciamentos Vencidos" sem coluna de data**: "Licen. - Prazo" (#11) fica vazio
   ate a planilha ganhar uma coluna de validade (o Status #10 ja funciona via coluna "Produto").
-- **Sydle (#3a)**: campos de referencia (cambio/financeiro) em 403 — liberar acesso para
-  popular "Documentos vs Sistema".
+- **Sydle (#3a)**: campos financeiros sensiveis (cambio/banco/remessa) seguem em 403 — liberar
+  acesso/view sanitizada para popular "Documentos vs Sistema". As colunas do relatório
+  Analytics/CSV foram preservadas no staging em 2026-07-08.
 - **Webhook Google Chat**: key invalida nas notificacoes (`chat.googleapis.com` 400) — config.
 - **Vertex SA dedicada** (opcao profissional): mover Vertex p/ `gemini-n8n` (least-privilege)
   com `roles/aiplatform.user` — hoje reusa a SA compartilhada `n8n-automacao`.
 
 ## Backlog do feedback da Eduarda 2026-06-21 (nao bloqueante; pos PR #99)
 
-- **Packing List sem null-fill deterministico:** a Invoice tem `fillInvoiceNullsFromText`
-  (recupera data/porto/exportador via regex), mas o Packing List nao tem equivalente —
-  campos de header do PL dependem 100% do modelo. **Fix:** `fillPackingListNullsFromText`
-  simetrico (`ai/utils`). Teto maior (PL escaneado/itens) depende de Vertex (#60).
+- **Packing List com itens ainda abaixo do esperado em alguns PDFs:** `fillPackingListNullsFromText`
+  ja cobre escalares de header no caminho do LLM. O ponto restante e item tabular em PDF com
+  texto ruim/colunas coladas ou scan; nesses casos depende de reprocesso com texto pesquisavel
+  ou melhoria especifica a partir de fixture real anonimizavel.
 - **Coluna "Sistema" no comparativo POR ITEM:** o painel agregado "Documentos vs Sistema"
   ja existe, mas a sugestao da Eduarda de ter a coluna Sistema tambem no quadro por item
   exige validacoes de sistema em **nivel de item** no backend (`documents/service.ts`
@@ -184,7 +186,7 @@ Descricao:
   `supplierName`, status/tipo real da parcela, pagamento/liquidacao, cambio,
   BRL, banco, contrato e remessa.
 - Enquanto `SYDLE_SYNC_ENABLED=false` ou faltar alguma variavel de
-  `sydle_one_class`, o job de 15 minutos registra `status=skipped`.
+  `sydle_one_class`, o job de 10 minutos registra `status=skipped`.
 - `scripts/deploy.sh` aborta se `SYDLE_SYNC_ENABLED=true` no `.env` remoto,
   salvo rollout aprovado com `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 

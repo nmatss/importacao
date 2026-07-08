@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
   CheckCircle2,
   Clock,
@@ -21,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { DRAFT_BL_CHECKS } from '@/shared/lib/constants';
 import { TableSkeleton } from '@/shared/components/Skeleton';
@@ -131,7 +134,25 @@ function DraftUploadSection({
   draftDoc: Document | null;
   processId: string;
 }) {
+  const queryClient = useQueryClient();
   const [showUpload, setShowUpload] = useState(!draftDoc);
+  const [isReprocessing, setIsReprocessing] = useState(false);
+
+  const reprocessDraft = async () => {
+    if (!draftDoc) return;
+    setIsReprocessing(true);
+    try {
+      await api.post(`/api/documents/${draftDoc.id}/reprocess`);
+      toast.success('Reprocessamento do Draft BL iniciado');
+      queryClient.invalidateQueries({ queryKey: ['documents', processId] });
+      queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Erro ao reprocessar Draft BL';
+      toast.error(message);
+    } finally {
+      setIsReprocessing(false);
+    }
+  };
 
   return (
     <div className="space-y-3">
@@ -141,16 +162,32 @@ function DraftUploadSection({
           Draft BL
         </h3>
         {draftDoc && (
-          <button
-            onClick={() => setShowUpload(!showUpload)}
-            className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 flex items-center gap-1"
-          >
-            <Upload className="h-3 w-3" />
-            {showUpload ? 'Ocultar upload' : 'Enviar novo'}
-            <ChevronDown
-              className={cn('h-3 w-3 transition-transform', showUpload && 'rotate-180')}
-            />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={reprocessDraft}
+              disabled={isReprocessing}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 disabled:opacity-50 flex items-center gap-1"
+            >
+              {isReprocessing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <FileSearch className="h-3 w-3" />
+              )}
+              Reprocessar
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUpload(!showUpload)}
+              className="text-xs text-slate-400 hover:text-slate-600 dark:text-slate-400 flex items-center gap-1"
+            >
+              <Upload className="h-3 w-3" />
+              {showUpload ? 'Ocultar upload' : 'Enviar novo'}
+              <ChevronDown
+                className={cn('h-3 w-3 transition-transform', showUpload && 'rotate-180')}
+              />
+            </button>
+          </div>
         )}
       </div>
 

@@ -27,6 +27,7 @@ const report = {
       matchStatus: 'unmatched',
       matchScore: null,
       matchReason: 'invoice,supplier,amount',
+      sydleProtocol: '5317',
       processCode: 'IM001',
       purchaseRef: 'PO-1',
       purchaseOrder: null,
@@ -41,10 +42,18 @@ const report = {
       paymentType: 'deposit',
       paymentStatus: 'open',
       dueDate: '2026-06-10',
+      invoiceIssuedDate: '2026-05-07',
+      taskCreatedAt: '2026-06-16T09:39:00.000Z',
+      shipmentDate: '2026-05-07',
+      paymentDeadlineAfterShipment: 30,
+      exceptionStatus: null,
+      exceptionReason: null,
       paidAt: '2026-06-11',
       scheduledAt: null,
       exchangeRate: '5.4321',
+      exchangeRateSource: 'sydle',
       amountBrl: '543.21',
+      amountBrlSource: 'sydle',
       bankName: 'Banco ABC',
       contractNumber: 'CON-1',
       remittanceId: 'REM-1',
@@ -52,6 +61,8 @@ const report = {
       syncedAt: '2026-06-10T12:00:00.000Z',
       portalProcessCode: null,
       portalBrand: null,
+      logisticStatus: 'in_transit',
+      processStatus: null,
     },
   ],
   pagination: { total: 1, page: 1, limit: 50, pages: 1 },
@@ -61,7 +72,7 @@ const summary = {
   totalPurchaseUsd: 100,
   totalPaidUsd: 0,
   totalOpenUsd: 100,
-  totalBrl: 0,
+  totalBrl: 543.21,
   records: 1,
   matched: 0,
   unmatched: 1,
@@ -138,7 +149,7 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getAllByText('Banco ABC').length).toBeGreaterThan(0);
     expect(screen.getAllByText('CON-1').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Remessa REM-1').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('PTAX 5,4321').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Taxa 5,4321').length).toBeGreaterThan(0);
     expect(screen.getAllByText('R$ 543,21').length).toBeGreaterThan(0);
     expect(screen.getAllByText('invoice,supplier,amount').length).toBeGreaterThan(0);
     expect(screen.getByText('Ignorada')).toBeInTheDocument();
@@ -152,7 +163,26 @@ describe('SydlePaymentsPage', () => {
   });
 
   it('warns that the financial block is pending when no SYDLE BRL is available', () => {
-    renderPage();
+    const noFinancialSummary = { ...summary, totalBrl: 0 };
+    vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
+      const key = Array.isArray(queryKey) ? queryKey[0] : null;
+      return {
+        data:
+          key === 'sydle-payments'
+            ? {
+                ...report,
+                data: [{ ...report.data[0], exchangeRate: null, amountBrl: null }],
+              }
+            : key === 'sydle-payments-summary'
+              ? noFinancialSummary
+              : [],
+        isLoading: false,
+        refetch: mockRefetch,
+        error: null,
+        isError: false,
+      } as unknown as ReturnType<typeof useApiQuery>;
+    });
+    renderTree();
     expect(screen.getByText(/Bloco financeiro da SYDLE pendente/i)).toBeInTheDocument();
   });
 
@@ -171,32 +201,21 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getByRole('button', { name: /^PDF$/i })).toBeInTheDocument();
   });
 
-  it('tags câmbio/BRL filled from the portal as an estimate (≈)', () => {
-    const estimated = {
-      ...report,
-      data: [
-        {
-          ...report.data[0],
-          exchangeRate: '5.4321',
-          exchangeRateSource: 'portal_estimate',
-          amountBrl: '543.21',
-          amountBrlSource: 'portal_estimate',
-        },
-      ],
-    };
-    vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
-      const key = Array.isArray(queryKey) ? queryKey[0] : null;
-      return {
-        data:
-          key === 'sydle-payments' ? estimated : key === 'sydle-payments-summary' ? summary : [],
-        isLoading: false,
-        refetch: mockRefetch,
-        error: null,
-        isError: false,
-      } as unknown as ReturnType<typeof useApiQuery>;
-    });
-    renderTree();
-    expect(screen.getAllByText('≈ 5,4321').length).toBeGreaterThan(0);
+  it('renders the unified SYDLE view with Excel-compatible columns', () => {
+    renderPage();
+
+    expect(screen.getByText('Visão unificada SYDLE')).toBeInTheDocument();
+    expect(screen.getByText('Protocolo')).toBeInTheDocument();
+    expect(screen.getByText('Data criação da tarefa')).toBeInTheDocument();
+    expect(screen.getAllByText('5317').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('30').length).toBeGreaterThan(0);
+  });
+
+  it('does not show portal-estimated financial markers in the SYDLE report', () => {
+    renderPage();
+
+    expect(screen.queryByText(/estimado/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
   });
 
   it('shows a specific message when the report fails with HTTP 403', () => {

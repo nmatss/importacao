@@ -18,7 +18,6 @@ import {
   importProcesses,
   sydlePurchasePayments,
   sydleSyncRuns,
-  currencyExchanges,
 } from '../../shared/database/schema.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
@@ -180,6 +179,7 @@ function buildWhere(filters: SydleReportQuery, includeSearch = true) {
     conditions.push(
       or(
         ilike(sydlePurchasePayments.processCode, pattern),
+        ilike(sydlePurchasePayments.sydleProtocol, pattern),
         ilike(sydlePurchasePayments.purchaseRef, pattern),
         ilike(sydlePurchasePayments.purchaseOrder, pattern),
         ilike(sydlePurchasePayments.proformaNumber, pattern),
@@ -255,21 +255,29 @@ function phaseLabel(status: string | null | undefined): string {
 type SydleExportRow = Awaited<ReturnType<typeof sydleService.list>>['data'][number];
 
 const EXPORT_COLUMNS = [
+  { key: 'sydleProtocol', header: 'Protocolo' },
   { key: 'process', header: 'Processo' },
   { key: 'phase', header: 'Fase Processo' },
+  { key: 'processCode', header: 'Código do processo' },
   { key: 'purchaseRef', header: 'Compra' },
   { key: 'purchaseOrder', header: 'PO' },
   { key: 'proformaNumber', header: 'PI' },
-  { key: 'invoiceNumber', header: 'Invoice' },
-  { key: 'supplierName', header: 'Fornecedor' },
+  { key: 'invoiceNumber', header: 'Número Invoice' },
+  { key: 'supplierName', header: 'Beneficiário' },
   { key: 'brand', header: 'Marca' },
-  { key: 'currency', header: 'Moeda' },
-  { key: 'purchaseAmount', header: 'Valor Compra' },
+  { key: 'paymentType', header: 'Tipo de pagamento' },
+  { key: 'dueDate', header: 'Data de vencimento' },
+  { key: 'currency', header: 'Moeda de pagamento' },
+  { key: 'purchaseAmount', header: 'Valor a Pagar' },
+  { key: 'invoiceIssuedDate', header: 'Data de emissão Invoice/PI' },
+  { key: 'taskCreatedAt', header: 'Data criação da tarefa' },
+  { key: 'exceptionStatus', header: 'Exceção' },
+  { key: 'exceptionReason', header: 'Motivo da exceção' },
+  { key: 'shipmentDate', header: 'Data de embarque' },
+  { key: 'paymentDeadlineAfterShipment', header: 'Prazo para pagamento pós embarque' },
   { key: 'paidAmount', header: 'Valor Pago' },
   { key: 'openAmount', header: 'Saldo Aberto' },
-  { key: 'paymentType', header: 'Tipo Pagamento' },
   { key: 'paymentStatus', header: 'Status Pagamento' },
-  { key: 'dueDate', header: 'Vencimento' },
   { key: 'paidAt', header: 'Pago Em' },
   { key: 'scheduledAt', header: 'Agendado Para' },
   { key: 'exchangeRate', header: 'Taxa Cambio' },
@@ -281,7 +289,7 @@ const EXPORT_COLUMNS = [
   { key: 'remittanceId', header: 'Remessa' },
   { key: 'matchStatus', header: 'Match Portal' },
   { key: 'matchReason', header: 'Motivo Match' },
-  { key: 'sourceUpdatedAt', header: 'Atualizado Na SYDLE' },
+  { key: 'sourceUpdatedAt', header: 'Data da última alteração' },
   { key: 'syncedAt', header: 'Sincronizado Em' },
 ] as const;
 
@@ -295,6 +303,12 @@ function exportValue(row: SydleExportRow, key: (typeof EXPORT_COLUMNS)[number]['
       return row.brand || row.portalBrand || '';
     case 'dueDate':
       return dateOnly(row.dueDate);
+    case 'invoiceIssuedDate':
+      return dateOnly(row.invoiceIssuedDate);
+    case 'taskCreatedAt':
+      return dateOnly(row.taskCreatedAt);
+    case 'shipmentDate':
+      return dateOnly(row.shipmentDate);
     case 'paidAt':
       return dateOnly(row.paidAt);
     case 'scheduledAt':
@@ -359,79 +373,25 @@ function buildSimplePdf(lines: string[]): Buffer {
   return Buffer.from(pdf, 'utf8');
 }
 
-// ── Portal exchange-rate fallback ────────────────────────────────────────
-// The SYDLE financial block (exchange_rate / amount_brl) is empty because it
-// lives in two SYDLE classes that return 403 (see docs/SYDLE-ACESSO-CLASSES-403.md).
-// But the team already records the real BRL/rate per process in
-// `currency_exchanges`. When a payment is matched to a process, fall back to
-// that REAL data — clearly tagged `portal_estimate` so the UI never passes it
-// off as the SYDLE bank rate. We never invent: only USD rows matched to a
-// process with a registered rate get filled.
-
-type ExchangeSourced<T> = T & {
-  exchangeRateSource: 'sydle' | 'portal_estimate' | null;
-  amountBrlSource: 'sydle' | 'portal_estimate' | null;
+type SydleFinancialSourced<T> = T & {
+  exchangeRateSource: 'sydle' | null;
+  amountBrlSource: 'sydle' | null;
 };
 
-/** Effective (blended) BRL/USD rate per process = Σ amount_brl / Σ amount_usd. */
-async function loadEffectiveRates(processIds: Array<number | null>): Promise<Map<number, number>> {
-  const ids = [...new Set(processIds.filter((id): id is number => typeof id === 'number'))];
-  if (ids.length === 0) return new Map();
-  const rows = await db
-    .select({
-      processId: currencyExchanges.processId,
-      usd: sql<string>`coalesce(sum(${currencyExchanges.amountUsd}), 0)`,
-      brl: sql<string>`coalesce(sum(${currencyExchanges.amountBrl}), 0)`,
-    })
-    .from(currencyExchanges)
-    .where(
-      and(
-        inArray(currencyExchanges.processId, ids),
-        isNotNull(currencyExchanges.amountBrl),
-        isNotNull(currencyExchanges.exchangeRate),
-      ),
-    )
-    .groupBy(currencyExchanges.processId);
-
-  const map = new Map<number, number>();
-  for (const r of rows) {
-    const usd = Number(r.usd);
-    const brl = Number(r.brl);
-    if (usd > 0 && brl > 0) map.set(r.processId, brl / usd);
-  }
-  return map;
-}
-
-interface ExchangeFillable {
-  processId: number | null;
-  currency: string;
-  purchaseAmount: string | null;
+interface SydleFinancialFillable {
   exchangeRate: string | null;
   amountBrl: string | null;
 }
 
-/** Tag SYDLE-provided values and fill nulls from the process rate (USD only). */
-export function applyPortalExchange<T extends ExchangeFillable>(
+/** Tag financial values only when they were provided by SYDLE itself. */
+export function tagSydleFinancialSources<T extends SydleFinancialFillable>(
   row: T,
-  rates: Map<number, number>,
-): ExchangeSourced<T> {
-  const out: ExchangeSourced<T> = {
+): SydleFinancialSourced<T> {
+  return {
     ...row,
     exchangeRateSource: row.exchangeRate != null ? 'sydle' : null,
     amountBrlSource: row.amountBrl != null ? 'sydle' : null,
   };
-  if (row.processId == null || row.currency !== 'USD') return out;
-  const rate = rates.get(row.processId);
-  if (rate == null) return out;
-  if (out.exchangeRate == null) {
-    out.exchangeRate = rate.toFixed(6);
-    out.exchangeRateSource = 'portal_estimate';
-  }
-  if (out.amountBrl == null && row.purchaseAmount != null) {
-    out.amountBrl = (Number(row.purchaseAmount) * rate).toFixed(2);
-    out.amountBrlSource = 'portal_estimate';
-  }
-  return out;
 }
 
 export const sydleService = {
@@ -658,6 +618,7 @@ export const sydleService = {
           matchStatus: match.matchStatus,
           matchScore: toDecimalString(match.matchScore, 4),
           matchReason: match.matchReason,
+          sydleProtocol: record.sydleProtocol,
           processCode: record.processCode,
           purchaseRef: record.purchaseRef,
           purchaseOrder: record.purchaseOrder,
@@ -672,6 +633,12 @@ export const sydleService = {
           paymentType: record.paymentType,
           paymentStatus: record.paymentStatus,
           dueDate: record.dueDate,
+          invoiceIssuedDate: record.invoiceIssuedDate,
+          taskCreatedAt: record.taskCreatedAt,
+          shipmentDate: record.shipmentDate,
+          paymentDeadlineAfterShipment: record.paymentDeadlineAfterShipment,
+          exceptionStatus: record.exceptionStatus,
+          exceptionReason: record.exceptionReason,
           paidAt: record.paidAt,
           scheduledAt: record.scheduledAt,
           exchangeRate: toDecimalString(record.exchangeRate, 6),
@@ -907,6 +874,7 @@ export const sydleService = {
           matchStatus: sydlePurchasePayments.matchStatus,
           matchScore: sydlePurchasePayments.matchScore,
           matchReason: sydlePurchasePayments.matchReason,
+          sydleProtocol: sydlePurchasePayments.sydleProtocol,
           processCode: sydlePurchasePayments.processCode,
           purchaseRef: sydlePurchasePayments.purchaseRef,
           purchaseOrder: sydlePurchasePayments.purchaseOrder,
@@ -921,6 +889,12 @@ export const sydleService = {
           paymentType: sydlePurchasePayments.paymentType,
           paymentStatus: sydlePurchasePayments.paymentStatus,
           dueDate: sydlePurchasePayments.dueDate,
+          invoiceIssuedDate: sydlePurchasePayments.invoiceIssuedDate,
+          taskCreatedAt: sydlePurchasePayments.taskCreatedAt,
+          shipmentDate: sydlePurchasePayments.shipmentDate,
+          paymentDeadlineAfterShipment: sydlePurchasePayments.paymentDeadlineAfterShipment,
+          exceptionStatus: sydlePurchasePayments.exceptionStatus,
+          exceptionReason: sydlePurchasePayments.exceptionReason,
           paidAt: sydlePurchasePayments.paidAt,
           scheduledAt: sydlePurchasePayments.scheduledAt,
           exchangeRate: sydlePurchasePayments.exchangeRate,
@@ -950,11 +924,8 @@ export const sydleService = {
         .where(where),
     ]);
 
-    const rates = await loadEffectiveRates(data.map((d) => d.processId));
-    const enriched = data.map((d) => applyPortalExchange(d, rates));
-
     return {
-      data: enriched,
+      data: data.map((d) => tagSydleFinancialSources(d)),
       total: Number(countRow?.total ?? 0),
       page: filters.page,
       limit: filters.limit,
@@ -978,35 +949,17 @@ export const sydleService = {
       .where(eq(sydlePurchasePayments.id, id))
       .limit(1);
     if (!row) return null;
-    const rates = await loadEffectiveRates([row.processId]);
-    return applyPortalExchange(row, rates);
+    return tagSydleFinancialSources(row);
   },
 
   async summary(filters: SydleReportQuery) {
     const where = buildWhere(filters);
-    // Per-process blended BRL/USD rate from currency_exchanges — used to
-    // estimate BRL for matched USD payments whose SYDLE amount_brl is null
-    // (financial block behind the 403 classes). Tagged separately as
-    // totalBrlEstimated so the real SYDLE total (totalBrl) is never overstated.
-    const ceRates = db
-      .select({
-        processId: currencyExchanges.processId,
-        rate: sql<string>`sum(${currencyExchanges.amountBrl}) / nullif(sum(${currencyExchanges.amountUsd}), 0)`.as(
-          'rate',
-        ),
-      })
-      .from(currencyExchanges)
-      .where(and(isNotNull(currencyExchanges.amountBrl), isNotNull(currencyExchanges.exchangeRate)))
-      .groupBy(currencyExchanges.processId)
-      .as('ce_rates');
-
     const [row] = await db
       .select({
         totalPurchaseUsd: sql<string>`coalesce(sum(case when ${sydlePurchasePayments.currency} = 'USD' then ${sydlePurchasePayments.purchaseAmount} else 0 end), 0)`,
         totalPaidUsd: sql<string>`coalesce(sum(case when ${sydlePurchasePayments.currency} = 'USD' then ${sydlePurchasePayments.paidAmount} else 0 end), 0)`,
         totalOpenUsd: sql<string>`coalesce(sum(case when ${sydlePurchasePayments.currency} = 'USD' then ${sydlePurchasePayments.openAmount} else 0 end), 0)`,
         totalBrl: sql<string>`coalesce(sum(${sydlePurchasePayments.amountBrl}), 0)`,
-        totalBrlEstimated: sql<string>`coalesce(sum(coalesce(${sydlePurchasePayments.amountBrl}, case when ${sydlePurchasePayments.currency} = 'USD' and ${ceRates.rate} is not null then ${sydlePurchasePayments.purchaseAmount} * ${ceRates.rate} else 0 end)), 0)`,
         records: sql<number>`count(*)::int`,
         matched: sql<number>`count(*) filter (where ${sydlePurchasePayments.matchStatus} = 'matched')::int`,
         unmatched: sql<number>`count(*) filter (where ${sydlePurchasePayments.matchStatus} <> 'matched')::int`,
@@ -1016,7 +969,6 @@ export const sydleService = {
       })
       .from(sydlePurchasePayments)
       .leftJoin(importProcesses, eq(sydlePurchasePayments.processId, importProcesses.id))
-      .leftJoin(ceRates, eq(ceRates.processId, sydlePurchasePayments.processId))
       .where(where);
 
     // Per-currency breakdown so payments in EUR/CNY (or any non-USD currency)
@@ -1047,7 +999,6 @@ export const sydleService = {
       totalPaidUsd: Number(row?.totalPaidUsd ?? 0),
       totalOpenUsd: Number(row?.totalOpenUsd ?? 0),
       totalBrl: Number(row?.totalBrl ?? 0),
-      totalBrlEstimated: Number(row?.totalBrlEstimated ?? 0),
       currencyBreakdown: breakdownRows.map((r) => ({
         currency: r.currency ?? 'USD',
         totalPurchase: Number(r.totalPurchase ?? 0),

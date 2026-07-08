@@ -53,6 +53,10 @@ Ultima atualizacao: 2026-06-19
 - `0018_validation_run_links.sql` adiciona `validation_run_id` em resultados
   atuais/historicos de validacao e altera `document_extraction_history` para
   preservar historico mesmo apos delete do documento.
+- `0021_sydle_report_columns.sql` adiciona, de forma idempotente, colunas de
+  paridade com o relatório SYDLE Analytics/CSV em `sydle_purchase_payments`
+  (`sydle_protocol`, datas de invoice/tarefa/embarque, exceção e prazo
+  pós-embarque).
 
 ## Indices Observados
 

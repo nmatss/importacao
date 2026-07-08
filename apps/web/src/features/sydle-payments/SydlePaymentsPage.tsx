@@ -35,7 +35,7 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { cn, formatCurrency, formatDateTime } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/utils/errors';
 
-const REFRESH_INTERVAL_MS = 15 * 60 * 1000;
+const REFRESH_INTERVAL_MS = 10 * 60 * 1000;
 
 /** Debounce a fast-changing value (used for free-text filters). */
 function useDebouncedValue<T>(value: T, delayMs = 350): T {
@@ -58,6 +58,7 @@ interface SydlePayment {
   matchStatus: MatchStatus;
   matchScore: string | null;
   matchReason: string | null;
+  sydleProtocol: string | null;
   processCode: string | null;
   purchaseRef: string | null;
   purchaseOrder: string | null;
@@ -72,15 +73,18 @@ interface SydlePayment {
   paymentType: PaymentType;
   paymentStatus: PaymentStatus;
   dueDate: string | null;
+  invoiceIssuedDate: string | null;
+  taskCreatedAt: string | null;
+  shipmentDate: string | null;
+  paymentDeadlineAfterShipment: number | null;
+  exceptionStatus: string | null;
+  exceptionReason: string | null;
   paidAt: string | null;
   scheduledAt: string | null;
   exchangeRate: string | null;
   amountBrl: string | null;
-  // Provenance of the exchange/BRL values: 'sydle' = came from SYDLE,
-  // 'portal_estimate' = derived from the process's currency_exchanges (the
-  // financial block is behind the SYDLE 403 classes — see docs).
-  exchangeRateSource?: 'sydle' | 'portal_estimate' | null;
-  amountBrlSource?: 'sydle' | 'portal_estimate' | null;
+  exchangeRateSource?: 'sydle' | null;
+  amountBrlSource?: 'sydle' | null;
   bankName: string | null;
   contractNumber: string | null;
   remittanceId: string | null;
@@ -153,9 +157,6 @@ interface SydleSummary {
   totalPaidUsd: number;
   totalOpenUsd: number;
   totalBrl: number;
-  // BRL total including portal-estimated rows (currency_exchanges fallback) for
-  // matched USD payments whose SYDLE amount_brl is null.
-  totalBrlEstimated?: number;
   currencyBreakdown?: SydleCurrencyBreakdown[];
   records: number;
   matched: number;
@@ -207,6 +208,116 @@ const syncStatusLabels: Record<string, string> = {
 function syncStatusLabel(status: string | null | undefined): string {
   if (!status) return 'sem dados';
   return syncStatusLabels[status] ?? status;
+}
+
+const unifiedColumns = [
+  { key: 'sydleProtocol', header: 'Protocolo', width: 'w-[96px]' },
+  { key: 'process', header: 'Processo', width: 'w-[140px]' },
+  { key: 'phase', header: 'Fase Processo', width: 'w-[150px]' },
+  { key: 'processCode', header: 'Código do processo', width: 'w-[150px]' },
+  { key: 'purchaseRef', header: 'Compra', width: 'w-[130px]' },
+  { key: 'purchaseOrder', header: 'PO', width: 'w-[120px]' },
+  { key: 'proformaNumber', header: 'PI', width: 'w-[120px]' },
+  { key: 'invoiceNumber', header: 'Número Invoice', width: 'w-[150px]' },
+  { key: 'supplierName', header: 'Beneficiário', width: 'w-[240px]' },
+  { key: 'brand', header: 'Marca', width: 'w-[120px]' },
+  { key: 'paymentType', header: 'Tipo de pagamento', width: 'w-[150px]' },
+  { key: 'dueDate', header: 'Data de vencimento', width: 'w-[150px]' },
+  { key: 'currency', header: 'Moeda de pagamento', width: 'w-[150px]' },
+  { key: 'purchaseAmount', header: 'Valor a Pagar', width: 'w-[140px]', align: 'right' },
+  { key: 'invoiceIssuedDate', header: 'Data de emissão Invoice/PI', width: 'w-[190px]' },
+  { key: 'taskCreatedAt', header: 'Data criação da tarefa', width: 'w-[170px]' },
+  { key: 'exceptionStatus', header: 'Exceção', width: 'w-[120px]' },
+  { key: 'exceptionReason', header: 'Motivo da exceção', width: 'w-[220px]' },
+  { key: 'shipmentDate', header: 'Data de embarque', width: 'w-[140px]' },
+  {
+    key: 'paymentDeadlineAfterShipment',
+    header: 'Prazo para pagamento pós embarque',
+    width: 'w-[210px]',
+    align: 'right',
+  },
+  { key: 'paidAmount', header: 'Valor Pago', width: 'w-[130px]', align: 'right' },
+  { key: 'openAmount', header: 'Saldo Aberto', width: 'w-[130px]', align: 'right' },
+  { key: 'paymentStatus', header: 'Status Pagamento', width: 'w-[150px]' },
+  { key: 'paidAt', header: 'Pago Em', width: 'w-[120px]' },
+  { key: 'scheduledAt', header: 'Agendado Para', width: 'w-[140px]' },
+  { key: 'exchangeRate', header: 'Taxa Cambio', width: 'w-[120px]', align: 'right' },
+  { key: 'exchangeRateSource', header: 'Origem Cambio', width: 'w-[130px]' },
+  { key: 'amountBrl', header: 'Valor BRL', width: 'w-[130px]', align: 'right' },
+  { key: 'amountBrlSource', header: 'Origem BRL', width: 'w-[120px]' },
+  { key: 'bankName', header: 'Banco', width: 'w-[160px]' },
+  { key: 'contractNumber', header: 'Contrato', width: 'w-[130px]' },
+  { key: 'remittanceId', header: 'Remessa', width: 'w-[130px]' },
+  { key: 'matchStatus', header: 'Match Portal', width: 'w-[130px]' },
+  { key: 'matchReason', header: 'Motivo Match', width: 'w-[200px]' },
+  { key: 'sourceUpdatedAt', header: 'Data da última alteração', width: 'w-[170px]' },
+  { key: 'syncedAt', header: 'Sincronizado Em', width: 'w-[170px]' },
+] as const;
+
+type UnifiedColumn = (typeof unifiedColumns)[number];
+type UnifiedColumnKey = UnifiedColumn['key'];
+
+function sourceLabel(value: SydlePayment['exchangeRateSource'] | SydlePayment['amountBrlSource']) {
+  if (value === 'sydle') return 'SYDLE';
+  return '--';
+}
+
+function textOrDash(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '--';
+  return String(value);
+}
+
+function unifiedValue(row: SydlePayment, key: UnifiedColumnKey): React.ReactNode {
+  switch (key) {
+    case 'process':
+      return row.portalProcessCode || row.processCode || '--';
+    case 'phase':
+      return row.logisticStatus ? phaseLabel(row.logisticStatus) : '--';
+    case 'brand':
+      return row.brand || row.portalBrand || '--';
+    case 'paymentType':
+      return paymentTypeLabels[row.paymentType];
+    case 'paymentStatus':
+      return paymentStatusLabels[row.paymentStatus];
+    case 'dueDate':
+      return dateLabel(row.dueDate);
+    case 'invoiceIssuedDate':
+      return dateLabel(row.invoiceIssuedDate);
+    case 'taskCreatedAt':
+      return row.taskCreatedAt ? formatDateTime(row.taskCreatedAt) : '--';
+    case 'shipmentDate':
+      return dateLabel(row.shipmentDate);
+    case 'paymentDeadlineAfterShipment':
+      return row.paymentDeadlineAfterShipment ?? '--';
+    case 'purchaseAmount':
+      return money(row.purchaseAmount, row.currency);
+    case 'paidAmount':
+      return money(row.paidAmount, row.currency);
+    case 'openAmount':
+      return money(row.openAmount, row.currency);
+    case 'paidAt':
+      return dateLabel(row.paidAt);
+    case 'scheduledAt':
+      return dateLabel(row.scheduledAt);
+    case 'exchangeRate':
+      return row.exchangeRate
+        ? Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 6 })
+        : '--';
+    case 'exchangeRateSource':
+      return sourceLabel(row.exchangeRateSource);
+    case 'amountBrl':
+      return money(row.amountBrl, 'BRL');
+    case 'amountBrlSource':
+      return sourceLabel(row.amountBrlSource);
+    case 'matchStatus':
+      return matchLabels[row.matchStatus];
+    case 'sourceUpdatedAt':
+      return row.sourceUpdatedAt ? formatDateTime(row.sourceUpdatedAt) : '--';
+    case 'syncedAt':
+      return row.syncedAt ? formatDateTime(row.syncedAt) : '--';
+    default:
+      return textOrDash(row[key]);
+  }
 }
 
 // Compact display for KPI cards. Uses Intl compact notation (locale-correct)
@@ -446,6 +557,7 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                   label="Fase do processo"
                   value={data.logisticStatus ? phaseLabel(data.logisticStatus) : null}
                 />
+                <DetailRow label="Protocolo SYDLE" value={data.sydleProtocol} />
                 <DetailRow label="Referencia da compra" value={data.purchaseRef} />
                 <DetailRow label="Pedido (PO)" value={data.purchaseOrder} />
                 <DetailRow label="Proforma (PI)" value={data.proformaNumber} />
@@ -465,6 +577,22 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                 <DetailRow label="Tipo" value={paymentTypeLabels[data.paymentType]} />
                 <DetailRow label="Status" value={paymentStatusLabels[data.paymentStatus]} />
                 <DetailRow label="Vencimento" value={dateLabel(data.dueDate)} />
+                <DetailRow label="Emissão Invoice/PI" value={dateLabel(data.invoiceIssuedDate)} />
+                <DetailRow
+                  label="Criação da tarefa"
+                  value={data.taskCreatedAt ? formatDateTime(data.taskCreatedAt) : null}
+                />
+                <DetailRow label="Embarque" value={dateLabel(data.shipmentDate)} />
+                <DetailRow
+                  label="Prazo pós-embarque"
+                  value={
+                    data.paymentDeadlineAfterShipment != null
+                      ? `${data.paymentDeadlineAfterShipment} dia(s)`
+                      : null
+                  }
+                />
+                <DetailRow label="Exceção" value={data.exceptionStatus} />
+                <DetailRow label="Motivo da exceção" value={data.exceptionReason} />
                 <DetailRow label="Pago em" value={dateLabel(data.paidAt)} />
                 <DetailRow label="Agendado para" value={dateLabel(data.scheduledAt)} />
               </DetailSection>
@@ -475,34 +603,16 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
                   value={
                     data.exchangeRate ? (
                       <span>
-                        {data.exchangeRateSource === 'portal_estimate' && '≈ '}
                         {Number(data.exchangeRate).toLocaleString('pt-BR', {
                           maximumFractionDigits: 6,
                         })}
-                        {data.exchangeRateSource === 'portal_estimate' && (
-                          <span className="ml-1 text-xs font-normal text-amber-600">
-                            estimado · portal
-                          </span>
-                        )}
                       </span>
                     ) : null
                   }
                 />
                 <DetailRow
                   label="Valor em BRL"
-                  value={
-                    data.amountBrl ? (
-                      <span>
-                        {data.amountBrlSource === 'portal_estimate' && '≈ '}
-                        {money(data.amountBrl, 'BRL')}
-                        {data.amountBrlSource === 'portal_estimate' && (
-                          <span className="ml-1 text-xs font-normal text-amber-600">
-                            estimado · portal
-                          </span>
-                        )}
-                      </span>
-                    ) : null
-                  }
+                  value={data.amountBrl ? <span>{money(data.amountBrl, 'BRL')}</span> : null}
                 />
                 <DetailRow label="Banco" value={data.bankName} />
                 <DetailRow label="Contrato" value={data.contractNumber} />
@@ -803,7 +913,7 @@ export function SydlePaymentsPage() {
                 Compras e Pagamentos Internacionais
               </h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Relatório financeiro sincronizado da SYDLE a cada 15 minutos.
+                Relatório financeiro sincronizado da SYDLE a cada 10 minutos.
               </p>
             </div>
           </div>
@@ -929,10 +1039,7 @@ export function SydlePaymentsPage() {
             <p className="font-semibold">Bloco financeiro da SYDLE pendente de liberação</p>
             <p className="mt-0.5">
               Banco, contrato de câmbio e remessa vivem em classes da SYDLE sem acesso de leitura
-              (403). Os valores de Câmbio/BRL marcados com <strong>≈</strong> são estimados pelo
-              câmbio do processo cadastrado no portal — não são a taxa bancária real da SYDLE.
-              {(summary.totalBrlEstimated ?? 0) > 0 &&
-                ` Equivalente estimado: ${fullCurrency(summary.totalBrlEstimated ?? 0, 'BRL')}.`}
+              (403). Câmbio/BRL só aparecem quando a própria SYDLE fornece esses campos.
             </p>
           </div>
         </div>
@@ -980,7 +1087,7 @@ export function SydlePaymentsPage() {
                 value={search}
                 onChange={(event) => resetPageAnd(setSearch, event.target.value)}
                 className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                placeholder="Processo, compra, PI, invoice..."
+                placeholder="Processo, protocolo, PI, invoice..."
               />
             </div>
           </label>
@@ -1334,19 +1441,12 @@ export function SydlePaymentsPage() {
                           {dateLabel(row.dueDate)}
                         </td>
                         <td className="px-4 py-3 text-sm tabular-nums text-slate-700 dark:text-slate-300">
-                          <div
-                            title={
-                              row.exchangeRateSource === 'portal_estimate'
-                                ? 'Câmbio estimado pelo portal (currency_exchanges) — SYDLE indisponível'
-                                : undefined
-                            }
-                          >
+                          <div>
                             {row.exchangeRate
-                              ? `${row.exchangeRateSource === 'portal_estimate' ? '≈ ' : 'PTAX '}${Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}`
+                              ? `Taxa ${Number(row.exchangeRate).toLocaleString('pt-BR', { maximumFractionDigits: 4 })}`
                               : '--'}
                           </div>
                           <div className="text-xs text-slate-400">
-                            {row.amountBrlSource === 'portal_estimate' && row.amountBrl ? '≈ ' : ''}
                             {money(row.amountBrl, 'BRL')}
                           </div>
                         </td>
@@ -1414,8 +1514,7 @@ export function SydlePaymentsPage() {
                         {fullCurrency(summary.totalOpenUsd)}
                       </td>
                       <td colSpan={2} className="px-4 py-3 text-xs font-normal text-slate-500">
-                        {(summary.totalBrlEstimated ?? summary.totalBrl) > 0 &&
-                          `BRL ${fullCurrency(summary.totalBrlEstimated ?? summary.totalBrl, 'BRL')}`}
+                        {summary.totalBrl > 0 && `BRL ${fullCurrency(summary.totalBrl, 'BRL')}`}
                       </td>
                       <td colSpan={4} />
                     </tr>
@@ -1487,7 +1586,6 @@ export function SydlePaymentsPage() {
                     <div>
                       <span className="block text-xs text-slate-500">BRL</span>
                       <span className="font-medium text-slate-800 dark:text-slate-200">
-                        {row.amountBrlSource === 'portal_estimate' && row.amountBrl ? '≈ ' : ''}
                         {money(row.amountBrl, 'BRL')}
                       </span>
                     </div>
@@ -1532,6 +1630,75 @@ export function SydlePaymentsPage() {
               );
             })}
           </div>
+
+          <section className="overflow-hidden rounded-lg border border-slate-200/70 bg-white shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
+            <header className="flex flex-col gap-2 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-700 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-primary-600 dark:text-primary-300" />
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  Visão unificada SYDLE
+                </h3>
+              </div>
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                {rows.length} de {pagination?.total ?? rows.length} registro(s)
+              </span>
+            </header>
+            <div className="overflow-x-auto">
+              <table className="min-w-[5600px] w-full table-fixed divide-y divide-slate-200 text-xs dark:divide-slate-700">
+                <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                  <tr>
+                    {unifiedColumns.map((column) => {
+                      const alignRight = 'align' in column && column.align === 'right';
+                      return (
+                        <th
+                          key={column.key}
+                          className={cn(
+                            'px-3 py-2 text-left font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400',
+                            column.width,
+                            alignRight && 'text-right',
+                          )}
+                        >
+                          {column.header}
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                  {rows.map((row) => (
+                    <tr
+                      key={`unified-${row.id}`}
+                      onClick={() => setSelectedId(row.id)}
+                      title="Ver detalhes da compra"
+                      className="cursor-pointer odd:bg-white even:bg-slate-50/70 hover:bg-primary-50/60 dark:odd:bg-slate-800 dark:even:bg-slate-900/50 dark:hover:bg-primary-950/20"
+                    >
+                      {unifiedColumns.map((column) => {
+                        const alignRight = 'align' in column && column.align === 'right';
+                        const cellValue = unifiedValue(row, column.key);
+                        const title =
+                          typeof cellValue === 'string' || typeof cellValue === 'number'
+                            ? String(cellValue)
+                            : undefined;
+                        return (
+                          <td
+                            key={`${row.id}-${column.key}`}
+                            title={title}
+                            className={cn(
+                              'px-3 py-2 align-top text-slate-700 dark:text-slate-300',
+                              column.width,
+                              alignRight && 'text-right tabular-nums',
+                            )}
+                          >
+                            <span className="block truncate">{cellValue}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
 

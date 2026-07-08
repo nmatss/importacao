@@ -5,6 +5,44 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-07-08 - Paridade do relatório SYDLE Analytics
+
+### Added
+
+- Staging SYDLE ganhou colunas aditivas do relatório consolidado/CSV:
+  protocolo, emissão Invoice/PI, criação da tarefa, exceção, motivo da exceção,
+  embarque e prazo de pagamento pós-embarque.
+- Exportações CSV/XLSX do relatório SYDLE passam a incluir as colunas do
+  relatório Analytics junto dos campos operacionais do portal.
+- Tela SYDLE ganhou uma visão unificada abaixo da visão operacional, com as
+  mesmas colunas e ordem do Excel/CSV.
+
+### Changed
+
+- Normalizador SYDLE reconhece aliases do CSV `Relatório Sydle.csv`, trata
+  `(vazio)` como nulo e deriva chave estável por protocolo + invoice +
+  vencimento + valor + prazo pós-embarque quando a fonte não fornece ID único.
+- Sync automático SYDLE passa de 15 para 10 minutos.
+- Relatório SYDLE deixa de preencher câmbio/BRL com estimativas do portal; os
+  cards, tabelas e detalhe passam a exibir valores financeiros apenas quando a
+  própria SYDLE fornece os campos.
+
+## [Unreleased] - 2026-06-29 - Feedback Odett/Eduarda: espelho, Draft BL e configuracoes
+
+### Added
+
+- Checklist do Draft BL ganhou aceite explicito de "Draft Recebido".
+- Aba Draft BL ganhou acao de reprocessamento do documento atual, usando o endpoint auditado
+  existente de reprocesso.
+- Configuracoes passaram a abrir em aba "E-mails", com "Destinatarios operacionais" no topo para
+  reduzir erro operacional de allowlist.
+
+### Fixed
+
+- Parser deterministico de espelho XLSX agora reconhece aliases ingleses de SKU/codigo
+  (`Code`, `SKU`, `Item Code`, `Product Code`) e pesos (`Net Weight`, `N.W.`, `Gross Weight`,
+  `G.W.`, `GW/NW`), cobrindo planilhas que antes marcavam leitura 100% mas deixavam pesos vazios.
+
 ## [Unreleased] - 2026-06-25 - Otimizacao de custo IA/Vertex
 
 ### Added

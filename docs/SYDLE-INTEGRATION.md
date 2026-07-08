@@ -1,12 +1,12 @@
 # SYDLE - Compras E Pagamentos Internacionais
 
-Ultima atualizacao: 2026-06-19
+Ultima atualizacao: 2026-07-08
 
 ## Objetivo
 
 Disponibilizar no portal de importacao um relatorio profissional de compras e
 pagamentos internacionais vindos da SYDLE, com sincronizacao automatica a cada
-15 minutos, historico auditavel e conciliacao com processos do portal.
+10 minutos, historico auditavel e conciliacao com processos do portal.
 
 ## Estado Atual
 
@@ -14,10 +14,14 @@ Implementado no portal:
 
 - Modulo API Node em `apps/api/src/modules/sydle`.
 - Tabelas `sydle_purchase_payments` e `sydle_sync_runs`.
-- Job agendado `sydle-sync` em `*/15 * * * *`.
+- Job agendado `sydle-sync` em `*/10 * * * *`.
 - Tela web `/importacao/compras-pagamentos`, menu `Importacao > Operacional >
 Compras/Pagamentos SYDLE` e atalho no portal para administradores.
+- A tela exibe uma visão operacional e uma visão unificada com as mesmas colunas
+  e ordem do Excel/CSV.
 - Exportacao CSV backend em `/api/sydle/payments-report/export.csv`.
+- Exportacoes CSV/XLSX/PDF preservam as colunas do relatório Analytics/CSV da
+  SYDLE quando a fonte as fornece.
 - Rotas backend SYDLE e tela web restritas a administradores.
 - Sync manual admin-only em `/api/sydle/sync-now`.
 - Normalizador tolerante a campos comuns em PT-BR e ingles.
@@ -180,30 +184,56 @@ pela SYDLE.
 
 Campos reconhecidos pelo normalizador:
 
-| Campo Interno     | Exemplos aceitos                                                  |
-| ----------------- | ----------------------------------------------------------------- |
-| `externalId`      | `externalId`, `id`, `_id`, `codigoPagamento`, `paymentId`         |
-| `processCode`     | `processCode`, `processo`, `codigoProcesso`, `process`            |
-| `purchaseRef`     | `purchaseRef`, `compra`, `referenciaCompra`                       |
-| `purchaseOrder`   | `purchaseOrder`, `poNumber`, `pedidoCompra`, `ordemCompra`        |
-| `proformaNumber`  | `proformaNumber`, `piNumber`, `numeroPi`, `proformaInvoice`       |
-| `invoiceNumber`   | `invoiceNumber`, `invoice`, `ciNumber`, `numeroInvoice`           |
-| `supplierName`    | `supplierName`, `supplier`, `fornecedor`, `exportador`, `shipper` |
-| `purchaseAmount`  | `purchaseAmount`, `valorCompra`, `amountUsd`, `valorInvoice`      |
-| `paidAmount`      | `paidAmount`, `valorPago`, `amountPaid`, `valorPagoUsd`           |
-| `paymentStatus`   | `paymentStatus`, `statusPagamento`, `status`, `situacao`          |
-| `sourceUpdatedAt` | `sourceUpdatedAt`, `updatedAt`, `ultimaAtualizacao`               |
+| Campo Interno                  | Exemplos aceitos                                                    |
+| ------------------------------ | ------------------------------------------------------------------- |
+| `externalId`                   | `externalId`, `id`, `_id`, `codigoPagamento`, `paymentId`           |
+| `sydleProtocol`                | `sydleProtocol`, `protocolo`, `ticketCode`, `sydleTicketCode`       |
+| `processCode`                  | `processCode`, `processo`, `codigoProcesso`, `process`              |
+| `purchaseRef`                  | `purchaseRef`, `compra`, `referenciaCompra`                         |
+| `purchaseOrder`                | `purchaseOrder`, `poNumber`, `pedidoCompra`, `ordemCompra`          |
+| `proformaNumber`               | `proformaNumber`, `piNumber`, `numeroPi`, `proformaInvoice`         |
+| `invoiceNumber`                | `invoiceNumber`, `invoice`, `ciNumber`, `numeroInvoice`             |
+| `supplierName`                 | `supplierName`, `supplier`, `fornecedor`, `exportador`, `shipper`   |
+| `purchaseAmount`               | `purchaseAmount`, `valorCompra`, `amountUsd`, `valorInvoice`        |
+| `paidAmount`                   | `paidAmount`, `valorPago`, `amountPaid`, `valorPagoUsd`             |
+| `paymentStatus`                | `paymentStatus`, `statusPagamento`, `status`, `situacao`            |
+| `invoiceIssuedDate`            | `Data de emissão Invoice/PI`, `invoiceIssueDate`, `piIssueDate`     |
+| `taskCreatedAt`                | `Data criação da tarefa`, `taskCreationDate`, `_creationDate`       |
+| `shipmentDate`                 | `Data de embarque`, `shipmentDate`, `shippingDate`                  |
+| `paymentDeadlineAfterShipment` | `Prazo para pagamento pós embarque`, `paymentDeadlineAfterShipment` |
+| `exceptionStatus`              | `Exceção`, `exception`                                              |
+| `exceptionReason`              | `Motivo da exceção`, `reason`                                       |
+| `sourceUpdatedAt`              | `sourceUpdatedAt`, `updatedAt`, `ultimaAtualizacao`                 |
 
 Se o payload real divergir, ajustar somente `normalizer.ts` e adicionar fixture
 sanitizada em teste.
+
+### Relatório Analytics/CSV
+
+O arquivo baixado da SYDLE Analytics em 2026-07-08 foi tratado como contrato
+complementar de staging. As 16 colunas observadas são: protocolo, número da
+invoice, beneficiário, marca, tipo de pagamento, data de vencimento, moeda de
+pagamento, valor a pagar, data de emissão Invoice/PI, data de criação da tarefa,
+exceção, motivo da exceção, código do processo, data de embarque, prazo para
+pagamento pós-embarque e data da última alteração.
+
+Quando a fonte não traz identificador único por parcela, o normalizador deriva
+`externalId` por protocolo + invoice + vencimento + valor + prazo pós-embarque,
+evitando colapsar parcelas diferentes do mesmo protocolo.
 
 ## Banco De Dados
 
 `sydle_purchase_payments` guarda o staging consolidado:
 
 - Identificador externo unico `external_id`.
+- Colunas de paridade com o relatório Analytics/CSV: `sydle_protocol`,
+  `invoice_issued_date`, `task_created_at`, `shipment_date`,
+  `payment_deadline_after_shipment`, `exception_status` e `exception_reason`.
 - Dados de compra, PI, invoice, fornecedor, valores, status e vencimento.
 - Dados de cambio/BRL quando a SYDLE fornecer.
+- O relatorio nao usa `currency_exchanges` nem outros dados financeiros do
+  portal para estimar câmbio/BRL; campos financeiros vazios na SYDLE permanecem
+  vazios no relatório.
 - `raw_payload` para auditoria e troubleshooting.
 - `process_id`, `match_status`, `match_score`, `match_reason` para conciliacao.
 
@@ -234,8 +264,9 @@ Prioridade de match:
 
 PI, invoice ou pedido isolado nao bastam para vinculo automatico. Se houver
 mais de um candidato ou score insuficiente, o registro fica `ambiguous` ou
-`unmatched`. O modulo nao sobrescreve `currency_exchanges` nem dados manuais de
-processo.
+`unmatched`. O modulo nao sobrescreve `currency_exchanges`, nao usa
+`currency_exchanges` para preencher o relatorio SYDLE e nao altera dados manuais
+de processo.
 
 ## Seguranca
 

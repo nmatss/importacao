@@ -1053,13 +1053,18 @@ export const openapiSpec = {
         summary: 'List SYDLE purchase/payment report rows (admin)',
         parameters: [
           { name: 'search', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'processCode', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'supplier', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'brand', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'currency', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'logisticStatus', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'paymentStatus', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'paymentType', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'matchStatus', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'dueFrom', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'dueTo', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'updatedFrom', in: 'query' as const, schema: { type: 'string' as const } },
+          { name: 'updatedTo', in: 'query' as const, schema: { type: 'string' as const } },
           { name: 'page', in: 'query' as const, schema: { type: 'integer' as const } },
           { name: 'limit', in: 'query' as const, schema: { type: 'integer' as const } },
         ],
@@ -1082,10 +1087,41 @@ export const openapiSpec = {
     '/api/sydle/payments-report/export.csv': {
       get: {
         tags: ['SYDLE'],
-        summary: 'Export SYDLE purchase/payment report as CSV (admin)',
+        summary: 'Export SYDLE purchase/payment report as CSV (admin, includes Analytics columns)',
         responses: {
           '200': { description: 'CSV export' },
           '403': { description: 'Admin role required' },
+        },
+      },
+    },
+    '/api/sydle/payments-report/export.xlsx': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Export SYDLE purchase/payment report as XLSX (admin)',
+        responses: {
+          '200': { description: 'XLSX export' },
+          '403': { description: 'Admin role required' },
+        },
+      },
+    },
+    '/api/sydle/payments-report/export.pdf': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Export SYDLE purchase/payment report as PDF (admin)',
+        responses: {
+          '200': { description: 'PDF export' },
+          '403': { description: 'Admin role required' },
+        },
+      },
+    },
+    '/api/sydle/payments-report/{id}': {
+      get: {
+        tags: ['SYDLE'],
+        summary: 'Get one SYDLE purchase/payment row with detail columns (admin)',
+        responses: {
+          '200': { description: 'SYDLE report row detail' },
+          '403': { description: 'Admin role required' },
+          '404': { description: 'Payment row not found' },
         },
       },
     },

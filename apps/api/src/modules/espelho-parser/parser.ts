@@ -150,11 +150,20 @@ function buildColumnMap(headerRow: Row): Map<number, keyof EspelhoItem> {
       assign(colIdx, 'nomeProduto');
       return;
     }
-    if (cell.includes('peso líquido') || cell.includes('peso liquido')) {
+    if (
+      cell.includes('peso líquido') ||
+      cell.includes('peso liquido') ||
+      cell.includes('net weight') ||
+      /\bn\.?\s*w\.?\b/.test(cell)
+    ) {
       assign(colIdx, 'pesoLiquidoTotal');
       return;
     }
-    if (cell.includes('peso bruto')) {
+    if (
+      cell.includes('peso bruto') ||
+      cell.includes('gross weight') ||
+      /\bg\.?\s*w\.?\b/.test(cell)
+    ) {
       assign(colIdx, 'pesoBrutoTotal');
       return;
     }
@@ -190,7 +199,14 @@ function buildColumnMap(headerRow: Row): Map<number, keyof EspelhoItem> {
       assign(colIdx, 'ean13');
       return;
     }
-    if (cell.includes('código') || cell.includes('codigo')) {
+    if (
+      cell.includes('código') ||
+      cell.includes('codigo') ||
+      cell === 'code' ||
+      cell === 'sku' ||
+      cell.includes('item code') ||
+      cell.includes('product code')
+    ) {
       assign(colIdx, 'codigo');
       return;
     }
@@ -219,7 +235,7 @@ function buildColumnMap(headerRow: Row): Map<number, keyof EspelhoItem> {
       assign(colIdx, 'caixasPorRef');
       return;
     }
-    if (cell.includes('gw/nt') || cell.includes('gw / nt')) {
+    if (cell.includes('gw/nt') || cell.includes('gw / nt') || cell.includes('gw/nw')) {
       assign(colIdx, 'gwNt');
       return;
     }

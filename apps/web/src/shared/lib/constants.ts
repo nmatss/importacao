@@ -121,6 +121,11 @@ export const CHECKLIST_STEPS = [
 
 export const DRAFT_BL_CHECKS = [
   {
+    key: 'draftReceivedOk',
+    label: 'Draft Recebido',
+    description: 'Draft BL recebido e identificado no processo',
+  },
+  {
     key: 'exporterOk',
     label: 'Exportador/Embarcador',
     description: 'Dados do exportador conferem',

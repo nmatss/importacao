@@ -102,7 +102,7 @@ Evidencias:
 ## SYDLE - Compras E Pagamentos
 
 Relatorio operacional de compras e pagamentos internacionais sincronizado da
-SYDLE a cada 15 minutos. Todas as rotas `/api/sydle/*` exigem usuario
+SYDLE a cada 10 minutos. Todas as rotas `/api/sydle/*` exigem usuario
 administrador. A sincronizacao real depende das variaveis `SYDLE_*`; sem
 configuracao, o job registra `skipped`.
 
@@ -117,19 +117,33 @@ Endpoints:
 - `GET /api/sydle/payments-report/export.csv` admin-only
 - `GET /api/sydle/payments-report/export.xlsx` admin-only
 - `GET /api/sydle/payments-report/export.pdf` admin-only
+- `GET /api/sydle/payments-report/:id` admin-only
 - `GET /api/sydle/sync-runs` admin-only
 - `POST /api/sydle/sync-now` admin-only
+
+As respostas de listagem/detalhe e as exportações preservam as colunas do
+relatório SYDLE Analytics/CSV quando disponíveis: protocolo, número da invoice,
+beneficiário, marca, tipo, vencimento, moeda, valor a pagar, emissão Invoice/PI,
+criação da tarefa, exceção, motivo da exceção, código do processo, embarque,
+prazo pós-embarque e última alteração.
+Valores de câmbio/BRL, banco, contrato e remessa só são exibidos quando vêm da
+SYDLE; o relatório não preenche esses campos com estimativas do portal.
 
 Filtros principais:
 
 - `search`
+- `processCode`
 - `supplier`
 - `brand`
+- `currency`
+- `logisticStatus`
 - `paymentStatus`
 - `paymentType`
 - `matchStatus`
 - `dueFrom`
 - `dueTo`
+- `updatedFrom`
+- `updatedTo`
 - `page`
 - `limit`
 

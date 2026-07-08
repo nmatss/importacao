@@ -39,7 +39,7 @@ API Node:
 - `email-ingestion`: IMAP/Gmail e classificacao.
 - `communications`: drafts e envio de emails.
 - `financial`: numerario e calculos.
-- `sydle`: relatorio de compras/pagamentos internacionais, sync 15 min e
+- `sydle`: relatorio de compras/pagamentos internacionais, sync 10 min e
   conciliacao com processos.
 - `alerts`, `audit`, `settings`, `health`, `admin`.
 
