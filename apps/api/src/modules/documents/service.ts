@@ -2799,28 +2799,41 @@ export const documentService = {
     // For 'secondary' criticality, a hard divergence is downgraded to warning
     // (per Nicolas: "endereço do exportador… talvez a gente consiga relevar").
     const aggregateComparison = aggregateFields.map((f, index) => {
-      const rawValues = [f.inv, f.pl, f.bl, f.espelho];
-      const values = rawValues.filter((v) => v != null && v !== '');
-      let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
-      const criticality: Criticality = f.criticality ?? 'critical';
-      if (criticality === 'secondary' && status === 'divergent') status = 'warning';
       const key = comparisonRowKey('aggregate', f.label, index);
       const invoiceOverride = getOverride(key, 'invoice');
       const packingListOverride = getOverride(key, 'packingList');
       const blOverride = getOverride(key, 'bl');
       const espelhoOverride = getOverride(key, 'espelho');
+
+      // Um override existente vale mesmo com valueText null (célula limpa de
+      // propósito); só na ausência de override a célula cai no valor extraído.
+      const resolveCell = (
+        override: { valueText: string | null } | undefined,
+        raw: unknown,
+      ): string | null => {
+        if (override) return override.valueText;
+        return raw != null && raw !== '' ? String(raw) : null;
+      };
+
+      const invoice = resolveCell(invoiceOverride, f.inv);
+      const packingList = resolveCell(packingListOverride, f.pl);
+      const bl = resolveCell(blOverride, f.bl);
+      const espelho = resolveCell(espelhoOverride, f.espelho);
+
+      // O status considera os valores efetivamente exibidos: corrigir uma
+      // célula editada deve reconciliar (ou divergir) a linha de verdade.
+      const values = [invoice, packingList, bl, espelho].filter((v) => v != null && v !== '');
+      let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
+      const criticality: Criticality = f.criticality ?? 'critical';
+      if (criticality === 'secondary' && status === 'divergent') status = 'warning';
       const baseMessage = aggregateMessage(status, criticality);
       return {
         rowKey: key,
         label: f.label,
-        invoice:
-          invoiceOverride?.valueText ?? (f.inv != null && f.inv !== '' ? String(f.inv) : null),
-        packingList:
-          packingListOverride?.valueText ?? (f.pl != null && f.pl !== '' ? String(f.pl) : null),
-        bl: blOverride?.valueText ?? (f.bl != null && f.bl !== '' ? String(f.bl) : null),
-        espelho:
-          espelhoOverride?.valueText ??
-          (f.espelho != null && f.espelho !== '' ? String(f.espelho) : null),
+        invoice,
+        packingList,
+        bl,
+        espelho,
         status,
         criticality,
         message: editedMessage(key, baseMessage),
@@ -3157,10 +3170,17 @@ function manufacturerValuesDiverge(values: unknown[]): boolean {
     .map((value) => normalizeCompanyName(value))
     .filter(Boolean);
   if (normalized.length <= 1) return false;
-  const [first] = normalized;
-  return normalized.some(
-    (value) => value !== first && !value.startsWith(first) && !first.startsWith(value),
-  );
+  // Compara todos os pares (não só contra o primeiro): 'ACME X' vs 'ACME Y'
+  // diverge mesmo quando ambos casam por prefixo com 'ACME'. Prefixo mútuo
+  // continua tolerado para absorver sufixos societários/ruído de extração.
+  for (let i = 0; i < normalized.length; i += 1) {
+    for (let j = i + 1; j < normalized.length; j += 1) {
+      const a = normalized[i];
+      const b = normalized[j];
+      if (a !== b && !a.startsWith(b) && !b.startsWith(a)) return true;
+    }
+  }
+  return false;
 }
 
 function normalizeStringList(value: unknown): string[] {

@@ -32,7 +32,8 @@ export const communicationAttachmentSchema = z
 
 export const createCommunicationSchema = z.object({
   processId: z.number().optional(),
-  recipient: z.string().min(1, 'Destinatário obrigatório').max(500),
+  // communications.recipient é varchar(255); manter o zod alinhado à coluna.
+  recipient: z.string().min(1, 'Destinatário obrigatório').max(255),
   recipientEmail: emailListSchema,
   subject: z.string().min(1, 'Assunto obrigatório').max(500),
   body: z.string().min(1, 'Corpo do e-mail obrigatório').max(100000),
@@ -44,7 +45,7 @@ export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>
 export const updateDraftSchema = z.object({
   subject: z.string().min(1).max(500).optional(),
   body: z.string().min(1).max(100000).optional(),
-  recipient: z.string().min(1).max(500).optional(),
+  recipient: z.string().min(1).max(255).optional(),
   recipientEmail: emailListSchema.optional(),
   attachments: z.array(communicationAttachmentSchema).max(20).optional(),
 });

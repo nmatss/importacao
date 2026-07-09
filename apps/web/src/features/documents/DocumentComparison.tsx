@@ -626,7 +626,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
           const status = highestStatus(field.status, systemStatus);
           const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
           const systemOverride = field.overrides?.find((item) => item.sourceColumn === 'system');
-          const system = systemOverride?.valueText ?? systemCheck?.expectedValue ?? null;
+          // Override existente vale mesmo com valueText null (célula limpa).
+          const system = systemOverride
+            ? systemOverride.valueText
+            : (systemCheck?.expectedValue ?? null);
           const message =
             systemStatus !== 'empty' && systemStatus !== 'match'
               ? (systemCheck?.message ?? field.message)

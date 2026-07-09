@@ -309,8 +309,12 @@ function reportProcessLabel(row: SydlePayment): string {
 }
 
 function documentKind(row: SydlePayment): 'PI' | 'INV' | null {
-  if (row.proformaNumber) return 'PI';
+  // O badge marca apenas o fallback: quando a coluna Processo exibe o número
+  // do documento por falta de código de processo real. A ordem segue
+  // reportProcessLabel (invoice antes de proforma).
+  if (row.portalProcessCode || row.processCode) return null;
   if (row.invoiceNumber) return 'INV';
+  if (row.proformaNumber) return 'PI';
   return null;
 }
 

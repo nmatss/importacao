@@ -32,12 +32,16 @@ export interface FetchedEmail {
 
 let gmailClient: gmail_v1.Gmail | null = null;
 
+export function resolveSharedMailbox(): string {
+  return process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX;
+}
+
 function getGmailClient(): gmail_v1.Gmail {
   if (gmailClient) return gmailClient;
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
   const privateKey = normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY);
-  const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX;
+  const sharedMailbox = resolveSharedMailbox();
 
   if (!clientEmail || !privateKey) {
     throw new Error(
@@ -45,8 +49,13 @@ function getGmailClient(): gmail_v1.Gmail {
     );
   }
 
-  if (!sharedMailbox) {
-    throw new Error('GMAIL_SHARED_MAILBOX not configured - set the shared mailbox email address');
+  if (!process.env.GMAIL_SHARED_MAILBOX) {
+    // Fallback intencional (feedback 2026-07-09), mas ambientes de teste com
+    // credenciais Google reais passariam a ler a caixa de produção — avisar.
+    logger.warn(
+      { sharedMailbox },
+      'GMAIL_SHARED_MAILBOX não configurado — usando mailbox compartilhado padrão',
+    );
   }
 
   const jwtClient = new googleAuth.JWT({
@@ -307,7 +316,7 @@ export const gmailService = {
   async testConnection(): Promise<boolean> {
     try {
       const gmail = getGmailClient();
-      const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX!;
+      const sharedMailbox = resolveSharedMailbox();
 
       const profile = await withTimeout(
         gmail.users.getProfile({ userId: sharedMailbox }),
@@ -321,11 +330,8 @@ export const gmailService = {
     }
   },
 
+  // O mailbox sempre resolve (fallback padrão); só as credenciais gateiam.
   isConfigured(): boolean {
-    return !!(
-      process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
-      process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
-      process.env.GMAIL_SHARED_MAILBOX
-    );
+    return !!(process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY);
   },
 };

@@ -17,6 +17,7 @@ import {
   Navigation,
 } from 'lucide-react';
 import { cn, formatDate, formatCurrency, formatWeight } from '@/shared/lib/utils';
+import { isRecord, unwrapAiValue } from '@/shared/lib/ai-values';
 import type { ImportProcess, AiExtractedData } from '@/shared/types';
 
 export interface ProcessInfoCardProps {
@@ -56,15 +57,6 @@ const sourceStyles: Record<ProcessInfoSource, { label: string; badge: string; ic
     icon: 'bg-slate-50 text-slate-400 dark:bg-slate-900',
   },
 };
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function unwrapAiValue(value: unknown): unknown {
-  if (isRecord(value) && 'value' in value) return value.value;
-  return value;
-}
 
 function isEmptyValue(value: unknown) {
   const unwrapped = unwrapAiValue(value);

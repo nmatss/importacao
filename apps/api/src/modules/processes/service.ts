@@ -22,10 +22,21 @@ import type {
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
-import { NotFoundError } from '../../shared/errors/index.js';
+import { NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { logger } from '../../shared/utils/logger.js';
 import { deriveLogisticStatus, isForwardTransition } from './logistic-auto-advance.js';
+
+// Colunas timestamp() (modo Date) recebem strings dos schemas: converte com
+// validação — '' limpa o campo; valor não parseável vira erro 400 claro.
+function parseTimestampInput(field: string, value: string | null | undefined): Date | null {
+  if (value == null || !value.trim()) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new ValidationError(`Data inválida em ${field}: ${value}`);
+  }
+  return parsed;
+}
 
 export const processService = {
   async list(filter: ProcessFilter) {
@@ -125,7 +136,7 @@ export const processService = {
         processId,
         label: input.label,
         position: input.position,
-        completedAt: input.completedAt ? new Date(input.completedAt) : null,
+        completedAt: parseTimestampInput('completedAt', input.completedAt),
         notes: input.notes ?? null,
         createdBy: userId,
       })
@@ -166,7 +177,7 @@ export const processService = {
     if (input.label !== undefined) updateData.label = input.label;
     if (input.position !== undefined) updateData.position = input.position;
     if (input.completedAt !== undefined) {
-      updateData.completedAt = input.completedAt ? new Date(input.completedAt) : null;
+      updateData.completedAt = parseTimestampInput('completedAt', input.completedAt);
     }
     if (input.notes !== undefined) updateData.notes = input.notes ?? null;
 
@@ -552,10 +563,20 @@ export const processService = {
     }
 
     const { processCode: _drop, ...rest } = input;
+
+    // registeredAt/customsClearanceAt são colunas timestamp() em modo Date;
+    // o schema entrega strings (YYYY-MM-DD) que o driver não aceita.
+    const patch: Record<string, unknown> = { ...rest };
+    for (const field of ['registeredAt', 'customsClearanceAt'] as const) {
+      const value = patch[field];
+      if (typeof value !== 'string') continue;
+      patch[field] = parseTimestampInput(field, value);
+    }
+
     const [process] = await db
       .update(importProcesses)
       .set({
-        ...rest,
+        ...patch,
         updatedAt: new Date(),
       } as Partial<typeof importProcesses.$inferInsert>)
       .where(eq(importProcesses.id, id))

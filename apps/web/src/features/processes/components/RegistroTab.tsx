@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatDateTime } from '@/shared/lib/utils';
+import { isRecord, unwrapAiValue } from '@/shared/lib/ai-values';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import type { Document, ImportProcess } from '@/shared/types';
 
@@ -35,15 +36,6 @@ function statusText(doc: Document | undefined) {
   if (doc.aiProcessingStatus === 'failed') return 'Revisao manual';
   if (doc.aiProcessingStatus === 'completed') return 'Recebido';
   return 'Processando';
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
-}
-
-function unwrapAiValue(value: unknown): unknown {
-  if (isRecord(value) && 'value' in value) return value.value;
-  return value;
 }
 
 function normalizeKey(value: string) {

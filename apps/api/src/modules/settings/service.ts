@@ -181,10 +181,38 @@ export const settingsService = {
       isActive?: boolean;
     },
   ) {
+    const name = data.name.trim();
+
+    // O índice único de nome não distingue ativos de desativados (soft
+    // delete): nome de modelo ativo conflita com erro claro, e nome de modelo
+    // desativado é reaproveitado reativando o registro com o novo conteúdo.
+    const [existing] = await db
+      .select()
+      .from(communicationTemplates)
+      .where(eq(communicationTemplates.name, name))
+      .limit(1);
+
+    if (existing?.isActive) {
+      throw Object.assign(new Error('Já existe um modelo ativo com esse nome'), {
+        statusCode: 409,
+      });
+    }
+
+    if (existing) {
+      return this.updateCommunicationTemplate(existing.id, userId, {
+        name,
+        recipient: data.recipient ?? null,
+        recipientEmail: data.recipientEmail ?? null,
+        subject: data.subject,
+        body: data.body,
+        isActive: data.isActive ?? true,
+      });
+    }
+
     const [created] = await db
       .insert(communicationTemplates)
       .values({
-        name: data.name.trim(),
+        name,
         recipient: data.recipient?.trim() || null,
         recipientEmail: data.recipientEmail?.trim() || null,
         subject: data.subject.trim(),

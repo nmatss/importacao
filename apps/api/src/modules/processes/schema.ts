@@ -2,15 +2,27 @@ import { z } from 'zod';
 
 const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,6})?$/;
 
-const nonNegativeDecimalString = (label: string) =>
+const nonNegativeDecimalString = (label: string, max?: number) =>
   z.preprocess(
     (value) => (value === '' || value == null ? undefined : value),
     z
       .union([z.string(), z.number()])
       .transform(String)
       .refine((value) => decimalPattern.test(value), `${label} deve ser zero ou positivo`)
+      // Postgres numeric só aceita ponto decimal; entrada pt-BR usa vírgula.
+      .transform((value) => value.replace(',', '.'))
+      .refine(
+        (value) => max === undefined || Number(value) <= max,
+        `${label} acima do limite permitido`,
+      )
       .optional(),
   );
+
+// Limites derivados da precisão das colunas numeric correspondentes.
+const REGISTRATION_DOLLAR_MAX = 9999.999999; // numeric(10,6)
+const CUSTOMS_VALUE_MAX = 999_999_999_999.99; // numeric(14,2)
+const INSURANCE_VALUE_MAX = 9_999_999_999.99; // numeric(12,2)
+const OPERATIONAL_AMOUNT_MAX = 9_999_999_999.99; // numeric(12,2)
 
 function validateProcessDates(
   data: { etd?: string; eta?: string; shipmentDate?: string },
@@ -50,9 +62,9 @@ export const createProcessSchema = z
     containerType: z.string().max(100).optional(),
     totalFobValue: nonNegativeDecimalString('Valor FOB'),
     freightValue: nonNegativeDecimalString('Valor de frete'),
-    insuranceValue: nonNegativeDecimalString('Seguro'),
-    customsValue: nonNegativeDecimalString('Valor aduaneiro'),
-    registrationDollar: nonNegativeDecimalString('Dólar de registro'),
+    insuranceValue: nonNegativeDecimalString('Seguro', INSURANCE_VALUE_MAX),
+    customsValue: nonNegativeDecimalString('Valor aduaneiro', CUSTOMS_VALUE_MAX),
+    registrationDollar: nonNegativeDecimalString('Dólar de registro', REGISTRATION_DOLLAR_MAX),
     totalCbm: nonNegativeDecimalString('CBM'),
     totalBoxes: z.coerce.number().int().min(0).optional(),
     totalNetWeight: nonNegativeDecimalString('Peso líquido'),
@@ -121,9 +133,9 @@ export const updateProcessSchema = z
     notes: z.string().max(5000).optional(),
     urgentNote: z.string().max(2000).nullable().optional(),
     containerType: z.string().max(100).optional(),
-    insuranceValue: nonNegativeDecimalString('Seguro'),
-    customsValue: nonNegativeDecimalString('Valor aduaneiro'),
-    registrationDollar: nonNegativeDecimalString('Dólar de registro'),
+    insuranceValue: nonNegativeDecimalString('Seguro', INSURANCE_VALUE_MAX),
+    customsValue: nonNegativeDecimalString('Valor aduaneiro', CUSTOMS_VALUE_MAX),
+    registrationDollar: nonNegativeDecimalString('Dólar de registro', REGISTRATION_DOLLAR_MAX),
     duimpNumber: z.string().max(100).optional(),
     registeredAt: z.string().max(30).optional(),
     customsChannel: z.string().max(20).optional(),
@@ -186,7 +198,7 @@ export const createOperationalRecordSchema = z.object({
   recordKind: z.enum(['document_error', 'extra_cost']),
   recordType: z.string().trim().min(1, 'Tipo obrigatorio').max(160),
   quantity: z.coerce.number().int().min(0).nullable().optional(),
-  amount: nonNegativeDecimalString('Valor'),
+  amount: nonNegativeDecimalString('Valor', OPERATIONAL_AMOUNT_MAX),
   currency: z.string().trim().max(10).optional(),
   notes: z.string().max(2000).nullable().optional(),
 });

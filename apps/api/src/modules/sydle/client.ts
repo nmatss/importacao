@@ -866,8 +866,24 @@ function derivePaymentState(
     (purchaseAmount != null && paidAmount != null
       ? Math.max(0, Math.round((purchaseAmount - paidAmount) * 100) / 100)
       : purchaseAmount);
+  // O status explícito vem como texto livre do SYDLE ('Pago', 'Em aberto'...);
+  // a UI espera o enum. Texto não reconhecido cai na inferência por valores.
+  const explicitEnumStatus = !explicitStatus
+    ? null
+    : isExplicitPaid
+      ? 'paid'
+      : isExplicitScheduled
+        ? 'scheduled'
+        : /(cancel|anulado)/.test(normalizedStatus)
+          ? 'cancelled'
+          : /(overdue|vencido|atrasado)/.test(normalizedStatus)
+            ? 'overdue'
+            : /(open|aberto|pendente|aguardando)/.test(normalizedStatus)
+              ? 'open'
+              : null;
+
   const paymentStatus =
-    explicitStatus ??
+    explicitEnumStatus ??
     (paidAt || (purchaseAmount != null && paidAmount != null && paidAmount >= purchaseAmount)
       ? 'paid'
       : scheduledAt || isExplicitScheduled

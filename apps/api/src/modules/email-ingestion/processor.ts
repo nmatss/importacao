@@ -14,7 +14,7 @@ import {
 } from '../../shared/database/schema.js';
 import { documentService } from '../documents/service.js';
 import { gmailService } from './gmail.service.js';
-import { DEFAULT_GMAIL_SHARED_MAILBOX } from './gmail.service.js';
+import { resolveSharedMailbox } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -1371,7 +1371,7 @@ export const emailProcessor = {
       method: gmailConfigured ? 'gmail_api' : imapConfigured ? 'imap' : 'none',
       gmailConfigured,
       imapConfigured,
-      sharedMailbox: process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX,
+      sharedMailbox: resolveSharedMailbox(),
       allowedSenders: process.env.EMAIL_ALLOWED_SENDERS || '(bloqueado - configure allowlist)',
       lastRun: lastLog?.createdAt || null,
       todayStats: stats,

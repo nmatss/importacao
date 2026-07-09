@@ -39,6 +39,7 @@ const envSchema = z
     // Gmail
     GMAIL_CREDENTIALS_JSON: z.string().optional(),
     GMAIL_SHARED_MAILBOX: z.string().optional(),
+    EMAIL_BODY_MAX_CHARS: z.coerce.number().int().positive().optional(),
 
     // Google Drive / Sheets
     GOOGLE_DRIVE_CLIENT_EMAIL: z.string().optional(),

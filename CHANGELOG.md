@@ -5,6 +5,41 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-07-09 - Revisão profunda pós-entrega (correções)
+
+### Fixed
+
+- Edição de processo com Data de Registro/Desembaraço preenchidas não quebra
+  mais (strings agora convertidas para Date com validação; inválida → 400).
+- Valores decimais com vírgula (pt-BR) são normalizados para ponto antes do
+  Postgres em todos os campos numéricos de processo e Erros/Custos; limites
+  máximos derivados da precisão das colunas (dólar de registro, valor
+  aduaneiro, seguro, valor de custo extra).
+- Campo destinatário de atendimento alinhado à coluna (máx. 255 caracteres).
+- Editar valores no Comparativo geral agora recalcula o status da linha
+  (corrigir uma célula divergente reconcilia de verdade) e limpar uma célula
+  editada exibe vazio em vez de voltar ao valor extraído.
+- Badge `PI`/`INV` do relatório SYDLE aparece apenas quando a coluna Processo
+  usa o fallback (sem código de processo real).
+- Status de pagamento explícito vindo do SYDLE ('Pago', 'Em aberto'…) é
+  normalizado para o enum antes de chegar à UI.
+- Conferência de fabricantes compara todos os pares (divergência entre dois
+  fornecedores não-primeiros não passa mais despercebida).
+- Aba Comparativo recuperou os atalhos manuais `Revalidar` e `Gerar e-mail de
+correção` (compactos — o editor completo continua em Atendimentos).
+- `isConfigured`/`testConnection` do Gmail passaram a usar o mesmo fallback de
+  mailbox compartilhado do fetch, e o job registra aviso ao usar o padrão.
+- Recriar modelo de atendimento com nome de modelo desativado reativa o
+  registro; nome de modelo ativo duplicado retorna 409 claro.
+- Etapas específicas validam `completedAt` (data inválida → 400 claro).
+- Configuração: `default_cc_email` semeado em produção (cópia fixa
+  `global@grupounico.com`); `EMAIL_BODY_MAX_CHARS` documentado no
+  `.env.example` e no schema de env.
+- Testes novos: check `ncm-bl-description` (7 casos) e normalização decimal do
+  schema de processos.
+
+---
+
 ## [Unreleased] - 2026-07-09 - Feedback Odett: atendimentos, comparativo, DUIMP e SYDLE
 
 ### Added

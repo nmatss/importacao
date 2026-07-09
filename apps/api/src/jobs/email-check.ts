@@ -1,7 +1,6 @@
 import { logger } from '../shared/utils/logger.js';
 
 let isRunning = false;
-const DEFAULT_GMAIL_SHARED_MAILBOX = 'global@grupounico.com';
 
 function buildAllowedSenderFilter(): string | null {
   const allowedSenders =
@@ -22,10 +21,9 @@ export async function checkEmails() {
   }
 
   // Check if at least one method is configured (Gmail API or IMAP)
+  // O mailbox sempre resolve via fallback padrão; só as credenciais gateiam.
   const gmailConfigured = !!(
-    process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
-    process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
-    (process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX)
+    process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY
   );
   const imapConfigured = !!(process.env.IMAP_USER && process.env.IMAP_PASS);
 
@@ -57,10 +55,9 @@ export async function doubleCheckEmails() {
     return;
   }
 
+  // O mailbox sempre resolve via fallback padrão; só as credenciais gateiam.
   const gmailConfigured = !!(
-    process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
-    process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
-    (process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX)
+    process.env.GOOGLE_DRIVE_CLIENT_EMAIL && process.env.GOOGLE_DRIVE_PRIVATE_KEY
   );
 
   if (!gmailConfigured) {
