@@ -310,6 +310,99 @@ describe('SydleClient', () => {
     });
   });
 
+  it('marks installments paid (without a paid date) when the ticket is concluded', async () => {
+    // Regra Odett: ticket "Concluído" => todas as parcelas pagas. A parcela
+    // sincronizada não traz data de pagamento (financeiro em 403), então o
+    // status vira 'paid'/open=0 mas "Pago Em" (paidAt) fica em branco — nunca a
+    // data de finalização do ticket.
+    process.env = { ...originalEnv, ...enrichmentBaseEnv };
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ accessToken: { token: 'jwt-token' } }), {
+          status: 200,
+          headers: { 'set-cookie': 'JW-UserToken_main=session-token; Path=/; HttpOnly' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            hits: {
+              hits: [
+                {
+                  _id: 'REQ-9',
+                  sort: ['2026-07-01T13:07:15.911Z', 'REQ-9'],
+                  _source: {
+                    _id: 'REQ-9',
+                    _lastUpdateDate: '2026-07-01T13:07:15.911Z',
+                    approved: true,
+                    invoice: 'PKT-0032-BD-SEA',
+                    ticket: { _id: 'TICKET-9' },
+                    paymentData: [
+                      {
+                        _id: 'PAY-9',
+                        paymentAmount: 15762.52,
+                        expirationDate: '2026-06-15T00:00:00Z',
+                        paymentCurrency: { _id: 'USD-ID' },
+                      },
+                    ],
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            hits: {
+              hits: [
+                {
+                  _id: 'TICKET-9',
+                  _source: {
+                    _id: 'TICKET-9',
+                    code: '5201',
+                    status: { _id: 'DONE' },
+                    attendanceConclusionDate: '2026-07-01T13:07:05.689Z',
+                    _lastUpdateDate: '2026-07-01T13:07:05.699Z',
+                  },
+                },
+              ],
+            },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            hits: { hits: [{ _id: 'DONE', _source: { _id: 'DONE', name: 'Concluído' } }] },
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            hits: { hits: [{ _id: 'USD-ID', _source: { _id: 'USD-ID', iso: 'USD' } }] },
+          }),
+          { status: 200 },
+        ),
+      );
+
+    const result = await new SydleClient().fetchPayments(null);
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0]).toMatchObject({
+      externalId: 'sydle-one:REQ-9:PAY-9',
+      paidAmount: 15762.52,
+      openAmount: 0,
+      paymentStatus: 'paid',
+      paidAt: null,
+    });
+  });
+
   it('enriches complementary fields from request and ticket openForm when SYDLE_ONE_ENRICH_FIELDS is on', async () => {
     process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
     mockSydleOneSequence(REQUEST_WITH_EXTRA, TICKET_WITH_OPENFORM);

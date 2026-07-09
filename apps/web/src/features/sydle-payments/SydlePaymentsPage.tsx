@@ -1520,9 +1520,11 @@ export function SydlePaymentsPage() {
                           <div className="text-xs text-slate-400">
                             {row.paidAt
                               ? `Pago ${dateLabel(row.paidAt)}`
-                              : row.scheduledAt
-                                ? `Ag. ${dateLabel(row.scheduledAt)}`
-                                : '--'}
+                              : row.paymentStatus === 'paid'
+                                ? 'Pago'
+                                : row.scheduledAt
+                                  ? `Ag. ${dateLabel(row.scheduledAt)}`
+                                  : '--'}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">

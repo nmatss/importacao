@@ -621,6 +621,7 @@ function flattenSydleOneInternationalPaymentRows(
       null;
     const requestPaymentType =
       getNestedString(record, ['requestData', 'paymentType']) ?? stringValue(record.paymentType);
+    const ticketConcluded = isTicketConcluded(status);
 
     payments.forEach((payment, index) => {
       const paymentId = stringValue(payment?._id) ?? `payment-${index + 1}`;
@@ -630,7 +631,7 @@ function flattenSydleOneInternationalPaymentRows(
           lookups.currencyById.get(getNestedString(payment, ['paymentCurrency', '_id']) ?? '')) ??
         null;
       const dueDate = payment?.expirationDate ?? null;
-      const paymentState = derivePaymentState(payment, amount);
+      const paymentState = derivePaymentState(payment, amount, { ticketConcluded });
       const ticketCode = stringValue(ticket?.code);
       const searchCode = stringValue(ticket?.searchCode);
 
@@ -842,6 +843,7 @@ function applyEnrichmentClasses(
 function derivePaymentState(
   payment: Record<string, unknown> | null,
   purchaseAmount: number | null,
+  options: { ticketConcluded?: boolean } = {},
 ): {
   paidAmount: number | null;
   openAmount: number | null;
@@ -858,8 +860,20 @@ function derivePaymentState(
   const isExplicitPaid = /(paid|pago|liquidado|baixado|concluido|concluida)/.test(normalizedStatus);
   const isExplicitScheduled = /(scheduled|agendado|programado)/.test(normalizedStatus);
 
-  const inferredPaidAmount =
-    paidAt || isExplicitPaid ? (purchaseAmount ?? null) : purchaseAmount != null ? 0 : null;
+  // A parcela sincronizada da SYDLE não traz data/flag de pagamento (esses
+  // campos financeiros ainda estão atrás das classes em 403). O único sinal de
+  // pagamento disponível é a conclusão do ticket, que na regra da operação
+  // (Odett) significa "todas as parcelas foram pagas". Usamos isso apenas para
+  // STATUS/valores — a data de "Pago Em" continua vindo só da parcela (real) e
+  // fica em branco enquanto a SYDLE não expuser a data de pagamento, em vez de
+  // exibir a data de finalização (que é outra coisa).
+  const treatAsPaid = Boolean(paidAt) || isExplicitPaid || Boolean(options.ticketConcluded);
+
+  const inferredPaidAmount = treatAsPaid
+    ? (purchaseAmount ?? null)
+    : purchaseAmount != null
+      ? 0
+      : null;
   const paidAmount = explicitPaidAmount ?? inferredPaidAmount;
   const openAmount =
     explicitOpenAmount ??
@@ -884,13 +898,25 @@ function derivePaymentState(
 
   const paymentStatus =
     explicitEnumStatus ??
-    (paidAt || (purchaseAmount != null && paidAmount != null && paidAmount >= purchaseAmount)
+    (treatAsPaid || (purchaseAmount != null && paidAmount != null && paidAmount >= purchaseAmount)
       ? 'paid'
       : scheduledAt || isExplicitScheduled
         ? 'scheduled'
         : 'open');
 
   return { paidAmount, openAmount, paymentStatus, paidAt, scheduledAt };
+}
+
+// Regra operacional: o ticket SYDLE só é concluído quando todas as parcelas
+// foram pagas. Detecta conclusão pelo NOME do status (não pela mera presença de
+// data de conclusão, que também aparece em cancelamentos).
+function isTicketConcluded(status: Record<string, unknown> | null): boolean {
+  const name = normalizeSydleStatusText(
+    stringValue(status?.name) ?? stringValue(status?.identifier) ?? '',
+  );
+  if (!name) return false;
+  if (/(cancel|anul|rejeit|reprov|devolv)/.test(name)) return false;
+  return /(conclu|finaliz|encerrad|liquidad|quitad)/.test(name);
 }
 
 function findPaymentValue(
