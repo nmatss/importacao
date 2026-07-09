@@ -5,6 +5,25 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-07-09 - Relatório SYDLE: pagamento por conclusão do ticket
+
+### Fixed
+
+- "Pago Em" deixou de exibir a data de finalização do ticket. A parcela
+  sincronizada da SYDLE não traz data nem flag de pagamento (esses campos
+  financeiros seguem atrás das classes em 403), então `paidAt` fica em branco
+  até a SYDLE expô-la, em vez de mostrar a finalização (que é outra coisa).
+- Tickets concluídos deixam de aparecer como vencidos. Pela regra da operação
+  (o ticket só finaliza quando todas as parcelas são pagas), um ticket com
+  status "Concluído" marca as parcelas como `paid` (valor pago cheio, saldo 0),
+  sem usar a data de finalização como data de pagamento. Ticket "Em andamento"
+  segue com a parcela `open`/vencida quando aplicável.
+- Detecção de conclusão pelo nome do status do ticket (não pela mera presença
+  de data de conclusão, que também ocorre em cancelamento).
+- Base de produção reprocessada com full resync (26 linhas re-derivadas).
+
+---
+
 ## [Unreleased] - 2026-07-09 - Revisão profunda pós-entrega (correções)
 
 ### Fixed
