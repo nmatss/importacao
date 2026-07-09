@@ -112,6 +112,13 @@ def create_certificate(
             400, "Informe ao menos uma data (validade do certificado ou vencimento do licenciamento)"
         )
 
+    # Production traffic reaches this service through Nginx, which overwrites
+    # this header from the authenticated Node auth_request response. Prefer it
+    # over the client-controlled form field so saved certificates are traceable
+    # to the real portal actor.
+    gateway_actor = (request.headers.get("X-Cert-Actor-Email") or "").strip()
+    effective_created_by = gateway_actor or created_by.strip() or None
+
     cert_id = str(uuid.uuid4())
     pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
 
@@ -128,7 +135,7 @@ def create_certificate(
                 cert_id, sku, brand,
                 validade_certificado or None, vencimento_licenciamento or None,
                 numero_certificado or None, ocp or None, orgao_certificador or None,
-                pdf_filename, created_by or None,
+                pdf_filename, effective_created_by,
             ],
         )
 

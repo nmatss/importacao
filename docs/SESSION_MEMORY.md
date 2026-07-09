@@ -1,5 +1,65 @@
 # Session Memory
 
+## 2026-07-09 - Feedback Odett: Atendimentos, Comparativo, DUIMP e SYDLE
+
+Resultado:
+
+- Menu Atendimentos ganhou seleção pesquisável/editável de processo, anexos de
+  documentos do processo e edição/envio de rascunhos existentes.
+- Aba Atendimentos dentro do processo passou a expandir rascunhos/enviados,
+  editar destinatário, assunto, corpo e anexos, salvar e enviar após validação.
+- Ingestão de e-mails passa a armazenar corpo textual novo em
+  `email_ingestion_logs.body_text`; aba E-mails permite expandir e consultar o
+  corpo quando disponível.
+- Envio de comunicações ganhou cópia fixa configurável por
+  `COMMUNICATION_DEFAULT_CC`/`default_cc_email`.
+- Processo ganhou observação urgente vermelha em faixa fixa no topo.
+- Documentos agora aceitam/classificam `draft_duimp` e `duimp`; processo ganhou
+  campos, UI e conferencia automatica de Registro Aduaneiro contra Draft
+  DUIMP/DUIMP quando a extracao trouxer os campos.
+- Comparativo removeu o checklist grande da aba, ocultou checks gerais que a
+  operação pediu para mover/remover, melhorou matching de itens com código
+  canônico e corrigiu NCM para OHBL x Espelho.
+- Comparativo geral ficou editavel por coluna com auditoria, evento do processo
+  e mensagem `Editado por`.
+- Modelos de atendimento passaram a ser gerenciaveis em Configuracoes > Modelos
+  por usuarios autenticados, e reutilizados no menu Atendimentos e na aba do
+  processo.
+- Processo ganhou abas `Etapas` e `Erros/Custos`, com APIs auditadas para etapas
+  especificas, erros documentais e custos extras.
+- Comparativo de itens passou a exibir fabricante e proporcao peso
+  bruto/liquido por item; quadro dedicado de fabricantes compara INV, PL e
+  Espelho. A extracao de Invoice agora aceita `manufacturerAliases` para
+  conferencia de rodape x Espelho quando o documento trouxer essa lista.
+- Gmail usa `global@grupounico.com` como mailbox compartilhado padrao quando
+  `GMAIL_SHARED_MAILBOX` nao estiver explicitamente configurado.
+- Relatório SYDLE passou a usar `Número Invoice` como fallback da coluna
+  Processo quando não há processo e exibe badge `PI`/`INV`.
+- SYDLE One deixou de derivar `paidAt`/status/valores pagos da finalização do
+  ticket; a regra agora usa a parcela (`paymentData`) e evita marcar parcelas
+  abertas como pagas ou vencidas incorretamente.
+
+Residual registrado em `docs/ROADMAP.md` e no status da entrega:
+
+- Refinos especificos do processo real `PK2052602TJ` com fixtures reais
+  anonimizadas.
+- Base mestre de fornecedores/fabricantes e regra final de aliases no rodape da
+  Invoice, se a conferencia por aliases extraidos nao for suficiente.
+- Validacao DUIMP pode precisar de novos aliases depois de testar documentos
+  reais anonimizados.
+
+Testes:
+
+- `npm run typecheck` -> passed.
+- `npm test -w apps/api -- sydle validation documents` -> 31 files / 282 tests passed.
+- `npm test -w apps/web -- SydlePaymentsPage DocumentComparison DocumentList DocumentUpload` -> 4 files / 25 tests passed.
+- `npm run lint` -> passed.
+- `npm test` -> API 765 passed / 1 skipped; Web 115 passed.
+- `npm test -w apps/api -- sydle` -> 4 files / 49 tests passed apos ajuste
+  final de status.
+- `npm run build` -> passed.
+- `git diff --check` -> passed.
+
 ## 2026-07-08 - Documentacao Pos-Deploy SYDLE Feedback Odett
 
 Resultado:

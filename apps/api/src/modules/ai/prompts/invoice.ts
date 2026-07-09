@@ -68,6 +68,7 @@ Responda com JSON estrito neste formato:
   ],
   "manufacturerName": { "value": "", "confidence": 0.0 },
   "manufacturerAddress": { "value": "", "confidence": 0.0 },
+  "manufacturerAliases": { "value": [], "confidence": 0.0 },
   "paymentTerms": { "value": { "depositPercent": 0, "balancePercent": 0, "paymentDays": 0, "description": "" }, "confidence": 0.0 },
   "totalFobValue": { "value": 0.0, "confidence": 0.0 },
   "totalBoxes": { "value": 0, "confidence": 0.0 },
@@ -84,6 +85,7 @@ REGRAS:
 - Moeda em ISO 4217 (USD, EUR, CNY)
 - Extraia TODOS os itens da tabela de produtos
 - manufacturerName = fabrica (nao exportador/trading company)
+- manufacturerAliases = apelidos/codigos/nomes abreviados de fabricantes/fornecedores listados no rodape ou observacoes da Invoice. Retorne [] se nao houver lista explicita.
 - unitType = unidade de medida do item: "PCS", "PAR", "SET", "KG", "DZ", "UN"
 - paymentTerms: "30% deposit, 70% balance within 30 days" → depositPercent: 30, balancePercent: 70, paymentDays: 30
 - itemCode: somente o codigo real do item. NAO inclua palavras que descrevem EMBALAGEM ("WHITE BOX", "BROWN BOX", "POLYBAG", "POLY BAG", "GIFT BOX", "COLOR BOX") como prefixo do codigo. Se o layout do PDF colocar a coluna de embalagem colada ao codigo, separe os valores.

@@ -64,6 +64,9 @@ export interface ImportProcess {
   importerAddress: string | null;
   totalFobValue: string | null;
   freightValue: string | null;
+  insuranceValue?: string | null;
+  customsValue?: string | null;
+  registrationDollar?: string | null;
   totalBoxes: number | null;
   totalNetWeight: string | null;
   totalGrossWeight: string | null;
@@ -73,6 +76,8 @@ export interface ImportProcess {
   blNumber: string | null;
   shippingLine: string | null;
   diNumber: string | null;
+  duimpNumber?: string | null;
+  registeredAt?: string | null;
   customsChannel: string | null;
   freightAgent: string | null;
   inspectionType: string | null;
@@ -86,6 +91,7 @@ export interface ImportProcess {
   paymentTerms: Record<string, unknown> | null;
   aiExtractedData: AiExtractedData | null;
   notes: string | null;
+  urgentNote?: string | null;
   driveFolderId: string | null;
   sistemaDriveFolderId: string | null;
   createdAt: string;
@@ -179,6 +185,7 @@ export interface CurrencyTotals {
 /** Communication / email draft sent from the system. */
 export interface Communication {
   id: number;
+  processId?: number;
   recipient: string;
   recipientEmail: string;
   subject: string;
@@ -186,8 +193,21 @@ export interface Communication {
   status: 'draft' | 'sent' | 'failed';
   sentAt: string | null;
   errorMessage: string | null;
-  attachments: Array<{ filename: string }> | null;
+  attachments: Array<{ filename?: string; documentId?: number; espelhoId?: number }> | null;
   createdAt: string;
+}
+
+/** Saved email/attendance template managed in Settings. */
+export interface CommunicationTemplate {
+  id: number;
+  name: string;
+  recipient: string | null;
+  recipientEmail: string | null;
+  subject: string;
+  body: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Email ingestion log. */
@@ -197,6 +217,7 @@ export interface EmailLog {
   fromAddress: string;
   subject: string;
   receivedAt: string;
+  bodyText?: string | null;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'ignored' | 'reprocessed';
   attachmentsCount: number;
   processedAttachments: number;

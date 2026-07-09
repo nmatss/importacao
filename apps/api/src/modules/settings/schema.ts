@@ -39,6 +39,7 @@ export const recipientSettingsSchema = z.object({
   kiom_email: emailListSchema.optional(),
   fenicia_email: emailListSchema.optional(),
   isa_email: emailListSchema.optional(),
+  default_cc_email: emailListSchema.optional(),
 });
 
 export const createEmailSignatureSchema = z.object({
@@ -52,3 +53,14 @@ export const updateEmailSignatureSchema = z.object({
   signatureHtml: z.string().min(1).max(50000).optional(),
   isDefault: z.boolean().optional(),
 });
+
+export const createCommunicationTemplateSchema = z.object({
+  name: z.string().trim().min(1, 'Nome obrigatorio').max(120),
+  recipient: z.string().trim().max(255).optional().nullable(),
+  recipientEmail: emailListSchema.optional().nullable(),
+  subject: z.string().trim().min(1, 'Assunto obrigatorio').max(500),
+  body: z.string().trim().min(1, 'Mensagem obrigatoria').max(50000),
+  isActive: z.boolean().optional(),
+});
+
+export const updateCommunicationTemplateSchema = createCommunicationTemplateSchema.partial();

@@ -5,6 +5,8 @@ import {
   documents,
   followUpTracking,
   processEvents,
+  processCustomStages,
+  processOperationalRecords,
   users,
 } from '../../shared/database/schema.js';
 import type {
@@ -12,6 +14,10 @@ import type {
   UpdateProcessInput,
   ProcessFilter,
   CreateFromPreConsInput,
+  CreateCustomStageInput,
+  UpdateCustomStageInput,
+  CreateOperationalRecordInput,
+  UpdateOperationalRecordInput,
 } from './schema.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
@@ -92,6 +98,236 @@ export const processService = {
     return { ...process, documents: processDocs, followUp };
   },
 
+  async listCustomStages(processId: number) {
+    return db
+      .select()
+      .from(processCustomStages)
+      .where(eq(processCustomStages.processId, processId))
+      .orderBy(processCustomStages.position, processCustomStages.createdAt);
+  },
+
+  async createCustomStage(
+    processId: number,
+    input: CreateCustomStageInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+    const [process] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!process) throw new NotFoundError('Processo', processId);
+
+    const [stage] = await db
+      .insert(processCustomStages)
+      .values({
+        processId,
+        label: input.label,
+        position: input.position,
+        completedAt: input.completedAt ? new Date(input.completedAt) : null,
+        notes: input.notes ?? null,
+        createdBy: userId,
+      })
+      .returning();
+
+    await auditService.log(
+      userId,
+      'create_custom_stage',
+      'process',
+      processId,
+      {
+        stageId: stage.id,
+        label: stage.label,
+        position: stage.position,
+      },
+      null,
+    );
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'custom_stage_created',
+        title: `Etapa especifica adicionada: ${stage.label}`,
+        metadata: { stageId: stage.id, position: stage.position },
+      },
+      userId,
+    );
+    return stage;
+  },
+
+  async updateCustomStage(
+    processId: number,
+    stageId: number,
+    input: UpdateCustomStageInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.label !== undefined) updateData.label = input.label;
+    if (input.position !== undefined) updateData.position = input.position;
+    if (input.completedAt !== undefined) {
+      updateData.completedAt = input.completedAt ? new Date(input.completedAt) : null;
+    }
+    if (input.notes !== undefined) updateData.notes = input.notes ?? null;
+
+    const [stage] = await db
+      .update(processCustomStages)
+      .set(updateData)
+      .where(and(eq(processCustomStages.id, stageId), eq(processCustomStages.processId, processId)))
+      .returning();
+    if (!stage) throw new NotFoundError('Etapa', stageId);
+
+    await auditService.log(
+      userId,
+      'update_custom_stage',
+      'process',
+      processId,
+      {
+        stageId,
+        fields: Object.keys(input),
+      },
+      null,
+    );
+    return stage;
+  },
+
+  async deleteCustomStage(processId: number, stageId: number, userId: number | null = null) {
+    await this.assertNotLocked(processId);
+    const [stage] = await db
+      .delete(processCustomStages)
+      .where(and(eq(processCustomStages.id, stageId), eq(processCustomStages.processId, processId)))
+      .returning();
+    if (!stage) throw new NotFoundError('Etapa', stageId);
+    await auditService.log(
+      userId,
+      'delete_custom_stage',
+      'process',
+      processId,
+      {
+        stageId,
+        label: stage.label,
+      },
+      null,
+    );
+    return { deleted: true };
+  },
+
+  async listOperationalRecords(processId: number) {
+    return db
+      .select()
+      .from(processOperationalRecords)
+      .where(eq(processOperationalRecords.processId, processId))
+      .orderBy(desc(processOperationalRecords.createdAt), desc(processOperationalRecords.id));
+  },
+
+  async createOperationalRecord(
+    processId: number,
+    input: CreateOperationalRecordInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+    const [process] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!process) throw new NotFoundError('Processo', processId);
+
+    const [record] = await db
+      .insert(processOperationalRecords)
+      .values({
+        processId,
+        recordKind: input.recordKind,
+        recordType: input.recordType,
+        quantity: input.quantity ?? null,
+        amount: input.amount,
+        currency: input.currency || 'BRL',
+        notes: input.notes ?? null,
+        createdBy: userId,
+      })
+      .returning();
+
+    await auditService.log(
+      userId,
+      'create_operational_record',
+      'process',
+      processId,
+      {
+        recordId: record.id,
+        recordKind: record.recordKind,
+        recordType: record.recordType,
+      },
+      null,
+    );
+    return record;
+  },
+
+  async updateOperationalRecord(
+    processId: number,
+    recordId: number,
+    input: UpdateOperationalRecordInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.recordKind !== undefined) updateData.recordKind = input.recordKind;
+    if (input.recordType !== undefined) updateData.recordType = input.recordType;
+    if (input.quantity !== undefined) updateData.quantity = input.quantity ?? null;
+    if (input.amount !== undefined) updateData.amount = input.amount;
+    if (input.currency !== undefined) updateData.currency = input.currency || 'BRL';
+    if (input.notes !== undefined) updateData.notes = input.notes ?? null;
+
+    const [record] = await db
+      .update(processOperationalRecords)
+      .set(updateData)
+      .where(
+        and(
+          eq(processOperationalRecords.id, recordId),
+          eq(processOperationalRecords.processId, processId),
+        ),
+      )
+      .returning();
+    if (!record) throw new NotFoundError('Registro', recordId);
+    await auditService.log(
+      userId,
+      'update_operational_record',
+      'process',
+      processId,
+      {
+        recordId,
+        fields: Object.keys(input),
+      },
+      null,
+    );
+    return record;
+  },
+
+  async deleteOperationalRecord(processId: number, recordId: number, userId: number | null = null) {
+    await this.assertNotLocked(processId);
+    const [record] = await db
+      .delete(processOperationalRecords)
+      .where(
+        and(
+          eq(processOperationalRecords.id, recordId),
+          eq(processOperationalRecords.processId, processId),
+        ),
+      )
+      .returning();
+    if (!record) throw new NotFoundError('Registro', recordId);
+    await auditService.log(
+      userId,
+      'delete_operational_record',
+      'process',
+      processId,
+      {
+        recordId,
+        recordKind: record.recordKind,
+      },
+      null,
+    );
+    return { deleted: true };
+  },
+
   async create(input: CreateProcessInput, userId: number) {
     const process = await db.transaction(async (tx) => {
       const [created] = await tx
@@ -109,6 +345,18 @@ export const processService = {
           importerName: input.importerName,
           importerAddress: input.importerAddress,
           notes: input.notes,
+          urgentNote: input.urgentNote,
+          containerType: input.containerType,
+          totalFobValue: input.totalFobValue,
+          freightValue: input.freightValue,
+          insuranceValue: input.insuranceValue,
+          customsValue: input.customsValue,
+          registrationDollar: input.registrationDollar,
+          totalCbm: input.totalCbm,
+          totalBoxes: input.totalBoxes,
+          totalNetWeight: input.totalNetWeight,
+          totalGrossWeight: input.totalGrossWeight,
+          shipmentDate: input.shipmentDate,
           logisticStatus: 'consolidation',
           createdBy: userId,
         })
@@ -231,6 +479,8 @@ export const processService = {
           null,
         customsChannel: process.customsChannel ?? null,
         diNumber: process.diNumber ?? null,
+        duimpNumber: process.duimpNumber ?? null,
+        registeredAt: process.registeredAt ?? null,
         customsClearanceAt: process.customsClearanceAt ?? null,
         cdArrivalAt: process.cdArrivalAt ?? null,
         logisticStatus: process.logisticStatus ?? null,
@@ -323,6 +573,8 @@ export const processService = {
       'shipmentDate',
       'customsChannel',
       'diNumber',
+      'duimpNumber',
+      'registeredAt',
       'customsClearanceAt',
       'cdArrivalAt',
     ];

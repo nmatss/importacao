@@ -68,6 +68,8 @@ const DOCUMENT_BLOCK_LABELS: Record<string, string> = {
   packing_list: 'Packing List',
   ohbl: 'BL Final',
   draft_bl: 'Draft BL',
+  draft_duimp: 'Draft DUIMP',
+  duimp: 'DUIMP',
   espelho: 'Espelho',
   li: 'Licença de Importação',
   certificate: 'Certificado',

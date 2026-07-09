@@ -302,10 +302,38 @@ function textOrDash(value: string | number | null | undefined): string {
   return String(value);
 }
 
+function reportProcessLabel(row: SydlePayment): string {
+  return (
+    row.portalProcessCode || row.processCode || row.invoiceNumber || row.proformaNumber || '--'
+  );
+}
+
+function documentKind(row: SydlePayment): 'PI' | 'INV' | null {
+  if (row.proformaNumber) return 'PI';
+  if (row.invoiceNumber) return 'INV';
+  return null;
+}
+
+function DocumentKindBadge({ kind }: { kind: 'PI' | 'INV' | null }) {
+  if (!kind) return null;
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none',
+        kind === 'PI'
+          ? 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700'
+          : 'border-primary-200 bg-primary-50 text-primary-700',
+      )}
+    >
+      {kind}
+    </span>
+  );
+}
+
 function unifiedValue(row: SydlePayment, key: UnifiedColumnKey): React.ReactNode {
   switch (key) {
     case 'process':
-      return row.portalProcessCode || row.processCode || '--';
+      return reportProcessLabel(row);
     case 'phase':
       return row.logisticStatus ? phaseLabel(row.logisticStatus) : '--';
     case 'brand':
@@ -1399,7 +1427,8 @@ export function SydlePaymentsPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                   {rows.map((row) => {
-                    const processCode = row.portalProcessCode || row.processCode;
+                    const referenceLabel = reportProcessLabel(row);
+                    const kind = documentKind(row);
                     return (
                       <tr
                         key={row.id}
@@ -1414,11 +1443,19 @@ export function SydlePaymentsPage() {
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center gap-1.5 text-primary-700 hover:underline dark:text-primary-300"
                             >
-                              {processCode}
+                              {referenceLabel}
                               <ExternalLink className="h-3.5 w-3.5" />
                             </Link>
                           ) : (
-                            processCode || '--'
+                            <span className="inline-flex items-center gap-1.5">
+                              <span>{referenceLabel}</span>
+                              <DocumentKindBadge kind={kind} />
+                            </span>
+                          )}
+                          {row.processId && (
+                            <span className="ml-1.5 inline-flex align-middle">
+                              <DocumentKindBadge kind={kind} />
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
@@ -1547,7 +1584,8 @@ export function SydlePaymentsPage() {
 
           <div className={cn('space-y-3', viewMode === 'cards' ? 'block' : 'hidden')}>
             {rows.map((row) => {
-              const processCode = row.portalProcessCode || row.processCode;
+              const referenceLabel = reportProcessLabel(row);
+              const kind = documentKind(row);
               return (
                 <div
                   key={row.id}
@@ -1557,7 +1595,12 @@ export function SydlePaymentsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">
-                        {processCode || row.purchaseRef || row.externalId}
+                        <span className="inline-flex min-w-0 items-center gap-1.5">
+                          <span className="truncate">
+                            {referenceLabel || row.purchaseRef || row.externalId}
+                          </span>
+                          <DocumentKindBadge kind={kind} />
+                        </span>
                       </p>
                       <p className="mt-0.5 truncate text-xs text-slate-500">
                         {row.supplierName || '--'}

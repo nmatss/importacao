@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-07-08
+Ultima atualizacao: 2026-07-09
 
 ## Objetivo
 
@@ -42,7 +42,8 @@ Fluxo central:
 
 1. Processo nasce manualmente, por Pre-Cons ou email.
 2. Documentos entram por upload ou email ingestion.
-3. Sistema classifica e extrai invoice, proforma, packing list, BL, draft BL, espelho, LI e certificados.
+3. Sistema classifica e extrai invoice, proforma, packing list, BL, draft BL,
+   draft DUIMP, DUIMP, espelho, LI e certificados.
 4. Dados alimentam card do processo, validacoes, comparativo e espelho.
 5. Operador corrige, aceita divergencia com justificativa ou reprocessa.
 6. Follow-up, milestones, alertas, comunicacoes e auditoria registram o ciclo.
@@ -72,6 +73,13 @@ Grau de confianca: alto.
   vincular resultados atuais/historicos/correcoes ao `validation_run_id` na
   mesma transacao de persistencia.
 - Aceite manual exige justificativa e nao altera o dado original.
+- Edicao manual do comparativo geral fica em `comparison_field_overrides`, com
+  auditoria e evento do processo; nao altera o dado extraido original.
+- Modelos de atendimento e assinaturas sao configuracoes operacionais acessiveis
+  a usuarios autenticados; SMTP, integracoes e destinatarios operacionais seguem
+  restritos a admin.
+- Etapas especificas e Erros/Custos Extras sao registros por processo, auditados
+  e separados do fluxo logistico canonico.
 - FOC/desconto nao deve reabrir falso positivo de FOB quando identificado.
 - Portos precisam ser normalizados para pais/sufixo, mas sem aceitar prefixo inseguro.
 - Documentos ausentes devem gerar `skipped` ou `warning`, nao falsa conformidade.
@@ -85,6 +93,11 @@ Grau de confianca: alto.
   derrubar a confianca abaixo do piso operacional, mantendo evidencia para
   revisao humana sem alimentar validacao automatica.
 - Comunicacoes nunca devem aceitar anexo por `path` livre do cliente; anexo precisa ser resolvido por documento/espelho autorizado do mesmo processo.
+- Comunicacoes podem ter copia fixa operacional (`default_cc_email` /
+  `COMMUNICATION_DEFAULT_CC`); destinatarios principais continuam validados por
+  allowlist/padroes permitidos.
+- O campo urgente do processo e operacional/manual, visualmente vermelho e
+  persistido em `import_processes.urgent_note`.
 - Trigger, varredura historica e reprocessamento manual de e-mail ingestion sao operacoes administrativas.
 - Exportacoes CSV de alertas e atendimentos devem refletir os filtros atuais da tela, evitando relatorios duplicados com o mesmo dado.
 - Assistente operacional deve responder somente com fontes internas; se a IA falhar, o fallback deterministico deve explicar as evidencias encontradas.
@@ -158,6 +171,10 @@ Compras/Pagamentos SYDLE` e no atalho `Pagamentos SYDLE` do portal para
   como `Conciliação Portal`/`Evidência conciliação`, com evidências traduzidas
   para linguagem de negócio. Cards financeiros devem exibir valores completos,
   não abreviados, e exports devem usar datas/valores formatados para Excel.
+- Feedback Odett 2026-07-09: quando a SYDLE não fornece processo em linhas de
+  PI, a coluna `Processo` deve usar `Número Invoice` como fallback e sinalizar
+  `PI`/`INV` na UI. Pagamento por parcela deve vir de `paymentData`
+  (`paidAt`/status/valor pago/saldo), nunca da finalização do ticket.
 - Entrega do feedback Odett implantada em producao no commit `716725d`
   (`716725d285fd` no deploy). Status auditavel registrado em
   `docs/STATUS-2026-07-08-SYDLE-FEEDBACK.md`, incluindo backup pre-deploy,
@@ -179,7 +196,8 @@ Internacional/current`) retornou 14 solicitacoes e `paymentData[]`; o portal
 - O usuario/API atual consegue resolver ticket, status, moeda e `requestData`
   suficiente para invoice, processo, emissao Invoice/PI, criacao da tarefa,
   embarque, tipo de pagamento real (`depositInAdvance`, `beforeShipment`,
-  `afterShipment`) e prazo por parcela. Campos financeiros sensiveis
+  `afterShipment`), prazo por parcela e estado de pagamento da parcela quando
+  `paymentData` fornece data/status/valor pago. Campos financeiros sensiveis
   (cambio/BRL/banco/contrato/remessa) ainda dependem de permissao adicional ou
   view sanitizada da SYDLE.
 - `scripts/deploy.sh` bloqueia deploy se `SYDLE_SYNC_ENABLED=true`, salvo

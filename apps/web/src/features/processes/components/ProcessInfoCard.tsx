@@ -236,6 +236,73 @@ function LogisticaSection({ process }: { process: ImportProcess }) {
   );
 }
 
+function RegistroAduaneiroSection({ process }: { process: ImportProcess }) {
+  const fields: Array<{
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    value: string | null;
+  }> = [
+    {
+      label: 'Valor Aduaneiro',
+      icon: Banknote,
+      value: process.customsValue != null ? formatCurrency(process.customsValue, 'BRL') : null,
+    },
+    {
+      label: 'Dolar de Registro',
+      icon: Banknote,
+      value:
+        process.registrationDollar != null
+          ? Number(process.registrationDollar).toLocaleString('pt-BR', {
+              minimumFractionDigits: 4,
+              maximumFractionDigits: 6,
+            })
+          : null,
+    },
+    {
+      label: 'Seguro',
+      icon: Banknote,
+      value: process.insuranceValue != null ? formatCurrency(process.insuranceValue, 'USD') : null,
+    },
+    { label: 'Numero DUIMP', icon: FileText, value: process.duimpNumber ?? null },
+    {
+      label: 'Data de Registro',
+      icon: Stamp,
+      value: process.registeredAt ? formatDate(process.registeredAt) : null,
+    },
+    {
+      label: 'Desembaraco',
+      icon: CalendarDays,
+      value: process.customsClearanceAt ? formatDate(process.customsClearanceAt) : null,
+    },
+    { label: 'Canal RFB', icon: Navigation, value: process.customsChannel ?? null },
+  ];
+
+  const populated = fields.filter((field) => !isEmptyValue(field.value));
+  if (populated.length === 0) return null;
+
+  return (
+    <div className="mt-6 rounded-xl border border-red-100 bg-red-50/30 p-5 dark:border-red-900/60 dark:bg-red-950/20">
+      <div className="mb-4 flex items-center gap-2">
+        <Stamp className="h-4 w-4 text-red-500" />
+        <p className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">
+          Registro Aduaneiro
+        </p>
+      </div>
+      <div className="grid grid-cols-1 gap-x-8 gap-y-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        {populated.map((field) => (
+          <InfoField
+            key={field.label}
+            icon={field.icon}
+            label={field.label}
+            value={field.value}
+            source="processo"
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
   const { invoice, espelhoSummary, espelhoExporter, bl } = getAiSources(process);
 
@@ -476,6 +543,9 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
 
         {/* Logistica */}
         <LogisticaSection process={process} />
+
+        {/* Registro Aduaneiro */}
+        <RegistroAduaneiroSection process={process} />
 
         {/* Payment Terms */}
         {process.paymentTerms && (

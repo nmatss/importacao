@@ -97,6 +97,30 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
     expect(result.data.items[1].isFreeOfCharge.value).toBe(true);
   });
 
+  it('uses the deterministic DUIMP parser and attaches trust evidence for Registro fields', async () => {
+    const spy = vi.spyOn(aiService as any, 'chat');
+    const result = await aiService.extractDUIMPData(
+      `DECLARACAO UNICA DE IMPORTACAO - DUIMP
+Numero da DUIMP: 26BR0000000001
+Data de Registro: 09/07/2026
+Valor Aduaneiro: R$ 123.456,78
+Dolar de Registro: 5,432100
+Valor do Seguro: R$ 1.234,56
+Canal RFB: VERDE
+Data de Desembaraco: 10/07/2026`,
+      'duimp',
+    );
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(result.data.duimpNumber.value).toBe('26BR0000000001');
+    expect(result.data.customsValue.value).toBe(123456.78);
+    expect(result.data.registrationDollar.value).toBe(5.4321);
+    expect(result.data.customsChannel.value).toBe('Verde');
+    expect(result.data._trust).toEqual(
+      expect.objectContaining({ trust: 'trusted', checkedAt: expect.any(String) }),
+    );
+  });
+
   it('returns primary result when confidence is above threshold (no upgrade call)', async () => {
     // Stub the AIService's internal chat to return a high-confidence response.
     const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(invoiceResponse(0.95));

@@ -20,22 +20,45 @@ import { checkCertApiHealth } from '@/shared/lib/cert-api-client';
 import { ThemeToggle } from '@/shared/components/ThemeToggle';
 import { AssistantBubble } from '@/shared/components/AssistantBubble';
 
-const navSections = [
+interface CertNavItem {
+  to: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  exact?: boolean;
+  adminOnly?: boolean;
+}
+
+const navSections: Array<{ label: string; items: CertNavItem[] }> = [
   {
     label: 'Principal',
     items: [
       { to: '/certificacoes', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       { to: '/certificacoes/validacao', label: 'Validação', icon: PlayCircle },
       { to: '/certificacoes/produtos', label: 'Produtos', icon: Package },
-      { to: '/certificacoes/cadastro', label: 'Cadastrar Certificado', icon: FilePlus2 },
+      {
+        to: '/certificacoes/cadastro',
+        label: 'Cadastrar Certificado',
+        icon: FilePlus2,
+        adminOnly: true,
+      },
     ],
   },
   {
     label: 'Gestão',
     items: [
       { to: '/certificacoes/relatorios', label: 'Relatórios', icon: FileBarChart },
-      { to: '/certificacoes/agendamentos', label: 'Agendamentos', icon: CalendarClock },
-      { to: '/certificacoes/configuracoes', label: 'Configurações', icon: Settings },
+      {
+        to: '/certificacoes/agendamentos',
+        label: 'Agendamentos',
+        icon: CalendarClock,
+        adminOnly: true,
+      },
+      {
+        to: '/certificacoes/configuracoes',
+        label: 'Configurações',
+        icon: Settings,
+        adminOnly: true,
+      },
     ],
   },
 ];
@@ -138,41 +161,43 @@ export function CertificacoesLayout({ children }: { children: React.ReactNode })
                 </p>
               )}
               <div className="space-y-0.5">
-                {section.items.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end={item.exact}
-                    aria-label={collapsed ? item.label : undefined}
-                    onClick={() => setMobileOpen(false)}
-                    className={({ isActive }) =>
-                      cn(
-                        'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
-                        isActive
-                          ? 'bg-emerald-500/20 text-white shadow-sm'
-                          : 'text-sidebar-200/60 hover:bg-white/5 hover:text-white',
-                        collapsed && 'justify-center px-0',
-                      )
-                    }
-                  >
-                    {({ isActive }) => (
-                      <>
-                        <item.icon
-                          className={cn(
-                            'h-[18px] w-[18px] shrink-0 transition-colors duration-150',
-                            isActive
-                              ? 'text-emerald-400'
-                              : 'text-sidebar-200/40 group-hover:text-sidebar-200/70',
+                {section.items
+                  .filter((item) => !item.adminOnly || user?.role === 'admin')
+                  .map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.exact}
+                      aria-label={collapsed ? item.label : undefined}
+                      onClick={() => setMobileOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
+                          isActive
+                            ? 'bg-emerald-500/20 text-white shadow-sm'
+                            : 'text-sidebar-200/60 hover:bg-white/5 hover:text-white',
+                          collapsed && 'justify-center px-0',
+                        )
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <item.icon
+                            className={cn(
+                              'h-[18px] w-[18px] shrink-0 transition-colors duration-150',
+                              isActive
+                                ? 'text-emerald-400'
+                                : 'text-sidebar-200/40 group-hover:text-sidebar-200/70',
+                            )}
+                          />
+                          {!collapsed && <span className="truncate">{item.label}</span>}
+                          {isActive && !collapsed && (
+                            <div className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />
                           )}
-                        />
-                        {!collapsed && <span className="truncate">{item.label}</span>}
-                        {isActive && !collapsed && (
-                          <div className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                ))}
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
               </div>
             </div>
           ))}

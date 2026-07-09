@@ -7,6 +7,8 @@ import {
   FileText,
   Package,
   Wrench,
+  Pencil,
+  Save,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -23,6 +25,7 @@ type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
 type DisplayStatus = RowStatus | 'accepted';
 type Criticality = 'critical' | 'secondary' | 'info';
 type ComparisonFilter = 'all' | 'divergent' | 'warning' | 'accepted' | 'match';
+type ComparisonSourceColumn = 'invoice' | 'packingList' | 'bl' | 'espelho' | 'system';
 
 interface AggregateField {
   rowKey?: string;
@@ -34,6 +37,19 @@ interface AggregateField {
   status: RowStatus;
   criticality?: Criticality;
   message?: string | null;
+  overrides?: ComparisonFieldOverride[];
+}
+
+interface ComparisonFieldOverride {
+  id: number;
+  rowKey: string;
+  fieldLabel: string;
+  sourceColumn: ComparisonSourceColumn;
+  valueText: string | null;
+  note: string | null;
+  editedAt: string;
+  editedBy: number | null;
+  editedByName?: string | null;
 }
 
 interface ItemComparison {
@@ -48,6 +64,10 @@ interface ItemComparison {
   invoiceTotal: number | null;
   espelhoUnitPrice: number | null;
   espelhoTotal: number | null;
+  invoiceManufacturer?: string | null;
+  plManufacturer?: string | null;
+  espelhoManufacturer?: string | null;
+  manufacturerMatch?: boolean | null;
   invoiceBoxes: number | null;
   plBoxes: number | null;
   espelhoBoxes: number | null;
@@ -59,6 +79,8 @@ interface ItemComparison {
   plWeight?: number | null;
   espelhoGrossWeight: number | null;
   isFreeOfCharge?: boolean;
+  weightRatioStatus?: RowStatus;
+  weightRatioMessage?: string | null;
   qtyMatch: boolean | null;
   matched: boolean;
   espelhoMatched: boolean;
@@ -102,6 +124,8 @@ interface ComparisonData {
   aggregateComparison: AggregateField[];
   itemComparison: ItemComparison[];
   unmatchedPlItems: UnmatchedItem[];
+  supplierFooterAliases?: string[];
+  espelhoSuppliers?: string[];
   // Symmetric direction: items present on the Invoice with no match on the
   // Packing List. Optional so older comparison payloads still render.
   unmatchedInvoiceItems?: UnmatchedItem[];
@@ -143,6 +167,13 @@ interface AcceptTarget {
   fieldLabel: string;
   itemCode?: string | null;
   previousStatus: RowStatus;
+}
+
+interface EditTarget {
+  rowKey: string;
+  fieldLabel: string;
+  sourceColumn: ComparisonSourceColumn;
+  currentValue: string | null;
 }
 
 const COVERAGE_LABELS: Record<string, string> = {
@@ -238,11 +269,45 @@ function normalizeLabelKey(value: string | undefined | null) {
     .replace(/^-+|-+$/g, '');
 }
 
+function normalizeSupplierValue(value: string | undefined | null) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+function supplierValuesMatch(a: string, b: string) {
+  const left = normalizeSupplierValue(a);
+  const right = normalizeSupplierValue(b);
+  if (!left || !right) return false;
+  return left === right || left.includes(right) || right.includes(left);
+}
+
 const SYSTEM_CHECK_BY_AGGREGATE_LABEL: Record<string, string> = {
   'total-fob-usd': 'invoice-value-vs-fup',
   frete: 'freight-vs-fup',
   'cbm-m3': 'cbm-vs-fup',
   'tipo-container': 'container-type-vs-fup',
+};
+
+const HIDDEN_CROSS_DOCUMENT_CHECKS = new Set([
+  'manufacturer-completeness',
+  'supplier-address-match',
+  'payment-terms-check',
+  'certificate-completeness',
+  'weight-ratio-check',
+  'item-level-match',
+  'unit-type-validation',
+]);
+
+const SOURCE_LABELS: Record<ComparisonSourceColumn, string> = {
+  invoice: 'PDF',
+  packingList: 'PDF',
+  bl: 'PDF',
+  espelho: 'Excel',
+  system: 'Sistema',
 };
 
 function statusLabel(status: DisplayStatus) {
@@ -339,13 +404,25 @@ function DocBadge({
   );
 }
 
-function StatusCell({ value, status }: { value: string | null; status?: DisplayStatus }) {
-  if (!value)
-    return <td className="px-3 py-2.5 text-sm text-slate-300 dark:text-slate-600 font-mono">-</td>;
+function StatusCell({
+  value,
+  status,
+  sourceLabel,
+  edited,
+  onEdit,
+}: {
+  value: string | null;
+  status?: DisplayStatus;
+  sourceLabel?: string;
+  edited?: boolean;
+  onEdit?: () => void;
+}) {
+  const content = value || '-';
   return (
     <td
       className={cn(
         'px-3 py-2.5 text-sm font-mono',
+        !value && 'text-slate-300 dark:text-slate-600',
         status === 'accepted'
           ? 'text-primary-700 dark:text-primary-300 font-medium bg-primary-50/40 dark:bg-primary-950/20'
           : status === 'divergent'
@@ -355,7 +432,35 @@ function StatusCell({ value, status }: { value: string | null; status?: DisplayS
               : 'text-slate-700 dark:text-slate-300',
       )}
     >
-      {value}
+      <div className="flex min-w-[110px] items-start justify-between gap-2">
+        <div className="min-w-0">
+          <span className="break-words">{content}</span>
+          {(sourceLabel || edited) && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {sourceLabel && (
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-slate-500 dark:bg-slate-700 dark:text-slate-300">
+                  {sourceLabel}
+                </span>
+              )}
+              {edited && (
+                <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-700">
+                  editado
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-primary-600"
+            aria-label="Editar valor do comparativo"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
     </td>
   );
 }
@@ -455,6 +560,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
   const [acceptTarget, setAcceptTarget] = useState<AcceptTarget | null>(null);
   const [acceptNote, setAcceptNote] = useState('');
   const [acceptingKey, setAcceptingKey] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [editNote, setEditNote] = useState('');
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useApiQuery<ComparisonData>(
     ['doc-comparison', processId],
@@ -516,7 +625,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
           const systemStatus = systemCheck ? checkRowStatus(systemCheck.status) : 'empty';
           const status = highestStatus(field.status, systemStatus);
           const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
-          const system = systemCheck?.expectedValue ?? null;
+          const systemOverride = field.overrides?.find((item) => item.sourceColumn === 'system');
+          const system = systemOverride?.valueText ?? systemCheck?.expectedValue ?? null;
           const message =
             systemStatus !== 'empty' && systemStatus !== 'match'
               ? (systemCheck?.message ?? field.message)
@@ -534,6 +644,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       (data?.aggregateComparison ?? []).map((f) => f.label.trim().toLowerCase()),
     );
     return (report?.crossDocumentChecks ?? [])
+      .filter((check) => !HIDDEN_CROSS_DOCUMENT_CHECKS.has(check.checkName))
       .map((check) => {
         const label = checkLabel(check.checkName);
         const status = checkRowStatus(check.status);
@@ -600,6 +711,64 @@ export function DocumentComparison({ processId }: { processId: string }) {
     };
   }, [aggregateRows, crossDocumentRows, itemRows]);
 
+  const manufacturerRows = useMemo(
+    () =>
+      itemRows
+        .filter(
+          (item) =>
+            item.invoiceManufacturer ||
+            item.plManufacturer ||
+            item.espelhoManufacturer ||
+            item.manufacturerMatch === false,
+        )
+        .map((item) => ({
+          rowKey: item.rowKey,
+          itemCode: item.itemCode,
+          description: item.description,
+          invoice: item.invoiceManufacturer ?? null,
+          packingList: item.plManufacturer ?? null,
+          espelho: item.espelhoManufacturer ?? null,
+          status:
+            item.manufacturerMatch === false
+              ? ('warning' as const)
+              : item.invoiceManufacturer || item.plManufacturer || item.espelhoManufacturer
+                ? ('match' as const)
+                : ('empty' as const),
+        })),
+    [itemRows],
+  );
+
+  const supplierAliasSummary = useMemo(() => {
+    const aliases = data?.supplierFooterAliases ?? [];
+    const espelhoSuppliers = data?.espelhoSuppliers ?? [];
+    if (aliases.length === 0 && espelhoSuppliers.length === 0) return null;
+
+    const aliasesMissingInEspelho = aliases.filter(
+      (alias) => !espelhoSuppliers.some((supplier) => supplierValuesMatch(alias, supplier)),
+    );
+    const espelhoMissingInAliases =
+      aliases.length === 0
+        ? espelhoSuppliers
+        : espelhoSuppliers.filter(
+            (supplier) => !aliases.some((alias) => supplierValuesMatch(alias, supplier)),
+          );
+    const status: RowStatus =
+      aliases.length > 0 &&
+      espelhoSuppliers.length > 0 &&
+      aliasesMissingInEspelho.length === 0 &&
+      espelhoMissingInAliases.length === 0
+        ? 'match'
+        : 'warning';
+
+    return {
+      aliases,
+      espelhoSuppliers,
+      aliasesMissingInEspelho,
+      espelhoMissingInAliases,
+      status,
+    };
+  }, [data?.espelhoSuppliers, data?.supplierFooterAliases]);
+
   const missingComparisonDocs = useMemo(() => {
     if (!data) return [];
     const hasOperationalBl = data.hasOperationalBl ?? data.hasBl;
@@ -634,6 +803,37 @@ export function DocumentComparison({ processId }: { processId: string }) {
       toast.error(getErrorMessage(err));
     } finally {
       setAcceptingKey(null);
+    }
+  };
+
+  const startEditingField = (target: EditTarget) => {
+    setEditTarget(target);
+    setEditValue(target.currentValue ?? '');
+    setEditNote('');
+  };
+
+  const submitFieldEdit = async () => {
+    if (!editTarget) return;
+    const key = `${editTarget.rowKey}:${editTarget.sourceColumn}`;
+    setEditingKey(key);
+    try {
+      await api.patch(`/api/documents/process/${processId}/comparison/field`, {
+        rowKey: editTarget.rowKey,
+        fieldLabel: editTarget.fieldLabel,
+        sourceColumn: editTarget.sourceColumn,
+        value: editValue.trim() || null,
+        note: editNote.trim() || null,
+      });
+      toast.success('Valor editado no comparativo');
+      setEditTarget(null);
+      setEditValue('');
+      setEditNote('');
+      queryClient.invalidateQueries({ queryKey: ['doc-comparison', processId] });
+      queryClient.invalidateQueries({ queryKey: ['process-events', processId] });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setEditingKey(null);
     }
   };
 
@@ -946,12 +1146,77 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       )}
                     </div>
                   </td>
-                  <StatusCell value={field.invoice} status={field.displayStatus} />
-                  <StatusCell value={field.packingList} status={field.displayStatus} />
-                  <StatusCell value={field.bl} status={field.displayStatus} />
-                  <StatusCell value={field.espelho} status={field.displayStatus} />
+                  <StatusCell
+                    value={field.invoice}
+                    status={field.displayStatus}
+                    sourceLabel={SOURCE_LABELS.invoice}
+                    edited={field.overrides?.some((item) => item.sourceColumn === 'invoice')}
+                    onEdit={() =>
+                      startEditingField({
+                        rowKey: field.rowKey,
+                        fieldLabel: field.label,
+                        sourceColumn: 'invoice',
+                        currentValue: field.invoice,
+                      })
+                    }
+                  />
+                  <StatusCell
+                    value={field.packingList}
+                    status={field.displayStatus}
+                    sourceLabel={SOURCE_LABELS.packingList}
+                    edited={field.overrides?.some((item) => item.sourceColumn === 'packingList')}
+                    onEdit={() =>
+                      startEditingField({
+                        rowKey: field.rowKey,
+                        fieldLabel: field.label,
+                        sourceColumn: 'packingList',
+                        currentValue: field.packingList,
+                      })
+                    }
+                  />
+                  <StatusCell
+                    value={field.bl}
+                    status={field.displayStatus}
+                    sourceLabel={SOURCE_LABELS.bl}
+                    edited={field.overrides?.some((item) => item.sourceColumn === 'bl')}
+                    onEdit={() =>
+                      startEditingField({
+                        rowKey: field.rowKey,
+                        fieldLabel: field.label,
+                        sourceColumn: 'bl',
+                        currentValue: field.bl,
+                      })
+                    }
+                  />
+                  <StatusCell
+                    value={field.espelho}
+                    status={field.displayStatus}
+                    sourceLabel={SOURCE_LABELS.espelho}
+                    edited={field.overrides?.some((item) => item.sourceColumn === 'espelho')}
+                    onEdit={() =>
+                      startEditingField({
+                        rowKey: field.rowKey,
+                        fieldLabel: field.label,
+                        sourceColumn: 'espelho',
+                        currentValue: field.espelho,
+                      })
+                    }
+                  />
                   {systemDataAvailable ? (
-                    <StatusCell value={field.system} status={field.displayStatus} />
+                    <StatusCell
+                      value={field.system}
+                      status={field.displayStatus}
+                      sourceLabel={SOURCE_LABELS.system}
+                      edited={field.overrides?.some((item) => item.sourceColumn === 'system')}
+                      onEdit={() =>
+                        startEditingField({
+                          rowKey: field.rowKey,
+                          fieldLabel: field.label,
+                          sourceColumn: 'system',
+                          currentValue: field.system,
+                        })
+                      }
+                    />
                   ) : (
                     <td className="px-3 py-2.5 text-xs text-slate-300 dark:text-slate-600 italic">
                       sem dados do sistema
@@ -1128,6 +1393,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Total INV
                   </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Fabricante
+                  </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Caixas
                   </th>
@@ -1136,6 +1404,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Peso Bruto
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Proporcao Peso
                   </th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Divergencia
@@ -1215,6 +1486,29 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     <td className="px-3 py-2 text-right font-mono text-slate-800 dark:text-slate-100 font-medium">
                       {formatMoney(item.invoiceTotal)}
                     </td>
+                    <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 min-w-[180px]">
+                      <div className="space-y-0.5">
+                        {[
+                          ['INV', item.invoiceManufacturer],
+                          ['PL', item.plManufacturer],
+                          ['Esp', item.espelhoManufacturer],
+                        ].map(([label, value]) =>
+                          value ? (
+                            <div key={label} className="flex items-center gap-1">
+                              <span className="rounded bg-slate-100 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500 dark:bg-slate-700">
+                                {label}
+                              </span>
+                              <span className="truncate">{value}</span>
+                            </div>
+                          ) : null,
+                        )}
+                        {item.manufacturerMatch === false && (
+                          <span className="inline-flex rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700">
+                            revisar
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <WeightCell
                       invoice={item.invoiceBoxes}
                       pl={item.plBoxes}
@@ -1234,6 +1528,22 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       espelho={item.espelhoGrossWeight}
                       hasEspelho={!!data.hasEspelho}
                     />
+                    <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 min-w-[160px]">
+                      {item.weightRatioMessage ? (
+                        <span
+                          className={cn(
+                            'rounded px-1.5 py-0.5 font-semibold',
+                            item.weightRatioStatus === 'divergent'
+                              ? 'bg-danger-50 text-danger-700'
+                              : 'bg-amber-50 text-amber-700',
+                          )}
+                        >
+                          {item.weightRatioMessage}
+                        </span>
+                      ) : (
+                        <span className="text-slate-300">ok</span>
+                      )}
+                    </td>
                     <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 min-w-[180px]">
                       {item.divergence || '-'}
                     </td>
@@ -1259,11 +1569,151 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 ))}
                 {filteredItemRows.length === 0 && (
                   <tr>
-                    <td colSpan={16} className="px-3 py-8 text-center text-sm text-slate-400">
+                    <td colSpan={18} className="px-3 py-8 text-center text-sm text-slate-400">
                       Nenhum item no filtro selecionado.
                     </td>
                   </tr>
                 )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {supplierAliasSummary && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-emerald-600" />
+                  Rodape da Invoice x Espelho
+                </h4>
+                <p className="mt-0.5 text-xs text-slate-500">
+                  Apelidos de fabricantes/fornecedores extraidos da Invoice comparados com o
+                  Espelho.
+                </p>
+              </div>
+              <StatusPill status={supplierAliasSummary.status} />
+            </div>
+          </div>
+          <div className="grid gap-4 p-4 md:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Apelidos no rodape da Invoice
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {supplierAliasSummary.aliases.length > 0 ? (
+                  supplierAliasSummary.aliases.map((alias) => (
+                    <span
+                      key={alias}
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
+                    >
+                      {alias}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-slate-400">Nao extraido</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Fornecedores no Espelho
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {supplierAliasSummary.espelhoSuppliers.length > 0 ? (
+                  supplierAliasSummary.espelhoSuppliers.map((supplier) => (
+                    <span
+                      key={supplier}
+                      className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700"
+                    >
+                      {supplier}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-sm text-slate-400">Nao extraido</span>
+                )}
+              </div>
+            </div>
+          </div>
+          {(supplierAliasSummary.aliasesMissingInEspelho.length > 0 ||
+            supplierAliasSummary.espelhoMissingInAliases.length > 0) && (
+            <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30">
+              {supplierAliasSummary.aliasesMissingInEspelho.length > 0 && (
+                <p>
+                  No rodape e nao no Espelho:{' '}
+                  {supplierAliasSummary.aliasesMissingInEspelho.join(', ')}
+                </p>
+              )}
+              {supplierAliasSummary.espelhoMissingInAliases.length > 0 && (
+                <p>
+                  No Espelho e nao no rodape:{' '}
+                  {supplierAliasSummary.espelhoMissingInAliases.join(', ')}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {manufacturerRows.length > 0 && (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
+          <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
+            <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-emerald-600" />
+              Conferencia de Fabricantes
+            </h4>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Conferencia por item entre Invoice, Packing List e Espelho.
+            </p>
+          </div>
+          <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+            <table className="min-w-[780px] w-full text-sm">
+              <thead>
+                <tr className="sticky top-0 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] dark:bg-slate-800">
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Item
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-primary-500">
+                    Invoice
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
+                    Packing List
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-cyan-500">
+                    Espelho
+                  </th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {manufacturerRows.map((row) => (
+                  <tr key={row.rowKey} className="border-t border-slate-100 dark:border-slate-700">
+                    <td className="px-3 py-2">
+                      <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                        {row.itemCode || '--'}
+                      </p>
+                      <p className="mt-0.5 max-w-[240px] truncate text-xs text-slate-400">
+                        {row.description || '--'}
+                      </p>
+                    </td>
+                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                      {row.invoice || '--'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                      {row.packingList || '--'}
+                    </td>
+                    <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                      {row.espelho || '--'}
+                    </td>
+                    <td className="px-3 py-2">
+                      <StatusPill status={row.status} />
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -1298,6 +1748,69 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 items={data.unmatchedInvoiceItems ?? []}
               />
             )}
+          </div>
+        </div>
+      )}
+
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="fixed inset-0" onClick={() => setEditTarget(null)} />
+          <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                Editar comparativo
+              </p>
+              <h4 className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
+                {editTarget.fieldLabel} · {SOURCE_LABELS[editTarget.sourceColumn]}
+              </h4>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Valor
+                </label>
+                <textarea
+                  value={editValue}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Observacao
+                </label>
+                <textarea
+                  value={editNote}
+                  onChange={(event) => setEditNote(event.target.value)}
+                  rows={2}
+                  placeholder="Motivo da edicao"
+                  className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditTarget(null)}
+                className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={submitFieldEdit}
+                disabled={editingKey === `${editTarget.rowKey}:${editTarget.sourceColumn}`}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-3 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
+              >
+                {editingKey === `${editTarget.rowKey}:${editTarget.sourceColumn}` ? (
+                  <LoadingSpinner size="sm" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Salvar edicao
+              </button>
+            </div>
           </div>
         </div>
       )}

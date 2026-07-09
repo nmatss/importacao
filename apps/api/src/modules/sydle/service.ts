@@ -436,7 +436,9 @@ function xlsxCurrencyFormat(currency: string | null | undefined): string {
 function exportValue(row: SydleExportRow, key: ExportColumnKey) {
   switch (key) {
     case 'process':
-      return row.portalProcessCode || row.processCode || '';
+      return (
+        row.portalProcessCode || row.processCode || row.invoiceNumber || row.proformaNumber || ''
+      );
     case 'phase':
       return phaseLabel(row.logisticStatus);
     case 'brand':

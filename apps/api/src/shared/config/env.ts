@@ -104,6 +104,7 @@ const envSchema = z
     SMTP_PORT: z.coerce.number().int().positive().optional(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
+    COMMUNICATION_DEFAULT_CC: z.string().optional(),
 
     // Email recipients
     KIOM_EMAIL: optionalEmailListEnv,

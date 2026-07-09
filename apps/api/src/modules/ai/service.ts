@@ -19,9 +19,11 @@ import { buildCertificatePrompt } from './prompts/certificate.js';
 import { buildDraftBLPrompt } from './prompts/draft-bl.js';
 import { buildEspelhoPrompt } from './prompts/espelho.js';
 import { buildLIPrompt } from './prompts/li.js';
+import { buildDUIMPPrompt, type DuimpDocumentType } from './prompts/duimp.js';
 import { certificateResponseSchema } from './schemas/certificate-response.js';
 import { espelhoResponseSchema } from './schemas/espelho-response.js';
 import { liResponseSchema } from './schemas/li-response.js';
+import { duimpResponseSchema } from './schemas/duimp-response.js';
 import { z, type ZodType } from 'zod';
 import { OpenRouterProvider } from './providers/openrouter.js';
 import { VertexAIProvider } from './providers/vertex.js';
@@ -51,6 +53,7 @@ import { fillBLNullsFromText } from './utils/bl-text-parser.js';
 import { computeConfidenceScore } from './utils/confidence.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
+import { fillDUIMPNullsFromText, tryParseDUIMPText } from './utils/duimp-text-parser.js';
 
 export { AIBudgetExceededError };
 
@@ -143,7 +146,11 @@ const CONTEXT_OUTPUT_TOKEN_CAPS: Array<[RegExp, number, string]> = [
   ],
   [/espelho_extraction/, 12_288, 'AI_ESPELHO_MAX_OUTPUT_TOKENS'],
   [/bl_extraction|draft_bl_extraction/, 6_144, 'AI_BL_MAX_OUTPUT_TOKENS'],
-  [/certificate_extraction|li_extraction/, 4_096, 'AI_EXTRACTION_SMALL_MAX_OUTPUT_TOKENS'],
+  [
+    /certificate_extraction|li_extraction|duimp_extraction/,
+    4_096,
+    'AI_EXTRACTION_SMALL_MAX_OUTPUT_TOKENS',
+  ],
   [/_self_repair$/, 768, 'AI_SELF_REPAIR_MAX_OUTPUT_TOKENS'],
   [/email_analysis|ncm_validation/, 512, 'AI_ANALYSIS_SMALL_MAX_OUTPUT_TOKENS'],
   [/anomaly_detection|email_draft|correction_email/, 1_024, 'AI_ANALYSIS_MAX_OUTPUT_TOKENS'],
@@ -222,6 +229,7 @@ const PROMPT_VERSIONS: Record<string, string> = {
   operational_assistant: 'v1.0',
   certificate_extraction: 'v1.0',
   li_extraction: 'v1.0',
+  duimp_extraction: 'v1.0',
   draft_bl_extraction: 'v1.0',
   proforma_extraction: 'v1.0',
   espelho_extraction: 'v1.0',
@@ -1342,6 +1350,90 @@ Responda SOMENTE com JSON estrito no formato:
       { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
       text,
     );
+  }
+
+  /**
+   * Extracts the operational fields displayed by the Registro tab from either
+   * a draft/minuta DUIMP or its final DUIMP. Text-native declarations take the
+   * deterministic path only when the DUIMP number plus at least three labelled
+   * fields are present; sparse/OCR documents fall through to structured,
+   * multimodal extraction instead of being completed by inference.
+   */
+  async extractDUIMPData(
+    text: string,
+    documentType: DuimpDocumentType,
+    imageOpts?: ImageExtractionOpts,
+  ): Promise<ExtractionResult> {
+    const deterministic = tryParseDUIMPText(text);
+    if (deterministic) {
+      const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
+      logger.info(
+        {
+          documentType,
+          confidenceScore: score,
+          lowConfidenceCount: lowConfidenceFields.length,
+        },
+        'DUIMP data extracted by deterministic text parser',
+      );
+      return this.applyHarness(
+        documentType,
+        {
+          data: deterministic,
+          confidenceScore: score,
+          fieldsWithLowConfidence: lowConfidenceFields,
+        },
+        text,
+      );
+    }
+
+    const msgs: OpenRouterMessage[] = buildDUIMPPrompt(text, documentType);
+    if (imageOpts) {
+      msgs[msgs.length - 1] = this.buildUserMessage(
+        msgs[msgs.length - 1].content as string,
+        imageOpts,
+      );
+    }
+    const messages = this.buildExtractionMessages(documentType, msgs, text, imageOpts);
+    const extracted = await this.extractWithUpgrade(
+      'duimp',
+      'gemini-2.5-flash',
+      'gemini-2.5-pro',
+      async (model) => {
+        const response = await this.chat(
+          model,
+          messages,
+          true,
+          'duimp_extraction',
+          USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.duimp : undefined,
+        );
+        const data = fillDUIMPNullsFromText(
+          this.zodParse(response, `${documentType} extraction`, duimpResponseSchema) as Record<
+            string,
+            any
+          >,
+          text,
+        );
+        const { score, lowConfidenceFields } = this.calculateConfidence(data);
+
+        logger.info(
+          {
+            documentType,
+            model,
+            confidenceScore: score,
+            lowConfidenceCount: lowConfidenceFields.length,
+            hasImage: !!imageOpts,
+          },
+          'DUIMP data extracted',
+        );
+
+        return this.applyHarness(
+          documentType,
+          { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
+          text,
+        );
+      },
+    );
+    return this.selfRepairExtraction(documentType, extracted, text);
   }
 
   async detectAnomalies(

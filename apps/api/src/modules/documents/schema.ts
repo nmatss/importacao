@@ -8,6 +8,8 @@ export const uploadDocumentSchema = z.object({
     'packing_list',
     'ohbl',
     'draft_bl',
+    'draft_duimp',
+    'duimp',
     'espelho',
     'li',
     'certificate',
@@ -28,5 +30,14 @@ export const acceptComparisonSchema = z.object({
   resolution_note: z.string().trim().min(3).max(1000),
 });
 
+export const editComparisonFieldSchema = z.object({
+  rowKey: z.string().trim().min(1).max(160),
+  fieldLabel: z.string().trim().min(1).max(160),
+  sourceColumn: z.enum(['invoice', 'packingList', 'bl', 'espelho', 'system']),
+  value: z.string().trim().max(5000).nullable(),
+  note: z.string().trim().max(1000).optional().nullable(),
+});
+
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
 export type AcceptComparisonInput = z.infer<typeof acceptComparisonSchema>;
+export type EditComparisonFieldInput = z.infer<typeof editComparisonFieldSchema>;

@@ -19,10 +19,11 @@
 //   5. draft (without BL token) — still treated as draft_bl because
 //      Odett's partners routinely send drafts named only with numeric IDs
 //      plus "(draft <process>)".
-//   6. certificate (expanded keyword set — phyto / fumiga / ispm / CO / COA
+//   6. DUIMP / Draft DUIMP — explicit registration documents
+//   7. certificate (expanded keyword set — phyto / fumiga / ispm / CO / COA
 //      / origem / inmetro / radiation / anvisa)
-//   7. li — checked last since "li" is a very generic 2-char token
-//   8. other — catch-all; processWithAI logs + alerts instead of silent drop
+//   8. li — checked last since "li" is a very generic 2-char token
+//   9. other — catch-all; processWithAI logs + alerts instead of silent drop
 export function classifyDocument(filename: string): string {
   const lower = filename.toLowerCase();
   // Strip extension, then split on separators including parentheses.
@@ -45,6 +46,10 @@ export function classifyDocument(filename: string): string {
     lower.includes('lading') ||
     lower.includes('conhecimento') ||
     lower.includes('ohbl');
+
+  const hasDuimpSignal = tokens.includes('duimp') || lower.includes('duimp');
+
+  if (hasDuimpSignal) return hasDraftSignal ? 'draft_duimp' : 'duimp';
 
   // 0. proforma invoice — MUST come before commercial invoice match.
   // Proformas are pre-shipment estimates and should not pollute the Comparativo
@@ -95,9 +100,8 @@ export function classifyDocument(filename: string): string {
   // 5. final BL
   if (hasBLSignal) return 'ohbl';
 
-  // 6. draft alone — still route to draft_bl (the only "draft" type the
-  //    system models; DUIMP drafts fall through to 'other' and are handled
-  //    below with an explicit keyword check).
+  // 6. draft alone — still route to draft_bl (the only non-DUIMP "draft" type
+  //    the system models).
   if (hasDraftSignal && !lower.includes('duimp')) return 'draft_bl';
 
   // 7. certificate — expanded keyword set

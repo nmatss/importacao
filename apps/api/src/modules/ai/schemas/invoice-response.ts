@@ -51,6 +51,7 @@ export const invoiceResponseSchema = z.object({
   items: z.array(invoiceItemSchema),
   manufacturerName: confidenceField(z.string()).optional(),
   manufacturerAddress: confidenceField(z.string()).optional(),
+  manufacturerAliases: confidenceField(z.array(z.string())).optional(),
   paymentTerms: confidenceField(paymentTermsValue).optional(),
   totalFobValue: confidenceField(z.number()),
   totalBoxes: confidenceField(z.number()).optional(),

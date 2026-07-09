@@ -30,6 +30,7 @@ export const settingsKeys = {
   smtp: () => [...settingsKeys.all, 'smtp'] as const,
   recipients: () => [...settingsKeys.all, 'recipients'] as const,
   integrations: () => [...settingsKeys.all, 'integrations'] as const,
+  communicationTemplates: () => [...settingsKeys.all, 'communication-templates'] as const,
   webhook: () => settingsKeys.key('google_chat_webhook'),
 };
 

@@ -15,6 +15,8 @@ const PENDING_SQL_MIGRATIONS = [
   '0019_logistic_status_index.sql',
   '0020_document_lineage_and_email_dedupe.sql',
   '0021_sydle_report_columns.sql',
+  '0022_odett_operational_feedback.sql',
+  '0023_communications_audit.sql',
 ];
 
 async function applyPendingSqlMigrations(migrationsFolder: string) {

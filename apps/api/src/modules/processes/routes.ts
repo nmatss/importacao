@@ -11,16 +11,45 @@ import {
   updateLogisticStatusSchema,
   renameProcessSchema,
   lockProcessSchema,
+  processFilterSchema,
+  createCustomStageSchema,
+  updateCustomStageSchema,
+  createOperationalRecordSchema,
+  updateOperationalRecordSchema,
 } from './schema.js';
 
 const router = Router();
 
 router.use(authMiddleware);
 
-router.get('/', processController.list);
+router.get('/', validate(processFilterSchema, 'query'), processController.list);
 router.get('/stats', processController.getStats);
 router.get('/:id', processController.getById);
 router.get('/:id/events', processController.getEvents);
+router.get('/:id/custom-stages', processController.listCustomStages);
+router.post(
+  '/:id/custom-stages',
+  validate(createCustomStageSchema),
+  processController.createCustomStage,
+);
+router.put(
+  '/:id/custom-stages/:stageId',
+  validate(updateCustomStageSchema),
+  processController.updateCustomStage,
+);
+router.delete('/:id/custom-stages/:stageId', processController.deleteCustomStage);
+router.get('/:id/operational-records', processController.listOperationalRecords);
+router.post(
+  '/:id/operational-records',
+  validate(createOperationalRecordSchema),
+  processController.createOperationalRecord,
+);
+router.put(
+  '/:id/operational-records/:recordId',
+  validate(updateOperationalRecordSchema),
+  processController.updateOperationalRecord,
+);
+router.delete('/:id/operational-records/:recordId', processController.deleteOperationalRecord);
 // Append-only audit trail of past validation runs (backlog #12)
 router.get('/:id/validation-history', validationController.getValidationHistory);
 router.post('/', validate(createProcessSchema), processController.create);

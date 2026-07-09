@@ -603,7 +603,6 @@ function flattenSydleOneInternationalPaymentRows(
     const ticket = lookups.ticketById.get(getNestedString(record, ['ticket', '_id']) ?? '') ?? null;
     const status =
       (ticket && lookups.statusById.get(getNestedString(ticket, ['status', '_id']) ?? '')) ?? null;
-    const ticketClosed = isClosedTicket(status, ticket);
     // Campos complementares aflorados do request/ticket (flag-gated, default off).
     const enrichment = lookups.enrichFields
       ? extractComplementaryFields(record, ticket, status)
@@ -631,6 +630,7 @@ function flattenSydleOneInternationalPaymentRows(
           lookups.currencyById.get(getNestedString(payment, ['paymentCurrency', '_id']) ?? '')) ??
         null;
       const dueDate = payment?.expirationDate ?? null;
+      const paymentState = derivePaymentState(payment, amount);
       const ticketCode = stringValue(ticket?.code);
       const searchCode = stringValue(ticket?.searchCode);
 
@@ -644,18 +644,19 @@ function flattenSydleOneInternationalPaymentRows(
         purchaseRef: ticketCode ? `SYDLE-${ticketCode}` : searchCode ? `SYDLE-${searchCode}` : null,
         currency: stringValue(currency?.iso) ?? stringValue(currency?.symbol) ?? 'USD',
         purchaseAmount: amount,
-        paidAmount: ticketClosed ? amount : 0,
-        openAmount: ticketClosed ? 0 : amount,
+        paidAmount: paymentState.paidAmount,
+        openAmount: paymentState.openAmount,
         paymentType:
           requestPaymentType ??
           (parseNumber(payment?.paymentDeadlineAfterShipment) === 0 ? 'deposit' : 'balance'),
-        paymentStatus: ticketClosed ? 'paid' : 'open',
+        paymentStatus: paymentState.paymentStatus,
         dueDate,
         taskCreatedAt,
         paymentDeadlineAfterShipment: payment?.paymentDeadlineAfterShipment ?? null,
         exceptionStatus: payment?.exception ?? null,
         exceptionReason: payment?.reason ?? null,
-        paidAt: ticketClosed ? ticket?.attendanceConclusionDate : null,
+        paidAt: paymentState.paidAt,
+        scheduledAt: paymentState.scheduledAt,
         sourceUpdatedAt: record._lastUpdateDate ?? ticket?._lastUpdateDate ?? record._creationDate,
         sydleTicketCode: ticketCode,
         sydleTicketSearchCode: searchCode,
@@ -838,15 +839,58 @@ function applyEnrichmentClasses(
   return out;
 }
 
-function isClosedTicket(
-  status: Record<string, unknown> | null,
-  ticket: Record<string, unknown> | null,
-): boolean {
-  const statusText = `${status?.identifier ?? ''} ${status?.name ?? ''}`.toLowerCase();
-  return (
-    Boolean(ticket?.attendanceConclusionDate) ||
-    /(closed|concluido|concluído|finalizado)/.test(statusText)
-  );
+function derivePaymentState(
+  payment: Record<string, unknown> | null,
+  purchaseAmount: number | null,
+): {
+  paidAmount: number | null;
+  openAmount: number | null;
+  paymentStatus: string;
+  paidAt: Date | null;
+  scheduledAt: Date | null;
+} {
+  const paidAt = parseSydleDateTime(findPaymentValue(payment, SYDLE_FIELD_KEYS.paidAt));
+  const scheduledAt = parseSydleDateTime(findPaymentValue(payment, SYDLE_FIELD_KEYS.scheduledAt));
+  const explicitPaidAmount = parseNumber(findPaymentValue(payment, SYDLE_FIELD_KEYS.paidAmount));
+  const explicitOpenAmount = parseNumber(findPaymentValue(payment, SYDLE_FIELD_KEYS.openAmount));
+  const explicitStatus = stringValue(findPaymentValue(payment, SYDLE_FIELD_KEYS.paymentStatus));
+  const normalizedStatus = normalizeSydleStatusText(explicitStatus);
+  const isExplicitPaid = /(paid|pago|liquidado|baixado|concluido|concluida)/.test(normalizedStatus);
+  const isExplicitScheduled = /(scheduled|agendado|programado)/.test(normalizedStatus);
+
+  const inferredPaidAmount =
+    paidAt || isExplicitPaid ? (purchaseAmount ?? null) : purchaseAmount != null ? 0 : null;
+  const paidAmount = explicitPaidAmount ?? inferredPaidAmount;
+  const openAmount =
+    explicitOpenAmount ??
+    (purchaseAmount != null && paidAmount != null
+      ? Math.max(0, Math.round((purchaseAmount - paidAmount) * 100) / 100)
+      : purchaseAmount);
+  const paymentStatus =
+    explicitStatus ??
+    (paidAt || (purchaseAmount != null && paidAmount != null && paidAmount >= purchaseAmount)
+      ? 'paid'
+      : scheduledAt || isExplicitScheduled
+        ? 'scheduled'
+        : 'open');
+
+  return { paidAmount, openAmount, paymentStatus, paidAt, scheduledAt };
+}
+
+function findPaymentValue(
+  payment: Record<string, unknown> | null,
+  keys: readonly string[],
+): unknown {
+  if (!payment) return null;
+  return findSydleField(payment, keys);
+}
+
+function normalizeSydleStatusText(value: string | null): string {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase();
 }
 
 function uniqueStrings(values: (string | null | undefined)[]): string[] {

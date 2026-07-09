@@ -30,7 +30,7 @@ FORNECEDORES COMUNS:
 Responda com JSON estrito:
 {
   "processCode": "O codigo do processo encontrado, ou null se nenhum detectado",
-  "documentTypes": ["Lista de tipos: invoice, packing_list, ohbl, espelho, li, certificate, draft, correction, other"],
+  "documentTypes": ["Lista de tipos: invoice, packing_list, ohbl, espelho, li, certificate, draft, draft_duimp, duimp, correction, other"],
   "invoiceNumbers": ["Lista de numeros de invoice mencionados"],
   "urgencyLevel": "normal | urgent | critical",
   "emailCategory": "new_shipment | document_delivery | correction | follow_up | payment | general | pre_confirmation | tracking_sent",
@@ -40,7 +40,7 @@ Responda com JSON estrito:
 
 REGRAS:
 - processCode: procure qualquer padrao de referencia no assunto E corpo. Retorne o PRIMEIRO encontrado.
-- documentTypes: detecte mencoes de: invoice/fatura, packing list/romaneio, BL/conhecimento de embarque, espelho, LI/licenca de importacao, certificado, draft/minuta/rascunho.
+- documentTypes: detecte mencoes de: invoice/fatura, packing list/romaneio, BL/conhecimento de embarque, espelho, LI/licenca de importacao, certificado, draft/minuta/rascunho, draft DUIMP/minuta DUIMP e DUIMP final.
 - urgencyLevel: "critical" se palavras como "urgente", "urgentissimo", "ASAP", "imediato"; "urgent" se "prioridade", "prazo curto", "deadline"; senao "normal".
 - emailCategory: "new_shipment" se discute novo embarque; "document_delivery" se envia documentos; "correction" se discute correcoes/revisoes/retificacao; "follow_up" se pede status/update; "payment" se sobre pagamento/cambio; "pre_confirmation" se e pre-conferencia de documentos; "tracking_sent" se envia tracking/rastreamento; senao "general".
 - invoiceNumbers: procure padroes como INV-XXXX, invoice #XXXX, fatura XXXX.

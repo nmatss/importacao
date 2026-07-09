@@ -12,6 +12,8 @@ const SPECIALIST_DOC_TYPES = [
   'espelho',
   'certificate',
   'li',
+  'draft_duimp',
+  'duimp',
 ];
 
 describe('specialist skill registry', () => {

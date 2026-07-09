@@ -3,6 +3,7 @@ import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key
 import { logger } from '../../shared/utils/logger.js';
 
 const GMAIL_API_TIMEOUT_MS = 30_000;
+export const DEFAULT_GMAIL_SHARED_MAILBOX = 'global@grupounico.com';
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
@@ -36,7 +37,7 @@ function getGmailClient(): gmail_v1.Gmail {
 
   const clientEmail = process.env.GOOGLE_DRIVE_CLIENT_EMAIL;
   const privateKey = normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY);
-  const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX;
+  const sharedMailbox = process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX;
 
   if (!clientEmail || !privateKey) {
     throw new Error(

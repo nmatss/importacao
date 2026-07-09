@@ -22,6 +22,7 @@ const extractInvoiceData = vi.fn();
 const extractPackingListData = vi.fn();
 const extractEspelhoData = vi.fn();
 const extractProformaData = vi.fn();
+const extractDUIMPData = vi.fn();
 vi.mock('../../ai/service.js', async () => {
   const { AIBudgetExceededError } = await import('../../ai/cost-pricing.js');
   return {
@@ -32,6 +33,7 @@ vi.mock('../../ai/service.js', async () => {
       extractPackingListData,
       extractEspelhoData,
       extractProformaData,
+      extractDUIMPData,
     },
   };
 });
@@ -180,6 +182,39 @@ describe('processWithAI — extraction failure resilience', () => {
         severity: 'critical',
         title: 'Falha na extração de IA',
       }),
+    );
+  });
+
+  it('dispatches draft DUIMP to the dedicated extractor with its document type', async () => {
+    extractDUIMPData.mockResolvedValueOnce({
+      data: { duimpNumber: { value: null, confidence: 0 } },
+      confidenceScore: 0.91,
+      fieldsWithLowConfidence: ['duimpNumber'],
+    });
+
+    const doc = {
+      id: 18,
+      processId: 42,
+      type: 'draft_duimp',
+      storagePath: '/tmp/draft-duimp.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'draft-duimp.pdf',
+    };
+
+    queryQueue.push(createResolvedChain([doc]));
+    queryQueue.push(createResolvedChain(undefined)); // mark empty extraction failed
+    queryQueue.push(createResolvedChain([{ processCode: 'IMP-042' }]));
+    queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
+
+    await documentService.processWithAI(18, 'draft_duimp');
+
+    expect(extractDUIMPData).toHaveBeenCalledWith(
+      'Extracted PDF text long enough to be real content',
+      'draft_duimp',
+      { imageBase64: 'bW9jayBjb250ZW50', imageMimeType: 'application/pdf' },
     );
   });
 

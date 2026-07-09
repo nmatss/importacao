@@ -18,83 +18,113 @@ interface CheckResult {
 export default function ncmBlDescription(input: CheckInput): CheckResult {
   const checkName = 'ncm-bl-description';
 
-  if (!input.invoiceData) {
+  if (!input.blData) {
     return {
       checkName,
       status: 'skipped',
-      documentsCompared: 'INV x BL',
-      message: 'aguardando INV',
+      documentsCompared: 'OHBL x Espelho',
+      message: 'Aguardando OHBL final para validar NCMs.',
     };
   }
 
-  const items = input.invoiceData?.items as Array<Record<string, any>> | undefined;
-  const cargoDescription = input.blData?.cargoDescription ?? '';
+  const espelhoItems = readEspelhoItems(input.processData);
+  if (espelhoItems.length === 0) {
+    return {
+      checkName,
+      status: 'skipped',
+      documentsCompared: 'OHBL x Espelho',
+      message: 'Aguardando Espelho com itens para validar NCMs.',
+    };
+  }
 
-  if (!items || items.length === 0) {
+  const espelhoPrefixes = ncmPrefixesFromItems(espelhoItems);
+  const blPrefixes = ncmPrefixesFromBl(input.blData);
+
+  if (espelhoPrefixes.size === 0) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'INV x BL',
-      message: 'Nenhum item encontrado na invoice para extrair codigos NCM.',
+      documentsCompared: 'OHBL x Espelho',
+      message: 'Nenhum codigo NCM valido encontrado nos itens do Espelho.',
     };
   }
 
-  if (!cargoDescription) {
+  if (blPrefixes.size === 0) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'INV x BL',
-      message: 'Nenhuma descricao de carga encontrada nos dados do BL.',
+      expectedValue: [...espelhoPrefixes].sort().join(', '),
+      actualValue: 'OHBL sem NCMs extraidas',
+      documentsCompared: 'OHBL x Espelho',
+      message: 'Nenhum prefixo NCM valido foi extraido do OHBL final.',
     };
   }
 
-  const ncmPrefixes = new Set<string>();
-  for (const item of items) {
-    const ncm = String(item.ncmCode ?? item.ncm ?? '').replace(/[.\-\s]/g, '');
-    if (ncm.length >= 4) {
-      ncmPrefixes.add(ncm.substring(0, 4));
-    }
-  }
-
-  if (ncmPrefixes.size === 0) {
-    return {
-      checkName,
-      status: 'warning',
-      documentsCompared: 'INV x BL',
-      message: 'Nenhum codigo NCM valido encontrado nos itens da invoice.',
-    };
-  }
-
-  const descriptionText = String(cargoDescription);
-  const missingPrefixes: string[] = [];
-
-  for (const prefix of ncmPrefixes) {
-    if (!descriptionText.includes(prefix)) {
-      missingPrefixes.push(prefix);
-    }
-  }
+  const missingPrefixes = [...espelhoPrefixes].filter((prefix) => !blPrefixes.has(prefix)).sort();
+  const extraBlPrefixes = [...blPrefixes].filter((prefix) => !espelhoPrefixes.has(prefix)).sort();
 
   if (missingPrefixes.length === 0) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: [...ncmPrefixes].join(', '),
-      actualValue: 'Todos encontrados no BL',
-      documentsCompared: 'INV x BL',
-      message: 'Todos os prefixos NCM encontrados na descricao de carga do BL.',
+      expectedValue: [...espelhoPrefixes].sort().join(', '),
+      actualValue: [...blPrefixes].sort().join(', '),
+      documentsCompared: 'OHBL x Espelho',
+      message: 'Todos os prefixos NCM do Espelho constam no OHBL final.',
     };
   }
 
-  // NOTE: compara prefixo NCM numerico (4 digitos) contra o texto livre da
-  // descricao de carga do BL — o BL raramente cita NCM, entao a ausencia e
-  // estrutural e nao indica erro documental real. Rebaixado de 'failed' para
-  // 'warning' para nao disparar correcao/alerta critico indevido (#9).
   return {
     checkName,
-    status: 'warning',
-    expectedValue: [...ncmPrefixes].join(', '),
-    actualValue: `Ausentes: ${missingPrefixes.join(', ')}`,
-    documentsCompared: 'INV x BL',
-    message: `Prefixos NCM nao encontrados na descricao do BL: ${missingPrefixes.join(', ')}.`,
+    status: 'failed',
+    expectedValue: [...espelhoPrefixes].sort().join(', '),
+    actualValue: [...blPrefixes].sort().join(', '),
+    documentsCompared: 'OHBL x Espelho',
+    message: [
+      `Prefixos NCM do Espelho ausentes no OHBL: ${missingPrefixes.join(', ')}.`,
+      extraBlPrefixes.length > 0 ? `Prefixos extras no OHBL: ${extraBlPrefixes.join(', ')}.` : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
   };
+}
+
+function readEspelhoItems(processData?: Record<string, any>): Array<Record<string, any>> {
+  const aiData = processData?.aiExtractedData;
+  const espelho = aiData && typeof aiData === 'object' ? aiData.espelho : null;
+  if (!espelho || typeof espelho !== 'object') return [];
+  const items: unknown[] = Array.isArray(espelho.items) ? espelho.items : [];
+  return items.filter((item): item is Record<string, any> =>
+    Boolean(item && typeof item === 'object'),
+  );
+}
+
+function ncmPrefixesFromItems(items: Array<Record<string, any>>): Set<string> {
+  const prefixes = new Set<string>();
+  for (const item of items) {
+    addNcmPrefix(prefixes, item.ncmCode ?? item.ncm ?? item.ncmItem ?? item.classificacaoFiscal);
+  }
+  return prefixes;
+}
+
+function ncmPrefixesFromBl(blData: Record<string, any>): Set<string> {
+  const prefixes = new Set<string>();
+  const listCandidates = [blData.ncmList, blData.ncms, blData.ncmCodes, blData.ncmPrefixes];
+  for (const candidate of listCandidates) {
+    if (Array.isArray(candidate)) {
+      for (const value of candidate) addNcmPrefix(prefixes, value);
+    } else {
+      addNcmPrefix(prefixes, candidate);
+    }
+  }
+  return prefixes;
+}
+
+function addNcmPrefix(target: Set<string>, value: unknown) {
+  if (value == null) return;
+  const rawValues = Array.isArray(value) ? value : String(value).split(/[,\n;/|]+/);
+  for (const raw of rawValues) {
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.length >= 4) target.add(digits.slice(0, 4));
+  }
 }

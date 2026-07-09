@@ -1,5 +1,4 @@
 import { DocumentComparison } from '@/features/documents/DocumentComparison';
-import { ValidationChecklist } from '@/features/validation/ValidationChecklist';
 
 export interface ComparisonTabProps {
   processId: string;
@@ -16,13 +15,6 @@ export function ComparisonTab({ processId }: ComparisonTabProps) {
           Validação, cruzamento e aceite operacional de divergências em uma única tela.
         </p>
       </div>
-
-      <section className="space-y-3">
-        <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-          Validação e e-mail de correção
-        </h4>
-        <ValidationChecklist processId={processId} />
-      </section>
 
       <DocumentComparison processId={processId} />
     </div>

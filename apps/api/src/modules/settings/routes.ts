@@ -9,6 +9,8 @@ import {
   recipientSettingsSchema,
   createEmailSignatureSchema,
   updateEmailSignatureSchema,
+  createCommunicationTemplateSchema,
+  updateCommunicationTemplateSchema,
 } from './schema.js';
 
 const router = Router();
@@ -28,6 +30,19 @@ router.put(
   settingsController.updateSignature,
 );
 router.delete('/email-signatures/:id', settingsController.deleteSignature);
+
+router.get('/communication-templates', settingsController.getCommunicationTemplates);
+router.post(
+  '/communication-templates',
+  validate(createCommunicationTemplateSchema),
+  settingsController.createCommunicationTemplate,
+);
+router.put(
+  '/communication-templates/:id',
+  validate(updateCommunicationTemplateSchema),
+  settingsController.updateCommunicationTemplate,
+);
+router.delete('/communication-templates/:id', settingsController.deleteCommunicationTemplate);
 
 // Admin-only routes below
 router.use(adminMiddleware);

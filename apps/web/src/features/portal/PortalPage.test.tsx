@@ -70,14 +70,15 @@ describe('PortalPage auth-sensitive cert-api calls', () => {
     vi.unstubAllGlobals();
   });
 
-  it('does not call cert-api from the portal for analyst users', async () => {
+  it('keeps cert-api stats enabled for analyst users', async () => {
     renderPortal('analyst');
 
     await screen.findByText(/Mariana Santos/i);
-    expect(screen.getByText(/Acesso restrito/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Pagamentos SYDLE/i).length).toBeGreaterThan(0);
-    expect(mockedFetchCertStats).not.toHaveBeenCalled();
-    expect(mockedCheckCertApiHealth).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockedFetchCertStats).toHaveBeenCalledTimes(1));
+    expect(mockedCheckCertApiHealth).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Acessar Certificações/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Acesso restrito/i)).not.toBeInTheDocument();
   });
 
   it('keeps cert-api stats enabled for admin users', async () => {

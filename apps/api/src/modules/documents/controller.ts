@@ -1,7 +1,11 @@
 import type { Request, Response } from 'express';
 import { documentService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
-import { acceptComparisonSchema, uploadDocumentSchema } from './schema.js';
+import {
+  acceptComparisonSchema,
+  editComparisonFieldSchema,
+  uploadDocumentSchema,
+} from './schema.js';
 
 export function isActiveContent(mimeType: string, filename?: string | null): boolean {
   const lowerMime = mimeType.toLowerCase();
@@ -191,6 +195,28 @@ export const documentController = {
         Number(req.params.processId),
         parsed.data,
         userId,
+      );
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async editComparisonField(req: Request, res: Response) {
+    try {
+      const parsed = editComparisonFieldSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return sendError(res, JSON.stringify(errors), 400);
+      }
+      const result = await documentService.editComparisonField(
+        Number(req.params.processId),
+        parsed.data,
+        req.user?.id ?? null,
       );
       sendSuccess(res, result);
     } catch (error: any) {

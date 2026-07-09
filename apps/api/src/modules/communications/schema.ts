@@ -44,5 +44,7 @@ export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>
 export const updateDraftSchema = z.object({
   subject: z.string().min(1).max(500).optional(),
   body: z.string().min(1).max(100000).optional(),
+  recipient: z.string().min(1).max(500).optional(),
   recipientEmail: emailListSchema.optional(),
+  attachments: z.array(communicationAttachmentSchema).max(20).optional(),
 });

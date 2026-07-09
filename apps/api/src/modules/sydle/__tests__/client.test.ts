@@ -258,6 +258,58 @@ describe('SydleClient', () => {
     },
   };
 
+  it('uses per-installment payment date instead of ticket conclusion date', async () => {
+    process.env = { ...originalEnv, ...enrichmentBaseEnv };
+    mockSydleOneSequence(
+      {
+        _id: 'REQ-1',
+        _lastUpdateDate: '2026-07-01T20:20:31.914Z',
+        approved: true,
+        ticket: { _id: 'TICKET-1' },
+        paymentData: [
+          {
+            _id: 'PAY-1',
+            paymentAmount: 4460,
+            expirationDate: '2026-06-18T00:00:00Z',
+            paymentDate: '2026-06-15T00:00:00Z',
+            paymentCurrency: { _id: 'USD-ID' },
+          },
+          {
+            _id: 'PAY-2',
+            paymentAmount: 1200,
+            expirationDate: '2026-07-10T00:00:00Z',
+            paymentCurrency: { _id: 'USD-ID' },
+          },
+        ],
+      },
+      {
+        _id: 'TICKET-1',
+        code: '5201',
+        status: { _id: 'OPEN' },
+        attendanceConclusionDate: '2026-07-01T00:00:00Z',
+        _lastUpdateDate: '2026-07-01T20:30:00.000Z',
+      },
+    );
+
+    const result = await new SydleClient().fetchPayments(null);
+
+    expect(result.records).toHaveLength(2);
+    expect(result.records[0]).toMatchObject({
+      externalId: 'sydle-one:REQ-1:PAY-1',
+      paidAmount: 4460,
+      openAmount: 0,
+      paymentStatus: 'paid',
+    });
+    expect((result.records[0].paidAt as Date).toISOString()).toBe('2026-06-15T00:00:00.000Z');
+    expect(result.records[1]).toMatchObject({
+      externalId: 'sydle-one:REQ-1:PAY-2',
+      paidAmount: 0,
+      openAmount: 1200,
+      paymentStatus: 'open',
+      paidAt: null,
+    });
+  });
+
   it('enriches complementary fields from request and ticket openForm when SYDLE_ONE_ENRICH_FIELDS is on', async () => {
     process.env = { ...originalEnv, ...enrichmentBaseEnv, SYDLE_ONE_ENRICH_FIELDS: 'true' };
     mockSydleOneSequence(REQUEST_WITH_EXTRA, TICKET_WITH_OPENFORM);

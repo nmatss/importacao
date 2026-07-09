@@ -113,6 +113,36 @@ async function allowedRecipientPatterns(): Promise<string[]> {
     .filter(Boolean);
 }
 
+function isValidEmailAddress(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+/**
+ * Every outgoing operational email must include the fixed operational copy.
+ *
+ * This validation intentionally happens before SMTP work (and before the
+ * send-error catch below) so a missing/malformed configuration never changes a
+ * reviewable draft into a failed communication.
+ */
+async function getRequiredDefaultCcRecipients(): Promise<string> {
+  const recipients = parseEmailList(await getOperationalRecipient('default_cc_email'));
+  const normalizedRecipients = recipients.join(', ');
+
+  if (
+    recipients.length === 0 ||
+    recipients.some((recipient) => !isValidEmailAddress(recipient)) ||
+    normalizedRecipients.length > 500
+  ) {
+    throw new AppError(
+      'Cópia operacional obrigatória não configurada. Cadastre um e-mail válido em "Configurações > E-mails > Destinatários operacionais".',
+      503,
+      'DEFAULT_CC_REQUIRED',
+    );
+  }
+
+  return normalizedRecipients;
+}
+
 function matchesPattern(recipient: string, pattern: string): boolean {
   if (pattern.startsWith('@')) {
     const domain = pattern.slice(1);
@@ -264,7 +294,7 @@ export const communicationService = {
     return { data, total, page, limit };
   },
 
-  async create(input: CreateCommunicationInput) {
+  async create(input: CreateCommunicationInput, userId: number | null = null) {
     const recipientEmail = normalizeEmailList(input.recipientEmail);
     if (!recipientEmail) {
       throw new AppError(
@@ -284,8 +314,35 @@ export const communicationService = {
         body: sanitizeHtml(input.body),
         attachments: input.attachments,
         status: 'draft',
+        createdBy: userId,
+        updatedBy: userId,
       })
       .returning();
+
+    const maskedRecipient = maskRecipientList(recipientEmail);
+    await auditService.log(
+      userId,
+      'communication.created',
+      'communication',
+      communication.id,
+      {
+        processId: communication.processId,
+        recipient: maskedRecipient,
+        attachmentsCount: Array.isArray(input.attachments) ? input.attachments.length : 0,
+      },
+      null,
+    );
+    if (communication.processId) {
+      await recordProcessEvent(
+        communication.processId,
+        {
+          eventType: 'communication_created',
+          title: `Rascunho de e-mail criado para ${maskedRecipient}`,
+          metadata: { communicationId: communication.id, recipient: maskedRecipient },
+        },
+        userId,
+      );
+    }
 
     return communication;
   },
@@ -334,6 +391,11 @@ export const communicationService = {
       );
     }
 
+    // Fail closed: the operational copy is a required business control, not an
+    // optional mail header. Keep the draft intact if the setting/env is absent
+    // or malformed so the operator can retry after configuration is corrected.
+    const defaultCc = await getRequiredDefaultCcRecipients();
+
     if (!process.env.SMTP_HOST) {
       throw new Error('SMTP não configurado. Defina SMTP_HOST nas variáveis de ambiente.');
     }
@@ -371,39 +433,55 @@ export const communicationService = {
         normalizeEmailList(v)
           .replace(/[\r\n]/g, '')
           .trim();
+      const ccHeader = sanitizeRecipientHeader(defaultCc);
 
       await transport.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
         to: sanitizeRecipientHeader(communication.recipientEmail),
+        cc: ccHeader,
         subject: sanitizeHeader(communication.subject),
         html: sanitizeHtml(htmlBody),
         attachments: mailAttachments,
       });
 
+      const sentAt = new Date();
       const [updated] = await db
         .update(communications)
-        .set({ status: 'sent', sentAt: new Date() })
+        .set({
+          status: 'sent',
+          sentAt,
+          sentBy: userId ?? null,
+          updatedBy: userId ?? null,
+          updatedAt: sentAt,
+          ccRecipients: defaultCc,
+        })
         .where(eq(communications.id, id))
         .returning();
 
-      logger.info({ id, to: communication.recipientEmail }, 'E-mail enviado com sucesso');
+      const maskedRecipient = maskRecipientList(communication.recipientEmail);
+      const maskedCc = maskRecipientList(defaultCc);
+      logger.info({ id, recipient: maskedRecipient, cc: maskedCc }, 'E-mail enviado com sucesso');
       await auditService.log(
         userId ?? null,
         'email.sent',
         'communication',
         updated.id,
-        { to: communication.recipientEmail, subject: communication.subject },
+        { recipient: maskedRecipient, ccRecipients: maskedCc },
         null,
       );
 
       // Record timeline event
       if (communication.processId) {
-        recordProcessEvent(
+        await recordProcessEvent(
           communication.processId,
           {
             eventType: 'email_sent',
-            title: `Email enviado para ${communication.recipientEmail}`,
-            metadata: { subject: communication.subject, communicationId: updated.id },
+            title: `E-mail enviado para ${maskedRecipient}`,
+            metadata: {
+              communicationId: updated.id,
+              recipient: maskedRecipient,
+              ccRecipients: maskedCc,
+            },
           },
           userId ?? null,
         );
@@ -625,7 +703,14 @@ export const communicationService = {
 
   async updateDraft(
     id: number,
-    data: { subject?: string; body?: string; recipientEmail?: string },
+    data: {
+      subject?: string;
+      body?: string;
+      recipient?: string;
+      recipientEmail?: string;
+      attachments?: unknown;
+    },
+    userId: number | null = null,
   ) {
     const [communication] = await db
       .select()
@@ -637,8 +722,19 @@ export const communicationService = {
     if (communication.status !== 'draft') throw new Error('Somente rascunhos podem ser editados');
 
     const updateData: Record<string, any> = {};
-    if (data.subject !== undefined) updateData.subject = data.subject;
-    if (data.body !== undefined) updateData.body = sanitizeHtml(data.body);
+    const changedFields: string[] = [];
+    if (data.recipient !== undefined) {
+      updateData.recipient = data.recipient;
+      changedFields.push('recipient');
+    }
+    if (data.subject !== undefined) {
+      updateData.subject = data.subject;
+      changedFields.push('subject');
+    }
+    if (data.body !== undefined) {
+      updateData.body = sanitizeHtml(data.body);
+      changedFields.push('body');
+    }
     if (data.recipientEmail !== undefined) {
       const recipientEmail = normalizeEmailList(data.recipientEmail);
       if (!recipientEmail) {
@@ -649,13 +745,41 @@ export const communicationService = {
         );
       }
       updateData.recipientEmail = recipientEmail;
+      changedFields.push('recipientEmail');
     }
+    if (data.attachments !== undefined) {
+      updateData.attachments = data.attachments;
+      changedFields.push('attachments');
+    }
+    updateData.updatedBy = userId;
+    updateData.updatedAt = new Date();
 
     const [updated] = await db
       .update(communications)
       .set(updateData)
       .where(eq(communications.id, id))
       .returning();
+
+    const maskedRecipient = maskRecipientList(updated.recipientEmail);
+    await auditService.log(
+      userId,
+      'communication.draft_updated',
+      'communication',
+      updated.id,
+      { recipient: maskedRecipient, changedFields },
+      null,
+    );
+    if (updated.processId) {
+      await recordProcessEvent(
+        updated.processId,
+        {
+          eventType: 'communication_draft_updated',
+          title: `Rascunho de e-mail atualizado para ${maskedRecipient}`,
+          metadata: { communicationId: updated.id, recipient: maskedRecipient, changedFields },
+        },
+        userId,
+      );
+    }
 
     return updated;
   },

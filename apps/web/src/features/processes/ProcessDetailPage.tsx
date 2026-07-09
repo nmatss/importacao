@@ -14,6 +14,9 @@ import {
   FileSearch,
   History,
   ClipboardList,
+  ListPlus,
+  AlertTriangle,
+  ShieldCheck,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
@@ -38,6 +41,9 @@ import { DraftBLTab } from './components/DraftBLTab';
 import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
 import { PreConsTab } from './components/PreConsTab';
 import { ProformasTab } from './components/ProformasTab';
+import { RegistroTab } from './components/RegistroTab';
+import { CustomStagesTab } from './components/CustomStagesTab';
+import { ErrorsCostsTab } from './components/ErrorsCostsTab';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
@@ -50,6 +56,9 @@ const CORE_TABS = [
   { key: 'comparativo', label: 'Comparativo', icon: GitCompareArrows },
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
+  { key: 'registro', label: 'Registro', icon: ShieldCheck },
+  { key: 'etapas', label: 'Etapas', icon: ListPlus },
+  { key: 'erros_custos', label: 'Erros/Custos', icon: AlertTriangle },
   { key: 'comunicacoes', label: 'Atendimentos', icon: MessageSquare },
   { key: 'emails', label: 'E-mails', icon: Mail },
   { key: 'historico', label: 'Histórico', icon: History },
@@ -225,6 +234,12 @@ function TabContent({
       return <CambiosTab processId={processId} initialData={cambiosData} />;
     case 'followup':
       return <FollowUpTab processId={processId} />;
+    case 'registro':
+      return <RegistroTab processId={processId} />;
+    case 'etapas':
+      return <CustomStagesTab processId={processId} />;
+    case 'erros_custos':
+      return <ErrorsCostsTab processId={processId} />;
     case 'comunicacoes':
       return <ComunicacoesTab processId={processId} />;
     case 'emails':
@@ -381,14 +396,18 @@ export function ProcessDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <Breadcrumbs
-        items={[
-          { label: 'Processos', href: '/importacao/processos' },
-          { label: process.processCode || 'Detalhe' },
-        ]}
-      />
+      <div className="sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <Breadcrumbs
+          items={[
+            { label: 'Processos', href: '/importacao/processos' },
+            { label: process.processCode || 'Detalhe' },
+          ]}
+        />
 
-      <ProcessHeader process={process} processId={id} onBack={handleBack} onEdit={handleEdit} />
+        <div className="mt-3">
+          <ProcessHeader process={process} processId={id} onBack={handleBack} onEdit={handleEdit} />
+        </div>
+      </div>
 
       <ProcessTimeline currentStatus={process.status} followUp={process.followUp} />
 

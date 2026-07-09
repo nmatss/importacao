@@ -71,6 +71,8 @@ const TYPE_COLORS: Record<string, string> = {
   packing_list: 'bg-amber-50 text-amber-700 border-amber-200',
   ohbl: 'bg-violet-50 text-violet-700 border-violet-200',
   draft_bl: 'bg-violet-50 text-violet-700 border-violet-200',
+  draft_duimp: 'bg-red-50 text-red-700 border-red-200',
+  duimp: 'bg-red-50 text-red-700 border-red-200',
   espelho: 'bg-cyan-50 text-cyan-700 border-cyan-200',
   li: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   certificate: 'bg-pink-50 text-pink-700 border-pink-200',
@@ -354,6 +356,8 @@ export function DocumentList({ processId }: DocumentListProps) {
     'packing_list',
     'ohbl',
     'draft_bl',
+    'draft_duimp',
+    'duimp',
     'espelho',
     'li',
     'certificate',
@@ -468,11 +472,15 @@ export function DocumentList({ processId }: DocumentListProps) {
                               ? 'BL'
                               : doc.documentType === 'draft_bl'
                                 ? 'DRAFT'
-                                : doc.documentType === 'certificate'
-                                  ? 'CERT'
-                                  : (typeLabel(doc.documentType) || doc.documentType)
-                                      .slice(0, 4)
-                                      .toUpperCase()}
+                                : doc.documentType === 'draft_duimp'
+                                  ? 'D-DUIMP'
+                                  : doc.documentType === 'duimp'
+                                    ? 'DUIMP'
+                                    : doc.documentType === 'certificate'
+                                      ? 'CERT'
+                                      : (typeLabel(doc.documentType) || doc.documentType)
+                                          .slice(0, 4)
+                                          .toUpperCase()}
                       </span>
 
                       {/* File info */}

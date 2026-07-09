@@ -444,6 +444,10 @@ fica como fallback caso aquele passo tenha falhado:
   docker cp apps/api/drizzle/0015_validation_history.sql importacao-postgres:/tmp/
   docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0015_validation_history.sql
 
+  # 0022 (ALTER TYPE + ADD COLUMN — DUIMP, corpo de e-mail, observação urgente e registro aduaneiro)
+  docker cp apps/api/drizzle/0022_odett_operational_feedback.sql importacao-postgres:/tmp/
+  docker exec importacao-postgres psql -U importacao -d importacao -f /tmp/0022_odett_operational_feedback.sql
+
   # OR run them all at once:
   /opt/importacao/scripts/apply-pending-migrations.sh
 
@@ -461,6 +465,7 @@ NEW ENV VARS (set in .env.production before restarting API):
   AI_UPGRADE_MIN_DELTA=0.05
   VIMBAR_AUTO_LOCK=1
   VIMBAR_SENDER_DOMAINS=                          # CSV — EMPTY = lock disabled (fail-closed)
+  COMMUNICATION_DEFAULT_CC=global@grupounico.com
   AUTO_GENERATE_ESPELHO=1
   AUTO_CLEAN_ITEM_CODES=1
   # Pasta criada em 2026-06-11 na área de importação do Drive ("Pre-Cons (sync

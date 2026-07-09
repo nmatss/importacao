@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-07-08
+Ultima atualizacao: 2026-07-09
 
 ## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
 
@@ -27,6 +27,21 @@ INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe re
 - **Webhook Google Chat**: key invalida nas notificacoes (`chat.googleapis.com` 400) — config.
 - **Vertex SA dedicada** (opcao profissional): mover Vertex p/ `gemini-n8n` (least-privilege)
   com `roles/aiplatform.user` — hoje reusa a SA compartilhada `n8n-automacao`.
+
+## Feedback Odett 2026-07-09 - Dependencias Para Declarar 100%
+
+- **Processo real `PK2052602TJ`:** o codigo foi ajustado para global mailbox,
+  OHBL x Espelho, pesos/volumes, frete via OHBL, comparativo por item,
+  fabricantes e SYDLE, mas a comprovacao 100% ainda depende de fixtures reais
+  anonimizadas ou reprocessamento em base com os documentos reais.
+- **DUIMP/Draft DUIMP:** a aba Registro compara campos do processo contra Draft
+  DUIMP/DUIMP Final por aliases comuns e prioriza a DUIMP final; se os documentos
+  reais usarem nomes de campo diferentes, sera preciso adicionar aliases
+  especificos apos validar a fixture.
+- **Fornecedores/fabricantes:** existe quadro por item INV/PL/Espelho e suporte a
+  aliases de rodape da Invoice (`manufacturerAliases`), mas a comparacao de dados
+  completos com base mestre depende de a operacao fornecer a planilha/base mestre
+  ou confirmar que os aliases extraidos bastam.
 
 ## Backlog do feedback da Eduarda 2026-06-21 (nao bloqueante; pos PR #99)
 
@@ -62,9 +77,11 @@ INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe re
   DraftBLTab, AuditLogPage, ExecutiveDashboardPage, etc.). Corrigidos nesta rodada:
   Certificacao "Verificar" (P1-B) e DocumentComparison (P1-G). **Fix restante:**
   padronizar `ErrorState`+retry (modelo: `SydlePaymentsPage`).
-- **Sydle regra de pagamento (negocio):** pago/aberto/tipo por parcela derivam do
-  estado do ticket, nao da parcela → totais podem divergir. Decisao financeira;
-  ver `SYDLE-INTEGRATION.md`.
+- **Sydle regra de pagamento (RESOLVIDO em 2026-07-09):** pago/aberto por parcela
+  nao deriva mais da conclusao do ticket; o conector SYDLE One usa `paymentData`
+  para `paidAt`, valor pago, saldo e status. Risco residual: se a SYDLE nao
+  enviar data/status/valor de pagamento na parcela, a linha permanece aberta e
+  depende de liberacao/mapeamento do campo correto na origem.
 - **DBA P2 — journal Drizzle parado em 0010:** migrations 0011-0019 aplicadas por
   runner manual (`migrate.ts` + `apply-pending-migrations.sh`). Reconciliar journal/snapshots.
 - **DevOps:** rede Docker externa `ia-local-net` e `.env` de producao sao pre-requisitos

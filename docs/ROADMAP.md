@@ -1,6 +1,6 @@
 # Roadmap
 
-Ultima atualizacao: 2026-06-19
+Ultima atualizacao: 2026-07-09
 
 ## P0 - Operacao E Confiabilidade
 
@@ -14,6 +14,17 @@ Ultima atualizacao: 2026-06-19
 ## P1 - Qualidade De Dados E Validacao
 
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).
+- Comparativo documental: evoluir a origem por campo para guardar
+  `sourceDocumentId`, versao e timestamp da leitura; a edicao auditavel do valor
+  consolidado ja existe via `comparison_field_overrides`.
+- Conferencia de fornecedores/fabricantes: conectar base mestre opcional de
+  fornecedores e validar dados completos, se o quadro por item e os aliases de
+  rodape da Invoice nao forem suficientes.
+- Draft DUIMP/DUIMP: validar documentos reais anonimizados e adicionar aliases
+  especificos que nao estejam cobertos pela conferencia atual da aba Registro.
+- Extracao real PK2052602TJ: refinar exportador, referencia do processo no
+  OHBL, volumes/pesos/CBM do PL em portugues e ingles, frete somente via OHBL
+  e fixtures anonimizadas para regressao.
 
 ## P1 - UX Operacional
 
@@ -23,6 +34,10 @@ Ultima atualizacao: 2026-06-19
 - Migrar Settings, Communications e CertCadastro para validacao de formulario
   completa com erro por campo e cobertura de teste.
 - Criar padrao mobile para tabelas largas e kanban operacional.
+- Atendimentos: versionar historico de modelos se a operacao precisar recuperar
+  versoes antigas; criar/editar/desativar ja esta implementado.
+- Workflow de processos: criar relatorio consolidado das etapas especificas e
+  registros de Erros/Custos, caso a operacao precise exportar indicadores.
 
 ## P2 - Dados, DW E Observabilidade
 

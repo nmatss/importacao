@@ -18,6 +18,12 @@ const FILE_TYPES = [
     keywords: ['draft bl', 'draft_bl', 'draft-bl', 'draftbl', 'draft bill', 'rascunho bl'],
   },
   {
+    value: 'draft_duimp',
+    label: 'Draft DUIMP',
+    keywords: ['draft duimp', 'draft_duimp', 'rascunho duimp', 'minuta duimp'],
+  },
+  { value: 'duimp', label: 'DUIMP', keywords: ['duimp'] },
+  {
     value: 'ohbl',
     label: 'BL',
     keywords: ['ohbl', 'original bl', 'bill', 'lading', 'conhecimento', 'bl'],

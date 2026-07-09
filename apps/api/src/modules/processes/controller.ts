@@ -27,6 +27,112 @@ export const processController = {
     }
   },
 
+  async listCustomStages(req: Request, res: Response) {
+    try {
+      const stages = await processService.listCustomStages(Number(req.params.id));
+      sendSuccess(res, stages);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async createCustomStage(req: Request, res: Response) {
+    try {
+      const stage = await processService.createCustomStage(
+        Number(req.params.id),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, stage, 201);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateCustomStage(req: Request, res: Response) {
+    try {
+      const stage = await processService.updateCustomStage(
+        Number(req.params.id),
+        Number(req.params.stageId),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, stage);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async deleteCustomStage(req: Request, res: Response) {
+    try {
+      const result = await processService.deleteCustomStage(
+        Number(req.params.id),
+        Number(req.params.stageId),
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async listOperationalRecords(req: Request, res: Response) {
+    try {
+      const records = await processService.listOperationalRecords(Number(req.params.id));
+      sendSuccess(res, records);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async createOperationalRecord(req: Request, res: Response) {
+    try {
+      const record = await processService.createOperationalRecord(
+        Number(req.params.id),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, record, 201);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateOperationalRecord(req: Request, res: Response) {
+    try {
+      const record = await processService.updateOperationalRecord(
+        Number(req.params.id),
+        Number(req.params.recordId),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, record);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async deleteOperationalRecord(req: Request, res: Response) {
+    try {
+      const result = await processService.deleteOperationalRecord(
+        Number(req.params.id),
+        Number(req.params.recordId),
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async create(req: Request, res: Response) {
     try {
       const userId = (req as AuthenticatedRequest).user.id;

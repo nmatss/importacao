@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,4})?$/;
+const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,6})?$/;
 
 const nonNegativeDecimalString = (label: string) =>
   z.preprocess(
@@ -46,9 +46,13 @@ export const createProcessSchema = z
     importerName: z.string().max(500).optional(),
     importerAddress: z.string().max(1000).optional(),
     notes: z.string().max(5000).optional(),
+    urgentNote: z.string().max(2000).nullable().optional(),
     containerType: z.string().max(100).optional(),
     totalFobValue: nonNegativeDecimalString('Valor FOB'),
     freightValue: nonNegativeDecimalString('Valor de frete'),
+    insuranceValue: nonNegativeDecimalString('Seguro'),
+    customsValue: nonNegativeDecimalString('Valor aduaneiro'),
+    registrationDollar: nonNegativeDecimalString('Dólar de registro'),
     totalCbm: nonNegativeDecimalString('CBM'),
     totalBoxes: z.coerce.number().int().min(0).optional(),
     totalNetWeight: nonNegativeDecimalString('Peso líquido'),
@@ -115,7 +119,15 @@ export const updateProcessSchema = z
     hasCertification: z.boolean().optional(),
     hasFreeOfCharge: z.boolean().optional(),
     notes: z.string().max(5000).optional(),
+    urgentNote: z.string().max(2000).nullable().optional(),
     containerType: z.string().max(100).optional(),
+    insuranceValue: nonNegativeDecimalString('Seguro'),
+    customsValue: nonNegativeDecimalString('Valor aduaneiro'),
+    registrationDollar: nonNegativeDecimalString('Dólar de registro'),
+    duimpNumber: z.string().max(100).optional(),
+    registeredAt: z.string().max(30).optional(),
+    customsChannel: z.string().max(20).optional(),
+    customsClearanceAt: z.string().max(30).optional(),
   })
   .superRefine(validateProcessDates);
 
@@ -125,8 +137,8 @@ export const processFilterSchema = z.object({
   search: z.string().max(200).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  page: z.coerce.number().min(1).default(1),
-  limit: z.coerce.number().min(1).default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export const updateStatusSchema = z.object({
@@ -161,6 +173,30 @@ export const updateLogisticStatusSchema = z.object({
   logisticStatus: z.enum(VALID_LOGISTIC_STATUSES),
 });
 
+export const createCustomStageSchema = z.object({
+  label: z.string().trim().min(1, 'Nome da etapa obrigatorio').max(160),
+  position: z.coerce.number().int().min(0).max(1000).default(0),
+  completedAt: z.string().max(30).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateCustomStageSchema = createCustomStageSchema.partial();
+
+export const createOperationalRecordSchema = z.object({
+  recordKind: z.enum(['document_error', 'extra_cost']),
+  recordType: z.string().trim().min(1, 'Tipo obrigatorio').max(160),
+  quantity: z.coerce.number().int().min(0).nullable().optional(),
+  amount: nonNegativeDecimalString('Valor'),
+  currency: z.string().trim().max(10).optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+export const updateOperationalRecordSchema = createOperationalRecordSchema.partial();
+
 export type CreateProcessInput = z.infer<typeof createProcessSchema>;
 export type UpdateProcessInput = z.infer<typeof updateProcessSchema>;
 export type ProcessFilter = z.infer<typeof processFilterSchema>;
+export type CreateCustomStageInput = z.infer<typeof createCustomStageSchema>;
+export type UpdateCustomStageInput = z.infer<typeof updateCustomStageSchema>;
+export type CreateOperationalRecordInput = z.infer<typeof createOperationalRecordSchema>;
+export type UpdateOperationalRecordInput = z.infer<typeof updateOperationalRecordSchema>;

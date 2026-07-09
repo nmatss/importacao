@@ -14,6 +14,7 @@ import {
 } from '../../shared/database/schema.js';
 import { documentService } from '../documents/service.js';
 import { gmailService } from './gmail.service.js';
+import { DEFAULT_GMAIL_SHARED_MAILBOX } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -45,6 +46,8 @@ const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
   '.xls': new Set(['application/vnd.ms-excel', 'application/x-cfb']),
 };
 
+const MAX_STORED_EMAIL_BODY_CHARS = Number(process.env.EMAIL_BODY_MAX_CHARS) || 20000;
+
 type EmailAttachment = {
   filename: string;
   contentType?: string;
@@ -61,6 +64,12 @@ type FetchedEmailForProcessing = {
   date: Date;
   attachments: EmailAttachment[];
 };
+
+function storedEmailBody(body: string | null | undefined): string | null {
+  const normalized = (body ?? '').replace(/\r\n/g, '\n').trim();
+  if (!normalized) return null;
+  return normalized.slice(0, MAX_STORED_EMAIL_BODY_CHARS);
+}
 
 async function markEmailAsReadAfterDurableLog(
   email: FetchedEmailForProcessing,
@@ -284,6 +293,10 @@ function classifyDocumentWithContext(
     draft_bl: 'draft_bl',
     rascunho_bl: 'draft_bl',
     draft_bill_of_lading: 'draft_bl',
+    duimp: 'duimp',
+    draft_duimp: 'draft_duimp',
+    minuta_duimp: 'draft_duimp',
+    rascunho_duimp: 'draft_duimp',
     espelho: 'espelho',
     li: 'li',
     licenca: 'li',
@@ -367,6 +380,9 @@ function extractDocumentTypesFromText(text: string): string[] {
   // Draft BL BEFORE final BL so a body mentioning "draft BL" is detected.
   if (/\b(draft\s+bl|draft\s+bill|rascunho\s+(do\s+)?bl|bl\s+draft|preliminary\s+bl)\b/.test(lower))
     types.push('draft_bl');
+  if (/\b(draft\s+duimp|minuta\s+duimp|rascunho\s+(da\s+)?duimp)\b/.test(lower))
+    types.push('draft_duimp');
+  if (/\bduimp\b/.test(lower) && !types.includes('draft_duimp')) types.push('duimp');
   if (
     /\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl)\b|(?:^|[^a-z])bl(?:$|[^a-z])/.test(
       lower,
@@ -584,6 +600,7 @@ export const emailProcessor = {
           subject: email.subject,
           receivedAt: email.date,
           attachmentsCount: email.attachments.length,
+          bodyText: storedEmailBody(email.body),
           status: 'ignored',
           errorMessage: 'Remetente não autorizado',
         });
@@ -599,6 +616,7 @@ export const emailProcessor = {
           subject: email.subject,
           receivedAt: email.date,
           attachmentsCount: email.attachments.length,
+          bodyText: storedEmailBody(email.body),
           status: 'processing',
         })
         .returning();
@@ -1353,7 +1371,7 @@ export const emailProcessor = {
       method: gmailConfigured ? 'gmail_api' : imapConfigured ? 'imap' : 'none',
       gmailConfigured,
       imapConfigured,
-      sharedMailbox: process.env.GMAIL_SHARED_MAILBOX || null,
+      sharedMailbox: process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX,
       allowedSenders: process.env.EMAIL_ALLOWED_SENDERS || '(bloqueado - configure allowlist)',
       lastRun: lastLog?.createdAt || null,
       todayStats: stats,

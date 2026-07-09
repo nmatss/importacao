@@ -1,6 +1,11 @@
 import { settingsService } from './service.js';
 
-export const OPERATIONAL_RECIPIENT_KEYS = ['kiom_email', 'fenicia_email', 'isa_email'] as const;
+export const OPERATIONAL_RECIPIENT_KEYS = [
+  'kiom_email',
+  'fenicia_email',
+  'isa_email',
+  'default_cc_email',
+] as const;
 
 export type OperationalRecipientKey = (typeof OPERATIONAL_RECIPIENT_KEYS)[number];
 
@@ -8,6 +13,7 @@ const RECIPIENT_ENV: Record<OperationalRecipientKey, string> = {
   kiom_email: 'KIOM_EMAIL',
   fenicia_email: 'FENICIA_EMAIL',
   isa_email: 'ISA_EMAIL',
+  default_cc_email: 'COMMUNICATION_DEFAULT_CC',
 };
 
 export function parseEmailList(value: string | null | undefined): string[] {

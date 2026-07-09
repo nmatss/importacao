@@ -45,6 +45,15 @@ interface ChecklistState {
   [key: string]: { checked: boolean; timestamp: string | null };
 }
 
+interface ValidationCheck {
+  checkName: string;
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
+  expectedValue?: string;
+  actualValue?: string;
+  documentsCompared?: string;
+  message: string;
+}
+
 interface DraftBLTabProps {
   processId: string;
 }
@@ -257,6 +266,11 @@ function DraftUploadSection({
 
 function ConferenceChecklist({ processId }: { processId: string }) {
   const [checklist, setChecklist] = useState<ChecklistState>(() => loadChecklist(processId));
+  const { data: validationChecks, refetch: refetchValidation } = useApiQuery<ValidationCheck[]>(
+    ['validation', processId],
+    `/api/validation/${processId}`,
+  );
+  const ncmCheck = validationChecks?.find((check) => check.checkName === 'ncm-bl-description');
 
   useEffect(() => {
     setChecklist(loadChecklist(processId));
@@ -316,6 +330,63 @@ function ConferenceChecklist({ processId }: { processId: string }) {
             />
           </div>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              NCMs do OHBL final × Espelho
+            </p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              A regra compara todos os quatro primeiros dígitos do OHBL final com os NCMs do
+              Espelho. Invoice e Packing List não são usados como fonte de NCM neste controle.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => refetchValidation()}
+            className="rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            Atualizar
+          </button>
+        </div>
+        {ncmCheck ? (
+          <div className="mt-3 grid gap-2 text-xs sm:grid-cols-[auto_1fr] sm:items-start">
+            <span
+              className={cn(
+                'inline-flex w-fit rounded-full px-2 py-1 font-semibold',
+                ncmCheck.status === 'passed'
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                  : ncmCheck.status === 'failed'
+                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : ncmCheck.status === 'warning'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+              )}
+            >
+              {ncmCheck.status === 'passed'
+                ? 'Conforme'
+                : ncmCheck.status === 'failed'
+                  ? 'Divergente'
+                  : ncmCheck.status === 'warning'
+                    ? 'Revisar'
+                    : 'Aguardando'}
+            </span>
+            <div className="min-w-0 text-slate-600 dark:text-slate-300">
+              <p>{ncmCheck.message}</p>
+              {(ncmCheck.expectedValue || ncmCheck.actualValue) && (
+                <p className="mt-1 font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                  Espelho: {ncmCheck.expectedValue || '—'} · OHBL: {ncmCheck.actualValue || '—'}
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+            Aguardando a validação automática do processo.
+          </p>
+        )}
       </div>
 
       {/* Checklist items */}
@@ -498,6 +569,13 @@ function AIExtractedData({
   const woodDeclaration = getFieldValue(data, 'woodDeclaration');
   const freeTime = getFieldValue(data, 'freeTime');
   const ncmList = getFieldValue(data, 'ncmList');
+  const ncmPrefixes = Array.isArray(ncmList)
+    ? [
+        ...new Set(
+          ncmList.map((ncm: unknown) => String(ncm).replace(/\D/g, '').slice(0, 4)).filter(Boolean),
+        ),
+      ]
+    : [];
 
   return (
     <div className="space-y-3">
@@ -655,6 +733,23 @@ function AIExtractedData({
               </span>
             ))}
           </div>
+          {ncmPrefixes.length > 0 && (
+            <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                Prefixos validados (4 digitos)
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {ncmPrefixes.map((prefix) => (
+                  <span
+                    key={prefix}
+                    className="inline-flex rounded bg-emerald-50 px-2 py-0.5 text-xs font-mono font-semibold text-emerald-700"
+                  >
+                    {prefix}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1107,12 +1202,14 @@ export function DraftBLTab({ processId }: DraftBLTabProps) {
 
   if (isLoading) return <TableSkeleton />;
 
-  // All draft_bl documents sorted by upload date (oldest first)
+  // The most recently uploaded draft is the active one. Older uploads remain
+  // available in Documentos as historical evidence and must not be reprocessed
+  // by the action shown in this operational tab.
   const allDraftDocs = (documents ?? [])
     .filter((d) => d.documentType === 'draft_bl')
-    .sort((a, b) => new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime());
+    .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime());
 
-  // First draft_bl is the original, shown in sections A and C
+  // First draft_bl is the current operational draft, shown in sections A and C.
   const draftDoc = allDraftDocs.length > 0 ? allDraftDocs[0] : null;
 
   // OHBL (final BL) — when present, Section C swaps to its data

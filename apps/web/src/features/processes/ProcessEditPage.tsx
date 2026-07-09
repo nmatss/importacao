@@ -9,7 +9,7 @@ import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 
-const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,4})?$/;
+const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,6})?$/;
 
 function optionalDecimalString(label: string) {
   return z
@@ -43,11 +43,18 @@ const processSchema = z
     containerType: z.string().optional(),
     totalFobValue: optionalDecimalString('Valor FOB'),
     freightValue: optionalDecimalString('Valor de frete'),
+    insuranceValue: optionalDecimalString('Seguro'),
+    customsValue: optionalDecimalString('Valor aduaneiro'),
+    registrationDollar: optionalDecimalString('Dolar de registro'),
     totalCbm: optionalDecimalString('CBM'),
     totalBoxes: optionalNonNegativeInteger,
     totalNetWeight: optionalDecimalString('Peso liquido'),
     totalGrossWeight: optionalDecimalString('Peso bruto'),
     shipmentDate: z.string().optional(),
+    duimpNumber: z.string().optional(),
+    registeredAt: z.string().optional(),
+    customsClearanceAt: z.string().optional(),
+    customsChannel: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.etd && data.eta && data.eta < data.etd) {
@@ -68,6 +75,15 @@ const processSchema = z
 
 type ProcessFormData = z.infer<typeof processSchema>;
 
+function normalizeProcessPayload(data: ProcessFormData): Partial<ProcessFormData> {
+  const payload: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value === '' || value == null) continue;
+    payload[key] = value;
+  }
+  return payload as Partial<ProcessFormData>;
+}
+
 interface Process {
   id: number;
   processCode: string;
@@ -85,11 +101,18 @@ interface Process {
   containerType: string | null;
   totalFobValue: string | null;
   freightValue: string | null;
+  insuranceValue: string | null;
+  customsValue: string | null;
+  registrationDollar: string | null;
   totalCbm: string | null;
   totalBoxes: number | null;
   totalNetWeight: string | null;
   totalGrossWeight: string | null;
   shipmentDate: string | null;
+  duimpNumber: string | null;
+  registeredAt: string | null;
+  customsClearanceAt: string | null;
+  customsChannel: string | null;
   lockedAt?: string | null;
   lockedReason?: string | null;
 }
@@ -132,21 +155,34 @@ export function ProcessEditPage() {
         containerType: process.containerType || '',
         totalFobValue: process.totalFobValue || '',
         freightValue: process.freightValue || '',
+        insuranceValue: process.insuranceValue || '',
+        customsValue: process.customsValue || '',
+        registrationDollar: process.registrationDollar || '',
         totalCbm: process.totalCbm || '',
         totalBoxes: process.totalBoxes ?? undefined,
         totalNetWeight: process.totalNetWeight || '',
         totalGrossWeight: process.totalGrossWeight || '',
         shipmentDate: process.shipmentDate ? process.shipmentDate.slice(0, 10) : '',
+        duimpNumber: process.duimpNumber || '',
+        registeredAt: process.registeredAt ? process.registeredAt.slice(0, 10) : '',
+        customsClearanceAt: process.customsClearanceAt
+          ? process.customsClearanceAt.slice(0, 10)
+          : '',
+        customsChannel: process.customsChannel || '',
       });
     }
   }, [process, reset]);
 
-  const mutation = useApiMutation<Process, ProcessFormData>(`/api/processes/${id}`, 'put', {
-    onSuccess: () => {
-      toast.success('Processo atualizado com sucesso');
-      navigate(`/importacao/processos/${id}`);
+  const mutation = useApiMutation<Process, Partial<ProcessFormData>>(
+    `/api/processes/${id}`,
+    'put',
+    {
+      onSuccess: () => {
+        toast.success('Processo atualizado com sucesso');
+        navigate(`/importacao/processos/${id}`);
+      },
     },
-  });
+  );
 
   if (!id) return <Navigate to="/importacao/processos" replace />;
 
@@ -155,7 +191,7 @@ export function ProcessEditPage() {
       toast.error('Destrave o processo antes de salvar alteracoes.');
       return;
     }
-    mutation.mutate(data);
+    mutation.mutate(normalizeProcessPayload(data));
   };
 
   if (isLoading) {
@@ -532,6 +568,119 @@ export function ProcessEditPage() {
                   className={inputClass}
                 />
                 {errors.shipmentDate && <p className={errorClass}>{errors.shipmentDate.message}</p>}
+              </div>
+            </div>
+          </div>
+
+          {/* Customs Registration */}
+          <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600">
+                <FileText className="h-5 w-5" />
+              </div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Registro Aduaneiro
+              </h3>
+            </div>
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <div>
+                <label htmlFor="customsValue" className={labelClass}>
+                  Valor Aduaneiro
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  id="customsValue"
+                  {...register('customsValue')}
+                  aria-invalid={!!errors.customsValue}
+                  placeholder="0.00"
+                  className={inputClass}
+                />
+                {errors.customsValue && <p className={errorClass}>{errors.customsValue.message}</p>}
+              </div>
+              <div>
+                <label htmlFor="registrationDollar" className={labelClass}>
+                  Dolar de Registro
+                </label>
+                <input
+                  type="number"
+                  step="0.000001"
+                  min="0"
+                  inputMode="decimal"
+                  id="registrationDollar"
+                  {...register('registrationDollar')}
+                  aria-invalid={!!errors.registrationDollar}
+                  placeholder="0.000000"
+                  className={inputClass}
+                />
+                {errors.registrationDollar && (
+                  <p className={errorClass}>{errors.registrationDollar.message}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="insuranceValue" className={labelClass}>
+                  Seguro
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  inputMode="decimal"
+                  id="insuranceValue"
+                  {...register('insuranceValue')}
+                  aria-invalid={!!errors.insuranceValue}
+                  placeholder="0.00"
+                  className={inputClass}
+                />
+                {errors.insuranceValue && (
+                  <p className={errorClass}>{errors.insuranceValue.message}</p>
+                )}
+              </div>
+              <div>
+                <label htmlFor="duimpNumber" className={labelClass}>
+                  Numero DUIMP
+                </label>
+                <input
+                  id="duimpNumber"
+                  {...register('duimpNumber')}
+                  placeholder="Numero da DUIMP"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="registeredAt" className={labelClass}>
+                  Data de Registro
+                </label>
+                <input
+                  type="date"
+                  id="registeredAt"
+                  {...register('registeredAt')}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="customsClearanceAt" className={labelClass}>
+                  Desembaraco
+                </label>
+                <input
+                  type="date"
+                  id="customsClearanceAt"
+                  {...register('customsClearanceAt')}
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label htmlFor="customsChannel" className={labelClass}>
+                  Canal RFB
+                </label>
+                <input
+                  id="customsChannel"
+                  {...register('customsChannel')}
+                  placeholder="Ex: verde, amarelo, vermelho"
+                  className={inputClass}
+                />
               </div>
             </div>
           </div>

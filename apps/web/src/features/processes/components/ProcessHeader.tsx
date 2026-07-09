@@ -6,13 +6,16 @@ import {
   BadgeCheck,
   Lock,
   Unlock,
+  Save,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { api } from '@/shared/lib/api-client';
+import { getErrorMessage } from '@/shared/utils/errors';
 import type { ImportProcess } from '@/shared/types';
 
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
@@ -137,6 +140,12 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
   const eta = process.eta ?? readEspelhoSummaryDate(process, 'eta');
   const queryClient = useQueryClient();
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
+  const [urgentNote, setUrgentNote] = useState(process.urgentNote ?? '');
+  const [savingUrgentNote, setSavingUrgentNote] = useState(false);
+
+  useEffect(() => {
+    setUrgentNote(process.urgentNote ?? '');
+  }, [process.urgentNote]);
 
   const handleUnlock = async () => {
     setShowUnlockConfirm(false);
@@ -152,6 +161,19 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
       queryClient.invalidateQueries({ queryKey: ['process', processId] });
     } catch (err: any) {
       toast.error(err.message || 'Erro ao destravar');
+    }
+  };
+
+  const saveUrgentNote = async () => {
+    setSavingUrgentNote(true);
+    try {
+      await api.put(`/api/processes/${processId}`, { urgentNote: urgentNote.trim() || null });
+      toast.success('Observacao urgente salva');
+      queryClient.invalidateQueries({ queryKey: ['process', processId] });
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSavingUrgentNote(false);
     }
   };
 
@@ -229,6 +251,24 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
                 {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.extracted}{' '}
                 extraido{docCounts.extracted !== 1 ? 's' : ''})
               </span>
+            </div>
+            <div className="mt-3 flex max-w-3xl flex-col gap-2 sm:flex-row sm:items-start">
+              <textarea
+                value={urgentNote}
+                onChange={(event) => setUrgentNote(event.target.value)}
+                rows={1}
+                placeholder="Observacao urgente"
+                className="min-h-[42px] flex-1 resize-y rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 placeholder:text-red-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200 dark:placeholder:text-red-500"
+              />
+              <button
+                type="button"
+                onClick={saveUrgentNote}
+                disabled={savingUrgentNote || urgentNote === (process.urgentNote ?? '')}
+                className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-600 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Salvar
+              </button>
             </div>
           </div>
         </div>

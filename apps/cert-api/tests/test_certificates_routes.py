@@ -147,6 +147,30 @@ async def test_create_happy_path_records_linx_outcome(
 
 
 @pytest.mark.asyncio
+async def test_create_prefers_gateway_actor_for_audit_attribution(
+    test_client, api_key_headers, mocker, tmp_path
+):
+    """The reverse proxy actor header overrides a spoofable multipart field."""
+    cur, _ = _mock_certificates_env(mocker, tmp_path=tmp_path)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={
+            "sku": "SKU1",
+            "brand": "imaginarium",
+            "validade_certificado": "2026-12-31",
+            "created_by": "spoofed@grupounico.com",
+        },
+        headers={**api_key_headers, "X-Cert-Actor-Email": "operadora@grupounico.com"},
+    )
+
+    assert resp.status_code == 200
+    insert_call = next(
+        call for call in cur.execute.call_args_list if "INSERT INTO cert_certificates" in str(call.args[0])
+    )
+    assert insert_call.args[1][-1] == "operadora@grupounico.com"
+
+
+@pytest.mark.asyncio
 async def test_retry_linx_404_when_not_found(test_client, api_key_headers, mocker):
     """Retry for an unknown certificate id must return 404 without calling Linx."""
     _, linx = _mock_certificates_env(mocker, row=None)

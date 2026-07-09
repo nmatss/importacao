@@ -23,6 +23,7 @@ import {
   Table,
 } from 'lucide-react';
 import { getErrorMessage } from '@/shared/utils/errors';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 interface CertReportFile {
   filename: string;
@@ -85,12 +86,14 @@ function formatSize(bytes: number): string {
 }
 
 export default function CertRelatoriosPage() {
+  const { user } = useAuth();
   const [reports, setReports] = useState<CertReportFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   const [brandFilter, setBrandFilter] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const isAdmin = user?.role === 'admin';
 
   const loadReports = useCallback(() => {
     setLoading(true);
@@ -186,20 +189,22 @@ export default function CertRelatoriosPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSyncStock}
-            disabled={syncing}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50"
-          >
-            {syncing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <RefreshCw className="w-4 h-4" />
-            )}
-            {syncing ? 'Sincronizando...' : 'Sync Estoque'}
-          </button>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSyncStock}
+              disabled={syncing}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50"
+            >
+              {syncing ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              {syncing ? 'Sincronizando...' : 'Sync Estoque'}
+            </button>
+          </div>
+        )}
       </div>
 
       {loadError && (

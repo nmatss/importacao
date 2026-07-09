@@ -236,4 +236,56 @@ export const settingsController = {
       sendError(res, error.message, status);
     }
   },
+
+  async getCommunicationTemplates(req: Request, res: Response) {
+    try {
+      const activeOnly = req.query.active !== 'false';
+      const templates = await settingsService.getCommunicationTemplates({ activeOnly });
+      sendSuccess(res, templates);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async createCommunicationTemplate(req: Request, res: Response) {
+    try {
+      const template = await settingsService.createCommunicationTemplate(
+        req.user?.id ?? null,
+        req.body,
+      );
+      sendSuccess(res, template, 201);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateCommunicationTemplate(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) return sendError(res, 'ID invalido', 400);
+      const template = await settingsService.updateCommunicationTemplate(
+        id,
+        req.user?.id ?? null,
+        req.body,
+      );
+      sendSuccess(res, template);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async deleteCommunicationTemplate(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id) || id <= 0) return sendError(res, 'ID invalido', 400);
+      const template = await settingsService.deleteCommunicationTemplate(id, req.user?.id ?? null);
+      sendSuccess(res, template);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
 };

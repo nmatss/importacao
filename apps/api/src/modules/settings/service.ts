@@ -1,6 +1,10 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { systemSettings, emailSignatures } from '../../shared/database/schema.js';
+import {
+  systemSettings,
+  emailSignatures,
+  communicationTemplates,
+} from '../../shared/database/schema.js';
 
 export const settingsService = {
   async getAll() {
@@ -152,5 +156,88 @@ export const settingsService = {
     }
 
     return { deleted: true };
+  },
+
+  // ── Communication Templates ─────────────────────────────────────────
+
+  async getCommunicationTemplates(options: { activeOnly?: boolean } = {}) {
+    const query = db.select().from(communicationTemplates);
+    if (options.activeOnly) {
+      return query
+        .where(eq(communicationTemplates.isActive, true))
+        .orderBy(communicationTemplates.name);
+    }
+    return query.orderBy(communicationTemplates.name);
+  },
+
+  async createCommunicationTemplate(
+    userId: number | null,
+    data: {
+      name: string;
+      recipient?: string | null;
+      recipientEmail?: string | null;
+      subject: string;
+      body: string;
+      isActive?: boolean;
+    },
+  ) {
+    const [created] = await db
+      .insert(communicationTemplates)
+      .values({
+        name: data.name.trim(),
+        recipient: data.recipient?.trim() || null,
+        recipientEmail: data.recipientEmail?.trim() || null,
+        subject: data.subject.trim(),
+        body: data.body.trim(),
+        isActive: data.isActive ?? true,
+        createdBy: userId,
+        updatedBy: userId,
+      })
+      .returning();
+    return created;
+  },
+
+  async updateCommunicationTemplate(
+    id: number,
+    userId: number | null,
+    data: {
+      name?: string;
+      recipient?: string | null;
+      recipientEmail?: string | null;
+      subject?: string;
+      body?: string;
+      isActive?: boolean;
+    },
+  ) {
+    const updateData: Record<string, unknown> = {
+      updatedAt: new Date(),
+      updatedBy: userId,
+    };
+    if (data.name !== undefined) updateData.name = data.name.trim();
+    if (data.recipient !== undefined) updateData.recipient = data.recipient?.trim() || null;
+    if (data.recipientEmail !== undefined) {
+      updateData.recipientEmail = data.recipientEmail?.trim() || null;
+    }
+    if (data.subject !== undefined) updateData.subject = data.subject.trim();
+    if (data.body !== undefined) updateData.body = data.body.trim();
+    if (data.isActive !== undefined) updateData.isActive = data.isActive;
+
+    const [updated] = await db
+      .update(communicationTemplates)
+      .set(updateData)
+      .where(eq(communicationTemplates.id, id))
+      .returning();
+    if (!updated) throw Object.assign(new Error('Modelo nao encontrado'), { statusCode: 404 });
+    return updated;
+  },
+
+  async deleteCommunicationTemplate(id: number, userId: number | null) {
+    const [updated] = await db
+      .update(communicationTemplates)
+      .set({ isActive: false, updatedAt: new Date(), updatedBy: userId })
+      .where(eq(communicationTemplates.id, id))
+      .returning();
+    if (!updated) throw Object.assign(new Error('Modelo nao encontrado'), { statusCode: 404 });
+    return updated;
   },
 };

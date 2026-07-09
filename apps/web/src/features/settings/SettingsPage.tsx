@@ -19,6 +19,7 @@ import {
   HardDrive,
   Database,
   Zap,
+  FileText,
   FileSignature,
   Trash2,
   Star,
@@ -53,12 +54,23 @@ interface EmailSignatureData {
   isDefault: boolean;
 }
 
-type TabKey = 'email' | 'users' | 'integrations' | 'signatures';
+interface CommunicationTemplateData {
+  id: number;
+  name: string;
+  recipient: string | null;
+  recipientEmail: string | null;
+  subject: string;
+  body: string;
+  isActive: boolean;
+}
+
+type TabKey = 'email' | 'users' | 'integrations' | 'templates' | 'signatures';
 
 const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'email', label: 'E-mails', icon: Mail },
   { key: 'users', label: 'Usuarios', icon: Users },
   { key: 'integrations', label: 'Integracoes', icon: Link2 },
+  { key: 'templates', label: 'Modelos', icon: FileText },
   { key: 'signatures', label: 'Assinaturas', icon: FileSignature },
 ];
 
@@ -93,13 +105,14 @@ export function SettingsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<TabKey>('email');
 
-  // Non-admins can only access the signatures tab
+  // Non-admins can manage operational email assets, but not system settings.
   const isNonAdmin = user?.role !== 'admin';
-  const visibleTabs = isNonAdmin ? tabs.filter((t) => t.key === 'signatures') : tabs;
+  const nonAdminTabs: TabKey[] = ['templates', 'signatures'];
+  const visibleTabs = isNonAdmin ? tabs.filter((t) => nonAdminTabs.includes(t.key)) : tabs;
   const effectiveTab =
-    isNonAdmin && activeTab !== ('signatures' as TabKey) ? ('signatures' as TabKey) : activeTab;
+    isNonAdmin && !nonAdminTabs.includes(activeTab) ? ('templates' as TabKey) : activeTab;
 
-  if (isNonAdmin && effectiveTab !== 'signatures') {
+  if (isNonAdmin && !nonAdminTabs.includes(effectiveTab)) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger-50 mb-5">
@@ -151,6 +164,7 @@ export function SettingsPage() {
       {effectiveTab === 'email' && <EmailSettingsTab />}
       {effectiveTab === 'users' && <UsersTab />}
       {effectiveTab === 'integrations' && <IntegrationsTab />}
+      {effectiveTab === 'templates' && <CommunicationTemplatesTab />}
       {effectiveTab === 'signatures' && <SignaturesTab />}
     </div>
   );
@@ -230,6 +244,7 @@ function EmailSettingsTab() {
   const [kiomEmail, setKiomEmail] = useState('');
   const [feniciaEmail, setFeniciaEmail] = useState('');
   const [isaEmail, setIsaEmail] = useState('');
+  const [defaultCcEmail, setDefaultCcEmail] = useState('');
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
   const [savingRecipients, setSavingRecipients] = useState(false);
@@ -273,6 +288,7 @@ function EmailSettingsTab() {
         if (s.key === 'kiom_email') setKiomEmail(s.value || '');
         if (s.key === 'fenicia_email') setFeniciaEmail(s.value || '');
         if (s.key === 'isa_email') setIsaEmail(s.value || '');
+        if (s.key === 'default_cc_email') setDefaultCcEmail(s.value || '');
       }
     }
   }, [recipientSettings]);
@@ -313,6 +329,7 @@ function EmailSettingsTab() {
       ...invalidEmailListItems(kiomEmail),
       ...invalidEmailListItems(feniciaEmail),
       ...invalidEmailListItems(isaEmail),
+      ...invalidEmailListItems(defaultCcEmail),
     ];
 
     if (invalidItems.length > 0) {
@@ -326,6 +343,7 @@ function EmailSettingsTab() {
         kiom_email: kiomEmail,
         fenicia_email: feniciaEmail,
         isa_email: isaEmail,
+        default_cc_email: defaultCcEmail,
       });
       setSavedRecipients(true);
       setTimeout(() => setSavedRecipients(false), 2000);
@@ -334,7 +352,7 @@ function EmailSettingsTab() {
     } finally {
       setSavingRecipients(false);
     }
-  }, [kiomEmail, feniciaEmail, isaEmail]);
+  }, [kiomEmail, feniciaEmail, isaEmail, defaultCcEmail]);
 
   return (
     <div className="space-y-6">
@@ -344,7 +362,7 @@ function EmailSettingsTab() {
         description="Allowlist de envio usada por rascunhos e automacoes"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
             <div className="min-w-0">
               <label htmlFor="kiom-email" className={labelClasses}>
                 KIOM
@@ -388,6 +406,21 @@ function EmailSettingsTab() {
               />
               <p className="mt-1 text-xs text-slate-400">
                 {parseEmailList(isaEmail).length} destinatário(s)
+              </p>
+            </div>
+            <div className="min-w-0">
+              <label htmlFor="default-cc-email" className={labelClasses}>
+                Copia fixa
+              </label>
+              <textarea
+                id="default-cc-email"
+                value={defaultCcEmail}
+                onChange={(e) => setDefaultCcEmail(e.target.value)}
+                placeholder="global@grupounico.com"
+                className={textareaClasses}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                {parseEmailList(defaultCcEmail).length} e-mail(s) em copia
               </p>
             </div>
           </div>
@@ -994,6 +1027,320 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
       )}
       Testar Conexao
     </button>
+  );
+}
+
+function CommunicationTemplatesTab() {
+  const queryClient = useQueryClient();
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState<CommunicationTemplateData | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name: '',
+    recipient: '',
+    recipientEmail: '',
+    subject: '',
+    body: '',
+    isActive: true,
+  });
+
+  const { data: templates, isLoading } = useApiQuery<CommunicationTemplateData[]>(
+    settingsKeys.communicationTemplates(),
+    '/api/settings/communication-templates?active=false',
+  );
+
+  const resetForm = () => {
+    setEditing(null);
+    setForm({
+      name: '',
+      recipient: '',
+      recipientEmail: '',
+      subject: '',
+      body: '',
+      isActive: true,
+    });
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowModal(true);
+  };
+
+  const openEdit = (template: CommunicationTemplateData) => {
+    setEditing(template);
+    setForm({
+      name: template.name,
+      recipient: template.recipient ?? '',
+      recipientEmail: template.recipientEmail ?? '',
+      subject: template.subject,
+      body: template.body,
+      isActive: template.isActive,
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const invalidItems = invalidEmailListItems(form.recipientEmail);
+    if (invalidItems.length > 0) {
+      toast.error(`E-mail inválido: ${invalidItems[0]}`);
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name,
+        recipient: form.recipient || null,
+        recipientEmail: form.recipientEmail || null,
+        subject: form.subject,
+        body: form.body,
+        isActive: form.isActive,
+      };
+      if (editing) {
+        await api.put(`/api/settings/communication-templates/${editing.id}`, payload);
+      } else {
+        await api.post('/api/settings/communication-templates', payload);
+      }
+      queryClient.invalidateQueries({ queryKey: settingsKeys.communicationTemplates() });
+      setShowModal(false);
+      resetForm();
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeactivate = async () => {
+    if (!deletingId) return;
+    try {
+      await api.delete(`/api/settings/communication-templates/${deletingId}`);
+      queryClient.invalidateQueries({ queryKey: settingsKeys.communicationTemplates() });
+      setDeletingId(null);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    }
+  };
+
+  if (isLoading) return <PageSkeleton />;
+
+  return (
+    <div className="space-y-5">
+      <SectionCard
+        icon={FileText}
+        title="Modelos de Atendimento"
+        description="Modelos reutilizaveis para rascunhos e envios de e-mail"
+        actions={
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Novo Modelo
+          </button>
+        }
+      >
+        {!templates || templates.length === 0 ? (
+          <div className="py-8 text-center">
+            <p className="text-sm font-medium text-slate-400">Nenhum modelo cadastrado.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-[720px] w-full">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Modelo
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Destinatario
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Assunto
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    Acoes
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((template) => (
+                  <tr
+                    key={template.id}
+                    className="border-b border-slate-100 last:border-b-0 dark:border-slate-700"
+                  >
+                    <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                      {template.name}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-500">
+                      {template.recipientEmail || template.recipient || '--'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+                      {template.subject}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          'rounded-lg px-2.5 py-1 text-xs font-semibold',
+                          template.isActive
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-slate-100 text-slate-500',
+                        )}
+                      >
+                        {template.isActive ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => openEdit(template)}
+                          className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600"
+                          aria-label={`Editar modelo ${template.name}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        {template.isActive && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingId(template.id)}
+                            className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600"
+                            aria-label={`Desativar modelo ${template.name}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </SectionCard>
+
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="template-modal-title"
+            className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
+          >
+            <h2
+              id="template-modal-title"
+              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+            >
+              {editing ? 'Editar Modelo' : 'Novo Modelo'}
+            </h2>
+            <form onSubmit={handleSave} className="space-y-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="template-name" className={labelClasses}>
+                    Nome
+                  </label>
+                  <input
+                    id="template-name"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className={inputClasses}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="template-recipient" className={labelClasses}>
+                    Destinatario
+                  </label>
+                  <input
+                    id="template-recipient"
+                    value={form.recipient}
+                    onChange={(e) => setForm({ ...form, recipient: e.target.value })}
+                    className={inputClasses}
+                  />
+                </div>
+              </div>
+              <div>
+                <label htmlFor="template-recipient-email" className={labelClasses}>
+                  E-mail destinatario
+                </label>
+                <input
+                  id="template-recipient-email"
+                  value={form.recipientEmail}
+                  onChange={(e) => setForm({ ...form, recipientEmail: e.target.value })}
+                  placeholder="email@exemplo.com, outro@exemplo.com"
+                  className={inputClasses}
+                />
+              </div>
+              <div>
+                <label htmlFor="template-subject" className={labelClasses}>
+                  Assunto
+                </label>
+                <input
+                  id="template-subject"
+                  value={form.subject}
+                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                  className={inputClasses}
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="template-body" className={labelClasses}>
+                  Mensagem
+                </label>
+                <textarea
+                  id="template-body"
+                  value={form.body}
+                  onChange={(e) => setForm({ ...form, body: e.target.value })}
+                  className={cn(inputClasses, 'min-h-[180px]')}
+                  required
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-300 text-primary-600"
+                />
+                Ativo para uso nos atendimentos
+              </label>
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setShowModal(false)}
+                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                >
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        isOpen={!!deletingId}
+        title="Desativar Modelo"
+        message="Este modelo deixara de aparecer nos atendimentos, mas o historico sera preservado."
+        confirmLabel="Desativar"
+        onConfirm={handleDeactivate}
+        onCancel={() => setDeletingId(null)}
+      />
+    </div>
   );
 }
 

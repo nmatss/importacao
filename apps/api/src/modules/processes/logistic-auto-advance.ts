@@ -17,6 +17,8 @@ interface DeriveInput {
     shipmentDate: Date | string | null;
     customsChannel: string | null;
     diNumber: string | null;
+    duimpNumber?: string | null;
+    registeredAt?: Date | string | null;
     customsClearanceAt: Date | null;
     cdArrivalAt: Date | null;
     logisticStatus: string | null;
@@ -48,8 +50,8 @@ export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
   // 6 — customs_inspection: customs channel assigned
   if (p.customsChannel) return 'customs_inspection';
 
-  // 5 — registered: DI registered
-  if (p.diNumber) return 'registered';
+  // 5 — registered: DI/DUIMP registered
+  if (p.diNumber || p.duimpNumber || p.registeredAt) return 'registered';
 
   // 4 — berthing: eta reached
   const eta = toDate(p.eta);
@@ -60,12 +62,7 @@ export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
   if (etd && etd.getTime() <= now.getTime()) return 'in_transit';
 
   // 2 — waiting_shipment: espelho built / sent to fenicia (ready for shipment)
-  if (
-    f?.espelhoBuiltAt ||
-    f?.espelhoGeneratedAt ||
-    f?.invoiceSentFeniciaAt ||
-    f?.sentToFeniciaAt
-  ) {
+  if (f?.espelhoBuiltAt || f?.espelhoGeneratedAt || f?.invoiceSentFeniciaAt || f?.sentToFeniciaAt) {
     return 'waiting_shipment';
   }
 
@@ -80,10 +77,7 @@ function toDate(v: Date | string | null | undefined): Date | null {
   return isNaN(d.getTime()) ? null : d;
 }
 
-export function isForwardTransition(
-  current: string | null,
-  next: LogisticStatus,
-): boolean {
+export function isForwardTransition(current: string | null, next: LogisticStatus): boolean {
   if (!current) return true;
   const cur = ORDER[current as LogisticStatus];
   if (cur === undefined) return true;

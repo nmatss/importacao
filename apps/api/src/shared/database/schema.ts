@@ -38,6 +38,8 @@ export const documentTypeEnum = pgEnum('document_type', [
   'packing_list',
   'ohbl',
   'draft_bl',
+  'draft_duimp',
+  'duimp',
   'espelho',
   'li',
   'certificate',
@@ -117,6 +119,10 @@ export const importProcesses = pgTable(
     diNumber: varchar('di_number', { length: 100 }),
     customsChannel: varchar('customs_channel', { length: 20 }),
     customsClearanceAt: timestamp('customs_clearance_at'),
+    customsValue: numeric('customs_value', { precision: 14, scale: 2 }),
+    registrationDollar: numeric('registration_dollar', { precision: 10, scale: 6 }),
+    duimpNumber: varchar('duimp_number', { length: 100 }),
+    registeredAt: timestamp('registered_at'),
     cdArrivalAt: timestamp('cd_arrival_at'),
     freeTimeDays: integer('free_time_days'),
     numerarioValue: numeric('numerario_value', { precision: 12, scale: 2 }),
@@ -125,6 +131,7 @@ export const importProcesses = pgTable(
     documentStage: varchar('document_stage', { length: 30 }).default('pre_con'),
     aiExtractedData: jsonb('ai_extracted_data'),
     notes: text('notes'),
+    urgentNote: text('urgent_note'),
     // Pre-Cons às vezes troca a referência de um processo (209 vira 208) ou
     // remove e devolve com outro código. previousCodes mantém o histórico
     // pra busca, audit e prevenção de duplicata. Adicionado 2026-05-22.
@@ -274,6 +281,33 @@ export const comparisonAcceptances = pgTable(
   ],
 );
 
+export const comparisonFieldOverrides = pgTable(
+  'comparison_field_overrides',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    rowKey: varchar('row_key', { length: 160 }).notNull(),
+    fieldLabel: varchar('field_label', { length: 160 }).notNull(),
+    sourceColumn: varchar('source_column', { length: 30 }).notNull(),
+    valueText: text('value_text'),
+    note: text('note'),
+    editedBy: integer('edited_by').references(() => users.id, { onDelete: 'set null' }),
+    editedAt: timestamp('edited_at', { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('comparison_field_overrides_process_id_idx').on(table.processId),
+    uniqueIndex('comparison_field_overrides_row_source_uidx').on(
+      table.processId,
+      table.rowKey,
+      table.sourceColumn,
+    ),
+  ],
+);
+
 export const currencyExchanges = pgTable(
   'currency_exchanges',
   {
@@ -326,6 +360,50 @@ export const followUpTracking = pgTable('follow_up_tracking', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+export const processCustomStages = pgTable(
+  'process_custom_stages',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    label: varchar('label', { length: 160 }).notNull(),
+    position: integer('position').default(0).notNull(),
+    completedAt: timestamp('completed_at'),
+    notes: text('notes'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [
+    index('process_custom_stages_process_id_idx').on(table.processId),
+    index('process_custom_stages_process_position_idx').on(table.processId, table.position),
+  ],
+);
+
+export const processOperationalRecords = pgTable(
+  'process_operational_records',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    recordKind: varchar('record_kind', { length: 30 }).notNull(),
+    recordType: varchar('record_type', { length: 160 }).notNull(),
+    quantity: integer('quantity'),
+    amount: numeric('amount', { precision: 12, scale: 2 }),
+    currency: varchar('currency', { length: 10 }).default('BRL'),
+    notes: text('notes'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [
+    index('process_operational_records_process_id_idx').on(table.processId),
+    index('process_operational_records_kind_idx').on(table.processId, table.recordKind),
+  ],
+);
+
 export const espelhos = pgTable(
   'espelhos',
   {
@@ -365,11 +443,39 @@ export const communications = pgTable(
     attachments: jsonb('attachments'),
     status: communicationStatusEnum('status').default('draft').notNull(),
     sentAt: timestamp('sent_at'),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    sentBy: integer('sent_by').references(() => users.id, { onDelete: 'set null' }),
+    ccRecipients: varchar('cc_recipients', { length: 500 }),
     errorMessage: text('error_message'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },
-  (table) => [index('communications_process_id_idx').on(table.processId)],
+  (table) => [
+    index('communications_process_id_idx').on(table.processId),
+    index('communications_created_by_idx').on(table.createdBy),
+  ],
+);
+
+export const communicationTemplates = pgTable(
+  'communication_templates',
+  {
+    id: serial('id').primaryKey(),
+    name: varchar('name', { length: 120 }).notNull(),
+    recipient: varchar('recipient', { length: 255 }),
+    recipientEmail: varchar('recipient_email', { length: 500 }),
+    subject: varchar('subject', { length: 500 }).notNull(),
+    body: text('body').notNull(),
+    isActive: boolean('is_active').default(true).notNull(),
+    createdBy: integer('created_by').references(() => users.id, { onDelete: 'set null' }),
+    updatedBy: integer('updated_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').defaultNow(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+  },
+  (table) => [
+    index('communication_templates_active_idx').on(table.isActive),
+    uniqueIndex('communication_templates_name_uidx').on(table.name),
+  ],
 );
 
 export const alerts = pgTable(
@@ -439,6 +545,7 @@ export const emailIngestionLogs = pgTable(
     status: emailIngestionStatusEnum('status').default('pending').notNull(),
     attachmentsCount: integer('attachments_count').default(0),
     processedAttachments: jsonb('processed_attachments'),
+    bodyText: text('body_text'),
     errorMessage: text('error_message'),
     processCode: varchar('process_code', { length: 50 }),
     createdAt: timestamp('created_at').defaultNow(),
@@ -535,18 +642,26 @@ export type NewProcessItem = typeof processItems.$inferInsert;
 
 export type ValidationResult = typeof validationResults.$inferSelect;
 export type NewValidationResult = typeof validationResults.$inferInsert;
+export type ComparisonFieldOverride = typeof comparisonFieldOverrides.$inferSelect;
+export type NewComparisonFieldOverride = typeof comparisonFieldOverrides.$inferInsert;
 
 export type CurrencyExchange = typeof currencyExchanges.$inferSelect;
 export type NewCurrencyExchange = typeof currencyExchanges.$inferInsert;
 
 export type FollowUpTracking = typeof followUpTracking.$inferSelect;
 export type NewFollowUpTracking = typeof followUpTracking.$inferInsert;
+export type ProcessCustomStage = typeof processCustomStages.$inferSelect;
+export type NewProcessCustomStage = typeof processCustomStages.$inferInsert;
+export type ProcessOperationalRecord = typeof processOperationalRecords.$inferSelect;
+export type NewProcessOperationalRecord = typeof processOperationalRecords.$inferInsert;
 
 export type Espelho = typeof espelhos.$inferSelect;
 export type NewEspelho = typeof espelhos.$inferInsert;
 
 export type Communication = typeof communications.$inferSelect;
 export type NewCommunication = typeof communications.$inferInsert;
+export type CommunicationTemplate = typeof communicationTemplates.$inferSelect;
+export type NewCommunicationTemplate = typeof communicationTemplates.$inferInsert;
 
 export type Alert = typeof alerts.$inferSelect;
 export type NewAlert = typeof alerts.$inferInsert;

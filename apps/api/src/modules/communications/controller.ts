@@ -42,7 +42,7 @@ export const communicationController = {
 
   async create(req: Request, res: Response) {
     try {
-      const communication = await communicationService.create(req.body);
+      const communication = await communicationService.create(req.body, req.user?.id ?? null);
       sendSuccess(res, communication, 201);
     } catch (error: any) {
       const status = error.statusCode || 400;
@@ -71,7 +71,11 @@ export const communicationController = {
       if (isNaN(id) || id <= 0) {
         return sendError(res, 'ID da comunicacao invalido', 400);
       }
-      const communication = await communicationService.updateDraft(id, req.body);
+      const communication = await communicationService.updateDraft(
+        id,
+        req.body,
+        req.user?.id ?? null,
+      );
       sendSuccess(res, communication);
     } catch (error: any) {
       const status = error.statusCode || 400;

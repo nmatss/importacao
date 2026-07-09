@@ -12,9 +12,11 @@ import {
   documentExtractionRuns,
   documentExtractedFields,
   comparisonAcceptances,
+  comparisonFieldOverrides,
   importProcesses,
   followUpTracking,
   emailIngestionLogs,
+  users,
 } from '../../shared/database/schema.js';
 import { aiService, flattenAiData, AIBudgetExceededError } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
@@ -30,10 +32,14 @@ import { getQueue } from '../../shared/queue/index.js';
 import { portsMatch as normalizedPortsMatch } from '../validation/utils/port-normalize.js';
 import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
 import { extractPartyParts } from '../validation/utils/party-extract.js';
-import { itemCodesMatch, cleanItemCodesInAiData } from '../validation/utils/item-code-normalize.js';
+import {
+  itemCodesMatch,
+  cleanItemCodesInAiData,
+  extractCanonicalItemCode,
+} from '../validation/utils/item-code-normalize.js';
 import { compareDates } from '../validation/utils/date-compare.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
-import type { AcceptComparisonInput } from './schema.js';
+import type { AcceptComparisonInput, EditComparisonFieldInput } from './schema.js';
 import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 
@@ -67,6 +73,8 @@ const PROJECTED_AI_DATA_KEYS = new Set([
   'packing_list',
   'ohbl',
   'draft_bl',
+  'draft_duimp',
+  'duimp',
   'espelho',
   'li',
   'certificate',
@@ -223,6 +231,22 @@ const COVERAGE_PROFILES: Record<string, CoverageProfile> = {
       'currency',
     ],
     important: ['deferralDate', 'items', 'anuentes'],
+  },
+  // A draft can legitimately precede channeling/clearance, while a final
+  // DUIMP should normally expose the registration date and all monetary data.
+  draft_duimp: {
+    required: ['duimpNumber', 'customsValue', 'registrationDollar', 'insuranceValue'],
+    important: ['registeredAt', 'customsClearanceAt', 'customsChannel'],
+  },
+  duimp: {
+    required: [
+      'duimpNumber',
+      'customsValue',
+      'registrationDollar',
+      'insuranceValue',
+      'registeredAt',
+    ],
+    important: ['customsClearanceAt', 'customsChannel'],
   },
 };
 
@@ -1102,6 +1126,9 @@ export const documentService = {
             return aiService.extractCertificateData(text, extractionOpts);
           case 'li':
             return aiService.extractLIData(text, extractionOpts);
+          case 'draft_duimp':
+          case 'duimp':
+            return aiService.extractDUIMPData(text, type, extractionOpts);
           default:
             throw new Error(`Tipo de documento sem extractor dedicado: ${type}`);
         }
@@ -1115,6 +1142,8 @@ export const documentService = {
         case 'draft_bl':
         case 'certificate':
         case 'li':
+        case 'draft_duimp':
+        case 'duimp':
           result = await withAIExtractionTimeout(runExtraction(), { documentId, type });
           break;
         default: {
@@ -2361,11 +2390,127 @@ export const documentService = {
     };
   },
 
+  async editComparisonField(
+    processId: number,
+    input: EditComparisonFieldInput,
+    userId?: number | null,
+  ) {
+    const [processRow] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!processRow) {
+      throw new NotFoundError('Processo', processId);
+    }
+
+    const editedAt = new Date();
+    const [override] = await db
+      .insert(comparisonFieldOverrides)
+      .values({
+        processId,
+        rowKey: input.rowKey,
+        fieldLabel: input.fieldLabel,
+        sourceColumn: input.sourceColumn,
+        valueText: input.value,
+        note: input.note ?? null,
+        editedBy: userId ?? null,
+        editedAt,
+      })
+      .onConflictDoUpdate({
+        target: [
+          comparisonFieldOverrides.processId,
+          comparisonFieldOverrides.rowKey,
+          comparisonFieldOverrides.sourceColumn,
+        ],
+        set: {
+          fieldLabel: input.fieldLabel,
+          valueText: input.value,
+          note: input.note ?? null,
+          editedBy: userId ?? null,
+          editedAt,
+          updatedAt: editedAt,
+        },
+      })
+      .returning();
+
+    await auditService.log(
+      userId ?? null,
+      'edit_comparison_field',
+      'process',
+      processId,
+      {
+        rowKey: input.rowKey,
+        fieldLabel: input.fieldLabel,
+        sourceColumn: input.sourceColumn,
+      },
+      null,
+    );
+
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'comparison_field_edited',
+        title: `Comparativo editado: ${input.fieldLabel}`,
+        description: input.note || undefined,
+        metadata: {
+          rowKey: input.rowKey,
+          fieldLabel: input.fieldLabel,
+          sourceColumn: input.sourceColumn,
+          value: input.value,
+          editedAt: editedAt.toISOString(),
+        },
+      },
+      userId ?? null,
+    );
+
+    return override;
+  },
+
   async getComparison(processId: number) {
-    const [docs, processRow] = await Promise.all([
+    const [docs, processRow, overrides] = await Promise.all([
       db.select().from(documents).where(eq(documents.processId, processId)),
       db.select().from(importProcesses).where(eq(importProcesses.id, processId)).limit(1),
+      db
+        .select({
+          id: comparisonFieldOverrides.id,
+          processId: comparisonFieldOverrides.processId,
+          rowKey: comparisonFieldOverrides.rowKey,
+          fieldLabel: comparisonFieldOverrides.fieldLabel,
+          sourceColumn: comparisonFieldOverrides.sourceColumn,
+          valueText: comparisonFieldOverrides.valueText,
+          note: comparisonFieldOverrides.note,
+          editedAt: comparisonFieldOverrides.editedAt,
+          editedBy: comparisonFieldOverrides.editedBy,
+          editedByName: users.name,
+        })
+        .from(comparisonFieldOverrides)
+        .leftJoin(users, eq(comparisonFieldOverrides.editedBy, users.id))
+        .where(eq(comparisonFieldOverrides.processId, processId)),
     ]);
+
+    const overrideByRow = new Map<string, typeof overrides>();
+    for (const override of overrides) {
+      const list = overrideByRow.get(override.rowKey) ?? [];
+      list.push(override);
+      overrideByRow.set(override.rowKey, list);
+    }
+    const getOverride = (rowKeyValue: string, sourceColumn: string) =>
+      overrideByRow.get(rowKeyValue)?.find((override) => override.sourceColumn === sourceColumn);
+    const editedMessage = (rowKeyValue: string, baseMessage: string | null) => {
+      const list = overrideByRow.get(rowKeyValue) ?? [];
+      if (list.length === 0) return baseMessage;
+      const latest = [...list].sort((a, b) => {
+        const aTime =
+          a.editedAt instanceof Date ? a.editedAt.getTime() : new Date(a.editedAt).getTime();
+        const bTime =
+          b.editedAt instanceof Date ? b.editedAt.getTime() : new Date(b.editedAt).getTime();
+        return bTime - aTime;
+      })[0];
+      const author = latest.editedByName ?? `usuario ${latest.editedBy ?? '-'}`;
+      return `${baseMessage ?? 'Valor revisado manualmente.'} Editado por ${author}.`;
+    };
 
     const newestFirst = [...docs].sort((a, b) => {
       const aTime = (a.updatedAt ?? a.createdAt)?.getTime?.() ?? 0;
@@ -2415,6 +2560,22 @@ export const documentService = {
       | undefined;
     const espelhoSummary = espelhoFromProcess?.summary ?? espelhoFromDoc?.summary ?? null;
     const espelhoItems = espelhoFromProcess?.items ?? espelhoFromDoc?.items ?? [];
+    const supplierFooterAliases = normalizeStringList(
+      inv?.manufacturerAliases ??
+        inv?.manufacturerNicknames ??
+        inv?.supplierAliases ??
+        inv?.supplierNicknames ??
+        [],
+    );
+    const espelhoSuppliers = normalizeStringList([
+      espelhoSummary?.exporterName,
+      espelhoSummary?.supplier,
+      espelhoSummary?.fornecedor,
+      ...espelhoItems.map(
+        (item: Record<string, any>) =>
+          item.fornecedor ?? item.supplier ?? item.manufacturer ?? item.manufacturerName,
+      ),
+    ]);
 
     // Pre-extract structured party parts from each document
     const invExporter = extractPartyParts(inv?.exporterName);
@@ -2643,16 +2804,27 @@ export const documentService = {
       let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
       const criticality: Criticality = f.criticality ?? 'critical';
       if (criticality === 'secondary' && status === 'divergent') status = 'warning';
+      const key = comparisonRowKey('aggregate', f.label, index);
+      const invoiceOverride = getOverride(key, 'invoice');
+      const packingListOverride = getOverride(key, 'packingList');
+      const blOverride = getOverride(key, 'bl');
+      const espelhoOverride = getOverride(key, 'espelho');
+      const baseMessage = aggregateMessage(status, criticality);
       return {
-        rowKey: comparisonRowKey('aggregate', f.label, index),
+        rowKey: key,
         label: f.label,
-        invoice: f.inv != null && f.inv !== '' ? String(f.inv) : null,
-        packingList: f.pl != null && f.pl !== '' ? String(f.pl) : null,
-        bl: f.bl != null && f.bl !== '' ? String(f.bl) : null,
-        espelho: f.espelho != null && f.espelho !== '' ? String(f.espelho) : null,
+        invoice:
+          invoiceOverride?.valueText ?? (f.inv != null && f.inv !== '' ? String(f.inv) : null),
+        packingList:
+          packingListOverride?.valueText ?? (f.pl != null && f.pl !== '' ? String(f.pl) : null),
+        bl: blOverride?.valueText ?? (f.bl != null && f.bl !== '' ? String(f.bl) : null),
+        espelho:
+          espelhoOverride?.valueText ??
+          (f.espelho != null && f.espelho !== '' ? String(f.espelho) : null),
         status,
         criticality,
-        message: aggregateMessage(status, criticality),
+        message: editedMessage(key, baseMessage),
+        overrides: overrideByRow.get(key) ?? [],
       };
     });
 
@@ -2662,12 +2834,7 @@ export const documentService = {
 
     const findPlMatch = (invItem: any) =>
       plItems.find((plItem: any) => {
-        const invEan = normalizeGtin(invItem.ean);
-        const plEan = normalizeGtin(plItem.ean);
-        if (invEan && plEan && invEan === plEan) return true;
-        if (itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)) {
-          return true;
-        }
+        if (itemIdentityMatches(plItem, invItem)) return true;
         const plDesc = plItem.description ?? plItem.descricao;
         const invDesc = invItem.description ?? invItem.descricao;
         return Boolean(
@@ -2679,36 +2846,59 @@ export const documentService = {
 
     const findEspelhoMatch = (invItem: any) =>
       espelhoItems.find((espItem: any) => {
-        const invEan = normalizeGtin(invItem.ean);
-        const espelhoEan = normalizeGtin(espItem.ean ?? espItem.ean13);
-        if (invEan && espelhoEan && invEan === espelhoEan) return true;
-        return itemCodesMatch(
-          espItem.codigo ?? espItem.itemCode,
-          invItem.itemCode ?? invItem.codigo,
-        );
+        return itemIdentityMatches(espItem, invItem);
       });
 
     const itemComparison = invItems.map((invItem: any, index: number) => {
       const plMatch = findPlMatch(invItem);
       const espelhoMatch = findEspelhoMatch(invItem);
-      const itemCode = invItem.itemCode ?? invItem.codigo;
+      const itemCode =
+        extractCanonicalItemCode(
+          invItem.itemCode ?? invItem.codigo ?? invItem.code ?? invItem.sku,
+        ) ||
+        itemCodeCandidates(invItem)[0] ||
+        invItem.itemCode ||
+        invItem.codigo;
       const invoiceQty = toNumberOrNull(invItem.quantity);
       const plQty = toNumberOrNull(plMatch?.quantity);
       const espelhoQty = toNumberOrNull(espelhoMatch?.qty ?? espelhoMatch?.quantity);
+      const invoiceManufacturer =
+        invItem.manufacturer ?? invItem.manufacturerName ?? invItem.fabricante ?? null;
+      const plManufacturer =
+        plMatch?.manufacturer ?? plMatch?.manufacturerName ?? plMatch?.fabricante ?? null;
+      const espelhoManufacturer =
+        espelhoMatch?.manufacturer ??
+        espelhoMatch?.manufacturerName ??
+        espelhoMatch?.fabricante ??
+        espelhoMatch?.fornecedor ??
+        null;
       const isFreeOfCharge = isInvoiceFreeOfCharge(invItem);
       const quantityDiverges =
         plQty != null && invoiceQty != null && Math.abs(plQty - invoiceQty) > 0.0001;
       const espelhoDiverges =
         espelhoQty != null && invoiceQty != null && Math.abs(espelhoQty - invoiceQty) > 0.0001;
+      const manufacturerDiverges = manufacturerValuesDiverge([
+        invoiceManufacturer,
+        plManufacturer,
+        espelhoManufacturer,
+      ]);
+      const weightRatio = compareItemWeightRatio({
+        invoiceNetWeight: toNumberOrNull(invItem.netWeight),
+        invoiceGrossWeight: toNumberOrNull(invItem.grossWeight),
+        plNetWeight: toNumberOrNull(plMatch?.netWeight),
+        plGrossWeight: toNumberOrNull(plMatch?.grossWeight),
+      });
       const matched = !!plMatch;
       const espelhoMatched = !!espelhoMatch;
       const status: RowStatus = isFreeOfCharge
         ? 'warning'
-        : !matched || (espelhoItems.length > 0 && !espelhoMatched)
+        : !matched || (espelhoItems.length > 0 && !espelhoMatched) || manufacturerDiverges
           ? 'warning'
-          : quantityDiverges || espelhoDiverges
+          : quantityDiverges || espelhoDiverges || weightRatio.status === 'divergent'
             ? 'divergent'
-            : 'match';
+            : weightRatio.status === 'warning'
+              ? 'warning'
+              : 'match';
       const divergence = buildItemDivergence({
         matched,
         espelhoMatched,
@@ -2716,6 +2906,8 @@ export const documentService = {
         quantityDiverges,
         espelhoDiverges,
         isFreeOfCharge,
+        manufacturerDiverges,
+        weightRatioMessage: weightRatio.message,
       });
 
       return {
@@ -2730,6 +2922,10 @@ export const documentService = {
         invoiceTotal: invItem.totalPrice,
         espelhoUnitPrice: espelhoMatch?.unitPrice ?? null,
         espelhoTotal: espelhoMatch?.amountUsd ?? null,
+        invoiceManufacturer,
+        plManufacturer,
+        espelhoManufacturer,
+        manufacturerMatch: !manufacturerDiverges,
         invoiceBoxes: invItem.boxQuantity ?? null,
         plBoxes: plMatch?.boxQuantity ?? null,
         espelhoBoxes: espelhoMatch?.caixasPorRef ?? null,
@@ -2741,6 +2937,8 @@ export const documentService = {
         plWeight: plMatch?.grossWeight ?? plMatch?.netWeight ?? null,
         espelhoGrossWeight: espelhoMatch?.pesoBrutoTotal ?? null,
         isFreeOfCharge,
+        weightRatioStatus: weightRatio.status,
+        weightRatioMessage: weightRatio.message,
         qtyMatch: plMatch ? !quantityDiverges : null,
         matched,
         espelhoMatched,
@@ -2755,14 +2953,7 @@ export const documentService = {
       .filter(
         (plItem: any) =>
           !invItems.some((invItem: any) => {
-            const invEan = normalizeGtin(invItem.ean);
-            const plEan = normalizeGtin(plItem.ean);
-            if (invEan && plEan && invEan === plEan) return true;
-            if (
-              itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)
-            ) {
-              return true;
-            }
+            if (itemIdentityMatches(plItem, invItem)) return true;
             const plDesc = plItem.description ?? plItem.descricao;
             const invDesc = invItem.description ?? invItem.descricao;
             return Boolean(
@@ -2773,7 +2964,11 @@ export const documentService = {
           }),
       )
       .map((item: any) => ({
-        itemCode: item.itemCode ?? item.codigo,
+        itemCode:
+          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
+          itemCodeCandidates(item)[0] ||
+          item.itemCode ||
+          item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'packing_list',
@@ -2786,14 +2981,7 @@ export const documentService = {
       .filter(
         (invItem: any) =>
           !plItems.some((plItem: any) => {
-            const invEan = normalizeGtin(invItem.ean);
-            const plEan = normalizeGtin(plItem.ean);
-            if (invEan && plEan && invEan === plEan) return true;
-            if (
-              itemCodesMatch(plItem.itemCode ?? plItem.codigo, invItem.itemCode ?? invItem.codigo)
-            ) {
-              return true;
-            }
+            if (itemIdentityMatches(plItem, invItem)) return true;
             const plDesc = plItem.description ?? plItem.descricao;
             const invDesc = invItem.description ?? invItem.descricao;
             return Boolean(
@@ -2804,7 +2992,11 @@ export const documentService = {
           }),
       )
       .map((item: any) => ({
-        itemCode: item.itemCode ?? item.codigo,
+        itemCode:
+          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
+          itemCodeCandidates(item)[0] ||
+          item.itemCode ||
+          item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'invoice',
@@ -2836,6 +3028,8 @@ export const documentService = {
       itemComparison,
       unmatchedPlItems,
       unmatchedInvoiceItems,
+      supplierFooterAliases,
+      espelhoSuppliers,
       extractionCoverage,
       draftBlRevisions,
       invoiceConfidence: invoiceDoc?.confidenceScore,
@@ -2878,6 +3072,44 @@ function toNumberOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function itemCodeCandidates(item: Record<string, any> | null | undefined): string[] {
+  if (!item) return [];
+  const rawCandidates = [
+    item.itemCode,
+    item.codigo,
+    item.code,
+    item.sku,
+    item.reference,
+    item.referencia,
+    item.description,
+    item.descricao,
+  ];
+  const seen = new Set<string>();
+  const values: string[] = [];
+  for (const raw of rawCandidates) {
+    if (raw == null || raw === '') continue;
+    const cleaned = extractCanonicalItemCode(raw);
+    if (!cleaned) continue;
+    const key = String(cleaned).trim().toUpperCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    values.push(cleaned);
+  }
+  return values;
+}
+
+function itemIdentityMatches(left: Record<string, any>, right: Record<string, any>): boolean {
+  const leftEan = normalizeGtin(left.ean ?? left.ean13);
+  const rightEan = normalizeGtin(right.ean ?? right.ean13);
+  if (leftEan && rightEan && leftEan === rightEan) return true;
+
+  const leftCodes = itemCodeCandidates(left);
+  const rightCodes = itemCodeCandidates(right);
+  return leftCodes.some((leftCode) =>
+    rightCodes.some((rightCode) => itemCodesMatch(leftCode, rightCode)),
+  );
+}
+
 function isInvoiceFreeOfCharge(item: Record<string, any>): boolean {
   const total = toNumberOrNull(item.totalPrice);
   const unit = toNumberOrNull(item.unitPrice);
@@ -2905,6 +3137,8 @@ function buildItemDivergence(input: {
   quantityDiverges: boolean;
   espelhoDiverges: boolean;
   isFreeOfCharge: boolean;
+  manufacturerDiverges?: boolean;
+  weightRatioMessage?: string | null;
 }): string {
   if (input.isFreeOfCharge) return 'FOC/desconto identificado na Invoice';
   if (!input.matched) return 'Item nao localizado no Packing List';
@@ -2912,7 +3146,73 @@ function buildItemDivergence(input: {
   const divergences: string[] = [];
   if (input.quantityDiverges) divergences.push('quantidade Invoice x Packing List');
   if (input.espelhoDiverges) divergences.push('quantidade Invoice x Espelho');
+  if (input.manufacturerDiverges) divergences.push('fabricante INV x PL x Espelho');
+  if (input.weightRatioMessage) divergences.push(input.weightRatioMessage);
   return divergences.length > 0 ? divergences.join('; ') : 'Sem divergencia';
+}
+
+function manufacturerValuesDiverge(values: unknown[]): boolean {
+  const normalized = values
+    .filter((value) => value != null && value !== '')
+    .map((value) => normalizeCompanyName(value))
+    .filter(Boolean);
+  if (normalized.length <= 1) return false;
+  const [first] = normalized;
+  return normalized.some(
+    (value) => value !== first && !value.startsWith(first) && !first.startsWith(value),
+  );
+}
+
+function normalizeStringList(value: unknown): string[] {
+  const rawValues = Array.isArray(value) ? value : [value];
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of rawValues.flatMap((item) =>
+    typeof item === 'string' ? item.split(/[;\n]/) : [item],
+  )) {
+    const text = String(raw ?? '')
+      .trim()
+      .replace(/\s+/g, ' ');
+    if (!text) continue;
+    const key = normalizeCompanyName(text) || text.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(text);
+  }
+
+  return result;
+}
+
+function compareItemWeightRatio(input: {
+  invoiceNetWeight: number | null;
+  invoiceGrossWeight: number | null;
+  plNetWeight: number | null;
+  plGrossWeight: number | null;
+}): { status: RowStatus; message: string | null } {
+  const ratio = (gross: number | null, net: number | null) => {
+    if (gross == null || net == null || net <= 0 || gross <= 0) return null;
+    return gross / net;
+  };
+  const invoiceRatio = ratio(input.invoiceGrossWeight, input.invoiceNetWeight);
+  const plRatio = ratio(input.plGrossWeight, input.plNetWeight);
+  if (invoiceRatio == null && plRatio == null) return { status: 'empty', message: null };
+  if (
+    (input.invoiceGrossWeight != null &&
+      input.invoiceNetWeight != null &&
+      input.invoiceGrossWeight < input.invoiceNetWeight) ||
+    (input.plGrossWeight != null &&
+      input.plNetWeight != null &&
+      input.plGrossWeight < input.plNetWeight)
+  ) {
+    return { status: 'divergent', message: 'peso bruto menor que peso liquido' };
+  }
+  if (invoiceRatio == null || plRatio == null) return { status: 'warning', message: null };
+  const diffPct = Math.abs(invoiceRatio - plRatio) / Math.max(invoiceRatio, plRatio, 1);
+  if (diffPct <= 0.15) return { status: 'match', message: null };
+  if (diffPct <= 0.25)
+    return { status: 'warning', message: 'proporcao peso bruto/liquido fora da margem de 15%' };
+  return { status: 'divergent', message: 'proporcao peso bruto/liquido divergente' };
 }
 
 function itemComparisonMessage(

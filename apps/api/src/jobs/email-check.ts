@@ -1,6 +1,7 @@
 import { logger } from '../shared/utils/logger.js';
 
 let isRunning = false;
+const DEFAULT_GMAIL_SHARED_MAILBOX = 'global@grupounico.com';
 
 function buildAllowedSenderFilter(): string | null {
   const allowedSenders =
@@ -24,7 +25,7 @@ export async function checkEmails() {
   const gmailConfigured = !!(
     process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
     process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
-    process.env.GMAIL_SHARED_MAILBOX
+    (process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX)
   );
   const imapConfigured = !!(process.env.IMAP_USER && process.env.IMAP_PASS);
 
@@ -59,7 +60,7 @@ export async function doubleCheckEmails() {
   const gmailConfigured = !!(
     process.env.GOOGLE_DRIVE_CLIENT_EMAIL &&
     process.env.GOOGLE_DRIVE_PRIVATE_KEY &&
-    process.env.GMAIL_SHARED_MAILBOX
+    (process.env.GMAIL_SHARED_MAILBOX || DEFAULT_GMAIL_SHARED_MAILBOX)
   );
 
   if (!gmailConfigured) {

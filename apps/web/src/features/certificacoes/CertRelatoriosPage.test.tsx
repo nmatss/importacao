@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
+import { MockAuthProvider, mockUser } from '@/test/mocks/auth';
 
 vi.mock('sonner', () => ({
   toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
@@ -26,10 +27,12 @@ import {
 } from '@/shared/lib/cert-api-client';
 import CertRelatoriosPage from './CertRelatoriosPage';
 
-function renderPage() {
+function renderPage(role: 'admin' | 'analyst' = 'admin') {
   return render(
     <MemoryRouter>
-      <CertRelatoriosPage />
+      <MockAuthProvider value={{ user: { ...mockUser, role } }}>
+        <CertRelatoriosPage />
+      </MockAuthProvider>
     </MemoryRouter>,
   );
 }
@@ -100,5 +103,12 @@ describe('CertRelatoriosPage', () => {
       'Sync parcial: 1 fonte(s) falharam. Verifique logs da cert-api.',
     );
     expect(toast.warning).not.toHaveBeenCalledWith(expect.stringContaining('host interno'));
+  });
+
+  it('does not expose stock synchronization to analyst users', async () => {
+    renderPage('analyst');
+
+    await waitFor(() => expect(fetchCertReports).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /Sync Estoque/i })).not.toBeInTheDocument();
   });
 });

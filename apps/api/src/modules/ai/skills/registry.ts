@@ -19,6 +19,7 @@ import { proformaResponseSchema } from '../schemas/proforma-response.js';
 import { espelhoResponseSchema } from '../schemas/espelho-response.js';
 import { certificateResponseSchema } from '../schemas/certificate-response.js';
 import { liResponseSchema } from '../schemas/li-response.js';
+import { duimpResponseSchema } from '../schemas/duimp-response.js';
 import { approxEqual, fieldNum, fieldVal, finding } from '../harness/numeric.js';
 import { cbmCeilingForContainer, isKnownCarrier } from '../harness/premises.js';
 import type { HarnessFinding, VerificationConfig } from '../harness/types.js';
@@ -132,6 +133,25 @@ function liDeferralAfterRegistrationCheck(data: Record<string, any>): HarnessFin
       );
 }
 
+/** Valores monetários/financeiros de uma DUIMP não podem ser negativos. */
+function duimpRegistrationValuesCheck(data: Record<string, any>): HarnessFinding | null {
+  const values: Array<[string, string]> = [
+    ['customsValue', 'valor aduaneiro'],
+    ['registrationDollar', 'dólar de registro'],
+    ['insuranceValue', 'seguro'],
+  ];
+  for (const [field, label] of values) {
+    const value = fieldNum(data, field);
+    if (value != null && value < 0) {
+      return finding(field, `${label} (${value}) não pode ser negativo`, 'error');
+    }
+  }
+  const rate = fieldNum(data, 'registrationDollar');
+  return rate === 0
+    ? finding('registrationDollar', 'dólar de registro igual a zero — confira a leitura', 'warning')
+    : null;
+}
+
 /**
  * totalCbm não pode exceder a capacidade física do containerType (premissas
  * cbmByContainer). Regra DO NOSSO AMBIENTE: 40HQ ~76m³ real, 20GP ~33m³ real.
@@ -196,6 +216,7 @@ const INVOICE_DOMAIN_RULES = `Documento: Commercial Invoice (fatura comercial do
 - incoterm: FOB/CFR/CIF/EXW. currency: quase sempre USD.
 - items[]: cada linha é um SKU. itemCode é o código do produto — CUIDADO com letra de outra coluna colada no código (ex.: "W7765Y" vindo de "WHITE BOX" deve ser "7765Y"). quantity é INTEIRA (peças/pares); unitPrice × quantity = totalPrice. ncmCode com 8 dígitos. ean só se impresso (8/12/13/14 díg).
 - isFreeOfCharge=true em amostra/FOC/brinde: esses itens NÃO entram no totalFobValue.
+- manufacturerAliases: lista de apelidos/códigos/nomes abreviados de fabricantes/fornecedores impressos no rodapé ou em observações da Invoice, sem inventar.
 - totalFobValue = soma dos totalPrice dos itens NÃO-FOC; deve bater com o total declarado. Pesos: líquido <= bruto.`;
 
 const INVOICE_FEWSHOT = `{
@@ -435,6 +456,32 @@ const LI_FEWSHOT = `{
   "anuentes": { "value": ["INMETRO", "DECEX"], "confidence": 0.88 }
 }`;
 
+// ── DUIMP / Registro Aduaneiro ──────────────────────────────────────
+const DUIMP_DOMAIN_RULES = `Documento: Declaração Única de Importação (DUIMP), minuta/draft ou declaração final do Portal Único/Siscomex. É um registro aduaneiro brasileiro; não é LI, DI, invoice ou BL. Se o documento não for DUIMP, retorne todos os campos null/0.
+- duimpNumber: número da DUIMP exatamente como impresso (ex.: 26BR0000000001). É a chave do registro; não confundir com LI, DI, processo, invoice ou BL.
+- customsValue: SOMENTE o "Valor Aduaneiro" declarado. Não usar FOB, CIF, frete, tributos, total da mercadoria ou valor em moeda estrangeira como substituto.
+- registrationDollar: SOMENTE "Dólar de Registro", "Taxa de Câmbio" ou "Taxa de Conversão" vinculada ao registro. É uma taxa, não valor total em USD.
+- insuranceValue: somente Seguro/Valor do Seguro explicitamente impresso. Não confundir com frete, AFRMM, ICMS, tributos ou despesas aduaneiras.
+- registeredAt: Data de Registro; customsClearanceAt: Data de Desembaraço. Datas sempre ISO YYYY-MM-DD. Draft/minuta pode não ter nenhuma das duas, e declaração ainda não desembaraçada não tem customsClearanceAt.
+- customsChannel: canal de parametrização/RFB. Normalize apenas nomes impressos VERDE/AMARELO/VERMELHO/CINZA para Verde/Amarelo/Vermelho/Cinza; sem canal explícito -> null.
+- Valores devem ser número JSON sem R$, ponto de milhar ou vírgula decimal. Nunca calcule/complete campo ausente. Campo ausente -> {value:null, confidence:0}.`;
+
+const DUIMP_FEWSHOT = `{
+  "customsValue": { "value": 123456.78, "confidence": 0.96 },
+  "registrationDollar": { "value": 5.4321, "confidence": 0.95 },
+  "insuranceValue": { "value": 1234.56, "confidence": 0.94 },
+  "duimpNumber": { "value": "26BR0000000001", "confidence": 0.99 },
+  "registeredAt": { "value": "2026-07-09", "confidence": 0.97 },
+  "customsClearanceAt": { "value": "2026-07-10", "confidence": 0.96 },
+  "customsChannel": { "value": "Verde", "confidence": 0.98 }
+}`;
+
+const DUIMP_VERIFICATION: VerificationConfig = {
+  groundedFields: ['duimpNumber', 'customsChannel'],
+  dateFields: ['registeredAt', 'customsClearanceAt'],
+  numericChecks: [duimpRegistrationValuesCheck],
+};
+
 const SKILLS: Record<string, ExtractionSkill> = {
   invoice: {
     type: 'invoice',
@@ -612,6 +659,36 @@ const SKILLS: Record<string, ExtractionSkill> = {
       supplierFields: ['exporterName'],
       numericChecks: [liTotalsCheck, liDeferralAfterRegistrationCheck, plQuantityIntegerCheck],
     },
+  },
+  draft_duimp: {
+    type: 'draft_duimp',
+    label: 'Draft / Minuta DUIMP',
+    schema: duimpResponseSchema,
+    domainRules: DUIMP_DOMAIN_RULES,
+    fewShot: [
+      {
+        description:
+          'DUIMP final com número, valor aduaneiro, dólar de registro, seguro, datas de registro/desembaraço e canal RFB; draft pode manter canal/desembaraço null quando ausentes.',
+        json: DUIMP_FEWSHOT,
+      },
+    ],
+    retrieval: { namespaces: ['premissas'], k: 3 },
+    verification: DUIMP_VERIFICATION,
+  },
+  duimp: {
+    type: 'duimp',
+    label: 'DUIMP Final',
+    schema: duimpResponseSchema,
+    domainRules: DUIMP_DOMAIN_RULES,
+    fewShot: [
+      {
+        description:
+          'DUIMP final com número, valor aduaneiro, dólar de registro, seguro, datas de registro/desembaraço e canal RFB; todos os valores devem estar explicitamente impressos.',
+        json: DUIMP_FEWSHOT,
+      },
+    ],
+    retrieval: { namespaces: ['premissas'], k: 3 },
+    verification: DUIMP_VERIFICATION,
   },
 };
 

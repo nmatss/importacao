@@ -12,6 +12,10 @@ vi.mock('../../audit/service.js', () => ({
   auditService: { log: vi.fn().mockResolvedValue(undefined) },
 }));
 
+vi.mock('../../../shared/utils/process-events.js', () => ({
+  recordProcessEvent: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../../shared/utils/logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
@@ -60,6 +64,7 @@ describe('communicationService', () => {
         kiom_email: 'kiom@example.com',
         fenicia_email: 'fenicia@example.com',
         isa_email: 'isa@example.com',
+        default_cc_email: 'global@example.com',
       };
       return recipients[key] ?? '';
     });
@@ -187,6 +192,7 @@ describe('communicationService', () => {
       expect(mockSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'to@example.com',
+          cc: 'global@example.com',
           subject: 'Test',
         }),
       );
@@ -195,7 +201,10 @@ describe('communicationService', () => {
         'email.sent',
         'communication',
         expect.any(Number),
-        expect.objectContaining({ to: 'to@example.com' }),
+        expect.objectContaining({
+          recipient: 't***@example.com',
+          ccRecipients: 'g***@example.com',
+        }),
         null,
       );
     });
@@ -271,7 +280,11 @@ describe('communicationService', () => {
     it('should allow a configured operational recipient even with empty COMMUNICATION_ALLOWED_RECIPIENTS', async () => {
       process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '';
       mockGetOperationalRecipient.mockImplementation(async (key: string) =>
-        key === 'kiom_email' ? 'kiom@example.com' : '',
+        key === 'kiom_email'
+          ? 'kiom@example.com'
+          : key === 'default_cc_email'
+            ? 'global@example.com'
+            : '',
       );
 
       const mockComm = {
@@ -318,7 +331,9 @@ describe('communicationService', () => {
 
     it('should allow a recipient matching a bare-domain pattern', async () => {
       process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'kiom.com.br';
-      mockGetOperationalRecipient.mockResolvedValue('');
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'default_cc_email' ? 'global@example.com' : '',
+      );
 
       const mockComm = {
         id: 1,
@@ -342,7 +357,9 @@ describe('communicationService', () => {
 
     it('should allow a recipient matching an @domain wildcard pattern', async () => {
       process.env.COMMUNICATION_ALLOWED_RECIPIENTS = '@fenicia.com';
-      mockGetOperationalRecipient.mockResolvedValue('');
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'default_cc_email' ? 'global@example.com' : '',
+      );
 
       const mockComm = {
         id: 1,
@@ -362,6 +379,50 @@ describe('communicationService', () => {
       expect(mockSendMail).toHaveBeenCalledWith(
         expect.objectContaining({ to: 'ops@sub.fenicia.com' }),
       );
+    });
+
+    it('should block a draft before SMTP when the required operational copy is missing', async () => {
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'default_cc_email' ? '' : 'kiom@example.com',
+      );
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow(
+        'Cópia operacional obrigatória não configurada',
+      );
+
+      expect(mockSendMail).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should block a draft before SMTP when the required operational copy is malformed', async () => {
+      mockGetOperationalRecipient.mockImplementation(async (key: string) =>
+        key === 'default_cc_email' ? 'not-an-email' : 'kiom@example.com',
+      );
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+
+      await expect(communicationService.send(1)).rejects.toThrow(
+        'Cópia operacional obrigatória não configurada',
+      );
+
+      expect(mockSendMail).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
 
     it('should reject when an exact-match pattern does not equal the recipient', async () => {

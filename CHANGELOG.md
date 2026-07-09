@@ -5,6 +5,75 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-07-09 - Feedback Odett: atendimentos, comparativo, DUIMP e SYDLE
+
+### Added
+
+- Atendimentos por e-mail agora permitem buscar processo por campo editável,
+  anexar documentos do processo, reabrir/editar rascunhos e atualizar antes do
+  envio tanto no menu quanto dentro do processo.
+- Modelos de atendimento podem ser criados, editados e desativados em
+  Configurações > Modelos por usuários autenticados, e reutilizados no menu
+  Atendimentos e na aba Atendimentos do processo.
+- Ingestão de e-mails passa a persistir `body_text`; a aba `E-mails` do processo
+  permite expandir e consultar o corpo das novas mensagens ingeridas.
+- Configuração de cópia fixa de e-mail (`COMMUNICATION_DEFAULT_CC` /
+  `default_cc_email`) e envio SMTP com `cc` operacional.
+- Tipos documentais `draft_duimp` e `duimp`, upload manual, classificação por
+  nome/texto/IA e campos de registro aduaneiro no processo: valor aduaneiro,
+  dólar de registro, seguro, DUIMP, data de registro, desembaraço e canal RFB.
+- Aba Registro com conferência processo x Draft DUIMP/DUIMP Final por aliases
+  extraídos, usando a DUIMP final como fonte preferencial quando existir.
+- Campo vermelho de observação urgente no topo fixo do detalhe do processo.
+- Abas `Etapas` e `Erros/Custos` dentro do processo, com APIs auditadas para
+  etapas específicas, erros documentais e custos extras.
+- Comparativo geral editável por coluna, com persistência em
+  `comparison_field_overrides`, evento do processo e mensagem `Editado por`.
+- Comparativo de itens passou a exibir fabricante e proporção peso bruto/líquido;
+  um quadro dedicado compara fabricantes INV/PL/Espelho.
+- Extração de Invoice aceita `manufacturerAliases` para conferir apelidos de
+  rodapé contra fornecedores do Espelho quando o documento trouxer essa lista.
+- Relatório SYDLE ganhou fallback da coluna `Processo` para `Número Invoice`
+  quando o processo não existe no formulário e badge visual `PI`/`INV`.
+
+### Fixed
+
+- Módulo de Certificações liberado com menor privilégio para usuários `analyst`:
+  o gate `/api/auth/cert-api-access` (usado pelo nginx para `/cert-api/*`)
+  agora permite consulta, validação e exportação. Sincronizações, agendamentos,
+  cadastro/reenvio ao Linx e configurações continuam restritos a `admin`,
+  inclusive por URL direta.
+
+### Changed
+
+- Aba Comparativo remove o bloco grande de checklist e concentra a operação no
+  comparativo consolidado; checks de fabricante, endereço fornecedor, pagamento,
+  certificado, proporção de peso e matching genérico de itens deixam de poluir o
+  quadro geral.
+- Matching de itens INV/PL/Espelho usa código canônico extraído também de
+  descrições com coleção/cor coladas.
+- Check `ncm-bl-description` passa a validar prefixos NCM de 4 dígitos do OHBL
+  final contra as NCMs do Espelho, em vez de procurar NCM em texto livre do BL.
+- Edição de processo não envia campos opcionais vazios e aceita dólar de
+  registro com até 6 casas decimais.
+- Fase logística `registered` também considera DUIMP/data de registro.
+- Gmail usa `global@grupounico.com` como mailbox compartilhado padrão quando
+  `GMAIL_SHARED_MAILBOX` não estiver definido.
+- Usuários autenticados, não apenas administradores, podem gerenciar modelos de
+  atendimento e assinaturas; configurações técnicas continuam restritas a admin.
+- SYDLE One deixa de usar conclusão do ticket como pagamento da parcela; `paidAt`,
+  valor pago, saldo e status passam a vir do próprio `paymentData`.
+
+### Fixed
+
+- Rascunhos de atendimento ficaram validáveis/editáveis antes do envio.
+- Aba de e-mails recebidos deixou de mostrar só título/anexos para mensagens
+  novas com corpo persistido.
+- Linhas PI sem processo não ficam mais com a coluna `Processo` vazia no relatório
+  e exportações SYDLE.
+- Parcelas já pagas deixam de aparecer vencidas/abertas quando o ticket ainda não
+  foi finalizado, desde que a SYDLE envie data/status de pagamento na parcela.
+
 ## [Unreleased] - 2026-07-08 - Paridade do relatório SYDLE Analytics
 
 ### Added

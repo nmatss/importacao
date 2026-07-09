@@ -1,4 +1,14 @@
-import { FileText, Paperclip, AlertTriangle, Inbox, User } from 'lucide-react';
+import { useState } from 'react';
+import {
+  FileText,
+  Paperclip,
+  AlertTriangle,
+  Inbox,
+  User,
+  ChevronDown,
+  ChevronUp,
+  MailOpen,
+} from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import { TableSkeleton } from '@/shared/components/Skeleton';
@@ -46,6 +56,7 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 };
 
 export function EmailsTab({ processId, processCode, initialResponse }: EmailsTabProps) {
+  const [expandedId, setExpandedId] = useState<number | null>(null);
   const { data: fetchedResponse, isLoading } = useApiQuery<{
     data: EmailLog[];
     pagination: unknown;
@@ -84,34 +95,44 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
         <div className="space-y-3">
           {logs.map((log) => {
             const cfg = STATUS_CONFIG[log.status] ?? STATUS_CONFIG.pending;
+            const isExpanded = expandedId === log.id;
             return (
               <div
                 key={log.id}
-                className="rounded-xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                className="rounded-xl border border-slate-200/60 bg-white p-4 transition-colors hover:bg-slate-50 dark:border-slate-700/60 dark:bg-slate-800 dark:hover:bg-slate-800/30"
               >
-                {/* Header: status + date */}
-                <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
-                  <span
-                    className={cn(
-                      'shrink-0 inline-flex rounded-lg px-2 py-0.5 text-xs font-semibold',
-                      cfg.color,
-                    )}
-                  >
-                    {cfg.label}
-                  </span>
-                  <div className="flex items-center gap-2 shrink-0 text-xs text-slate-400">
-                    <span className="font-medium" title={formatDateTime(log.receivedAt)}>
-                      {relativeTime(log.receivedAt)}
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                  className="w-full text-left"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+                    <span
+                      className={cn(
+                        'inline-flex shrink-0 rounded-lg px-2 py-0.5 text-xs font-semibold',
+                        cfg.color,
+                      )}
+                    >
+                      {cfg.label}
                     </span>
-                    <span className="hidden sm:inline text-slate-300 dark:text-slate-600">|</span>
-                    <span className="hidden sm:inline">{formatDateTime(log.receivedAt)}</span>
+                    <div className="flex shrink-0 items-center gap-2 text-xs text-slate-400">
+                      <span className="font-medium" title={formatDateTime(log.receivedAt)}>
+                        {relativeTime(log.receivedAt)}
+                      </span>
+                      <span className="hidden text-slate-300 dark:text-slate-600 sm:inline">|</span>
+                      <span className="hidden sm:inline">{formatDateTime(log.receivedAt)}</span>
+                      {isExpanded ? (
+                        <ChevronUp className="h-4 w-4" />
+                      ) : (
+                        <ChevronDown className="h-4 w-4" />
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                {/* Subject */}
-                <p className="mt-2 text-sm font-semibold text-slate-800 dark:text-slate-100 line-clamp-2">
-                  {log.subject}
-                </p>
+                  <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                    {log.subject}
+                  </p>
+                </button>
 
                 {/* Subject preview (first 100 chars) */}
                 {log.subject && log.subject.length > 60 && (
@@ -160,6 +181,25 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                   <div className="mt-2 text-xs text-danger-500 flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     {log.errorMessage}
+                  </div>
+                )}
+
+                {isExpanded && (
+                  <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+                    <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                      <MailOpen className="h-3.5 w-3.5" />
+                      Corpo do e-mail
+                    </div>
+                    {log.bodyText ? (
+                      <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50 px-3 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                        {log.bodyText}
+                      </p>
+                    ) : (
+                      <p className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                        Corpo nao armazenado para este e-mail. A visualizacao completa vale para
+                        mensagens ingeridas apos a atualizacao.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
