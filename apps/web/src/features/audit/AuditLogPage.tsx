@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { cn } from '@/shared/lib/utils';
 
 interface AuditLog {
@@ -163,7 +164,12 @@ export function AuditLogPage() {
   if (startDate) params.set('startDate', startDate);
   if (endDate) params.set('endDate', endDate);
 
-  const { data: response, isLoading } = useApiQuery<ApiResponse>(
+  const {
+    data: response,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<ApiResponse>(
     ['audit-logs', String(page), action, entityType, startDate, endDate],
     `/api/audit/logs?${params.toString()}`,
   );
@@ -184,6 +190,12 @@ export function AuditLogPage() {
     'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all appearance-none cursor-pointer';
   const inputClasses =
     'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar os registros de auditoria." onRetry={() => refetch()} />
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

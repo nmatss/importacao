@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import {
   acceptComparisonSchema,
   editComparisonFieldSchema,
+  reclassifyDocumentSchema,
   uploadDocumentSchema,
 } from './schema.js';
 
@@ -101,6 +102,20 @@ export const documentController = {
     }
   },
 
+  async getExtractionEvidence(req: Request, res: Response) {
+    try {
+      const documentId = Number(req.params.id);
+      if (isNaN(documentId) || documentId <= 0) {
+        return sendError(res, 'ID do documento invalido', 400);
+      }
+      const evidence = await documentService.getExtractionEvidence(documentId);
+      sendSuccess(res, evidence);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async getFile(req: Request, res: Response) {
     try {
       const resource = await documentService.getFileResource(Number(req.params.id));
@@ -132,6 +147,28 @@ export const documentController = {
     try {
       const userId = req.user?.id ?? null;
       const doc = await documentService.reprocess(Number(req.params.id), userId);
+      sendSuccess(res, doc);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async reclassify(req: Request, res: Response) {
+    try {
+      const parsed = reclassifyDocumentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return sendError(res, JSON.stringify(errors), 400);
+      }
+      const doc = await documentService.reclassify(
+        Number(req.params.id),
+        parsed.data.documentType,
+        req.user?.id ?? null,
+      );
       sendSuccess(res, doc);
     } catch (error: any) {
       const status = error.statusCode || 400;

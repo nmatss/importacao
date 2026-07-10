@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -96,20 +97,26 @@ interface PaginatedAlerts {
 // ── Component ────────────────────────────────────────────────────────────
 
 export function MeuDiaPage() {
-  const { data: slaData, isLoading: slaLoading } = useApiQuery<SlaData>(
-    ['dashboard', 'sla'],
-    '/api/dashboard/sla',
-  );
+  const {
+    data: slaData,
+    isLoading: slaLoading,
+    error: slaError,
+    refetch: refetchSla,
+  } = useApiQuery<SlaData>(['dashboard', 'sla'], '/api/dashboard/sla');
 
-  const { data: overview, isLoading: overviewLoading } = useApiQuery<OverviewData>(
-    ['dashboard', 'overview'],
-    '/api/dashboard/overview',
-  );
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useApiQuery<OverviewData>(['dashboard', 'overview'], '/api/dashboard/overview');
 
-  const { data: alertsResponse, isLoading: alertsLoading } = useApiQuery<PaginatedAlerts>(
-    ['alerts'],
-    '/api/alerts?limit=10',
-  );
+  const {
+    data: alertsResponse,
+    isLoading: alertsLoading,
+    error: alertsError,
+    refetch: refetchAlerts,
+  } = useApiQuery<PaginatedAlerts>(['alerts'], '/api/alerts?limit=10');
   const alerts = Array.isArray(alertsResponse)
     ? alertsResponse
     : Array.isArray((alertsResponse as any)?.data)
@@ -233,6 +240,19 @@ export function MeuDiaPage() {
 
   if (isLoading) {
     return <LoadingSpinner />;
+  }
+
+  if (slaError || overviewError || alertsError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar as prioridades do dia."
+        onRetry={() => {
+          void refetchSla();
+          void refetchOverview();
+          void refetchAlerts();
+        }}
+      />
+    );
   }
 
   return (

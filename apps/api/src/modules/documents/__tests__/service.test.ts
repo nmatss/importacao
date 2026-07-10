@@ -59,6 +59,10 @@ vi.mock('pdf-parse', () => ({
   default: vi.fn().mockResolvedValue({ text: 'Extracted PDF text' }),
 }));
 
+vi.mock('../ocr.js', () => ({
+  ocrScannedPdf: vi.fn().mockResolvedValue(null),
+}));
+
 vi.mock('xlsx', () => ({
   read: vi.fn().mockReturnValue({
     SheetNames: ['Sheet1'],
@@ -71,6 +75,7 @@ vi.mock('xlsx', () => ({
 
 const { documentService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
+const { ocrScannedPdf } = await import('../ocr.js');
 
 describe('documentService', () => {
   beforeEach(() => {
@@ -352,6 +357,73 @@ describe('documentService', () => {
         expect.objectContaining({ processId: 1 }),
         null,
       );
+    });
+  });
+
+  describe('reclassify()', () => {
+    it('archives the prior extraction, rebuilds projections and queues the corrected parser', async () => {
+      const mockDoc = {
+        id: 21,
+        processId: 1,
+        type: 'other',
+        storagePath: '/tmp/misclassified.pdf',
+        originalFilename: 'documento.pdf',
+        isProcessed: true,
+        confidenceScore: '0.8',
+        aiParsedData: { invoiceNumber: { value: 'INV-21', confidence: 0.8 } },
+      };
+      const enqueueSpy = vi.spyOn(documentService, 'enqueueAIExtraction').mockResolvedValue();
+
+      // Current document + lock check.
+      queryQueue.push(createResolvedChain([mockDoc]));
+      queryQueue.push(createResolvedChain([]));
+      // Transaction: archive, reset/type update, rebuild current projection.
+      txQueue.push(createResolvedChain(undefined));
+      txQueue.push(createResolvedChain(undefined));
+      txQueue.push(createResolvedChain([]));
+      txQueue.push(createResolvedChain([{ aiExtractedData: { custom: true } }]));
+      txQueue.push(createResolvedChain(undefined));
+      // Invalidate comparison acceptances after the transaction.
+      queryQueue.push(createResolvedChain(undefined));
+
+      try {
+        const result = await documentService.reclassify(21, 'invoice', 7);
+
+        expect(result).toMatchObject({
+          id: 21,
+          documentType: 'invoice',
+          aiProcessingStatus: 'processing',
+        });
+        expect(mockTx.insert).toHaveBeenCalled();
+        expect(mockTx.update).toHaveBeenCalled();
+        expect(enqueueSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ id: 21, type: 'invoice' }),
+          'invoice',
+        );
+        expect(auditService.log).toHaveBeenCalledWith(
+          7,
+          'reclassify',
+          'document',
+          21,
+          expect.objectContaining({ fromType: 'other', toType: 'invoice' }),
+          null,
+        );
+      } finally {
+        enqueueSpy.mockRestore();
+      }
+    });
+  });
+
+  describe('getSource()', () => {
+    it('uses relational attachment lineage before the legacy filename scan', async () => {
+      queryQueue.push(createResolvedChain([{ id: 31, processId: 1, originalFilename: 'INV.pdf' }]));
+      queryQueue.push(createResolvedChain([{ emailSubject: 'Invoice do fornecedor' }]));
+
+      await expect(documentService.getSource(31)).resolves.toEqual({
+        source: 'email',
+        emailSubject: 'Invoice do fornecedor',
+      });
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -872,6 +944,25 @@ describe('documentService', () => {
       );
 
       expect(result.text).toContain('col1,col2');
+    });
+
+    it('uses bounded local OCR text for a scanned PDF when available', async () => {
+      const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>;
+      pdfParse.mockResolvedValueOnce({ text: '' });
+      vi.mocked(ocrScannedPdf).mockResolvedValueOnce({
+        text: 'INVOICE 123\n\f\nTOTAL USD 100',
+        pageTexts: ['INVOICE 123', 'TOTAL USD 100'],
+        pageCount: 2,
+      });
+
+      const result = await documentService.extractText('/tmp/scanned.pdf', 'application/pdf');
+
+      expect(result).toMatchObject({
+        text: 'INVOICE 123\n\f\nTOTAL USD 100',
+        pageTexts: ['INVOICE 123', 'TOTAL USD 100'],
+        ocrUsed: true,
+      });
+      expect(ocrScannedPdf).toHaveBeenCalledWith('/tmp/scanned.pdf');
     });
   });
 });

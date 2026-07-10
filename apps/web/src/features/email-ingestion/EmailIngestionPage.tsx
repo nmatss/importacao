@@ -22,6 +22,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { api } from '@/shared/lib/api-client';
 
@@ -124,10 +125,12 @@ export function EmailIngestionPage() {
   const [endDate, setEndDate] = useState('');
   const limit = 20;
 
-  const { data: status, isLoading: statusLoading } = useApiQuery<EmailStatus>(
-    ['email-ingestion-status'],
-    '/api/email-ingestion/status',
-  );
+  const {
+    data: status,
+    isLoading: statusLoading,
+    error: statusError,
+    refetch: refetchStatus,
+  } = useApiQuery<EmailStatus>(['email-ingestion-status'], '/api/email-ingestion/status');
 
   const logsParams = new URLSearchParams();
   logsParams.set('page', String(page));
@@ -135,7 +138,12 @@ export function EmailIngestionPage() {
   if (startDate) logsParams.set('startDate', startDate);
   if (endDate) logsParams.set('endDate', endDate);
 
-  const { data: logsResponse, isLoading: logsLoading } = useApiQuery<LogsResponse>(
+  const {
+    data: logsResponse,
+    isLoading: logsLoading,
+    error: logsError,
+    refetch: refetchLogs,
+  } = useApiQuery<LogsResponse>(
     ['email-ingestion-logs', String(page), startDate, endDate],
     `/api/email-ingestion/logs?${logsParams.toString()}`,
   );
@@ -196,6 +204,18 @@ export function EmailIngestionPage() {
       gradient: 'from-amber-500 to-amber-600',
     },
   ];
+
+  if (statusError || logsError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar o status ou os registros de ingestão de e-mail."
+        onRetry={() => {
+          void refetchStatus();
+          void refetchLogs();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">

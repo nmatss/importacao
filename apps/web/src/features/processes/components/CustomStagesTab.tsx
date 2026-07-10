@@ -6,6 +6,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface CustomStage {
@@ -24,7 +25,12 @@ export function CustomStagesTab({ processId }: { processId: string }) {
   const [saving, setSaving] = useState(false);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
 
-  const { data: stages, isLoading } = useApiQuery<CustomStage[]>(
+  const {
+    data: stages,
+    isLoading,
+    isError,
+    refetch,
+  } = useApiQuery<CustomStage[]>(
     ['process-custom-stages', processId],
     `/api/processes/${processId}/custom-stages`,
   );
@@ -80,6 +86,11 @@ export function CustomStagesTab({ processId }: { processId: string }) {
   };
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isError) {
+    return (
+      <ErrorState message="Erro ao carregar as etapas específicas." onRetry={() => refetch()} />
+    );
+  }
 
   return (
     <div className="space-y-5">

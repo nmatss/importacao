@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   Eye,
   Download,
+  Pencil,
+  X,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
@@ -182,12 +184,14 @@ function extractionFailureMessage(doc: Document): string | null {
 export function DocumentList({ processId }: DocumentListProps) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const canManageDocuments = user?.role === 'admin';
+  const canDeleteDocuments = user?.role === 'admin';
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
   const [activeFileAction, setActiveFileAction] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<number | null>(null);
+  const [reclassifyingId, setReclassifyingId] = useState<number | null>(null);
+  const [reclassificationType, setReclassificationType] = useState('');
 
   // Auto-refresh every 5s while any doc is still processing
   const {
@@ -299,6 +303,34 @@ export function DocumentList({ processId }: DocumentListProps) {
       toast.error(err.message || 'Erro ao reprocessar documento');
     } finally {
       setReprocessingId(null);
+    }
+  };
+
+  const handleReclassify = async (doc: Document) => {
+    if (!reclassificationType || reclassificationType === doc.documentType) {
+      setReclassifyingId(null);
+      return;
+    }
+    const token = localStorage.getItem('importacao_token');
+    const baseUrl = import.meta.env.VITE_API_URL || '';
+    try {
+      const res = await fetch(`${baseUrl}/api/documents/${doc.id}/classification`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ documentType: reclassificationType }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error || body?.message || 'Falha ao corrigir classificação');
+      }
+      toast.success('Classificação corrigida; nova extração iniciada');
+      void invalidateDocumentWorkflow(queryClient, processId);
+      setReclassifyingId(null);
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao corrigir classificação');
     }
   };
 
@@ -449,6 +481,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                 const opening = activeFileAction === `${doc.id}:open`;
                 const downloading = activeFileAction === `${doc.id}:download`;
                 const reprocessing = reprocessingId === doc.id;
+                const reclassifying = reclassifyingId === doc.id;
                 const failureMessage = extractionFailureMessage(doc);
 
                 return (
@@ -629,28 +662,46 @@ export function DocumentList({ processId }: DocumentListProps) {
                           </button>
                         )}
 
-                        {/* Reprocess */}
-                        {canManageDocuments && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleReprocess(doc.id);
-                            }}
-                            disabled={!!reprocessingId}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
-                            title="Reprocessar IA"
-                            aria-label={`Reprocessar IA de ${doc.fileName}`}
-                          >
-                            {reprocessing ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCw className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        )}
+                        {/* Reprocess is operational, not destructive: analysts can recover a failed extraction. */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReprocess(doc.id);
+                          }}
+                          disabled={!!reprocessingId || reclassifyingId !== null}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          title="Reprocessar IA"
+                          aria-label={`Reprocessar IA de ${doc.fileName}`}
+                        >
+                          {reprocessing ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <RefreshCw className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReclassifyingId(reclassifying ? null : doc.id);
+                            setReclassificationType(doc.documentType);
+                          }}
+                          disabled={
+                            !!reprocessingId || (reclassifyingId !== null && !reclassifying)
+                          }
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          title="Corrigir classificação"
+                          aria-label={`Corrigir classificação de ${doc.fileName}`}
+                        >
+                          {reclassifying ? (
+                            <X className="h-3.5 w-3.5" />
+                          ) : (
+                            <Pencil className="h-3.5 w-3.5" />
+                          )}
+                        </button>
 
                         {/* Delete */}
-                        {canManageDocuments && (
+                        {canDeleteDocuments && (
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
@@ -665,6 +716,36 @@ export function DocumentList({ processId }: DocumentListProps) {
                         )}
                       </div>
                     </div>
+
+                    {reclassifying && (
+                      <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                        <label
+                          htmlFor={`document-type-${doc.id}`}
+                          className="text-xs font-medium text-slate-600 dark:text-slate-300"
+                        >
+                          Tipo correto
+                        </label>
+                        <select
+                          id={`document-type-${doc.id}`}
+                          value={reclassificationType}
+                          onChange={(event) => setReclassificationType(event.target.value)}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          {DOCUMENT_TYPES.map((type) => (
+                            <option key={type.value} value={type.value}>
+                              {type.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleReclassify(doc)}
+                          className="rounded bg-primary-600 px-2 py-1 text-xs font-medium text-white hover:bg-primary-700"
+                        >
+                          Salvar e reprocessar
+                        </button>
+                      </div>
+                    )}
 
                     {/* Expanded AI data — professional summary */}
                     {expanded && doc.aiParsedData && (

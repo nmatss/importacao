@@ -143,6 +143,22 @@ describe('EspelhoPreview', () => {
     expect(screen.getByText(/Nenhum item no espelho ainda/i)).toBeInTheDocument();
   });
 
+  it('shows a retryable error instead of a false empty state when loading fails', () => {
+    const refetch = vi.fn();
+    vi.mocked(useApiQuery).mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('network unavailable'),
+      refetch,
+    } as unknown as ReturnType<typeof useApiQuery>);
+
+    renderPreview();
+
+    expect(screen.getByText('Erro ao carregar o espelho do processo.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    expect(refetch).toHaveBeenCalledOnce();
+  });
+
   it('adds items using the backend espelho field contract', async () => {
     renderPreview();
 

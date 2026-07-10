@@ -291,20 +291,31 @@ export function ProcessDetailPage() {
   } = useApiQuery<ImportProcess>(['process', id!], `/api/processes/${id}`, { enabled: !!id });
 
   // Lightweight queries for tab indicators
-  const { data: validationChecks } = useApiQuery<ValidationCheck[]>(
-    ['validation', id!],
-    `/api/validation/${id}`,
-    { enabled: !!id, staleTime: 60_000 },
-  );
+  const {
+    data: validationChecks,
+    error: validationChecksError,
+    refetch: refetchValidationChecks,
+  } = useApiQuery<ValidationCheck[]>(['validation', id!], `/api/validation/${id}`, {
+    enabled: !!id,
+    staleTime: 60_000,
+  });
 
-  const { data: emailResponse } = useApiQuery<EmailLogsResponse>(
+  const {
+    data: emailResponse,
+    error: emailLogsError,
+    refetch: refetchEmailLogs,
+  } = useApiQuery<EmailLogsResponse>(
     ['email-logs', id!, process?.processCode],
     `/api/email-ingestion/logs?limit=100&processId=${id}`,
     { enabled: !!id && !!process, staleTime: 60_000 },
   );
 
   // Lightweight check for cambios data (cached — CambiosTab won't re-fetch)
-  const { data: cambiosData } = useApiQuery<CambiosTotalsResponse>(
+  const {
+    data: cambiosData,
+    error: cambiosError,
+    refetch: refetchCambios,
+  } = useApiQuery<CambiosTotalsResponse>(
     ['cambios', id!],
     `/api/currency-exchange/process/${id}/totals`,
     {
@@ -317,6 +328,8 @@ export function ProcessDetailPage() {
     if (!emailResponse?.data) return 0;
     return emailResponse.data.length;
   }, [emailResponse]);
+
+  const hasAuxiliaryLoadError = !!(validationChecksError || emailLogsError || cambiosError);
 
   /** Compute which tabs are visible based on process status and available data. */
   const visibleTabs = useMemo(() => {
@@ -414,6 +427,26 @@ export function ProcessDetailPage() {
       <LogisticStatusBar {...buildLogisticProps(process)} />
 
       <ProcessInfoCard process={process} />
+
+      {hasAuxiliaryLoadError && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100"
+        >
+          <span>Alguns indicadores do processo não puderam ser atualizados.</span>
+          <button
+            type="button"
+            onClick={() => {
+              void refetchValidationChecks();
+              void refetchEmailLogs();
+              void refetchCambios();
+            }}
+            className="rounded-lg border border-amber-300 px-3 py-1.5 text-xs font-semibold transition-colors hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/40"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">

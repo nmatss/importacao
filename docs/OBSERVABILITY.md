@@ -60,4 +60,7 @@ Criar dashboard minimo:
 - Jobs por status.
 - AI calls, latency, budget.
 - Uploads/extractions por status.
+- OCR: `document_ocr_runs_total` por resultado, paginas processadas e duracao;
+  alertar quando `failed` crescer apos ativacao, sem tratar falha isolada como
+  indisponibilidade do fluxo (ha fallback multimodal).
 - SYDLE sync: ultimo status, duracao, registros lidos, erros e nao conciliados.

@@ -12,6 +12,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import { TableSkeleton } from '@/shared/components/Skeleton';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { EmailLog } from '@/shared/types';
 
 function relativeTime(dateStr: string): string {
@@ -57,7 +58,12 @@ const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
 
 export function EmailsTab({ processId, processCode, initialResponse }: EmailsTabProps) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const { data: fetchedResponse, isLoading } = useApiQuery<{
+  const {
+    data: fetchedResponse,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{
     data: EmailLog[];
     pagination: unknown;
   }>(['email-logs', processId], `/api/email-ingestion/logs?limit=100&processId=${processId}`, {
@@ -67,6 +73,11 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
   const response = initialResponse ?? fetchedResponse;
 
   if (!initialResponse && isLoading) return <TableSkeleton />;
+  if (!initialResponse && error) {
+    return (
+      <ErrorState message="Erro ao carregar os e-mails deste processo." onRetry={() => refetch()} />
+    );
+  }
 
   const logs = response?.data ?? [];
 

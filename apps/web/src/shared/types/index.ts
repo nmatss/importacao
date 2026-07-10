@@ -30,9 +30,17 @@ export interface FollowUpTracking {
   processId: number;
   documentsReceivedAt: string | null;
   preInspectionAt: string | null;
+  savedToFolderAt: string | null;
   ncmVerifiedAt: string | null;
+  ncmBlCheckedAt: string | null;
+  freightBlCheckedAt: string | null;
+  espelhoBuiltAt: string | null;
+  invoiceSentFeniciaAt: string | null;
   espelhoGeneratedAt: string | null;
+  signaturesCollectedAt: string | null;
+  signedDocsSentAt: string | null;
   sentToFeniciaAt: string | null;
+  diDraftAt: string | null;
   liSubmittedAt: string | null;
   liApprovedAt: string | null;
   liDeadline: string | null;

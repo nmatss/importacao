@@ -16,7 +16,7 @@ vi.mock('@/shared/hooks/useApi', () => ({
 import { DocumentList } from './DocumentList';
 import { useApiQuery } from '@/shared/hooks/useApi';
 
-function renderDocumentList(documents: unknown[]) {
+function renderDocumentList(documents: unknown[], role: 'admin' | 'analyst' = 'analyst') {
   vi.mocked(useApiQuery).mockReturnValue({
     data: documents,
     isLoading: false,
@@ -28,7 +28,9 @@ function renderDocumentList(documents: unknown[]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MockAuthProvider>
+      <MockAuthProvider
+        value={{ user: { id: '1', name: 'Operadora', email: 'op@grupounico.com', role } }}
+      >
         <DocumentList processId="1" />
       </MockAuthProvider>
     </QueryClientProvider>,
@@ -63,5 +65,24 @@ describe('DocumentList', () => {
 
     expect(screen.getByText(/Baixa confiança/i)).toBeInTheDocument();
     expect(screen.getByText(/Use estes dados apenas para revisão manual/i)).toBeInTheDocument();
+  });
+
+  it('allows an analyst to recover a document by reprocessing or correcting its classification', () => {
+    renderDocumentList([
+      {
+        id: 11,
+        fileName: 'anexo.pdf',
+        documentType: 'other',
+        uploadedAt: '2026-06-10T12:00:00.000Z',
+        aiProcessingStatus: 'failed',
+        aiConfidence: 0,
+        aiParsedData: { extractionFailed: true, reason: 'Tipo sem extractor dedicado' },
+      },
+    ]);
+
+    expect(screen.getByLabelText(/Reprocessar IA de anexo.pdf/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Corrigir classificação de anexo.pdf/i));
+    expect(screen.getByLabelText(/Tipo correto/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Salvar e reprocessar/i })).toBeInTheDocument();
   });
 });

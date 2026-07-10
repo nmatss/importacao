@@ -42,6 +42,15 @@ INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe re
   aliases de rodape da Invoice (`manufacturerAliases`), mas a comparacao de dados
   completos com base mestre depende de a operacao fornecer a planilha/base mestre
   ou confirmar que os aliases extraidos bastam.
+- **Follow-Up ↔ planilha:** a integração está disponível por comparação/sync
+  administrativo por processo, mas não tem job automático. Antes de ativá-lo é
+  necessário confirmar a planilha-fonte, frequência e se divergências devem
+  apenas alertar ou sobrescrever o portal; ativar escrita automática sem essa
+  regra cria risco de sobrescrita operacional.
+- **Mailbox de ingestão:** código tem fallback para `global@grupounico.com`,
+  porém uma configuração explícita de produção pode prevalecer. Confirmar
+  `GMAIL_SHARED_MAILBOX=global@grupounico.com` no rollout evita processar a
+  caixa errada.
 
 ## Backlog do feedback da Eduarda 2026-06-21 (nao bloqueante; pos PR #99)
 

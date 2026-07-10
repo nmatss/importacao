@@ -6,6 +6,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatDateTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface OperationalRecord {
@@ -37,7 +38,12 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const { data: records, isLoading } = useApiQuery<OperationalRecord[]>(
+  const {
+    data: records,
+    isLoading,
+    isError,
+    refetch,
+  } = useApiQuery<OperationalRecord[]>(
     ['process-operational-records', processId],
     `/api/processes/${processId}/operational-records`,
   );
@@ -88,6 +94,11 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
   };
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
+  if (isError) {
+    return (
+      <ErrorState message="Erro ao carregar erros e custos extras." onRetry={() => refetch()} />
+    );
+  }
 
   return (
     <div className="space-y-5">

@@ -224,7 +224,7 @@ describe('SydlePaymentsPage', () => {
     expect(screen.getAllByText('US$ 100,00').length).toBeGreaterThan(0);
   });
 
-  it('uses invoice number as process fallback for PI rows without process field', () => {
+  it('uses invoice number and identifies its source when a PI row has no process field', () => {
     vi.mocked(useApiQuery).mockImplementation((queryKey: readonly unknown[]) => {
       const key = Array.isArray(queryKey) ? queryKey[0] : null;
       return {
@@ -255,7 +255,11 @@ describe('SydlePaymentsPage', () => {
 
     renderTree();
 
-    expect(screen.getAllByText('INV-FALLBACK').length).toBeGreaterThan(0);
+    const unifiedSection = screen.getByText('Visão unificada SYDLE').closest('section');
+    expect(unifiedSection).not.toBeNull();
+    const unified = within(unifiedSection as HTMLElement);
+    expect(unified.getAllByText('INV-FALLBACK')).toHaveLength(2);
+    expect(unified.getByLabelText('Processo identificado por INV')).toBeInTheDocument();
   });
 
   it('does not show portal-estimated financial markers in the SYDLE report', () => {

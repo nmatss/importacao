@@ -427,7 +427,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                       </div>
                     )}
 
-                    {comm.status === 'draft' && (
+                    {(comm.status === 'draft' || comm.status === 'failed') && (
                       <div className="mt-4 flex flex-wrap justify-end gap-2">
                         {isEditing ? (
                           <>
@@ -460,7 +460,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                             className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
                           >
                             <Edit className="h-3.5 w-3.5" />
-                            Editar
+                            {comm.status === 'failed' ? 'Corrigir e tentar novamente' : 'Editar'}
                           </button>
                         )}
                         <button

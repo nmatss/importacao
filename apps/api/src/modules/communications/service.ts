@@ -719,7 +719,12 @@ export const communicationService = {
       .limit(1);
 
     if (!communication) throw new Error('Comunicacao nao encontrada');
-    if (communication.status !== 'draft') throw new Error('Somente rascunhos podem ser editados');
+    // A failed send has never become a sent message. Keep it recoverable so the
+    // operator can correct recipient/content/configuration and explicitly retry
+    // instead of having to recreate a reviewable draft from scratch.
+    if (communication.status !== 'draft' && communication.status !== 'failed') {
+      throw new Error('Somente rascunhos ou envios com falha podem ser editados');
+    }
 
     const updateData: Record<string, any> = {};
     const changedFields: string[] = [];
@@ -753,6 +758,11 @@ export const communicationService = {
     }
     updateData.updatedBy = userId;
     updateData.updatedAt = new Date();
+    if (communication.status === 'failed') {
+      updateData.status = 'draft';
+      updateData.errorMessage = null;
+      changedFields.push('reopenedAfterFailure');
+    }
 
     const [updated] = await db
       .update(communications)

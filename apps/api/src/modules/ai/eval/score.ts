@@ -127,6 +127,35 @@ export function scoreExtraction(predicted: unknown, gold: unknown): ExtractionSc
 
   walk(gold, predicted, '');
 
+  // Gold fixtures are an allow-list, not merely a list of fields to grade.
+  // Count confidence-envelope values emitted outside that allow-list as
+  // hallucinations too. Without this reverse walk a model could invent a
+  // completely new field and still receive a perfect score.
+  function walkUnexpected(p: any, g: any, path: string): void {
+    if (isLeaf(p)) {
+      if (!isLeaf(g) && p.value !== null && p.value !== undefined) {
+        fields.push({ path, status: 'hallucination', gold: undefined, predicted: p.value });
+      }
+      return;
+    }
+    if (Array.isArray(p)) {
+      for (let i = 0; i < p.length; i++)
+        walkUnexpected(p[i], Array.isArray(g) ? g[i] : undefined, `${path}[${i}]`);
+      return;
+    }
+    if (p && typeof p === 'object') {
+      for (const key of Object.keys(p)) {
+        walkUnexpected(
+          p[key],
+          g && typeof g === 'object' ? g[key] : undefined,
+          path ? `${path}.${key}` : key,
+        );
+      }
+    }
+  }
+
+  walkUnexpected(predicted, gold, '');
+
   const correct = fields.filter((f) => f.status === 'correct').length;
   const missing = fields.filter((f) => f.status === 'missing').length;
   const wrong = fields.filter((f) => f.status === 'wrong').length;

@@ -2,6 +2,7 @@ import { DollarSign } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { TableSkeleton } from '@/shared/components/Skeleton';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { CurrencyExchange, CurrencyTotals } from '@/shared/types';
 
 export interface CambiosTabProps {
@@ -13,7 +14,12 @@ export interface CambiosTabProps {
 }
 
 export function CambiosTab({ processId, initialData }: CambiosTabProps) {
-  const { data: fetchedData, isLoading } = useApiQuery<{
+  const {
+    data: fetchedData,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{
     exchanges: CurrencyExchange[];
     totals: CurrencyTotals;
   }>(['cambios', processId], `/api/currency-exchange/process/${processId}/totals`, {
@@ -23,6 +29,11 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
   const data = initialData ?? fetchedData;
 
   if (!initialData && isLoading) return <TableSkeleton />;
+  if (!initialData && error) {
+    return (
+      <ErrorState message="Erro ao carregar os câmbios deste processo." onRetry={() => refetch()} />
+    );
+  }
 
   const exchanges = data?.exchanges ?? [];
   const totals = data?.totals;

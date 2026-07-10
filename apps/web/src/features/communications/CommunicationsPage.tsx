@@ -862,7 +862,7 @@ export function CommunicationsPage() {
                             <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                               {comm.body}
                             </p>
-                            {comm.status === 'draft' && (
+                            {(comm.status === 'draft' || comm.status === 'failed') && (
                               <div className="mt-4 flex justify-end">
                                 <button
                                   type="button"
@@ -870,7 +870,9 @@ export function CommunicationsPage() {
                                   className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100"
                                 >
                                   <PenTool className="h-3.5 w-3.5" />
-                                  Editar rascunho
+                                  {comm.status === 'failed'
+                                    ? 'Corrigir e tentar novamente'
+                                    : 'Editar rascunho'}
                                 </button>
                               </div>
                             )}

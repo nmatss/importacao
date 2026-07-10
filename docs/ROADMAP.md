@@ -1,5 +1,7 @@
 # Roadmap
 
+Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
+
 Ultima atualizacao: 2026-07-09
 
 ## P0 - Operacao E Confiabilidade

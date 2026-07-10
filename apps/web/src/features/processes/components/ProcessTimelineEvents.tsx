@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, relativeTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { ProcessEvent } from '@/shared/types';
 
 interface ProcessTimelineEventsProps {
@@ -103,7 +104,12 @@ function EventMetadata({ metadata }: { metadata: Record<string, unknown> }) {
 }
 
 export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps) {
-  const { data: events, isLoading } = useApiQuery<ProcessEvent[]>(
+  const {
+    data: events,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<ProcessEvent[]>(
     ['process-events', processId],
     `/api/processes/${processId}/events?limit=50`,
     { staleTime: 30_000 },
@@ -111,6 +117,12 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
 
   if (isLoading) {
     return <LoadingSpinner className="py-6" />;
+  }
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar o histórico de eventos." onRetry={() => refetch()} />
+    );
   }
 
   if (!events || events.length === 0) {

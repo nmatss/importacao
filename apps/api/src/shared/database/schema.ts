@@ -171,12 +171,18 @@ export const documents = pgTable(
     aiParsedData: jsonb('ai_parsed_data'),
     confidenceScore: numeric('confidence_score', { precision: 5, scale: 4 }),
     isProcessed: boolean('is_processed').default(false),
+    // Distributed extraction lease. A worker claims this atomically before
+    // touching OCR/AI so duplicate queue deliveries cannot extract the same
+    // document concurrently. Expiry makes a crashed worker recoverable.
+    extractionLeaseToken: varchar('extraction_lease_token', { length: 64 }),
+    extractionLeaseExpiresAt: timestamp('extraction_lease_expires_at', { withTimezone: true }),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },
   (table) => [
     index('documents_process_id_idx').on(table.processId),
     index('documents_process_type_idx').on(table.processId, table.type),
+    index('documents_extraction_lease_expires_idx').on(table.extractionLeaseExpiresAt),
   ],
 );
 
@@ -1097,6 +1103,7 @@ export const documentExtractedFields = pgTable(
     valueJson: jsonb('value_json'),
     confidence: numeric('confidence', { precision: 5, scale: 4 }),
     sourcePage: integer('source_page'),
+    sourceExcerpt: text('source_excerpt'),
     sourceTextHash: varchar('source_text_hash', { length: 64 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },

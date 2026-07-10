@@ -21,6 +21,13 @@ Ultima atualizacao: 2026-06-20
 
 ## IA E Extracao
 
+- Adicionar lease/lock atômico por `document_id` na fila de extração. A escrita
+  no processo já é atômica, mas jobs duplicados ainda podem gastar IA e gerar
+  linhagem redundante.
+- Evoluir linhagem de campos para evidência navegável: página, trecho/posição e
+  versão efetiva do parser/modelo por campo.
+- Versionar um corpus anonimizado de documentos reais e executar o evaluator de
+  extração no CI antes de promover parser/modelo.
 - Unificar helpers de `parseNumber`, `parseDate`, FOC e normalizacao entre parsers, harness, validation e anomalies.
 - Documentar a decisao final de provider: IA local, Vertex ou estrategia hibrida.
 - Revisar latencia e timeout do provider local em CPU para PDFs imagem-only:
@@ -86,15 +93,19 @@ Ultima atualizacao: 2026-06-20
 
 ## Documentos, IA E E-mail Ingestion
 
-- Adicionar OCR/preprocessamento para PDFs escaneados, screenshots e documentos
-  de baixa qualidade. O pipeline atual usa texto extraido/base64/IA, mas ainda
-  nao tem etapa OCR dedicada com qualidade mensuravel por pagina.
+- OCR local para PDFs escaneados foi entregue com Poppler+Tesseract opt-in,
+  limite de páginas/tempo, métricas e fallback multimodal. A operação ainda
+  precisa instalar os binários e idiomas no container antes de ativar
+  `DOCUMENT_OCR_ENABLED=1`; screenshots/imagens seguem pelo multimodal.
 
 Concluido em 2026-06-24:
 
 - Linhagem relacional de extração em `document_extraction_runs` e
   `document_extracted_fields`, incluindo `document_id`, `field_path`, valor,
   confiança, hash do texto fonte, provider/modelo e versão de parser.
+- Evidência por campo na extração mais recente: página inferida de forma
+  determinística quando o valor ocorre no texto e trecho limitado a 500
+  caracteres, disponível em `GET /api/documents/:id/extraction-evidence`.
 - Deduplicação de anexos de e-mail em `email_attachment_documents` por
   `process_id + content_sha256`, com origem, caminho local, Drive inbox,
   documento vinculado e estado de órfão/recuperável.

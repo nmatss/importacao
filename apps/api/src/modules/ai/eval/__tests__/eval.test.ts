@@ -59,6 +59,19 @@ describe('scoreExtraction', () => {
     expect(s.hallucinations).toBe(1); // importerCnpj
     expect(s.expected).toBe(5);
   });
+
+  it('counts an unexpected confidence field as a hallucination', () => {
+    const pred = {
+      ...gold,
+      inventedReference: cf('NOT PRESENT IN SOURCE'),
+    };
+    const s = scoreExtraction(pred, gold);
+    expect(s.accuracy).toBe(1);
+    expect(s.hallucinations).toBe(1);
+    expect(s.fields).toContainEqual(
+      expect.objectContaining({ path: 'inventedReference', status: 'hallucination' }),
+    );
+  });
 });
 
 describe('runEval + gate', () => {

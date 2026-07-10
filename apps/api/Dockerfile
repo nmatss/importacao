@@ -21,7 +21,12 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine
 
-RUN apk upgrade --no-cache && apk add --no-cache su-exec
+RUN apk upgrade --no-cache && apk add --no-cache \
+  su-exec \
+  poppler-utils \
+  tesseract-ocr \
+  tesseract-ocr-data-eng \
+  tesseract-ocr-data-por
 
 WORKDIR /app
 

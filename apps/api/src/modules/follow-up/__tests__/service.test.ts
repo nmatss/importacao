@@ -112,6 +112,39 @@ describe('followUpService', () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
 
+    it('reaches 100% when every persisted milestone is complete', async () => {
+      const completedAt = new Date('2026-07-10T12:00:00Z');
+      const existingTracking = {
+        id: 1,
+        processId: 1,
+        documentsReceivedAt: completedAt,
+        preInspectionAt: completedAt,
+        savedToFolderAt: completedAt,
+        ncmVerifiedAt: completedAt,
+        ncmBlCheckedAt: completedAt,
+        freightBlCheckedAt: completedAt,
+        espelhoBuiltAt: completedAt,
+        invoiceSentFeniciaAt: completedAt,
+        espelhoGeneratedAt: completedAt,
+        signaturesCollectedAt: completedAt,
+        signedDocsSentAt: completedAt,
+        sentToFeniciaAt: completedAt,
+        diDraftAt: completedAt,
+        liSubmittedAt: completedAt,
+        liApprovedAt: null,
+      };
+
+      queryQueue.push(createResolvedChain([existingTracking]));
+      queryQueue.push(createResolvedChain([{ id: 1, overallProgress: 100 }]));
+
+      await followUpService.update(1, { liApprovedAt: completedAt.toISOString() });
+
+      const updateChain = mockDb.update.mock.results.at(-1)?.value;
+      expect(updateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({ overallProgress: 100 }),
+      );
+    });
+
     it('should throw NotFoundError if tracking not found', async () => {
       // select existing (found)
       queryQueue.push(createResolvedChain([{ id: 1, processId: 999 }]));

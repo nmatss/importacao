@@ -1,5 +1,41 @@
 # Session Memory
 
+## 2026-07-10 - Auditoria Profunda de Análise Documental
+
+- Revisado o pipeline upload/e-mail → magic bytes → fila de extração → parser/
+  IA → harness de confiança → linhagem/projeção → comparativo/validação.
+- Corrigida lacuna de recuperação: operador pode reclassificar documento já
+  ingerido, preservando extração anterior, invalidando derivados e reenfileirando
+  o parser correto.
+- Origem de documento agora prioriza `email_attachment_documents` por
+  `document_id`; o fallback por nome/últimos logs ficou apenas para legado.
+- Riscos registrados em `docs/STATUS-2026-07-10-DOCUMENT-ANALYSIS.md`: OCR,
+  exclusão mútua de worker, corpus ouro/eval em CI, evidência por página e
+  limites de payload multimodal.
+
+## 2026-07-10 - Revisão de fechamento do feedback Odett
+
+Resultado:
+
+- Comunicação com status `failed` voltou a ser recuperável: editar reabre o
+  rascunho, limpa o erro e mantém a auditoria para correção e novo envio.
+- Follow-Up expõe as 15 etapas persistidas e calcula progresso por proporção,
+  corrigindo o teto incorreto de 90% com todas as etapas concluídas.
+- Registro/DUIMP, Etapas, Erros/Custos e Follow-Up distinguem falha de API de
+  estado vazio e oferecem retry.
+- A Visão unificada SYDLE ganhou o badge PI/INV ao usar o fallback de Processo.
+
+Pendências operacionais confirmadas:
+
+- Follow-Up para planilha não possui job automático; só há comparação/sync
+  administrativo por processo. A ativação requer planilha-fonte, periodicidade
+  e regra explícita de conflito para evitar sobrescrita de dados operacionais.
+- A produção estava configurada com mailbox de ingestão diferente da caixa
+  global solicitada; alinhar `GMAIL_SHARED_MAILBOX=global@grupounico.com` no
+  próximo rollout aprovado.
+- O reprocessamento do processo real PK2052602TJ continua dependente dos
+  documentos reais/anonimizados e não foi declarado validado sem essa evidência.
+
 ## 2026-07-09 - Feedback Odett: Atendimentos, Comparativo, DUIMP e SYDLE
 
 Resultado:

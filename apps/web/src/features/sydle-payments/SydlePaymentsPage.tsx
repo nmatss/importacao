@@ -322,6 +322,8 @@ function DocumentKindBadge({ kind }: { kind: 'PI' | 'INV' | null }) {
   if (!kind) return null;
   return (
     <span
+      aria-label={`Processo identificado por ${kind}`}
+      title={`Fallback do campo Processo: ${kind}`}
       className={cn(
         'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none',
         kind === 'PI'
@@ -1745,6 +1747,8 @@ export function SydlePaymentsPage() {
                       {unifiedColumns.map((column) => {
                         const alignRight = 'align' in column && column.align === 'right';
                         const cellValue = unifiedValue(row, column.key);
+                        const isProcessFallback = column.key === 'process';
+                        const kind = isProcessFallback ? documentKind(row) : null;
                         const title =
                           typeof cellValue === 'string' || typeof cellValue === 'number'
                             ? String(cellValue)
@@ -1759,7 +1763,14 @@ export function SydlePaymentsPage() {
                               alignRight && 'text-right tabular-nums',
                             )}
                           >
-                            <span className="block truncate">{cellValue}</span>
+                            {isProcessFallback ? (
+                              <span className="flex items-center gap-1.5 truncate">
+                                <span className="truncate">{cellValue}</span>
+                                <DocumentKindBadge kind={kind} />
+                              </span>
+                            ) : (
+                              <span className="block truncate">{cellValue}</span>
+                            )}
                           </td>
                         );
                       })}

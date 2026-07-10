@@ -5,6 +5,49 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-07-10 - Fechamento de revisão operacional Odett
+
+### Fixed
+
+- Um atendimento cujo envio falhou pode ser corrigido e reenviado: ao editar,
+  ele volta para `draft`, limpa o erro anterior e preserva a trilha de auditoria.
+- Follow-Up passa a mostrar as 15 etapas persistidas e seu progresso usa a
+  proporção real das etapas concluídas, chegando a 100%.
+- Follow-Up, Registro/DUIMP, Etapas específicas e Erros/Custos exibem estado
+  de erro com nova tentativa, em vez de aparentarem estar vazios.
+- O badge `PI`/`INV` também aparece na visão unificada do relatório SYDLE
+  quando a coluna Processo usa o fallback do número de documento.
+
+### Operational notes
+
+- A sincronização Follow-Up ↔ planilha ainda é manual e administrativa; não
+  foi ativada uma sobrescrita automática sem confirmação da planilha-fonte,
+  frequência e política de conflito.
+- O ambiente de produção deve configurar `GMAIL_SHARED_MAILBOX` como
+  `global@grupounico.com` para que a ingestão use a caixa solicitada.
+
+---
+
+## [Unreleased] - 2026-07-10 - Recuperação e auditabilidade documental
+
+### Added
+
+- Documento já ingerido pode ser reclassificado e reextraído por operador sem
+  reupload: a extração anterior fica no histórico, projeções/aceites derivados
+  são reconstruídos e a ação entra na auditoria/timeline.
+
+### Changed
+
+- A origem de anexos passa a consultar a linhagem relacional documento↔e-mail,
+  eliminando inferência frágil por nome de arquivo e janela de logs.
+
+### Fixed
+
+- Analistas passam a ter acesso na UI ao reprocessamento e à correção de tipo,
+  que a API já suportava como ações não destrutivas.
+
+---
+
 ## [Unreleased] - 2026-07-09 - Relatório SYDLE: pagamento por conclusão do ticket
 
 ### Fixed

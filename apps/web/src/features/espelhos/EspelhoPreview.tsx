@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatWeight } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
 
@@ -85,10 +86,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   } | null>(null);
   const [editValue, setEditValue] = useState('');
 
-  const { data: espelho, isLoading } = useApiQuery<Espelho>(
-    ['espelho', processId],
-    `/api/espelhos/${processId}`,
-  );
+  const {
+    data: espelho,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<Espelho>(['espelho', processId], `/api/espelhos/${processId}`);
 
   const apiCall = async (path: string, method = 'POST', body?: unknown) => {
     const token = localStorage.getItem('importacao_token');
@@ -248,6 +251,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
   if (isLoading) {
     return <LoadingSpinner className="py-8" />;
+  }
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar o espelho do processo." onRetry={() => refetch()} />
+    );
   }
 
   const rowBg = (item: EspelhoItem) => {

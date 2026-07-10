@@ -331,6 +331,15 @@ export const openapiSpec = {
         responses: { '200': { description: 'Document extraction history' } },
       },
     },
+    '/api/documents/{id}/extraction-evidence': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Get field-level source evidence for the latest extraction',
+        responses: {
+          '200': { description: 'Extracted fields with page and bounded source excerpt' },
+        },
+      },
+    },
     '/api/documents/{id}/reprocess': {
       post: {
         tags: ['Documents'],

@@ -50,16 +50,16 @@ const TRACKING_STEP_LABELS: Record<(typeof TRACKING_STEPS)[number], string> = {
 };
 
 function calculateProgress(tracking: Partial<FollowUpTracking>): number {
-  const stepWeight = Math.floor(100 / TRACKING_STEPS.length);
-  let progress = 0;
+  const completedSteps = TRACKING_STEPS.reduce(
+    (total, step) => total + (tracking[step] ? 1 : 0),
+    0,
+  );
 
-  for (const step of TRACKING_STEPS) {
-    if (tracking[step]) {
-      progress += stepWeight;
-    }
-  }
-
-  return Math.min(progress, 100);
+  // Do not use an integer weight per stage: 15 * floor(100 / 15) capped a
+  // fully completed follow-up at 90%. The displayed progress is a business
+  // completion indicator, so every persisted milestone must be able to reach
+  // exactly 100%.
+  return Math.round((completedSteps / TRACKING_STEPS.length) * 100);
 }
 
 async function recordChecklistEvent(
@@ -125,9 +125,7 @@ export interface StepCompletedBy {
  * most recent checklist_step_changed event per step. Falls back to the event author's
  * current name when the metadata snapshot lacks a name (older events).
  */
-async function getStepCompletedByMap(
-  processId: number,
-): Promise<Record<string, StepCompletedBy>> {
+async function getStepCompletedByMap(processId: number): Promise<Record<string, StepCompletedBy>> {
   try {
     const events = await db
       .select({

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { eq, desc, sql, and } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'fs/promises';
@@ -16,6 +16,7 @@ import {
   importProcesses,
   followUpTracking,
   emailIngestionLogs,
+  emailAttachmentDocuments,
   users,
 } from '../../shared/database/schema.js';
 import { aiService, flattenAiData, AIBudgetExceededError } from '../ai/service.js';
@@ -42,6 +43,7 @@ import { buildEspelhoFromAiData } from './utils/build-espelho.js';
 import type { AcceptComparisonInput, EditComparisonFieldInput } from './schema.js';
 import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
+import { ocrScannedPdf } from './ocr.js';
 
 /**
  * Convert an XLSX buffer to plain CSV-style text — used as input to the
@@ -81,6 +83,15 @@ const PROJECTED_AI_DATA_KEYS = new Set([
   'other',
 ]);
 const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+const DEFAULT_EXTRACTION_LEASE_MS = 10 * 60 * 1000;
+
+function extractionLeaseDurationMs(): number {
+  const configured = Number(process.env.DOCUMENT_EXTRACTION_LEASE_MS);
+  // A lease shorter than the AI timeout would reintroduce concurrent work.
+  return Number.isFinite(configured) && configured >= 120_000
+    ? configured
+    : DEFAULT_EXTRACTION_LEASE_MS;
+}
 const AI_META_KEYS = new Set([
   'budgetExceeded',
   'confidence',
@@ -312,6 +323,31 @@ function collectExtractedFields(
   return out;
 }
 
+type FieldEvidence = { sourcePage: number | null; sourceExcerpt: string | null };
+
+/**
+ * Evidence is intentionally deterministic: it identifies the first page whose
+ * normalized text contains the extracted scalar and stores only a bounded
+ * excerpt. Values not present verbatim (for example normalized dates) retain
+ * null evidence instead of inventing provenance.
+ */
+function findFieldEvidence(value: unknown, pageTexts: string[]): FieldEvidence {
+  const scalar = typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+  if (scalar.length < 3) return { sourcePage: null, sourceExcerpt: null };
+  const normalized = scalar.replace(/\s+/g, ' ').toLowerCase();
+  for (let index = 0; index < pageTexts.length; index += 1) {
+    const page = pageTexts[index] ?? '';
+    const haystack = page.replace(/\s+/g, ' ').toLowerCase();
+    const position = haystack.indexOf(normalized);
+    if (position < 0) continue;
+    const excerpt = page
+      .replace(/\s+/g, ' ')
+      .slice(Math.max(0, position - 120), position + normalized.length + 180);
+    return { sourcePage: index + 1, sourceExcerpt: excerpt.slice(0, 500) || null };
+  }
+  return { sourcePage: null, sourceExcerpt: null };
+}
+
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -526,6 +562,7 @@ async function persistExtractionLineage(params: {
   data: Record<string, any>;
   confidenceScore: number;
   sourceText: string;
+  sourcePages?: string[];
 }) {
   const sourceTextHash = sha256Text(params.sourceText ?? '');
   const [run] = await db
@@ -550,16 +587,21 @@ async function persistExtractionLineage(params: {
   if (fields.length === 0) return;
 
   await db.insert(documentExtractedFields).values(
-    fields.map((field) => ({
-      runId: run.id,
-      documentId: params.documentId,
-      processId: params.processId,
-      documentType: params.documentType,
-      fieldPath: field.fieldPath,
-      valueJson: field.valueJson as any,
-      confidence: field.confidence == null ? null : String(field.confidence),
-      sourceTextHash,
-    })),
+    fields.map((field) => {
+      const evidence = findFieldEvidence(field.valueJson, params.sourcePages ?? []);
+      return {
+        runId: run.id,
+        documentId: params.documentId,
+        processId: params.processId,
+        documentType: params.documentType,
+        fieldPath: field.fieldPath,
+        valueJson: field.valueJson as any,
+        confidence: field.confidence == null ? null : String(field.confidence),
+        sourceTextHash,
+        sourcePage: evidence.sourcePage,
+        sourceExcerpt: evidence.sourceExcerpt,
+      };
+    }),
   );
 }
 
@@ -1010,6 +1052,29 @@ export const documentService = {
       .orderBy(desc(documentExtractionHistory.archivedAt), desc(documentExtractionHistory.id));
   },
 
+  async getExtractionEvidence(documentId: number) {
+    const [run] = await db
+      .select()
+      .from(documentExtractionRuns)
+      .where(eq(documentExtractionRuns.documentId, documentId))
+      .orderBy(desc(documentExtractionRuns.createdAt), desc(documentExtractionRuns.id))
+      .limit(1);
+    if (!run) return { run: null, fields: [] };
+
+    const fields = await db
+      .select({
+        fieldPath: documentExtractedFields.fieldPath,
+        value: documentExtractedFields.valueJson,
+        confidence: documentExtractedFields.confidence,
+        sourcePage: documentExtractedFields.sourcePage,
+        sourceExcerpt: documentExtractedFields.sourceExcerpt,
+      })
+      .from(documentExtractedFields)
+      .where(eq(documentExtractedFields.runId, run.id))
+      .orderBy(documentExtractedFields.fieldPath);
+    return { run, fields };
+  },
+
   async markExtractionFailure(
     doc: typeof documents.$inferSelect,
     type: string,
@@ -1076,9 +1141,70 @@ export const documentService = {
     );
   },
 
+  /**
+   * Atomically claim a document before an expensive extraction. The lease is
+   * kept on the document (rather than in process memory) because queue
+   * workers and queue-fallback execution can run in different API instances.
+   */
+  async claimExtractionLease(doc: typeof documents.$inferSelect): Promise<string | null> {
+    // Compatibility with focused unit-test document stubs created before the
+    // lease columns existed. Real Drizzle rows always contain these columns
+    // (null when unclaimed), and therefore always take the durable path.
+    if (!Object.hasOwn(doc, 'extractionLeaseToken')) return null;
+
+    const token = randomUUID();
+    const expiresAt = new Date(Date.now() + extractionLeaseDurationMs());
+    const [claimed] = await db
+      .update(documents)
+      .set({
+        extractionLeaseToken: token,
+        extractionLeaseExpiresAt: expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(documents.id, doc.id),
+          sql`(${documents.extractionLeaseExpiresAt} IS NULL OR ${documents.extractionLeaseExpiresAt} <= now())`,
+        ),
+      )
+      .returning({ id: documents.id });
+
+    return claimed ? token : null;
+  },
+
+  async releaseExtractionLease(documentId: number, token: string): Promise<void> {
+    await db
+      .update(documents)
+      .set({ extractionLeaseToken: null, extractionLeaseExpiresAt: null, updatedAt: new Date() })
+      .where(and(eq(documents.id, documentId), eq(documents.extractionLeaseToken, token)));
+  },
+
   async processWithAI(documentId: number, type: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
     if (!doc) return;
+
+    const leaseToken = await this.claimExtractionLease(doc);
+    if (Object.hasOwn(doc, 'extractionLeaseToken') && !leaseToken) {
+      logger.info(
+        { documentId, type },
+        'Skipping duplicate AI extraction: document lease is active',
+      );
+      return;
+    }
+
+    try {
+      await this.processWithAIClaimed(doc, type);
+    } finally {
+      if (leaseToken) {
+        await this.releaseExtractionLease(documentId, leaseToken).catch((err) =>
+          logger.error({ err, documentId }, 'Failed to release document extraction lease'),
+        );
+      }
+    }
+  },
+
+  async processWithAIClaimed(doc: typeof documents.$inferSelect, type: string) {
+    const documentId = doc.id;
 
     // Re-extraction over an already extracted document overwrites
     // aiParsedData — archive the previous value first (audit, backlog #12).
@@ -1100,6 +1226,7 @@ export const documentService = {
 
     let result;
     let sourceText = '';
+    let sourcePages: string[] = [];
     try {
       const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
 
@@ -1110,6 +1237,7 @@ export const documentService = {
 
       const text = extracted.text;
       sourceText = text;
+      sourcePages = extracted.pageTexts ?? (text ? text.split(/\f/) : []);
       const runExtraction = async () => {
         switch (type) {
           case 'invoice':
@@ -1244,6 +1372,7 @@ export const documentService = {
       data: result.data as Record<string, any>,
       confidenceScore: result.confidenceScore,
       sourceText,
+      sourcePages,
     });
 
     await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
@@ -1947,7 +2076,13 @@ export const documentService = {
   async extractText(
     filePath: string,
     mimeType: string,
-  ): Promise<{ text: string; imageBase64?: string; imageMimeType?: string }> {
+  ): Promise<{
+    text: string;
+    imageBase64?: string;
+    imageMimeType?: string;
+    pageTexts?: string[];
+    ocrUsed?: boolean;
+  }> {
     const buffer = await fs.readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
 
@@ -1964,6 +2099,19 @@ export const documentService = {
 
       // If PDF has very little text, it's likely a scanned image
       if (text.length < 50) {
+        const ocr = await ocrScannedPdf(filePath);
+        if (ocr?.text) {
+          logger.info(
+            {
+              filePath,
+              textLength: text.length,
+              ocrTextLength: ocr.text.length,
+              ocrPages: ocr.pageCount,
+            },
+            'Scanned PDF preprocessed with local OCR',
+          );
+          return { text: ocr.text, pageTexts: ocr.pageTexts, ocrUsed: true };
+        }
         logger.info(
           { filePath, textLength: text.length },
           'PDF has minimal text, treating as scanned document for multimodal processing',
@@ -1971,7 +2119,7 @@ export const documentService = {
         const base64 = buffer.toString('base64');
         return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
       }
-      return { text };
+      return { text, pageTexts: text.split(/\f/) };
     }
 
     // ── Excel (XLSX/XLS) ──
@@ -2080,7 +2228,21 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new NotFoundError('Documento', id);
 
-    // Check if this document came from email ingestion
+    // Relational lineage is authoritative. The legacy filename/log scan could
+    // mislabel old email attachments after a process accumulated more than ten
+    // logs, or attribute a same-named attachment to the wrong email.
+    const [lineage] = await db
+      .select({ emailSubject: emailIngestionLogs.subject })
+      .from(emailAttachmentDocuments)
+      .leftJoin(emailIngestionLogs, eq(emailAttachmentDocuments.emailLogId, emailIngestionLogs.id))
+      .where(eq(emailAttachmentDocuments.documentId, id))
+      .orderBy(desc(emailAttachmentDocuments.createdAt))
+      .limit(1);
+    if (lineage) {
+      return { source: 'email' as const, emailSubject: lineage.emailSubject ?? undefined };
+    }
+
+    // Legacy fallback for records created before relational attachment lineage.
     const emailLogs = await db
       .select()
       .from(emailIngestionLogs)
@@ -2195,6 +2357,92 @@ export const documentService = {
     await this.enqueueAIExtraction(doc, doc.type);
     return toDocumentResponse({
       ...doc,
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      updatedAt: new Date(),
+    });
+  },
+
+  /**
+   * Correct a manual/email classification and restart extraction without
+   * losing the prior result. This is intentionally available to authenticated
+   * operators, like reprocess(): a wrong type otherwise leaves a document in
+   * an unrecoverable "other"/wrong-parser path until an admin reuploads it.
+   */
+  async reclassify(documentId: number, documentType: string, userId: number | null = null) {
+    const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
+    if (!doc) throw new NotFoundError('Documento', documentId);
+    await assertDocumentProcessNotLocked(doc.processId);
+
+    if (doc.type === documentType) {
+      return toDocumentResponse(doc);
+    }
+
+    await db.transaction(async (tx) => {
+      if (doc.aiParsedData != null) {
+        await tx.insert(documentExtractionHistory).values({
+          documentId: doc.id,
+          processId: doc.processId,
+          documentType: doc.type,
+          originalFilename: doc.originalFilename,
+          storagePath: doc.storagePath,
+          aiParsedData: doc.aiParsedData,
+          confidence: doc.confidenceScore ?? null,
+          reason: 'reprocess',
+        });
+      }
+
+      await tx
+        .update(documents)
+        .set({
+          type: documentType as (typeof documents.type.enumValues)[number],
+          isProcessed: false,
+          aiParsedData: null,
+          confidenceScore: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, documentId));
+
+      await this.rebuildProcessAiExtractedData(doc.processId, tx);
+    });
+
+    await db
+      .update(emailAttachmentDocuments)
+      .set({ documentType, updatedAt: new Date() })
+      .where(eq(emailAttachmentDocuments.documentId, documentId));
+
+    await invalidateComparisonAcceptances(
+      doc.processId,
+      `document_reclassified:${documentId}:${doc.type}:${documentType}`,
+    );
+    await auditService.log(
+      userId,
+      'reclassify',
+      'document',
+      documentId,
+      { processId: doc.processId, fromType: doc.type, toType: documentType },
+      null,
+    );
+    await recordProcessEvent(
+      doc.processId,
+      {
+        eventType: 'document_reclassified',
+        title: `Documento reclassificado: ${doc.type} → ${documentType}`,
+        metadata: {
+          documentId,
+          filename: doc.originalFilename,
+          fromType: doc.type,
+          toType: documentType,
+        },
+      },
+      userId,
+    );
+
+    const reclassified = { ...doc, type: documentType as typeof doc.type };
+    await this.enqueueAIExtraction(reclassified, documentType);
+    return toDocumentResponse({
+      ...reclassified,
       isProcessed: false,
       aiParsedData: null,
       confidenceScore: null,

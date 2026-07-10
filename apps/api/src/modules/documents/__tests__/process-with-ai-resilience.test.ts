@@ -94,6 +94,29 @@ describe('processWithAI — extraction failure resilience', () => {
     vi.useRealTimers();
   });
 
+  it('does not invoke OCR/AI when another worker holds the document lease', async () => {
+    const leasedDoc = {
+      id: 7,
+      processId: 42,
+      type: 'invoice',
+      storagePath: '/tmp/inv.pdf',
+      mimeType: 'application/pdf',
+      isProcessed: false,
+      aiParsedData: null,
+      confidenceScore: null,
+      originalFilename: 'inv.pdf',
+      extractionLeaseToken: null,
+      extractionLeaseExpiresAt: null,
+    };
+    queryQueue.push(createResolvedChain([leasedDoc])); // read document
+    queryQueue.push(createResolvedChain([])); // atomic claim returns no row
+
+    await documentService.processWithAI(7, 'invoice');
+
+    expect(extractInvoiceData).not.toHaveBeenCalled();
+    expect(mockFsReadFile).not.toHaveBeenCalled();
+  });
+
   it('marks document as extractionFailed and raises a critical alert when extraction throws', async () => {
     extractInvoiceData.mockRejectedValueOnce(new Error('All AI models in fallback chain failed'));
 

@@ -75,6 +75,29 @@ ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose -f docker-compose
    or espelho until the operator reprocesses/reuploads.
 5. The feature degrades gracefully — manual data entry still works.
 
+### OCR de PDF escaneado
+
+O OCR local e opt-in: mantenha `DOCUMENT_OCR_ENABLED=0` ate instalar Poppler
+(`pdftoppm`) e Tesseract no container da API, incluindo os idiomas `por` e
+`eng`. Para ativar, configure `DOCUMENT_OCR_ENABLED=1`, revise os limites
+`DOCUMENT_OCR_TIMEOUT_MS` e `DOCUMENT_OCR_MAX_PAGES`, e acompanhe no endpoint
+`/metrics` as series `document_ocr_runs_total`, `document_ocr_pages_total` e
+`document_ocr_duration_seconds`.
+
+Uma falha de OCR nao bloqueia o documento: o fluxo continua pelo fallback
+multimodal. Confirme a causa nos logs por `Local OCR unavailable` antes de
+repetir o processamento. A evidencia da extracao mais recente fica em
+`GET /api/documents/:id/extraction-evidence`, com pagina e trecho limitado.
+
+### Lease de extração duplicada
+
+Cada worker reivindica o `document_id` antes de iniciar OCR/IA. Uma mensagem
+duplicada apenas registra `Skipping duplicate AI extraction` e não consome
+modelo. Mantenha `DOCUMENT_EXTRACTION_LEASE_MS` acima do p99 de OCR+IA (o
+default é 10 minutos; a API recusa valor menor que 2 minutos). Se houver queda
+do worker, a lease expira e uma nova entrega retoma o documento; não apague ou
+altere a lease diretamente no banco durante uma extração em curso.
+
 ### Deploy failed
 
 ```bash

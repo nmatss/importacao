@@ -13,6 +13,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatDateTime } from '@/shared/lib/utils';
 import { TableSkeleton } from '@/shared/components/Skeleton';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { FollowUpTracking } from '@/shared/types';
 
 export interface FollowUpTabProps {
@@ -22,20 +23,38 @@ export interface FollowUpTabProps {
 const FOLLOW_UP_STEPS = [
   { key: 'documentsReceivedAt', label: 'Documentos recebidos', icon: FileText },
   { key: 'preInspectionAt', label: 'Pré-inspeção', icon: ClipboardCheck },
+  { key: 'savedToFolderAt', label: 'Salvo na pasta', icon: FileText },
   { key: 'ncmVerifiedAt', label: 'NCM verificado', icon: ShieldCheck },
+  { key: 'ncmBlCheckedAt', label: 'NCM BL conferido', icon: ShieldCheck },
+  { key: 'freightBlCheckedAt', label: 'Frete BL conferido', icon: ClipboardCheck },
+  { key: 'espelhoBuiltAt', label: 'Espelho montado', icon: FileSpreadsheet },
+  { key: 'invoiceSentFeniciaAt', label: 'Invoice enviada à Fenícia', icon: Send },
   { key: 'espelhoGeneratedAt', label: 'Espelho gerado', icon: FileSpreadsheet },
+  { key: 'signaturesCollectedAt', label: 'Assinaturas coletadas', icon: FileEdit },
+  { key: 'signedDocsSentAt', label: 'Documentos assinados enviados', icon: Send },
   { key: 'sentToFeniciaAt', label: 'Enviado à Fenícia', icon: Send },
+  { key: 'diDraftAt', label: 'Rascunho DI', icon: FileEdit },
   { key: 'liSubmittedAt', label: 'LI submetida', icon: FileEdit },
   { key: 'liApprovedAt', label: 'LI aprovada', icon: CheckCircle },
 ] as const;
 
 export function FollowUpTab({ processId }: FollowUpTabProps) {
-  const { data: tracking, isLoading } = useApiQuery<FollowUpTracking>(
-    ['followup', processId],
-    `/api/follow-up/${processId}`,
-  );
+  const {
+    data: tracking,
+    isLoading,
+    isError,
+    refetch,
+  } = useApiQuery<FollowUpTracking>(['followup', processId], `/api/follow-up/${processId}`);
 
   if (isLoading) return <TableSkeleton />;
+  if (isError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar o acompanhamento do processo."
+        onRetry={() => refetch()}
+      />
+    );
+  }
 
   if (!tracking) {
     return (

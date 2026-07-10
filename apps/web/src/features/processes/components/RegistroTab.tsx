@@ -11,6 +11,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatDateTime } from '@/shared/lib/utils';
 import { isRecord, unwrapAiValue } from '@/shared/lib/ai-values';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { Document, ImportProcess } from '@/shared/types';
 
 type RegistroCheckStatus = 'match' | 'warning' | 'divergent' | 'empty';
@@ -275,16 +276,34 @@ function statusClass(status: RegistroCheckStatus) {
 }
 
 export function RegistroTab({ processId }: { processId: string }) {
-  const { data: process, isLoading: loadingProcess } = useApiQuery<ImportProcess>(
-    ['process', processId],
-    `/api/processes/${processId}`,
-  );
-  const { data: docs, isLoading: loadingDocs } = useApiQuery<Document[]>(
+  const {
+    data: process,
+    isLoading: loadingProcess,
+    isError: processError,
+    refetch: refetchProcess,
+  } = useApiQuery<ImportProcess>(['process', processId], `/api/processes/${processId}`);
+  const {
+    data: docs,
+    isLoading: loadingDocs,
+    isError: documentsError,
+    refetch: refetchDocuments,
+  } = useApiQuery<Document[]>(
     ['documents', 'process', processId],
     `/api/documents/process/${processId}`,
   );
 
   if (loadingProcess || loadingDocs) return <LoadingSpinner className="py-8" />;
+  if (processError || documentsError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar os dados de registro aduaneiro."
+        onRetry={() => {
+          void refetchProcess();
+          void refetchDocuments();
+        }}
+      />
+    );
+  }
   if (!process) return null;
 
   const draftDuimp = docs?.find((doc) => doc.documentType === 'draft_duimp');

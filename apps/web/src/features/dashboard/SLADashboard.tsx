@@ -14,6 +14,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate, formatCurrency } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
+import { ErrorState } from '@/shared/components/ErrorState';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -212,11 +213,12 @@ export function SLADashboard() {
   const [sortField, setSortField] = useState<string>('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  const { data: sla, isLoading } = useApiQuery<SlaData>(
-    ['dashboard', 'sla'],
-    '/api/dashboard/sla',
-    { refetchInterval: 60_000 },
-  );
+  const {
+    data: sla,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<SlaData>(['dashboard', 'sla'], '/api/dashboard/sla', { refetchInterval: 60_000 });
 
   function handleSort(field: string) {
     if (sortField === field) {
@@ -270,6 +272,12 @@ export function SLADashboard() {
         </div>
         <Skeleton className="h-96 rounded-2xl" />
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState message="Erro ao carregar os indicadores de SLA." onRetry={() => refetch()} />
     );
   }
 

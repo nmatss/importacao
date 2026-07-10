@@ -28,6 +28,7 @@ import {
   Area,
 } from 'recharts';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { cn, formatCurrency } from '@/shared/lib/utils';
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -156,25 +157,34 @@ function ChangeBadge({ value }: { value: number }) {
 // ── Main Page ────────────────────────────────────────────────────────────
 
 export function ExecutiveDashboardPage() {
-  const { data: kpis, isLoading: loadingKpis } = useApiQuery<ExecutiveKpis>(
-    ['dashboard', 'executive'],
-    '/api/dashboard/executive',
-  );
+  const {
+    data: kpis,
+    isLoading: loadingKpis,
+    error: kpisError,
+    refetch: refetchKpis,
+  } = useApiQuery<ExecutiveKpis>(['dashboard', 'executive'], '/api/dashboard/executive');
 
-  const { data: timeline, isLoading: loadingTimeline } = useApiQuery<TimelineEntry[]>(
+  const {
+    data: timeline,
+    isLoading: loadingTimeline,
+    error: timelineError,
+    refetch: refetchTimeline,
+  } = useApiQuery<TimelineEntry[]>(
     ['dashboard', 'executive', 'timeline'],
     '/api/dashboard/executive/timeline',
   );
 
-  const { data: byMonth } = useApiQuery<MonthlyTrend[]>(
-    ['dashboard', 'by-month'],
-    '/api/dashboard/by-month',
-  );
+  const {
+    data: byMonth,
+    error: byMonthError,
+    refetch: refetchByMonth,
+  } = useApiQuery<MonthlyTrend[]>(['dashboard', 'by-month'], '/api/dashboard/by-month');
 
-  const { data: fobByBrand } = useApiQuery<FobByBrand[]>(
-    ['dashboard', 'fob-by-brand'],
-    '/api/dashboard/fob-by-brand',
-  );
+  const {
+    data: fobByBrand,
+    error: fobByBrandError,
+    refetch: refetchFobByBrand,
+  } = useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
 
   if (loadingKpis) {
     return (
@@ -199,6 +209,20 @@ export function ExecutiveDashboardPage() {
           <ChartSkeleton />
         </div>
       </div>
+    );
+  }
+
+  if (kpisError || timelineError || byMonthError || fobByBrandError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar os indicadores executivos."
+        onRetry={() => {
+          void refetchKpis();
+          void refetchTimeline();
+          void refetchByMonth();
+          void refetchFobByBrand();
+        }}
+      />
     );
   }
 

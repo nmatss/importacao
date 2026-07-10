@@ -169,6 +169,42 @@ describe('communicationService', () => {
     });
   });
 
+  describe('updateDraft()', () => {
+    it('should reopen a failed communication as a draft so it can be corrected and retried', async () => {
+      const failed = {
+        id: 7,
+        processId: 1,
+        recipient: 'Test',
+        recipientEmail: 'test@example.com',
+        subject: 'Original',
+        body: '<p>Original</p>',
+        status: 'failed',
+        errorMessage: 'SMTP timeout',
+      };
+      const reopened = {
+        ...failed,
+        subject: 'Corrigido',
+        status: 'draft',
+        errorMessage: null,
+      };
+
+      queryQueue.push(createResolvedChain([failed]));
+      queryQueue.push(createResolvedChain([reopened]));
+
+      const result = await communicationService.updateDraft(7, { subject: 'Corrigido' }, 12);
+
+      expect(result).toEqual(reopened);
+      expect(auditService.log).toHaveBeenCalledWith(
+        12,
+        'communication.draft_updated',
+        'communication',
+        7,
+        expect.objectContaining({ changedFields: ['subject', 'reopenedAfterFailure'] }),
+        null,
+      );
+    });
+  });
+
   describe('send()', () => {
     it('should send email and mark as sent', async () => {
       const mockComm = {

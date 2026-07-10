@@ -56,6 +56,26 @@ export const validationChecksRunning = new Gauge({
   registers: [register],
 });
 
+export const documentOcrRunsTotal = new Counter({
+  name: 'document_ocr_runs_total',
+  help: 'Local OCR attempts by outcome',
+  labelNames: ['outcome'] as const,
+  registers: [register],
+});
+
+export const documentOcrPagesTotal = new Counter({
+  name: 'document_ocr_pages_total',
+  help: 'PDF pages rendered for local OCR',
+  registers: [register],
+});
+
+export const documentOcrDuration = new Histogram({
+  name: 'document_ocr_duration_seconds',
+  help: 'End-to-end local OCR duration',
+  buckets: [0.1, 0.5, 1, 2.5, 5, 10, 30, 60, 120],
+  registers: [register],
+});
+
 /**
  * Normalize path to avoid high-cardinality labels.
  * Replaces UUID-like and numeric path segments with placeholders.

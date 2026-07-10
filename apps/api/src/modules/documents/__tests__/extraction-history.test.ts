@@ -269,4 +269,31 @@ describe('document extraction history (backlog #12)', () => {
       expect(history).toEqual(rows);
     });
   });
+
+  describe('getExtractionEvidence()', () => {
+    it('returns the latest run and its bounded field evidence', async () => {
+      const run = { id: 91, documentId: 7, extractionStatus: 'completed' };
+      const fields = [
+        {
+          fieldPath: 'invoiceNumber',
+          value: 'INV-001',
+          confidence: '0.9500',
+          sourcePage: 2,
+          sourceExcerpt: 'COMMERCIAL INVOICE INV-001 total USD 100',
+        },
+      ];
+      queryQueue.push(createResolvedChain([run]));
+      queryQueue.push(createResolvedChain(fields));
+
+      await expect(documentService.getExtractionEvidence(7)).resolves.toEqual({ run, fields });
+    });
+
+    it('returns an empty evidence set when no extraction has completed', async () => {
+      queryQueue.push(createResolvedChain([]));
+      await expect(documentService.getExtractionEvidence(7)).resolves.toEqual({
+        run: null,
+        fields: [],
+      });
+    });
+  });
 });

@@ -21,6 +21,10 @@ export const reprocessDocumentSchema = z.object({
   documentId: z.coerce.number(),
 });
 
+export const reclassifyDocumentSchema = z.object({
+  documentType: uploadDocumentSchema.shape.documentType,
+});
+
 export const acceptComparisonSchema = z.object({
   scope: z.enum(['aggregate', 'item']),
   rowKey: z.string().trim().min(1).max(160),
@@ -39,5 +43,6 @@ export const editComparisonFieldSchema = z.object({
 });
 
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
+export type ReclassifyDocumentInput = z.infer<typeof reclassifyDocumentSchema>;
 export type AcceptComparisonInput = z.infer<typeof acceptComparisonSchema>;
 export type EditComparisonFieldInput = z.infer<typeof editComparisonFieldSchema>;
