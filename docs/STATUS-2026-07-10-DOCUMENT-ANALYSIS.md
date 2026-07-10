@@ -76,9 +76,29 @@ atrás de autenticação e processo travado bloqueia alteração.
 - Web `DocumentList`: 2 testes aprovados, incluindo recuperação por analista.
 - `npm run typecheck` e `git diff --check` aprovados.
 
+## Rollout em produção — 2026-07-10
+
+Publicado em produção nos commits `d5a7f36` e `739f63a`.
+
+- Migração `0024_document_analysis_hardening.sql` aplicada e schema validado:
+  lease em `documents` e `source_excerpt` em campos extraídos.
+- Runtime validado com Poppler e Tesseract (`por` e `eng`),
+  `DOCUMENT_OCR_ENABLED=1` e lease de 10 minutos.
+- Mailbox persistente SOPS configurado como `global@grupounico.com`.
+- Full resync da SYDLE concluído: 26 registros atualizados, zero erros.
+- Oito documentos do processo real `PK2052602TJ` foram reenfileirados e a
+  fila concluiu todos os jobs. Cinco extrações concluíram normalmente; três
+  invoices ficaram explicitamente em falha para revisão manual (resposta sem
+  dados úteis ou JSON inválido), sem projeção automática.
+- O teste revelou uma falha de segurança operacional: a reconciliação podia
+  elevar a confiança de uma extração já marcada como falha. O commit `739f63a`
+  bloqueia esse caminho e a reparação de dados reduziu essas confianças a zero.
+- Pós-deploy validado: API healthy, dependências DB/Redis healthy e site
+  público HTTP 200.
+
 ## Pendências de operação
 
-Uma validação conclusiva com o processo real PK2052602TJ exige os documentos
-reais anonimizados ou autorização para reprocessá-los no ambiente de destino.
-Sem essa evidência, não se deve declarar como comprovada a leitura de
-exportador, pesos, CBM, frete e itens daquele layout.
+As três invoices marcadas como falha no PK2052602TJ exigem reclassificação,
+documento substituto ou correção manual por operador; não são evidência de
+êxito da leitura. Para elevar a cobertura do CI, ainda falta incorporar
+documentos reais anonimizados e aprovados como casos ouro.

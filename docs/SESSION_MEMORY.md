@@ -1367,3 +1367,19 @@ Observacao operacional:
   confirmar reducao dos falsos positivos; avisos restantes esperados tendem a
   ser dados ausentes/externos (FOC explicado, FUP/Odoo/NCM/data logistica
   ausente), nao travamento de extracao.
+
+## 2026-07-10 — Rollout documental e validação PK2052602TJ
+
+- Deploy de produção concluído nos commits `d5a7f36` e `739f63a`; revision
+  remota `739f63aa79f6`.
+- Migration 0024 aplicada; OCR local está ativo com Poppler/Tesseract e
+  idiomas `por+eng`; mailbox de ingestão persistido em SOPS como
+  `global@grupounico.com`.
+- Full resync SYDLE manual concluído: 26 atualizações, sem erro.
+- Reprocessamento de oito documentos do processo PK2052602TJ terminou pela
+  fila pg-boss. Documentos 43, 147, 148, 149 e 150 extraíram; invoices 44,
+  146 e 151 falharam de modo explícito e devem ser revisadas manualmente.
+- Descoberto e corrigido: `reconcileProcessConfidence` não deve recalibrar
+  documentos com `extractionFailed`/`error`. O patch publicado preserva
+  confiança zero e impede projeção enganosa; dados existentes afetados foram
+  reparados em produção.

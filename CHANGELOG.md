@@ -20,6 +20,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Operational notes
 
+- Produção publicada e validada em 2026-07-10: migration 0024, OCR local,
+  mailbox `global@grupounico.com`, ressync completo SYDLE e reprocessamento do
+  PK2052602TJ. Invoices sem extração útil permanecem em revisão manual.
 - A sincronização Follow-Up ↔ planilha ainda é manual e administrativa; não
   foi ativada uma sobrescrita automática sem confirmação da planilha-fonte,
   frequência e política de conflito.
