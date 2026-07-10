@@ -67,6 +67,18 @@ export async function reconcileProcessConfidence(
 
     for (const doc of docs) {
       if (!RECONCILABLE_TYPES.has(doc.type) || !doc.isProcessed || !doc.aiParsedData) continue;
+      // A failed extraction only stores operational error metadata.  It must
+      // never be treated as an itemized document and have its confidence
+      // "recovered" from the espelho, otherwise the UI would advertise a
+      // high-confidence result with no extracted source data.
+      if (
+        typeof doc.aiParsedData === 'object' &&
+        !Array.isArray(doc.aiParsedData) &&
+        ((doc.aiParsedData as Record<string, unknown>).extractionFailed ||
+          (doc.aiParsedData as Record<string, unknown>).error)
+      ) {
+        continue;
+      }
       const data = structuredCloneSafe(doc.aiParsedData as Record<string, any>);
       const before = computeConfidenceScore(data).score;
 
