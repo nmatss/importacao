@@ -127,6 +127,46 @@ def test_write_skips_missing_date(monkeypatch):
     assert calls == ["00224"]  # only validade written; vencimento skipped
 
 
+class TestResolveWhenSkuIsProduto:
+    """LINX_SKU_IS_PRODUTO=true ainda confere se o produto existe.
+
+    Só o Puket tem FK de PROP_PRODUTOS->PRODUTOS; no Imaginarium um código
+    desconhecido viraria linha órfã no ERP. E o portal carrega SKUs que não são
+    código de produto (EANs, códigos da outra marca).
+    """
+
+    def _sku_is_produto(self, monkeypatch, found: bool):
+        from app.db import sqlserver
+
+        monkeypatch.setitem(sqlserver.LINX_SCHEMA, "sku_is_produto", "true")
+        conn = _FakeConn("070400034" if found else None)
+        monkeypatch.setattr(sqlserver, "_connect", lambda cfg: conn)
+        return sqlserver, conn
+
+    def test_returns_code_when_product_exists(self, monkeypatch):
+        sqlserver, _ = self._sku_is_produto(monkeypatch, found=True)
+        assert sqlserver.resolve_produto_codigo("puket", "070400034") == "070400034"
+
+    def test_returns_none_when_product_absent(self, monkeypatch):
+        # Ex.: EAN '7909692117627' — vira "SKU nao encontrado", nao lixo no ERP.
+        sqlserver, _ = self._sku_is_produto(monkeypatch, found=False)
+        assert sqlserver.resolve_produto_codigo("puket", "7909692117627") is None
+
+    def test_unknown_sku_never_reaches_the_upsert(self, monkeypatch):
+        from app.services import linx_service
+
+        monkeypatch.setattr(linx_service, "LINX_WRITE_ENABLED", True)
+        monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda b, s: None)
+        calls = []
+        monkeypatch.setattr(
+            linx_service, "upsert_produto_propriedade", lambda *a: calls.append(a)
+        )
+        out = linx_service.write_certificate_to_linx("puket", "7909692117627", "2027-04-24", None)
+        assert out["status"] == "error"
+        assert "nao encontrado" in out["error"]
+        assert calls == []  # nada foi escrito no ERP
+
+
 def test_resolve_raises_when_sku_mapping_unconfigured():
     # Default config (sku_is_produto=false, produto_col_sku="") must fail closed,
     # not return the raw SKU.
@@ -182,6 +222,13 @@ class _FakeConn:
         self.committed = False
         self.rolled_back = False
         self.closed = False
+
+    # resolve_produto_codigo usa `with _connect(...) as conn`
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
 
     def cursor(self):
         return self.cursor_obj

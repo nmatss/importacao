@@ -124,8 +124,17 @@ def resolve_produto_codigo(brand: str, sku: str) -> str | None:
 
     The panel SKU is often produto+cor+tamanho (grade level), while certification
     properties live at the base-product level. When LINX_SKU_IS_PRODUTO is true the
-    SKU is already the product code and is returned as-is. Otherwise we look the SKU
-    up in the product table via the configured columns.
+    SKU is already the product code, but it is still checked against the product
+    table before being handed to the upsert. Otherwise we look the SKU up in the
+    product table via the configured columns.
+
+    The existence check is not redundant. Only Puket has a foreign key from
+    PROP_PRODUTOS to PRODUTOS (XFKP2_PROP_PRODUTOS); Imaginarium has none, so an
+    unknown code would silently become an orphan row in the ERP. And the portal
+    does carry SKUs that are not product codes — 7 of Puket's 358 are EANs or codes
+    from the other brand's catalogue (2026-07-16). Checking turns those into the
+    caller's plain "SKU nao encontrado no Linx" instead of an FK violation on one
+    brand and corruption on the other.
 
     Args:
         brand: Brand name used to pick the Linx database.
@@ -138,7 +147,18 @@ def resolve_produto_codigo(brand: str, sku: str) -> str | None:
         Exception: On connection/query failure.
     """
     if LINX_SCHEMA.get("sku_is_produto", "false").lower() == "true":
-        return sku
+        cfg = _brand_linx(brand)
+        table = _ident(LINX_SCHEMA["produto_table"])
+        codigo_col = _ident(LINX_SCHEMA["produto_col_codigo"])
+        with _connect(cfg) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                f"SELECT TOP 1 {codigo_col} FROM {table} "  # noqa: S608
+                f"WHERE LTRIM(RTRIM({codigo_col})) = %s",
+                (sku.strip(),),
+            )
+            row = cur.fetchone()
+            return str(row[0]).strip() if row and row[0] is not None else None
 
     sku_col = LINX_SCHEMA.get("produto_col_sku", "")
     if not sku_col:
