@@ -1,7 +1,8 @@
 # Cadastro de Certificado + Escrita no Linx (PROP_PRODUTOS)
 
-> Status: **implementado, gravação no Linx GATED** (`LINX_WRITE_ENABLED=false`) até a
-> descoberta de schema ser confirmada. Branch: `feat/ai-harness-uat-odett`.
+> Status: **implementado, gravação no Linx GATED** (`LINX_WRITE_ENABLED=false`).
+> Schema **confirmado** contra as duas bases em 2026-07-16 (§6); falta apenas ligar a
+> flag com as credenciais por marca. Issue #62.
 
 Permite que a equipe cadastre certificados pelo painel de Certificações e, ao salvar,
 **faz upsert das datas de certificação nas propriedades de produto do Linx** (SQL Server)
@@ -19,7 +20,8 @@ Para cada produto de Imaginarium / Puket, gravar duas propriedades no Linx:
 | Vencimento do Licenciamento | `00225`                  | `00107`                        |
 
 O valor gravado é a data (texto, `dd/mm/AAAA` por padrão) na coluna de valor de
-`PROP_PRODUTOS`. Se a propriedade já existe para o produto → **UPDATE**; senão → **INSERT**.
+`PROP_PRODUTOS`. Se a propriedade não existe para o produto → **INSERT**; se existe com valor
+diferente → **UPDATE**; se já bate → **nada** (`unchanged`).
 
 ---
 
@@ -61,7 +63,8 @@ Puket Escolares usa o **mesmo** Linx/códigos da Puket.
 ### Backend — `apps/cert-api`
 
 - `app/config.py` — bloco `LINX_*`: switch `LINX_WRITE_ENABLED`, `LINX_BRANDS`
-  (host/db/códigos por marca) e `LINX_SCHEMA` (nomes de tabela/coluna, parametrizáveis por env).
+  (host/db/**credenciais**/códigos por marca) e `LINX_SCHEMA` (nomes de tabela/coluna,
+  parametrizáveis por env).
 - `app/db/sqlserver.py` — `_ident` (guarda de identificador), `_brand_linx`, `_connect`,
   `resolve_produto_codigo`, `upsert_produto_propriedade`.
 - `app/services/linx_service.py` — orquestra a escrita das 2 propriedades, formatação de
@@ -69,8 +72,9 @@ Puket Escolares usa o **mesmo** Linx/códigos da Puket.
 - `app/routes/certificates.py` — endpoints REST + upload/validação de PDF.
 - `app/db/postgres.py` — cria a tabela `cert_certificates` em `ensure_tables()`.
 - `app/main.py` — registra o router `certificates`.
-- `sql/linx_discovery.sql` — **query de descoberta read-only** (ver §6).
-- `tests/test_linx_service.py` — 26 testes de unidade (datas, fail-closed, marca, guarda SQL).
+- `sql/linx_discovery.sql` / `scripts/linx_discovery.py` — **descoberta read-only** (ver §6).
+- `tests/test_linx_service.py` — testes de unidade (datas, fail-closed, marca, guarda SQL,
+  insert/update/unchanged do upsert, credenciais por marca).
 
 ### Frontend — `apps/web`
 
@@ -116,11 +120,14 @@ linx_detail (jsonb), linx_applied_at, created_by, created_at, updated_at`.
 - **SQL-injection-proof:** nomes de tabela/coluna vêm **apenas** de config/env e passam por
   `_ident` (`^[A-Za-z0-9_]+$`); produto, código de propriedade e valor são **sempre bind params**.
   Nenhum input de request alcança um identificador.
-- **Upsert seguro (anti-race + anti-trigger):**
-  `UPDATE … WITH (UPDLOCK, HOLDLOCK, ROWLOCK)` serializa o caso "linha ausente" (dois cadastros
-  simultâneos do mesmo par produto/propriedade não inserem em duplicidade); `SET NOCOUNT ON` +
-  `SELECT @@ROWCOUNT` tornam a contagem confiável mesmo se `PROP_PRODUTOS` tiver triggers (comum em Linx).
-  Tudo em transação manual (commit/rollback/close).
+- **Upsert seguro (anti-race + anti-trigger):** lê o valor atual com
+  `SELECT … WITH (UPDLOCK, HOLDLOCK)`, o que serializa o caso "linha ausente" (dois cadastros
+  simultâneos do mesmo par produto/propriedade não inserem em duplicidade), e então decide:
+  **insere** se a propriedade falta (informando `ITEM_PROPRIEDADE` — PK, `NOT NULL` sem default),
+  **atualiza** se o certificado traz valor diferente, ou devolve **`unchanged`** se já bate.
+  O no-op importa: `PROP_PRODUTOS` tem trigger ativo no Puket (`LXU_PROP_PRODUTOS`) e reescrever
+  valor igual dispararia a replicação do Linx à toa. Tudo em transação manual
+  (commit/rollback/close).
 - **Resolução SKU→produto fail-closed:** o SKU do portal às vezes é produto+cor+tamanho (grade),
   enquanto a propriedade vive no produto base. Sem a coluna de mapeamento configurada, o resolver
   **recusa gravar** (`raise`) em vez de usar o SKU cru — não polui o ERP com chave inválida.
