@@ -54,6 +54,72 @@ def _find_col_by_header(headers: list[str], *candidates: str) -> int | None:
     return None
 
 
+def _cell(row: list, idx: int | None) -> str:
+    """Le uma celula da linha, tolerando coluna ausente ou linha curta."""
+    if idx is None or idx >= len(row):
+        return ""
+    return str(row[idx]).strip()
+
+
+def read_encerramentos_prazos() -> list[dict]:
+    """Read SKU + PRAZO FINAL VENDA + MARCA from the 'Encerramentos' tab.
+
+    Fonte do prazo final de venda para o sync com o Linx. Le a aba direto, e nao
+    `cert_products`, por dois motivos: a marca decide em qual Linx gravar e chega
+    NULA na tabela (a linha de "Ativos" vence o upsert), e o prazo aqui e o dado
+    cru que o time fiscal mantem.
+
+    Returns:
+        Lista de dicts {sku, sale_deadline, brand, certificado}, um por SKU
+        (a coluna SKU pode trazer varios codigos separados por quebra de linha).
+        Lista vazia quando o Sheets nao esta configurado ou a aba nao existe.
+    """
+    client = _get_sheets_client()
+    if not client or not SHEETS_SPREADSHEET_ID:
+        log.warning("Sheets nao configurado; sync de prazo abortado")
+        return []
+
+    try:
+        ws = client.open_by_key(SHEETS_SPREADSHEET_ID).worksheet("Encerramentos")
+    except gspread.exceptions.WorksheetNotFound:
+        log.warning("Aba 'Encerramentos' nao encontrada")
+        return []
+
+    rows = ws.get_all_values()
+    if not rows:
+        return []
+
+    headers = rows[0]
+    i_sku = _find_col_by_header(headers, "sku", "código", "codigo", "ref")
+    i_prazo = _find_col_by_header(headers, "prazo final venda", "prazo final", "prazo venda")
+    i_marca = _find_col_by_header(headers, "marca", "brand")
+    i_cert = _find_col_by_header(headers, "certificado")
+    if i_sku is None or i_prazo is None or i_marca is None:
+        log.warning(
+            f"Aba 'Encerramentos' sem coluna obrigatoria (sku={i_sku} prazo={i_prazo} marca={i_marca})"
+        )
+        return []
+
+    out: list[dict] = []
+    for row in rows[1:]:
+        prazo, marca = _cell(row, i_prazo), _cell(row, i_marca)
+        if not prazo or not marca:
+            continue
+        for sku in re.split(r"[\r\n]+", _cell(row, i_sku)):
+            sku = sku.strip()
+            if sku:
+                out.append(
+                    {
+                        "sku": sku,
+                        "sale_deadline": prazo,
+                        "brand": marca,
+                        "certificado": _cell(row, i_cert),
+                    }
+                )
+    log.info(f"Encerramentos: {len(out)} SKUs com prazo final de venda")
+    return out
+
+
 def _read_products_from_sheets() -> list[dict]:
     """Read product certification data from Google Sheets (Ativos + Encerramentos tabs).
 

@@ -185,6 +185,39 @@ def resolve_produto_codigo(brand: str, sku: str) -> str | None:
         return str(row[0]).strip() if row and row[0] is not None else None
 
 
+def read_produto_propriedade(brand: str, produto_codigo: str, prop_code: str) -> str | None:
+    """Le o valor atual de uma propriedade do produto no Linx.
+
+    Existe para o dry-run do sync poder classificar o que aconteceria sem abrir
+    transacao de escrita.
+
+    Args:
+        brand: marca (escolhe o banco/credencial).
+        produto_codigo: codigo do produto ja resolvido.
+        prop_code: codigo da PROPRIEDADE (ex.: '00224').
+
+    Returns:
+        O valor (sem padding), ou None quando a propriedade nao existe para o produto.
+    """
+    cfg = _brand_linx(brand)
+    table = _ident(LINX_SCHEMA["prop_table"])
+    col_prod = _ident(LINX_SCHEMA["prop_col_produto"])
+    col_prop = _ident(LINX_SCHEMA["prop_col_propriedade"])
+    col_val = _ident(LINX_SCHEMA["prop_col_valor"])
+
+    with _connect(cfg) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            f"SELECT TOP 1 {col_val} FROM {table} "  # noqa: S608
+            f"WHERE {col_prod} = %s AND {col_prop} = %s",
+            (produto_codigo, prop_code),
+        )
+        row = cur.fetchone()
+        if row is None:
+            return None
+        return "" if row[0] is None else str(row[0]).strip()
+
+
 def upsert_produto_propriedade(
     brand: str, produto_codigo: str, prop_code: str, valor: str
 ) -> str:
