@@ -42,13 +42,36 @@ class TestFetchEcommerceStock:
         assert isinstance(result, list)
 
     def test_puket_escolares_uses_puket_db(self, mock_sqlserver_conn, mocker):
-        """puket_escolares brand should connect to Puket ERP host."""
+        """puket_escolares brand should connect to Puket ERP host with Puket credentials."""
         import pymssql
         mocker.patch("app.db.sqlserver.ERP_PUKET_HOST", "puket-test-host")
         mocker.patch("app.db.sqlserver.ERP_PUKET_DB", "puket_test_db")
-        mocker.patch("app.db.sqlserver.ERP_MSSQL_USER", "erp-test-user")
-        mocker.patch("app.db.sqlserver.ERP_MSSQL_PASS", "erp-test-pass")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_USER", "puket-test-user")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_PASS", "puket-test-pass")
         mock_sqlserver_conn.fetchall.return_value = []
         fetch_ecommerce_stock("puket_escolares")
         call_args = pymssql.connect.call_args
-        assert call_args.args[:4] == ("puket-test-host", "erp-test-user", "erp-test-pass", "puket_test_db")
+        assert call_args.args[:4] == (
+            "puket-test-host", "puket-test-user", "puket-test-pass", "puket_test_db",
+        )
+
+    def test_each_brand_connects_with_its_own_credentials(self, mock_sqlserver_conn, mocker):
+        """db01 e db02 têm logins distintos: o estoque não pode usar um só."""
+        import pymssql
+        mocker.patch("app.db.sqlserver.ERP_PUKET_HOST", "db01")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_DB", "DB_puket")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_USER", "u_puket")
+        mocker.patch("app.db.sqlserver.ERP_PUKET_PASS", "p_puket")
+        mocker.patch("app.db.sqlserver.ERP_IMG_HOST", "db02")
+        mocker.patch("app.db.sqlserver.ERP_IMG_DB", "Grupo_Imaginarium")
+        mocker.patch("app.db.sqlserver.ERP_IMG_USER", "u_img")
+        mocker.patch("app.db.sqlserver.ERP_IMG_PASS", "p_img")
+        mock_sqlserver_conn.fetchall.return_value = []
+
+        fetch_ecommerce_stock("puket")
+        assert pymssql.connect.call_args.args[:4] == ("db01", "u_puket", "p_puket", "DB_puket")
+
+        fetch_ecommerce_stock("imaginarium")
+        assert pymssql.connect.call_args.args[:4] == (
+            "db02", "u_img", "p_img", "Grupo_Imaginarium",
+        )

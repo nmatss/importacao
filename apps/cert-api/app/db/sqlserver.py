@@ -5,10 +5,12 @@ import re
 from app.config import (
     ERP_IMG_DB,
     ERP_IMG_HOST,
-    ERP_MSSQL_PASS,
-    ERP_MSSQL_USER,
+    ERP_IMG_PASS,
+    ERP_IMG_USER,
     ERP_PUKET_DB,
     ERP_PUKET_HOST,
+    ERP_PUKET_PASS,
+    ERP_PUKET_USER,
     LINX_BRANDS,
     LINX_SCHEMA,
 )
@@ -54,16 +56,17 @@ def fetch_ecommerce_stock(brand: str) -> list[dict]:
     """
     import pymssql
 
-    if brand.lower() in ("puket", "puket_escolares"):
-        host = ERP_PUKET_HOST
-        db_name = ERP_PUKET_DB
+    is_puket = brand.lower() in ("puket", "puket_escolares")
+    if is_puket:
+        host, db_name = ERP_PUKET_HOST, ERP_PUKET_DB
+        user, password = ERP_PUKET_USER, ERP_PUKET_PASS
         where = "filial = 'EXTREMA - MG'"
     else:
-        host = ERP_IMG_HOST
-        db_name = ERP_IMG_DB
+        host, db_name = ERP_IMG_HOST, ERP_IMG_DB
+        user, password = ERP_IMG_USER, ERP_IMG_PASS
         where = "filial LIKE '%IMAGINARIUM EXTREMA MG%'"
 
-    with pymssql.connect(host, ERP_MSSQL_USER, ERP_MSSQL_PASS, db_name, timeout=15, login_timeout=10) as conn:
+    with pymssql.connect(host, user, password, db_name, timeout=15, login_timeout=10) as conn:
         cursor = conn.cursor(as_dict=True)
         # WHERE clause is built from a safe predefined constant — no user input
         cursor.execute(f"SELECT * FROM estoque_produtos WHERE {where}")  # noqa: S608
@@ -97,12 +100,14 @@ def _brand_linx(brand: str) -> dict[str, str]:
     raise ValueError(f"Brand '{brand}' is not mapped to a Linx database")
 
 
-def _connect(host: str, db_name: str):
-    """Open a pymssql connection to a Linx database.
+def _connect(cfg: dict[str, str]):
+    """Open a pymssql connection to a brand's Linx database.
+
+    Takes the whole brand config because the credentials are per-brand: Puket (db01)
+    and Imaginarium (db02) are separate instances with separate logins.
 
     Args:
-        host: SQL Server host.
-        db_name: Database name.
+        cfg: A LINX_BRANDS entry (host/db/user/password).
 
     Returns:
         An open pymssql connection (caller is responsible for closing).
@@ -110,7 +115,7 @@ def _connect(host: str, db_name: str):
     import pymssql
 
     return pymssql.connect(
-        host, ERP_MSSQL_USER, ERP_MSSQL_PASS, db_name, timeout=15, login_timeout=10
+        cfg["host"], cfg["user"], cfg["password"], cfg["db"], timeout=15, login_timeout=10
     )
 
 
@@ -150,7 +155,7 @@ def resolve_produto_codigo(brand: str, sku: str) -> str | None:
     codigo_col = _ident(LINX_SCHEMA["produto_col_codigo"])
     sku_col = _ident(sku_col)
 
-    with _connect(cfg["host"], cfg["db"]) as conn:
+    with _connect(cfg) as conn:
         cur = conn.cursor()
         cur.execute(
             f"SELECT TOP 1 {codigo_col} FROM {table} WHERE {sku_col} = %s",  # noqa: S608
@@ -165,18 +170,30 @@ def upsert_produto_propriedade(
 ) -> str:
     """Insert-or-update a single product property value in Linx (PROP_PRODUTOS).
 
-    UPDATE first, INSERT only if no row matched — the whole thing runs in one
-    transaction. Table/column names come from validated config; the product code,
-    property code and value are always bound parameters.
+    Reads the current value under lock, then INSERTs when the property is absent,
+    UPDATEs when the certification system carries a different value, and does
+    nothing when it already matches. Table/column names come from validated config;
+    the product code, property code and value are always bound parameters.
+
+    The INSERT must supply ITEM_PROPRIEDADE: it is the third column of the PK and is
+    smallint NOT NULL with no default in both databases, so omitting it fails every
+    time the product doesn't have the property yet (the exact path a first-time
+    certificate registration takes). It is the property's multi-value index; the four
+    certification properties are single-valued and use item=1 across every existing
+    row, which is why matching on (produto, propriedade) alone is unambiguous here.
+
+    Skipping the no-op write is not just tidiness: PROP_PRODUTOS carries an active
+    trigger on Puket (LXU_PROP_PRODUTOS), so rewriting an identical value would fire
+    Linx's replication for nothing.
 
     Args:
-        brand: Brand name used to pick the Linx database.
+        brand: Brand name used to pick the Linx database and credentials.
         produto_codigo: Base product code (already resolved).
         prop_code: PROPRIEDADE code (e.g. '00224').
         valor: Value to store (e.g. the formatted date string).
 
     Returns:
-        'updated' or 'inserted'.
+        'inserted', 'updated' or 'unchanged'.
 
     Raises:
         Exception: On connection/query failure (transaction is rolled back).
@@ -186,32 +203,44 @@ def upsert_produto_propriedade(
     col_prod = _ident(LINX_SCHEMA["prop_col_produto"])
     col_prop = _ident(LINX_SCHEMA["prop_col_propriedade"])
     col_val = _ident(LINX_SCHEMA["prop_col_valor"])
+    col_item = _ident(LINX_SCHEMA["prop_col_item"])
+    item_value = int(LINX_SCHEMA["prop_item_value"])
 
-    conn = _connect(cfg["host"], cfg["db"])
+    conn = _connect(cfg)
     try:
         cur = conn.cursor()
         # UPDLOCK+HOLDLOCK serialize the "row absent" case so two concurrent upserts
         # for the same (produto, propriedade) can't both fall through to INSERT.
-        # SET NOCOUNT ON + an explicit SELECT @@ROWCOUNT make the affected-row count
-        # reliable even if PROP_PRODUTOS carries triggers (common in Linx).
         cur.execute(
-            f"SET NOCOUNT ON; "  # noqa: S608
-            f"UPDATE {table} WITH (UPDLOCK, HOLDLOCK, ROWLOCK) SET {col_val} = %s "
-            f"WHERE {col_prod} = %s AND {col_prop} = %s; SELECT @@ROWCOUNT",
-            (valor, produto_codigo, prop_code),
+            f"SELECT {col_val} FROM {table} WITH (UPDLOCK, HOLDLOCK) "  # noqa: S608
+            f"WHERE {col_prod} = %s AND {col_prop} = %s",
+            (produto_codigo, prop_code),
         )
         row = cur.fetchone()
-        affected = int(row[0]) if row and row[0] is not None else 0
-        if affected > 0:
+
+        if row is None:
+            cur.execute(
+                f"INSERT INTO {table} ({col_prod}, {col_prop}, {col_item}, {col_val}) "  # noqa: S608
+                f"VALUES (%s, %s, %s, %s)",
+                (produto_codigo, prop_code, item_value, valor),
+            )
             conn.commit()
-            return "updated"
+            return "inserted"
+
+        # VALOR_PROPRIEDADE is a padded text column — compare trimmed, or every
+        # write would look like a change.
+        current = "" if row[0] is None else str(row[0]).strip()
+        if current == valor.strip():
+            conn.commit()  # nothing to write; just release the lock
+            return "unchanged"
+
         cur.execute(
-            f"INSERT INTO {table} ({col_prod}, {col_prop}, {col_val}) "  # noqa: S608
-            f"VALUES (%s, %s, %s)",
-            (produto_codigo, prop_code, valor),
+            f"UPDATE {table} SET {col_val} = %s "  # noqa: S608
+            f"WHERE {col_prod} = %s AND {col_prop} = %s",
+            (valor, produto_codigo, prop_code),
         )
         conn.commit()
-        return "inserted"
+        return "updated"
     except Exception:
         conn.rollback()
         raise

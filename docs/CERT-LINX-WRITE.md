@@ -131,51 +131,77 @@ linx_detail (jsonb), linx_applied_at, created_by, created_at, updated_at`.
 
 ## 6. Go-live: ativar a gravação no Linx
 
-A gravação só liga após confirmar os nomes reais de coluna (não foram adivinhados).
+**Descoberta CONCLUÍDA em 2026-07-16** (issue #62, passo 1). Rodada com
+`scripts/linx_discovery.py` + probes read-only nas duas bases. O que ficou cravado:
 
-1. **Descoberta (read-only):** rodar `apps/cert-api/sql/linx_discovery.sql` no SSMS conectado a
-   **DB_puket** (db01) e **Grupo_Imaginarium** (db02). Ela revela:
-   - colunas e PK de `PROP_PRODUTOS` e `PROPRIEDADE`;
-   - o catálogo de `PROPRIEDADE` (confirma 00224/00106… → descrição);
-   - colunas candidatas a produto/sku/cor/tamanho para definir o mapeamento.
-2. **Configurar** (`.env`, ver `.env.example`):
+| Item                      | Valor real (as duas bases)                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROP_PRODUTOS`           | `PROPRIEDADE` char(5), `PRODUTO` char(12), `ITEM_PROPRIEDADE` smallint, `VALOR_PROPRIEDADE` varchar(70)                                                                                  |
+| **PK de `PROP_PRODUTOS`** | **(`PROPRIEDADE`, `PRODUTO`, `ITEM_PROPRIEDADE`)** — 3 colunas                                                                                                                           |
+| `ITEM_PROPRIEDADE`        | `NOT NULL`, **sem default** → todo INSERT precisa informá-la. É o índice de multivalor; as 4 props de certificado são single-valued e usam **item=1** em 100% das 8510 linhas existentes |
+| SKU → produto             | O SKU do portal **é** o `PRODUTO` (`070400034`→Puket, `PI4511Y`→Imaginarium) → `LINX_SKU_IS_PRODUTO=true`                                                                                |
+| Máscara das props de data | `99/99/9999` → confere com `LINX_DATE_FORMAT=%d/%m/%Y`                                                                                                                                   |
+| Valor "vazio" no Linx     | Sentinela `01/01/1900` (não é NULL)                                                                                                                                                      |
+| Trigger                   | `LXU_PROP_PRODUTOS` **ativo no Puket**, ausente no Imaginarium → o upsert não reescreve valor igual (`unchanged`) para não disparar replicação à toa                                     |
+| Credenciais               | **db01 e db02 têm logins SEPARADOS** — uma credencial só não atende as duas                                                                                                              |
+
+Os defaults do `config.py` para tabela/colunas estavam corretos e foram mantidos.
+
+1. **Configurar** (`.env`, ver `.env.example`):
    ```
    LINX_WRITE_ENABLED=true
-   LINX_PROP_TABLE=PROP_PRODUTOS
-   LINX_PROP_COL_PRODUTO=...           # coluna do código do produto
-   LINX_PROP_COL_PROPRIEDADE=...       # coluna do código da propriedade (00224…)
-   LINX_PROP_COL_VALOR=VALOR_PROPRIEDADE
-   # mapeamento SKU -> produto:
-   LINX_SKU_IS_PRODUTO=false           # true se o SKU já é o código do produto
-   LINX_PRODUTO_TABLE=...              # se precisa resolver
-   LINX_PRODUTO_COL_CODIGO=...
-   LINX_PRODUTO_COL_SKU=...
-   LINX_DATE_FORMAT=%d/%m/%Y
-   ERP_MSSQL_USER / ERP_MSSQL_PASS     # credenciais de escrita
+   LINX_SKU_IS_PRODUTO=true            # confirmado: SKU do portal == PRODUTO do Linx
+   # tabela/colunas: os defaults já batem com o schema real; sobrescreva só se mudar
+   # LINX_PROP_TABLE=PROP_PRODUTOS
+   # LINX_PROP_COL_PRODUTO=PRODUTO
+   # LINX_PROP_COL_PROPRIEDADE=PROPRIEDADE
+   # LINX_PROP_COL_VALOR=VALOR_PROPRIEDADE
+   # LINX_PROP_COL_ITEM=ITEM_PROPRIEDADE
+   # LINX_PROP_ITEM_VALUE=1
+   # LINX_DATE_FORMAT=%d/%m/%Y
+   # Credenciais POR MARCA (db01 e db02 têm logins distintos):
+   ERP_PUKET_USER / ERP_PUKET_PASS
+   ERP_IMG_USER / ERP_IMG_PASS
+   # ERP_MSSQL_USER / ERP_MSSQL_PASS  # fallback, se um login servir para as duas
    ```
-3. **Reprocessar** o que ficou pendente: botão **"Reenviar ao Linx"** na tela (ou
+2. **Reprocessar** o que ficou pendente: botão **"Reenviar ao Linx"** na tela (ou
    `POST /api/certificates/{id}/retry-linx`).
 
-> Recomendado validar que `PROP_PRODUTOS` tem PK/unique em (produto, propriedade) — a query [3]
-> de descoberta mostra a PK. Se não houver, o lock do upsert já protege contra corrida.
+> A PK cobre (produto, propriedade) — corrida está protegida pela PK e pelo
+> `UPDLOCK, HOLDLOCK` do upsert.
+
+### Não existe "prazo de comercialização" no Linx
+
+Pedido da Lilian em 2026-07-16 (SKU `070400034`). Listadas **todas** as propriedades de
+produto das duas bases: as únicas ligadas a certificação são `VALIDADE DO CERTIFICADO` e
+`VENCIMENTO DO LICENCIAMENTO`. **Não há propriedade de prazo de comercialização** — o
+`sale_deadline` da planilha "Encerramentos" não tem destino no Linx hoje. Para o portal
+passar a gravá-lo, o time do Linx precisa **criar a propriedade** primeiro; só então faz
+sentido estender `write_certificate_to_linx` (que hoje escreve 2 props fixas) ou construir
+um sync planilha→Linx.
 
 ---
 
 ## 7. Operação / troubleshooting
 
-| Sintoma                                          | Causa provável                                            | Ação                                    |
-| ------------------------------------------------ | --------------------------------------------------------- | --------------------------------------- |
-| `linx_status=disabled`                           | `LINX_WRITE_ENABLED=false`                                | Concluir §6 e reenviar.                 |
-| `error` "Resolucao SKU->produto nao configurada" | `LINX_PRODUTO_COL_SKU` vazio e `LINX_SKU_IS_PRODUTO≠true` | Definir mapeamento (§6).                |
-| `error` "SKU não encontrado no Linx"             | SKU não casa na tabela de produto                         | Conferir SKU / coluna de busca.         |
-| `error` de conexão                               | credenciais/rede SQL Server                               | Validar `ERP_MSSQL_*` e acesso ao host. |
-| PDF rejeitado                                    | não é PDF (sem `%PDF-`) ou > 15 MB                        | Reenviar arquivo válido.                |
+| Sintoma                                                       | Causa provável                                                         | Ação                                                                                  |
+| ------------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `linx_status=disabled`                                        | `LINX_WRITE_ENABLED=false`                                             | Concluir §6 e reenviar.                                                               |
+| `error` "Resolucao SKU->produto nao configurada"              | `LINX_PRODUTO_COL_SKU` vazio e `LINX_SKU_IS_PRODUTO≠true`              | Definir mapeamento (§6).                                                              |
+| `error` "SKU não encontrado no Linx"                          | SKU não casa na tabela de produto                                      | Conferir SKU / coluna de busca.                                                       |
+| `error` de conexão / `Login failed for user`                  | credencial da marca errada/expirada (db01 e db02 têm logins distintos) | Validar `ERP_PUKET_*` / `ERP_IMG_*` (ou o fallback `ERP_MSSQL_*`) e o acesso ao host. |
+| `Cannot insert the value NULL into column 'ITEM_PROPRIEDADE'` | `LINX_PROP_COL_ITEM`/`LINX_PROP_ITEM_VALUE` vazios                     | Restaurar os defaults (`ITEM_PROPRIEDADE` / `1`).                                     |
+| `action: unchanged` no detalhe                                | o Linx já tinha esse valor                                             | Esperado — não reescreve para não disparar o trigger `LXU_PROP_PRODUTOS`.             |
+| PDF rejeitado                                                 | não é PDF (sem `%PDF-`) ou > 15 MB                                     | Reenviar arquivo válido.                                                              |
 
 ---
 
 ## 8. Limitações conhecidas / próximos passos
 
-- Nomes de coluna de `PROP_PRODUTOS`/`PROPRIEDADE` **pendentes de confirmação** (§6).
+- Schema de `PROP_PRODUTOS`/`PROPRIEDADE` **confirmado** em 2026-07-16 (§6). Falta só
+  ligar `LINX_WRITE_ENABLED` com as credenciais por marca.
+- `write_certificate_to_linx` grava **2 propriedades fixas**; não há suporte a N props
+  (bloqueado, de todo modo, pela ausência da propriedade de prazo — §6).
 - PDF é armazenado em disco (`CERTS_DIR`); migrar para Google Drive é possível (cert-api já usa
   service account para Sheets) mas não foi feito.
 - Não há edição/exclusão de certificado pela UI (apenas cadastro, listagem e retry).

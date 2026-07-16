@@ -68,30 +68,49 @@ ERP_IMG_DB: str = os.environ.get("ERP_IMG_DB", "")
 ERP_MSSQL_USER: str = os.environ.get("ERP_MSSQL_USER", "")
 ERP_MSSQL_PASS: str = os.environ.get("ERP_MSSQL_PASS", "")
 
+# Puket (db01) e Imaginarium (db02) sao instancias SQL Server SEPARADAS, com logins
+# separados: a mesma credencial nao atende as duas (confirmado em 2026-07-16 — a
+# senha compartilhada autenticava so em uma delas por vez, deixando a outra marca
+# fora do ar). Cada marca tem as suas; o ERP_MSSQL_* continua valendo como fallback
+# para quem so tem um login para os dois.
+ERP_PUKET_USER: str = os.environ.get("ERP_PUKET_USER", "") or ERP_MSSQL_USER
+ERP_PUKET_PASS: str = os.environ.get("ERP_PUKET_PASS", "") or ERP_MSSQL_PASS
+ERP_IMG_USER: str = os.environ.get("ERP_IMG_USER", "") or ERP_MSSQL_USER
+ERP_IMG_PASS: str = os.environ.get("ERP_IMG_PASS", "") or ERP_MSSQL_PASS
+
 # --- Linx ERP write (product properties) ---
 # Master switch. Stays OFF until the PROP_PRODUTOS/PROPRIEDADE column names below
 # are confirmed against production via sql/linx_discovery.sql. While OFF, certificates
 # are saved in the portal (Postgres) but NOT written to Linx (linx_status='disabled').
 LINX_WRITE_ENABLED: bool = os.environ.get("LINX_WRITE_ENABLED", "false").lower() == "true"
 
-# Per-brand Linx connection + the PROPRIEDADE codes for each cert field.
-# Codes confirmed by the user (UAT): Puket 00224/00225, Imaginarium 00106/00107.
+# Per-brand Linx connection + credentials + the PROPRIEDADE codes for each cert field.
+# Codigos reconfirmados contra as duas bases em 2026-07-16 (PROPRIEDADE.TITULO_PROPRIEDADE):
+# Puket 00224/00225, Imaginarium 00106/00107 — e NAO existe propriedade de "prazo de
+# comercializacao" em nenhuma das duas.
+# ATENCAO: cada entrada carrega `password`. Nunca logue o dict inteiro (log so `db`).
 LINX_BRANDS: dict[str, dict[str, str]] = {
     "imaginarium": {
         "host": ERP_IMG_HOST,
         "db": ERP_IMG_DB,
+        "user": ERP_IMG_USER,
+        "password": ERP_IMG_PASS,
         "prop_validade_certificado": "00106",
         "prop_vencimento_licenciamento": "00107",
     },
     "puket": {
         "host": ERP_PUKET_HOST,
         "db": ERP_PUKET_DB,
+        "user": ERP_PUKET_USER,
+        "password": ERP_PUKET_PASS,
         "prop_validade_certificado": "00224",
         "prop_vencimento_licenciamento": "00225",
     },
     "puket escolares": {
         "host": ERP_PUKET_HOST,
         "db": ERP_PUKET_DB,
+        "user": ERP_PUKET_USER,
+        "password": ERP_PUKET_PASS,
         "prop_validade_certificado": "00224",
         "prop_vencimento_licenciamento": "00225",
     },
@@ -106,6 +125,13 @@ LINX_SCHEMA: dict[str, str] = {
     "prop_col_produto": os.environ.get("LINX_PROP_COL_PRODUTO", "PRODUTO"),
     "prop_col_propriedade": os.environ.get("LINX_PROP_COL_PROPRIEDADE", "PROPRIEDADE"),
     "prop_col_valor": os.environ.get("LINX_PROP_COL_VALOR", "VALOR_PROPRIEDADE"),
+    # 3a coluna da PK (PROPRIEDADE, PRODUTO, ITEM_PROPRIEDADE), smallint NOT NULL e
+    # SEM default nas duas bases: todo INSERT precisa informa-la. E o indice de
+    # multivalor da propriedade (a 00118 do Puket chega a 108 itens), mas as quatro
+    # props de certificado sao single-valued e usam item=1 em 100% das 8510 linhas
+    # existentes (conferido nas duas bases em 2026-07-16).
+    "prop_col_item": os.environ.get("LINX_PROP_COL_ITEM", "ITEM_PROPRIEDADE"),
+    "prop_item_value": os.environ.get("LINX_PROP_ITEM_VALUE", "1"),
     # Resolucao SKU -> codigo de produto "pai". Quando o SKU do portal ja e o
     # codigo do produto no Linx, deixe LINX_SKU_IS_PRODUTO=true e o resolver e no-op.
     "sku_is_produto": os.environ.get("LINX_SKU_IS_PRODUTO", "false"),
@@ -138,10 +164,31 @@ def validate_linx_config() -> None:
         missing.append("LINX_PROP_COL_PROPRIEDADE")
     if not LINX_SCHEMA["prop_col_valor"]:
         missing.append("LINX_PROP_COL_VALOR")
+    if not LINX_SCHEMA["prop_col_item"]:
+        missing.append("LINX_PROP_COL_ITEM")
 
     sku_is_produto = LINX_SCHEMA["sku_is_produto"].lower() == "true"
     if not sku_is_produto and not LINX_SCHEMA["produto_col_sku"]:
         missing.append("LINX_PRODUTO_COL_SKU (ou LINX_SKU_IS_PRODUTO=true)")
+
+    # ITEM_PROPRIEDADE e smallint: um valor nao-inteiro so estouraria no INSERT, ja
+    # com o certificado salvo no portal e a marca esperando a gravacao.
+    try:
+        int(LINX_SCHEMA["prop_item_value"])
+    except (TypeError, ValueError):
+        missing.append(
+            f"LINX_PROP_ITEM_VALUE inteiro (recebido: {LINX_SCHEMA['prop_item_value']!r})"
+        )
+
+    # Sem credencial da marca o pymssql tentaria login anonimo e o erro sairia como
+    # falha de rede, escondendo que o .env e que esta incompleto.
+    for brand, cfg in LINX_BRANDS.items():
+        if not cfg["user"] or not cfg["password"]:
+            missing.append(
+                f"credencial de '{brand}' (ERP_{'PUKET' if 'puket' in brand else 'IMG'}_USER/PASS "
+                f"ou o fallback ERP_MSSQL_USER/PASS)"
+            )
+            break
 
     if missing:
         raise RuntimeError(
