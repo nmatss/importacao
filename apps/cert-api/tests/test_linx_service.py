@@ -426,6 +426,43 @@ class TestSyncPrazoVenda:
         svc.sync_prazo_venda_to_linx(dry_run=False, brand_filter="imaginarium")
         assert [e[0] for e in escritas] == ["IMAGINARIUM"]
 
+    # Regressao real: na 1a execucao em producao (16/07/2026) 3 SKUs vieram em dois
+    # encerramentos cada (produto recertificado, ex. PI6073Y nos certificados
+    # 8325/2022-BRI-1 e 9142/2023-BRI-2). Processando linha a linha, a 1a linha
+    # gravava e a 2a comparava contra o valor recem-escrito — a ORDEM DAS LINHAS
+    # decidia o prazo, e o dry-run mentia (9 "encurta janela" viraram 11 no apply).
+    DUPLICADO = [
+        {"sku": "PI6073Y", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "8325/2022-BRI-1"},
+        {"sku": "PI6073Y", "sale_deadline": "26/01/2025", "brand": "IMAGINARIUM", "certificado": "9142/2023-BRI-2"},
+    ]
+
+    def test_sku_com_prazos_divergentes_nao_e_gravado(self, monkeypatch):
+        svc, escritas = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
+        r = svc.sync_prazo_venda_to_linx(dry_run=False)
+        assert escritas == []
+        assert r["counts"].get("ambiguo (prazos divergentes p/ o mesmo SKU)") == 1
+        amb = r["ambiguos"][0]
+        assert amb["sku"] == "PI6073Y"
+        assert amb["certificados"] == ["8325/2022-BRI-1", "9142/2023-BRI-2"]
+        assert "26/01/2025" in amb["prazo"] and "29/10/2026" in amb["prazo"]
+
+    def test_sku_repetido_com_o_mesmo_prazo_grava_uma_vez_so(self, monkeypatch):
+        linhas = [
+            {"sku": "PI1", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "A"},
+            {"sku": "PI1", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "B"},
+        ]
+        svc, escritas = self._wire(monkeypatch, linhas=linhas, atual=None)
+        svc.sync_prazo_venda_to_linx(dry_run=False)
+        assert len(escritas) == 1  # sem prazo divergente, nao ha ambiguidade
+
+    def test_dry_run_e_apply_classificam_igual_com_duplicados(self, monkeypatch):
+        # O defeito: o dry-run prometia um resultado e o apply entregava outro.
+        svc, _ = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
+        seco = svc.sync_prazo_venda_to_linx(dry_run=True)["counts"]
+        svc, _ = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
+        molhado = svc.sync_prazo_venda_to_linx(dry_run=False)["counts"]
+        assert seco == molhado
+
     def test_falha_de_um_sku_nao_derruba_o_resto(self, monkeypatch):
         from app.services import linx_service
 

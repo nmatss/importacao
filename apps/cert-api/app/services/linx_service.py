@@ -171,9 +171,12 @@ def sync_prazo_venda_to_linx(dry_run: bool = True, brand_filter: str | None = No
     `dry_run=True` (padrao) NAO escreve nada: apenas classifica o que aconteceria.
     Escrever no ERP de producao exige `dry_run=False` explicito.
 
-    Casos que ENCURTAM a janela de venda (prazo da planilha anterior ao que esta no
-    Linx) sao contados a parte em `encurta_janela`: sao os unicos em que a gravacao
-    tira dias de venda de um produto, entao precisam de decisao consciente.
+    Dois grupos nunca sao gravados, nem com `dry_run=False`, porque dependem de
+    decisao de negocio e nao podem sair como efeito colateral de um sync:
+    - `encurta_janela`: o prazo da planilha e anterior ao que ja esta no Linx, entao
+      gravar TIRA dias de venda do produto.
+    - `ambiguos`: o mesmo SKU aparece em encerramentos com prazos diferentes
+      (produto recertificado) — qual certificado vale nao e o codigo que decide.
 
     Args:
         dry_run: quando True, so simula.
@@ -190,6 +193,7 @@ def sync_prazo_venda_to_linx(dry_run: bool = True, brand_filter: str | None = No
         "counts": {},
         "items": [],
         "encurta_janela": [],
+        "ambiguos": [],
         "error": None,
     }
 
@@ -210,11 +214,30 @@ def sync_prazo_venda_to_linx(dry_run: bool = True, brand_filter: str | None = No
         counts[chave or acao] = counts.get(chave or acao, 0) + 1
         result["items"].append(item)
 
+    # Um SKU pode aparecer em mais de um encerramento (produto recertificado: o
+    # mesmo codigo com certificados e prazos diferentes). Processar linha a linha
+    # faria a ORDEM DAS LINHAS decidir o prazo — a ultima grava por cima da
+    # primeira, e a segunda ainda compara contra o valor que a primeira acabou de
+    # escrever. Qual certificado vale e decisao de negocio: agrupamos por SKU e,
+    # havendo prazos divergentes, nao gravamos.
+    por_sku: dict[str, list[dict]] = {}
     for linha in linhas:
-        sku, prazo_raw, brand = linha["sku"], linha["sale_deadline"], linha["brand"]
+        por_sku.setdefault(linha["sku"], []).append(linha)
+
+    for sku, grupo in por_sku.items():
+        linha = grupo[0]
+        prazo_raw, brand = linha["sale_deadline"], linha["brand"]
         if brand_filter and brand_filter.lower() not in brand.lower():
             continue
         item = {"sku": sku, "brand": brand, "prazo": prazo_raw, "valor_atual": None, "acao": None}
+
+        prazos = {ln["sale_deadline"] for ln in grupo}
+        if len(prazos) > 1:
+            certs = sorted({ln.get("certificado") or "?" for ln in grupo})
+            item["prazo"] = " | ".join(sorted(prazos))
+            result["ambiguos"].append({**item, "certificados": certs})
+            registrar(item, "ambiguo (prazos divergentes p/ o mesmo SKU)")
+            continue
 
         prazo_date = _parse_br_date(prazo_raw)
         if prazo_date is None:

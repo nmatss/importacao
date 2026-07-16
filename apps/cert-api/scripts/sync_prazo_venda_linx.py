@@ -12,9 +12,13 @@ Uso (no servidor):
     docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --brand puket
     docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --apply
 
-Produtos cujo prazo da planilha e ANTERIOR ao que esta no Linx aparecem como
-"encurta janela" e NUNCA sao gravados por este script — tirar dias de venda de um
-produto e decisao de negocio, nao efeito colateral de sync. Doc: docs/CERT-LINX-WRITE.md
+Dois grupos NUNCA sao gravados, nem com --apply, porque dependem de decisao de
+negocio e nao podem sair como efeito colateral de um sync:
+  - "encurta janela": o prazo da planilha e anterior ao que ja esta no Linx, entao
+    gravar tira dias de venda do produto.
+  - "ambiguo": o mesmo SKU aparece em encerramentos com prazos diferentes (produto
+    recertificado) — qual certificado vale nao e o script que decide.
+Doc: docs/CERT-LINX-WRITE.md
 """
 
 import argparse
@@ -72,6 +76,12 @@ def main() -> int:
             print(
                 f"   {it['sku']:12} {str(it['valor_atual']):12} {it['prazo']:12} {it['dias_a_menos']:>12}"
             )
+
+    if r["ambiguos"]:
+        print(f"\n!! {len(r['ambiguos'])} SKU(s) com prazos divergentes entre encerramentos.")
+        print("   Nao foram gravados — qual certificado vale e decisao de negocio:")
+        for it in r["ambiguos"]:
+            print(f"   {it['sku']:12} prazos: {it['prazo']:26} certificados: {', '.join(it['certificados'])}")
 
     if args.list:
         print(f"\n{'SKU':12} {'MARCA':13} {'PRAZO':12} {'LINX HOJE':12} ACAO")
