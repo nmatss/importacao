@@ -65,6 +65,11 @@ def encode_env(key: str, value: str) -> str:
     value = value.replace("\r\n", "\n").replace("\r", "\n")
     if key.endswith("_PRIVATE_KEY"):
         value = value.replace("\\\\n", "\n").replace("\\n", "\n")
+    # Este .env e consumido pelo docker compose, que INTERPOLA os valores: um `$`
+    # literal precisa virar `$$`, senao uma senha como `!@#$Mariana*` chega ao
+    # container como `!@#*` (o compose le `$Mariana` como variavel vazia e avisa
+    # "variable is not set"). O compose desfaz o `$$` ao injetar no container.
+    value = value.replace("$", "$$")
     needs_quote = any(c in value for c in [" ", "\n", "\"", "#", ";", "|", "&", "(", ")", "!", "'"])
     if not needs_quote:
         return f"{key}={value}"

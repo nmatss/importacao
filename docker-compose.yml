@@ -143,6 +143,12 @@ services:
       ERP_IMG_DB: ${ERP_IMG_DB:?ERP_IMG_DB required}
       ERP_MSSQL_USER: ${ERP_MSSQL_USER:?ERP_MSSQL_USER required}
       ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:?ERP_MSSQL_PASS required}
+      # db01 (Puket) e db02 (Imaginarium) tem logins SEPARADOS; sem estas, as duas
+      # marcas caem no ERP_MSSQL_* e uma delas falha o login.
+      ERP_PUKET_USER: ${ERP_PUKET_USER:-}
+      ERP_PUKET_PASS: ${ERP_PUKET_PASS:-}
+      ERP_IMG_USER: ${ERP_IMG_USER:-}
+      ERP_IMG_PASS: ${ERP_IMG_PASS:-}
       CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY required}
     volumes:
       - cert-reports:/app/reports
