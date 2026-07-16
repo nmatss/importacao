@@ -19,11 +19,25 @@ Feedback Eduarda 2026-06-19:
   "Licenciamentos Vencidos" via `license_map` (process_code/SKU → status+prazo),
   com fallback NAO_APLICAVEL quando não há linha correspondente.
 
+Feedback 2026-07-16 (Eduarda, via PI4511Y "CANETA MUDA FRASES HP FEITICOS"):
+- Certificação encerrada NÃO implica produto irregular no site. Enquanto o prazo
+  de comercialização estiver vigente (ex.: cert encerrada, prazo 02/03/2028), o
+  produto pode continuar sendo vendido → comercializacao_status DENTRO_PRAZO e o
+  site_status julgado pelos mesmos critérios de um produto ATIVO (o prazo vigente
+  absolve a certificação encerrada, mas não absolve frase errada na página nem
+  validação que não rodou). Vira ENCERRADA quando o prazo passa, não existe, ou o
+  SKU foi excluído.
+- O prazo passa a ser avaliado por DATA (`sale_deadline_date`), não só pelo texto
+  da janela de venda ("fim do lote"); antes, um prazo com data futura não era
+  reconhecido e o item caía em NAO_CONFORME indevidamente.
+
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 (não persiste no DB). Pode ser usado direto em routes ou em report_service.
 """
 
 from __future__ import annotations
+
+from datetime import date, datetime
 
 # Palavras-chave que indicam "produto regulado por órgão de certificação".
 # Vem do scraper.py + cert_service.py (que já detecta inmetro/anatel/abnt/anvisa).
@@ -79,6 +93,61 @@ def _within_sale_window(sale_deadline_raw: str | None) -> bool:
         or "fim da venda" in deadline
         or "ate o fim" in deadline
     )
+
+
+def _parse_deadline_date(value: object) -> date | None:
+    """Converte um prazo de venda em `date`, aceitando date/datetime/texto.
+
+    O DB entrega `sale_deadline_date` como `date`, mas o agregado do dashboard
+    projeta só o texto (`sale_deadline`, ex.: "02/03/2028"); aceitar ambos evita
+    que a contagem divirja da tabela. Texto não-data ("Vencido") → None.
+    """
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m/%y"):
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def derive_within_sale_deadline(
+    sheet_status: str | None,
+    sale_deadline_raw: str | None,
+    sale_deadline_date: object = None,
+    today: date | None = None,
+) -> bool:
+    """True quando o produto ainda pode ser comercializado (prazo de venda vigente).
+
+    Duas formas de prazo vigente:
+    - Janela textual ("venda até o fim do lote") — sem data de corte.
+    - Data futura ou de hoje em `sale_deadline_date` (inclusiva: no último dia
+      ainda se pode vender).
+
+    SKU excluído NUNCA está dentro do prazo — a regra da Eduarda (2026-06-19) põe
+    a exclusão acima da janela de venda, e isso vale aqui também.
+
+    "Vencido" escrito no prazo também manda, como já manda em `derive_cert_status`:
+    o upsert do sync faz COALESCE em `sale_deadline_date` e nunca a limpa, então um
+    item que passou a "Vencido" na planilha conserva a data antiga e não pode ser
+    lido como vigente por causa dela.
+    """
+    if "exclu" in _norm(sheet_status):
+        return False
+    if "vencido" in _norm(sale_deadline_raw):
+        return False
+    if _within_sale_window(sale_deadline_raw):
+        return True
+    deadline = _parse_deadline_date(sale_deadline_date) or _parse_deadline_date(sale_deadline_raw)
+    if deadline is None:
+        return False
+    return deadline >= (today or date.today())
 
 
 def derive_cert_status(
@@ -162,6 +231,7 @@ def derive_site_status(
     cert_status: str,
     expected_cert_text: str | None,
     certification_type: str | None,
+    within_sale_deadline: bool = False,
 ) -> tuple[str, str | None]:
     """Status de conformidade no e-commerce — colapsado em CONFORME | NAO_CONFORME.
 
@@ -173,6 +243,14 @@ def derive_site_status(
       NAO_CONFORME por erro/indefinição, retorna também a frase obrigatória
       (`reason`) que a UI exibe — o frontend lê `site_status_reason` pelo index
       signature do CertProduct.
+
+    Feedback 2026-07-16: certificação encerrada com prazo de comercialização
+    vigente (`within_sale_deadline`) continua CONFORME no site — a venda ainda é
+    permitida até o prazo. Ver `derive_within_sale_deadline`.
+
+    Args:
+        within_sale_deadline: produto ainda dentro do prazo de comercialização.
+            Default False mantém a leitura conservadora de quem chama sem o prazo.
 
     Returns:
         Tupla (status, reason). `reason` é None quando CONFORME ou quando o
@@ -200,17 +278,24 @@ def derive_site_status(
 
     found_on_site = vs != "URL_NOT_FOUND"
 
-    # Cert encerrada / SKU excluído: se está no site, é não-conforme.
-    if cert_status == "ENCERRADO":
+    # Cert encerrada / SKU excluído FORA do prazo: se está no site, é não-conforme.
+    if cert_status == "ENCERRADO" and not within_sale_deadline:
         if found_on_site:
             return "NAO_CONFORME", "Certificacao encerrada / fora do prazo com produto no site"
         return "CONFORME", None
 
-    if cert_status == "ATIVO":
+    # ATIVO, ou ENCERRADO ainda dentro do prazo de comercialização (Eduarda
+    # 2026-07-16, caso PI4511Y): a venda é permitida, então o site é julgado pelos
+    # MESMOS critérios de conteúdo dos dois casos. O prazo vigente absolve a
+    # certificação encerrada — não absolve frase errada na página nem validação que
+    # sequer rodou.
+    if cert_status in ("ATIVO", "ENCERRADO"):
         if vs in ("URL_NOT_FOUND", "OK"):
             # Fora do site (OK) ou cadastro consistente → conforme.
             return "CONFORME", None
         if vs == "EXPIRED":
+            # O validador só marca EXPIRED com o prazo de venda já vencido; se o
+            # prazo consta vigente, os dois sinais se contradizem → revisar.
             return "NAO_CONFORME", "Certificacao vencida no site"
         # MISSING / INCONSISTENT / API_ERROR / outros → revisar.
         return "NAO_CONFORME", SITE_REASON_PENDING
@@ -256,8 +341,13 @@ def derive_comercializacao_status(
     cert_status: str,
     sale_deadline_raw: str | None,
     sheet_status: str | None,
+    within_sale_deadline: bool = False,
 ) -> str:
-    """Status de comercialização (cobertura do "estatório de cessamento")."""
+    """Status de comercialização (cobertura do "estatório de cessamento").
+
+    Feedback 2026-07-16: cert encerrada com prazo vigente é DENTRO_PRAZO, não
+    ENCERRADA — mesma regra que mantém o site_status CONFORME.
+    """
     s = _norm(sheet_status)
     deadline = _norm(sale_deadline_raw)
     if cert_status == "ATIVO":
@@ -266,7 +356,7 @@ def derive_comercializacao_status(
             return "DENTRO_PRAZO"
         return "LIBERADA"
     if cert_status == "ENCERRADO":
-        return "ENCERRADA"
+        return "DENTRO_PRAZO" if within_sale_deadline else "ENCERRADA"
     return "NAO_APLICA"
 
 
@@ -290,7 +380,9 @@ def _lookup_license_row(row: dict, license_map: dict | None) -> dict | None:
     return None
 
 
-def compute_status_dimensions(row: dict, license_map: dict | None = None) -> dict[str, str | None]:
+def compute_status_dimensions(
+    row: dict, license_map: dict | None = None, today: date | None = None
+) -> dict[str, str | None]:
     """Recebe um dict de cert_products (psycopg2 DictRow ou similar) e devolve
     os status semânticos como dict ready-to-merge no response.
 
@@ -301,6 +393,8 @@ def compute_status_dimensions(row: dict, license_map: dict | None = None) -> dic
         license_map: dict opcional {PROCESS_CODE/SKU(upper) -> {status, valid_until}}
             vindo de `erp_service.read_licenciamentos_vencidos()`. Quando None ou
             sem match, license_status defaulta para NAO_APLICAVEL.
+        today: data de referência do prazo de venda. Default `date.today()`;
+            explicitável para deixar o cálculo determinístico em teste.
     """
     sheet_status = row.get("sheet_status")
     is_expired = bool(row.get("is_expired") or False)
@@ -310,9 +404,14 @@ def compute_status_dimensions(row: dict, license_map: dict | None = None) -> dic
     last_vs = row.get("last_validation_status")
 
     cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw)
-    ss, ss_reason = derive_site_status(last_vs, cs, expected_cert_text, certification_type)
+    within_deadline = derive_within_sale_deadline(
+        sheet_status, sale_deadline_raw, row.get("sale_deadline_date"), today
+    )
+    ss, ss_reason = derive_site_status(
+        last_vs, cs, expected_cert_text, certification_type, within_deadline
+    )
     ls, ls_deadline = derive_license_status(_lookup_license_row(row, license_map))
-    cms = derive_comercializacao_status(cs, sale_deadline_raw, sheet_status)
+    cms = derive_comercializacao_status(cs, sale_deadline_raw, sheet_status, within_deadline)
     return {
         "cert_status": cs,
         "site_status": ss,

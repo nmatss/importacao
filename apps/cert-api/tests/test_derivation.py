@@ -8,6 +8,7 @@ Cobre os colapsos pedidos:
 """
 
 import itertools
+from datetime import date, timedelta
 
 import pytest
 
@@ -17,8 +18,10 @@ from app.services.derivation import (
     SITE_STATUS_VALUES,
     compute_status_dimensions,
     derive_cert_status,
+    derive_comercializacao_status,
     derive_license_status,
     derive_site_status,
+    derive_within_sale_deadline,
 )
 
 # ---------------------------------------------------------------------------
@@ -194,6 +197,178 @@ class TestSiteStatusCollapsed:
         )
         assert result["site_status"] == "NAO_CONFORME"
         assert result["site_status_reason"] == SITE_REASON_PENDING
+
+
+# ---------------------------------------------------------------------------
+# Prazo de comercialização vigente (feedback Eduarda 2026-07-16)
+# ---------------------------------------------------------------------------
+
+
+# sheet_status real do PI4511Y em produção: log de eventos, não um status limpo.
+PI4511Y_SHEET_STATUS = (
+    "18/03/2026 - Certificado encerrado, carta de encerramento recebido 03/03/2026, "
+    "N° de registro encerrado no orquestra em 18/03\n"
+    "03/03/2026 Recebido a carta de encerramento\n"
+    "23/04/2025 - Manutenção finalizada.\n"
+    "03/06/24 - Manutenção concluída.\n"
+    "Retrabalho das canetas concluído."
+)
+
+
+class TestWithinSaleDeadline:
+    def test_future_date_is_within(self):
+        assert derive_within_sale_deadline("Encerrado", "02/03/2028", date(2028, 3, 2), date(2026, 7, 16))
+
+    def test_past_date_is_not_within(self):
+        assert not derive_within_sale_deadline("Encerrado", "02/03/2024", date(2024, 3, 2), date(2026, 7, 16))
+
+    def test_deadline_today_is_still_within(self):
+        # Prazo até 16/07/2026 significa que ainda se pode vender NO dia 16.
+        today = date(2026, 7, 16)
+        assert derive_within_sale_deadline("Encerrado", "16/07/2026", today, today)
+
+    def test_textual_window_is_within_without_date(self):
+        assert derive_within_sale_deadline("Encerrado", "Venda até fim do lote", None, date(2026, 7, 16))
+
+    def test_no_deadline_is_not_within(self):
+        assert not derive_within_sale_deadline("Encerrado", None, None, date(2026, 7, 16))
+
+    def test_vencido_text_is_not_within(self):
+        assert not derive_within_sale_deadline("Encerrado", "Vencido", None, date(2026, 7, 16))
+
+    def test_excluded_sku_never_within_despite_future_deadline(self):
+        # Regra Eduarda: exclusão de SKU precede a janela de venda.
+        assert not derive_within_sale_deadline("SKU excluído", "02/03/2028", date(2028, 3, 2), date(2026, 7, 16))
+
+    def test_falls_back_to_raw_text_when_date_column_absent(self):
+        # Callers que projetam só `sale_deadline` (sem a coluna DATE) nao podem
+        # divergir da tabela.
+        assert derive_within_sale_deadline("Encerrado", "02/03/2028", None, date(2026, 7, 16))
+
+    def test_vencido_text_beats_stale_future_date(self):
+        # O upsert do sync faz COALESCE e nunca limpa sale_deadline_date: um item
+        # que virou "Vencido" na planilha conserva a data antiga. O texto manda —
+        # igual a derive_cert_status — senao um item vencido voltaria a "vigente".
+        assert not derive_within_sale_deadline(
+            "Encerrado", "Vencido", date(2028, 3, 2), date(2026, 7, 16)
+        )
+
+
+class TestEncerradaDentroDoPrazo:
+    """PI4511Y: cert encerrada + prazo 02/03/2028 vigente -> Conforme no site.
+
+    O relógio é injetado (`HOJE`) para o cenário do PI4511Y continuar sendo o
+    mesmo depois de 02/03/2028 — sem isso a suíte passaria a falhar sozinha no dia
+    em que o prazo real vencer.
+    """
+
+    HOJE = date(2026, 7, 16)  # data do reporte da Eduarda
+
+    def _pi4511y(self, today_deadline="02/03/2028", deadline_date=date(2028, 3, 2)):
+        return {
+            "sku": "PI4511Y",
+            "name": "CANETA MUDA FRASES HP FEITICOS",
+            "sheet_status": PI4511Y_SHEET_STATUS,
+            "is_expired": False,
+            "sale_deadline": today_deadline,
+            "sale_deadline_date": deadline_date,
+            "certification_type": "INMETRO SISTEMA 5 (FABRICA) - PORTARIA 481",
+            "expected_cert_text": "INMETRO",
+            "last_validation_status": "OK",
+        }
+
+    def test_pi4511y_cert_stays_encerrado(self):
+        # A certificação está encerrada de fato — isso continua correto.
+        result = compute_status_dimensions(self._pi4511y(), today=self.HOJE)
+        assert result["cert_status"] == "ENCERRADO"
+
+    def test_pi4511y_site_status_is_conforme(self):
+        # O bug relatado: marcava NAO_CONFORME mesmo dentro do prazo de venda.
+        result = compute_status_dimensions(self._pi4511y(), today=self.HOJE)
+        assert result["site_status"] == "CONFORME"
+        assert result["site_status_reason"] is None
+
+    def test_pi4511y_comercializacao_is_dentro_prazo(self):
+        result = compute_status_dimensions(self._pi4511y(), today=self.HOJE)
+        assert result["comercializacao_status"] == "DENTRO_PRAZO"
+
+    def test_same_product_past_deadline_is_nao_conforme(self):
+        # Passado o prazo, volta a ser irregular no site.
+        result = compute_status_dimensions(
+            self._pi4511y(today_deadline="02/03/2024", deadline_date=date(2024, 3, 2)),
+            today=self.HOJE,
+        )
+        assert result["cert_status"] == "ENCERRADO"
+        assert result["site_status"] == "NAO_CONFORME"
+        assert result["site_status_reason"]
+        assert result["comercializacao_status"] == "ENCERRADA"
+
+    def test_encerrada_within_deadline_but_off_site_is_conforme(self):
+        row = self._pi4511y()
+        row["last_validation_status"] = "URL_NOT_FOUND"
+        result = compute_status_dimensions(row, today=self.HOJE)
+        assert result["site_status"] == "CONFORME"
+
+    def test_excluded_sku_within_deadline_is_still_nao_conforme(self):
+        row = self._pi4511y()
+        row["sheet_status"] = "SKU excluído"
+        result = compute_status_dimensions(row, today=self.HOJE)
+        assert result["cert_status"] == "ENCERRADO"
+        assert result["site_status"] == "NAO_CONFORME"
+        assert result["comercializacao_status"] == "ENCERRADA"
+
+    def test_deadline_date_as_iso_string_is_honored(self):
+        # psycopg2 devolve DATE; exports/mocks podem devolver string ISO.
+        row = self._pi4511y(deadline_date="2028-03-02")
+        assert compute_status_dimensions(row, today=self.HOJE)["site_status"] == "CONFORME"
+
+    def test_dynamic_future_deadline_is_conforme_without_frozen_date(self):
+        # Sem congelar o relógio: prazo sempre futuro relativo a hoje.
+        future = date.today() + timedelta(days=365)
+        row = self._pi4511y(today_deadline=future.strftime("%d/%m/%Y"), deadline_date=future)
+        assert compute_status_dimensions(row, today=self.HOJE)["site_status"] == "CONFORME"
+
+    def test_comercializacao_encerrada_when_no_deadline(self):
+        assert derive_comercializacao_status("ENCERRADO", None, "Encerrado", False) == "ENCERRADA"
+
+    # O prazo vigente absolve a certificação encerrada, NÃO absolve problema de
+    # conteúdo/verificação no site: dentro do prazo o item é julgado igual a um ATIVO.
+    @pytest.mark.parametrize(
+        "vs,expected_status",
+        [
+            ("OK", "CONFORME"),
+            ("URL_NOT_FOUND", "CONFORME"),
+            ("INCONSISTENT", "NAO_CONFORME"),  # frase da página não bate com a esperada
+            ("MISSING", "NAO_CONFORME"),
+            ("API_ERROR", "NAO_CONFORME"),  # VTEX fora do ar: não dá para afirmar conforme
+            ("EXPIRED", "NAO_CONFORME"),  # contradiz o prazo vigente -> revisar
+        ],
+    )
+    def test_within_deadline_is_judged_like_ativo(self, vs, expected_status):
+        encerrado, reason_enc = derive_site_status(vs, "ENCERRADO", "INMETRO", "INMETRO", True)
+        assert encerrado == expected_status
+        # Mesma resposta que um produto ATIVO — o prazo vigente equipara os dois.
+        ativo, reason_ativo = derive_site_status(vs, "ATIVO", "INMETRO", "INMETRO", False)
+        assert (encerrado, reason_enc) == (ativo, reason_ativo)
+
+    @pytest.mark.parametrize("vs", ["OK", "URL_NOT_FOUND", "MISSING", "INCONSISTENT", "API_ERROR"])
+    def test_invariant_holds_with_deadline_flag(self, vs):
+        # Nunca um terceiro estado silencioso: NAO_CONFORME sempre traz a frase.
+        status, reason = derive_site_status(vs, "ENCERRADO", "INMETRO", "INMETRO", True)
+        assert status in SITE_STATUS_VALUES
+        if status == "NAO_CONFORME":
+            assert reason
+
+    def test_inconsistent_within_deadline_reaches_the_operator(self):
+        # Regressão do defeito achado na revisão: produto no site com a frase de
+        # certificação ERRADA não pode aparecer como Conforme só porque o prazo corre.
+        row = self._pi4511y()
+        row["last_validation_status"] = "INCONSISTENT"
+        result = compute_status_dimensions(row, today=self.HOJE)
+        assert result["site_status"] == "NAO_CONFORME"
+        assert result["site_status_reason"] == SITE_REASON_PENDING
+        # A comercialização segue liberada — são eixos independentes.
+        assert result["comercializacao_status"] == "DENTRO_PRAZO"
 
 
 # ---------------------------------------------------------------------------

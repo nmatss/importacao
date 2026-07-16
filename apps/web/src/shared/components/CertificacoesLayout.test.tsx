@@ -40,7 +40,8 @@ describe('CertificacoesLayout permissions', () => {
     expect(screen.getByRole('link', { name: 'Validação' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Produtos' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Relatórios' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Cadastrar Certificado' })).not.toBeInTheDocument();
+    // Cadastro de certificado é rotina do time de certificações (2026-07-16).
+    expect(screen.getByRole('link', { name: 'Cadastrar Certificado' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Agendamentos' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Configurações' })).not.toBeInTheDocument();
   });

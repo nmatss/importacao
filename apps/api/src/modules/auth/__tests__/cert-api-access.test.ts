@@ -73,11 +73,39 @@ describe('cert-api gateway access policy', () => {
     );
     expect(requiredCertApiScope('POST', '/cert-api/api/validate')).toBe('cert.operate');
     expect(requiredCertApiScope('POST', '/cert-api/api/reports/export-stock')).toBe('cert.operate');
+    // Cadastro de certificado é rotina do time de certificações (2026-07-16).
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates')).toBe('cert.operate');
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/retry-linx')).toBe(
+      'cert.operate',
+    );
 
     expect(requiredCertApiScope('POST', '/cert-api/api/sync-stock')).toBe('cert.admin');
-    expect(requiredCertApiScope('POST', '/cert-api/api/certificates')).toBe('cert.admin');
     expect(requiredCertApiScope('GET', '/cert-api/api/products%2Fverify')).toBe('cert.admin');
     expect(requiredCertApiScope(undefined, undefined)).toBe('cert.admin');
+  });
+
+  it('keeps non-POST writes on certificates administrative', () => {
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1')).toBe('cert.admin');
+    expect(requiredCertApiScope('PUT', '/cert-api/api/certificates/cert-1')).toBe('cert.admin');
+    // Não pode vazar para rotas vizinhas via prefixo/subpath.
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/retry-linx/extra')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1')).toBe('cert.admin');
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates%2Fcert-1%2Fretry-linx')).toBe(
+      'cert.admin',
+    );
+    // Nginx resolve traversal percent-encoded antes de proxiar: o escopo decidido
+    // sobre a URI crua nao pode liberar mais que o path realmente servido.
+    expect(
+      requiredCertApiScope(
+        'POST',
+        '/cert-api/api/certificates/%2e%2e%2f%2e%2e%2fapi%2fsync-stock/retry-linx',
+      ),
+    ).toBe('cert.admin');
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/retry-linx')).toBe(
+      'cert.admin',
+    );
   });
 
   it('allows analysts only cert.read and cert.operate scopes', () => {
@@ -96,6 +124,8 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/products/verify'],
     ['POST', '/cert-api/api/reports/export'],
     ['POST', '/cert-api/api/reports/export-stock'],
+    ['POST', '/cert-api/api/certificates'],
+    ['POST', '/cert-api/api/certificates/cert-1/retry-linx'],
   ])('allows analyst access to %s %s and returns trusted actor identity', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 
@@ -109,8 +139,7 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/sync-sheets'],
     ['POST', '/cert-api/api/sync-stock'],
     ['POST', '/cert-api/api/sync-licenciados'],
-    ['POST', '/cert-api/api/certificates'],
-    ['POST', '/cert-api/api/certificates/cert-1/retry-linx'],
+    ['DELETE', '/cert-api/api/certificates/cert-1'],
     ['DELETE', '/cert-api/api/schedules/schedule-1'],
     ['GET', '/cert-api/api/not-yet-classified'],
   ])('denies analyst access to %s %s', async (method, uri) => {

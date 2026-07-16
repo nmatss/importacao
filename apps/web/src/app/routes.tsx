@@ -242,14 +242,7 @@ export function AppRoutes() {
                   <Route path="/validacao" element={<CertValidacaoPage />} />
                   <Route path="/produtos" element={<CertProdutosPage />} />
                   <Route path="/produtos/:sku" element={<CertProdutoDetailPage />} />
-                  <Route
-                    path="/cadastro"
-                    element={
-                      <AdminRoute>
-                        <CertCadastroPage />
-                      </AdminRoute>
-                    }
-                  />
+                  <Route path="/cadastro" element={<CertCadastroPage />} />
                   <Route path="/relatorios" element={<CertRelatoriosPage />} />
                   <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
                   <Route

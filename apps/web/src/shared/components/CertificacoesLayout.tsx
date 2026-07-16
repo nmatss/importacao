@@ -35,12 +35,7 @@ const navSections: Array<{ label: string; items: CertNavItem[] }> = [
       { to: '/certificacoes', label: 'Dashboard', icon: LayoutDashboard, exact: true },
       { to: '/certificacoes/validacao', label: 'Validação', icon: PlayCircle },
       { to: '/certificacoes/produtos', label: 'Produtos', icon: Package },
-      {
-        to: '/certificacoes/cadastro',
-        label: 'Cadastrar Certificado',
-        icon: FilePlus2,
-        adminOnly: true,
-      },
+      { to: '/certificacoes/cadastro', label: 'Cadastrar Certificado', icon: FilePlus2 },
     ],
   },
   {

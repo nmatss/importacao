@@ -29,6 +29,7 @@ const OPERATE_PATHS = new Set([
   '/cert-api/api/products/verify',
   '/cert-api/api/reports/export',
   '/cert-api/api/reports/export-stock',
+  '/cert-api/api/certificates',
 ]);
 
 function originalPath(value: string | undefined): string | null {
@@ -56,6 +57,19 @@ function isReadPath(path: string): boolean {
   );
 }
 
+function isOperatePath(path: string): boolean {
+  if (OPERATE_PATHS.has(path)) return true;
+
+  // Retrying the Linx write finishes the cadastro the analyst just submitted;
+  // it repeats that same certificate's write and grants nothing broader.
+  //
+  // This is the only POST rule with a wildcard segment, so the id excludes `%`
+  // as well as `/`: Nginx resolves percent-encoded traversal before it proxies,
+  // and a scope decided on the raw URI must never out-permit the path the
+  // cert-api actually serves. Certificate ids are uuid4 — never percent-encoded.
+  return /^\/cert-api\/api\/certificates\/[^/%]+\/retry-linx$/.test(path);
+}
+
 /**
  * Resolve the least-privileged scope required by an original cert-api request.
  */
@@ -69,16 +83,18 @@ export function requiredCertApiScope(
   if (!path || !method) return 'cert.admin';
 
   if ((method === 'GET' || method === 'HEAD') && isReadPath(path)) return 'cert.read';
-  if (method === 'POST' && OPERATE_PATHS.has(path)) return 'cert.operate';
+  if (method === 'POST' && isOperatePath(path)) return 'cert.operate';
 
   return 'cert.admin';
 }
 
 /**
  * The project currently has only `admin` and `analyst` roles. Analysts may
- * consult certification data and trigger bounded validation/export operations;
- * all synchronization, schedule changes, certificate/Linx writes, and future
- * routes remain administrative until a finer-grained role model is introduced.
+ * consult certification data, trigger bounded validation/export operations and
+ * register certificates (the cert team's own routine — the actor is recorded via
+ * `X-Cert-Actor-Email`); synchronization, schedule changes, user management,
+ * certificate deletion and future routes remain administrative until a
+ * finer-grained role model is introduced.
  */
 export function canAccessCertApi(role: string | undefined, scope: CertApiScope): boolean {
   if (role === 'admin') return true;
