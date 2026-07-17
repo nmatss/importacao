@@ -9,9 +9,12 @@ type ProgressEvent = CertValidationEvent;
 export function CertValidationProgress({
   runId,
   onComplete,
+  onError,
 }: {
   runId: string | null;
   onComplete?: (summary: any) => void;
+  /** Chamado quando o stream falha — o pai PRECISA destravar o botão (running). */
+  onError?: (message?: string) => void;
 }) {
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -21,6 +24,8 @@ export function CertValidationProgress({
   // Latest-ref: mantém o callback atualizado sem reabrir o stream SSE a cada render.
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   useEffect(() => {
     if (!runId) return;
@@ -37,7 +42,12 @@ export function CertValidationProgress({
         setStatus('complete');
         onCompleteRef.current?.(data.summary);
       } else if (data.type === 'error') {
+        // Antes o erro NÃO era propagado ao pai: o botão "Validar" ficava
+        // preso em "Validando…" para sempre (auditoria 2026-07-17). Quedas de
+        // conexão também chegam aqui — o streamCertValidation converte falha
+        // de rede em evento 'error'.
         setStatus('error');
+        onErrorRef.current?.((data as { error?: string }).error);
       }
     });
 

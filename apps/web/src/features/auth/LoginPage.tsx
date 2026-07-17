@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { Ship, FileCheck, BarChart3, Shield } from 'lucide-react';
@@ -13,6 +14,8 @@ const features = [
 export function LoginPage() {
   const { loginWithGoogle } = useAuth();
   const [error, setError] = useState<string | null>(null);
+  const [searchParams] = useSearchParams();
+  const sessionExpired = searchParams.get('expired') === '1';
   const [loading, setLoading] = useState(false);
 
   return (
@@ -120,8 +123,22 @@ export function LoginPage() {
               className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 p-4 shadow-sm shadow-slate-900/[0.03] animate-fade-in-up sm:p-8"
               style={{ animationDelay: '100ms' }}
             >
+              {sessionExpired && !error && (
+                <div
+                  role="status"
+                  className="mb-6 flex items-start gap-3 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 dark:bg-amber-900/20 dark:border-amber-800"
+                >
+                  <div className="mt-0.5 h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Sua sessão expirou. Entre novamente para continuar de onde parou.
+                  </p>
+                </div>
+              )}
               {error && (
-                <div className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3">
+                <div
+                  role="alert"
+                  className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3"
+                >
                   <div className="mt-0.5 h-2 w-2 rounded-full bg-danger-500 shrink-0" />
                   <p className="text-sm text-danger-600">{error}</p>
                 </div>

@@ -94,14 +94,35 @@ const ackOptions: { value: AckFilter; label: string }[] = [
 
 export function AlertsPage() {
   const queryClient = useQueryClient();
-  const [severityFilter, setSeverityFilter] = useState<SeverityFilter>('all');
-  const [ackFilter, setAckFilter] = useState<AckFilter>('all');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [severityFilter, setSeverityFilterRaw] = useState<SeverityFilter>('all');
+  const [ackFilter, setAckFilterRaw] = useState<AckFilter>('all');
+  const [startDate, setStartDateRaw] = useState('');
+  const [endDate, setEndDateRaw] = useState('');
+  const [page, setPage] = useState(1);
+  // Mudar qualquer filtro volta para a página 1.
+  const setSeverityFilter = (v: SeverityFilter) => {
+    setSeverityFilterRaw(v);
+    setPage(1);
+  };
+  const setAckFilter = (v: AckFilter) => {
+    setAckFilterRaw(v);
+    setPage(1);
+  };
+  const setStartDate = (v: string) => {
+    setStartDateRaw(v);
+    setPage(1);
+  };
+  const setEndDate = (v: string) => {
+    setEndDateRaw(v);
+    setPage(1);
+  };
   const [exportingCsv, setExportingCsv] = useState(false);
 
   const queryParams = new URLSearchParams();
-  queryParams.set('limit', '100');
+  // Auditoria 2026-07-17: limit=100 sem paginação escondia alertas 101+ para
+  // sempre — a API sempre foi paginada, só a tela não usava.
+  queryParams.set('limit', '50');
+  queryParams.set('page', String(page));
   if (severityFilter !== 'all') queryParams.set('severity', severityFilter);
   if (ackFilter !== 'all') queryParams.set('acknowledged', ackFilter);
   if (startDate) queryParams.set('startDate', startDate);
@@ -113,22 +134,29 @@ export function AlertsPage() {
     isLoading,
     error,
     refetch,
-  } = useApiQuery<{ data: Alert[]; pagination: unknown }>(
-    ['alerts', severityFilter, ackFilter, startDate, endDate],
-    `/api/alerts${qs ? `?${qs}` : ''}`,
-  );
+  } = useApiQuery<{
+    data: Alert[];
+    pagination?: { total?: number; pages?: number; page?: number };
+  }>(['alerts', severityFilter, ackFilter, startDate, endDate, page], `/api/alerts?${qs}`);
   const alerts = alertsResponse?.data;
+  const totalAlerts = alertsResponse?.pagination?.total ?? alerts?.length ?? 0;
+  // sendPaginated retorna `pages` (não `totalPages`) — mesmo campo que o
+  // export CSV já lia.
+  const totalPages = alertsResponse?.pagination?.pages ?? 1;
+  // Contagem de pendentes: com paginação, contar só a página subestima. Quando
+  // o filtro já é "pendentes", o total da API é exato; senão, aproxima pela página.
+  const pendingCount =
+    ackFilter === 'false' ? totalAlerts : (alerts?.filter((a) => !a.acknowledged).length ?? 0);
 
   const handleAcknowledge = async (alertId: number) => {
     try {
       await api.patch<AckResponse>(`/api/alerts/${alertId}/acknowledge`);
       queryClient.invalidateQueries({ queryKey: ['alerts'] });
+      toast.success('Alerta marcado como tratado');
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     }
   };
-
-  const pendingCount = alerts?.filter((a) => !a.acknowledged).length ?? 0;
 
   const handleExportCsv = async () => {
     setExportingCsv(true);
@@ -421,6 +449,31 @@ export function AlertsPage() {
                 </div>
               );
             })}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-6">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Página {page} de {totalPages} · {totalAlerts} alerta{totalAlerts !== 1 ? 's' : ''}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Anterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

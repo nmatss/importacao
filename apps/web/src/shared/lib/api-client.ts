@@ -1,3 +1,5 @@
+import { redirectToLogin } from './session-expired';
+
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'importacao_token';
 
@@ -20,7 +22,7 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
   if (response.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
-    window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Unauthorized');
   }
 

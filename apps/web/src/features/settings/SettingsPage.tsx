@@ -39,7 +39,7 @@ interface User {
   name: string;
   email: string;
   role: string;
-  active: boolean;
+  isActive: boolean;
 }
 
 interface SettingValue {
@@ -569,6 +569,7 @@ function UsersTab() {
       }
       queryClient.invalidateQueries({ queryKey: userKeys.all });
       setShowModal(false);
+      toast.success(editUser ? 'Usuário atualizado' : 'Usuário criado');
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -589,8 +590,9 @@ function UsersTab() {
 
   const toggleActive = async (user: User) => {
     try {
-      await api.put(`/api/auth/users/${user.id}`, { active: !user.active });
+      await api.put(`/api/auth/users/${user.id}`, { isActive: !user.isActive });
       queryClient.invalidateQueries({ queryKey: userKeys.all });
+      toast.success(user.isActive ? `${user.name} desativado` : `${user.name} ativado`);
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     }
@@ -657,7 +659,7 @@ function UsersTab() {
                         <div
                           className={cn(
                             'flex h-8 w-8 items-center justify-center rounded-xl text-[11px] font-bold',
-                            user.active
+                            user.isActive
                               ? 'bg-gradient-to-br from-primary-500 to-primary-600 text-white'
                               : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                           )}
@@ -692,18 +694,20 @@ function UsersTab() {
                       <button
                         type="button"
                         role="switch"
-                        aria-checked={user.active}
+                        aria-checked={user.isActive}
                         onClick={() => toggleActive(user)}
-                        aria-label={user.active ? `Desativar ${user.name}` : `Ativar ${user.name}`}
+                        aria-label={
+                          user.isActive ? `Desativar ${user.name}` : `Ativar ${user.name}`
+                        }
                         className={cn(
                           'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
-                          user.active ? 'bg-primary-600' : 'bg-slate-200',
+                          user.isActive ? 'bg-primary-600' : 'bg-slate-200',
                         )}
                       >
                         <span
                           className={cn(
                             'inline-block h-5 w-5 rounded-full bg-white dark:bg-slate-800 shadow-sm transition-transform duration-200',
-                            user.active ? 'translate-x-5' : 'translate-x-0',
+                            user.isActive ? 'translate-x-5' : 'translate-x-0',
                           )}
                         />
                       </button>

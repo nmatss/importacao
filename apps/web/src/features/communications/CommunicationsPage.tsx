@@ -28,6 +28,7 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { SubmitButton } from '@/shared/components/SubmitButton';
+import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EmailSignatureOption {
@@ -213,7 +214,7 @@ export function CommunicationsPage() {
   const communicationPayload = () => ({
     processId: Number(composer.processId),
     recipient: composer.recipient,
-    recipientEmail: composer.recipientEmail,
+    recipientEmail: composer.recipientEmail.trim(),
     subject: composer.subject,
     body: composer.body,
     attachments: selectedAttachmentIds.map((documentId) => ({ documentId })),
@@ -271,7 +272,28 @@ export function CommunicationsPage() {
     saveDraftMutation.mutate(communicationPayload());
   };
 
+  // Enviar e-mail é irreversível — confirma antes (paridade com a Validação,
+  // que já confirmava; auditoria 2026-07-17). Também valida o formato do
+  // destinatário, que o isFormValid só checava como não-vazio.
+  const [showSendConfirm, setShowSendConfirm] = useState(false);
+
+  const requestSend = () => {
+    // Aceita lista separada por ; ou , (o campo sempre permitiu múltiplos
+    // destinatários) — valida cada endereço individualmente.
+    const addresses = composer.recipientEmail
+      .split(/[;,]/)
+      .map((a) => a.trim())
+      .filter(Boolean);
+    const invalid = addresses.filter((a) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a));
+    if (addresses.length === 0 || invalid.length > 0) {
+      toast.error(`E-mail do destinatário inválido: "${invalid[0] ?? composer.recipientEmail}"`);
+      return;
+    }
+    setShowSendConfirm(true);
+  };
+
   const handleSend = async () => {
+    setShowSendConfirm(false);
     setSending(true);
     try {
       const draftId = editingCommunicationId
@@ -753,13 +775,23 @@ export function CommunicationsPage() {
                 </button>
                 <SubmitButton
                   type="button"
-                  onClick={handleSend}
+                  onClick={requestSend}
                   loading={sending}
                   disabled={!isFormValid || sending}
                 >
                   <Send className="h-4 w-4" />
                   {editingCommunicationId ? 'Atualizar e enviar' : 'Enviar e-mail'}
                 </SubmitButton>
+                <ConfirmDialog
+                  isOpen={showSendConfirm}
+                  title="Enviar e-mail?"
+                  message={`O e-mail "${composer.subject}" será enviado para ${composer.recipientEmail}. Esta ação não pode ser desfeita.`}
+                  confirmLabel="Enviar"
+                  cancelLabel="Cancelar"
+                  variant="primary"
+                  onConfirm={handleSend}
+                  onCancel={() => setShowSendConfirm(false)}
+                />
               </div>
             </div>
           </div>

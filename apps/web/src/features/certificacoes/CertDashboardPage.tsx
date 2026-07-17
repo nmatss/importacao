@@ -415,7 +415,10 @@ export default function CertDashboardPage() {
               </div>
             </div>
             <Link
-              to="/certificacoes/produtos?status=EXPIRED"
+              // cert_status é o eixo que a página de Produtos realmente lê —
+              // o antigo ?status=EXPIRED (vocabulário legado) era ignorado e o
+              // "Ver todos" abria a lista completa (auditoria 2026-07-17).
+              to="/certificacoes/produtos?cert_status=ENCERRADO"
               className="flex items-center gap-1.5 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors shrink-0"
             >
               Ver todos <ArrowRight className="h-4 w-4" />
@@ -465,7 +468,7 @@ export default function CertDashboardPage() {
             </div>
             {problemProducts.length > 0 && (
               <Link
-                to="/certificacoes/produtos?status=URL_NOT_FOUND,INCONSISTENT"
+                to="/certificacoes/produtos?site_status=NAO_CONFORME"
                 className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
               >
                 Ver todos <ArrowRight className="h-4 w-4" />

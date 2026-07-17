@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { toast } from 'sonner';
 import {
   FilePlus2,
   CheckCircle2,
@@ -156,8 +157,15 @@ export default function CertCadastroPage() {
       const updated = await retryCertificateLinx(id);
       setRecent((prev) => prev.map((c) => (c.id === id ? updated : c)));
       if (result?.id === id) setResult(updated);
-    } catch {
-      // mantém estado anterior
+      if (updated.linx_status === 'applied') {
+        toast.success('Gravado no Linx com sucesso');
+      } else if (updated.linx_status === 'error') {
+        toast.error(`Linx retornou erro: ${updated.linx_error || 'verifique o detalhe do item'}`);
+      }
+    } catch (err) {
+      // Auditoria 2026-07-17: a falha era engolida — o operador reenviava ao
+      // Linx e não sabia se funcionou.
+      toast.error(err instanceof Error ? err.message : 'Falha ao reenviar ao Linx');
     } finally {
       setRetrying(null);
     }

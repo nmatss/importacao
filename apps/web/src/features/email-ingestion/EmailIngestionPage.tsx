@@ -25,6 +25,8 @@ import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { api } from '@/shared/lib/api-client';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface AttachmentDetail {
   filename: string;
@@ -161,13 +163,19 @@ export function EmailIngestionPage() {
 
   const totalToday = status?.todayStats?.reduce((sum, s) => sum + s.count, 0) ?? 0;
 
+  // Auditoria 2026-07-17: essas ações falhavam em SILÊNCIO TOTAL (sem catch,
+  // sem toast) — o spinner sumia e o operador não sabia se rodou ou quebrou.
   const handleTrigger = async (includeRead = false) => {
     setTriggering(true);
     try {
       const qs = includeRead ? '?includeRead=true' : '';
-      await api.post<TriggerResponse>(`/api/email-ingestion/trigger${qs}`);
+      const res = await api.post<TriggerResponse>(`/api/email-ingestion/trigger${qs}`);
       queryClient.invalidateQueries({ queryKey: ['email-ingestion-status'] });
       queryClient.invalidateQueries({ queryKey: ['email-ingestion-logs'] });
+      // O endpoint responde só { message } — repassa a mensagem da API.
+      toast.success((res as { message?: string })?.message || 'Busca de e-mails concluída');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setTriggering(false);
     }
@@ -178,6 +186,9 @@ export function EmailIngestionPage() {
     try {
       await api.post<TriggerResponse>(`/api/email-ingestion/reprocess/${logId}`);
       queryClient.invalidateQueries({ queryKey: ['email-ingestion-logs'] });
+      toast.success('E-mail reprocessado');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     } finally {
       setReprocessingId(null);
     }

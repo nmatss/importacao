@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import {
   fetchCertSchedules,
   createCertSchedule,
@@ -302,8 +303,10 @@ export default function CertAgendamentosPage() {
       await deleteCertSchedule(id);
       setDeleteConfirm(null);
       await loadSchedules();
-    } catch {
-      // silently fail
+      toast.success('Agendamento excluído');
+    } catch (err) {
+      // Auditoria 2026-07-17: falha era 100% silenciosa — a UI parecia não reagir.
+      toast.error(err instanceof Error ? err.message : 'Falha ao excluir o agendamento');
     }
   }
 
@@ -315,6 +318,14 @@ export default function CertAgendamentosPage() {
   }, []);
 
   async function handleTrigger(id: string) {
+    // pollRef é único: uma 2ª execução simultânea sobrescreveria o interval da
+    // 1ª (leak + progresso perdido). triggeringId cobre a janela entre o clique
+    // e o início do poll (o await de runCertScheduleNow), onde pollRef ainda é
+    // null.
+    if (triggeringId !== null || pollRef.current) {
+      toast.warning('Já existe uma execução em andamento — aguarde ela concluir.');
+      return;
+    }
     setTriggeringId(id);
     setTriggerResult({ scheduleId: id, status: 'running', processed: 0 });
     try {
@@ -364,8 +375,9 @@ export default function CertAgendamentosPage() {
     try {
       await updateCertSchedule(schedule.id, { enabled: !schedule.enabled });
       await loadSchedules();
-    } catch {
-      // silently fail
+      toast.success(schedule.enabled ? 'Agendamento desativado' : 'Agendamento ativado');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao alterar o agendamento');
     } finally {
       setTogglingId(null);
     }

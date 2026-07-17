@@ -1,6 +1,7 @@
 import { createContext, useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/shared/lib/api-client';
+import { consumeReturnTo } from '@/shared/lib/session-expired';
 
 const TOKEN_KEY = 'importacao_token';
 
@@ -49,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       localStorage.setItem(TOKEN_KEY, data.token);
       setUser(data.user);
-      navigate('/portal');
+      navigate(consumeReturnTo() ?? '/portal');
     },
     [navigate],
   );
@@ -61,7 +62,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       localStorage.setItem(TOKEN_KEY, data.token);
       setUser(data.user);
-      navigate('/portal');
+      // Sessão expirou no meio do trabalho? Volta para onde a pessoa estava.
+      navigate(consumeReturnTo() ?? '/portal');
     },
     [navigate],
   );
@@ -69,6 +71,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     setUser(null);
+    // Logout explícito descarta o returnTo salvo por uma expiração anterior —
+    // senão a rota do usuário anterior sequestra o próximo login desta aba.
+    consumeReturnTo();
     navigate('/login');
   }, [navigate]);
 

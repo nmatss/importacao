@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { CertValidationProgress } from '@/features/certificacoes/components/CertValidationProgress';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { startCertValidation, fetchCertStats } from '@/shared/lib/cert-api-client';
@@ -206,7 +207,18 @@ export default function CertValidacaoPage() {
       </div>
 
       {/* Progress */}
-      {runId && <CertValidationProgress runId={runId} onComplete={handleComplete} />}
+      {runId && (
+        <CertValidationProgress
+          runId={runId}
+          onComplete={handleComplete}
+          onError={(message) => {
+            // Destrava o botão "Validar" — antes o erro do stream deixava
+            // running=true para sempre (auditoria 2026-07-17).
+            setRunning(false);
+            toast.error(message || 'A validação falhou. Tente novamente.');
+          }}
+        />
+      )}
 
       {/* Summary */}
       {summary && (

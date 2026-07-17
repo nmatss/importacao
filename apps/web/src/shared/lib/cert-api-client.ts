@@ -1,3 +1,5 @@
+import { redirectToLogin } from './session-expired';
+
 // ── Cert-API response types ────────────────────────────────────────────
 // These represent the known shape of cert-api responses.
 // Consumers may use their own local interfaces; functions are generic
@@ -251,7 +253,7 @@ export async function certApiFetch(path: string, options: RequestInit = {}): Pro
 
   if (res.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
-    window.location.href = '/login';
+    redirectToLogin();
     throw new Error('Unauthorized');
   }
 
@@ -413,6 +415,13 @@ export function streamCertValidation(
           .join('\n');
         if (data) dispatchEvent(data);
       }
+    }
+    // Servidor encerrou o stream SEM evento complete/error (restart do
+    // cert-api no meio da validação): sem isto o consumidor ficava em
+    // "running" para sempre (auditoria 2026-07-17).
+    if (!closed) {
+      onEvent({ type: 'error', error: 'Stream encerrado pelo servidor antes de concluir' });
+      close();
     }
   })().catch((error: unknown) => {
     if (!closed) {
