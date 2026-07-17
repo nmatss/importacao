@@ -177,7 +177,8 @@ def derive_cert_status(
     # SKU excluído → SEMPRE encerrado (regra explícita Eduarda: "Encerrado =
     # certificação encerrada, SKU excluído OU fora do prazo de venda"). Precede o
     # short-circuit de janela de venda: um SKU excluído nunca volta a ATIVO mesmo
-    # com prazo de venda vigente.
+    # com prazo de venda vigente. Vale para o texto INTEIRO: exclusão é estado
+    # terminal, não importa em que linha do histórico apareça.
     if "exclu" in s:
         return "ENCERRADO"
 
@@ -185,24 +186,46 @@ def derive_cert_status(
     if within_window:
         return "ATIVO"
 
-    # Em andamento → conservador ENCERRADO (sem flag clara de atividade);
-    # a janela de venda já foi tratada acima.
-    if "andamento" in s:
-        return "ENCERRADO"
+    # O sheet_status frequentemente carrega o HISTÓRICO inteiro da planilha
+    # (log multilinha, entrada mais recente PRIMEIRO). Fazer substring no texto
+    # todo deixava uma entrada velha ("25/11/24 - Registro encerrado.") vencer a
+    # mais recente ("13/03/2026 - Manutenção Finalizada") — e "Registro
+    # concedido" nem era reconhecido (caso Eduarda 2026-07-17: PI7550Y/51Y/53Y,
+    # 26 produtos ATIVOS exibidos como Encerrado). A ENTRADA MAIS RECENTE decide;
+    # o texto completo fica como fallback para os formatos antigos de uma linha.
+    latest = _norm(str(sheet_status or "").splitlines()[0] if sheet_status else "")
 
-    # Marcadores explícitos de encerramento.
-    if s == "expired" or "vencid" in s or "encerrad" in s:
-        return "ENCERRADO"
-
-    # Marcadores explícitos de atividade — só permanecem ATIVO se não houver
-    # sinal concreto de expiração ("Ativo" obsoleto + vencido → ENCERRADO).
-    if s == "ativo" or "finalizad" in s or s == "expiring":
-        if is_expired or "vencido" in deadline:
+    def _classify(fragment: str) -> str | None:
+        """Classifica um fragmento de status; None quando não há marcador claro."""
+        if not fragment:
+            return None
+        # Em andamento → conservador ENCERRADO (sem flag clara de atividade).
+        if "andamento" in fragment:
             return "ENCERRADO"
-        return "ATIVO"
+        if fragment == "expired" or "vencid" in fragment or "encerrad" in fragment:
+            return "ENCERRADO"
+        # "conce": cobre "Registro concedido", "Inclusão concedida" e o typo real
+        # da planilha "concecida". Concessão de registro = certificação ativa.
+        if (
+            fragment == "ativo"
+            or "finalizad" in fragment
+            or fragment == "expiring"
+            or "conce" in fragment
+        ):
+            if is_expired or "vencido" in deadline:
+                return "ENCERRADO"
+            return "ATIVO"
+        return None
 
-    # sheet_status vazio ou texto livre histórico → deduz pelos sinais binários,
-    # de forma conservadora (default ENCERRADO quando não claramente ativo).
+    verdict = _classify(latest)
+    if verdict is None and latest != s:
+        verdict = _classify(s)
+    if verdict is not None:
+        return verdict
+
+    # sheet_status vazio ou texto livre sem marcador → deduz pelos sinais
+    # binários, de forma conservadora (default ENCERRADO quando não claramente
+    # ativo).
     return _fallback_from_expiration(is_expired, sale_deadline_raw)
 
 

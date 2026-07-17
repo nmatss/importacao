@@ -74,6 +74,55 @@ class TestCertStatusCollapsed:
     def test_andamento_defaults_encerrado(self):
         assert derive_cert_status("Em andamento", False, None) == "ENCERRADO"
 
+    # ── Caso Eduarda 2026-07-17 (PI7550Y/PI7551Y/PI7553Y) ────────────────────
+    def test_registro_concedido_is_ativo(self):
+        # "Registro concedido" = certificação ATIVA; 26 produtos em prod exibiam
+        # Encerrado porque o marcador não era reconhecido.
+        assert (
+            derive_cert_status("01/09/25 - Registro concedido no Orquestra.", False, None)
+            == "ATIVO"
+        )
+
+    def test_inclusao_concedida_typo_is_ativo(self):
+        # Typo real da planilha: "concecida".
+        assert derive_cert_status("21/08/24 - Inclusão concecida no Orquestra.", False, None) in {
+            "ATIVO",
+            "ENCERRADO",
+        }
+        # O typo "concecida" não contém "conce"+"did"; o marcador usa "conce".
+        assert (
+            derive_cert_status("21/08/24 - Inclusão concecida no Orquestra.", False, None)
+            == "ATIVO"
+        )
+
+    def test_registro_concedido_expirado_is_encerrado(self):
+        # Concessão antiga + expirado → guarda de expiração continua mandando.
+        assert (
+            derive_cert_status("01/09/25 - Registro concedido no Orquestra.", True, None)
+            == "ENCERRADO"
+        )
+
+    def test_historico_multilinha_entrada_mais_recente_decide(self):
+        # Log real: manutenção finalizada (recente) por cima de um encerramento
+        # antigo — o substring no texto inteiro deixava a entrada VELHA vencer.
+        log = (
+            "13/03/2026 - Manutenção Finalizada\n"
+            "25/11/24 - Registro encerrado.\n"
+            "01/12 - Registro concedido. Número do Registro: 011828/2022."
+        )
+        assert derive_cert_status(log, False, None) == "ATIVO"
+
+    def test_historico_multilinha_encerrado_recente_decide(self):
+        # Direção oposta: encerramento é a entrada mais recente → ENCERRADO,
+        # mesmo com concessão/finalização antigas abaixo.
+        log = "25/11/25 - Registro encerrado.\n13/03/2024 - Manutenção Finalizada"
+        assert derive_cert_status(log, False, None) == "ENCERRADO"
+
+    def test_historico_multilinha_excluido_em_qualquer_linha_e_terminal(self):
+        # Exclusão é estado terminal — vale mesmo fora da primeira linha.
+        log = "13/03/2026 - Manutenção Finalizada\n01/02/25 - SKU excluído do portfólio."
+        assert derive_cert_status(log, False, None) == "ENCERRADO"
+
     def test_andamento_within_sale_window_is_ativo(self):
         assert derive_cert_status("Em andamento", False, "Venda até fim do lote") == "ATIVO"
 
