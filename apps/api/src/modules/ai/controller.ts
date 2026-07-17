@@ -25,7 +25,16 @@ export async function extractDocument(req: Request, res: Response) {
     let { text } = req.body;
     if (!text) {
       const doc = await documentService.getById(documentId);
-      text = await documentService.extractText(doc.storagePath, doc.mimeType || '');
+      // extractText retorna { text, imageBase64?, ... } — antes o OBJETO era
+      // atribuído a `text` e a IA recebia "[object Object]". Com teto de 3 min
+      // para a request HTTP não pendurar num OCR travado (auditoria 2026-07-17).
+      const extracted = await Promise.race([
+        documentService.extractText(doc.storagePath, doc.mimeType || ''),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Tempo limite na extração de texto (180s)')), 180_000),
+        ),
+      ]);
+      text = extracted.text;
     }
 
     let result;

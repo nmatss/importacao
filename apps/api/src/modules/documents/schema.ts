@@ -30,7 +30,7 @@ export const acceptComparisonSchema = z.object({
   rowKey: z.string().trim().min(1).max(160),
   fieldLabel: z.string().trim().min(1).max(160).optional(),
   itemCode: z.string().trim().max(80).optional().nullable(),
-  previousStatus: z.enum(['divergent', 'warning', 'match', 'empty']).optional(),
+  previousStatus: z.enum(['divergent', 'warning', 'match', 'empty', 'single_source']).optional(),
   resolution_note: z.string().trim().min(3).max(1000),
 });
 

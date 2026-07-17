@@ -93,6 +93,12 @@ function readEspelhoItems(processData?: Record<string, any>): Array<Record<strin
   const aiData = processData?.aiExtractedData;
   const espelho = aiData && typeof aiData === 'object' ? aiData.espelho : null;
   if (!espelho || typeof espelho !== 'object') return [];
+  // Espelho AUTO-gerado é cópia da própria Invoice/PL — cruzá-lo com o OHBL
+  // aqui contaria como corroboração o que o comparativo (auditoria 2026-07-17)
+  // deixou de aceitar. Sem espelho do operador, o check degrada para ausente.
+  if ((espelho.summary as Record<string, any> | undefined)?.generatedBy === 'auto_deterministic') {
+    return [];
+  }
   const items: unknown[] = Array.isArray(espelho.items) ? espelho.items : [];
   return items.filter((item): item is Record<string, any> =>
     Boolean(item && typeof item === 'object'),

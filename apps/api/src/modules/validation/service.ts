@@ -36,7 +36,7 @@ type DocumentWithAiData = {
   updatedAt?: Date | string | null;
 };
 
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+import { MIN_OPERATIONAL_CONFIDENCE } from '../documents/constants.js';
 type ValidationRunMode = 'final' | 'partial';
 
 type RunAllChecksOptions = {

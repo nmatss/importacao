@@ -9,30 +9,38 @@ interface DocumentUploadProps {
 }
 
 const FILE_TYPES = [
-  { value: 'proforma_invoice', label: 'Proforma', keywords: ['proforma', 'pro forma'] },
-  { value: 'invoice', label: 'Invoice', keywords: ['invoice', 'inv', 'fatura', 'commercial'] },
-  { value: 'packing_list', label: 'Packing List', keywords: ['packing', 'pl', 'pack'] },
-  {
-    value: 'draft_bl',
-    label: 'Draft BL',
-    keywords: ['draft bl', 'draft_bl', 'draft-bl', 'draftbl', 'draft bill', 'rascunho bl'],
-  },
-  {
-    value: 'draft_duimp',
-    label: 'Draft DUIMP',
-    keywords: ['draft duimp', 'draft_duimp', 'rascunho duimp', 'minuta duimp'],
-  },
-  { value: 'duimp', label: 'DUIMP', keywords: ['duimp'] },
-  {
-    value: 'ohbl',
-    label: 'BL',
-    keywords: ['ohbl', 'original bl', 'bill', 'lading', 'conhecimento', 'bl'],
-  },
-  { value: 'espelho', label: 'Espelho', keywords: ['espelho', 'mirror'] },
-  { value: 'li', label: 'LI', keywords: ['li', 'licen'] },
-  { value: 'certificate', label: 'Certificado', keywords: ['cert', 'certificado', 'certificate'] },
-  { value: 'other', label: 'Outro', keywords: [] },
+  { value: 'proforma_invoice', label: 'Proforma' },
+  { value: 'invoice', label: 'Invoice' },
+  { value: 'packing_list', label: 'Packing List' },
+  { value: 'draft_bl', label: 'Draft BL' },
+  { value: 'draft_duimp', label: 'Draft DUIMP' },
+  { value: 'duimp', label: 'DUIMP' },
+  { value: 'ohbl', label: 'BL' },
+  { value: 'espelho', label: 'Espelho' },
+  { value: 'li', label: 'LI' },
+  { value: 'certificate', label: 'Certificado' },
+  { value: 'other', label: 'Outro' },
 ] as const;
+
+// Paridade com o classify-document.ts do backend (auditoria 2026-07-17):
+// PALAVRAS fortes de invoice/PL vencem, mas os TOKENS de referência
+// ('inv'/'ci'/'pl') descem para DEPOIS do sinal de BL — um BL nomeado com o
+// número da CI ("OHBL ... CI IM071...") era pré-selecionado como Invoice.
+// Ordem importa: primeiro match vence. Manter em sincronia com o backend.
+const DETECTION_RULES: ReadonlyArray<{ value: string; keywords: readonly string[] }> = [
+  { value: 'draft_duimp', keywords: ['draft duimp', 'rascunho duimp', 'minuta duimp'] },
+  { value: 'duimp', keywords: ['duimp'] },
+  { value: 'proforma_invoice', keywords: ['proforma', 'pro forma', 'pi'] },
+  { value: 'invoice', keywords: ['invoice', 'fatura', 'commercial'] },
+  { value: 'packing_list', keywords: ['packing', 'pack', 'romaneio'] },
+  { value: 'espelho', keywords: ['espelho', 'mirror'] },
+  { value: 'draft_bl', keywords: ['draft bl', 'draftbl', 'draft bill', 'rascunho bl'] },
+  { value: 'ohbl', keywords: ['ohbl', 'original bl', 'bill', 'lading', 'conhecimento', 'bl'] },
+  { value: 'invoice', keywords: ['inv', 'ci'] },
+  { value: 'packing_list', keywords: ['pl'] },
+  { value: 'li', keywords: ['li', 'licen'] },
+  { value: 'certificate', keywords: ['cert', 'certificado', 'certificate'] },
+];
 
 const ACCEPT =
   '.pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif,.webp,.tif,.tiff,.bmp,.csv,.txt,.eml,.msg';
@@ -53,9 +61,9 @@ function normalizeFilenameForDetection(filename: string): string {
 
 export function detectDocType(filename: string): string {
   const normalizedName = normalizeFilenameForDetection(filename);
-  for (const ft of FILE_TYPES) {
-    if (ft.keywords.some((kw) => normalizedName.includes(normalizeFilenameForDetection(kw)))) {
-      return ft.value;
+  for (const rule of DETECTION_RULES) {
+    if (rule.keywords.some((kw) => normalizedName.includes(normalizeFilenameForDetection(kw)))) {
+      return rule.value;
     }
   }
   return 'other';

@@ -1302,6 +1302,51 @@ export const emailProcessor = {
           })
           .where(eq(emailIngestionLogs.id, logEntry.id));
 
+        // Auditoria 2026-07-17: os dois desfechos abaixo eram INVISÍVEIS fora
+        // da tela de email-logs — documento legítimo sumia do radar. Viram
+        // alerta acionável. O ASSUNTO entra no TÍTULO de propósito: o dedup do
+        // alertService é por título+processId em 24h, e sem o assunto um 2º
+        // e-mail DIFERENTE ignorado no mesmo dia seria suprimido (revisão R1).
+        const subjectTag = (email.subject || 'sem assunto').slice(0, 60);
+        // Só alerta "formato não suportado" quando houve anexo pulado POR
+        // FORMATO — e-mail cujos anexos foram todos pulados como DUPLICATA já
+        // está no processo; alertar induziria upload manual duplicado.
+        const hasUnsupportedSkip = enrichedData.some(
+          (att: { status?: string; skipReason?: string }) =>
+            att.status === 'skipped' &&
+            typeof att.skipReason === 'string' &&
+            !att.skipReason.startsWith('duplicate'),
+        );
+        if (finalStatus === 'ignored' && hasUnsupportedSkip) {
+          await alertService
+            .create({
+              severity: 'warning',
+              title: `E-mail ignorado — anexos não suportados: ${subjectTag}`,
+              message:
+                `Todos os anexos do e-mail "${email.subject}" (de ${email.from}) foram pulados ` +
+                `(formato não suportado pela ingestão — aceitos: PDF/XLSX/XLS — ou incompatível ` +
+                `com o conteúdo). Se houver documento legítimo (foto, Word), suba manualmente ` +
+                `pelo portal — o upload manual aceita imagem/DOCX.`,
+            })
+            .catch((alertErr) =>
+              logger.warn({ err: alertErr }, 'Failed to create unsupported-attachments alert'),
+            );
+        } else if (!linkedToProcess && actuallyProcessed.length > 0) {
+          await alertService
+            .create({
+              severity: 'warning',
+              title: `Anexos sem processo identificado: ${subjectTag}`,
+              message:
+                `O e-mail "${email.subject}" (de ${email.from}) trouxe ${actuallyProcessed.length} ` +
+                `anexo(s) processado(s), mas nenhum código de processo foi identificado. Os ` +
+                `arquivos estão salvos e recuperáveis na tela de Ingestão de E-mail — vincule-os ` +
+                `ao processo correto.`,
+            })
+            .catch((alertErr) =>
+              logger.warn({ err: alertErr }, 'Failed to create orphaned-attachments alert'),
+            );
+        }
+
         auditService.log(
           null,
           'email_processed',

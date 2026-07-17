@@ -21,7 +21,7 @@ import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { ProcessEvent } from '@/shared/types';
 
-type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
+type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
 type DisplayStatus = RowStatus | 'accepted';
 type Criticality = 'critical' | 'secondary' | 'info';
 type ComparisonFilter = 'all' | 'divergent' | 'warning' | 'accepted' | 'match';
@@ -136,6 +136,7 @@ interface ComparisonData {
   finalBlConfidence?: number | null;
   draftBlConfidence?: number | null;
   espelhoConfidence?: number | null;
+  espelhoSource?: string | null;
   extractionCoverage?: {
     invoice?: ExtractionCoverageSummary | null;
     packingList?: ExtractionCoverageSummary | null;
@@ -320,6 +321,8 @@ function statusLabel(status: DisplayStatus) {
       return 'Atencao';
     case 'match':
       return 'Conforme';
+    case 'single_source':
+      return 'Fonte única';
     default:
       return '-';
   }
@@ -335,6 +338,8 @@ function statusClasses(status: DisplayStatus) {
       return 'bg-amber-50 text-amber-700 border-amber-200';
     case 'match':
       return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    case 'single_source':
+      return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800';
     default:
       return 'bg-slate-50 text-slate-500 border-slate-200';
   }
@@ -551,6 +556,7 @@ function highestStatus(...statuses: RowStatus[]): RowStatus {
   if (statuses.includes('divergent')) return 'divergent';
   if (statuses.includes('warning')) return 'warning';
   if (statuses.includes('match')) return 'match';
+  if (statuses.includes('single_source')) return 'single_source';
   return 'empty';
 }
 
@@ -981,6 +987,19 @@ export function DocumentComparison({ processId }: { processId: string }) {
           confidence={data.espelhoConfidence ?? null}
         />
       </div>
+
+      {data.espelhoSource === 'auto_deterministic' && (
+        <div className="flex items-start gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-800 dark:bg-sky-900/20 dark:text-sky-200">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div>
+            O espelho deste processo foi{' '}
+            <strong>gerado automaticamente a partir da própria Invoice/PL</strong> e por isso não
+            entra na conferência (conferir a fatura com uma cópia dela mesma sempre daria
+            &quot;conforme&quot;). Suba o Espelho oficial (.xlsx) para ter uma fonte independente de
+            corroboração.
+          </div>
+        </div>
+      )}
 
       <ExtractionCoveragePanel coverage={data.extractionCoverage} />
 

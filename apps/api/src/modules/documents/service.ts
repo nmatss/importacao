@@ -44,6 +44,7 @@ import type { AcceptComparisonInput, EditComparisonFieldInput } from './schema.j
 import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 import { ocrScannedPdf } from './ocr.js';
+import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
 
 /**
  * Convert an XLSX buffer to plain CSV-style text — used as input to the
@@ -82,8 +83,10 @@ const PROJECTED_AI_DATA_KEYS = new Set([
   'certificate',
   'other',
 ]);
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
-const DEFAULT_EXTRACTION_LEASE_MS = 10 * 60 * 1000;
+// 25 min: precisa cobrir a PIOR extração real (OCR de 20 páginas + IA) e casar
+// com o expireInSeconds do job — lease menor que a extração fazia um reprocess
+// concorrente reivindicar o documento enquanto o worker original ainda rodava.
+const DEFAULT_EXTRACTION_LEASE_MS = 25 * 60 * 1000;
 
 function extractionLeaseDurationMs(): number {
   const configured = Number(process.env.DOCUMENT_EXTRACTION_LEASE_MS);
@@ -641,8 +644,9 @@ function aiExtractionTimeoutMs(): number {
 async function withAIExtractionTimeout<T>(
   promise: Promise<T>,
   context: { documentId: number; type: string },
+  timeoutMsOverride?: number,
 ): Promise<T> {
-  const timeoutMs = aiExtractionTimeoutMs();
+  const timeoutMs = timeoutMsOverride ?? aiExtractionTimeoutMs();
   let timeout: ReturnType<typeof setTimeout> | undefined;
 
   try {
@@ -809,12 +813,22 @@ export const documentService = {
   ) {
     try {
       const boss = await getQueue();
-      const jobId = await boss.send('ai-extraction', {
-        documentId: doc.id,
-        processId: doc.processId,
-        documentType: type,
-        filePath: doc.storagePath,
-      });
+      // Auditoria 2026-07-17: pg-boss v10 tem retryLimit=0 por default — um
+      // CRASH DURO do worker (OOM em PDF grande, redeploy no meio) deixava o
+      // documento preso para sempre. O retry cobre crash/expiração; erros de
+      // extração tratados (markExtractionFailure) NÃO re-tentam — são falhas
+      // determinísticas que o operador resolve via reprocess. O lease de
+      // documento impede execução dupla concorrente no retry.
+      const jobId = await boss.send(
+        'ai-extraction',
+        {
+          documentId: doc.id,
+          processId: doc.processId,
+          documentType: type,
+          filePath: doc.storagePath,
+        },
+        { retryLimit: 2, retryDelay: 60, retryBackoff: true, expireInSeconds: 25 * 60 },
+      );
       if (!jobId) {
         logger.error(
           { documentId: doc.id, processId: doc.processId, type },
@@ -1053,10 +1067,18 @@ export const documentService = {
   },
 
   async getExtractionEvidence(documentId: number) {
+    // Auditoria 2026-07-17: o run mais recente costuma ser o da RECONCILIAÇÃO
+    // (provider 'reconciliation'), cujos campos não têm página/trecho-fonte.
+    // A evidência "de onde saiu o valor" é a do run de EXTRAÇÃO.
     const [run] = await db
       .select()
       .from(documentExtractionRuns)
-      .where(eq(documentExtractionRuns.documentId, documentId))
+      .where(
+        and(
+          eq(documentExtractionRuns.documentId, documentId),
+          sql`${documentExtractionRuns.provider} IS DISTINCT FROM 'reconciliation'`,
+        ),
+      )
       .orderBy(desc(documentExtractionRuns.createdAt), desc(documentExtractionRuns.id))
       .limit(1);
     if (!run) return { run: null, fields: [] };
@@ -1228,7 +1250,15 @@ export const documentService = {
     let sourceText = '';
     let sourcePages: string[] = [];
     try {
-      const extracted = await this.extractText(doc.storagePath, doc.mimeType || '');
+      // Timeout também na extração de TEXTO (pdf-parse/OCR/xlsx) — antes só a
+      // chamada de IA tinha teto e um OCR travado segurava o job para sempre.
+      // Teto PRÓPRIO (20 min default), maior que o da IA: OCR de 20 páginas é
+      // legitimamente lento e não pode ser morto pelo teto de 180s da IA.
+      const extracted = await withAIExtractionTimeout(
+        this.extractText(doc.storagePath, doc.mimeType || ''),
+        { documentId, type: `${type}:extract-text` },
+        Number(process.env.DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS) || 20 * 60 * 1000,
+      );
 
       // Build extraction options with optional image data for multimodal processing
       const extractionOpts = extracted.imageBase64
@@ -2099,14 +2129,27 @@ export const documentService = {
       const data = await pdfParse(buffer);
       const text = data.text?.trim() || '';
 
-      // If PDF has very little text, it's likely a scanned image
-      if (text.length < 50) {
+      // Detecção de escaneado (auditoria 2026-07-17): o gatilho antigo era
+      // `length < 50` — um scan com watermark/cabeçalho residual de 51 chars
+      // passava como "PDF com texto" e mandava lixo pra IA sem OCR nem imagem.
+      // Agora: densidade de caracteres alfanuméricos POR PÁGINA (via
+      // data.numpages — o pdf-parse junta páginas com \n\n, então split por \f
+      // NÃO conta páginas). Página real de invoice/BL tem milhares; scan com
+      // camada residual fica <150.
+      const pages = text ? text.split(/\f/) : [];
+      const pageCount = Math.max(1, Number(data.numpages) || 1);
+      const alnumChars = text.replace(/[^\p{L}\p{N}]/gu, '').length;
+      const charsPerPage = alnumChars / pageCount;
+      const looksScanned = alnumChars < 50 || charsPerPage < 150;
+
+      if (looksScanned) {
         const ocr = await ocrScannedPdf(filePath);
         if (ocr?.text) {
           logger.info(
             {
               filePath,
               textLength: text.length,
+              charsPerPage: Math.round(charsPerPage),
               ocrTextLength: ocr.text.length,
               ocrPages: ocr.pageCount,
             },
@@ -2114,14 +2157,24 @@ export const documentService = {
           );
           return { text: ocr.text, pageTexts: ocr.pageTexts, ocrUsed: true };
         }
+        // Multimodal só até um teto de tamanho: base64 de PDF gigante estoura
+        // o limite de request do provider e pressiona a memória do worker.
+        const MULTIMODAL_MAX_BYTES = 15 * 1024 * 1024;
+        if (buffer.length > MULTIMODAL_MAX_BYTES) {
+          logger.warn(
+            { filePath, bytes: buffer.length, charsPerPage: Math.round(charsPerPage) },
+            'Scanned PDF too large for multimodal — proceeding with residual text only',
+          );
+          return { text, pageTexts: pages };
+        }
         logger.info(
-          { filePath, textLength: text.length },
+          { filePath, textLength: text.length, charsPerPage: Math.round(charsPerPage) },
           'PDF has minimal text, treating as scanned document for multimodal processing',
         );
         const base64 = buffer.toString('base64');
         return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
       }
-      return { text, pageTexts: text.split(/\f/) };
+      return { text, pageTexts: pages };
     }
 
     // ── Excel (XLSX/XLS) ──
@@ -2808,8 +2861,28 @@ export const documentService = {
     const espelhoFromDoc = espelhoDoc?.aiParsedData as
       | { summary?: Record<string, any>; items?: any[] }
       | undefined;
-    const espelhoSummary = espelhoFromProcess?.summary ?? espelhoFromDoc?.summary ?? null;
-    const espelhoItems = espelhoFromProcess?.items ?? espelhoFromDoc?.items ?? [];
+    // Se a coluna do processo guarda o espelho AUTO-gerado mas existe um xlsx
+    // do operador, o do operador vence — ele é a fonte real de conferência.
+    let espelhoChosen = espelhoFromProcess ?? espelhoFromDoc ?? null;
+    if (
+      (espelhoChosen?.summary as any)?.generatedBy === 'auto_deterministic' &&
+      espelhoFromDoc?.summary
+    ) {
+      espelhoChosen = espelhoFromDoc;
+    }
+    const espelhoSource: string | null =
+      ((espelhoChosen?.summary as any)?.generatedBy as string | undefined) ??
+      (espelhoChosen?.summary ? 'operator' : null);
+    let espelhoSummary = espelhoChosen?.summary ?? null;
+    let espelhoItems = espelhoChosen?.items ?? [];
+    // FALSO VERDE (auditoria 2026-07-17): o espelho auto-gerado é uma CÓPIA da
+    // própria Invoice/PL (build-espelho.ts) — usá-lo como 4ª fonte faz a fatura
+    // conferir consigo mesma e pintar as linhas de verde a "99%". Derivado NÃO
+    // entra na conferência (agregado nem itens); a UI explica via espelhoSource.
+    if (espelhoSource === 'auto_deterministic') {
+      espelhoSummary = null;
+      espelhoItems = [];
+    }
     const supplierFooterAliases = normalizeStringList(
       inv?.manufacturerAliases ??
         inv?.manufacturerNicknames ??
@@ -3301,11 +3374,12 @@ export const documentService = {
       finalBlConfidence: blDoc?.confidenceScore,
       draftBlConfidence: draftBlDoc?.confidenceScore,
       espelhoConfidence: espelhoDoc?.confidenceScore ?? (espelhoSummary ? 0.99 : null),
+      espelhoSource,
     };
   },
 };
 
-type RowStatus = 'match' | 'warning' | 'divergent' | 'empty';
+type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
 
 function comparisonRowKey(scope: 'aggregate' | 'item', value: unknown, index: number): string {
   const raw = String(value ?? `linha-${index + 1}`)
@@ -3321,6 +3395,9 @@ function comparisonRowKey(scope: 'aggregate' | 'item', value: unknown, index: nu
 
 function aggregateMessage(status: RowStatus, criticality: 'critical' | 'secondary' | 'info') {
   if (status === 'empty') return 'Sem dados extraidos para comparar.';
+  if (status === 'single_source') {
+    return 'Fonte unica — nenhum outro documento disponivel para corroborar este valor.';
+  }
   if (status === 'match') return 'Conforme entre os documentos disponiveis.';
   if (status === 'warning' && criticality === 'secondary') {
     return 'Divergencia secundaria registrada como atencao.';
@@ -3502,7 +3579,10 @@ function computeRowStatus(
   dateOpts?: { matchDays?: number; warnDays?: number },
 ): RowStatus {
   if (values.length === 0) return 'empty';
-  if (values.length === 1) return 'match';
+  // FALSO VERDE (auditoria 2026-07-17): um valor sozinho não "confere" com nada
+  // — verde aqui fazia um Incoterm errado extraído só da Invoice parecer
+  // validado. Estado neutro próprio, nem conforme nem divergente.
+  if (values.length === 1) return 'single_source';
 
   if (kind === 'date') {
     return compareDates(values, dateOpts) as RowStatus;

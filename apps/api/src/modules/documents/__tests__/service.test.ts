@@ -299,6 +299,9 @@ describe('documentService', () => {
         expect(mockQueueSend).toHaveBeenCalledWith(
           'ai-extraction',
           expect.objectContaining({ documentId: 99, documentType: 'invoice' }),
+          // Retry obrigatório (auditoria 2026-07-17): sem retryLimit um crash
+          // do worker deixava o documento preso para sempre.
+          expect.objectContaining({ retryLimit: 2, retryBackoff: true }),
         );
         expect(processSpy).toHaveBeenCalledWith(99, 'invoice');
       } finally {

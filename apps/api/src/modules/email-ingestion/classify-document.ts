@@ -68,23 +68,17 @@ export function classifyDocument(filename: string): string {
     tokens.includes('pi');
   if (hasProformaSignal) return 'proforma_invoice';
 
-  // 1. invoice — wide keyword base (INV token is Uni.co standard)
-  if (
-    lower.includes('invoice') ||
-    lower.includes('fatura') ||
-    lower.includes('commercial') ||
-    tokens.includes('inv') ||
-    tokens.includes('ci')
-  )
+  // 1. invoice — só PALAVRAS fortes aqui ('invoice'/'fatura'/'commercial').
+  //    Os TOKENS de referência ('inv'/'ci') descem para DEPOIS do BL: um BL
+  //    chega rotineiramente nomeado com o número da CI ("OHBL ... CI IM071...")
+  //    e era sequestrado para invoice (auditoria 2026-07-17 — o misclass
+  //    OHBL-como-invoice conhecido). Palavra forte é autodescrição; token é
+  //    referência cruzada.
+  if (lower.includes('invoice') || lower.includes('fatura') || lower.includes('commercial'))
     return 'invoice';
 
-  // 2. packing list
-  if (
-    lower.includes('packing') ||
-    tokens.includes('pl') ||
-    lower.includes('pack') ||
-    lower.includes('romaneio')
-  )
+  // 2. packing list — idem: palavras fortes antes do BL, token 'pl' depois.
+  if (lower.includes('packing') || lower.includes('pack') || lower.includes('romaneio'))
     return 'packing_list';
 
   // 3. espelho (xlsx) — literal
@@ -97,8 +91,13 @@ export function classifyDocument(filename: string): string {
     return 'draft_bl';
   }
 
-  // 5. final BL
+  // 5. final BL — vence os tokens de referência 'ci'/'inv'/'pl'.
   if (hasBLSignal) return 'ohbl';
+
+  // 5b. invoice / packing list por TOKEN de referência (fraco) — só chega aqui
+  //     um arquivo SEM sinal de BL.
+  if (tokens.includes('inv') || tokens.includes('ci')) return 'invoice';
+  if (tokens.includes('pl')) return 'packing_list';
 
   // 6. draft alone — still route to draft_bl (the only non-DUIMP "draft" type
   //    the system models).
