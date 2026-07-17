@@ -1,11 +1,13 @@
 # Known Issues
 
-Ultima atualizacao: 2026-07-09
+Ultima atualizacao: 2026-07-17 (ver `docs/STATUS-2026-07-17.md`)
 
 ## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
 
-Vertex ligado e funcionando (prod `e170b43`). O teto de extracao agora e a QUALIDADE DO
-INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`). Pendencias que so a equipe resolve:
+Vertex ligado e funcionando (prod `b55968a`; **issue #60 FECHADA em 2026-07-17** — a SA
+dedicada `gemini-n8n` segue pendente, passos no fechamento da issue). O teto de extracao
+agora e a QUALIDADE DO INPUT, nao a IA (ver `docs/STATUS-2026-06-22.md`); telemetria de
+acuracia com corpus real rastreada na **issue #100**. Pendencias que so a equipe resolve:
 
 - **Reclassificar "KIOM PI" existentes (proforma)**: ~30+ docs reais com nome "KIOM PI -..."
   estavam como `invoice`/`other`. O classificador da ingestao foi CORRIGIDO (token `pi` ->

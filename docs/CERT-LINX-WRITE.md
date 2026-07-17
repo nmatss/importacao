@@ -1,8 +1,10 @@
 # Cadastro de Certificado + Escrita no Linx (PROP_PRODUTOS)
 
-> Status: **implementado, gravação no Linx GATED** (`LINX_WRITE_ENABLED=false`).
-> Schema **confirmado** contra as duas bases em 2026-07-16 (§6); falta apenas ligar a
-> flag com as credenciais por marca. Issue #62.
+> Status: **LIGADO EM PRODUÇÃO** desde 2026-07-16 (`LINX_WRITE_ENABLED=true` e
+> `LINX_SKU_IS_PRODUTO=true` no SOPS, commit `edd3117`, issue #62 fechada).
+> Schema **confirmado** contra as duas bases em 2026-07-16 (§6). Credenciais por
+> marca ativas (atenção: `ERP_*_USER` ainda é a conta pessoal do Nicolas — migrar
+> para conta de serviço segue pendente).
 
 Permite que a equipe cadastre certificados pelo painel de Certificações e, ao salvar,
 **faz upsert das datas de certificação nas propriedades de produto do Linx** (SQL Server)
@@ -177,15 +179,21 @@ Os defaults do `config.py` para tabela/colunas estavam corretos e foram mantidos
 > A PK cobre (produto, propriedade) — corrida está protegida pela PK e pelo
 > `UPDLOCK, HOLDLOCK` do upsert.
 
-### Não existe "prazo de comercialização" no Linx
+### Não existe "prazo de comercialização" no Linx — o sync reaproveita a prop de validade
 
 Pedido da Lilian em 2026-07-16 (SKU `070400034`). Listadas **todas** as propriedades de
 produto das duas bases: as únicas ligadas a certificação são `VALIDADE DO CERTIFICADO` e
-`VENCIMENTO DO LICENCIAMENTO`. **Não há propriedade de prazo de comercialização** — o
-`sale_deadline` da planilha "Encerramentos" não tem destino no Linx hoje. Para o portal
-passar a gravá-lo, o time do Linx precisa **criar a propriedade** primeiro; só então faz
-sentido estender `write_certificate_to_linx` (que hoje escreve 2 props fixas) ou construir
-um sync planilha→Linx.
+`VENCIMENTO DO LICENCIAMENTO`. **Não há propriedade dedicada de prazo de comercialização.**
+
+**Atualização (commits `4148ba8`/`915db83`):** existe agora o sync
+`sync_prazo_venda_to_linx` (`scripts/sync_prazo_venda_linx.py`), que grava o
+"PRAZO FINAL VENDA" da aba Encerramentos **na propriedade de VALIDADE DO CERTIFICADO**
+(00224 Puket / 00106 Imaginarium) — reaproveitando a prop existente. `dry_run` por
+padrão (`--list` imprime prazo × valor atual no Linx × ação); escrever exige `--apply`.
+Dois grupos NUNCA são gravados automaticamente: `encurta_janela` (prazo da planilha
+anterior ao do Linx — gravaria tirando dias de venda) e `ambiguos` (mesmo SKU com
+prazos divergentes, produto recertificado). O relatório JSON do `--apply` é o único
+caminho de rollback — o Linx não versiona PROP_PRODUTOS.
 
 ---
 
