@@ -13,6 +13,7 @@
 #   COMPOSE_FILE          Docker compose file (default: docker-compose.prod.yml)
 #   HEALTH_ENDPOINT       API health URL (default: http://localhost:3050/health/ready)
 #   WEB_HEALTH_ENDPOINT   Web health URL (default: http://localhost:8085/)
+#   PROXY_HEALTH_ENDPOINT /api atraves do nginx, como o browser (default: http://localhost:8085/api/health)
 #   PUBLIC_WEB_HEALTH_ENDPOINT Optional public HTTPS/frontend URL to validate
 #   ALLOW_SYDLE_SYNC_DEPLOY Set to "1" to allow SYDLE_SYNC_ENABLED=true after UAT
 #   HEALTH_RETRIES        Health check retries (default: 30)
@@ -30,6 +31,8 @@ DEPLOY_DIR="${DEPLOY_DIR:-/home/${DEPLOY_USER}/importacao}"
 COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.prod.yml}"
 HEALTH_ENDPOINT="${HEALTH_ENDPOINT:-http://localhost:3050/health/ready}"
 WEB_HEALTH_ENDPOINT="${WEB_HEALTH_ENDPOINT:-http://localhost:8085/}"
+# Passa pelo nginx, como o browser: valida o proxy /api, nao so a api direta.
+PROXY_HEALTH_ENDPOINT="${PROXY_HEALTH_ENDPOINT:-http://localhost:8085/api/health}"
 PUBLIC_WEB_HEALTH_ENDPOINT="${PUBLIC_WEB_HEALTH_ENDPOINT:-}"
 ALLOW_SYDLE_SYNC_DEPLOY="${ALLOW_SYDLE_SYNC_DEPLOY:-0}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
@@ -385,6 +388,21 @@ ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${WEB_HEALTH_ENDPOINT}'" > /dev/null |
   exit 1
 }
 success "web health passed."
+
+# O caminho que o usuario realmente usa: browser -> nginx -> api. Os checks acima
+# batem na api pela porta direta (${HEALTH_ENDPOINT}) e no nginx so na raiz, entao
+# os dois passam mesmo com o proxy /api quebrado — foi assim que quatro deploys
+# em 16/07/2026 reportaram sucesso com o login do time fora do ar (nginx com o IP
+# antigo da api apos ela ser recriada). Este check fecha esse buraco.
+ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${PROXY_HEALTH_ENDPOINT}'" > /dev/null || {
+  error "proxy health check failed after deploy: ${PROXY_HEALTH_ENDPOINT}"
+  error "O portal responde, mas o nginx nao alcanca a api: /api/* esta quebrado (login inclusive)."
+  error "Tente: docker compose -f ${COMPOSE_FILE} restart web"
+  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: proxy /api health failed"
+  exit 1
+}
+success "proxy /api health passed (browser -> nginx -> api)."
+
 if [[ -n "${PUBLIC_WEB_HEALTH_ENDPOINT}" ]]; then
   if ! curl -sf "${PUBLIC_WEB_HEALTH_ENDPOINT}" > /dev/null; then
     error "public web health check failed after deploy: ${PUBLIC_WEB_HEALTH_ENDPOINT}"
