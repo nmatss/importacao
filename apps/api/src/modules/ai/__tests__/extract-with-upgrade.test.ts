@@ -76,9 +76,12 @@ describe('extractWithUpgrade behavior (invoice path)', () => {
 
   it('uses deterministic KIOM compact invoice parser without calling AI chat', async () => {
     const spy = vi.spyOn(aiService as any, 'chat');
+    // TOTAL FOB bate com a soma dos itens não-FOC (5.112,00): a fixture original
+    // era um recorte de invoice real (24.312,52) e a checagem aritmética agora é
+    // 'error' — divergência mandaria a extração para revisão (cap 0.39).
     const text = `COMMERCIAL INVOICE
 EXPORTERIMPORTERNOTIFY PARTYTERMS
-TOTAL  FOBUSD24.312,52
+TOTAL  FOBUSD5.112,00
 KIOM GLOBAL LIMITEDUNI.CO COMERCIO S/AUNI.CO COMERCIO S/ACI NUMBERIM0712602NBPAYMENT TERMSSTA TUSDAYSDATE
 BRN: 75433983CNPJ: 00.399.603/0006-12CNPJ: 00.399.603/0006-12CI DATE22-Feb-26FREIGHT0,00%USD0,00-
 263 HENNESSY ROAD, WANCHAI, HONG KONGBIGUAÇU, SC, BRAZIL, ZIP 88164-290BIGUAÇU, SC, BRAZIL, ZIP 88164-290INCOTERMFOBBALANCE 10,00%USD0,00-7
@@ -90,7 +93,11 @@ EMAIL: contact@kiomglobal.comEMAIL: controladoria@grupounico.comEMAIL: controlad
     const result = await aiService.extractInvoiceData(text);
 
     expect(spy).not.toHaveBeenCalled();
-    expect(result.confidenceScore).toBeGreaterThanOrEqual(0.7);
+    // A fixture é um recorte (2 itens, vários campos null): a confiança agora
+    // pondera cobertura, então o score fica médio (~0.64) em vez de alto — em
+    // produção a reconciliação/espelho preenche os nulos e o score sobe.
+    expect(result.confidenceScore).toBeGreaterThanOrEqual(0.6);
+    expect(result.confidenceScore).toBeLessThan(0.7);
     expect(result.data.invoiceNumber.value).toBe('IM0712602NB');
     expect(result.data.exporterName.value).toBe('KIOM GLOBAL LIMITED');
     expect(result.data.items).toHaveLength(2);
@@ -137,7 +144,11 @@ Data de Desembaraco: 10/07/2026`,
       .spyOn(aiService as any, 'chat')
       .mockResolvedValueOnce(invoiceResponse(0.5))
       .mockResolvedValueOnce(invoiceResponse(0.85));
-    const result = await aiService.extractInvoiceData('fake');
+    // Texto-fonte ≥50 chars contendo os valores groundáveis (INV-001, A1) para o
+    // grounding rodar e passar — texto curto agora ativa o cap de 0.75.
+    const result = await aiService.extractInvoiceData(
+      'COMMERCIAL INVOICE INV-001 date 2026-06-01 from NINGBO to ITAPOA item A1 qty 10 x 10.00 total USD 100.00',
+    );
     expect(spy).toHaveBeenCalledTimes(2);
     // Adopted the upgrade result (delta = 0.35 >> 0.05).
     expect(result.confidenceScore).toBeCloseTo(0.85, 2);
@@ -177,6 +188,20 @@ Data de Desembaraco: 10/07/2026`,
     const result = await aiService.extractInvoiceData('fake');
     expect(spy).toHaveBeenCalledTimes(1);
     expect(result.confidenceScore).toBeCloseTo(0.4, 2);
+  });
+
+  it('marca groundingSkipped e capa a confiança quando o texto-fonte é curto demais (scan/imagem)', async () => {
+    process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(invoiceResponse(0.95));
+
+    // <50 chars não-brancos: o grounding anti-alucinação não tem contra o que
+    // verificar — a extração não pode sair com badge de alta confiança.
+    const result = await aiService.extractInvoiceData('fake scan');
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect((result.data as Record<string, any>)._trust.groundingSkipped).toBe(true);
+    expect(result.confidenceScore).toBeLessThanOrEqual(0.75);
+    expect(result.confidenceScore).toBeGreaterThan(0.7);
   });
 
   it('caps confidence below operational threshold when AI response fails Zod contract', async () => {

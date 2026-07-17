@@ -9,10 +9,18 @@ const router = Router();
 
 /**
  * GET /health/live — liveness probe
- * Returns 200 if the process is running.
+ * Returns 200 if the process is running. Expõe também o provider de IA ativo
+ * e a revisão do build: o `.env` do repo pode divergir do de produção (drift
+ * ialocal-vs-vertex da análise 2026-07-17) e este endpoint é a fonte de
+ * verdade observável de qual provider realmente roda.
  */
 router.get('/live', (_req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    aiProvider: process.env.AI_PROVIDER || 'ialocal',
+    revision: process.env.REVISION || null,
+  });
 });
 
 /**

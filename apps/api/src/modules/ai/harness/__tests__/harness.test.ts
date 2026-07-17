@@ -161,7 +161,7 @@ describe('invoice total harness', () => {
       expect.objectContaining({
         field: 'totalFobValue',
         kind: 'numeric',
-        severity: 'warning',
+        severity: 'error',
       }),
     );
   });

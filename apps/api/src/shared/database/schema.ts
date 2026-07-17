@@ -842,6 +842,9 @@ export const aiUsageLog = pgTable(
     outputTokens: integer('output_tokens').default(0),
     costUsd: numeric('cost_usd', { precision: 12, scale: 6 }).default('0'),
     status: varchar('status', { length: 20 }).default('success'),
+    latencyMs: integer('latency_ms'),
+    promptVersion: varchar('prompt_version', { length: 50 }),
+    errorMessage: text('error_message'),
   },
   (table) => [
     index('ai_usage_log_created_at_idx').on(table.createdAt),

@@ -1,6 +1,5 @@
 import { logger } from '../../shared/utils/logger.js';
 import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
-import { logAIRequest } from './governance.js';
 import { invoiceResponseSchema } from './schemas/invoice-response.js';
 import { proformaResponseSchema } from './schemas/proforma-response.js';
 import { packingListResponseSchema } from './schemas/packing-list-response.js';
@@ -50,7 +49,11 @@ import {
   fillPackingListNullsFromText,
 } from './utils/packing-list-text-parser.js';
 import { fillBLNullsFromText } from './utils/bl-text-parser.js';
-import { computeConfidenceScore } from './utils/confidence.js';
+import {
+  computeConfidenceScore,
+  GROUNDING_SKIPPED_CONFIDENCE_CAP,
+  REVIEW_CONFIDENCE_CAP,
+} from './utils/confidence.js';
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 import { fillDUIMPNullsFromText, tryParseDUIMPText } from './utils/duimp-text-parser.js';
@@ -426,20 +429,17 @@ class AIService {
         );
 
         const latencyMs = Date.now() - attemptStart;
-        logAIRequest({
-          model: currentModel,
-          promptVersion,
-          latencyMs,
-          status: 'success',
-          context: attemptContext,
-        });
-        // Best-effort persist of usage. Failure logs internally, never throws.
+        // Best-effort persist of usage + telemetry. Failure logs internally,
+        // never throws. (Governança consolidada aqui — 2026-07-17: latência e
+        // prompt_version persistem no ai_usage_log em vez do store in-memory.)
         await logUsage({
           provider: this.provider.name,
           model: currentModel,
           context: attemptContext,
           inputTokens: result.usage.inputTokens,
           outputTokens: result.usage.outputTokens,
+          latencyMs,
+          promptVersion,
         });
         logger.info(
           {
@@ -460,27 +460,21 @@ class AIService {
         }
         lastError = err;
         const latencyMs = Date.now() - attemptStart;
-        // Some failures still consume tokens (timeouts after generation,
-        // partial responses). Persist usage if the error carries it so the
-        // budget cap doesn't drift below reality.
+        // Errors are ALWAYS persisted (antes só quando o erro carregava tokens
+        // — falhas sem usage eram invisíveis na telemetria). Some failures
+        // still consume tokens (timeouts after generation, partial responses):
+        // persisting them keeps the budget cap from drifting below reality.
         const errUsage = err?.usage as { inputTokens?: number; outputTokens?: number } | undefined;
-        if (errUsage && (errUsage.inputTokens || errUsage.outputTokens)) {
-          await logUsage({
-            provider: this.provider.name,
-            model: currentModel,
-            context: `${attemptContext}:error`,
-            inputTokens: errUsage.inputTokens ?? 0,
-            outputTokens: errUsage.outputTokens ?? 0,
-            status: 'error',
-          });
-        }
-        logAIRequest({
+        await logUsage({
+          provider: this.provider.name,
           model: currentModel,
-          promptVersion,
-          latencyMs,
+          context: `${attemptContext}:error`,
+          inputTokens: errUsage?.inputTokens ?? 0,
+          outputTokens: errUsage?.outputTokens ?? 0,
           status: 'error',
+          latencyMs,
+          promptVersion,
           errorMessage: err.message,
-          context: attemptContext,
         });
         logger.error({ err, model: currentModel, context }, 'AI model request failed');
       }
@@ -552,16 +546,6 @@ class AIService {
   }
 
   /**
-   * Confidence harness — runs deterministic trust checks (grounding / format /
-   * numeric / knowledge) over an extraction and folds the verdict back in:
-   *  - attaches the trust report to data._trust (persisted for audit),
-   *  - unions review fields into the low-confidence list,
-   *  - and, on error findings, caps confidence below the 0.4 review gate so the
-   *    document pipeline routes the extraction to human review.
-   * Grounding is skipped when the source text is too short to verify (scanned /
-   * image-only PDFs), to avoid false hallucination alarms.
-   */
-  /**
    * Build the messages for an extraction. With AI_USE_SPECIALIST on and a skill
    * registered for `registryKey`, uses the secure specialist assembly
    * (constitution + RAG + few-shot + fenced/neutralized document, with the
@@ -607,6 +591,17 @@ class AIService {
     return process.env.AI_ANALYSIS_MODEL || MODEL_FALLBACK_CHAIN[0];
   }
 
+  /**
+   * Confidence harness — runs deterministic trust checks (grounding / format /
+   * numeric / knowledge) over an extraction and folds the verdict back in:
+   *  - attaches the trust report to data._trust (persisted for audit),
+   *  - unions review fields into the low-confidence list,
+   *  - on error findings, caps confidence at REVIEW_CONFIDENCE_CAP (below the
+   *    0.4 gate) so the document pipeline routes the extraction to human review,
+   *  - and when grounding can't run (source text too short — scanned/image-only
+   *    PDFs), records _trust.groundingSkipped and caps confidence at
+   *    GROUNDING_SKIPPED_CONFIDENCE_CAP instead of silently passing.
+   */
   private applyHarness(
     docType: string,
     result: ExtractionResult,
@@ -615,7 +610,13 @@ class AIService {
     const config = getVerificationConfig(docType);
     if (!config) return result;
 
-    const groundingViable = (sourceText ?? '').replace(/\s/g, '').length >= 50;
+    const sourceChars = (sourceText ?? '').replace(/\s/g, '').length;
+    const groundingViable = sourceChars >= 50;
+    // Grounding pulado ≠ grounding aprovado: extração por imagem/scan sem OCR
+    // nunca foi conferida contra o documento, então não pode sair com badge de
+    // alta confiança. O flag é persistido em _trust (o cap correspondente vive
+    // em computeConfidenceScore, para a reconciliação respeitar o mesmo teto).
+    const groundingSkipped = !groundingViable && (config.groundedFields?.length ?? 0) > 0;
     const effectiveConfig = groundingViable ? config : { ...config, groundedFields: [] };
 
     const report = verifyExtraction(
@@ -627,7 +628,21 @@ class AIService {
     const dataRecord = result.data as Record<string, any>;
     const existingTrust =
       dataRecord._trust && typeof dataRecord._trust === 'object' ? dataRecord._trust : {};
-    dataRecord._trust = { ...report, ...existingTrust };
+    // O report FRESCO vence as chaves de veredito (trust/findings/reviewFields/
+    // adjustedConfidence/checkedAt) — um re-harness pós-self-repair precisa
+    // limpar um 'review' já corrigido. Flags custom (contractFailure, evidência
+    // DUIMP) não existem no report e sobrevivem do _trust anterior.
+    dataRecord._trust = { ...existingTrust, ...report };
+    // Set/clear explícito: um harness com texto-fonte suficiente NÃO herda o
+    // flag de um passe anterior.
+    dataRecord._trust.groundingSkipped = groundingSkipped;
+    if (groundingSkipped) {
+      logger.warn(
+        { docType, sourceTextChars: sourceChars },
+        'AI harness: grounding pulado — texto-fonte insuficiente (scan/imagem sem OCR); ' +
+          `confiança limitada a ${GROUNDING_SKIPPED_CONFIDENCE_CAP}`,
+      );
+    }
 
     if (report.findings.length > 0) {
       logger.info(
@@ -645,10 +660,11 @@ class AIService {
     const fieldsWithLowConfidence = [
       ...new Set([...result.fieldsWithLowConfidence, ...report.reviewFields]),
     ];
-    const confidenceScore =
-      report.trust === 'review'
-        ? Math.min(result.confidenceScore, 0.39)
-        : Math.min(result.confidenceScore, report.adjustedConfidence);
+    const confidenceScore = Math.min(
+      result.confidenceScore,
+      report.trust === 'review' ? REVIEW_CONFIDENCE_CAP : report.adjustedConfidence,
+      groundingSkipped ? GROUNDING_SKIPPED_CONFIDENCE_CAP : 1,
+    );
 
     return { ...result, confidenceScore, fieldsWithLowConfidence };
   }

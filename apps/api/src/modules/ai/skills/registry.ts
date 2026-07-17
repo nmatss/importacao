@@ -46,12 +46,14 @@ function invoiceTotalsCheck(data: Record<string, any>): HarnessFinding | null {
     }
   }
   if (!counted) return null;
+  // error, não warning: uma invoice aritmeticamente inconsistente não pode
+  // projetar como confiável — precisa cair na revisão humana (análise 2026-07-17).
   return approxEqual(sum, total, 0.02)
     ? null
     : finding(
         'totalFobValue',
         `soma dos itens (${sum.toFixed(2)}) diverge do FOB declarado (${total.toFixed(2)})`,
-        'warning',
+        'error',
       );
 }
 
@@ -60,9 +62,10 @@ function netLeGrossCheck(data: Record<string, any>): HarnessFinding | null {
   const net = fieldNum(data, 'totalNetWeight');
   const gross = fieldNum(data, 'totalGrossWeight');
   if (net == null || gross == null) return null;
+  // error: peso líquido > bruto é fisicamente impossível — leitura errada certa.
   return net <= gross + 0.001
     ? null
-    : finding('totalGrossWeight', `peso líquido (${net}) maior que o bruto (${gross})`, 'warning');
+    : finding('totalGrossWeight', `peso líquido (${net}) maior que o bruto (${gross})`, 'error');
 }
 
 /**

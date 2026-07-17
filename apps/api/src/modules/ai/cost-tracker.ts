@@ -148,6 +148,9 @@ export async function logUsage(params: {
   inputTokens: number;
   outputTokens: number;
   status?: 'success' | 'error';
+  latencyMs?: number;
+  promptVersion?: string;
+  errorMessage?: string;
 }): Promise<void> {
   const cost = estimateCostUSD(params.model, params.inputTokens, params.outputTokens);
   try {
@@ -159,6 +162,9 @@ export async function logUsage(params: {
       outputTokens: params.outputTokens,
       costUsd: cost.toFixed(6),
       status: params.status ?? 'success',
+      latencyMs: params.latencyMs,
+      promptVersion: params.promptVersion?.slice(0, 50),
+      errorMessage: params.errorMessage?.slice(0, 2000),
     });
   } catch (err) {
     logger.error(
@@ -186,6 +192,8 @@ export async function getUsageSummary(): Promise<{
     inputTokens: number;
     outputTokens: number;
     costUsd: number;
+    avgLatencyMs: number | null;
+    errorCalls: number;
   }>;
 }> {
   const budgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
@@ -203,6 +211,8 @@ export async function getUsageSummary(): Promise<{
       inputTokens: sql<string>`COALESCE(SUM(${aiUsageLog.inputTokens}), 0)`,
       outputTokens: sql<string>`COALESCE(SUM(${aiUsageLog.outputTokens}), 0)`,
       costUsd: sql<string>`COALESCE(SUM(${aiUsageLog.costUsd}), 0)`,
+      avgLatencyMs: sql<string | null>`ROUND(AVG(${aiUsageLog.latencyMs}))`,
+      errorCalls: sql<string>`COUNT(*) FILTER (WHERE ${aiUsageLog.status} = 'error')`,
     })
     .from(aiUsageLog)
     .where(
@@ -225,6 +235,8 @@ export async function getUsageSummary(): Promise<{
       inputTokens: Number(r.inputTokens),
       outputTokens: Number(r.outputTokens),
       costUsd: Number(r.costUsd),
+      avgLatencyMs: r.avgLatencyMs == null ? null : Number(r.avgLatencyMs),
+      errorCalls: Number(r.errorCalls),
     })),
   };
 }

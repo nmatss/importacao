@@ -136,7 +136,9 @@ export function toVertexSchema(node: unknown): unknown {
   if (node && typeof node === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
-      if (['$schema', '$ref', '$id', 'definitions', 'additionalProperties', 'default'].includes(k)) {
+      if (
+        ['$schema', '$ref', '$id', 'definitions', 'additionalProperties', 'default'].includes(k)
+      ) {
         continue;
       }
       if (k === 'type' && Array.isArray(v)) {
@@ -200,8 +202,14 @@ export class VertexAIProvider implements AIProvider {
     });
 
     if (!response.ok) {
-      await response.text().catch(() => '');
-      logger.error({ status: response.status, model: fullModel }, 'Vertex API error');
+      // Corpo truncado no log estruturado — o Vertex detalha ali a causa real
+      // (schema rejeitado, quota, região). A message lançada mantém só o status
+      // porque isRetryableAiError() faz parse dele.
+      const errorBody = await response.text().catch(() => '');
+      logger.error(
+        { status: response.status, model: fullModel, errorBody: errorBody.slice(0, 500) },
+        'Vertex API error',
+      );
       throw new Error(`Vertex API error: ${response.status}`);
     }
 

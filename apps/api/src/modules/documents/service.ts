@@ -1378,9 +1378,11 @@ export const documentService = {
     await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
 
     const veryLowConfidence = result.confidenceScore < MIN_OPERATIONAL_CONFIDENCE;
-    const lowConfidenceFields = Array.isArray(result.fieldsWithLowConfidence)
-      ? result.fieldsWithLowConfidence
-      : [];
+    // Marcadores meta ('_contract', '_grounding') não são campos do documento —
+    // ficam fora da lista mostrada ao operador no alerta.
+    const lowConfidenceFields = (
+      Array.isArray(result.fieldsWithLowConfidence) ? result.fieldsWithLowConfidence : []
+    ).filter((f) => !f.startsWith('_'));
 
     if (veryLowConfidence) {
       const [proc] = await db

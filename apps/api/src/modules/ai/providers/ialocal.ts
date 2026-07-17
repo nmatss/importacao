@@ -117,8 +117,11 @@ export class IALocalProvider implements AIProvider {
     });
 
     if (!response.ok) {
-      await response.text().catch(() => '');
-      logger.error({ status: response.status, model: fullModel }, 'IA_LOCAL API error');
+      const errorBody = await response.text().catch(() => '');
+      logger.error(
+        { status: response.status, model: fullModel, errorBody: errorBody.slice(0, 500) },
+        'IA_LOCAL API error',
+      );
       // Message format mirrors the other providers so isRetryableAiError() can
       // match the embedded HTTP status (4xx are NOT retried).
       throw new Error(`IA_LOCAL API error: ${response.status}`);
