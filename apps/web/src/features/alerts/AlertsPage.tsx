@@ -18,6 +18,7 @@ import { formatDate, cn } from '@/shared/lib/utils';
 import { downloadCsv } from '@/shared/lib/csv';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { Button } from '@/shared/components/Button';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { getErrorMessage } from '@/shared/utils/errors';
@@ -455,22 +456,22 @@ export function AlertsPage() {
                   Página {page} de {totalPages} · {totalAlerts} alerta{totalAlerts !== 1 ? 's' : ''}
                 </span>
                 <div className="flex gap-2">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Anterior
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
                   >
                     Próxima
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}

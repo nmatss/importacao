@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
+import { CONFIDENCE_HIGH, CONFIDENCE_MEDIUM } from '@/shared/lib/confidence';
 import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -395,9 +396,11 @@ function DocBadge({
         <span
           className={cn(
             'ml-1 text-xs font-mono rounded-md px-1.5 py-0.5',
-            confidence >= 0.8
+            // Limiares unificados (shared/lib/confidence.ts) — este badge usava
+            // 0.6 enquanto o resto usava 0.5.
+            confidence >= CONFIDENCE_HIGH
               ? 'bg-emerald-100 text-emerald-700'
-              : confidence >= 0.6
+              : confidence >= CONFIDENCE_MEDIUM
                 ? 'bg-amber-100 text-amber-700'
                 : 'bg-danger-100 text-danger-700',
           )}

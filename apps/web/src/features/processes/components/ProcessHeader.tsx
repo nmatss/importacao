@@ -18,7 +18,7 @@ import { api } from '@/shared/lib/api-client';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { ImportProcess } from '@/shared/types';
 
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
 
 export interface ProcessHeaderProps {
   process: ImportProcess;

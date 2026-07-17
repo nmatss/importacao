@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { NavLink, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard,
   PlayCircle,
@@ -8,27 +6,19 @@ import {
   FileBarChart,
   CalendarClock,
   Settings,
-  LogOut,
-  Menu,
-  X,
-  ChevronLeft,
-  ArrowLeft,
 } from 'lucide-react';
-import { useAuth } from '@/shared/hooks/useAuth';
-import { cn } from '@/shared/lib/utils';
 import { checkCertApiHealth } from '@/shared/lib/cert-api-client';
-import { ThemeToggle } from '@/shared/components/ThemeToggle';
-import { AssistantBubble } from '@/shared/components/AssistantBubble';
+import {
+  AppLayout,
+  type AppNavItem,
+  type AppNavSection,
+  type AppHeaderInfo,
+} from '@/shared/components/AppLayout';
 
-interface CertNavItem {
-  to: string;
-  label: string;
-  icon: typeof LayoutDashboard;
-  exact?: boolean;
-  adminOnly?: boolean;
-}
+// Wrapper fino sobre o AppLayout (shell único — auditoria 2026-07-17). Este
+// arquivo só carrega o que é do módulo: nav, accent, health e títulos.
 
-const navSections: Array<{ label: string; items: CertNavItem[] }> = [
+const navSections: AppNavSection[] = [
   {
     label: 'Principal',
     items: [
@@ -58,248 +48,42 @@ const navSections: Array<{ label: string; items: CertNavItem[] }> = [
   },
 ];
 
-const allNavItems = navSections.flatMap((s) => s.items);
+function resolveHeader(rawPathname: string, allNavItems: AppNavItem[]): AppHeaderInfo {
+  // Normaliza trailing slash: '/certificacoes/produtos/' é a LISTA, não detalhe.
+  const pathname = rawPathname.length > 1 ? rawPathname.replace(/\/+$/, '') : rawPathname;
+  const currentNav = allNavItems.find((item) =>
+    item.exact ? pathname === item.to : pathname.startsWith(item.to),
+  );
+  const base = currentNav?.label || 'Certificações';
+  // Detalhe (/produtos/:sku, /relatorios/:id): breadcrumb com o pai clicável —
+  // antes o header mostrava só o título genérico da seção.
+  if (currentNav && pathname !== currentNav.to && !currentNav.exact) {
+    return {
+      title: 'Detalhes',
+      breadcrumbs: [{ label: base, href: currentNav.to }, { label: 'Detalhes' }],
+    };
+  }
+  return { title: base };
+}
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0].toUpperCase())
-    .join('');
+async function certHealth(): Promise<boolean> {
+  const h = await checkCertApiHealth();
+  return h.connected;
 }
 
 export function CertificacoesLayout({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [apiOnline, setApiOnline] = useState(false);
-  const { user, logout } = useAuth();
-  const location = useLocation();
-
-  useEffect(() => {
-    checkCertApiHealth().then((h) => setApiOnline(h.connected));
-    const interval = setInterval(() => {
-      checkCertApiHealth().then((h) => setApiOnline(h.connected));
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const currentNav = allNavItems.find((item) =>
-    item.exact ? location.pathname === item.to : location.pathname.startsWith(item.to),
-  );
-  const pageTitle = currentNav?.label || 'Certificações';
-
   return (
-    <div className="flex h-screen overflow-hidden bg-page">
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-sidebar-950/60 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar — Dark Enterprise (Emerald accent) */}
-      <aside
-        role="navigation"
-        aria-label="Menu principal de certificações"
-        className={cn(
-          'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-800/50 transition-all duration-300 ease-in-out lg:relative',
-          'bg-gradient-to-b from-sidebar-900 via-sidebar-900 to-sidebar-950',
-          collapsed ? 'w-[72px]' : 'w-[264px]',
-          mobileOpen
-            ? 'translate-x-0 shadow-2xl shadow-black/40'
-            : '-translate-x-full lg:translate-x-0',
-        )}
-      >
-        {/* Logo area */}
-        <div
-          className={cn(
-            'flex h-16 items-center gap-3 px-5 shrink-0',
-            collapsed && 'justify-center px-0',
-          )}
-        >
-          <div className="relative flex-shrink-0">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 ring-1 ring-white/10">
-              <img src="/logo-unico.png" alt="Uni.co" className="h-7 w-7 rounded-lg object-cover" />
-            </div>
-            <span
-              className={cn(
-                'absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-sidebar-900 transition-colors',
-                apiOnline ? 'bg-emerald-400' : 'bg-slate-500',
-              )}
-            />
-          </div>
-          {!collapsed && (
-            <div className="overflow-hidden">
-              <p className="truncate text-sm font-bold text-white tracking-tight">Uni.co</p>
-              <p className="truncate text-[11px] text-sidebar-200/50 font-medium">Certificações</p>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            className="ml-auto rounded-lg p-1.5 text-sidebar-200/40 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
-            aria-label="Fechar menu"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Nav links */}
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
-          {navSections.map((section) => (
-            <div key={section.label}>
-              {!collapsed && (
-                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-200/30">
-                  {section.label}
-                </p>
-              )}
-              <div className="space-y-0.5">
-                {section.items
-                  .filter((item) => !item.adminOnly || user?.role === 'admin')
-                  .map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      end={item.exact}
-                      aria-label={collapsed ? item.label : undefined}
-                      onClick={() => setMobileOpen(false)}
-                      className={({ isActive }) =>
-                        cn(
-                          'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
-                          isActive
-                            ? 'bg-emerald-500/20 text-white shadow-sm'
-                            : 'text-sidebar-200/60 hover:bg-white/5 hover:text-white',
-                          collapsed && 'justify-center px-0',
-                        )
-                      }
-                    >
-                      {({ isActive }) => (
-                        <>
-                          <item.icon
-                            className={cn(
-                              'h-[18px] w-[18px] shrink-0 transition-colors duration-150',
-                              isActive
-                                ? 'text-emerald-400'
-                                : 'text-sidebar-200/40 group-hover:text-sidebar-200/70',
-                            )}
-                          />
-                          {!collapsed && <span className="truncate">{item.label}</span>}
-                          {isActive && !collapsed && (
-                            <div className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                          )}
-                        </>
-                      )}
-                    </NavLink>
-                  ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        {/* Bottom section */}
-        <div className="shrink-0">
-          <div className="mx-4 border-t border-white/5" />
-
-          <div className="px-3 py-2">
-            <Link
-              to="/portal"
-              aria-label={collapsed ? 'Voltar ao Portal' : undefined}
-              className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/40 hover:bg-white/5 hover:text-white transition-all duration-150',
-                collapsed && 'justify-center px-0',
-              )}
-            >
-              <ArrowLeft className="h-[18px] w-[18px] shrink-0" />
-              {!collapsed && <span>Voltar ao Portal</span>}
-            </Link>
-          </div>
-
-          <div className="px-3 pb-3">
-            {!collapsed && user && (
-              <div className="flex items-center gap-2.5 rounded-lg bg-white/5 px-3 py-2.5 mb-2">
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">
-                  {getInitials(user.name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-xs font-medium text-white/80">{user.name}</p>
-                  <p className="truncate text-[10px] text-sidebar-200/30">{user.role}</p>
-                </div>
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={() => setCollapsed(!collapsed)}
-              className={cn(
-                'hidden lg:flex h-8 w-full items-center justify-center rounded-lg text-sidebar-200/30 hover:bg-white/5 hover:text-white/60 transition-all duration-150',
-              )}
-              aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
-            >
-              <ChevronLeft
-                className={cn(
-                  'h-4 w-4 transition-transform duration-300',
-                  collapsed && 'rotate-180',
-                )}
-              />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
-          <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setMobileOpen(true)}
-              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 lg:hidden transition-colors"
-              aria-label="Abrir menu"
-            >
-              <Menu className="h-5 w-5" />
-            </button>
-            <h1 className="truncate text-base font-semibold text-slate-800 dark:text-slate-100 tracking-tight">
-              {pageTitle}
-            </h1>
-          </div>
-
-          <div className="flex shrink-0 items-center gap-2">
-            <ThemeToggle />
-            {user && (
-              <>
-                <div className="mr-1 hidden max-w-[180px] text-right sm:block lg:max-w-[240px]">
-                  <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
-                    {user.name}
-                  </p>
-                  <p className="truncate text-[11px] text-slate-400">{user.role}</p>
-                </div>
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-[11px] font-bold shadow-sm">
-                  {getInitials(user.name)}
-                </div>
-                <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 hidden sm:block mx-1" />
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-900/30 dark:hover:text-danger-400 transition-all duration-150"
-                  title="Sair"
-                  aria-label="Sair do sistema"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span className="hidden sm:inline text-xs font-medium">Sair</span>
-                </button>
-              </>
-            )}
-          </div>
-        </header>
-
-        {/* Content */}
-        <main id="main" role="main" className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
-        </main>
-      </div>
-      <AssistantBubble accent="emerald" />
-    </div>
+    <AppLayout
+      moduleKey="certificacoes"
+      moduleName="Certificações"
+      accent="emerald"
+      navSections={navSections}
+      navAriaLabel="Menu principal de certificações"
+      checkHealth={certHealth}
+      resolveHeader={resolveHeader}
+      moduleSwitch={{ to: '/importacao/dashboard', label: 'Ir para Importação' }}
+    >
+      {children}
+    </AppLayout>
   );
 }

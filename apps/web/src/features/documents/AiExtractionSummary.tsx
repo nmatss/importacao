@@ -25,7 +25,7 @@ interface AiExtractionSummaryProps {
   coverage?: CoverageSummary | null;
 }
 
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
 
 // Fields below this per-field confidence are surfaced as "low confidence" in the
 // derived (fallback) coverage so the user knows to double-check them.

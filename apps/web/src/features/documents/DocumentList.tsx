@@ -22,6 +22,12 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
+import {
+  MIN_OPERATIONAL_CONFIDENCE,
+  CONFIDENCE_HIGH,
+  CONFIDENCE_MEDIUM,
+  explainLowConfidence,
+} from '@/shared/lib/confidence';
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -59,10 +65,10 @@ interface DocumentListProps {
   processId: string;
 }
 
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
-
 const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
 
+// null = ainda sem score (doc não processado) → tratado como utilizável aqui;
+// o LIMIAR vem da fonte única em shared/lib/confidence.ts.
 function hasOperationalConfidence(value: number | null | undefined): boolean {
   return value == null || value >= MIN_OPERATIONAL_CONFIDENCE;
 }
@@ -82,16 +88,31 @@ const TYPE_COLORS: Record<string, string> = {
     'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600',
 };
 
-function ConfidenceBadge({ value }: { value: number }) {
+function ConfidenceBadge({ value, data }: { value: number; data?: Record<string, unknown> }) {
   const pct = Math.round(value * 100);
   const usable = hasOperationalConfidence(value);
+  // Limiar de cor unificado (shared/lib/confidence.ts) — a mesma % tinha
+  // cores diferentes conforme a tela.
+  // Compara sobre o pct ARREDONDADO (o número que o operador vê): 0.795
+  // exibe "80%" e precisa ser verde, não âmbar.
   const color = !usable
     ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200'
-    : pct >= 80
+    : pct >= CONFIDENCE_HIGH * 100
       ? 'text-emerald-700 bg-emerald-50'
-      : pct >= 50
+      : pct >= CONFIDENCE_MEDIUM * 100
         ? 'text-amber-700 bg-amber-50'
         : 'text-danger-700 bg-danger-50';
+
+  // "Por quê está baixo": a fórmula nova derruba números de propósito —
+  // o tooltip explica a causa em linguagem de operador.
+  const { reasons, action } = explainLowConfidence(data);
+  const base = usable
+    ? `Confiança da extração: ${pct}%`
+    : `Confiança ${pct}% abaixo do piso operacional; documento não utilizável automaticamente`;
+  const why =
+    pct < CONFIDENCE_HIGH * 100 && reasons.length > 0
+      ? `\nPor quê: ${reasons.join(' ')}${action ? `\nAção: ${action}` : ''}`
+      : '';
 
   return (
     <span
@@ -99,11 +120,7 @@ function ConfidenceBadge({ value }: { value: number }) {
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
         color,
       )}
-      title={
-        usable
-          ? `Confiança da extração: ${pct}%`
-          : `Confiança ${pct}% abaixo do piso operacional; documento não utilizável automaticamente`
-      }
+      title={`${base}${why}`}
     >
       {usable ? `${pct}%` : `${pct}% não utilizável`}
     </span>
@@ -526,7 +543,9 @@ export function DocumentList({ processId }: DocumentListProps) {
                             {formatDate(doc.uploadedAt)}
                           </span>
                           <AiStatus status={doc.aiProcessingStatus} confidence={doc.aiConfidence} />
-                          {doc.aiConfidence != null && <ConfidenceBadge value={doc.aiConfidence} />}
+                          {doc.aiConfidence != null && (
+                            <ConfidenceBadge value={doc.aiConfidence} data={doc.aiParsedData} />
+                          )}
                         </div>
                         {source && (
                           <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">

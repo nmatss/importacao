@@ -86,7 +86,7 @@ interface ValidationCheck {
   status: 'passed' | 'failed' | 'warning' | 'skipped';
 }
 
-const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
 
 type EmailLogsResponse = { data: EmailLog[]; pagination: unknown };
 
