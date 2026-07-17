@@ -61,6 +61,10 @@ services:
       AI_PROVIDER: ${AI_PROVIDER:-ialocal}
       AI_ALLOW_EXTERNAL: ${AI_ALLOW_EXTERNAL:-false}
       AI_MONTHLY_BUDGET_USD: ${AI_MONTHLY_BUDGET_USD:-200}
+      # Self-repair no provider PAGO (re-ask de campos faltantes; custo centavos,
+      # gated pelo teto diario). Lembrete: o compose lista env explicitamente —
+      # sem esta linha, setar no .env nao chega ao container.
+      AI_SELF_REPAIR_PAID: ${AI_SELF_REPAIR_PAID:-0}
       # IA_LOCAL / DocIntel (on-prem) é o provider padrão para documentos sensíveis.
       IA_LOCAL_BASE_URL: ${IA_LOCAL_BASE_URL:-http://ia-local-gateway:8443/v1}
       IA_LOCAL_API_KEY: ${IA_LOCAL_API_KEY:-}
