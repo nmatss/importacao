@@ -169,6 +169,68 @@ def fetch_barcode_map(brand: str, codes: list[str] | None = None) -> dict[str, s
         }
 
 
+def fetch_produto_propriedades(
+    brand: str, prop_codes: list[str], produtos: list[str]
+) -> dict[str, dict[str, str]]:
+    """Le, em lote, o valor de propriedades de produto no Linx (PROP_PRODUTOS).
+
+    E a fonte de verdade da "trava de faturamento": a data gravada em VALIDADE DO
+    CERTIFICADO (00224 Puket / 00106 Imaginarium) e VENCIMENTO DO LICENCIAMENTO
+    (00225 / 00107) e o que efetivamente impede o item de ser faturado.
+
+    O portal NAO serve para isso. `cert_certificates` so registra certificado
+    cadastrado pelo formulario do portal, e em 2026-08-07 a tabela estava vazia
+    enquanto o Linx tinha trava para 489 dos 658 produtos do painel — as travas
+    chegaram la por outros caminhos, entre eles `sync_prazo_venda_to_linx`, que
+    grava direto e nao deixa registro no portal.
+
+    Args:
+        brand: marca (escolhe o banco/credencial).
+        prop_codes: codigos de PROPRIEDADE a buscar (ex.: ['00224', '00225']).
+        produtos: codigos de produto a consultar.
+
+    Returns:
+        Dict {produto: {prop_code: valor}}, apenas com valor nao vazio. Produto
+        ausente do dict = sem trava gravada.
+
+    Raises:
+        Exception: em falha de conexao/consulta (o caller decide se degrada).
+    """
+    if not prop_codes or not produtos:
+        return {}
+
+    cfg = _brand_linx(brand)
+    table = _ident(LINX_SCHEMA["prop_table"])
+    col_prod = _ident(LINX_SCHEMA["prop_col_produto"])
+    col_prop = _ident(LINX_SCHEMA["prop_col_propriedade"])
+    col_val = _ident(LINX_SCHEMA["prop_col_valor"])
+
+    alvo = sorted({p.strip() for p in produtos if p and p.strip()})
+    out: dict[str, dict[str, str]] = {}
+
+    with _connect(cfg) as conn:
+        cur = conn.cursor()
+        # SQL Server tem teto de 2100 parametros por comando; lotes de 400
+        # deixam margem larga mesmo com varias propriedades na mesma consulta.
+        for i in range(0, len(alvo), 400):
+            lote = alvo[i : i + 400]
+            ph_prod = ",".join(["%s"] * len(lote))
+            ph_prop = ",".join(["%s"] * len(prop_codes))
+            cur.execute(
+                f"SELECT LTRIM(RTRIM({col_prod})), {col_prop}, {col_val} "  # noqa: S608
+                f"FROM {table} "
+                f"WHERE {col_prop} IN ({ph_prop}) AND LTRIM(RTRIM({col_prod})) IN ({ph_prod})",
+                (*prop_codes, *lote),
+            )
+            for produto, prop, valor in cur.fetchall():
+                texto = "" if valor is None else str(valor).strip()
+                if not texto:
+                    continue
+                out.setdefault(str(produto).strip(), {})[str(prop).strip()] = texto
+
+    return out
+
+
 def resolve_produto_codigo(brand: str, sku: str) -> str | None:
     """Resolve a portal SKU to the Linx base product code used by PROP_PRODUTOS.
 

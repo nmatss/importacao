@@ -1,6 +1,7 @@
 """Excel report generation via openpyxl."""
 
 import json
+from collections import defaultdict
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -60,12 +61,35 @@ _LICENSE_STATUS_LABELS: dict[str, str] = {
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
-# Propriedades do Linx que travam o faturamento do item. Os codigos por marca
-# estao em config.LINX_BRANDS; aqui interessa apenas o nome do campo gravado em
-# cert_certificates.linx_detail (ver services/linx_service.write_certificate_to_linx).
-_TRAVA_CERT_FIELD = "validade_certificado"
-_TRAVA_LIC_FIELD = "vencimento_licenciamento"
-_TRAVA_APLICADA = {"inserted", "updated", "unchanged"}
+# Rotulos da trava de faturamento. "Nao verificado" existe para o Linx fora do ar:
+# um relatorio que dissesse "Nao" nesse caso afirmaria ausencia de trava sem ter
+# consultado nada — pior que admitir que nao olhou.
+TRAVA_NAO_VERIFICADA = "Nao verificado (Linx indisponivel)"
+TRAVA_SEM_MARCA = "Nao verificado (marca sem Linx)"
+
+# O Linx usa 01/01/1900 como sentinela de "campo criado, data nao preenchida" —
+# e e a MAIORIA das linhas: 2.210 dos 2.400 valores da propriedade de validade
+# da Puket e 999 dos 1.256 da Imaginarium (medido em 2026-08-07). Tratar essas
+# linhas como trava faria o relatorio afirmar "Sim" para centenas de itens que
+# nao travam nada. Nenhum certificado vivo tem validade anterior a 2000.
+_TRAVA_ANO_MINIMO = 2000
+
+
+def _trava_ativa(valor: str | None) -> str | None:
+    """Devolve a data da trava quando ela e real; None quando e sentinela/vazio."""
+    texto = (valor or "").strip()
+    if not texto:
+        return None
+    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+        try:
+            if datetime.strptime(texto, fmt).year < _TRAVA_ANO_MINIMO:
+                return None
+            return texto
+        except ValueError:
+            continue
+    # Texto que nao e data: nao da para afirmar que trava, mas tambem nao da para
+    # descartar — devolve como veio para a operacao julgar.
+    return texto
 
 
 def _fetch_stock_map() -> dict[str, dict]:
@@ -92,67 +116,70 @@ def _fetch_stock_map() -> dict[str, dict]:
         return {}
 
 
-def _fetch_travas_faturamento() -> dict[str, dict[str, str]]:
-    """Descobre, por SKU, se a trava de faturamento ja foi gravada no Linx.
+def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str]]:
+    """Descobre, por SKU, se a trava de faturamento esta gravada no Linx.
 
-    A "trava" e a data escrita nas propriedades do produto no Linx: VALIDADE DO
+    A "trava" e a data escrita na propriedade do produto no ERP: VALIDADE DO
     CERTIFICADO (00224 Puket / 00106 Imaginarium) e VENCIMENTO DO LICENCIAMENTO
-    (00225 / 00107). Quem grava e `linx_service.write_certificate_to_linx`, que
-    registra o resultado por campo em `cert_certificates.linx_detail`.
+    (00225 / 00107). Enquanto ela estiver la, o item nao fatura depois do prazo.
 
-    Le o certificado MAIS RECENTE de cada SKU: e o que reflete o estado atual da
-    propriedade no ERP.
+    A fonte e o PROPRIO Linx, nao o portal. A primeira versao lia
+    `cert_certificates` — a tabela do formulario de cadastro de certificado — e
+    por isso reportava "sem trava" para 100% dos produtos: a tabela estava vazia
+    (ninguem usou o formulario) enquanto o Linx tinha trava para 489 dos 658
+    produtos do painel. As travas foram gravadas por outros caminhos, entre eles
+    `sync_prazo_venda_to_linx`, que escreve direto no ERP.
+
+    Falha de conexao NAO derruba o relatorio: os SKUs daquela marca saem como
+    "Nao verificado" e o Excel e gerado do mesmo jeito.
+
+    Args:
+        rows: linhas de cert_products (usa `sku` e `brand`).
 
     Returns:
-        Dict {sku: {'cert': <rotulo>, 'lic': <rotulo>}}. SKU ausente do dict
-        significa que nunca houve certificado cadastrado no portal.
+        Dict {sku: {'cert': <rotulo>, 'lic': <rotulo>}}.
     """
+    from app.db.sqlserver import _brand_linx, fetch_produto_propriedades
+
+    por_marca: dict[str, list[str]] = defaultdict(list)
+    for r in rows:
+        sku = str(r.get("sku") or "").strip()
+        brand = str(r.get("brand") or "").strip()
+        if sku and brand:
+            por_marca[brand].append(sku)
+
     travas: dict[str, dict[str, str]] = {}
-    try:
-        with db() as (_conn, _cur):
-            _cur.execute("""
-                SELECT DISTINCT ON (sku)
-                    sku, linx_status, linx_detail, linx_applied_at
-                FROM cert_certificates
-                ORDER BY sku, created_at DESC
-            """)
-            rows = _cur.fetchall()
-    except Exception as e:
-        log.warning(f"Could not fetch Linx lock data: {e}")
-        return {}
+    for brand, skus in por_marca.items():
+        try:
+            cfg = _brand_linx(brand)
+        except ValueError:
+            for sku in skus:
+                travas[sku] = {"cert": TRAVA_SEM_MARCA, "lic": TRAVA_SEM_MARCA}
+            continue
 
-    for row in rows:
-        detail = row.get("linx_detail") or []
-        if isinstance(detail, str):
-            try:
-                detail = json.loads(detail)
-            except ValueError:
-                detail = []
-        acoes = {
-            d.get("field"): str(d.get("action") or "")
-            for d in detail
-            if isinstance(d, dict)
-        }
-        status = row.get("linx_status") or ""
-        aplicado_em = row.get("linx_applied_at")
-        quando = aplicado_em.strftime("%d/%m/%Y") if hasattr(aplicado_em, "strftime") else ""
+        prop_cert = cfg["prop_validade_certificado"]
+        prop_lic = cfg["prop_vencimento_licenciamento"]
+        try:
+            props = fetch_produto_propriedades(brand, [prop_cert, prop_lic], skus)
+        except Exception as e:
+            log.warning(f"Trava de faturamento indisponivel para '{brand}': {e}")
+            for sku in skus:
+                travas[sku] = {"cert": TRAVA_NAO_VERIFICADA, "lic": TRAVA_NAO_VERIFICADA}
+            continue
 
-        def _label(field: str, _status: str = status, _acoes: dict = acoes, _quando: str = quando) -> str:
-            if _status == "disabled":
-                return "Nao - escrita no Linx desabilitada"
-            if _status == "error":
-                return "Nao - erro na gravacao"
-            acao = _acoes.get(field, "")
-            if acao in _TRAVA_APLICADA:
-                return f"Sim ({_quando})" if _quando else "Sim"
-            if acao.startswith("skipped"):
-                return "Nao - sem data cadastrada"
-            return "Nao"
+        for sku in skus:
+            valores = props.get(sku, {})
+            # O valor da propriedade E a data da trava — vai junto no rotulo,
+            # porque saber ate quando o item fatura vale mais que um "Sim".
+            # `_trava_ativa` descarta a sentinela 01/01/1900 do Linx.
+            data_cert = _trava_ativa(valores.get(prop_cert))
+            data_lic = _trava_ativa(valores.get(prop_lic))
+            travas[sku] = {
+                "cert": f"Sim ({data_cert})" if data_cert else "Nao",
+                "lic": f"Sim ({data_lic})" if data_lic else "Nao",
+            }
 
-        travas[row["sku"]] = {
-            "cert": _label(_TRAVA_CERT_FIELD),
-            "lic": _label(_TRAVA_LIC_FIELD),
-        }
+    log.info(f"Travas de faturamento consultadas no Linx para {len(travas)} SKUs")
     return travas
 
 
@@ -255,6 +282,42 @@ _PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
 _COL_STATUS_CERT = 4
 
 
+# Colunas do relatorio de produtos, na ordem. A lista existe para o cabecalho, a
+# largura e a montagem da linha ficarem sempre em sincronia.
+_PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("SKU", 15),
+    ("Nome", 40),
+    ("Marca", 18),
+    # As tres dimensoes do painel, com os mesmos rotulos da tela.
+    ("Status Certificacao", 18),
+    ("Status E-commerce", 18),
+    ("Motivo (E-commerce)", 38),
+    ("Status Licenciamento", 20),
+    # Cadastro vindo das abas Imaginarium/Puket.
+    ("Tipo Certificacao", 32),          # coluna H
+    ("Numero Certificado", 20),         # coluna P
+    ("Texto Esperado", 45),             # coluna V
+    ("Texto Encontrado", 45),
+    ("Pontuacao", 11),
+    ("URL", 45),
+    # Aba Encerramentos.
+    ("Prazo Final Venda", 16),          # coluna G
+    ("Situacao da Venda", 26),          # coluna H
+    ("Licen. - Prazo", 16),
+    # Travas de faturamento gravadas no Linx.
+    ("Trava Fat. Certificacao", 26),
+    ("Trava Fat. Licenciamento", 26),
+    # Estoque.
+    ("Estoque CD", 12),
+    ("Estoque E-commerce", 18),
+    ("Total Estoque", 14),
+    ("Estoque Atualizado Em", 22),
+)
+
+# 1-based, usada para pintar a celula de status de certificacao.
+_COL_STATUS_CERT = 4
+
+
 def generate_products_report(
     rows: list[dict],
     brand: str = "",
@@ -281,7 +344,7 @@ def generate_products_report(
     """
     now = datetime.now(UTC)
     stock_map = _fetch_stock_map()
-    travas = _fetch_travas_faturamento()
+    travas = _fetch_travas_faturamento(rows)
 
     enriched = [{**r, **compute_status_dimensions(r, license_map)} for r in rows]
 
@@ -343,8 +406,8 @@ def generate_products_report(
             _safe_text(r.get("sale_deadline", "")),
             _safe_text(r.get("encerramento_status", "")),
             _safe_text(r.get("license_deadline") or ""),
-            _safe_text(trava.get("cert", "Sem certificado cadastrado")),
-            _safe_text(trava.get("lic", "Sem certificado cadastrado")),
+            _safe_text(trava.get("cert", TRAVA_NAO_VERIFICADA)),
+            _safe_text(trava.get("lic", TRAVA_NAO_VERIFICADA)),
             stock.get("stock_cd", 0),
             stock.get("stock_ecommerce", 0),
             stock.get("stock_total", 0),

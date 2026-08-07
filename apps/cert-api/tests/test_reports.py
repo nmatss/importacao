@@ -223,7 +223,7 @@ def test_products_report_has_no_vencido_column_and_reports_travas(mocker, tmp_pa
 
 
 def test_products_report_marks_missing_certificate_registration(mocker, tmp_path):
-    """SKU sem certificado no portal nao pode parecer 'trava aplicada'."""
+    """SKU que o Linx nao respondeu nao pode parecer 'sem trava'."""
     _patch_products_report_io(mocker, tmp_path)
 
     output = generate_products_report([{"sku": "PI9999Y", "name": "X", "brand": "Puket"}])
@@ -232,5 +232,110 @@ def test_products_report_marks_missing_certificate_registration(mocker, tmp_path
     ws = wb["Produtos"]
     assert (
         ws.cell(row=8, column=_header_index(ws, "Trava Fat. Certificacao")).value
-        == "Sem certificado cadastrado"
+        == "Nao verificado (Linx indisponivel)"
     )
+
+
+class TestTravaFaturamento:
+    """A trava vem do Linx (PROP_PRODUTOS), nunca de cert_certificates.
+
+    A primeira versao lia a tabela do formulario do portal e reportava "sem
+    trava" nas 658 linhas, enquanto o Linx tinha trava para 489 produtos.
+    """
+
+    def _rows(self):
+        return [
+            {"sku": "PI7223Y", "brand": "Imaginarium"},
+            {"sku": "100400496", "brand": "Puket"},
+        ]
+
+    def test_le_a_propriedade_do_linx_e_mostra_a_data(self, mocker):
+        from app.services import report_service
+
+        mocker.patch(
+            "app.db.sqlserver.fetch_produto_propriedades",
+            side_effect=lambda brand, props, skus: (
+                {"PI7223Y": {"00106": "24/07/2026", "00107": "31/12/2026"}}
+                if brand == "Imaginarium"
+                else {"100400496": {"00224": "11/08/2027"}}
+            ),
+        )
+        travas = report_service._fetch_travas_faturamento(self._rows())
+
+        assert travas["PI7223Y"] == {"cert": "Sim (24/07/2026)", "lic": "Sim (31/12/2026)"}
+        # Produto com validade mas sem licenciamento gravado.
+        assert travas["100400496"] == {"cert": "Sim (11/08/2027)", "lic": "Nao"}
+
+    def test_produto_sem_propriedade_sai_como_nao(self, mocker):
+        from app.services import report_service
+
+        mocker.patch("app.db.sqlserver.fetch_produto_propriedades", return_value={})
+        travas = report_service._fetch_travas_faturamento(self._rows())
+        assert travas["PI7223Y"] == {"cert": "Nao", "lic": "Nao"}
+
+    def test_linx_fora_do_ar_nao_derruba_o_relatorio(self, mocker):
+        """Dizer "Nao" sem ter consultado seria afirmar ausencia de trava."""
+        from app.services import report_service
+
+        mocker.patch(
+            "app.db.sqlserver.fetch_produto_propriedades",
+            side_effect=OSError("db02 unreachable"),
+        )
+        travas = report_service._fetch_travas_faturamento(self._rows())
+        assert travas["PI7223Y"]["cert"] == report_service.TRAVA_NAO_VERIFICADA
+        assert travas["100400496"]["lic"] == report_service.TRAVA_NAO_VERIFICADA
+
+    def test_marca_sem_linx_e_sinalizada(self, mocker):
+        from app.services import report_service
+
+        mocker.patch("app.db.sqlserver.fetch_produto_propriedades", return_value={})
+        travas = report_service._fetch_travas_faturamento([{"sku": "X1", "brand": "Kayuan"}])
+        assert travas["X1"]["cert"] == report_service.TRAVA_SEM_MARCA
+
+    def test_consulta_uma_vez_por_marca_e_nao_por_sku(self, mocker):
+        """658 produtos nao podem virar 658 idas ao SQL Server."""
+        from app.services import report_service
+
+        spy = mocker.patch("app.db.sqlserver.fetch_produto_propriedades", return_value={})
+        report_service._fetch_travas_faturamento(
+            [{"sku": f"PI{i}Y", "brand": "Imaginarium"} for i in range(300)]
+        )
+        assert spy.call_count == 1
+
+
+class TestSentinelaDoLinx:
+    """01/01/1900 e "campo criado sem data", nao trava — e e a maioria das linhas."""
+
+    def test_sentinela_1900_nao_e_trava(self):
+        from app.services.report_service import _trava_ativa
+
+        assert _trava_ativa("01/01/1900") is None
+        assert _trava_ativa("1900-01-01") is None
+
+    def test_data_real_e_trava(self):
+        from app.services.report_service import _trava_ativa
+
+        assert _trava_ativa("24/07/2026") == "24/07/2026"
+        assert _trava_ativa(" 11/08/2027 ") == "11/08/2027"
+
+    def test_vazio_nao_e_trava(self):
+        from app.services.report_service import _trava_ativa
+
+        assert _trava_ativa("") is None
+        assert _trava_ativa(None) is None
+
+    def test_texto_nao_data_volta_como_veio(self):
+        """Nao da para afirmar nem descartar — a operacao julga."""
+        from app.services.report_service import _trava_ativa
+
+        assert _trava_ativa("indeterminado") == "indeterminado"
+
+    def test_sentinela_no_lookup_completo(self, mocker):
+        from app.services import report_service
+
+        mocker.patch(
+            "app.db.sqlserver.fetch_produto_propriedades",
+            return_value={"PI1Y": {"00106": "01/01/1900", "00107": "31/12/2027"}},
+        )
+        travas = report_service._fetch_travas_faturamento([{"sku": "PI1Y", "brand": "Imaginarium"}])
+        assert travas["PI1Y"] == {"cert": "Nao", "lic": "Sim (31/12/2027)"}
