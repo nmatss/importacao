@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { communicationService } from './service.js';
+import { driveAttachmentsService } from './drive-attachments.service.js';
 import { sendSuccess, sendError, sendPaginated } from '../../shared/utils/response.js';
 
 export const communicationController = {
@@ -59,6 +60,33 @@ export const communicationController = {
         req.user?.id ?? null,
       );
       sendSuccess(res, communication);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async listDriveFiles(req: Request, res: Response) {
+    try {
+      const processId = Number(req.query.processId);
+      if (!Number.isInteger(processId) || processId <= 0) {
+        return sendError(res, 'ID do processo invalido', 400);
+      }
+      const files = await driveAttachmentsService.listProcessFiles(processId);
+      sendSuccess(res, files);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async importDriveFile(req: Request, res: Response) {
+    try {
+      const document = await driveAttachmentsService.importToProcess(
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, document, 201);
     } catch (error: any) {
       const status = error.statusCode || 400;
       sendError(res, error.message, status);

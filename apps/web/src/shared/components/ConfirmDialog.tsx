@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { ModalPortal } from './ModalPortal';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -77,52 +78,57 @@ export function ConfirmDialog({
       : 'bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-500';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="fixed inset-0 bg-sidebar-950/40 backdrop-blur-sm" onClick={onCancel} />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descriptionId}
-        className="relative z-10 w-full max-w-md rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-xl shadow-slate-900/10 dark:shadow-black/30 animate-scale-in"
-      >
-        <div className="flex items-start gap-4">
-          {variant === 'danger' && (
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-50 dark:bg-danger-900/30">
-              <AlertTriangle className="h-5 w-5 text-danger-600 dark:text-danger-400" />
+    <ModalPortal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-sidebar-950/40 backdrop-blur-sm" onClick={onCancel} />
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descriptionId}
+          className="relative z-10 w-full max-w-md rounded-2xl bg-white dark:bg-slate-800 p-6 shadow-xl shadow-slate-900/10 dark:shadow-black/30 animate-scale-in"
+        >
+          <div className="flex items-start gap-4">
+            {variant === 'danger' && (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-danger-50 dark:bg-danger-900/30">
+                <AlertTriangle className="h-5 w-5 text-danger-600 dark:text-danger-400" />
+              </div>
+            )}
+            <div className="flex-1">
+              <h2
+                id={titleId}
+                className="text-base font-semibold text-slate-900 dark:text-slate-100"
+              >
+                {title}
+              </h2>
+              <p
+                id={descriptionId}
+                className="mt-1.5 text-sm text-slate-500 dark:text-slate-400 leading-relaxed"
+              >
+                {message}
+              </p>
             </div>
-          )}
-          <div className="flex-1">
-            <h2 id={titleId} className="text-base font-semibold text-slate-900 dark:text-slate-100">
-              {title}
-            </h2>
-            <p
-              id={descriptionId}
-              className="mt-1.5 text-sm text-slate-500 dark:text-slate-400 leading-relaxed"
+          </div>
+          <div className="mt-6 flex justify-end gap-3">
+            <button
+              ref={cancelButtonRef}
+              type="button"
+              onClick={onCancel}
+              className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus:outline-none transition-colors"
             >
-              {message}
-            </p>
+              {cancelLabel}
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus:outline-none transition-colors ${confirmColors}`}
+            >
+              {confirmLabel}
+            </button>
           </div>
         </div>
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            ref={cancelButtonRef}
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus:outline-none transition-colors"
-          >
-            {cancelLabel}
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus:outline-none transition-colors ${confirmColors}`}
-          >
-            {confirmLabel}
-          </button>
-        </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }

@@ -69,32 +69,16 @@ function wrapWorker<T extends object>(
 // ── Worker handlers ──────────────────────────────────────────────────
 
 async function handleEmailSend(data: EmailSendJob): Promise<void> {
-  const nodemailer = await import('nodemailer');
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const secure = process.env.SMTP_SECURE === 'true';
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const hasAuth = user && pass && user !== 'noreply@grupounico.com';
+  // Mesmo plano de envio dos atendimentos: remetente e copia operacional
+  // obrigatoria resolvidos em um unico lugar (shared/mail/mailer.ts).
+  const { buildOutgoingMail, getSmtpTransport } = await import('../mail/mailer.js');
+  const mail = await buildOutgoingMail(data.to);
 
-  // Verificação de certificado segue a mesma política do communications/service.ts;
-  // SMTP_TLS_REJECT_UNAUTHORIZED=false é o único caminho para aceitar cert
-  // self-signed (relay interno) — decisão explícita de operação, não default.
-  const rejectUnauthorized =
-    process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false'
-      ? false
-      : process.env.NODE_ENV === 'production';
-
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure,
-    ...(hasAuth ? { auth: { user, pass } } : {}),
-    tls: { rejectUnauthorized },
-    ignoreTLS: !secure,
-  });
+  const transporter = getSmtpTransport();
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-    to: data.to,
+    from: mail.from,
+    to: mail.to,
+    ...(mail.cc ? { cc: mail.cc } : {}),
     subject: data.subject,
     html: data.body,
   });

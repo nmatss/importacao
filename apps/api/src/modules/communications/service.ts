@@ -1,5 +1,4 @@
 import { eq, desc, count, and, sql, gte } from 'drizzle-orm';
-import nodemailer from 'nodemailer';
 import path from 'node:path';
 import { db } from '../../shared/database/connection.js';
 import {
@@ -23,6 +22,7 @@ import {
   normalizeEmailList,
   parseEmailList,
 } from '../settings/operational-recipients.js';
+import { buildOutgoingMail, getSmtpTransport } from '../../shared/mail/mailer.js';
 
 interface StoredAttachment {
   filename?: unknown;
@@ -51,25 +51,6 @@ function sanitizeHtml(html: string): string {
   // Remove dangerous tags: svg, math, iframe, object, embed, form, base
   clean = clean.replace(/<\/?(svg|math|iframe|object|embed|form|base|link|meta)\b[^>]*>/gi, '');
   return clean;
-}
-
-function getSmtpTransport() {
-  const port = Number(process.env.SMTP_PORT) || 587;
-  const secure = process.env.SMTP_SECURE === 'true';
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  const hasAuth = user && pass && user !== 'noreply@grupounico.com'; // Skip auth for internal relay
-
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port,
-    secure,
-    ...(hasAuth ? { auth: { user, pass } } : {}),
-    tls: {
-      rejectUnauthorized: process.env.NODE_ENV === 'production',
-      minVersion: 'TLSv1.2',
-    },
-  });
 }
 
 function normalizeEmail(value: string): string {
@@ -111,36 +92,6 @@ async function allowedRecipientPatterns(): Promise<string[]> {
     .flatMap(parseEmailList)
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
-}
-
-function isValidEmailAddress(value: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
-
-/**
- * Every outgoing operational email must include the fixed operational copy.
- *
- * This validation intentionally happens before SMTP work (and before the
- * send-error catch below) so a missing/malformed configuration never changes a
- * reviewable draft into a failed communication.
- */
-async function getRequiredDefaultCcRecipients(): Promise<string> {
-  const recipients = parseEmailList(await getOperationalRecipient('default_cc_email'));
-  const normalizedRecipients = recipients.join(', ');
-
-  if (
-    recipients.length === 0 ||
-    recipients.some((recipient) => !isValidEmailAddress(recipient)) ||
-    normalizedRecipients.length > 500
-  ) {
-    throw new AppError(
-      'Cópia operacional obrigatória não configurada. Cadastre um e-mail válido em "Configurações > E-mails > Destinatários operacionais".',
-      503,
-      'DEFAULT_CC_REQUIRED',
-    );
-  }
-
-  return normalizedRecipients;
 }
 
 function matchesPattern(recipient: string, pattern: string): boolean {
@@ -391,10 +342,11 @@ export const communicationService = {
       );
     }
 
-    // Fail closed: the operational copy is a required business control, not an
-    // optional mail header. Keep the draft intact if the setting/env is absent
-    // or malformed so the operator can retry after configuration is corrected.
-    const defaultCc = await getRequiredDefaultCcRecipients();
+    // Headers are resolved before any SMTP work (and before the send-error catch
+    // below) so a malformed configuration keeps the draft reviewable instead of
+    // turning it into a failed communication. `buildOutgoingMail` guarantees the
+    // operational mailbox as sender and as mandatory copy.
+    const mail = await buildOutgoingMail(communication.recipientEmail);
 
     if (!process.env.SMTP_HOST) {
       throw new Error('SMTP não configurado. Defina SMTP_HOST nas variáveis de ambiente.');
@@ -429,16 +381,13 @@ export const communicationService = {
 
       // Sanitize headers to prevent CRLF injection
       const sanitizeHeader = (v: string) => v.replace(/[\r\n]/g, '').trim();
-      const sanitizeRecipientHeader = (v: string) =>
-        normalizeEmailList(v)
-          .replace(/[\r\n]/g, '')
-          .trim();
-      const ccHeader = sanitizeRecipientHeader(defaultCc);
 
       await transport.sendMail({
-        from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: sanitizeRecipientHeader(communication.recipientEmail),
-        cc: ccHeader,
+        from: mail.from,
+        to: mail.to,
+        // Empty when the operational mailbox is already the sender or a primary
+        // recipient — nodemailer omits the header instead of duplicating it.
+        ...(mail.cc ? { cc: mail.cc } : {}),
         subject: sanitizeHeader(communication.subject),
         html: sanitizeHtml(htmlBody),
         attachments: mailAttachments,
@@ -453,13 +402,15 @@ export const communicationService = {
           sentBy: userId ?? null,
           updatedBy: userId ?? null,
           updatedAt: sentAt,
-          ccRecipients: defaultCc,
+          // Records the copy that was actually required for this send, so the
+          // audit trail stays truthful even when de-duplication emptied the header.
+          ccRecipients: mail.mandatoryCc,
         })
         .where(eq(communications.id, id))
         .returning();
 
       const maskedRecipient = maskRecipientList(communication.recipientEmail);
-      const maskedCc = maskRecipientList(defaultCc);
+      const maskedCc = maskRecipientList(mail.mandatoryCc);
       logger.info({ id, recipient: maskedRecipient, cc: maskedCc }, 'E-mail enviado com sucesso');
       await auditService.log(
         userId ?? null,

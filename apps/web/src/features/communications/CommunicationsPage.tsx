@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
 import DOMPurify from 'dompurify';
@@ -18,6 +18,10 @@ import {
   Paperclip,
   Search,
   X,
+  Eye,
+  HardDrive,
+  Loader2,
+  Upload,
 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
@@ -29,6 +33,8 @@ import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { ModalPortal } from '@/shared/components/ModalPortal';
+import { DocumentViewerModal } from '@/shared/components/DocumentViewerModal';
 import { getErrorMessage } from '@/shared/utils/errors';
 
 interface EmailSignatureOption {
@@ -58,6 +64,15 @@ interface ProcessDocument {
   id: number;
   fileName: string;
   documentType: string;
+  driveFileId?: string | null;
+}
+
+interface DriveFileOption {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number | null;
+  webViewLink: string | null;
 }
 
 interface Communication {
@@ -125,6 +140,14 @@ export function CommunicationsPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [exportingCsv, setExportingCsv] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [showDrivePicker, setShowDrivePicker] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<DriveFileOption[]>([]);
+  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [importingDriveFileId, setImportingDriveFileId] = useState<string | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<ProcessDocument | null>(null);
 
   // Fetch signatures
   const { data: signatures } = useApiQuery<EmailSignatureOption[]>(
@@ -394,6 +417,89 @@ export function CommunicationsPage() {
       toast.error(getErrorMessage(err));
     } finally {
       setExportingCsv(false);
+    }
+  };
+
+  /**
+   * Anexo vindo do computador.
+   *
+   * Reaproveita `POST /api/documents/upload` — o arquivo entra como documento do
+   * processo (mesmo storage, auditoria, timeline e sincronia com o Drive) e so
+   * depois e marcado como anexo do e-mail. Nao existe storage paralelo de anexo.
+   */
+  const handleUploadFromComputer = async (file: File) => {
+    if (!composer.processId) {
+      toast.error('Selecione o processo antes de anexar um arquivo.');
+      return;
+    }
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('processId', composer.processId);
+      formData.append('documentType', 'other');
+
+      const token = localStorage.getItem('importacao_token');
+      const baseUrl = import.meta.env.VITE_API_URL || '';
+      const response = await fetch(`${baseUrl}/api/documents/upload`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(payload?.error || `Falha no upload (${response.status})`);
+      }
+
+      const uploaded = payload?.data ?? payload;
+      if (uploaded?.id) setSelectedAttachmentIds((prev) => [...prev, uploaded.id]);
+      queryClient.invalidateQueries({ queryKey: ['documents', 'process', composer.processId] });
+      toast.success(`"${file.name}" anexado e salvo no processo.`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setUploadingFile(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const openDrivePicker = async () => {
+    if (!composer.processId) {
+      toast.error('Selecione o processo antes de anexar um arquivo.');
+      return;
+    }
+    setShowDrivePicker(true);
+    setLoadingDriveFiles(true);
+    setDriveError(null);
+    try {
+      const files = await api.get<DriveFileOption[]>(
+        `/api/communications/drive/files?processId=${composer.processId}`,
+      );
+      setDriveFiles(files);
+    } catch (err: unknown) {
+      setDriveError(getErrorMessage(err));
+    } finally {
+      setLoadingDriveFiles(false);
+    }
+  };
+
+  /** Importa o arquivo do Drive como documento do processo e ja o marca como anexo. */
+  const importDriveFile = async (driveFile: DriveFileOption) => {
+    setImportingDriveFileId(driveFile.id);
+    try {
+      const document = await api.post<ProcessDocument>('/api/communications/drive/import', {
+        processId: Number(composer.processId),
+        driveFileId: driveFile.id,
+        documentType: 'other',
+      });
+      if (document?.id) setSelectedAttachmentIds((prev) => [...prev, document.id]);
+      queryClient.invalidateQueries({ queryKey: ['documents', 'process', composer.processId] });
+      toast.success(`"${driveFile.name}" anexado e salvo no processo.`);
+      setShowDrivePicker(false);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setImportingDriveFileId(null);
     }
   };
 
@@ -712,40 +818,87 @@ export function CommunicationsPage() {
 
               {composer.processId && (
                 <div>
-                  <p className="mb-2 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
-                    <Paperclip className="h-3.5 w-3.5" />
-                    Anexos do processo
-                  </p>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
+                      <Paperclip className="h-3.5 w-3.5" />
+                      Anexos do processo
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="sr-only"
+                        aria-label="Anexar arquivo do computador"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) handleUploadFromComputer(file);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={uploadingFile}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+                      >
+                        {uploadingFile ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Upload className="h-3.5 w-3.5" />
+                        )}
+                        Do computador
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openDrivePicker}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+                      >
+                        <HardDrive className="h-3.5 w-3.5" />
+                        Do Google Drive
+                      </button>
+                    </div>
+                  </div>
                   {!processDocuments?.length ? (
                     <p className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-400">
-                      Nenhum documento disponível para anexar.
+                      Nenhum documento disponível para anexar. Use os botões acima para anexar do
+                      computador ou do Google Drive — o arquivo fica salvo no processo.
                     </p>
                   ) : (
-                    <div className="max-h-36 space-y-1 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 p-2">
+                    <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 p-2">
                       {processDocuments.map((doc) => {
                         const checked = selectedAttachmentIds.includes(doc.id);
                         return (
-                          <label
+                          <div
                             key={doc.id}
-                            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
+                            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800"
                           >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(event) => {
-                                setSelectedAttachmentIds((prev) =>
-                                  event.target.checked
-                                    ? [...prev, doc.id]
-                                    : prev.filter((id) => id !== doc.id),
-                                );
-                              }}
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
-                            />
-                            <span className="rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-slate-500">
-                              {doc.documentType}
-                            </span>
-                            <span className="truncate">{doc.fileName}</span>
-                          </label>
+                            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={(event) => {
+                                  setSelectedAttachmentIds((prev) =>
+                                    event.target.checked
+                                      ? [...prev, doc.id]
+                                      : prev.filter((id) => id !== doc.id),
+                                  );
+                                }}
+                                className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary-600"
+                              />
+                              <span className="shrink-0 rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-slate-500">
+                                {doc.documentType}
+                              </span>
+                              <span className="truncate">{doc.fileName}</span>
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setPreviewDocument(doc)}
+                              title="Visualizar no sistema"
+                              aria-label={`Visualizar ${doc.fileName}`}
+                              className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-slate-700"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -894,6 +1047,41 @@ export function CommunicationsPage() {
                             <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                               {comm.body}
                             </p>
+                            {comm.attachments && comm.attachments.length > 0 && (
+                              <div className="mt-3 space-y-1">
+                                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                  <Paperclip className="h-3 w-3" />
+                                  Anexos
+                                </p>
+                                {comm.attachments.map((attachment, index) => (
+                                  <button
+                                    key={`${comm.id}-${attachment.documentId ?? attachment.espelhoId ?? index}`}
+                                    type="button"
+                                    disabled={!attachment.documentId}
+                                    onClick={() =>
+                                      attachment.documentId &&
+                                      setPreviewDocument({
+                                        id: attachment.documentId,
+                                        fileName:
+                                          attachment.filename ??
+                                          `Documento ${attachment.documentId}`,
+                                        documentType: 'other',
+                                      })
+                                    }
+                                    className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:border-primary-200 hover:bg-primary-50/50 disabled:cursor-default disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:disabled:hover:bg-slate-800"
+                                  >
+                                    <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                    <span className="truncate">
+                                      {attachment.filename ??
+                                        `Documento ${attachment.documentId ?? attachment.espelhoId}`}
+                                    </span>
+                                    {attachment.documentId && (
+                                      <Eye className="ml-auto h-3.5 w-3.5 shrink-0 text-slate-400" />
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
                             {(comm.status === 'draft' || comm.status === 'failed') && (
                               <div className="mt-4 flex justify-end">
                                 <button
@@ -919,6 +1107,102 @@ export function CommunicationsPage() {
           </div>
         </div>
       </div>
+
+      {showDrivePicker && (
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="fixed inset-0 bg-sidebar-950/50 backdrop-blur-sm"
+              onClick={() => setShowDrivePicker(false)}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="drive-picker-title"
+              className="relative z-10 flex max-h-[80vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-slate-700/80 dark:bg-slate-800"
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-6">
+                <h2
+                  id="drive-picker-title"
+                  className="flex items-center gap-2.5 text-sm font-semibold text-slate-900 dark:text-slate-100"
+                >
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
+                    <HardDrive className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                  </div>
+                  Anexar do Google Drive
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowDrivePicker(false)}
+                  aria-label="Fechar seletor do Drive"
+                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="min-h-[12rem] flex-1 overflow-y-auto p-4 sm:p-6">
+                {loadingDriveFiles ? (
+                  <LoadingSpinner className="py-10" />
+                ) : driveError ? (
+                  <ErrorState message={driveError} onRetry={openDrivePicker} />
+                ) : driveFiles.length === 0 ? (
+                  <EmptyState
+                    icon={HardDrive}
+                    title="Nenhum arquivo na pasta do processo"
+                    description="A pasta deste processo no Google Drive não tem arquivos anexáveis."
+                  />
+                ) : (
+                  <div className="space-y-1">
+                    {driveFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        className="flex items-center gap-3 rounded-lg border border-slate-100 px-3 py-2 dark:border-slate-700"
+                      >
+                        <FileText className="h-4 w-4 shrink-0 text-slate-400" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm text-slate-700 dark:text-slate-200">
+                            {file.name}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            {file.size != null
+                              ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
+                              : 'tamanho desconhecido'}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => importDriveFile(file)}
+                          disabled={importingDriveFileId !== null}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-primary-700 disabled:opacity-50"
+                        >
+                          {importingDriveFileId === file.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Paperclip className="h-3.5 w-3.5" />
+                          )}
+                          Anexar
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400 dark:border-slate-700 sm:px-6">
+                O arquivo escolhido é salvo como documento deste processo antes de virar anexo.
+              </p>
+            </div>
+          </div>
+        </ModalPortal>
+      )}
+
+      <DocumentViewerModal
+        documentId={previewDocument?.id ?? null}
+        fileName={previewDocument?.fileName}
+        driveFileId={previewDocument?.driveFileId}
+        onClose={() => setPreviewDocument(null)}
+      />
     </div>
   );
 }

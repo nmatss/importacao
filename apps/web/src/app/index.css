@@ -259,20 +259,30 @@ body:where(.dark *) {
   }
 }
 
+/*
+ * fill-mode `backwards` (nao `both`): o estado final destas animacoes ja e o
+ * padrao do elemento (opacity 1, sem transform), entao reter o keyframe final
+ * nao muda a aparencia — mas deixa `transform` calculado como uma matriz, e um
+ * elemento com transform vira containing block de qualquer descendente
+ * `position: fixed`. Com `both`, todo modal/overlay renderizado dentro de uma
+ * pagina animada era posicionado em relacao a ela em vez da viewport (backdrop
+ * parcial, dialog cortado). `backwards` mantem o fade de entrada e devolve
+ * `transform: none` ao terminar.
+ */
 .animate-fade-in {
-  animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .animate-fade-in-up {
-  animation: fade-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-in-up 0.4s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .animate-slide-in-left {
-  animation: slide-in-left 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: slide-in-left 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .animate-scale-in {
-  animation: scale-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: scale-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 .animate-shimmer {
@@ -288,7 +298,7 @@ body:where(.dark *) {
 
 /* Staggered children animation */
 .stagger-children > * {
-  animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 .stagger-children > *:nth-child(1) {
   animation-delay: 0ms;
@@ -606,8 +616,14 @@ button:active:not(:disabled) {
    PAGE TRANSITION
    ══════════════════════════════════════ */
 
+/*
+ * `backwards` e obrigatorio aqui: com `both`, o <main> ficava permanentemente
+ * com `transform: matrix(...)` e virava o containing block de todo overlay
+ * `position: fixed` da aplicacao — modais nasciam presos a area de conteudo,
+ * fora do centro e com backdrop cobrindo so parte da tela.
+ */
 main {
-  animation: fade-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-in 0.25s cubic-bezier(0.22, 1, 0.36, 1) backwards;
 }
 
 /* ══════════════════════════════════════

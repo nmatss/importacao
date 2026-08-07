@@ -49,6 +49,12 @@ vi.mock('nodemailer', () => ({
   },
 }));
 
+// O mailer le `smtp_from` das configuracoes; o mock evita que a consulta
+// consuma a fila de queries do mockDb usada pelos casos de teste.
+vi.mock('../../settings/service.js', () => ({
+  settingsService: { get: vi.fn().mockResolvedValue(undefined) },
+}));
+
 const { communicationService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
 const { logger } = await import('../../../shared/utils/logger.js');
@@ -227,7 +233,10 @@ describe('communicationService', () => {
       expect(result).toEqual(mockUpdated);
       expect(mockSendMail).toHaveBeenCalledWith(
         expect.objectContaining({
+          from: '"Uni.co Importacao" <global@grupounico.com>',
           to: 'to@example.com',
+          // A caixa operacional e sempre exigida (ver ccRecipients auditado),
+          // mas sai do header por ja ser o remetente.
           cc: 'global@example.com',
           subject: 'Test',
         }),
@@ -239,10 +248,32 @@ describe('communicationService', () => {
         expect.any(Number),
         expect.objectContaining({
           recipient: 't***@example.com',
-          ccRecipients: 'g***@example.com',
+          ccRecipients: 'g***@example.com, g***@grupounico.com',
         }),
         null,
       );
+    });
+
+    it('should not duplicate the operational mailbox when it is already a recipient', async () => {
+      mockGetOperationalRecipient.mockResolvedValue('');
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'grupounico.com';
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'global@grupounico.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
+
+      await communicationService.send(1);
+
+      const sent = mockSendMail.mock.calls[0][0];
+      expect(sent.to).toBe('global@grupounico.com');
+      expect(sent.cc).toBeUndefined();
     });
 
     it('should throw when communication not found', async () => {
@@ -417,10 +448,11 @@ describe('communicationService', () => {
       );
     });
 
-    it('should block a draft before SMTP when the required operational copy is missing', async () => {
+    it('should fall back to the operational mailbox when no copy is configured', async () => {
       mockGetOperationalRecipient.mockImplementation(async (key: string) =>
         key === 'default_cc_email' ? '' : 'kiom@example.com',
       );
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
       const mockComm = {
         id: 1,
         status: 'draft',
@@ -430,16 +462,44 @@ describe('communicationService', () => {
         attachments: null,
       };
       queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
 
-      await expect(communicationService.send(1)).rejects.toThrow(
-        'Cópia operacional obrigatória não configurada',
-      );
+      await communicationService.send(1);
 
-      expect(mockSendMail).not.toHaveBeenCalled();
-      expect(mockDb.update).not.toHaveBeenCalled();
+      // Sem cadastro, a copia obrigatoria e a propria caixa operacional — que ja
+      // e o remetente, entao o header CC sai vazio por deduplicacao.
+      const sent = mockSendMail.mock.calls[0][0];
+      expect(sent.from).toBe('"Uni.co Importacao" <global@grupounico.com>');
+      expect(sent.cc).toBeUndefined();
     });
 
-    it('should block a draft before SMTP when the required operational copy is malformed', async () => {
+    it('should keep the operational mailbox in copy when MAIL_FORCE_OPERATIONAL_CC is on', async () => {
+      mockGetOperationalRecipient.mockResolvedValue('');
+      process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
+      process.env.MAIL_FORCE_OPERATIONAL_CC = 'true';
+
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
+
+      try {
+        await communicationService.send(1);
+        expect(mockSendMail).toHaveBeenCalledWith(
+          expect.objectContaining({ cc: 'global@grupounico.com' }),
+        );
+      } finally {
+        delete process.env.MAIL_FORCE_OPERATIONAL_CC;
+      }
+    });
+
+    it('should block a draft before SMTP when the configured operational copy is malformed', async () => {
       mockGetOperationalRecipient.mockImplementation(async (key: string) =>
         key === 'default_cc_email' ? 'not-an-email' : 'kiom@example.com',
       );
@@ -454,7 +514,7 @@ describe('communicationService', () => {
       queryQueue.push(createResolvedChain([mockComm]));
 
       await expect(communicationService.send(1)).rejects.toThrow(
-        'Cópia operacional obrigatória não configurada',
+        'Cópia operacional obrigatória inválida',
       );
 
       expect(mockSendMail).not.toHaveBeenCalled();

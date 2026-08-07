@@ -13,7 +13,6 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  ShieldAlert,
   Mail,
   MessageSquare,
   HardDrive,
@@ -31,6 +30,8 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { api } from '@/shared/lib/api-client';
 import { PageSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
+import { ModalPortal } from '@/shared/components/ModalPortal';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { cn } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/utils/errors';
 
@@ -68,8 +69,8 @@ type TabKey = 'email' | 'users' | 'integrations' | 'templates' | 'signatures';
 
 const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
   { key: 'email', label: 'E-mails', icon: Mail },
-  { key: 'users', label: 'Usuarios', icon: Users },
-  { key: 'integrations', label: 'Integracoes', icon: Link2 },
+  { key: 'users', label: 'Usuários', icon: Users },
+  { key: 'integrations', label: 'Integrações', icon: Link2 },
   { key: 'templates', label: 'Modelos', icon: FileText },
   { key: 'signatures', label: 'Assinaturas', icon: FileSignature },
 ];
@@ -112,29 +113,15 @@ export function SettingsPage() {
   const effectiveTab =
     isNonAdmin && !nonAdminTabs.includes(activeTab) ? ('templates' as TabKey) : activeTab;
 
-  if (isNonAdmin && !nonAdminTabs.includes(effectiveTab)) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-danger-50 mb-5">
-          <ShieldAlert className="h-8 w-8 text-danger-400" />
-        </div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">Acesso negado</h2>
-        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-          Somente administradores podem acessar as configuracoes do sistema.
-        </p>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Page header */}
       <div>
         <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-          Configuracoes
+          Configurações
         </h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Gerencie preferencias, usuarios e integracoes
+          Gerencie preferências, usuários e integrações
         </p>
       </div>
 
@@ -252,20 +239,27 @@ function EmailSettingsTab() {
   const [savedSmtp, setSavedSmtp] = useState(false);
   const [savedRecipients, setSavedRecipients] = useState(false);
 
+  // A rota devolve 404 enquanto a chave nunca foi gravada — estado normal de
+  // "ainda nao configurado", nao um erro de carregamento da aba.
   const { data: webhookSetting } = useApiQuery<SettingValue>(
     settingsKeys.webhook(),
-    '/api/settings/google_chat_webhook',
+    '/api/settings/google_chat_webhook_url',
+    { retry: false },
   );
 
-  const { data: smtpSettings } = useApiQuery<SettingValue[]>(
-    settingsKeys.smtp(),
-    '/api/settings/smtp',
-  );
+  const {
+    data: smtpSettings,
+    isLoading: loadingSmtp,
+    error: smtpError,
+    refetch: refetchSmtp,
+  } = useApiQuery<SettingValue[]>(settingsKeys.smtp(), '/api/settings/smtp');
 
-  const { data: recipientSettings } = useApiQuery<SettingValue[]>(
-    settingsKeys.recipients(),
-    '/api/settings/recipients',
-  );
+  const {
+    data: recipientSettings,
+    isLoading: loadingRecipients,
+    error: recipientsError,
+    refetch: refetchRecipients,
+  } = useApiQuery<SettingValue[]>(settingsKeys.recipients(), '/api/settings/recipients');
 
   useEffect(() => {
     if (webhookSetting) setWebhookUrl(webhookSetting.value || '');
@@ -296,7 +290,7 @@ function EmailSettingsTab() {
   const handleSaveWebhook = useCallback(async () => {
     setSavingWebhook(true);
     try {
-      await api.put('/api/settings/google_chat_webhook', { value: webhookUrl });
+      await api.put('/api/settings/google_chat_webhook_url', { value: webhookUrl });
       setSavedWebhook(true);
       setTimeout(() => setSavedWebhook(false), 2000);
     } catch (err: unknown) {
@@ -354,12 +348,26 @@ function EmailSettingsTab() {
     }
   }, [kiomEmail, feniciaEmail, isaEmail, defaultCcEmail]);
 
+  if (loadingSmtp || loadingRecipients) return <PageSkeleton />;
+
+  if (recipientsError || smtpError) {
+    return (
+      <ErrorState
+        message="Nao foi possivel carregar as configuracoes de e-mail."
+        onRetry={() => {
+          if (recipientsError) refetchRecipients();
+          if (smtpError) refetchSmtp();
+        }}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <SectionCard
         icon={Users}
-        title="Destinatarios operacionais"
-        description="Allowlist de envio usada por rascunhos e automacoes"
+        title="Destinatários operacionais"
+        description="Allowlist de envio usada por rascunhos e automações"
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -380,7 +388,7 @@ function EmailSettingsTab() {
             </div>
             <div className="min-w-0">
               <label htmlFor="fenicia-email" className={labelClasses}>
-                Fenicia
+                Fenícia
               </label>
               <textarea
                 id="fenicia-email"
@@ -410,7 +418,7 @@ function EmailSettingsTab() {
             </div>
             <div className="min-w-0">
               <label htmlFor="default-cc-email" className={labelClasses}>
-                Copia fixa
+                Cópia fixa
               </label>
               <textarea
                 id="default-cc-email"
@@ -420,7 +428,7 @@ function EmailSettingsTab() {
                 className={textareaClasses}
               />
               <p className="mt-1 text-xs text-slate-400">
-                {parseEmailList(defaultCcEmail).length} e-mail(s) em copia
+                {parseEmailList(defaultCcEmail).length} e-mail(s) em cópia
               </p>
             </div>
           </div>
@@ -435,7 +443,7 @@ function EmailSettingsTab() {
       <SectionCard
         icon={MessageSquare}
         title="Google Chat Webhook"
-        description="Notificacoes via Google Chat"
+        description="Notificações via Google Chat"
       >
         <div className="space-y-4">
           <div>
@@ -457,7 +465,7 @@ function EmailSettingsTab() {
 
       <SectionCard
         icon={Mail}
-        title="Configuracoes SMTP"
+        title="Configurações SMTP"
         description="Servidor de envio de e-mails"
       >
         <div className="space-y-4">
@@ -490,7 +498,7 @@ function EmailSettingsTab() {
             </div>
             <div>
               <label htmlFor="smtp-user" className={labelClasses}>
-                Usuario
+                Usuário
               </label>
               <input
                 id="smtp-user"
@@ -608,14 +616,14 @@ function UsersTab() {
           <span className="font-semibold text-slate-700 dark:text-slate-300">
             {users?.length ?? 0}
           </span>{' '}
-          usuarios cadastrados
+          usuários cadastrados
         </p>
         <button
           onClick={openCreate}
           className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 transition-all"
         >
           <Plus className="h-4 w-4" />
-          Novo Usuario
+          Novo Usuário
         </button>
       </div>
 
@@ -626,7 +634,7 @@ function UsersTab() {
             <thead>
               <tr className="border-b border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80">
                 <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Usuario
+                  Usuário
                 </th>
                 <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Email
@@ -638,7 +646,7 @@ function UsersTab() {
                   Status
                 </th>
                 <th className="px-3 py-2 sm:px-6 sm:py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Acoes
+                  Ações
                 </th>
               </tr>
             </thead>
@@ -718,7 +726,7 @@ function UsersTab() {
                           onClick={() => openEdit(user)}
                           className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                           title="Editar"
-                          aria-label={`Editar usuario ${user.name}`}
+                          aria-label={`Editar usuário ${user.name}`}
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
@@ -726,7 +734,7 @@ function UsersTab() {
                           onClick={() => setDeactivateId(user.id)}
                           className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
                           title="Desativar"
-                          aria-label={`Desativar usuario ${user.name}`}
+                          aria-label={`Desativar usuário ${user.name}`}
                         >
                           <UserX className="h-4 w-4" />
                         </button>
@@ -742,100 +750,102 @@ function UsersTab() {
 
       {/* User modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
-          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="user-modal-title"
-            className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
-          >
-            <h2
-              id="user-modal-title"
-              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+            <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="user-modal-title"
+              className="relative z-10 w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
             >
-              {editUser ? 'Editar Usuario' : 'Novo Usuario'}
-            </h2>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label htmlFor="user-name" className={labelClasses}>
-                  Nome
-                </label>
-                <input
-                  id="user-name"
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className={inputClasses}
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="user-email" className={labelClasses}>
-                  Email
-                </label>
-                <input
-                  id="user-email"
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className={inputClasses}
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="user-password" className={labelClasses}>
-                  Senha{editUser ? ' (deixe vazio para manter)' : ''}
-                </label>
-                <input
-                  id="user-password"
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className={inputClasses}
-                  required={!editUser}
-                />
-              </div>
-              <div>
-                <label htmlFor="user-role" className={labelClasses}>
-                  Perfil
-                </label>
-                <select
-                  id="user-role"
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  className={inputClasses}
-                >
-                  <option value="admin">Admin</option>
-                  <option value="analyst">Analista</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </form>
+              <h2
+                id="user-modal-title"
+                className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+              >
+                {editUser ? 'Editar Usuário' : 'Novo Usuário'}
+              </h2>
+              <form onSubmit={handleSave} className="space-y-4">
+                <div>
+                  <label htmlFor="user-name" className={labelClasses}>
+                    Nome
+                  </label>
+                  <input
+                    id="user-name"
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    className={inputClasses}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="user-email" className={labelClasses}>
+                    Email
+                  </label>
+                  <input
+                    id="user-email"
+                    type="email"
+                    value={form.email}
+                    onChange={(e) => setForm({ ...form, email: e.target.value })}
+                    className={inputClasses}
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="user-password" className={labelClasses}>
+                    Senha{editUser ? ' (deixe vazio para manter)' : ''}
+                  </label>
+                  <input
+                    id="user-password"
+                    type="password"
+                    value={form.password}
+                    onChange={(e) => setForm({ ...form, password: e.target.value })}
+                    className={inputClasses}
+                    required={!editUser}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="user-role" className={labelClasses}>
+                    Perfil
+                  </label>
+                  <select
+                    id="user-role"
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value })}
+                    className={inputClasses}
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="analyst">Analista</option>
+                  </select>
+                </div>
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       <ConfirmDialog
         isOpen={!!deactivateId}
-        title="Desativar Usuario"
-        message="Tem certeza que deseja desativar este usuario? Ele nao podera acessar o sistema."
+        title="Desativar usuário"
+        message="Tem certeza que deseja desativar este usuário? Ele não poderá acessar o sistema."
         confirmLabel="Desativar"
         onConfirm={handleDeactivate}
         onCancel={() => setDeactivateId(null)}
@@ -857,10 +867,12 @@ function IntegrationsTab() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const { data: integrationSettings } = useApiQuery<SettingValue[]>(
-    settingsKeys.integrations(),
-    '/api/settings/integrations',
-  );
+  const {
+    data: integrationSettings,
+    isLoading: loadingIntegrations,
+    error: integrationsError,
+    refetch: refetchIntegrations,
+  } = useApiQuery<SettingValue[]>(settingsKeys.integrations(), '/api/settings/integrations');
 
   useEffect(() => {
     if (integrationSettings && Array.isArray(integrationSettings)) {
@@ -919,12 +931,23 @@ function IntegrationsTab() {
     }
   };
 
+  if (loadingIntegrations) return <PageSkeleton />;
+
+  if (integrationsError) {
+    return (
+      <ErrorState
+        message="Nao foi possivel carregar as integracoes."
+        onRetry={() => refetchIntegrations()}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <SectionCard
         icon={HardDrive}
         title="Google Drive"
-        description="Armazenamento e sincronizacao de documentos"
+        description="Armazenamento e sincronização de documentos"
         actions={<StatusIndicator status={driveStatus} />}
       >
         <div className="space-y-4">
@@ -963,7 +986,7 @@ function IntegrationsTab() {
       <SectionCard
         icon={Database}
         title="Odoo ERP"
-        description="Integracao com sistema de gestao empresarial"
+        description="Integração com sistema de gestão empresarial"
         actions={<StatusIndicator status={odooStatus} />}
       >
         <div className="space-y-4">
@@ -996,7 +1019,7 @@ function IntegrationsTab() {
             </div>
             <div>
               <label htmlFor="odoo-user" className={labelClasses}>
-                Usuario
+                Usuário
               </label>
               <input
                 id="odoo-user"
@@ -1012,7 +1035,7 @@ function IntegrationsTab() {
         </div>
       </SectionCard>
 
-      <SaveButton onClick={handleSave} saving={saving} saved={saved} label="Salvar Integracoes" />
+      <SaveButton onClick={handleSave} saving={saving} saved={saved} label="Salvar integrações" />
     </div>
   );
 }
@@ -1029,7 +1052,7 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
       ) : (
         <Zap className="h-4 w-4 text-amber-500" />
       )}
-      Testar Conexao
+      Testar conexão
     </button>
   );
 }
@@ -1134,7 +1157,7 @@ function CommunicationTemplatesTab() {
       <SectionCard
         icon={FileText}
         title="Modelos de Atendimento"
-        description="Modelos reutilizaveis para rascunhos e envios de e-mail"
+        description="Modelos reutilizáveis para rascunhos e envios de e-mail"
         actions={
           <button
             onClick={openCreate}
@@ -1158,7 +1181,7 @@ function CommunicationTemplatesTab() {
                     Modelo
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Destinatario
+                    Destinatário
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Assunto
@@ -1167,7 +1190,7 @@ function CommunicationTemplatesTab() {
                     Status
                   </th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Acoes
+                    Ações
                   </th>
                 </tr>
               </thead>
@@ -1229,117 +1252,119 @@ function CommunicationTemplatesTab() {
       </SectionCard>
 
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
-          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="template-modal-title"
-            className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
-          >
-            <h2
-              id="template-modal-title"
-              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+            <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="template-modal-title"
+              className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
             >
-              {editing ? 'Editar Modelo' : 'Novo Modelo'}
-            </h2>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <h2
+                id="template-modal-title"
+                className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+              >
+                {editing ? 'Editar Modelo' : 'Novo Modelo'}
+              </h2>
+              <form onSubmit={handleSave} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div>
+                    <label htmlFor="template-name" className={labelClasses}>
+                      Nome
+                    </label>
+                    <input
+                      id="template-name"
+                      value={form.name}
+                      onChange={(e) => setForm({ ...form, name: e.target.value })}
+                      className={inputClasses}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="template-recipient" className={labelClasses}>
+                      Destinatário
+                    </label>
+                    <input
+                      id="template-recipient"
+                      value={form.recipient}
+                      onChange={(e) => setForm({ ...form, recipient: e.target.value })}
+                      className={inputClasses}
+                    />
+                  </div>
+                </div>
                 <div>
-                  <label htmlFor="template-name" className={labelClasses}>
-                    Nome
+                  <label htmlFor="template-recipient-email" className={labelClasses}>
+                    E-mail destinatário
                   </label>
                   <input
-                    id="template-name"
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    id="template-recipient-email"
+                    value={form.recipientEmail}
+                    onChange={(e) => setForm({ ...form, recipientEmail: e.target.value })}
+                    placeholder="email@exemplo.com, outro@exemplo.com"
+                    className={inputClasses}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="template-subject" className={labelClasses}>
+                    Assunto
+                  </label>
+                  <input
+                    id="template-subject"
+                    value={form.subject}
+                    onChange={(e) => setForm({ ...form, subject: e.target.value })}
                     className={inputClasses}
                     required
                   />
                 </div>
                 <div>
-                  <label htmlFor="template-recipient" className={labelClasses}>
-                    Destinatario
+                  <label htmlFor="template-body" className={labelClasses}>
+                    Mensagem
                   </label>
-                  <input
-                    id="template-recipient"
-                    value={form.recipient}
-                    onChange={(e) => setForm({ ...form, recipient: e.target.value })}
-                    className={inputClasses}
+                  <textarea
+                    id="template-body"
+                    value={form.body}
+                    onChange={(e) => setForm({ ...form, body: e.target.value })}
+                    className={cn(inputClasses, 'min-h-[180px]')}
+                    required
                   />
                 </div>
-              </div>
-              <div>
-                <label htmlFor="template-recipient-email" className={labelClasses}>
-                  E-mail destinatario
+                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={form.isActive}
+                    onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600"
+                  />
+                  Ativo para uso nos atendimentos
                 </label>
-                <input
-                  id="template-recipient-email"
-                  value={form.recipientEmail}
-                  onChange={(e) => setForm({ ...form, recipientEmail: e.target.value })}
-                  placeholder="email@exemplo.com, outro@exemplo.com"
-                  className={inputClasses}
-                />
-              </div>
-              <div>
-                <label htmlFor="template-subject" className={labelClasses}>
-                  Assunto
-                </label>
-                <input
-                  id="template-subject"
-                  value={form.subject}
-                  onChange={(e) => setForm({ ...form, subject: e.target.value })}
-                  className={inputClasses}
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="template-body" className={labelClasses}>
-                  Mensagem
-                </label>
-                <textarea
-                  id="template-body"
-                  value={form.body}
-                  onChange={(e) => setForm({ ...form, body: e.target.value })}
-                  className={cn(inputClasses, 'min-h-[180px]')}
-                  required
-                />
-              </div>
-              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-                <input
-                  type="checkbox"
-                  checked={form.isActive}
-                  onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-300 text-primary-600"
-                />
-                Ativo para uso nos atendimentos
-              </label>
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </form>
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       <ConfirmDialog
         isOpen={!!deletingId}
-        title="Desativar Modelo"
-        message="Este modelo deixara de aparecer nos atendimentos, mas o historico sera preservado."
+        title="Desativar modelo"
+        message="Este modelo deixará de aparecer nos atendimentos, mas o histórico será preservado."
         confirmLabel="Desativar"
         onConfirm={handleDeactivate}
         onCancel={() => setDeletingId(null)}
@@ -1477,7 +1502,7 @@ function SignaturesTab() {
                     {sig.isDefault && (
                       <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">
                         <Star className="h-3 w-3" />
-                        Padrao
+                        Padrão
                       </span>
                     )}
                   </div>
@@ -1532,97 +1557,99 @@ function SignaturesTab() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
-          <div className="fixed inset-0" onClick={() => setShowModal(false)} />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="signature-modal-title"
-            className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
-          >
-            <h2
-              id="signature-modal-title"
-              className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+        <ModalPortal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
+            <div className="fixed inset-0" onClick={() => setShowModal(false)} />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="signature-modal-title"
+              className="relative z-10 w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-6 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-200"
             >
-              {editSig ? 'Editar Assinatura' : 'Nova Assinatura'}
-            </h2>
-            <form onSubmit={handleSave} className="space-y-4">
-              <div>
-                <label htmlFor="sig-name" className={labelClasses}>
-                  Nome
-                </label>
-                <input
-                  id="sig-name"
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="Ex: Assinatura Comercial"
-                  className={inputClasses}
-                  required
-                  maxLength={100}
-                />
-              </div>
-              <div>
-                <label htmlFor="sig-html" className={labelClasses}>
-                  Conteúdo HTML da assinatura
-                </label>
-                <textarea
-                  id="sig-html"
-                  value={form.signatureHtml}
-                  onChange={(e) => setForm({ ...form, signatureHtml: e.target.value })}
-                  placeholder="<p>Atenciosamente,<br/>Seu Nome<br/>Cargo | Empresa</p>"
-                  className={cn(inputClasses, 'min-h-[150px] font-mono text-xs')}
-                  required
-                />
-              </div>
-              {form.signatureHtml && (
+              <h2
+                id="signature-modal-title"
+                className="text-lg font-bold text-slate-900 dark:text-slate-100 mb-5"
+              >
+                {editSig ? 'Editar Assinatura' : 'Nova Assinatura'}
+              </h2>
+              <form onSubmit={handleSave} className="space-y-4">
                 <div>
-                  <label className={labelClasses}>Pré-visualização</label>
-                  <div
-                    className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 p-4 text-sm text-slate-700 dark:text-slate-300 prose prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.signatureHtml) }}
+                  <label htmlFor="sig-name" className={labelClasses}>
+                    Nome
+                  </label>
+                  <input
+                    id="sig-name"
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder="Ex: Assinatura Comercial"
+                    className={inputClasses}
+                    required
+                    maxLength={100}
                   />
                 </div>
-              )}
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={form.isDefault}
-                    onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                <div>
+                  <label htmlFor="sig-html" className={labelClasses}>
+                    Conteúdo HTML da assinatura
+                  </label>
+                  <textarea
+                    id="sig-html"
+                    value={form.signatureHtml}
+                    onChange={(e) => setForm({ ...form, signatureHtml: e.target.value })}
+                    placeholder="<p>Atenciosamente,<br/>Seu Nome<br/>Cargo | Empresa</p>"
+                    className={cn(inputClasses, 'min-h-[150px] font-mono text-xs')}
+                    required
                   />
-                  <span className="text-sm text-slate-600 dark:text-slate-400">
-                    Definir como assinatura padrão
-                  </span>
-                </label>
-              </div>
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
-                >
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </button>
-              </div>
-            </form>
+                </div>
+                {form.signatureHtml && (
+                  <div>
+                    <label className={labelClasses}>Pré-visualização</label>
+                    <div
+                      className="rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 p-4 text-sm text-slate-700 dark:text-slate-300 prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(form.signatureHtml) }}
+                    />
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.isDefault}
+                      onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                      className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span className="text-sm text-slate-600 dark:text-slate-400">
+                      Definir como assinatura padrão
+                    </span>
+                  </label>
+                </div>
+                <div className="flex justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="rounded-xl border border-slate-200 dark:border-slate-600 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-all duration-200"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       <ConfirmDialog
         isOpen={!!deletingId}
         title="Excluir Assinatura"
-        message="Tem certeza que deseja excluir esta assinatura? Esta acao nao pode ser desfeita."
+        message="Tem certeza que deseja excluir esta assinatura? Esta ação não pode ser desfeita."
         confirmLabel="Excluir"
         onConfirm={handleDelete}
         onCancel={() => setDeletingId(null)}
@@ -1641,7 +1668,7 @@ function StatusIndicator({ status }: { status: 'idle' | 'success' | 'error' }) {
   ) : (
     <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600">
       <XCircle className="h-3.5 w-3.5" />
-      Falha na conexao
+      Falha na conexão
     </span>
   );
 }

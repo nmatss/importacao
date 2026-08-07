@@ -31,7 +31,10 @@ export const settingsKeys = {
   recipients: () => [...settingsKeys.all, 'recipients'] as const,
   integrations: () => [...settingsKeys.all, 'integrations'] as const,
   communicationTemplates: () => [...settingsKeys.all, 'communication-templates'] as const,
-  webhook: () => settingsKeys.key('google_chat_webhook'),
+  // Chave real da configuracao lida por alerts/validation/event handlers.
+  // A tela usava 'google_chat_webhook' (sem _url) e por isso lia 404 e gravava
+  // em uma chave que nenhum consumidor le.
+  webhook: () => settingsKeys.key('google_chat_webhook_url'),
 };
 
 export const userKeys = {

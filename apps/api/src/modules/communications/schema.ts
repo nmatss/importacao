@@ -42,6 +42,35 @@ export const createCommunicationSchema = z.object({
 
 export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>;
 
+/**
+ * Importacao de anexo vindo do Google Drive.
+ *
+ * `documentType` usa o mesmo enum de `documents/schema.ts` — o arquivo vira um
+ * documento do processo, nao um anexo com storage proprio. O default `other`
+ * cobre o caso comum do atendimento (anexo avulso ainda nao classificado).
+ */
+export const driveImportSchema = z.object({
+  processId: z.coerce.number().int().positive(),
+  driveFileId: z.string().trim().min(1).max(255),
+  documentType: z
+    .enum([
+      'invoice',
+      'proforma_invoice',
+      'packing_list',
+      'ohbl',
+      'draft_bl',
+      'draft_duimp',
+      'duimp',
+      'espelho',
+      'li',
+      'certificate',
+      'other',
+    ])
+    .default('other'),
+});
+
+export type DriveImportInput = z.infer<typeof driveImportSchema>;
+
 export const updateDraftSchema = z.object({
   subject: z.string().min(1).max(500).optional(),
   body: z.string().min(1).max(100000).optional(),
