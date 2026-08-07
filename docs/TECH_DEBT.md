@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-06-20
+Ultima atualizacao: 2026-08-03
 
 ## Validacao E Comparativo
 
@@ -21,9 +21,21 @@ Ultima atualizacao: 2026-06-20
 
 ## IA E Extracao
 
-- Adicionar lease/lock atômico por `document_id` na fila de extração. A escrita
-  no processo já é atômica, mas jobs duplicados ainda podem gastar IA e gerar
-  linhagem redundante.
+- Criar executor administrativo de reprocessamento em lote com dry-run,
+  selecao canonica, exclusao explicita de processos, batch ID, checkpoint,
+  retomada e exclusao mutua.
+- Criar modo de manutencao que separe reclassificacao de enqueue e diferir
+  validacao, reconciliacao, Drive, Chat e relatorios ate o fim de cada processo.
+- Tornar o limite de reprocessamento global por usuario/operacao, em vez de
+  incluir o ID do documento em `req.path` como parte isolante da chave.
+- Implementar rollback controlado de extracao a partir de
+  `document_extraction_history`; hoje a tabela preserva evidencia, mas nao ha
+  endpoint/servico de restauracao.
+- Alinhar `DOCUMENT_EXTRACTION_LEASE_MS` ao timeout de texto/job em compose e
+  adicionar validacao fail-fast que rejeite lease menor que o pior timeout.
+- A lease/lock atomica por `document_id` foi entregue na migration `0024`; a
+  divida residual e alinhar o valor efetivo de producao ao pior timeout e
+  impedir lote concorrente em nivel de batch/processo.
 - Evoluir linhagem de campos para evidência navegável: página, trecho/posição e
   versão efetiva do parser/modelo por campo.
 - Versionar um corpus anonimizado de documentos reais e executar o evaluator de
@@ -55,6 +67,13 @@ Ultima atualizacao: 2026-06-20
 
 ## DevOps E Operacao
 
+- Expor `APP_VERSION`/revision real no health de producao e registrar o SHA em
+  todo batch operacional.
+- Adicionar runbook especifico para reprocessamento documental: backup de banco
+  e `uploads`, piloto, pausa, criterios de encerramento e reconciliacao de
+  efeitos externos.
+- Adicionar chave operacional para suprimir notificacoes e uploads externos em
+  manutencoes controladas, sem desligar silenciosamente integracoes normais.
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
 - Adicionar alerta externo para falha do `scripts/restore-test.sh` e medir RTO em
   execucao recorrente. Restore manual e cron semanal validados em 2026-06-17.

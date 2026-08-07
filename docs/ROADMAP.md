@@ -2,10 +2,19 @@
 
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
-Ultima atualizacao: 2026-07-09
+Ultima atualizacao: 2026-08-03
 
 ## P0 - Operacao E Confiabilidade
 
+- Preparar reprocessamento integral sem o DEMO: executor admin-only resumivel,
+  dry-run, selecao canonica, batch ID, modo de manutencao e exclusao obrigatoria
+  de `process_id=264`.
+- Corrigir a lease de producao para 25 minutos e validar um piloto antes de
+  liberar o lote de 42 documentos canonicos planejados.
+- Criar backup novo de PostgreSQL/`uploads` e comprovar restore/listagem antes
+  da janela de reprocessamento.
+- Resolver ou monitorar o egress intermitente da API antes do lote, pois Vertex,
+  Drive e login Google dependem da rota externa.
 - Adicionar PDFs ou extracoes reais anonimizadas de validacao INV/PL/OHBL/Draft
   BL. Existe fixture representativa sem mock de `allChecks` desde 2026-06-17.
 - Cadastrar destinatarios KIOM, Fenicia e ISA em
@@ -15,6 +24,10 @@ Ultima atualizacao: 2026-07-09
 
 ## P1 - Qualidade De Dados E Validacao
 
+- Confirmar 11 sugestoes de reclassificacao, triar 15 documentos `other` e
+  corrigir 2 espelhos PDF antes de declarar a base 100% operacional.
+- Definir politica de reprocessamento para processos `completed`, que nao podem
+  transicionar novamente para `validating` pela state machine atual.
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).
 - Comparativo documental: evoluir a origem por campo para guardar
   `sourceDocumentId`, versao e timestamp da leitura; a edicao auditavel do valor

@@ -1,6 +1,180 @@
 # Known Issues
 
-Ultima atualizacao: 2026-07-17 (ver `docs/STATUS-2026-07-17.md`)
+Ultima atualizacao: 2026-08-07 (ver
+`docs/STATUS-2026-08-07-CERTIFICACAO-RELATORIO-ESTOQUE.md`,
+`docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
+`docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
+`docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## ALTO - Estoque De Certificacao Sem Agendamento Proprio
+
+Descricao:
+
+- Ate 2026-08-07 a tabela `cert_stock` inteira (33.416 linhas) datava de
+  23/03/2026: o unico registro em `cert_schedules` roda apenas a validacao VTEX,
+  e `/api/sync-stock` so era acionado manualmente.
+- A correcao fez o sync de estoque pegar carona no caminho `source="sheets"`,
+  entao ele passa a rodar uma vez por dia junto do cron das 06:00.
+
+Impacto:
+
+- Estoque no painel e no relatorio pode ficar ate 24h defasado, e um problema no
+  cron de validacao leva o estoque junto sem alerta proprio.
+
+Status:
+
+- **PARCIAL / ALTO.** `cert_schedules` nao tem coluna de tipo de job, entao nao
+  da para cadastrar um agendamento so de estoque sem migration. Registrado em
+  `docs/TECH_DEBT.md`.
+
+## MEDIO - Produtos Ativos Sem "Descricao E-commerce" Na Planilha
+
+Descricao:
+
+- 41 dos 567 produtos das abas de produto estao com a coluna V ("Descricao
+  E-commerce") vazia na planilha STATUS CERTIFICACAO.
+- Ate 2026-08-07 isso ficava escondido porque o sync caia para
+  `certification_type` quando a coluna V estava vazia — o que gerava comparacao
+  contra texto que nao e frase de certificacao.
+- Com a correcao, `expected_cert_text` e exclusivamente a coluna V. Sem ela o
+  produto sai como `NAO_CONFORME` com a frase "Frase de certificacao obrigatoria
+  ausente no cadastro".
+
+Impacto:
+
+- Esses 41 SKUs aparecem como nao conformes ate o time fiscal preencher a coluna
+  V. O status esta correto: a frase realmente nao esta cadastrada.
+
+Status:
+
+- **ABERTO / MEDIO.** Depende de preenchimento na planilha (time fiscal).
+
+## ALTO - Login Google Intermitente Por Gateway Docker Da API
+
+Descricao:
+
+- Em 2026-08-03, Leticia, Eduarda e Odett tiveram nove tentativas de login
+  bloqueadas entre 09:16 e 09:19 BRT.
+- O frontend recebeu HTTP 401, mas a causa real foi `ETIMEDOUT` da API ao obter
+  token em `oauth2.googleapis.com` para validar o Google Group.
+- A API esta nas redes `importacao_default` e `ia-local-net`; seu default
+  gateway aponta para `ia-local-net`, cuja origem `192.168.208.4` nao possui
+  egress funcional. A origem `172.20.0.9` de `importacao_default` acessa o
+  Google normalmente.
+
+Impacto:
+
+- Todos os logins Google e integracoes externas originadas pela API podem
+  falhar de forma intermitente.
+- O health check continua verde porque valida somente API, PostgreSQL e Redis.
+- Timeouts de infraestrutura sao apresentados incorretamente como HTTP 401.
+
+Status:
+
+- **ABERTO / ALTO.** Houve login bem-sucedido das tres usuarias as 11:37 BRT,
+  mas um probe posterior voltou a falhar; o sucesso temporario nao encerra o
+  incidente.
+- Correcao recomendada: fixar `importacao_default` como gateway prioritario via
+  `gw_priority`, manter `ia-local-net` para a IA local, recriar a API pelo fluxo
+  aprovado e executar a matriz de validacao registrada em
+  `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md`.
+- Nenhuma mudanca de producao foi aplicada durante o diagnostico.
+
+## ALTO - Reprocessamento Integral Nao Possui Orquestrador Seguro
+
+Descricao:
+
+- A API expoe reprocessamento unitario, mas nao possui batch ID, dry-run,
+  selecao canonica, retomada ou exclusao mutua de lote.
+- Existem 73 versoes excedentes em 28 grupos `processo + tipo`; reprocessar
+  todas pode fazer documento historico competir com a versao operacional.
+- Cada documento pode disparar validacao, reconciliacao, upload/relatorio no
+  Drive, movimento de pasta e alerta no Google Chat.
+- O rate limiter usa `req.path` na chave; IDs diferentes nao formam um limite
+  global efetivo para o lote.
+
+Impacto:
+
+- Limpeza antecipada de dezenas de documentos enquanto aguardam o worker.
+- Validacoes repetidas, transicoes de workflow, ruido de alertas e arquivos
+  duplicados em integracoes externas.
+- Lote interrompido nao tem checkpoint operacional para retomada segura.
+
+Status:
+
+- **PARCIALMENTE MITIGADO / ALTO. 2026-08-07:** `scripts/reprocess-documents.mjs`
+  cobre dry-run por padrao, batch ID, retomada por JSONL, selecao canonica,
+  exclusao do processo 264 e ritmo proprio de requisicao, tudo sobre as rotas
+  HTTP existentes (nenhuma escrita direta no banco).
+- Continua ABERTO no lado do servidor: nao ha modo de manutencao para diferir
+  validacao, Drive e Google Chat, nem exclusao mutua entre lotes concorrentes.
+  Enquanto isso, o lote so deve rodar em janela combinada com a operacao.
+
+## MEDIO - Assuntos De E-mail Da Rodada DUIMP Nao Existem No Portal
+
+Descricao:
+
+- Os unicos assuntos gerados pelo portal sao `Documentos de Importação - {codigo}
+  - {marca}` (`templates/fenicia-submission.ts`), `Correção Necessária - ...`
+(`templates/kiom-correction.ts`) e `Certificação ISA - ...`
+(`templates/isa-certification.ts`).
+- A thread real Odett/Eduarda do processo PK2052602TJ usa outros dois padroes,
+  que nao tem template correspondente: `Rascunho DUIMP PUK PK2052602TJ //
+DOCUMENTOS` (rodada de conferencia do rascunho) e `REGISTRO DUIMP PUK016/26 -
+PK2052602TJ` (aviso de registro).
+- O segundo padrao depende da referencia Fenicia (`PUK016/26`), que o portal nao
+  guarda em coluna alguma de `import_processes` — `purchase_ref` e a referencia
+  de compra, nao a da Fenicia. A referencia esta impressa nos dois PDFs
+  (`Referência externa` no rascunho, `REFERENCIA FENICIA` no extrato), mas
+  `duimpResponseSchema` nao extrai o campo.
+
+Impacto:
+
+- A rodada de rascunho e o aviso de registro continuam sendo escritos a mao; o
+  portal nao consegue reproduzir o assunto que a Fenicia usa para arquivar.
+
+Status:
+
+- **ABERTO / MEDIO.** Precisa de decisao: promover a referencia Fenicia a coluna
+  de `import_processes` + campo do extractor DUIMP, e so entao criar os dois
+  templates no modulo `communications`.
+
+## ALTO - Lease De Extracao De Producao Menor Que O Timeout Do Job
+
+Descricao:
+
+- Producao usa `DOCUMENT_EXTRACTION_LEASE_MS=600000` (10 minutos).
+- A extracao de texto/OCR pode durar 20 minutos e o job `ai-extraction` expira
+  em 25 minutos.
+
+Impacto:
+
+- Uma extracao longa pode perder a lease e permitir trabalho concorrente ou
+  duplicado antes do encerramento do job original.
+
+Status:
+
+- **ABERTO / ALTO antes do lote.** Ajustar para no minimo `1500000` e validar o
+  comportamento em piloto.
+
+## MEDIO - Base Documental Exige Triagem Antes Do Reprocessamento Integral
+
+Descricao:
+
+- Dos 26 documentos `other` fora do DEMO, o classificador sugeriu 6 proformas,
+  4 invoices e 1 Draft DUIMP; 15 continuam inconclusivos.
+- Dois espelhos canonicos sao PDF e nao sao aceitos pelo parser deterministico
+  atual; o fallback de IA do espelho nao esta habilitado.
+
+Impacto:
+
+- Reprocessar `other` apenas os marca sem extractor e gera alerta.
+- Reprocessar os espelhos PDF repete a falha sem melhorar os dados.
+
+Status:
+
+- **ABERTO / MEDIO.** Confirmar as 11 reclassificacoes, triar manualmente os 15
+  restantes e substituir/reclassificar os 2 espelhos PDF.
 
 ## Para fechar o "100%" — itens de DADO/CONFIG (nao codigo) — 2026-06-22
 

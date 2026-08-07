@@ -421,6 +421,7 @@ Por onde começar, em ordem sugerida para quem chega agora:
 
 Estado e backlog da entrega:
 
+- [`docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`](docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md) — inventario de producao, escopo canonico, riscos e plano para reprocessar a base sem o DEMO
 - [`docs/ENTREGA-2026-06-11.md`](docs/ENTREGA-2026-06-11.md) — registro consolidado da entrega em produção (UAT + harness + cert-Linx + hardening + Parte A + deploy)
 - [`docs/ODETT-STATUS.md`](docs/ODETT-STATUS.md) — status da UAT da Odett + camada de confiança da IA
 - [`docs/REVISAO-100.md`](docs/REVISAO-100.md) — gap analysis e backlog vivo da "Parte A 100%"

@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-07-09
+Ultima atualizacao: 2026-08-03
 
 ## Objetivo
 
@@ -101,6 +101,18 @@ Grau de confianca: alto.
 - Trigger, varredura historica e reprocessamento manual de e-mail ingestion sao operacoes administrativas.
 - Exportacoes CSV de alertas e atendimentos devem refletir os filtros atuais da tela, evitando relatorios duplicados com o mesmo dado.
 - Assistente operacional deve responder somente com fontes internas; se a IA falhar, o fallback deterministico deve explicar as evidencias encontradas.
+- Reprocessamento integral deve excluir o processo DEMO por identificador
+  estavel (`process_id=264`), selecionar somente a versao canonica mais recente
+  por `processo + tipo` e preservar versoes antigas como evidencia, sem faze-las
+  competir pela projecao operacional.
+- "100% operacional" documental significa estado terminal auditavel para cada
+  documento canonico: extraido/utilizavel ou falho/quarentenado com causa e
+  acao explicitas. Nao significa elevar artificialmente confianca ou declarar
+  todos os documentos conformes.
+- Reprocessamento em massa deve diferir efeitos derivados e executar rebuild,
+  reconciliacao e validacao uma unica vez por processo ao final. Drive, Chat,
+  relatorios e movimentos de pasta nao devem ocorrer para cada documento do
+  lote.
 
 Evidencias:
 
@@ -111,12 +123,48 @@ Evidencias:
 
 Grau de confianca: alto.
 
+## Baseline De Reprocessamento Documental - 2026-08-03
+
+Inventario read-only de producao, excluindo o DEMO `264`:
+
+- 121 documentos em 25 processos; 121/121 arquivos presentes;
+- 99 processados e 22 pendentes;
+- 28 grupos duplicados, com 73 versoes excedentes;
+- 40 documentos canonicos antes da triagem de `other`;
+- 11 sugestoes deterministicas de reclassificacao entre 26 `other`;
+- 15 `other` ainda inconclusivos;
+- 44 canonicos apos simulacao das reclassificacoes;
+- 2 espelhos PDF incompativeis com o parser atual;
+- lote executavel planejado: 42 canonicos, sendo 39 via IA e 3 espelhos XLSX,
+  distribuidos por 21 processos.
+
+Bloqueios anteriores ao lote:
+
+- executor admin-only, resumivel e com dry-run;
+- modo de manutencao para Drive/Chat/validacao;
+- `DOCUMENT_EXTRACTION_LEASE_MS` alinhado em 25 minutos;
+- backup novo de PostgreSQL e `uploads`;
+- triagem dos `other` e espelhos PDF;
+- piloto real com criterios de go/no-go;
+- tratamento separado de processo `completed`.
+
+O fluxo existente preserva historico antes de limpar a extracao, mas nao
+oferece restauracao por API. Rollback sistemico depende de backup e nao desfaz
+efeitos externos no Drive/Chat.
+
+Evidencia canonica:
+
+- `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`
+
+Grau de confianca: alto para inventario e arquitetura; medio para custo e tempo
+do lote; classificacoes sugeridas exigem confirmacao humana.
+
 ## Dados E Banco
 
 Fonte principal:
 
 - `apps/api/src/shared/database/schema.ts`
-- migrations `apps/api/drizzle/0000` ate `0018`
+- migrations `apps/api/drizzle/0000` ate `0025`
 
 Tabelas centrais observadas:
 
@@ -260,19 +308,32 @@ Grau de confianca: alto para estado de codigo; medio para estrategia futura, poi
 - Deploy atual por `scripts/deploy.sh`.
 - O script faz backup PostgreSQL, snapshot de rollback, rsync, rebuild de `api` e `web`, migrations pendentes e health check.
 - Banco e Redis expostos apenas localmente/internamente conforme compose prod.
+- A API precisa permanecer simultaneamente nas redes `importacao_default` e
+  `ia-local-net`: a primeira atende os servicos do compose e o egress externo;
+  a segunda permite acesso ao gateway on-prem da IA local.
+- Incidente de 2026-08-03 confirmou que o default gateway da API pode cair em
+  `ia-local-net` e perder egress para Google/SYDLE. A correcao duravel deve
+  declarar `gw_priority` para `importacao_default`, sem remover `ia-local-net`.
+- O health check atual da API cobre banco e Redis, mas nao prova disponibilidade
+  do login Google ou de integracoes externas. Usar alerta/probe sintetico
+  separado para egress; nao transformar dependencia externa em readiness que
+  reinicia a API inutilmente.
 - SHA `3f36137a697fee9f4f1011bc3eace3417467d5be` foi implantado com sucesso
   operacional em 2026-06-19: backup, migrations, API/web/cert-api healthy,
   observabilidade iniciada e `REVISION` remoto gravado.
-- O go-live publico ainda esta bloqueado: `https://importacao.grupounico.com/`
-  retornou 502 de uma camada `nginx` externa. A topologia correta confirmada e
-  Nginx/edge externo -> Nginx interno do app em `192.168.168.124:8085`; manter
-  o compose com `8085:80` e sem roteamento Traefik para este dominio.
+- O bloqueio publico por 502 registrado em junho foi superado: em 2026-08-03,
+  `https://importacao.grupounico.com/` e `/api/health` responderam HTTP 200. A
+  topologia confirmada continua Nginx/edge externo -> Nginx interno do app em
+  `192.168.168.124:8085`; manter `8085:80` no compose.
+- Revisao observada em producao durante o incidente de 2026-08-03:
+  `b55968a1ded2527524113543cb5febc64c7fedd2`.
 
 Evidencias:
 
 - `scripts/deploy.sh`
 - `docker-compose.prod.yml`
 - `docs/STATUS-2026-06-16.md`
+- `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md`
 
 Grau de confianca: alto.
 
@@ -288,6 +349,10 @@ Ver detalhes em:
 
 Principais temas:
 
+- Login Google e integracoes externas permanecem sob risco alto enquanto o
+  gateway default da API nao for fixado em `importacao_default`.
+- Timeouts de Google Groups sao atualmente convertidos em HTTP 401; tratar
+  indisponibilidade externa como HTTP 503 com mensagem segura.
 - Extração de cabeçalho/portos/datas ainda depende da qualidade do provider.
 - Odoo agora aceita URL/database/usuario do banco com fallback para env; senha
   permanece em SOPS/env.

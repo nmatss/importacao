@@ -1,5 +1,95 @@
 # Session Memory
 
+## 2026-08-03 - Planejamento Do Reprocessamento Integral Sem O DEMO
+
+Objetivo:
+
+- Analisar o reprocessamento de 100% da base documental operacional, excluindo
+  o atendimento/processo de demonstracao.
+
+Resultado:
+
+- DEMO identificado como processo `264`, codigo
+  `DEMO-IM0712602NB-E227210`, com 11 documentos e 27 atendimentos vinculados.
+- A exclusao deve usar `process_id <> 264`, nao texto livre.
+- Fora do DEMO existem 121 documentos em 25 processos; todos os 121 arquivos
+  locais existem, 99 documentos estao processados e 22 pendentes.
+- Existem 28 grupos duplicados de `processo + tipo`, com 73 versoes excedentes.
+  O lote deve selecionar somente o documento canonico mais recente de cada
+  `processo + tipo`.
+- Antes de triagem existem 40 documentos canonicos tipados. O classificador
+  atual sugeriu reclassificar 11 dos 26 `other`: 6 proformas, 4 invoices e 1
+  Draft DUIMP. Quinze continuam inconclusivos.
+- A simulacao das reclassificacoes produziu 44 canonicos. Dois sao espelhos PDF
+  incompativeis com o parser atual; o lote executavel fica em 42 documentos
+  (39 via IA e 3 espelhos XLSX), distribuido por 21 processos.
+- Os 21 processos incluem 11 `draft`, 6 `validating`, 3 `validated` e 1
+  `completed`; este ultimo nao aceita transicao para `validating`.
+- Fila pg-boss vazia, zero leases ativas, zero documentos travados, zero
+  aceites de comparativo ativos e espaco/custo suficientes.
+- Vertex, Drive, Chat e OCR estao ativos. A rota existente pode criar arquivos
+  duplicados no Drive, relatorios, movimentos de pasta, validacoes repetidas e
+  alertas externos; por isso o disparo bruto foi classificado como NO-GO.
+- Producao usa lease de 10 minutos, abaixo dos 20 minutos do timeout de texto e
+  dos 25 minutos do job. Ajustar para 25 minutos antes do lote.
+- O backup mais recente encontrado era de 2026-07-17; novo backup de banco e
+  `uploads` e obrigatorio.
+- Health retorna `revision: null`/`APP_VERSION=dev`, apesar de os fontes
+  criticos do servidor coincidirem com o workspace.
+- Custo projetado das 39 chamadas canonicas e inferior a US$ 1 com base no
+  historico recente, mas a estimativa tem confianca medio-baixa.
+
+Decisao:
+
+- Nao executar o lote pelas rotas unitarias atuais.
+- Implementar executor admin-only com dry-run, batch ID, retomada, selecao
+  canonica, exclusao obrigatoria do processo 264 e modo de manutencao para
+  diferir Drive, Chat e validacao.
+- Higienizar os 15 `other` e os 2 espelhos PDF, criar backup, rodar piloto e so
+  depois executar um processo por vez.
+
+Testes:
+
+- Testes focados de historico/reprocessamento, service documental e
+  classificacao: 3 arquivos, 42 testes aprovados, 0 falhas.
+
+Alteracoes:
+
+- Somente documentacao e memoria. Nenhuma escrita em producao e nenhum
+  reprocessamento executado.
+
+Fonte canonica:
+
+- `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`
+
+## 2026-08-03 - Incidente de Login Google e Egress Docker
+
+Resultado:
+
+- Confirmado o relato de Leticia: ela, Eduarda (associacao inferida com
+  confianca alta para "Duda") e Odett tiveram nove tentativas de login
+  bloqueadas entre 09:16 e 09:19 BRT.
+- Os tres cadastros existem como `analyst`, estao ativos e nao houve evidencia
+  de ausencia no Google Group ou credencial invalida.
+- Logs da API mostraram `ETIMEDOUT` em `oauth2.googleapis.com/token` durante o
+  gate obrigatorio do Google Group; o controller converteu a falha externa em
+  HTTP 401.
+- A API usa `importacao_default` e `ia-local-net`, mas o default gateway estava
+  em `ia-local-net`. Probe pela origem `192.168.208.4` expirou; o mesmo probe
+  pela origem `172.20.0.9` de `importacao_default` respondeu em 221 ms.
+- Host de producao e `cert-api` acessaram o Google normalmente, isolando a
+  falha na rota/NAT do container da API.
+- Houve login bem-sucedido das tres as 11:37 BRT, mas nova verificacao posterior
+  falhou; incidente permanece aberto/intermitente.
+- API/web/cert-api, raiz publica e `/api/health` estavam verdes, demonstrando
+  lacuna de observabilidade para Auth/egress externo.
+- Nenhuma mudanca de producao, banco, permissao ou codigo foi aplicada.
+
+Fonte canonica, riscos e plano de correcao:
+
+- `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md`
+- `docs/KNOWN_ISSUES.md`
+
 ## 2026-07-10 - Auditoria Profunda de Análise Documental
 
 - Revisado o pipeline upload/e-mail → magic bytes → fila de extração → parser/
