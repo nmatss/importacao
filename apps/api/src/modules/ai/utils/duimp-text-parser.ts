@@ -1,4 +1,4 @@
-import { findLabeledDate } from './dates.js';
+import { findLabeledDate, normalizeDate } from './dates.js';
 import { parseDecimal } from './numbers.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
@@ -25,7 +25,18 @@ const DUIMP_FIELD_KEYS = [
 
 // The right boundary prevents the grouped-number branch from accepting only a
 // prefix of a six-decimal exchange rate (e.g. "5,432100" -> "5,432").
-const NUMBER_VALUE = String.raw`(?:R\$\s*)?([-+]?(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?))(?=$|[^\d.,])`;
+const AMOUNT = String.raw`[-+]?(?:\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?=$|[^\d.,])`;
+
+// The Extrato da Duimp (Portal Unico) prints the page-1 summary with an
+// explicit currency prefix, and the FOB/frete/seguro lines carry BOTH
+// currencies at once ("SEGURO: US$ 117,06 / R$  603,84"). A scan that only
+// tolerated an optional "R$" read every US$-prefixed value as null, which is
+// why the official extract used to yield a null seguro and a null taxa.
+const USD_AMOUNT = new RegExp(String.raw`(?:US\$|USD)[ \t]*(${AMOUNT})`, 'i');
+const BRL_AMOUNT = new RegExp(String.raw`(?:R\$|BRL)[ \t]*(${AMOUNT})`, 'i');
+const BARE_AMOUNT = new RegExp(`(${AMOUNT})`);
+
+type CurrencyPreference = 'brl' | 'usd';
 
 const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.8): ConfidenceField<T> => ({
   value,
@@ -46,15 +57,89 @@ function escapeLabel(label: string): string {
   return label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, String.raw`[ \t]*`);
 }
 
-function extractNumberAfterLabels(text: string, labels: string[]): number | null {
-  for (const label of labels) {
-    const match = text.match(
-      new RegExp(`${escapeLabel(label)}[ \\t]*[:#-]?[ \\t]*${NUMBER_VALUE}`, 'i'),
-    );
-    const parsed = parseDecimal(match?.[1]);
+/**
+ * Read one amount out of the text that follows a label on the SAME line.
+ * `preference` decides which side of a two-currency line wins; a value printed
+ * without any currency marker (the Fenicia rascunho style, "Valor do Seguro:0")
+ * is the last resort so single-currency documents keep working.
+ */
+function amountFromSegment(segment: string, preference: CurrencyPreference): number | null {
+  const ordered = preference === 'usd' ? [USD_AMOUNT, BRL_AMOUNT] : [BRL_AMOUNT, USD_AMOUNT];
+  for (const pattern of ordered) {
+    const parsed = parseDecimal(segment.match(pattern)?.[1]);
     if (parsed != null) return parsed;
   }
+  return parseDecimal(segment.match(BARE_AMOUNT)?.[1]);
+}
+
+/**
+ * Scan EVERY occurrence of each label, not just the first. The extract quotes
+ * "(VALOR ADUANEIRO)" inside the Decreto 11.090 boilerplate before printing the
+ * real "VALOR ADUANEIRO - R$ 900.864,17" line, so stopping at the first hit
+ * would lose the value.
+ */
+function extractAmountAfterLabels(
+  text: string,
+  labels: string[],
+  preference: CurrencyPreference,
+): number | null {
+  for (const label of labels) {
+    const pattern = new RegExp(`${escapeLabel(label)}[ \\t]*[:#=-]?[ \\t]*([^\\n\\r]*)`, 'gi');
+    for (const match of text.matchAll(pattern)) {
+      const parsed = amountFromSegment(match[1] ?? '', preference);
+      if (parsed != null) return parsed;
+    }
+  }
   return null;
+}
+
+/**
+ * The registration exchange rate appears in two mutually exclusive layouts:
+ * the Portal Unico extract states it as an equation
+ * ("TAXA DE CAMBIO: US$ 1,00 = R$ 5,1606"), where a naive label scan would
+ * return the 1,00 side; the Fenicia rascunho labels it "Taxa Dólar".
+ */
+function extractRegistrationDollar(text: string): number | null {
+  const equation = text.match(
+    new RegExp(
+      String.raw`(?:US\$|USD)[ \t]*1(?:[.,]0+)?[ \t]*=[ \t]*(?:R\$|BRL)?[ \t]*(${AMOUNT})`,
+      'i',
+    ),
+  );
+  const fromEquation = parseDecimal(equation?.[1]);
+  if (fromEquation != null) return fromEquation;
+
+  return extractAmountAfterLabels(
+    text,
+    [
+      'dolar de registro',
+      'dólar de registro',
+      'dolar registro',
+      'dólar registro',
+      'taxa de cambio',
+      'taxa de câmbio',
+      'taxa de conversao',
+      'taxa de conversão',
+      'taxa dolar',
+      'taxa dólar',
+      'taxa do dolar',
+      'taxa do dólar',
+    ],
+    'brl',
+  );
+}
+
+/**
+ * The Portal Unico extract has no "Data de registro" label: the registration
+ * timestamp only exists as a Histórico row, "<dd/mm/yyyy>, <hh:mm> Declaração
+ * registrada". pdf-parse keeps the date/time and the event on separate lines,
+ * so anchor on the event and walk back to the date.
+ */
+function extractRegisteredAtFromHistory(text: string): string | null {
+  const match = text.match(
+    /(\d{1,2}\/\d{1,2}\/\d{4})[\s,]*(?:\d{1,2}:\d{2}(?::\d{2})?)?\s*Declara[cç][aã]o\s+registrada/i,
+  );
+  return match ? normalizeDate(match[1]) : null;
 }
 
 function extractDuimpNumber(text: string): string | null {
@@ -108,31 +193,28 @@ function extractFields(text: string): DuimpFields | null {
   if (!source.trim() || !isDuimpText(source)) return null;
 
   return {
-    customsValue: extractNumberAfterLabels(source, ['valor aduaneiro', 'valor aduanero', 'v.a.']),
-    registrationDollar: extractNumberAfterLabels(source, [
-      'dolar de registro',
-      'dólar de registro',
-      'dolar registro',
-      'dólar registro',
-      'taxa de cambio',
-      'taxa de câmbio',
-      'taxa de conversao',
-      'taxa de conversão',
-    ]),
-    insuranceValue: extractNumberAfterLabels(source, [
-      'valor do seguro',
-      'valor de seguro',
-      'seguro',
-      'insurance value',
-      'insurance',
-    ]),
+    // Valor aduaneiro is a BRL figure; seguro is tracked in USD by the process
+    // (ProcessInfoCard renders insuranceValue as USD), so each field asks for
+    // the currency it is stored in when the document prints both.
+    customsValue: extractAmountAfterLabels(
+      source,
+      ['valor aduaneiro', 'valor aduanero', 'v.a.'],
+      'brl',
+    ),
+    registrationDollar: extractRegistrationDollar(source),
+    insuranceValue: extractAmountAfterLabels(
+      source,
+      ['valor do seguro', 'valor de seguro', 'seguro', 'insurance value', 'insurance'],
+      'usd',
+    ),
     duimpNumber: extractDuimpNumber(source),
-    registeredAt: findLabeledDate(source, [
-      'data de registro',
-      'data registro',
-      'data do registro',
-      'registro da duimp',
-    ]),
+    registeredAt:
+      findLabeledDate(source, [
+        'data de registro',
+        'data registro',
+        'data do registro',
+        'registro da duimp',
+      ]) ?? extractRegisteredAtFromHistory(source),
     customsClearanceAt: findLabeledDate(source, [
       'data de desembaraco',
       'data de desembaraço',

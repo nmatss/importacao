@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { canonicalizeRecordType } from './constants.js';
 
 const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,6})?$/;
 
@@ -196,7 +197,14 @@ export const updateCustomStageSchema = createCustomStageSchema.partial();
 
 export const createOperationalRecordSchema = z.object({
   recordKind: z.enum(['document_error', 'extra_cost']),
-  recordType: z.string().trim().min(1, 'Tipo obrigatorio').max(160),
+  // Campo livre por design (ver constants.ts); o transform apenas unifica a
+  // grafia dos tipos catalogados para que agreguem como um so no relatorio.
+  recordType: z
+    .string()
+    .trim()
+    .min(1, 'Tipo obrigatorio')
+    .max(160)
+    .transform(canonicalizeRecordType),
   quantity: z.coerce.number().int().min(0).nullable().optional(),
   amount: nonNegativeDecimalString('Valor', OPERATIONAL_AMOUNT_MAX),
   currency: z.string().trim().max(10).optional(),

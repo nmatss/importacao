@@ -42,3 +42,21 @@ describe('decimal fields (Postgres numeric)', () => {
     );
   });
 });
+
+describe('record type catalog', () => {
+  const parseType = (recordType: string) =>
+    createOperationalRecordSchema.parse({ recordKind: 'extra_cost', recordType }).recordType;
+
+  it('canonicalizes the container cost types regardless of case, accent or spacing', () => {
+    expect(parseType('lavacao')).toBe('LAVAÇÃO');
+    expect(parseType('Lavação e  Reparo')).toBe('LAVAÇÃO E REPARO');
+    expect(parseType('lavagem quimica')).toBe('LAVAGEM QUÍMICA');
+    expect(parseType('remocao de detritos')).toBe('REMOÇÃO DE DETRITOS');
+    expect(parseType('REPARO')).toBe('REPARO');
+  });
+
+  it('keeps an uncatalogued type as free text', () => {
+    // A coluna e livre desde a migration 0022 e ja tem valores em producao.
+    expect(parseType('Sobreestadia de container')).toBe('Sobreestadia de container');
+  });
+});

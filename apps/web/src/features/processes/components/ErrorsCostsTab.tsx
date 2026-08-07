@@ -25,6 +25,17 @@ const kindLabel = {
   extra_cost: 'Custo extra',
 };
 
+// Espelha apps/api/src/modules/processes/constants.ts (EXTRA_COST_TYPES). A API
+// canonicaliza a grafia, entao um valor digitado a mao continua valido — a
+// lista existe para padronizar o que a operacao registra com mais frequencia.
+const EXTRA_COST_TYPES = [
+  'LAVAÇÃO',
+  'REPARO',
+  'LAVAÇÃO E REPARO',
+  'LAVAGEM QUÍMICA',
+  'REMOÇÃO DE DETRITOS',
+];
+
 export function ErrorsCostsTab({ processId }: { processId: string }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({
@@ -121,6 +132,9 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
             setForm((prev) => ({
               ...prev,
               recordKind: event.target.value as OperationalRecord['recordKind'],
+              // Os catalogos de erro e de custo nao se cruzam: manter o tipo
+              // anterior gravaria "LAVAÇÃO" como erro documental.
+              recordType: '',
             }))
           }
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
@@ -132,8 +146,14 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
           value={form.recordType}
           onChange={(event) => setForm((prev) => ({ ...prev, recordType: event.target.value }))}
           placeholder="Tipo"
+          list={form.recordKind === 'extra_cost' ? 'extra-cost-types' : undefined}
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
         />
+        <datalist id="extra-cost-types">
+          {EXTRA_COST_TYPES.map((type) => (
+            <option key={type} value={type} />
+          ))}
+        </datalist>
         <input
           type="number"
           min={0}
