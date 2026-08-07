@@ -217,6 +217,15 @@ def ensure_tables() -> None:
         ("sale_deadline", "TEXT"),
         ("sale_deadline_date", "DATE"),
         ("is_expired", "BOOLEAN DEFAULT FALSE"),
+        # Coluna P das abas "Imaginarium"/"Puket" ("Número Certificado") e coluna
+        # A da aba "Encerramentos" ("CERTIFICADO") — e o que liga as duas abas.
+        ("numero_certificado", "TEXT DEFAULT ''"),
+        # Coluna U ("SITUAÇÃO") das abas de produto.
+        ("situacao", "TEXT DEFAULT ''"),
+        # Coluna H da aba "Encerramentos": "Comerciação Permitida" /
+        # "Vencido - Venda Bloqueada" / "Venda até fim do lote". E o veredito
+        # sobre poder faturar o item; ver services/derivation.py.
+        ("encerramento_status", "TEXT"),
     ]:
         _add_column_if_not_exists(col, coltype)
 

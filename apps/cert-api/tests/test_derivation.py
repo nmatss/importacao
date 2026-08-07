@@ -12,6 +12,7 @@ from datetime import date, timedelta
 
 import pytest
 
+from app.services import derivation
 from app.services.derivation import (
     CERT_STATUS_VALUES,
     SITE_REASON_PENDING,
@@ -476,3 +477,108 @@ class TestLicenseStatus:
         )
         assert result["license_status"] == "NAO_APLICAVEL"
         assert result["license_deadline"] is None
+
+
+# ---------------------------------------------------------------------------
+# Feedback Eduarda 2026-08-07 — casos 100400496 / PI7560Y / PI7223Y
+# ---------------------------------------------------------------------------
+
+
+class TestSkuExcluidoEReincluido:
+    """"Item excluído e incluído novamente" é REINCLUSÃO, não exclusão."""
+
+    # Texto real de cert_products.sheet_status do PI7560Y em 07/08/2026.
+    PI7560Y = (
+        "27/10/25 - Item excluído e incluído novamente com o novo nome.\n"
+        "01/09/25 - Registro concedido no Orquestra."
+    )
+
+    def test_reinclusao_nao_e_exclusao(self):
+        assert derivation._is_sku_excluded(self.PI7560Y) is False
+
+    def test_exclusao_pura_continua_valendo(self):
+        assert derivation._is_sku_excluded("15/02/26 - SKU excluído do catálogo.") is True
+
+    def test_entrada_mais_recente_decide(self):
+        # Reincluído agora, excluído antes → vale a reinclusão.
+        historico = (
+            "10/03/26 - Item excluído e incluído novamente.\n"
+            "05/01/26 - Item excluído."
+        )
+        assert derivation._is_sku_excluded(historico) is False
+
+    def test_sem_mencao_a_exclusao(self):
+        assert derivation._is_sku_excluded("01/09/25 - Registro concedido.") is False
+
+    def test_pi7560y_fica_ativo_dentro_do_prazo(self):
+        """O caso reportado: estava Encerrado/Nao conforme com venda permitida."""
+        row = {
+            "sku": "PI7560Y",
+            "sheet_status": self.PI7560Y,
+            "encerramento_status": "Comerciação Permitida",
+            "last_validation_status": "OK",
+        }
+        dims = derivation.compute_status_dimensions(row)
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["site_status"] == "CONFORME"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+
+
+class TestVendaEncerramento:
+    """Coluna H da aba 'Encerramentos' é o veredito sobre poder vender."""
+
+    def test_permitida(self):
+        assert derivation.derive_venda_encerramento("Comerciação Permitida") == "PERMITIDA"
+
+    def test_bloqueada(self):
+        assert derivation.derive_venda_encerramento("Vencido - Venda Bloqueada") == "BLOQUEADA"
+
+    def test_bloqueada_recall(self):
+        assert (
+            derivation.derive_venda_encerramento("Vencido - Venda Bloqueada (Recall)")
+            == "BLOQUEADA"
+        )
+
+    def test_fim_do_lote(self):
+        assert derivation.derive_venda_encerramento("Venda até fim do lote") == "FIM_LOTE"
+
+    def test_vazio_e_desconhecido_nao_liberam_venda(self):
+        assert derivation.derive_venda_encerramento("") is None
+        assert derivation.derive_venda_encerramento("qualquer coisa") is None
+
+    def test_permitida_sem_data_mantem_prazo_vigente(self):
+        """28 SKUs têm veredito na coluna H e NENHUMA data na coluna G."""
+        assert (
+            derivation.derive_within_sale_deadline(
+                sheet_status="",
+                sale_deadline_raw="",
+                sale_deadline_date=None,
+                encerramento_status="Comerciação Permitida",
+            )
+            is True
+        )
+
+    def test_bloqueada_vence_data_futura(self):
+        """Data velha que sobrou no banco não pode reabrir a venda."""
+        assert (
+            derivation.derive_within_sale_deadline(
+                sheet_status="",
+                sale_deadline_raw="28/07/2028",
+                sale_deadline_date="2028-07-28",
+                encerramento_status="Vencido - Venda Bloqueada",
+            )
+            is False
+        )
+
+    def test_bloqueada_encerra_certificacao_e_comercializacao(self):
+        row = {
+            "sku": "PI7223Y",
+            "sheet_status": "20/04/2026 - Não seguiremos com a manutenção.",
+            "encerramento_status": "Vencido - Venda Bloqueada",
+            "sale_deadline": "24/07/2026",
+            "last_validation_status": "URL_NOT_FOUND",
+        }
+        dims = derivation.compute_status_dimensions(row)
+        assert dims["cert_status"] == "ENCERRADO"
+        assert dims["comercializacao_status"] == "ENCERRADA"
+        assert dims["venda_encerramento"] == "BLOQUEADA"

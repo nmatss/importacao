@@ -22,7 +22,14 @@ from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
 from app.services.derivation import compute_status_dimensions
-from app.services.erp_service import read_licenciamentos_vencidos, sync_sheets_to_db
+from app.services.erp_service import (
+    normalize_brand_filter,
+    sync_sheets_to_db,
+)
+from app.services.erp_service import (
+    safe_license_map as _safe_license_map,
+)
+from app.services.wms_service import summarize_stock_rows, sync_stock_all
 from app.utils.logging import log
 
 router = APIRouter()
@@ -59,15 +66,6 @@ def cleanup_old_validations(max_age_seconds: int = 3600, stuck_timeout: int = 72
         del _running_validations[rid]
 
 
-def _safe_license_map() -> dict[str, dict]:
-    """Load the 'Licenciamentos Vencidos' map, never raising on Sheets failures."""
-    if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
-        return {}
-    try:
-        return read_licenciamentos_vencidos()
-    except Exception as e:
-        log.warning(f"Could not load Licenciamentos Vencidos map: {e}")
-        return {}
 
 
 def _serialize_product(r: dict, license_map: dict | None = None) -> dict:
@@ -116,12 +114,24 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
     """
     state = _running_validations[run_id]
     try:
-        if source == "sheets" and SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY:
+        if source == "sheets":
+            # `source == "sheets"` e o caminho de atualizacao completa: e por onde
+            # entram o agendamento diario e o "rodar agora". O estoque entra aqui
+            # junto porque NAO tinha agendamento proprio — o unico cron cadastrado
+            # roda validacao, e /api/sync-stock so era chamado a mao. Resultado:
+            # em 07/08/2026 a cert_stock inteira (33.416 linhas) ainda datava de
+            # 23/03/2026, e o painel exibia estoque de quatro meses atras.
+            if SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY:
+                try:
+                    sync_result = sync_sheets_to_db()
+                    log.info(f"Pre-validation sheets sync: {sync_result}")
+                except Exception as e:
+                    log.warning(f"Pre-validation sheets sync failed: {e}")
             try:
-                sync_result = sync_sheets_to_db()
-                log.info(f"Pre-validation sheets sync: {sync_result}")
+                stock_result = sync_stock_all()
+                log.info(f"Pre-validation stock sync: {stock_result}")
             except Exception as e:
-                log.warning(f"Pre-validation sheets sync failed: {e}")
+                log.warning(f"Pre-validation stock sync failed: {e}")
 
         products = []
         if DATABASE_URL:
@@ -396,8 +406,10 @@ def list_expired_products(
             conditions.append("(sku ILIKE %s OR name ILIKE %s)")
             params.extend([f"%{search}%", f"%{search}%"])
         if brand:
-            conditions.append("LOWER(brand) = LOWER(%s)")
-            params.append(brand)
+            # Mesma normalizacao do relatorio: a UI manda o slug
+            # `puket_escolares` e o banco guarda `Puket Escolares`.
+            conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
+            params.append(normalize_brand_filter(brand))
 
         where = "WHERE " + " AND ".join(conditions)
         license_map = _safe_license_map()
@@ -480,8 +492,10 @@ def list_products(
             conditions.append("(sku ILIKE %s OR name ILIKE %s)")
             params.extend([f"%{search}%", f"%{search}%"])
         if brand:
-            conditions.append("LOWER(brand) = LOWER(%s)")
-            params.append(brand)
+            # Mesma normalizacao do relatorio: a UI manda o slug
+            # `puket_escolares` e o banco guarda `Puket Escolares`.
+            conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
+            params.append(normalize_brand_filter(brand))
         if status:
             statuses = [s.strip() for s in status.split(",") if s.strip()]
             if "EXPIRED" in statuses:
@@ -539,33 +553,17 @@ def list_products(
             cur.execute(
                 f"""
                 SELECT sku, source, warehouse,
-                    COALESCE(SUM(quantity), 0) as qty,
-                    COALESCE(SUM(available), 0) as avail,
+                    COALESCE(SUM(quantity), 0) as quantity,
+                    COALESCE(SUM(available), 0) as available,
                     MAX(synced_at) as synced_at
                 FROM cert_stock WHERE sku IN ({placeholders})
                 GROUP BY sku, source, warehouse
                 """,
                 skus,
             )
-            stock_rows = cur.fetchall()
-            stock_map: dict = {}
-            for sr in stock_rows:
-                sk = sr["sku"]
-                if sk not in stock_map:
-                    stock_map[sk] = {"stock_cd": 0, "stock_ecommerce": 0, "stock_total": 0, "stock_detail": []}
-                entry = {
-                    "source": sr["source"],
-                    "warehouse": sr["warehouse"],
-                    "quantity": sr["qty"],
-                    "available": sr["avail"],
-                    "synced_at": sr["synced_at"].isoformat() if sr["synced_at"] else None,
-                }
-                stock_map[sk]["stock_detail"].append(entry)
-                if sr["source"] == "wms_biguacu":
-                    stock_map[sk]["stock_cd"] += sr["avail"] or sr["qty"] or 0
-                else:
-                    stock_map[sk]["stock_ecommerce"] += sr["avail"] or sr["qty"] or 0
-                stock_map[sk]["stock_total"] = stock_map[sk]["stock_cd"] + stock_map[sk]["stock_ecommerce"]
+            # Mesma funcao que o relatorio usa — painel e Excel nao podem somar
+            # de jeitos diferentes (ver summarize_stock_rows).
+            stock_map = summarize_stock_rows([dict(r) for r in cur.fetchall()])
 
             for p in products_raw:
                 s = stock_map.get(p["sku"], {})
@@ -573,6 +571,7 @@ def list_products(
                 p["stock_ecommerce"] = s.get("stock_ecommerce", 0)
                 p["stock_total"] = s.get("stock_total", 0)
                 p["stock_detail"] = s.get("stock_detail", [])
+                p["stock_synced_at"] = s.get("stock_synced_at")
 
         cur.execute("SELECT MAX(last_validation_date) as last_date FROM cert_products")
         last_date_row = cur.fetchone()

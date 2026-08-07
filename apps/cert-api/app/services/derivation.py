@@ -31,6 +31,17 @@ Feedback 2026-07-16 (Eduarda, via PI4511Y "CANETA MUDA FRASES HP FEITICOS"):
   da janela de venda ("fim do lote"); antes, um prazo com data futura não era
   reconhecido e o item caía em NAO_CONFORME indevidamente.
 
+Feedback 2026-08-07 (Eduarda, casos 100400496 / PI7560Y):
+- A coluna H da aba "Encerramentos" ("Comerciação Permitida" / "Vencido - Venda
+  Bloqueada" / "Venda até fim do lote") é a palavra final sobre poder vender ou
+  não. Ela existe para 28 SKUs que NÃO têm data na coluna G, e a leitura antiga,
+  que exigia data, simplesmente descartava essas linhas — deixando o produto sem
+  prazo nenhum e caindo em ENCERRADO/NAO_CONFORME (caso PI7560Y).
+- "Item excluído e incluído novamente" é REINCLUSÃO, não exclusão. O teste de
+  substring `"exclu" in texto` sobre o histórico inteiro tratava a frase como
+  exclusão e derrubava o item para ENCERRADO com prazo vigente. Ver
+  `_is_sku_excluded`.
+
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 (não persiste no DB). Pode ser usado direto em routes ou em report_service.
 """
@@ -52,6 +63,10 @@ CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO"}
 SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME"}
 LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL"}
 COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA"}
+
+# Coluna H da aba "Encerramentos", normalizada. PERMITIDA e FIM_LOTE liberam a
+# venda; BLOQUEADA a proíbe. None = SKU sem linha de encerramento.
+VENDA_ENCERRAMENTO_VALUES = {"PERMITIDA", "BLOQUEADA", "FIM_LOTE"}
 
 # Frase obrigatória exibida na UI quando o site_status fica NAO_CONFORME por
 # indefinição/erro de validação (não pode haver terceiro estado silencioso).
@@ -75,6 +90,55 @@ def _norm(s: str | None) -> str:
     if not s:
         return ""
     return str(s).strip().lower()
+
+
+def _is_sku_excluded(sheet_status: str | None) -> bool:
+    """True quando o histórico diz que o SKU foi excluído e NÃO reincluído.
+
+    O `sheet_status` é o log multilinha da planilha, entrada mais recente PRIMEIRO.
+    O teste antigo (`"exclu" in texto_inteiro`) tratava qualquer menção como
+    exclusão terminal — inclusive "27/10/25 - Item excluído e incluído novamente
+    com o novo nome", que é exatamente o oposto (caso PI7560Y, Eduarda 2026-08-07:
+    item exibido como Encerrado/Nao conforme com prazo de venda vigente).
+
+    Regra: percorre da entrada mais recente para a mais antiga e para na PRIMEIRA
+    que fala de exclusão. Se essa mesma entrada também fala de inclusão, o item
+    voltou ao catálogo e não está excluído.
+    """
+    for line in str(sheet_status or "").splitlines():
+        frag = _norm(line)
+        if "exclu" not in frag:
+            continue
+        # Remove as próprias ocorrências de "exclu*" antes de procurar "inclu*",
+        # senão "excluído" casaria consigo mesmo ("ex-CLUÍDO" não, mas "exclu" e
+        # "inclu" compartilham o sufixo em variações como "exclusão/inclusão").
+        return "inclu" not in frag.replace("exclu", " ")
+    return False
+
+
+def derive_venda_encerramento(encerramento_status: str | None) -> str | None:
+    """Normaliza a coluna H da aba "Encerramentos" em PERMITIDA/BLOQUEADA/FIM_LOTE.
+
+    Valores reais da planilha (conferidos em 2026-08-07, 389 linhas):
+        'Comerciação Permitida'              -> PERMITIDA  (203)
+        'Vencido - Venda Bloqueada'          -> BLOQUEADA  (178)
+        'Vencido - Venda Bloqueada (Recall)' -> BLOQUEADA  (1)
+        'Venda até fim do lote'              -> FIM_LOTE   (7)
+
+    Returns:
+        'PERMITIDA' | 'BLOQUEADA' | 'FIM_LOTE', ou None quando não há linha de
+        encerramento (ou o texto não é reconhecido — nunca inventa permissão).
+    """
+    s = _norm(encerramento_status)
+    if not s:
+        return None
+    if "bloquead" in s:
+        return "BLOQUEADA"
+    if "fim do lote" in s or "fim de lote" in s:
+        return "FIM_LOTE"
+    if "permitid" in s:
+        return "PERMITIDA"
+    return None
 
 
 # ---------- Derivações ----------
@@ -122,24 +186,32 @@ def derive_within_sale_deadline(
     sale_deadline_raw: str | None,
     sale_deadline_date: object = None,
     today: date | None = None,
+    encerramento_status: str | None = None,
 ) -> bool:
     """True quando o produto ainda pode ser comercializado (prazo de venda vigente).
 
-    Duas formas de prazo vigente:
-    - Janela textual ("venda até o fim do lote") — sem data de corte.
-    - Data futura ou de hoje em `sale_deadline_date` (inclusiva: no último dia
-      ainda se pode vender).
-
-    SKU excluído NUNCA está dentro do prazo — a regra da Eduarda (2026-06-19) põe
-    a exclusão acima da janela de venda, e isso vale aqui também.
+    Ordem de decisão:
+    1. SKU excluído (e não reincluído) NUNCA está dentro do prazo — a regra da
+       Eduarda (2026-06-19) põe a exclusão acima da janela de venda.
+    2. A coluna H da aba "Encerramentos" (`encerramento_status`) manda quando
+       existe: é onde o time fiscal declara "Comerciação Permitida" ou "Vencido -
+       Venda Bloqueada". 28 SKUs têm esse veredito SEM data na coluna G, então
+       exigir data descartaria a única informação disponível (caso PI7560Y).
+    3. Janela textual ("venda até o fim do lote") — sem data de corte.
+    4. Data futura ou de hoje em `sale_deadline_date` (inclusiva: no último dia
+       ainda se pode vender).
 
     "Vencido" escrito no prazo também manda, como já manda em `derive_cert_status`:
-    o upsert do sync faz COALESCE em `sale_deadline_date` e nunca a limpa, então um
-    item que passou a "Vencido" na planilha conserva a data antiga e não pode ser
-    lido como vigente por causa dela.
+    um item que passou a "Vencido" na planilha pode conservar a data antiga e não
+    pode ser lido como vigente por causa dela.
     """
-    if "exclu" in _norm(sheet_status):
+    if _is_sku_excluded(sheet_status):
         return False
+    venda = derive_venda_encerramento(encerramento_status)
+    if venda == "BLOQUEADA":
+        return False
+    if venda in ("PERMITIDA", "FIM_LOTE"):
+        return True
     if "vencido" in _norm(sale_deadline_raw):
         return False
     if _within_sale_window(sale_deadline_raw):
@@ -154,6 +226,7 @@ def derive_cert_status(
     sheet_status: str | None,
     is_expired: bool | None,
     sale_deadline_raw: str | None,
+    encerramento_status: str | None = None,
 ) -> str:
     """Status da certificação — colapsado em ATIVO | ENCERRADO.
 
@@ -162,7 +235,9 @@ def derive_cert_status(
     - "Encerrado": certificação encerrada, SKU excluído OU fora do prazo de venda.
 
     Mapeamento:
-    - SKU excluído                  → ENCERRADO
+    - SKU excluído (sem reinclusão)  → ENCERRADO
+    - Venda bloqueada (Encerramentos)→ ENCERRADO
+    - Venda permitida (Encerramentos)→ ATIVO (prazo de venda vigente)
     - Em andamento                  → ENCERRADO (a menos que claramente ativo
                                        por prazo de venda vigente)
     - Expired / Vencido / Encerrado → ENCERRADO, salvo dentro da janela de venda
@@ -177,10 +252,19 @@ def derive_cert_status(
     # SKU excluído → SEMPRE encerrado (regra explícita Eduarda: "Encerrado =
     # certificação encerrada, SKU excluído OU fora do prazo de venda"). Precede o
     # short-circuit de janela de venda: um SKU excluído nunca volta a ATIVO mesmo
-    # com prazo de venda vigente. Vale para o texto INTEIRO: exclusão é estado
-    # terminal, não importa em que linha do histórico apareça.
-    if "exclu" in s:
+    # com prazo de venda vigente. "Excluído e incluído novamente" NÃO conta —
+    # ver `_is_sku_excluded`.
+    if _is_sku_excluded(sheet_status):
         return "ENCERRADO"
+
+    # A coluna H de "Encerramentos" é o veredito do time fiscal sobre a venda e
+    # vence o texto livre do histórico (que costuma descrever o processo de
+    # certificação, não a permissão de comercializar).
+    venda = derive_venda_encerramento(encerramento_status)
+    if venda == "BLOQUEADA":
+        return "ENCERRADO"
+    if venda in ("PERMITIDA", "FIM_LOTE"):
+        return "ATIVO"
 
     # Dentro da janela de venda reativa (após excluir SKUs excluídos).
     if within_window:
@@ -365,14 +449,24 @@ def derive_comercializacao_status(
     sale_deadline_raw: str | None,
     sheet_status: str | None,
     within_sale_deadline: bool = False,
+    encerramento_status: str | None = None,
 ) -> str:
     """Status de comercialização (cobertura do "estatório de cessamento").
 
     Feedback 2026-07-16: cert encerrada com prazo vigente é DENTRO_PRAZO, não
     ENCERRADA — mesma regra que mantém o site_status CONFORME.
+
+    Feedback 2026-08-07: quando a aba "Encerramentos" declara a venda
+    (`encerramento_status`), ela decide — bloqueada é ENCERRADA e permitida é
+    DENTRO_PRAZO, mesmo que o histórico de certificação diga outra coisa.
     """
     s = _norm(sheet_status)
     deadline = _norm(sale_deadline_raw)
+    venda = derive_venda_encerramento(encerramento_status)
+    if venda == "BLOQUEADA":
+        return "ENCERRADA"
+    if venda in ("PERMITIDA", "FIM_LOTE"):
+        return "DENTRO_PRAZO"
     if cert_status == "ATIVO":
         # Ativo mas com SITUAÇÃO=Encerrado e prazo até final do lote = dentro do prazo
         if "encerrad" in s or _within_sale_window(sale_deadline_raw) or "fim de lote" in deadline:
@@ -425,16 +519,23 @@ def compute_status_dimensions(
     certification_type = row.get("certification_type")
     expected_cert_text = row.get("expected_cert_text")
     last_vs = row.get("last_validation_status")
+    encerramento_status = row.get("encerramento_status")
 
-    cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw)
+    cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw, encerramento_status)
     within_deadline = derive_within_sale_deadline(
-        sheet_status, sale_deadline_raw, row.get("sale_deadline_date"), today
+        sheet_status,
+        sale_deadline_raw,
+        row.get("sale_deadline_date"),
+        today,
+        encerramento_status,
     )
     ss, ss_reason = derive_site_status(
         last_vs, cs, expected_cert_text, certification_type, within_deadline
     )
     ls, ls_deadline = derive_license_status(_lookup_license_row(row, license_map))
-    cms = derive_comercializacao_status(cs, sale_deadline_raw, sheet_status, within_deadline)
+    cms = derive_comercializacao_status(
+        cs, sale_deadline_raw, sheet_status, within_deadline, encerramento_status
+    )
     return {
         "cert_status": cs,
         "site_status": ss,
@@ -442,4 +543,6 @@ def compute_status_dimensions(
         "license_status": ls,
         "license_deadline": ls_deadline,
         "comercializacao_status": cms,
+        "venda_encerramento": derive_venda_encerramento(encerramento_status),
+        "within_sale_deadline": within_deadline,
     }

@@ -11,6 +11,10 @@ from slowapi.util import get_remote_address
 
 from app.config import DATABASE_URL, REPORTS_DIR
 from app.db.postgres import db
+from app.services.erp_service import (
+    normalize_brand_filter as _normalize_brand,
+)
+from app.services.erp_service import safe_license_map
 from app.services.report_service import (
     generate_products_report,
     generate_stock_report,
@@ -19,18 +23,6 @@ from app.services.report_service import (
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
-
-_BRAND_ALIASES = {
-    "puket": "puket",
-    "imaginarium": "imaginarium",
-    "puket_escolares": "puket escolares",
-    "puket escolares": "puket escolares",
-}
-
-
-def _normalize_brand(value: str) -> str:
-    normalized = value.strip().lower().replace("_", " ")
-    return _BRAND_ALIASES.get(normalized, normalized)
 
 
 def _safe_export_error(exc: Exception) -> HTTPException:
@@ -92,7 +84,9 @@ def export_products_report(
         rows = [dict(r) for r in cur.fetchall()]
 
     try:
-        filepath = generate_products_report(rows, brand=brand, status=status)
+        filepath = generate_products_report(
+            rows, brand=brand, status=status, license_map=safe_license_map()
+        )
     except Exception as exc:
         raise _safe_export_error(exc) from exc
     return FileResponse(

@@ -30,6 +30,15 @@ export interface CertProduct {
   is_expired?: boolean;
   sale_deadline?: string;
   sale_deadline_date?: string | null;
+  // Coluna P das abas Imaginarium/Puket ("Número Certificado") — também é o que
+  // liga o produto à linha da aba Encerramentos (coluna A, "CERTIFICADO").
+  numero_certificado?: string | null;
+  // Coluna U das abas de produto ("SITUAÇÃO").
+  situacao?: string | null;
+  // Coluna H da aba Encerramentos: 'Comerciação Permitida' /
+  // 'Vencido - Venda Bloqueada' / 'Venda até fim do lote'. É o veredito do time
+  // fiscal sobre poder faturar, e existe para SKUs que não têm data em G.
+  encerramento_status?: string | null;
   // Prazo de licenciamento — distinto do prazo de venda (sale_deadline).
   // Alimenta a coluna "Licen. - Prazo". Backend ainda precisa expor este campo
   // a partir da planilha "Licenciamentos Vencidos" (ver followups).
@@ -48,6 +57,8 @@ export interface CertProduct {
     available: number;
     synced_at?: string | null;
   }>;
+  // Sync de estoque mais recente entre as fontes deste SKU.
+  stock_synced_at?: string | null;
   // Status semânticos derivados (port Verificao_status — sessão 2026-05-22):
   cert_status?: CertStatusKind | null;
   site_status?: SiteStatusKind | null;

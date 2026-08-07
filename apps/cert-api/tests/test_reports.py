@@ -109,10 +109,22 @@ def test_generate_stock_report_writes_synced_at_column(mocker, tmp_path):
     assert ws["M6"].value.startswith("2026-06-19T12:00:00")
 
 
+def _patch_products_report_io(mocker, tmp_path, stock=None, travas=None):
+    """Isola a geracao do XLSX de produtos das consultas ao banco."""
+    mocker.patch("app.services.report_service.REPORTS_DIR", tmp_path)
+    mocker.patch("app.services.report_service._fetch_stock_map", return_value=stock or {})
+    mocker.patch("app.services.report_service._fetch_travas_faturamento", return_value=travas or {})
+
+
+def _header_index(ws, label: str) -> int:
+    """Indice 1-based da coluna cujo cabecalho (linha 7) e `label`."""
+    headers = [c.value for c in ws[7]]
+    return headers.index(label) + 1
+
+
 def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
     """User-controlled text exported to XLSX must not execute as formulas."""
-    mocker.patch("app.services.report_service.REPORTS_DIR", tmp_path)
-    mocker.patch("app.services.report_service._fetch_stock_map", return_value={})
+    _patch_products_report_io(mocker, tmp_path)
 
     output = generate_products_report(
         [
@@ -122,10 +134,12 @@ def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
                 "brand": "@Marca",
                 "last_validation_status": "OK",
                 "certification_type": "-Tipo",
+                "numero_certificado": "=Cert",
                 "expected_cert_text": "=Esperado",
                 "actual_cert_text": "+Encontrado",
                 "last_validation_url": "@https://example.invalid",
                 "sale_deadline": "-2026-12-31",
+                "encerramento_status": "@Comerciacao Permitida",
             }
         ]
     )
@@ -133,11 +147,90 @@ def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
     wb = openpyxl.load_workbook(output, data_only=False)
     ws = wb["Produtos"]
 
-    assert ws["A8"].value == "'=2+2"
-    assert ws["B8"].value == "'+Produto"
-    assert ws["C8"].value == "'@Marca"
-    assert ws["F8"].value == "'-Tipo"
-    assert ws["G8"].value == "'=Esperado"
-    assert ws["H8"].value == "'+Encontrado"
-    assert ws["I8"].value == "'@https://example.invalid"
-    assert ws["J8"].value == "'-2026-12-31"
+    def cell(label: str):
+        return ws.cell(row=8, column=_header_index(ws, label)).value
+
+    assert cell("SKU") == "'=2+2"
+    assert cell("Nome") == "'+Produto"
+    assert cell("Marca") == "'@Marca"
+    assert cell("Tipo Certificacao") == "'-Tipo"
+    assert cell("Numero Certificado") == "'=Cert"
+    assert cell("Texto Esperado") == "'=Esperado"
+    assert cell("Texto Encontrado") == "'+Encontrado"
+    assert cell("URL") == "'@https://example.invalid"
+    assert cell("Prazo Final Venda") == "'-2026-12-31"
+    assert cell("Situacao da Venda") == "'@Comerciacao Permitida"
+
+
+def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
+    """O Excel tem de trazer os MESMOS tres status do painel, nao o status cru."""
+    _patch_products_report_io(
+        mocker,
+        tmp_path,
+        stock={"PI7560Y": {"stock_cd": 10, "stock_ecommerce": 5, "stock_total": 15,
+                           "stock_synced_at": "2026-08-07T09:00:00"}},
+    )
+
+    output = generate_products_report(
+        [
+            {
+                "sku": "PI7560Y",
+                "name": "CANETA PANDA AMIGOS",
+                "brand": "Imaginarium",
+                "sheet_status": "27/10/25 - Item excluído e incluído novamente com o novo nome.",
+                "encerramento_status": "Comerciação Permitida",
+                "last_validation_status": "OK",
+            }
+        ],
+        license_map={"PI7560Y": {"status": "VENCIDO", "valid_until": "2026-01-31"}},
+    )
+
+    wb = openpyxl.load_workbook(output)
+    ws = wb["Produtos"]
+
+    def cell(label: str):
+        return ws.cell(row=8, column=_header_index(ws, label)).value
+
+    assert cell("Status Certificacao") == "Ativo"
+    assert cell("Status E-commerce") == "Conforme"
+    assert cell("Status Licenciamento") == "Vencido"
+    assert cell("Licen. - Prazo") == "2026-01-31"
+    assert cell("Estoque CD") == 10
+    assert cell("Total Estoque") == 15
+    assert cell("Estoque Atualizado Em") == "2026-08-07T09:00:00"
+
+
+def test_products_report_has_no_vencido_column_and_reports_travas(mocker, tmp_path):
+    """A coluna 'Vencido' saiu; entraram as duas travas de faturamento."""
+    _patch_products_report_io(
+        mocker,
+        tmp_path,
+        travas={"PI7223Y": {"cert": "Sim (24/07/2026)", "lic": "Nao - sem data cadastrada"}},
+    )
+
+    output = generate_products_report([{"sku": "PI7223Y", "name": "CAIXA DE SOM", "brand": "Imaginarium"}])
+
+    wb = openpyxl.load_workbook(output)
+    ws = wb["Produtos"]
+    headers = [c.value for c in ws[7]]
+
+    assert "Vencido" not in headers
+    assert ws.cell(row=8, column=_header_index(ws, "Trava Fat. Certificacao")).value == "Sim (24/07/2026)"
+    assert (
+        ws.cell(row=8, column=_header_index(ws, "Trava Fat. Licenciamento")).value
+        == "Nao - sem data cadastrada"
+    )
+
+
+def test_products_report_marks_missing_certificate_registration(mocker, tmp_path):
+    """SKU sem certificado no portal nao pode parecer 'trava aplicada'."""
+    _patch_products_report_io(mocker, tmp_path)
+
+    output = generate_products_report([{"sku": "PI9999Y", "name": "X", "brand": "Puket"}])
+
+    wb = openpyxl.load_workbook(output)
+    ws = wb["Produtos"]
+    assert (
+        ws.cell(row=8, column=_header_index(ws, "Trava Fat. Certificacao")).value
+        == "Sem certificado cadastrado"
+    )

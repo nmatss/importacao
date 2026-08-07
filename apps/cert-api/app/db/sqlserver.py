@@ -119,6 +119,56 @@ def _connect(cfg: dict[str, str]):
     )
 
 
+def fetch_barcode_map(brand: str, codes: list[str] | None = None) -> dict[str, str]:
+    """Mapeia codigo de barras (EAN) -> codigo de produto no Linx.
+
+    O WMS Biguacu identifica a maior parte dos itens pelo EAN, nao pelo codigo de
+    produto: dos 35.342 registros de estoque, 30.787 vem com EAN de 13 digitos e
+    so 3.760 com o codigo PIxxxxY da Imaginarium (medido em 2026-08-07). Como
+    `cert_products.sku` guarda o codigo de produto, o join por SKU cru so pegava a
+    Imaginarium — Puket ficava com 2 de 223 itens com estoque de CD e Puket
+    Escolares com 0 de 162. Este mapa e o que fecha essa lacuna.
+
+    A aba "Encerramentos" da planilha tambem traz EAN na coluna de SKU em algumas
+    linhas, e usa o mesmo mapa para normalizar.
+
+    Args:
+        brand: marca (escolhe o banco/credencial do Linx).
+        codes: quando informado, resolve apenas esses codigos (consulta pontual);
+            quando None, devolve o mapa inteiro de codigos ativos.
+
+    Returns:
+        Dict {codigo_barra -> produto}, ambos ja sem padding. Vazio quando
+        `codes` e uma lista vazia.
+
+    Raises:
+        Exception: em falha de conexao/consulta (o caller decide se degrada).
+    """
+    cfg = _brand_linx(brand)
+    sql = (
+        "SELECT LTRIM(RTRIM(CODIGO_BARRA)), LTRIM(RTRIM(PRODUTO)) "
+        "FROM PRODUTOS_BARRA WHERE INATIVO = 0"
+    )
+    params: tuple = ()
+    if codes is not None:
+        wanted = sorted({c.strip() for c in codes if c and c.strip()})
+        if not wanted:
+            return {}
+        # Lista vem de dados internos (planilha/WMS), mas ainda assim vai como
+        # parametro — nunca interpolada.
+        sql += " AND LTRIM(RTRIM(CODIGO_BARRA)) IN ({})".format(",".join(["%s"] * len(wanted)))
+        params = tuple(wanted)
+
+    with _connect(cfg) as conn:
+        cur = conn.cursor()
+        cur.execute(sql, params)
+        return {
+            str(barra).strip(): str(produto).strip()
+            for barra, produto in cur.fetchall()
+            if barra is not None and produto is not None and str(produto).strip()
+        }
+
+
 def resolve_produto_codigo(brand: str, sku: str) -> str | None:
     """Resolve a portal SKU to the Linx base product code used by PROP_PRODUTOS.
 

@@ -616,7 +616,11 @@ export default function CertProdutosPage() {
                       )}
                     </td>
                     <td className="px-5 py-3.5">
-                      {p.sale_deadline ? (
+                      {/* Prazo final de venda (coluna G da aba Encerramentos). 28 SKUs
+                          têm veredito de venda na coluna H e NENHUMA data em G — nesses
+                          a situação da venda é a única informação que existe, e é ela
+                          que aparece aqui em vez de um "--" mudo. */}
+                      {p.sale_deadline || p.encerramento_status ? (
                         <span
                           className={cn(
                             'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
@@ -624,8 +628,9 @@ export default function CertProdutosPage() {
                               ? 'text-pink-700 bg-pink-50'
                               : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900',
                           )}
+                          title={p.encerramento_status || undefined}
                         >
-                          {p.sale_deadline}
+                          {p.sale_deadline || p.encerramento_status}
                         </span>
                       ) : (
                         <span className="text-xs text-slate-300 font-medium">--</span>

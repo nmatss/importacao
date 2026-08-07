@@ -11,6 +11,8 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from app.config import REPORTS_DIR
 from app.db.postgres import db
+from app.services.derivation import compute_status_dimensions
+from app.services.wms_service import summarize_stock_rows
 from app.utils.logging import log
 
 # ---------------------------------------------------------------------------
@@ -45,33 +47,113 @@ _STATUS_LABELS: dict[str, str] = {
     "NO_EXPECTED": "Sem Certificacao",
     "EXPIRED": "Vencido",
 }
+
+# Rotulos das dimensoes derivadas — os MESMOS textos que o painel exibe, para o
+# Excel poder ser conferido linha a linha contra a tela.
+_CERT_STATUS_LABELS: dict[str, str] = {"ATIVO": "Ativo", "ENCERRADO": "Encerrado"}
+_SITE_STATUS_LABELS: dict[str, str] = {"CONFORME": "Conforme", "NAO_CONFORME": "Nao conforme"}
+_LICENSE_STATUS_LABELS: dict[str, str] = {
+    "VALIDO": "Valido",
+    "VENCIDO": "Vencido",
+    "NAO_APLICAVEL": "Nao aplicavel",
+}
+
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
 
+# Propriedades do Linx que travam o faturamento do item. Os codigos por marca
+# estao em config.LINX_BRANDS; aqui interessa apenas o nome do campo gravado em
+# cert_certificates.linx_detail (ver services/linx_service.write_certificate_to_linx).
+_TRAVA_CERT_FIELD = "validade_certificado"
+_TRAVA_LIC_FIELD = "vencimento_licenciamento"
+_TRAVA_APLICADA = {"inserted", "updated", "unchanged"}
 
-def _fetch_stock_map() -> dict[str, dict[str, int]]:
-    """Fetch aggregated stock totals from cert_stock grouped by sku and source.
+
+def _fetch_stock_map() -> dict[str, dict]:
+    """Fetch aggregated stock totals from cert_stock, per SKU.
+
+    Usa `summarize_stock_rows` — a mesma funcao do painel — para que os totais do
+    Excel e da tela nao possam divergir (ver o docstring dela para o historico).
 
     Returns:
-        Dict mapping sku -> {'cd': int, 'ecommerce': int}.
+        Dict {sku: {stock_cd, stock_ecommerce, stock_total, stock_synced_at, ...}}.
     """
-    stock_map: dict[str, dict[str, int]] = {}
     try:
         with db() as (_conn, _cur):
             _cur.execute("""
-                SELECT sku, source, SUM(COALESCE(available, quantity, 0)) as qty
-                FROM cert_stock GROUP BY sku, source
+                SELECT sku, source, warehouse,
+                    COALESCE(SUM(quantity), 0) AS quantity,
+                    COALESCE(SUM(available), 0) AS available,
+                    MAX(synced_at) AS synced_at
+                FROM cert_stock GROUP BY sku, source, warehouse
             """)
-            for srow in _cur.fetchall():
-                sk = srow["sku"]
-                if sk not in stock_map:
-                    stock_map[sk] = {"cd": 0, "ecommerce": 0}
-                if srow["source"] == "wms_biguacu":
-                    stock_map[sk]["cd"] = srow["qty"] or 0
-                else:
-                    stock_map[sk]["ecommerce"] += srow["qty"] or 0
+            return summarize_stock_rows([dict(r) for r in _cur.fetchall()])
     except Exception as e:
         log.warning(f"Could not fetch stock data: {e}")
-    return stock_map
+        return {}
+
+
+def _fetch_travas_faturamento() -> dict[str, dict[str, str]]:
+    """Descobre, por SKU, se a trava de faturamento ja foi gravada no Linx.
+
+    A "trava" e a data escrita nas propriedades do produto no Linx: VALIDADE DO
+    CERTIFICADO (00224 Puket / 00106 Imaginarium) e VENCIMENTO DO LICENCIAMENTO
+    (00225 / 00107). Quem grava e `linx_service.write_certificate_to_linx`, que
+    registra o resultado por campo em `cert_certificates.linx_detail`.
+
+    Le o certificado MAIS RECENTE de cada SKU: e o que reflete o estado atual da
+    propriedade no ERP.
+
+    Returns:
+        Dict {sku: {'cert': <rotulo>, 'lic': <rotulo>}}. SKU ausente do dict
+        significa que nunca houve certificado cadastrado no portal.
+    """
+    travas: dict[str, dict[str, str]] = {}
+    try:
+        with db() as (_conn, _cur):
+            _cur.execute("""
+                SELECT DISTINCT ON (sku)
+                    sku, linx_status, linx_detail, linx_applied_at
+                FROM cert_certificates
+                ORDER BY sku, created_at DESC
+            """)
+            rows = _cur.fetchall()
+    except Exception as e:
+        log.warning(f"Could not fetch Linx lock data: {e}")
+        return {}
+
+    for row in rows:
+        detail = row.get("linx_detail") or []
+        if isinstance(detail, str):
+            try:
+                detail = json.loads(detail)
+            except ValueError:
+                detail = []
+        acoes = {
+            d.get("field"): str(d.get("action") or "")
+            for d in detail
+            if isinstance(d, dict)
+        }
+        status = row.get("linx_status") or ""
+        aplicado_em = row.get("linx_applied_at")
+        quando = aplicado_em.strftime("%d/%m/%Y") if hasattr(aplicado_em, "strftime") else ""
+
+        def _label(field: str, _status: str = status, _acoes: dict = acoes, _quando: str = quando) -> str:
+            if _status == "disabled":
+                return "Nao - escrita no Linx desabilitada"
+            if _status == "error":
+                return "Nao - erro na gravacao"
+            acao = _acoes.get(field, "")
+            if acao in _TRAVA_APLICADA:
+                return f"Sim ({_quando})" if _quando else "Sim"
+            if acao.startswith("skipped"):
+                return "Nao - sem data cadastrada"
+            return "Nao"
+
+        travas[row["sku"]] = {
+            "cert": _label(_TRAVA_CERT_FIELD),
+            "lic": _label(_TRAVA_LIC_FIELD),
+        }
+    return travas
 
 
 def _row_get(row: Any, key: str, default: Any = "") -> Any:
@@ -137,29 +219,83 @@ def _apply_header_row(
     return header_row
 
 
-def generate_products_report(rows: list[dict], brand: str = "", status: str = "") -> Path:
+# Colunas do relatorio de produtos, na ordem. A lista existe para o cabecalho, a
+# largura e a montagem da linha ficarem sempre em sincronia.
+_PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
+    ("SKU", 15),
+    ("Nome", 40),
+    ("Marca", 18),
+    # As tres dimensoes do painel, com os mesmos rotulos da tela.
+    ("Status Certificacao", 18),
+    ("Status E-commerce", 18),
+    ("Motivo (E-commerce)", 38),
+    ("Status Licenciamento", 20),
+    # Cadastro vindo das abas Imaginarium/Puket.
+    ("Tipo Certificacao", 32),          # coluna H
+    ("Numero Certificado", 20),         # coluna P
+    ("Texto Esperado", 45),             # coluna V
+    ("Texto Encontrado", 45),
+    ("Pontuacao", 11),
+    ("URL", 45),
+    # Aba Encerramentos.
+    ("Prazo Final Venda", 16),          # coluna G
+    ("Situacao da Venda", 26),          # coluna H
+    ("Licen. - Prazo", 16),
+    # Travas de faturamento gravadas no Linx.
+    ("Trava Fat. Certificacao", 26),
+    ("Trava Fat. Licenciamento", 26),
+    # Estoque.
+    ("Estoque CD", 12),
+    ("Estoque E-commerce", 18),
+    ("Total Estoque", 14),
+    ("Estoque Atualizado Em", 22),
+)
+
+# 1-based, usada para pintar a celula de status de certificacao.
+_COL_STATUS_CERT = 4
+
+
+def generate_products_report(
+    rows: list[dict],
+    brand: str = "",
+    status: str = "",
+    license_map: dict | None = None,
+) -> Path:
     """Generate an Excel report for cert_products data.
+
+    O relatorio espelha o painel: as colunas Status Certificacao / Status
+    E-commerce / Status Licenciamento saem de `compute_status_dimensions`, a
+    MESMA funcao que alimenta a tela, em vez de reexibirem o
+    `last_validation_status` cru (que so fala do scraping da VTEX e nao do
+    veredito de negocio).
 
     Args:
         rows: List of product dicts from cert_products.
         brand: Optional brand filter label (used only in filename).
         status: Optional status filter label (used only in filename).
+        license_map: Mapa de "Licenciamentos Vencidos" (SKU -> status/prazo).
+            Sem ele o status de licenciamento sai como "Nao aplicavel".
 
     Returns:
         Path to the generated .xlsx file.
     """
     now = datetime.now(UTC)
     stock_map = _fetch_stock_map()
+    travas = _fetch_travas_faturamento()
+
+    enriched = [{**r, **compute_status_dimensions(r, license_map)} for r in rows]
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Produtos"
 
-    # Meta rows
-    ok_count = sum(1 for r in rows if r.get("last_validation_status") == "OK")
-    not_found_count = sum(1 for r in rows if r.get("last_validation_status") in ("MISSING", "URL_NOT_FOUND"))
-    inconsistent_count = sum(1 for r in rows if r.get("last_validation_status") == "INCONSISTENT")
-    expired_count = sum(1 for r in rows if r.get("is_expired"))
+    # Meta rows — contagens pelas dimensoes de negocio, nao pelo status cru.
+    ativos = sum(1 for r in enriched if r.get("cert_status") == "ATIVO")
+    encerrados = sum(1 for r in enriched if r.get("cert_status") == "ENCERRADO")
+    conformes = sum(1 for r in enriched if r.get("site_status") == "CONFORME")
+    nao_conformes = sum(1 for r in enriched if r.get("site_status") == "NAO_CONFORME")
+    lic_vencidos = sum(1 for r in enriched if r.get("license_status") == "VENCIDO")
+    bloqueados = sum(1 for r in enriched if r.get("venda_encerramento") == "BLOQUEADA")
 
     ws.append(["Relatorio de Produtos - Certificacoes"])
     ws.merge_cells("A1:J1")
@@ -169,76 +305,84 @@ def generate_products_report(rows: list[dict], brand: str = "", status: str = ""
     ws.append([])
     ws.append(
         [
-            f"Conforme: {ok_count} | Nao Encontrado: {not_found_count} "
-            f"| Inconsistente: {inconsistent_count} | Vencidos: {expired_count}"
+            f"Certificacao — Ativo: {ativos} | Encerrado: {encerrados}    "
+            f"E-commerce — Conforme: {conformes} | Nao conforme: {nao_conformes}    "
+            f"Licenciamento vencido: {lic_vencidos}    Venda bloqueada: {bloqueados}"
         ]
     )
-    ws.append([])
+    ws.append([_estoque_meta_line(stock_map)])
 
-    headers = [
-        "SKU",
-        "Nome",
-        "Marca",
-        "Status",
-        "Pontuacao",
-        "Tipo Certificacao",
-        "Texto Esperado",
-        "Texto Encontrado",
-        "URL",
-        "Prazo Venda",
-        "Vencido",
-        "Estoque CD",
-        "Estoque E-commerce",
-        "Total Estoque",
-    ]
+    headers = [name for name, _ in _PRODUCT_COLUMNS]
     header_row = _apply_header_row(ws, headers, _HEADER_FONT_CERT, _HEADER_FILL_CERT)
 
-    for r in rows:
-        status_raw = r.get("last_validation_status") or ""
-        is_exp = r.get("is_expired", False)
-        if not status_raw and is_exp:
-            status_raw = "EXPIRED"
-        label = _STATUS_LABELS.get(status_raw, status_raw)
+    for r in enriched:
+        cert_status = r.get("cert_status") or ""
         score = r.get("last_validation_score")
         score_str = f"{score * 100:.0f}%" if score is not None else ""
         sku = r.get("sku", "")
-        stock = stock_map.get(sku, {"cd": 0, "ecommerce": 0})
+        stock = stock_map.get(sku, {})
+        trava = travas.get(sku, {})
         row_data = [
             _safe_text(sku),
             _safe_text(r.get("name", "")),
             _safe_text(r.get("brand", "")),
-            _safe_text(label),
-            _safe_text(score_str),
+            _safe_text(_CERT_STATUS_LABELS.get(cert_status, cert_status)),
+            _safe_text(_SITE_STATUS_LABELS.get(r.get("site_status") or "", r.get("site_status") or "")),
+            _safe_text(r.get("site_status_reason") or ""),
+            _safe_text(
+                _LICENSE_STATUS_LABELS.get(
+                    r.get("license_status") or "", r.get("license_status") or ""
+                )
+            ),
             _safe_text(r.get("certification_type", "")),
+            _safe_text(r.get("numero_certificado", "")),
             _safe_text(r.get("expected_cert_text", "")),
             _safe_text(r.get("actual_cert_text", "")),
+            _safe_text(score_str),
             _safe_text(r.get("last_validation_url", "")),
             _safe_text(r.get("sale_deadline", "")),
-            "Sim" if is_exp else "",
-            stock["cd"],
-            stock["ecommerce"],
-            stock["cd"] + stock["ecommerce"],
+            _safe_text(r.get("encerramento_status", "")),
+            _safe_text(r.get("license_deadline") or ""),
+            _safe_text(trava.get("cert", "Sem certificado cadastrado")),
+            _safe_text(trava.get("lic", "Sem certificado cadastrado")),
+            stock.get("stock_cd", 0),
+            stock.get("stock_ecommerce", 0),
+            stock.get("stock_total", 0),
+            _safe_text(stock.get("stock_synced_at") or ""),
         ]
         ws.append(row_data)
         row_idx = ws.max_row
         for col_idx in range(1, len(row_data) + 1):
             ws.cell(row=row_idx, column=col_idx).border = _THIN_BORDER
-        status_cell = ws.cell(row=row_idx, column=4)
-        if is_exp:
+        status_cell = ws.cell(row=row_idx, column=_COL_STATUS_CERT)
+        if cert_status == "ENCERRADO":
             status_cell.fill = _EXPIRED_FILL
-        elif status_raw in _STATUS_FILLS:
-            status_cell.fill = _STATUS_FILLS[status_raw]
+        elif cert_status == "ATIVO":
+            status_cell.fill = _STATUS_FILLS["OK"]
 
-    col_widths = [15, 40, 18, 18, 12, 25, 40, 40, 50, 15, 10, 12, 18, 14]
-    for i, w in enumerate(col_widths, 1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+    for i, (_, width) in enumerate(_PRODUCT_COLUMNS, 1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = width
 
-    ws.auto_filter.ref = f"A{header_row}:N{ws.max_row}"
+    last_col = openpyxl.utils.get_column_letter(len(_PRODUCT_COLUMNS))
+    ws.auto_filter.ref = f"A{header_row}:{last_col}{ws.max_row}"
 
     filename = f"produtos_certificacoes_{now.strftime('%Y%m%d_%H%M%S')}.xlsx"
     filepath = REPORTS_DIR / filename
     wb.save(str(filepath))
     return filepath
+
+
+def _estoque_meta_line(stock_map: dict[str, dict]) -> str:
+    """Linha de cabecalho que datalha o estoque — o relatorio nao pode esconder
+    que os numeros vem de um sync antigo.
+
+    O sync de estoque nao tinha agendamento e ficou 4 meses sem rodar (ultimo em
+    23/03/2026, descoberto em 2026-08-07). Quem abrir o Excel precisa ver a data.
+    """
+    datas = [s.get("stock_synced_at") for s in stock_map.values() if s.get("stock_synced_at")]
+    if not datas:
+        return "Estoque: sem dados sincronizados"
+    return f"Estoque sincronizado em: {max(datas)[:16].replace('T', ' ')}"
 
 
 def generate_stock_report(rows: list, brand: str = "") -> Path:
@@ -381,7 +525,7 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
         score = p.get("score")
         score_str = f"{score * 100:.0f}%" if score is not None else ""
         p_sku = p.get("sku", "")
-        stock = stock_map.get(p_sku, {"cd": 0, "ecommerce": 0})
+        stock = stock_map.get(p_sku, {})
         row = [
             _safe_text(p_sku),
             _safe_text(p.get("name", "")),
@@ -392,9 +536,9 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
             _safe_text(p.get("actual_cert_text", "")),
             _safe_text(p.get("url", "")),
             _safe_text(p.get("error", "")),
-            stock["cd"],
-            stock["ecommerce"],
-            stock["cd"] + stock["ecommerce"],
+            stock.get("stock_cd", 0),
+            stock.get("stock_ecommerce", 0),
+            stock.get("stock_total", 0),
         ]
         ws.append(row)
         row_idx = ws.max_row

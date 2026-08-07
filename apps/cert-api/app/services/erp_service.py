@@ -1,6 +1,7 @@
 """Google Sheets sync services for certifications and licenciados."""
 
 import re
+from collections import defaultdict
 from datetime import datetime
 
 import gspread
@@ -8,7 +9,94 @@ from google.oauth2.service_account import Credentials
 
 from app.config import SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY, SHEETS_SPREADSHEET_ID
 from app.db.postgres import db
+from app.services.derivation import derive_venda_encerramento
 from app.utils.logging import log
+
+# ---------------------------------------------------------------------------
+# Layout da planilha "STATUS CERTIFICAÇÃO"
+# ---------------------------------------------------------------------------
+# Cada campo é (candidatos de cabeçalho, índice de fallback 0-based). O
+# cabeçalho manda; o índice só entra quando a coluna foi renomeada. Letras de
+# coluna conferidas contra a planilha em 2026-08-07.
+
+_DESC_ECOMMERCE_HEADERS = (
+    "descrição e-commerce", "descricao e-commerce",
+    "descrição ecommerce", "descricao ecommerce",
+    "desc e-commerce", "desc ecommerce",
+)
+
+# Abas "Imaginarium" e "Puket" compartilham o mesmo layout A..W.
+_LAYOUT_MARCA = {
+    "sku": (("código", "codigo"), 2),                                       # C
+    "name": (("nome",), 5),                                                 # F
+    "certification_type": (("tipo de certificação", "tipo de certificacao"), 7),  # H
+    "sheet_status": (("status",), 9),                                       # J
+    "numero_certificado": (("número certificado", "numero certificado"), 15),     # P
+    "situacao": (("situação", "situacao"), 20),                             # U
+    "ecommerce_description": (_DESC_ECOMMERCE_HEADERS, 21),                 # V
+}
+
+_ATIVOS_SHEETS = (
+    {"name": "Imaginarium", "brand": "Imaginarium", "fields": _LAYOUT_MARCA},
+    {"name": "Puket", "brand": "Puket", "fields": _LAYOUT_MARCA},
+    {
+        "name": "Puket escolares",
+        "brand": "Puket Escolares",
+        "fields": {
+            "sku": (("sku",), 0),                                           # A
+            "name": (("nome comercial (certificado)",), 1),                 # B
+            "certification_type": (("tipo",), 2),                           # C
+            "sheet_status": (("status",), 6),                               # G
+            "numero_certificado": (("certificado",), 3),                    # D
+            "situacao": ((), None),
+            "ecommerce_description": (_DESC_ECOMMERCE_HEADERS, 7),          # H
+        },
+    },
+)
+
+# Marcas canônicas gravadas em cert_products.brand. A coluna MARCA (A) das abas
+# de produto NÃO é confiável: em 2026-08-07 uma das 111 linhas da Puket trazia
+# 'Kayuan' — o nome do FORNECEDOR (coluna E) — e o item 100400496 chegava ao
+# painel com marca 'Kayuan', o que quebrava a resolução da loja VTEX
+# (last_validation_status=API_ERROR "No VTEX store configured") e o derrubava
+# para "Nao conforme". A aba é que define a marca.
+_BRAND_CANONICAL = {
+    "imaginarium": "Imaginarium",
+    "puket": "Puket",
+    "puket escolares": "Puket Escolares",
+    "puket_escolares": "Puket Escolares",
+}
+
+# EAN-13 (e variações de 12/14 dígitos) aparecem na coluna SKU da aba
+# "Encerramentos" — 5 linhas em 2026-08-07, todas Puket. Sem tradução elas
+# viram produtos fantasma no painel e no relatório.
+_EAN_RE = re.compile(r"^\d{12,14}$")
+
+
+def _canonical_brand(raw: str, default: str = "") -> str:
+    """Normaliza o texto de marca da planilha para o rótulo canônico."""
+    key = (raw or "").strip().lower().replace("_", " ")
+    return _BRAND_CANONICAL.get(key, default or (raw or "").strip())
+
+
+def normalize_brand_filter(value: str) -> str:
+    """Normaliza o valor de filtro de marca vindo da UI para comparar com o banco.
+
+    O frontend manda `puket_escolares` (slug), o banco guarda `Puket Escolares`.
+    O relatório já normalizava; o painel comparava `LOWER(brand) = LOWER(%s)` e
+    por isso o filtro "Puket Escolares" não devolvia nada. Usar esta função nos
+    dois lados mantém painel e relatório filtrando igual.
+
+    Returns:
+        Texto em minúsculas, com `_` trocado por espaço, pronto para comparar
+        com `LOWER(REPLACE(brand, '_', ' '))`.
+    """
+    return (value or "").strip().lower().replace("_", " ")
+
+
+def _looks_like_ean(value: str) -> bool:
+    """True quando o código tem cara de código de barras, não de SKU."""
+    return bool(_EAN_RE.match((value or "").strip()))
 
 
 def _get_sheets_client() -> gspread.Client | None:
@@ -39,19 +127,53 @@ def _get_sheets_client() -> gspread.Client | None:
 def _find_col_by_header(headers: list[str], *candidates: str) -> int | None:
     """Find a column index by matching header text (case-insensitive).
 
+    Faz duas passadas: primeiro cabeçalho IDÊNTICO ao candidato, depois
+    substring. A passada exata evita o falso positivo clássico da aba
+    "Puket escolares", onde procurar por "certificado" achava
+    "NOME COMERCIAL (CERTIFICADO)" (coluna B) antes da coluna "CERTIFICADO" (D).
+
     Args:
         headers: List of header strings from the first row.
-        *candidates: Substrings to search for in headers.
+        *candidates: Header names to search for (exact first, then substring).
 
     Returns:
         Zero-based column index, or None if not found.
     """
-    for i, h in enumerate(headers):
-        h_lower = h.lower().strip()
-        for c in candidates:
-            if c.lower() in h_lower:
+    normalized = [h.lower().strip() for h in headers]
+    wanted = [c.lower().strip() for c in candidates if c]
+    for c in wanted:
+        if c in normalized:
+            return normalized.index(c)
+    for i, h_lower in enumerate(normalized):
+        for c in wanted:
+            if c in h_lower:
                 return i
     return None
+
+
+def _resolve_columns(headers: list[str], fields: dict, sheet_name: str) -> dict[str, int | None]:
+    """Resolve o índice de cada campo do layout: cabeçalho primeiro, índice depois.
+
+    Args:
+        headers: primeira linha da aba.
+        fields: {campo: (candidatos_de_cabecalho, indice_fallback)}.
+        sheet_name: nome da aba (só para log).
+
+    Returns:
+        {campo: índice 0-based ou None quando a coluna não existe na aba}.
+    """
+    resolved: dict[str, int | None] = {}
+    for field, (candidates, fallback) in fields.items():
+        idx = _find_col_by_header(headers, *candidates) if candidates else None
+        if idx is None:
+            idx = fallback
+        elif fallback is not None and idx != fallback:
+            log.info(
+                f"Aba '{sheet_name}': coluna '{field}' encontrada em {idx} "
+                f"(layout esperado: {fallback})"
+            )
+        resolved[field] = idx
+    return resolved
 
 
 def _cell(row: list, idx: int | None) -> str:
@@ -120,267 +242,345 @@ def read_encerramentos_prazos() -> list[dict]:
     return out
 
 
-def _read_products_from_sheets() -> list[dict]:
-    """Read product certification data from Google Sheets (Ativos + Encerramentos tabs).
+def _resolve_ean_skus(items: list[dict]) -> int:
+    """Traduz, in-place, SKUs que na verdade sao codigo de barras.
 
-    Returns Encerramentos products first, then Ativos — so the upsert logic lets Ativos
-    data overwrite Encerramentos for any SKU that appears in both.
+    A coluna SKU da aba "Encerramentos" traz EAN em algumas linhas (5 em
+    2026-08-07, todas Puket: 7909692117610 -> produto 100400416 etc.). Sem
+    traducao esses codigos viram produtos fantasma — aparecem como SKU no painel
+    e no relatorio e nunca casam com estoque, validacao ou Linx.
+
+    Consulta o Linx (PRODUTOS_BARRA) por marca, apenas para os codigos com cara
+    de EAN. Falha de conexao NAO derruba o sync: o codigo cru e mantido e a
+    ocorrencia vai para o log.
+
+    Args:
+        items: dicts com chaves 'sku' e 'brand'; mutados no lugar.
 
     Returns:
-        List of product dicts ready for upsert into cert_products.
+        Quantidade de SKUs efetivamente traduzidos.
     """
-    client = _get_sheets_client()
-    if not client:
-        return []
-    try:
-        spreadsheet = client.open_by_key(SHEETS_SPREADSHEET_ID)
-    except Exception as e:
-        log.error(f"Failed to open spreadsheet: {e}")
-        return []
+    pendentes: dict[str, set[str]] = defaultdict(set)
+    for it in items:
+        if _looks_like_ean(it.get("sku", "")):
+            pendentes[it.get("brand") or ""].add(it["sku"].strip())
+    if not pendentes:
+        return 0
 
-    products: list[dict] = []
-    worksheet_configs = [
-        {
-            "name": "Imaginarium",
-            "sku_col": 2, "name_col": 5, "brand_col": 0,
-            "brand_default": "Imaginarium",
-            "cert_type_col": 7, "status_col": 9,
-        },
-        {
-            "name": "Puket",
-            "sku_col": 2, "name_col": 5, "brand_col": 0,
-            "brand_default": "Puket",
-            "cert_type_col": 7, "status_col": 9,
-        },
-        {
-            "name": "Puket escolares",
-            "sku_col": 0, "name_col": 1, "brand_col": None,
-            "brand_default": "Puket Escolares",
-            "cert_type_col": 2, "status_col": 6,
-        },
-    ]
+    from app.db.sqlserver import fetch_barcode_map
 
-    for cfg in worksheet_configs:
+    traduzidos = 0
+    for brand, codes in pendentes.items():
+        try:
+            mapa = fetch_barcode_map(brand, sorted(codes))
+        except Exception as e:
+            log.warning(f"Nao foi possivel resolver EAN->SKU da marca '{brand}': {e}")
+            continue
+        for it in items:
+            sku = it.get("sku", "").strip()
+            if it.get("brand") == brand and sku in mapa:
+                it["sku"] = mapa[sku]
+                it["sku_origem_ean"] = sku
+                traduzidos += 1
+    if traduzidos:
+        log.info(f"EAN->SKU resolvidos: {traduzidos}")
+    return traduzidos
+
+
+def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
+    """Le o cadastro de certificacao das abas de produto ativo.
+
+    Cobre "Imaginarium", "Puket" e "Puket escolares". Cada campo e localizado
+    pelo cabecalho, com o indice do layout como fallback (ver `_ATIVOS_SHEETS`).
+
+    A MARCA vem da ABA, nunca da coluna A: ver `_BRAND_CANONICAL` (caso
+    100400496 / 'Kayuan').
+
+    Returns:
+        Lista de dicts de cadastro, um por SKU.
+    """
+    produtos: list[dict] = []
+    for cfg in _ATIVOS_SHEETS:
         try:
             ws = spreadsheet.worksheet(cfg["name"])
             rows = ws.get_all_values()
         except Exception as e:
             log.warning(f"Could not read worksheet '{cfg['name']}': {e}")
             continue
-
         if not rows:
             continue
 
-        headers = rows[0]
-        desc_ecommerce_col = _find_col_by_header(
-            headers,
-            "descrição e-commerce", "descricao e-commerce",
-            "descrição ecommerce", "descricao ecommerce",
-            "desc e-commerce", "desc ecommerce",
-        )
-        if desc_ecommerce_col is not None:
-            log.info(
-                f"Worksheet '{cfg['name']}': found 'Descrição E-commerce' at column {desc_ecommerce_col}"
-            )
+        cols = _resolve_columns(rows[0], cfg["fields"], cfg["name"])
+        i_sku = cols["sku"]
+        if i_sku is None:
+            log.warning(f"Aba '{cfg['name']}' sem coluna de SKU; ignorada")
+            continue
 
         for row in rows[1:]:
-            sku_col = cfg["sku_col"]
-            if sku_col >= len(row):
-                continue
-            raw_sku = str(row[sku_col]).strip()
+            raw_sku = _cell(row, i_sku)
             if not raw_sku:
                 continue
-
-            name = str(row[cfg["name_col"]]).strip() if cfg["name_col"] < len(row) else ""
-            if cfg["brand_col"] is not None and cfg["brand_col"] < len(row):
-                brand = str(row[cfg["brand_col"]]).strip() or cfg["brand_default"]
-            else:
-                brand = cfg["brand_default"]
-            cert_type = str(row[cfg["cert_type_col"]]).strip() if cfg["cert_type_col"] < len(row) else ""
-            sheet_status = str(row[cfg["status_col"]]).strip() if cfg["status_col"] < len(row) else ""
-            desc_ecommerce = ""
-            if desc_ecommerce_col is not None and desc_ecommerce_col < len(row):
-                desc_ecommerce = str(row[desc_ecommerce_col]).strip()
-
             for sku in re.split(r"[\r\n]+", raw_sku):
                 sku = sku.strip()
                 if not sku:
                     continue
-                products.append({
+                produtos.append({
                     "sku": sku,
-                    "name": name,
-                    "brand": brand,
-                    "certification_type": cert_type,
-                    "sheet_status": sheet_status,
-                    "ecommerce_description": desc_ecommerce,
-                    "_source": "ativos",
+                    "name": _cell(row, cols["name"]),
+                    "brand": cfg["brand"],
+                    "certification_type": _cell(row, cols["certification_type"]),
+                    "numero_certificado": _cell(row, cols["numero_certificado"]),
+                    "situacao": _cell(row, cols["situacao"]),
+                    "sheet_status": _cell(row, cols["sheet_status"]),
+                    "ecommerce_description": _cell(row, cols["ecommerce_description"]),
                 })
 
-    log.info(f"Read {len(products)} active products from Google Sheets")
+    log.info(f"Ativos: {len(produtos)} SKUs lidos das abas de produto")
+    return produtos
 
-    # Read Encerramentos tab
-    enc_products: list[dict] = []
+
+def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
+    """Le a aba "Encerramentos" — prazo final de venda e permissao de venda.
+
+    Colunas (conferidas em 2026-08-07):
+        A CERTIFICADO | B SKU | C NOME | D ESTOQUE INFORMADO | E DATA NOTIFICACAO
+        F DATA LEMBRETE | G PRAZO FINAL VENDA | H STATUS | I CODIGO DE BARRAS
+        J MARCA | K CUSTO MEDIO | L REF CONCATENADA
+
+    A coluna H e o veredito do time fiscal ("Comerciacao Permitida" /
+    "Vencido - Venda Bloqueada" / "Venda ate fim do lote"). A leitura antiga
+    exigia data na coluna G e por isso DESCARTAVA as 28 linhas que so tem o
+    status — entre elas PI7560Y, que aparecia no painel como Encerrado / Nao
+    conforme sem ter prazo nenhum. Agora basta prazo OU status.
+
+    Returns:
+        Lista de dicts de encerramento, um por SKU.
+    """
     try:
-        ws_enc = spreadsheet.worksheet("Encerramentos")
-        enc_rows = ws_enc.get_all_values()
-        if enc_rows:
-            enc_headers = enc_rows[0]
-            prazo_col = _find_col_by_header(enc_headers, "prazo final venda", "prazo final", "prazo venda")
-            sku_col_enc = _find_col_by_header(enc_headers, "sku", "código", "codigo", "ref")
-            name_col_enc = _find_col_by_header(enc_headers, "nome", "produto", "descrição", "descricao")
-            brand_col_enc = _find_col_by_header(enc_headers, "marca", "brand")
-            status_col_enc = _find_col_by_header(enc_headers, "status", "situação", "situacao")
-
-            if prazo_col is not None and sku_col_enc is not None:
-                today = datetime.now().date()
-                expired_count = 0
-                venda_fim_lote_count = 0
-
-                for row in enc_rows[1:]:
-                    if sku_col_enc >= len(row):
-                        continue
-                    raw_sku = str(row[sku_col_enc]).strip()
-                    if not raw_sku:
-                        continue
-                    prazo_str = str(row[prazo_col]).strip() if prazo_col < len(row) else ""
-                    if not prazo_str:
-                        continue
-
-                    enc_status_str = (
-                        str(row[status_col_enc]).strip()
-                        if status_col_enc is not None and status_col_enc < len(row)
-                        else ""
-                    )
-                    combined_text = f"{prazo_str} {enc_status_str}".lower()
-                    is_venda_fim_lote = (
-                        "venda até fim do lote" in combined_text
-                        or "venda ate fim do lote" in combined_text
-                    )
-                    is_vencido = "vencido" in combined_text
-
-                    prazo_date = None
-                    for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
-                        try:
-                            prazo_date = datetime.strptime(prazo_str, fmt).date()
-                            break
-                        except ValueError:
-                            continue
-
-                    if is_venda_fim_lote:
-                        is_expired = False
-                        venda_fim_lote_count += 1
-                        sheet_status_val = "VENDA_FIM_LOTE"
-                    elif is_vencido:
-                        is_expired = True
-                        sheet_status_val = "EXPIRED"
-                    elif prazo_date is not None:
-                        is_expired = prazo_date < today
-                        sheet_status_val = "EXPIRED" if is_expired else "EXPIRING"
-                    else:
-                        continue
-
-                    name = (
-                        str(row[name_col_enc]).strip()
-                        if name_col_enc is not None and name_col_enc < len(row)
-                        else ""
-                    )
-                    brand = (
-                        str(row[brand_col_enc]).strip()
-                        if brand_col_enc is not None and brand_col_enc < len(row)
-                        else ""
-                    )
-
-                    for sku in re.split(r"[\r\n]+", raw_sku):
-                        sku = sku.strip()
-                        if not sku:
-                            continue
-                        enc_products.append({
-                            "sku": sku,
-                            "name": name,
-                            "brand": brand,
-                            "certification_type": f"ENCERRAMENTO - Prazo: {prazo_str}",
-                            "sheet_status": sheet_status_val,
-                            "ecommerce_description": "",
-                            "sale_deadline": prazo_str,
-                            "sale_deadline_date": prazo_date.isoformat() if prazo_date else None,
-                            "is_expired": is_expired,
-                            "_source": "encerramentos",
-                        })
-                        if is_expired:
-                            expired_count += 1
-
-                log.info(
-                    f"Encerramentos: {expired_count} expired, {venda_fim_lote_count} 'venda fim lote'"
-                )
-            else:
-                log.warning(
-                    f"Worksheet 'Encerramentos': missing required columns (prazo={prazo_col}, sku={sku_col_enc})"
-                )
+        ws = spreadsheet.worksheet("Encerramentos")
+        rows = ws.get_all_values()
     except gspread.exceptions.WorksheetNotFound:
-        log.info("Worksheet 'Encerramentos' not found, skipping expiration check")
+        log.info("Worksheet 'Encerramentos' not found, skipping")
+        return []
     except Exception as e:
         log.warning(f"Error reading 'Encerramentos' worksheet: {e}")
+        return []
 
-    # Encerramentos first, Ativos second — upsert lets Ativos win on conflict
-    return enc_products + products
+    if not rows:
+        return []
+
+    headers = rows[0]
+    i_sku = _find_col_by_header(headers, "sku", "código", "codigo", "ref")
+    i_prazo = _find_col_by_header(headers, "prazo final venda", "prazo final", "prazo venda")
+    i_status = _find_col_by_header(headers, "status", "situação", "situacao")
+    i_marca = _find_col_by_header(headers, "marca", "brand")
+    i_cert = _find_col_by_header(headers, "certificado")
+    i_nome = _find_col_by_header(headers, "nome", "produto", "descrição", "descricao")
+    if i_sku is None:
+        log.warning("Aba 'Encerramentos' sem coluna de SKU; ignorada")
+        return []
+
+    today = datetime.now().date()
+    out: list[dict] = []
+    for row in rows[1:]:
+        raw_sku = _cell(row, i_sku)
+        if not raw_sku:
+            continue
+        prazo_str = _cell(row, i_prazo)
+        status_str = _cell(row, i_status)
+        if not prazo_str and not status_str:
+            continue
+
+        prazo_date = None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+            try:
+                prazo_date = datetime.strptime(prazo_str, fmt).date()
+                break
+            except ValueError:
+                continue
+
+        venda = derive_venda_encerramento(status_str)
+        if venda == "BLOQUEADA":
+            is_expired = True
+        elif venda in ("PERMITIDA", "FIM_LOTE"):
+            is_expired = False
+        elif prazo_date is not None:
+            is_expired = prazo_date < today
+        else:
+            # Sem data e sem veredito reconhecido: nao inventa vencimento.
+            is_expired = "vencido" in f"{prazo_str} {status_str}".lower()
+
+        for sku in re.split(r"[\r\n]+", raw_sku):
+            sku = sku.strip()
+            if not sku:
+                continue
+            out.append({
+                "sku": sku,
+                "name": _cell(row, i_nome),
+                "brand": _canonical_brand(_cell(row, i_marca)),
+                "numero_certificado": _cell(row, i_cert),
+                "sale_deadline": prazo_str,
+                "sale_deadline_date": prazo_date.isoformat() if prazo_date else None,
+                "encerramento_status": status_str,
+                "is_expired": is_expired,
+            })
+
+    _resolve_ean_skus(out)
+    bloqueados = sum(1 for e in out if e["is_expired"])
+    sem_prazo = sum(1 for e in out if not e["sale_deadline"])
+    log.info(
+        f"Encerramentos: {len(out)} SKUs ({bloqueados} com venda bloqueada, "
+        f"{sem_prazo} sem data na coluna G)"
+    )
+    return out
+
+
+# SQL do cadastro (abas de produto). Os campos que a planilha controla sao
+# atribuidos DIRETAMENTE, sem COALESCE: quando a celula esvazia, o portal tem de
+# esvaziar junto. Era o COALESCE que deixava `expected_cert_text` e
+# `certification_type` carregando texto velho ("ENCERRAMENTO - Prazo: ...")
+# depois que a planilha ja tinha corrigido a linha.
+_UPSERT_ATIVOS_SQL = """
+    INSERT INTO cert_products
+        (sku, name, brand, certification_type, numero_certificado, situacao,
+         expected_cert_text, ecommerce_description, sheet_status, updated_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    ON CONFLICT (sku) DO UPDATE SET
+        name = COALESCE(NULLIF(EXCLUDED.name, ''), cert_products.name),
+        brand = COALESCE(NULLIF(EXCLUDED.brand, ''), cert_products.brand),
+        certification_type = EXCLUDED.certification_type,
+        numero_certificado = EXCLUDED.numero_certificado,
+        situacao = EXCLUDED.situacao,
+        expected_cert_text = EXCLUDED.expected_cert_text,
+        ecommerce_description = EXCLUDED.ecommerce_description,
+        sheet_status = COALESCE(NULLIF(EXCLUDED.sheet_status, ''), cert_products.sheet_status),
+        updated_at = NOW()
+"""
+
+# SQL do encerramento. Roda DEPOIS do cadastro e so mexe nos campos que a aba
+# "Encerramentos" possui. name/brand/numero_certificado sao preenchidos apenas
+# quando o cadastro nao trouxe nada (SKU que so existe em encerramentos).
+_UPSERT_ENCERRAMENTOS_SQL = """
+    INSERT INTO cert_products
+        (sku, name, brand, numero_certificado, sale_deadline, sale_deadline_date,
+         encerramento_status, is_expired, updated_at)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
+    ON CONFLICT (sku) DO UPDATE SET
+        name = COALESCE(NULLIF(cert_products.name, ''), EXCLUDED.name),
+        brand = COALESCE(NULLIF(cert_products.brand, ''), EXCLUDED.brand),
+        numero_certificado = COALESCE(
+            NULLIF(cert_products.numero_certificado, ''), EXCLUDED.numero_certificado
+        ),
+        sale_deadline = EXCLUDED.sale_deadline,
+        sale_deadline_date = EXCLUDED.sale_deadline_date,
+        encerramento_status = EXCLUDED.encerramento_status,
+        is_expired = EXCLUDED.is_expired,
+        updated_at = NOW()
+"""
+
+# Um SKU que saiu da aba "Encerramentos" tem de perder prazo e status junto. O
+# upsert antigo fazia COALESCE em sale_deadline/sale_deadline_date e nunca os
+# limpava: PI7560Y seguia exibindo "28/07/2028" muito depois de a celula da
+# planilha ter sido esvaziada.
+_CLEAR_ENCERRAMENTOS_SQL = """
+    UPDATE cert_products
+    SET sale_deadline = NULL, sale_deadline_date = NULL,
+        encerramento_status = NULL, is_expired = FALSE, updated_at = NOW()
+    WHERE NOT (sku = ANY(%s))
+      AND (sale_deadline IS NOT NULL
+           OR sale_deadline_date IS NOT NULL
+           OR encerramento_status IS NOT NULL
+           OR is_expired = TRUE)
+"""
 
 
 def sync_sheets_to_db() -> dict:
     """Sync certification products from Google Sheets into cert_products table.
 
+    Duas passadas explicitas, em vez do antigo "encerramentos primeiro, ativos
+    depois, e o ON CONFLICT que decide": cadastro (abas de produto) e depois
+    encerramento (aba "Encerramentos"). Cada passada escreve apenas as colunas
+    que a sua aba realmente possui.
+
+    A ordem anterior tinha um efeito colateral silencioso: a linha de "Ativos"
+    vinha por ultimo com `is_expired = FALSE` fixo e apagava o vencimento que a
+    aba "Encerramentos" tinha acabado de gravar — PI7223Y ficava com
+    `is_expired = false` no banco mesmo com prazo 24/07/2026 vencido e a
+    planilha dizendo "Vencido - Venda Bloqueada".
+
     Returns:
-        Dict with 'synced' count and optional 'error' key.
+        Dict com contadores por passada e opcional 'error'.
     """
     from app.config import DATABASE_URL
 
-    products = _read_products_from_sheets()
-    if not products:
+    client = _get_sheets_client()
+    if not client or not SHEETS_SPREADSHEET_ID:
+        return {"synced": 0, "error": "No products found or Sheets not configured"}
+    try:
+        spreadsheet = client.open_by_key(SHEETS_SPREADSHEET_ID)
+    except Exception as e:
+        log.error(f"Failed to open spreadsheet: {e}")
+        return {"synced": 0, "error": f"Failed to open spreadsheet: {e}"}
+
+    ativos = _read_ativos_from_sheets(spreadsheet)
+    encerramentos = _read_encerramentos_from_sheets(spreadsheet)
+    if not ativos and not encerramentos:
         return {"synced": 0, "error": "No products found or Sheets not configured"}
     if not DATABASE_URL:
         return {"synced": 0, "error": "Database not configured"}
 
     try:
         with db() as (conn, cur):
-            for p in products:
-                ecommerce_desc = p.get("ecommerce_description", "")
-                expected = ecommerce_desc if ecommerce_desc else p["certification_type"]
-                sale_deadline = p.get("sale_deadline")
-                sale_deadline_date = p.get("sale_deadline_date")
-                source = p.get("_source", "ativos")
-                is_expired = False if source == "ativos" else p.get("is_expired", False)
-
+            for p in ativos:
                 cur.execute(
-                    """
-                    INSERT INTO cert_products
-                        (sku, name, brand, certification_type, expected_cert_text,
-                         ecommerce_description, sheet_status, sale_deadline,
-                         sale_deadline_date, is_expired, updated_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT (sku) DO UPDATE SET
-                        name = COALESCE(NULLIF(EXCLUDED.name, ''), cert_products.name),
-                        brand = COALESCE(NULLIF(EXCLUDED.brand, ''), cert_products.brand),
-                        certification_type = CASE WHEN EXCLUDED.sale_deadline IS NOT NULL
-                            THEN EXCLUDED.certification_type
-                            ELSE COALESCE(NULLIF(EXCLUDED.certification_type, ''), cert_products.certification_type)
-                        END,
-                        expected_cert_text = COALESCE(NULLIF(EXCLUDED.expected_cert_text, ''), cert_products.expected_cert_text),
-                        ecommerce_description = COALESCE(NULLIF(EXCLUDED.ecommerce_description, ''), cert_products.ecommerce_description),
-                        sheet_status = CASE WHEN EXCLUDED.sale_deadline IS NOT NULL
-                            THEN EXCLUDED.sheet_status
-                            ELSE COALESCE(NULLIF(EXCLUDED.sheet_status, ''), cert_products.sheet_status)
-                        END,
-                        sale_deadline = COALESCE(EXCLUDED.sale_deadline, cert_products.sale_deadline),
-                        sale_deadline_date = COALESCE(EXCLUDED.sale_deadline_date, cert_products.sale_deadline_date),
-                        is_expired = EXCLUDED.is_expired,
-                        updated_at = NOW()
-                    """,
+                    _UPSERT_ATIVOS_SQL,
                     [
                         p["sku"], p["name"], p["brand"], p["certification_type"],
-                        expected, ecommerce_desc, p["sheet_status"],
-                        sale_deadline, sale_deadline_date, is_expired,
+                        p["numero_certificado"], p["situacao"],
+                        # "Texto esperado" e EXCLUSIVAMENTE a coluna V (Descricao
+                        # E-commerce). O fallback antigo para certification_type
+                        # era o que fazia a coluna do relatorio misturar prazo de
+                        # encerramento com o tipo de certificado repetido.
+                        p["ecommerce_description"], p["ecommerce_description"],
+                        p["sheet_status"],
                     ],
                 )
-        return {"synced": len(products), "total_rows": len(products)}
+            for e in encerramentos:
+                cur.execute(
+                    _UPSERT_ENCERRAMENTOS_SQL,
+                    [
+                        e["sku"], e["name"], e["brand"], e["numero_certificado"],
+                        e["sale_deadline"] or None, e["sale_deadline_date"],
+                        e["encerramento_status"] or None, e["is_expired"],
+                    ],
+                )
+            # A limpeza SO pode rodar com a aba lida de verdade. `_read_encerramentos_
+            # _from_sheets` devolve [] tanto para "aba vazia" quanto para "aba
+            # sumiu / erro de leitura", e nesse segundo caso um DELETE-por-ausencia
+            # apagaria o prazo e o vencimento de TODOS os produtos por causa de uma
+            # falha transitoria do Sheets. Sem linhas, nao se conclui nada.
+            if encerramentos:
+                cur.execute(_CLEAR_ENCERRAMENTOS_SQL, [[e["sku"] for e in encerramentos]])
+                limpos = cur.rowcount
+            else:
+                limpos = 0
+                log.warning(
+                    "Aba 'Encerramentos' voltou vazia; limpeza de prazos ignorada "
+                    "para nao apagar dado bom por falha de leitura"
+                )
+
+        total = len(ativos) + len(encerramentos)
+        log.info(
+            f"Sync sheets: {len(ativos)} ativos, {len(encerramentos)} encerramentos, "
+            f"{limpos} SKUs sem encerramento limpos"
+        )
+        return {
+            "synced": total,
+            "total_rows": total,
+            "ativos": len(ativos),
+            "encerramentos": len(encerramentos),
+            "encerramentos_limpos": limpos,
+        }
     except Exception as e:
         log.error(f"Failed to sync sheets to DB: {e}")
         return {"synced": 0, "error": str(e)}
@@ -568,6 +768,22 @@ def read_licenciamentos_vencidos() -> dict[str, dict]:
 
     log.info(f"Read {len(result)} expired-license rows from 'Licenciamentos Vencidos'")
     return result
+
+
+def safe_license_map() -> dict[str, dict]:
+    """Le o mapa de "Licenciamentos Vencidos" sem nunca propagar erro do Sheets.
+
+    Painel e relatorio precisam do mesmo mapa para derivar `license_status`, e
+    nenhum dos dois pode cair porque a planilha ficou indisponivel — sem o mapa o
+    status apenas defauta para NAO_APLICAVEL.
+    """
+    if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
+        return {}
+    try:
+        return read_licenciamentos_vencidos()
+    except Exception as e:
+        log.warning(f"Could not load Licenciamentos Vencidos map: {e}")
+        return {}
 
 
 def sync_licenciados_to_db() -> dict:
