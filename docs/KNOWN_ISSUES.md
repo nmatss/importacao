@@ -1,6 +1,6 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-07 (ver
+Ultima atualizacao: 2026-08-07 (ver `docs/REVISAO-2026-08-07.md`,
 `docs/STATUS-2026-08-07-CERTIFICACAO-RELATORIO-ESTOQUE.md`,
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
@@ -48,6 +48,77 @@ Impacto:
 Status:
 
 - **ABERTO / MEDIO.** Depende de preenchimento na planilha (time fiscal).
+
+## ALTO - 110 Produtos Viram "Nao Conforme" No Proximo Cron
+
+Descricao:
+
+- Os SKUs que so existem na aba "Encerramentos" (115 em 2026-08-07) nao tem
+  frase de certificacao cadastrada, porque nao estao nas abas de produto.
+- Ao parar de gravar o texto contaminado "ENCERRAMENTO - Prazo: ..." em
+  `certification_type`/`expected_cert_text`, esses produtos passaram a cair em
+  `NO_EXPECTED`, que `derive_site_status` mapeia para NAO_CONFORME sem excecao.
+- Simulacao com dados reais: NAO_CONFORME vai de 5 para 115.
+- Antes davam falso-CONFORME por um atalho em `compare_cert_texts`
+  (`if "encerramento" in exp_lower: return OK`). Nem antes nem agora esta certo.
+
+Impacto:
+
+- 110 alertas sem acao possivel no painel, o que corroi a confianca na tela.
+- Pior: nesse caminho `validate_single_product` retorna sem CONSULTAR o site,
+  entao um produto regulado publicado sem a frase passa despercebido.
+
+Status:
+
+- **ABERTO / ALTO.** Recomendacao: consultar o site mesmo sem frase cadastrada e
+  distinguir "esta no site sem frase" de "nao esta no site". Exige decisao do
+  time fiscal (a regra "sem terceiro estado silencioso" e deles).
+- Detalhes em `docs/REVISAO-2026-08-07.md`.
+
+## ALTO - Copia Operacional Obrigatoria Nao Sai Em Producao
+
+Descricao:
+
+- `SMTP_HOST=mta.imgnet.com.br` e relay interno, nao Workspace: nao ha copia em
+  "Enviados".
+- Com `SMTP_FROM=global@grupounico.com` e `MAIL_FORCE_OPERATIONAL_CC=false`, a
+  deduplicacao do `buildOutgoingMail` remove a caixa operacional do CC.
+- `communications/service.ts` grava e audita `ccRecipients` afirmando uma copia
+  que nao existiu.
+
+Impacto:
+
+- O requisito "todo e qualquer e-mail com global@grupounico.com em copia" nao
+  esta sendo cumprido, e o banco afirma o contrario.
+
+Status:
+
+- **ABERTO / ALTO**, mas sem dano acumulado: so ha 5 comunicacoes `sent`, a mais
+  recente de 2026-06-29, anterior a este codigo. Nenhum e-mail saiu sob a versao
+  nova. Correcao: `MAIL_FORCE_OPERATIONAL_CC=true`, sem redeploy.
+
+## ALTO - Injecao De Header No Remetente E `smtp_from` Sem Validacao
+
+Descricao:
+
+- `sanitizeHeader` remove CR/LF, mas a string colada vira sintaxe de grupo
+  RFC-2822 e o nodemailer passa a usar o endereco injetado como envelope
+  MAIL FROM. `extractEmailAddress` discorda do parser e faz a copia obrigatoria
+  sumir junto. Provado por execucao com o nodemailer do proprio repositorio.
+- `smtp_from` nao e validado em nenhuma das tres camadas (input fora de `<form>`,
+  `handleSaveSmtp` sem validador, Zod aceita qualquer string). Um admin digitando
+  "Importacao" produz `envelope.from === false` e para 100% do envio.
+
+Impacto:
+
+- Sequestro de envelope (bounces e reputacao vao para o endereco injetado) e
+  perda silenciosa da copia obrigatoria. Admin-only.
+- Configuracao ruim derruba todo o envio sem mensagem que aponte a causa.
+
+Status:
+
+- **ABERTO / ALTO.** Correcao: validar o `From` resolvido com parser de endereco
+  em `resolveMailFrom` (fecha os dois de uma vez) e validar `smtp_from` no Zod.
 
 ## ALTO - Login Google Intermitente Por Gateway Docker Da API
 
