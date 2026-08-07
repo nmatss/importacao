@@ -471,6 +471,20 @@ _UPSERT_ENCERRAMENTOS_SQL = """
         numero_certificado = COALESCE(
             NULLIF(cert_products.numero_certificado, ''), EXCLUDED.numero_certificado
         ),
+        -- Limpeza do lixo que o sync antigo gravava. Para o SKU que existe nas
+        -- abas de produto a passada de cadastro ja reescreveu estes dois campos;
+        -- sobra o SKU que SO existe em "Encerramentos", que nenhuma passada toca
+        -- e por isso conservava "ENCERRAMENTO - Prazo: dd/mm/aaaa" como tipo de
+        -- certificacao E como texto esperado (115 linhas em 07/08/2026). A aba
+        -- nao tem esses dados, entao o valor fiel e vazio.
+        certification_type = CASE
+            WHEN cert_products.certification_type LIKE 'ENCERRAMENTO - Prazo%%' THEN ''
+            ELSE cert_products.certification_type
+        END,
+        expected_cert_text = CASE
+            WHEN cert_products.expected_cert_text LIKE 'ENCERRAMENTO - Prazo%%' THEN ''
+            ELSE cert_products.expected_cert_text
+        END,
         sale_deadline = EXCLUDED.sale_deadline,
         sale_deadline_date = EXCLUDED.sale_deadline_date,
         encerramento_status = EXCLUDED.encerramento_status,
@@ -482,6 +496,26 @@ _UPSERT_ENCERRAMENTOS_SQL = """
 # upsert antigo fazia COALESCE em sale_deadline/sale_deadline_date e nunca os
 # limpava: PI7560Y seguia exibindo "28/07/2028" muito depois de a celula da
 # planilha ter sido esvaziada.
+# A marca canonica e gravada pela passada de cadastro, mas o SKU que so existe em
+# "Encerramentos" nunca passa por ela e conserva a grafia que o sync antigo leu da
+# coluna MARCA da planilha ('PUKET', 'IMAGINARIUM'). Isso partia o filtro do
+# painel em dois grupos para a mesma marca. Normaliza so a GRAFIA — nao decide de
+# qual aba a marca vem.
+_NORMALIZE_BRAND_SQL = """
+    UPDATE cert_products SET brand = %s, updated_at = NOW()
+    WHERE LOWER(REPLACE(brand, '_', ' ')) = %s AND brand <> %s
+"""
+
+# O codigo de barras que a coluna SKU da aba "Encerramentos" traz em algumas
+# linhas virou produto no banco antes de existir a traducao EAN -> SKU. Agora que
+# a linha entra com o codigo de produto correto, a linha antiga fica orfa: mesmo
+# produto, chave errada, sem encerramento e com o texto velho. Remove apenas os
+# codigos que ACABARAM de ser resolvidos nesta rodada — nunca por formato.
+_DELETE_EAN_ORFAOS_SQL = """
+    DELETE FROM cert_products
+    WHERE sku = ANY(%s) AND sku NOT IN (SELECT unnest(%s::text[]))
+"""
+
 _CLEAR_ENCERRAMENTOS_SQL = """
     UPDATE cert_products
     SET sale_deadline = NULL, sale_deadline_date = NULL,
@@ -560,14 +594,26 @@ def sync_sheets_to_db() -> dict:
             # apagaria o prazo e o vencimento de TODOS os produtos por causa de uma
             # falha transitoria do Sheets. Sem linhas, nao se conclui nada.
             if encerramentos:
-                cur.execute(_CLEAR_ENCERRAMENTOS_SQL, [[e["sku"] for e in encerramentos]])
+                skus_enc = [e["sku"] for e in encerramentos]
+                cur.execute(_CLEAR_ENCERRAMENTOS_SQL, [skus_enc])
                 limpos = cur.rowcount
+
+                # Orfaos de EAN: so os codigos resolvidos nesta rodada, e nunca um
+                # que por acaso tambem seja SKU valido de outro produto.
+                eans = sorted({e["sku_origem_ean"] for e in encerramentos if e.get("sku_origem_ean")})
+                if eans:
+                    cur.execute(_DELETE_EAN_ORFAOS_SQL, [eans, skus_enc])
+                    if cur.rowcount:
+                        log.info(f"Removidos {cur.rowcount} produtos fantasma com EAN no lugar do SKU")
             else:
                 limpos = 0
                 log.warning(
                     "Aba 'Encerramentos' voltou vazia; limpeza de prazos ignorada "
                     "para nao apagar dado bom por falha de leitura"
                 )
+
+            for canonico in sorted(set(_BRAND_CANONICAL.values())):
+                cur.execute(_NORMALIZE_BRAND_SQL, [canonico, canonico.lower(), canonico])
 
         total = len(ativos) + len(encerramentos)
         log.info(

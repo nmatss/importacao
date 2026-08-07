@@ -276,3 +276,64 @@ class TestSyncSheetsToDb:
         assert result["encerramentos_limpos"] == 7
         sqls = [c.args[0] for c in cur.execute.call_args_list]
         assert any("SET sale_deadline = NULL" in s for s in sqls)
+
+    def test_limpa_residuos_do_sync_antigo(self, mocker):
+        """SKU so-de-encerramento carregava 'ENCERRAMENTO - Prazo:' e marca em caixa alta."""
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(erp_service, "_read_ativos_from_sheets", return_value=[])
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "050402301", "name": "N", "brand": "Puket",
+                            "numero_certificado": "C", "sale_deadline": "07/12/2025",
+                            "sale_deadline_date": "2025-12-07",
+                            "encerramento_status": "Vencido - Venda Bloqueada",
+                            "is_expired": True}],
+        )
+
+        erp_service.sync_sheets_to_db()
+        sqls = [c.args[0] for c in cur.execute.call_args_list]
+
+        assert any("ENCERRAMENTO - Prazo%" in s and "certification_type = CASE" in s for s in sqls)
+        assert any("SET brand = %s" in s for s in sqls)
+
+    def test_remove_orfao_de_ean_apenas_do_que_foi_resolvido(self, mocker):
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(erp_service, "_read_ativos_from_sheets", return_value=[])
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "100400416", "sku_origem_ean": "7909692117610",
+                            "name": "N", "brand": "Puket", "numero_certificado": "C",
+                            "sale_deadline": "13/08/2023", "sale_deadline_date": "2023-08-13",
+                            "encerramento_status": "Vencido - Venda Bloqueada",
+                            "is_expired": True}],
+        )
+
+        erp_service.sync_sheets_to_db()
+        delete = next(
+            c for c in cur.execute.call_args_list if "DELETE FROM cert_products" in c.args[0]
+        )
+        assert delete.args[1][0] == ["7909692117610"]
+        assert delete.args[1][1] == ["100400416"]
+
+    def test_sem_ean_resolvido_nao_emite_delete(self, mocker):
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(erp_service, "_read_ativos_from_sheets", return_value=[])
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "PI7223Y", "name": "N", "brand": "Imaginarium",
+                            "numero_certificado": "C", "sale_deadline": "24/07/2026",
+                            "sale_deadline_date": "2026-07-24",
+                            "encerramento_status": "Vencido - Venda Bloqueada",
+                            "is_expired": True}],
+        )
+
+        erp_service.sync_sheets_to_db()
+        assert not any(
+            "DELETE FROM cert_products" in c.args[0] for c in cur.execute.call_args_list
+        )
