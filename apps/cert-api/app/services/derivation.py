@@ -48,6 +48,7 @@ Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 
 # Palavras-chave que indicam "produto regulado por órgão de certificação".
@@ -92,6 +93,52 @@ def _norm(s: str | None) -> str:
     return str(s).strip().lower()
 
 
+# Negação em português. Aplicada DENTRO da cláusula, nunca numa janela de N
+# caracteres: o histórico da planilha é uma lista de "dd/mm - frase.", e uma
+# janela cega faria a negação de uma entrada contaminar a entrada seguinte
+# ("...não será continuada / 23/10/25 - Manutenção finalizada" é afirmativa).
+_NEGACAO_RE = re.compile(r"\b(n[aã]o|nunca|jamais|sem|nenhum[ao]?|deixou de)\b")
+_SEPARADOR_CLAUSULA = re.compile(r"[\n;|]+|(?<=\.)\s+")
+
+# Vocabulário que PROÍBE a venda. Verificado antes de qualquer marcador
+# positivo: nenhuma dessas palavras pode ser anulada por um "permitida" na
+# mesma frase.
+BLOQUEIO_VENDA = (
+    "bloquead", "proibid", "suspens", "vetad", "cancelad", "revogad",
+    "negad", "indeferid", "reprovad", "apreend", "recall", "impedid",
+)
+
+
+def _clausulas(texto: str | None):
+    """Quebra o texto em cláusulas independentes, já normalizadas."""
+    for parte in _SEPARADOR_CLAUSULA.split(_norm(texto)):
+        parte = parte.strip()
+        if parte:
+            yield parte
+
+
+def _afirmativo(texto: str | None, *marcadores: str) -> bool:
+    """True quando algum marcador aparece em cláusula SEM negação antes dele.
+
+    É o que separa "Registro concedido" de "Registro NÃO concedido" e
+    "Comerciação Permitida" de "Venda NÃO permitida". O teste antigo era
+    `marcador in texto`, que dava o mesmo veredito para os dois — e sempre o
+    veredito permissivo, que é a direção errada do erro.
+    """
+    for clausula in _clausulas(texto):
+        for marcador in marcadores:
+            i = clausula.find(marcador)
+            if i >= 0 and not _NEGACAO_RE.search(clausula[:i]):
+                return True
+    return False
+
+
+def _tem_bloqueio(texto: str | None) -> bool:
+    """True quando o texto traz qualquer palavra que proíbe a venda."""
+    s = _norm(texto)
+    return any(t in s for t in BLOQUEIO_VENDA)
+
+
 def _is_sku_excluded(sheet_status: str | None) -> bool:
     """True quando o histórico diz que o SKU foi excluído e NÃO reincluído.
 
@@ -132,11 +179,16 @@ def derive_venda_encerramento(encerramento_status: str | None) -> str | None:
     s = _norm(encerramento_status)
     if not s:
         return None
-    if "bloquead" in s:
+    # Proibição primeiro: nenhuma palavra permissiva na mesma frase pode anular
+    # um "bloqueada"/"suspensa"/"cancelada".
+    if _tem_bloqueio(s):
         return "BLOQUEADA"
-    if "fim do lote" in s or "fim de lote" in s:
+    if _afirmativo(s, "fim do lote", "fim de lote"):
         return "FIM_LOTE"
-    if "permitid" in s:
+    # `_afirmativo` (e não `in`) para que "Venda NÃO permitida" deixe de liberar
+    # a venda. Sem marcador afirmativo devolve None: a ausência de veredito não
+    # concede permissão, ela apenas devolve a decisão ao prazo.
+    if _afirmativo(s, "permitid", "liberad", "autorizad"):
         return "PERMITIDA"
     return None
 
@@ -227,6 +279,8 @@ def derive_cert_status(
     is_expired: bool | None,
     sale_deadline_raw: str | None,
     encerramento_status: str | None = None,
+    sale_deadline_date: object = None,
+    today: date | None = None,
 ) -> str:
     """Status da certificação — colapsado em ATIVO | ENCERRADO.
 
@@ -288,13 +342,16 @@ def derive_cert_status(
             return "ENCERRADO"
         if fragment == "expired" or "vencid" in fragment or "encerrad" in fragment:
             return "ENCERRADO"
+        # Vocabulário que invalida o certificado agora (suspenso, cancelado,
+        # revogado, indeferido...). Precede os marcadores positivos.
+        if _tem_bloqueio(fragment):
+            return "ENCERRADO"
         # "conce": cobre "Registro concedido", "Inclusão concedida" e o typo real
         # da planilha "concecida". Concessão de registro = certificação ativa.
-        if (
-            fragment == "ativo"
-            or "finalizad" in fragment
-            or fragment == "expiring"
-            or "conce" in fragment
+        # `_afirmativo` em vez de `in`: "Registro NÃO concedido" e "Manutenção
+        # não finalizada" deixam de valer como sinal de atividade.
+        if fragment == "ativo" or fragment == "expiring" or _afirmativo(
+            fragment, "finalizad", "conce"
         ):
             if is_expired or "vencido" in deadline:
                 return "ENCERRADO"
@@ -310,26 +367,38 @@ def derive_cert_status(
     # sheet_status vazio ou texto livre sem marcador → deduz pelos sinais
     # binários, de forma conservadora (default ENCERRADO quando não claramente
     # ativo).
-    return _fallback_from_expiration(is_expired, sale_deadline_raw)
+    return _fallback_from_expiration(is_expired, sale_deadline_raw, sale_deadline_date, today)
 
 
-def _fallback_from_expiration(is_expired: bool | None, sale_deadline_raw: str | None) -> str:
-    """Quando sheet_status é vazio/texto livre, deduz pelos sinais binários.
+def _fallback_from_expiration(
+    is_expired: bool | None,
+    sale_deadline_raw: str | None,
+    sale_deadline_date: object = None,
+    today: date | None = None,
+) -> str:
+    """Quando sheet_status é vazio/texto livre, deduz pelo PRAZO — comparando a data.
 
-    Conservador: ENCERRADO quando vencido/expirado; ATIVO apenas com prazo
-    vigente explícito ou janela de venda aberta.
+    A versão anterior fazia `if deadline: return "ATIVO"`: bastava o campo de
+    prazo não estar vazio e não conter a palavra literal "vencido". Isso dava
+    ATIVO para um prazo de "01/01/2020" (seis anos vencido) e para qualquer
+    texto solto como "a definir" — deixando o item com lixo no prazo MAIS
+    permissivo do que o item sem prazo nenhum, que caía em ENCERRADO.
+
+    Agora só concede ATIVO com evidência positiva: janela de venda aberta ou uma
+    data que efetivamente ainda não passou. Texto que não é data não concede
+    nada.
     """
     if _within_sale_window(sale_deadline_raw):
         return "ATIVO"
-    deadline = _norm(sale_deadline_raw)
-    if "vencido" in deadline:
+    if _tem_bloqueio(sale_deadline_raw) or "vencido" in _norm(sale_deadline_raw):
         return "ENCERRADO"
     if is_expired:
         return "ENCERRADO"
-    if deadline:
-        # Tem prazo estruturado e não está vencido → dentro do prazo.
-        return "ATIVO"
-    # Sem qualquer sinal de prazo nem certificação ativa → conservador ENCERRADO.
+    prazo = _parse_deadline_date(sale_deadline_date) or _parse_deadline_date(sale_deadline_raw)
+    if prazo is not None:
+        return "ATIVO" if prazo >= (today or date.today()) else "ENCERRADO"
+    # Prazo ausente, ou preenchido com texto que não é data nem janela conhecida:
+    # sem evidência de que a venda esteja liberada, o veredito é ENCERRADO.
     return "ENCERRADO"
 
 

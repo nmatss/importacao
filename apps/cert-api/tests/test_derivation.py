@@ -582,3 +582,97 @@ class TestVendaEncerramento:
         assert dims["cert_status"] == "ENCERRADO"
         assert dims["comercializacao_status"] == "ENCERRADA"
         assert dims["venda_encerramento"] == "BLOQUEADA"
+
+
+# ---------------------------------------------------------------------------
+# Trava do falso "pode vender" (revisao 2026-08-07)
+#
+# Duas familias de defeito com a mesma causa: a derivacao decidia por PRESENCA
+# de substring e de texto, nunca por semantica. Falso "liberado" e muito pior
+# que falso "bloqueado" — e era sempre para o lado permissivo que ela errava.
+# ---------------------------------------------------------------------------
+
+
+class TestNegacaoNaoLiberaVenda:
+    @pytest.mark.parametrize(
+        "frase",
+        ["Venda NÃO permitida", "Comercialização não permitida",
+         "Venda nao autorizada", "Venda não liberada"],
+    )
+    def test_frase_negada_nao_vira_permitida(self, frase):
+        assert derivation.derive_venda_encerramento(frase) != "PERMITIDA"
+
+    @pytest.mark.parametrize(
+        "frase",
+        ["Venda proibida", "Venda suspensa", "Venda cancelada", "Licenca revogada",
+         "Registro indeferido", "Vencido - Venda Bloqueada (Recall)"],
+    )
+    def test_vocabulario_de_proibicao_bloqueia(self, frase):
+        assert derivation.derive_venda_encerramento(frase) == "BLOQUEADA"
+
+    def test_valores_reais_da_planilha_seguem_valendo(self):
+        assert derivation.derive_venda_encerramento("Comerciação Permitida") == "PERMITIDA"
+        assert derivation.derive_venda_encerramento("Vencido - Venda Bloqueada") == "BLOQUEADA"
+        assert derivation.derive_venda_encerramento("Venda até fim do lote") == "FIM_LOTE"
+
+    def test_proibicao_vence_permissao_na_mesma_frase(self):
+        """Nenhuma palavra permissiva pode anular um bloqueio."""
+        assert derivation.derive_venda_encerramento("Venda bloqueada, antes permitida") == "BLOQUEADA"
+
+
+class TestNegacaoNoHistoricoDeCertificacao:
+    @pytest.mark.parametrize(
+        ("historico", "esperado"),
+        [
+            ("01/09/25 - Registro concedido.", "ATIVO"),
+            ("01/09/25 - Registro NAO concedido.", "ENCERRADO"),
+            ("01/09/25 - Concessao negada pelo OCP.", "ENCERRADO"),
+            ("11/09/23 - Certificado suspenso.", "ENCERRADO"),
+            ("10/03/26 - Manutencao finalizada.", "ATIVO"),
+            ("10/03/26 - Manutencao nao finalizada.", "ENCERRADO"),
+        ],
+    )
+    def test_marcador_negado_nao_indica_atividade(self, historico, esperado):
+        assert derive_cert_status(historico, False, "") == esperado
+
+    def test_negacao_nao_vaza_para_a_entrada_seguinte(self):
+        """Caso real 100400496: a negacao de uma entrada nao pode contaminar a
+        proxima. 'NAO SERA CONTINUADA' seguido de 'Manutencao finalizada' e
+        ATIVO — o certificado segue valido ate 2027."""
+        historico = (
+            "04/05/2026 - ESSSA CERTIFICAÇÃO NÃO SERÁ CONTINUADA\n"
+            "23/10/25 - Manutenção finalizada.\n"
+            "09/07/24 - Certificado de Homologação recebido, inclusão finalizada."
+        )
+        assert derive_cert_status(historico, False, "") == "ATIVO"
+
+    def test_data_com_barra_nao_quebra_a_clausula(self):
+        """A data 'dd/mm/aa' nao pode separar a negacao do marcador."""
+        assert derive_cert_status("27/10/25 - Registro nao concedido.", False, "") == "ENCERRADO"
+
+
+class TestPrazoComparaData:
+    """`_fallback_from_expiration` concedia ATIVO so por o campo nao estar vazio."""
+
+    LIVRE = "10/01/26 - Aguardando retorno do laboratorio."
+
+    def test_data_passada_encerra(self):
+        assert derive_cert_status(self.LIVRE, False, "01/01/2020") == "ENCERRADO"
+
+    def test_data_futura_mantem_ativo(self):
+        assert derive_cert_status(self.LIVRE, False, "31/12/2030") == "ATIVO"
+
+    @pytest.mark.parametrize("texto", ["a definir", "aguardando OCP", "-", "?"])
+    def test_texto_que_nao_e_data_nao_libera(self, texto):
+        """Lixo no prazo nao pode deixar o item MAIS permissivo que prazo vazio."""
+        assert derive_cert_status(self.LIVRE, False, texto) == "ENCERRADO"
+
+    def test_prazo_vazio_continua_encerrado(self):
+        assert derive_cert_status(self.LIVRE, False, "") == "ENCERRADO"
+
+    def test_janela_textual_continua_valendo(self):
+        assert derive_cert_status(self.LIVRE, False, "Venda até fim do lote") == "ATIVO"
+
+    def test_data_de_hoje_ainda_permite_vender(self):
+        hoje = date.today()
+        assert derive_cert_status(self.LIVRE, False, hoje.strftime("%d/%m/%Y")) == "ATIVO"
