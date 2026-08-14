@@ -176,8 +176,15 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
-      - default
-      - ia-local-net
+      # A rota default TEM que sair pela rede do proprio stack. Em 07/08/2026 o
+      # container subiu com a default via ia-local-net e ficou sem saida para a
+      # internet — o IP dele naquele bridge nao e mascarado —, o que derrubou
+      # login Google, sync SYDLE, Gmail e Drive por uma semana. ia-local-net
+      # continua anexada (mesmo L2 do ia-local-gateway), so nao ganha o gateway.
+      default:
+        gw_priority: 100
+      ia-local-net:
+        gw_priority: -100
 
   cert-volumes-init:
     image: alpine:3.22
