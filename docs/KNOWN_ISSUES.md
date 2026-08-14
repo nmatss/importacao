@@ -1,10 +1,77 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-07 (ver `docs/REVISAO-2026-08-07.md`,
+Ultima atualizacao: 2026-08-14 (ver `docs/INCIDENTE-2026-08-14-EGRESS-API.md`,
+`docs/REVISAO-2026-08-07.md`,
 `docs/STATUS-2026-08-07-CERTIFICACAO-RELATORIO-ESTOQUE.md`,
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## ALTO - Regra Desconhecida Bloqueia O IP Da API Na ia-local-net
+
+Descricao:
+
+- Entre 01/08 e 14/08/2026 o `importacao-api` ficou sem saida para a internet
+  porque sua rota default estava em `ia-local-net` (192.168.208.1). O gatilho
+  foi o reboot do host em 01/08 as 17:38 UTC; a primeira falha do sync veio 2
+  minutos depois.
+- Containers novos no mesmo bridge, com o mesmo gateway, saem normalmente. O
+  `portal-app` (.8) e o `n8nprod-n8n` (.5) tambem. A unica constante e o IP
+  `192.168.208.4`, que a API recebe de forma estavel a cada recriacao.
+- A hipotese e uma regra de firewall/NAT presa a esse endereco, no host ou no
+  roteador da LAN. Nao foi possivel confirmar: `sudo` no servidor pede senha.
+
+Impacto:
+
+- O `gw_priority` aplicado em 14/08 **contorna** o caminho quebrado; ele nao
+  remove a regra. Qualquer container que venha a usar aquele IP com rota
+  default por `ia-local-net` cai na mesma armadilha.
+
+Status:
+
+- **ABERTO / ALTO.** Para fechar: `sudo iptables -t nat -S POSTROUTING`,
+  `sudo iptables -S DOCKER-USER` e `sudo iptables -S FORWARD` no host. O
+  experimento decisivo (subir container forcado no `.4`) exige janela, porque
+  derruba o acesso a IA local.
+
+## ALTO - Falha De Egress E De Cron Nao Gera Alerta
+
+Descricao:
+
+- O `sydle-sync` falhou 1.864 vezes seguidas, 144 por dia, por 12 dias, sem
+  disparar nada. A ingestao Gmail e o `pre-cons-drive-sync` falhavam junto.
+- O `/health/ready` cobre API, banco e Redis. Ficou verde durante todo o
+  incidente, e o deploy de 07/08 passou nos 8 checks com o sistema quebrado.
+- O incidente so foi descoberto porque uma usuaria insistiu no WhatsApp.
+
+Impacto:
+
+- O detector de incidente de integracao externa e o usuario final. O tempo de
+  deteccao real foi de 13 dias.
+
+Status:
+
+- **ABERTO / ALTO.** Ver `docs/TECH_DEBT.md` para as opcoes discutidas (probe
+  sintetico de egress e alerta por sequencia de `sydle_sync_runs` com
+  `status='failed'`). Nao transformar dependencia externa em readiness
+  bloqueante: reiniciar a API nao corrige indisponibilidade de terceiro.
+
+## BAIXO - Falha Isolada Do Sync SYDLE Apos A Correcao
+
+Descricao:
+
+- Depois da correcao de 14/08, 32 de 33 execucoes do sync tiveram sucesso. A
+  execucao das 18:20 UTC falhou com a mesma mensagem generica `fetch failed`,
+  em 533 ms (run 7244).
+
+Impacto:
+
+- Pode ser transiente do lado do SYDLE ou residuo do problema de rede. Uma
+  falha isolada nao reproduz o padrao do incidente (que era 100% de falha).
+
+Status:
+
+- **EM OBSERVACAO / BAIXO.** Reavaliar apos alguns dias de janela limpa.
 
 ## ALTO - Estoque De Certificacao Sem Agendamento Proprio
 

@@ -1,5 +1,14 @@
 # Status 2026-08-03 - Incidente de Login Google e Egress Docker
 
+> **Encerrado em 2026-08-14.** O diagnostico abaixo estava correto, e o "Plano
+> De Correcao Recomendado" tambem. Nada foi aplicado na epoca, e o sistema
+> seguiu quebrado por mais 11 dias, ate uma usuaria insistir no WhatsApp. A
+> causa era continua desde o reboot do host em 01/08 as 17:38 UTC, e nao um
+> problema novo de 03/08: o sync SYDLE falhou 1.864 vezes seguidas nesse
+> periodo. A correcao (`gw_priority`), o mapeamento 401 -> 503/403, o cache de
+> membership e o alerta pendente estao em
+> `docs/INCIDENTE-2026-08-14-EGRESS-API.md`.
+
 ## Objetivo Identificado
 
 Investigar o relato de Leticia Silva Bicca, recebido as 09:18 BRT, de que ela,

@@ -5,6 +5,50 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-08-14 - Egress da API restaurado e erro de login honesto
+
+### Fixed
+
+- A API voltou a ter saída para a internet. A rota default do container caía na
+  rede `ia-local-net`, por onde o tráfego externo morria; `gw_priority` no
+  `docker-compose.prod.yml` fixa a saída na rede do próprio stack, mantendo
+  `ia-local-net` conectada para o gateway de IA local. Sem isso a falha
+  reincidia a cada recriação do container.
+- Queda de dependência externa deixou de ser apresentada como "sua sessão
+  expirou". O `authController` parou de achatar toda exceção em HTTP 401:
+  falha de infraestrutura responde 503, fora do grupo e conta desativada
+  respondem 403, e 401 fica só para credencial inválida de verdade.
+- O `api-client` não redireciona mais para `/login?expired=1` quando o 401 vem
+  dos próprios endpoints que emitem a sessão (`/api/auth/login`,
+  `/api/auth/google`). A mensagem real passa a aparecer na tela de login, em
+  vez de a página recarregar antes de exibi-la.
+- `verifyIdToken` também busca chaves pela rede; falha de rede ali deixou de ser
+  reportada como token inválido.
+
+### Added
+
+- `isNetworkError()` em `shared/utils/resilience.ts`, que distingue "o outro
+  lado respondeu que não" de "não consegui falar com o outro lado", incluindo o
+  formato do Gaxios.
+- Cache curto (10 min) da checagem de pertencimento ao Google Group, com
+  sobrevida de 12 h usada apenas quando o Google está inacessível. Negativas não
+  entram no cache: incluir alguém no grupo continua valendo na hora e quem sai
+  perde a sobrevida junto.
+
+### Operational notes
+
+- Incidente contínuo de 2026-08-01 17:38 UTC (reboot do host) a 2026-08-14
+  16:20 UTC: 1.864 execuções consecutivas do `sydle-sync` falharam sem um único
+  sucesso, com `/health/ready` verde o tempo todo. Linha do tempo completa,
+  evidências e pendências em `docs/INCIDENTE-2026-08-14-EGRESS-API.md`.
+- A regra que bloqueia especificamente o IP `192.168.208.4` na `ia-local-net`
+  continua desconhecida e ativa; o `gw_priority` contorna o caminho, não remove
+  a causa. Registrado em `docs/KNOWN_ISSUES.md`.
+- Continua sem alerta de egress e sem alerta de cron falhando em sequência. O
+  detector deste incidente foi a usuária final, após 13 dias.
+
+---
+
 ## [Unreleased] - 2026-07-10 - Fechamento de revisão operacional Odett
 
 ### Fixed

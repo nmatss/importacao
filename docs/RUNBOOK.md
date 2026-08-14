@@ -118,6 +118,57 @@ ssh nicolas@192.168.168.124 "cd ~/importacao && docker compose restart cert-api"
 
 Oracle WMS connection issues are non-fatal — cert-api starts even if WMS is unreachable.
 
+### API sem egress externo (login Google falhando, sync SYDLE falhando)
+
+Sintoma que engana: a API responde, o health check fica **verde**, o container
+alcanca banco, Redis, gateway do bridge e roteador da LAN em menos de 1 ms — e
+mesmo assim nada sai para a internet. Na tela, o usuario le "Sua sessao
+expirou" em loop. Ver `docs/INCIDENTE-2026-08-14-EGRESS-API.md`.
+
+Suspeite disso quando: varias pessoas nao conseguem logar, o cron `sydle-sync`
+falha em sequencia, ou os logs mostram `ETIMEDOUT` para
+`https://oauth2.googleapis.com/token`.
+
+Diagnostico em tres comandos — o terceiro e o que decide:
+
+```bash
+# 1. Por onde sai a rota default? Se for 192.168.208.1 (ia-local-net), e isso.
+ssh nicolas@192.168.168.124 "docker exec importacao-api sh -c 'ip route | grep default'"
+
+# 2. O container tem saida?
+ssh nicolas@192.168.168.124 "docker exec importacao-api sh -c 'timeout 6 ping -c3 8.8.8.8'"
+
+# 3. Um container NOVO no mesmo bridge tem saida?
+ssh nicolas@192.168.168.124 "docker run --rm --network ia-local-net alpine:latest sh -c 'timeout 6 ping -c3 8.8.8.8'"
+```
+
+Container novo passando + API falhando = a rota default da API esta errada.
+
+Quem falhou e por que (o controller nao loga o motivo do 401; o servico de
+grupo loga):
+
+```bash
+ssh nicolas@192.168.168.124 "docker logs importacao-api --since 24h 2>&1 | grep 'Google Groups: error'"
+```
+
+Correcao ao vivo, sem downtime e sem perder a IA local:
+
+```bash
+ssh nicolas@192.168.168.124 "docker network disconnect ia-local-net importacao-api && \
+  docker network connect --alias importacao-api --alias api --gw-priority -100 ia-local-net importacao-api"
+```
+
+A correcao duravel ja esta em `docker-compose.prod.yml` (`gw_priority`). Se a
+rota voltar a sair por `ia-local-net` depois de um deploy, o compose foi
+revertido — conferir antes de mexer na rede.
+
+Confirme a recuperacao pelo banco, nao pelo health check:
+
+```bash
+ssh nicolas@192.168.168.124 "docker exec importacao-postgres psql -U importacao -d importacao -c \
+  \"SELECT status, count(*) FROM sydle_sync_runs WHERE started_at > now() - interval '1 hour' GROUP BY 1;\""
+```
+
 ---
 
 ## Rollback Manual

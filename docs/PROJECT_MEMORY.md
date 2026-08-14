@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-08-03
+Ultima atualizacao: 2026-08-14
 
 ## Objetivo
 
@@ -314,6 +314,20 @@ Grau de confianca: alto para estado de codigo; medio para estrategia futura, poi
 - Incidente de 2026-08-03 confirmou que o default gateway da API pode cair em
   `ia-local-net` e perder egress para Google/SYDLE. A correcao duravel deve
   declarar `gw_priority` para `importacao_default`, sem remover `ia-local-net`.
+- **Aplicado em 2026-08-14** (SHA `0b5393e`): `docker-compose.prod.yml` declara
+  `gw_priority: 100` em `default` e `-100` em `ia-local-net` para o servico
+  `api`. Sem isso a falha reincide a cada recriacao do container — o deploy de
+  2026-08-14 provou, porque o container voltou a receber o mesmo IP
+  `192.168.208.4` e so nao quebrou por causa da prioridade.
+- O incidente foi continuo de 2026-08-01 17:38 UTC (reboot do host) a
+  2026-08-14 16:20 UTC: 1.864 execucoes do `sydle-sync` falharam sem um unico
+  sucesso, e o `/health/ready` ficou verde o tempo todo. Detalhes, linha do
+  tempo e pendencias em `docs/INCIDENTE-2026-08-14-EGRESS-API.md`.
+- Continua desconhecida a regra que bloqueia especificamente o IP
+  `192.168.208.4` na `ia-local-net`: containers novos no mesmo bridge, e os
+  vizinhos `portal-app` (.8) e `n8nprod-n8n` (.5), saem normalmente. `sudo` no
+  servidor pede senha, entao `iptables` nao foi lido. O `gw_priority` contorna
+  o caminho, nao remove a regra.
 - O health check atual da API cobre banco e Redis, mas nao prova disponibilidade
   do login Google ou de integracoes externas. Usar alerta/probe sintetico
   separado para egress; nao transformar dependencia externa em readiness que
@@ -334,6 +348,7 @@ Evidencias:
 - `docker-compose.prod.yml`
 - `docs/STATUS-2026-06-16.md`
 - `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md`
+- `docs/INCIDENTE-2026-08-14-EGRESS-API.md`
 
 Grau de confianca: alto.
 

@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-08-03
+Ultima atualizacao: 2026-08-14
 
 ## Validacao E Comparativo
 
@@ -95,6 +95,22 @@ Ultima atualizacao: 2026-08-03
   `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do
   Sentry e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e
   quebrou E2E local em Node 20).
+- Criar probe sintetico de egress externo da API e alerta por sequencia de
+  falhas de cron. O incidente de 01-14/08/2026 rodou 1.864 falhas seguidas do
+  `sydle-sync` em 12 dias com `/health/ready` verde; o detector foi o usuario
+  final. Sinal barato e disponivel: `sydle_sync_runs` com N falhas consecutivas
+  e nenhum sucesso na janela. Nao usar readiness bloqueante para dependencia de
+  terceiro — reiniciar a API nao corrige queda externa.
+- Adicionar validacao de rota default no pos-deploy: conferir que a saida da API
+  nao caiu em `ia-local-net`. O deploy de 07/08/2026 passou nos 8 health checks
+  com o container sem nenhuma saida para a internet. O `gw_priority` no compose
+  previne, mas nada verifica.
+- Fazer o `authController` logar o motivo real do erro de login com correlation
+  ID. Hoje o motivo so aparece quando passa pelo `googleGroupsService`; falha em
+  `verifyIdToken` nao deixa rastro no log, so o status HTTP.
+- Fechar a causa raiz do bloqueio do IP `192.168.208.4` na `ia-local-net`
+  (`docs/KNOWN_ISSUES.md`). O `gw_priority` contorna o caminho, nao remove a
+  regra.
 
 ## Frontend
 

@@ -1,5 +1,55 @@
 # Session Memory
 
+## 2026-08-14 - Incidente De Egress Da API E Login Google
+
+Objetivo:
+
+- Atender o relato de Franciely Mafra ("nao estou conseguindo acessar o
+  sistema", 13/08 17:16 BRT e 14/08 08:01 BRT) e descobrir por que a tela dela
+  mostrava "Sua sessao expirou" em loop.
+
+Resultado:
+
+- Nao era cadastro dela. Franciely (`users.id=6`, `analyst`, ativa) nunca gerou
+  `login_failed` com `not_in_group`: as 8 tentativas dela morreram em excecao de
+  rede, com `Google Groups: error checking membership` /
+  `ETIMEDOUT https://oauth2.googleapis.com/token`. Odett e Leticia bateram no
+  mesmo erro.
+- O `importacao-api` estava sem rota de saida para a internet. Alcancava banco,
+  Redis, gateway do bridge, host e roteador da LAN em menos de 1 ms e mantinha
+  `/health/ready` verde, mas nada saia para fora.
+- A rota default do container caia em `ia-local-net` (192.168.208.1). Um alpine
+  descartavel no mesmo bridge saiu 12/12 enquanto a API falhou 0/12. Descartados
+  por teste: veth velho, subnet sobreposta, conntrack cheio, MTU, DNS e a
+  propria rede.
+- Gatilho: reboot do host em 01/08 as 17:38 UTC. A primeira falha do
+  `sydle-sync` veio as 17:40, e foram 1.864 falhas consecutivas com zero
+  sucessos ate 14/08 16:20 — 12 dias e 22 horas.
+- O mesmo incidente ja tinha sido diagnosticado corretamente em
+  `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md`, com o plano de correcao escrito
+  (incluindo `gw_priority`). Nada foi aplicado na epoca.
+- Correcao de rede aplicada ao vivo (`--gw-priority -100`) e depois no compose.
+  Primeiro sync bem-sucedido em 12d22h as 16:20; Franciely logou as 16:55:52.
+- Correcao de codigo: `isNetworkError`, `ServiceUnavailableError` (503) e
+  `ForbiddenError` (403), controller respeitando `statusCode`, `api-client` sem
+  sequestrar 401 dos endpoints de login e cache/sobrevida da checagem de grupo.
+  16 testes novos; 877 API + 127 web passando.
+- Deploy do SHA `0b5393e` em 14/08 13:31-13:34 BRT, 8/8 etapas OK. O container
+  recriado recebeu de novo o IP `192.168.208.4` e mesmo assim manteve saida —
+  prova de que sem `gw_priority` o deploy teria reintroduzido a falha.
+
+Pendencias:
+
+- A regra que bloqueia especificamente o `192.168.208.4` continua desconhecida
+  (`sudo` no servidor pede senha). O `gw_priority` contorna, nao remove.
+- Nao existe alerta de egress nem de cron falhando em sequencia; o detector do
+  incidente foi a usuaria.
+- Uma falha isolada do sync as 18:20 UTC em observacao.
+
+Evidencia canonica:
+
+- `docs/INCIDENTE-2026-08-14-EGRESS-API.md`
+
 ## 2026-08-03 - Planejamento Do Reprocessamento Integral Sem O DEMO
 
 Objetivo:
