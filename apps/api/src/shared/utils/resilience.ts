@@ -85,6 +85,47 @@ export async function withTimeout<T>(
   }
 }
 
+// ── isNetworkError ──────────────────────────────────────────────────────────
+
+const NETWORK_ERROR_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'EPIPE',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+/**
+ * Distingue "o outro lado respondeu que nao" de "nao consegui falar com o outro
+ * lado". Sem isso, uma queda de rede vira erro de autorizacao — foi o que
+ * derrubou o login Google em agosto/2026: ETIMEDOUT virava 401 e o operador
+ * lia "sessao expirou".
+ *
+ * Cobre tambem o Gaxios/Axios, que embrulha o erro de socket em `err.error` e
+ * so preenche `err.response` quando houve resposta HTTP de verdade.
+ */
+export function isNetworkError(err: unknown, depth = 0): boolean {
+  if (!err || typeof err !== 'object' || depth > 5) return false;
+  const e = err as {
+    code?: unknown;
+    cause?: unknown;
+    error?: unknown;
+    response?: unknown;
+    name?: unknown;
+  };
+
+  if (e.response) return false; // houve resposta HTTP: e erro de aplicacao, nao de rede
+  if (e.name === 'AbortError' || e.name === 'TimeoutError') return true;
+  if (typeof e.code === 'string' && NETWORK_ERROR_CODES.has(e.code)) return true;
+
+  return isNetworkError(e.cause, depth + 1) || isNetworkError(e.error, depth + 1);
+}
+
 // ── CircuitBreaker ──────────────────────────────────────────────────────────
 
 type CircuitState = 'closed' | 'open' | 'half-open';

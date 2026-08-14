@@ -1,6 +1,9 @@
 import { JWT } from 'google-auth-library';
 import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
+import { isNetworkError } from '../../shared/utils/resilience.js';
+import { cache } from '../../shared/cache/redis.js';
+import { ServiceUnavailableError } from '../../shared/errors/index.js';
 
 const GOOGLE_DRIVE_CLIENT_EMAIL = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
 const GOOGLE_DRIVE_PRIVATE_KEY =
@@ -11,7 +14,24 @@ const GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET = process.env.GOOGLE_GROUP_ALLOW_ALL_WHE
 
 const SCOPE = 'https://www.googleapis.com/auth/admin.directory.group.member.readonly';
 
+/**
+ * Caminho rapido: enquanto fresco, nao chama o Google. Curto de proposito —
+ * remover alguem do grupo deve tirar o acesso em minutos, nao em horas.
+ */
+const FRESH_TTL_SECONDS = 10 * 60;
+/**
+ * Sobrevida usada *somente* quando o Google esta inalcancavel. Sem isso, um
+ * soluco de rede tranca todo mundo para fora (07-14/08/2026: o container ficou
+ * sem saida e ninguem conseguia logar). Negativas nao entram no cache, entao
+ * incluir alguem no grupo continua valendo na hora.
+ */
+const GRACE_TTL_SECONDS = 12 * 60 * 60;
+
 let jwtClient: JWT | null = null;
+
+function cacheKey(userEmail: string): string {
+  return `google-groups:${GOOGLE_GROUP_ALLOWED}:${userEmail.toLowerCase()}`;
+}
 
 function getClient(): JWT {
   if (jwtClient) return jwtClient;
@@ -49,18 +69,64 @@ async function isAllowed(userEmail: string): Promise<boolean> {
     return false;
   }
 
-  const client = getClient();
+  const key = cacheKey(userEmail);
+  const cached = await readCache(key);
+
+  if (cached && Date.now() < cached.freshUntil) return true;
+
   const url = `https://admin.googleapis.com/admin/directory/v1/groups/${encodeURIComponent(GOOGLE_GROUP_ALLOWED)}/hasMember/${encodeURIComponent(userEmail)}`;
 
   try {
+    const client = getClient();
     const res = await client.request<{ isMember: boolean }>({ url });
-    return res.data.isMember === true;
+    const isMember = res.data.isMember === true;
+
+    if (isMember) {
+      await cache.set(
+        key,
+        JSON.stringify({ freshUntil: Date.now() + FRESH_TTL_SECONDS * 1000 }),
+        GRACE_TTL_SECONDS,
+      );
+    } else {
+      // Saiu do grupo: derruba a sobrevida junto, senao ele continuaria
+      // entrando enquanto o Google estivesse fora.
+      await cache.del(key);
+    }
+    return isMember;
   } catch (err: any) {
     if (err?.response?.status === 404) {
+      await cache.del(key);
       return false;
     }
-    logger.error({ err, userEmail }, 'Google Groups: error checking membership');
-    throw err;
+
+    // Daqui para baixo nao sabemos se a pessoa tem acesso — sabemos que nao
+    // conseguimos perguntar. Isso nunca pode virar "acesso negado".
+    logger.error(
+      { err, userEmail, network: isNetworkError(err), grace: Boolean(cached) },
+      'Google Groups: error checking membership',
+    );
+
+    if (cached) {
+      logger.warn({ userEmail }, 'Google Groups: usando membership em cache (Google inacessivel)');
+      return true;
+    }
+
+    throw new ServiceUnavailableError(
+      'Nao foi possivel validar seu acesso com o Google agora. Tente novamente em alguns minutos.',
+    );
+  }
+}
+
+async function readCache(key: string): Promise<{ freshUntil: number } | null> {
+  try {
+    const raw = await cache.get(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { freshUntil?: unknown };
+    return typeof parsed.freshUntil === 'number' ? { freshUntil: parsed.freshUntil } : null;
+  } catch {
+    // Cache indisponivel ou corrompido nao pode bloquear login: segue e pergunta
+    // ao Google.
+    return null;
   }
 }
 

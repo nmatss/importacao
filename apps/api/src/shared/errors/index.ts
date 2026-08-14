@@ -30,6 +30,23 @@ export class ConflictError extends AppError {
   }
 }
 
+export class ForbiddenError extends AppError {
+  constructor(message: string) {
+    super(message, 403, 'FORBIDDEN');
+  }
+}
+
+/**
+ * Dependencia externa indisponivel (rede, timeout, 5xx do provedor). Existe
+ * para nao devolver 401 quando o Google esta fora do ar: 401 faz o front tratar
+ * como sessao expirada e o usuario fica em loop de login sem saber o motivo.
+ */
+export class ServiceUnavailableError extends AppError {
+  constructor(message: string) {
+    super(message, 503, 'SERVICE_UNAVAILABLE');
+  }
+}
+
 export class IntegrationError extends AppError {
   readonly service: string;
   constructor(service: string, message: string) {

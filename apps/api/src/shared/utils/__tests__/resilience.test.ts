@@ -1,5 +1,44 @@
 import { describe, it, expect, vi } from 'vitest';
-import { withRetry, withTimeout, CircuitBreaker } from '../resilience.js';
+import { withRetry, withTimeout, CircuitBreaker, isNetworkError } from '../resilience.js';
+
+describe('isNetworkError', () => {
+  it('reconhece o ETIMEDOUT do Gaxios que derrubou o login em 08/2026', () => {
+    const gaxiosError = Object.assign(new Error('request to oauth2.googleapis.com failed'), {
+      code: 'ETIMEDOUT',
+      config: { url: 'https://oauth2.googleapis.com/token' },
+      error: { type: 'FetchError', code: 'ETIMEDOUT' },
+    });
+
+    expect(isNetworkError(gaxiosError)).toBe(true);
+  });
+
+  it('enxerga o codigo aninhado em cause', () => {
+    expect(isNetworkError(new Error('fetch failed', { cause: { code: 'ECONNREFUSED' } }))).toBe(
+      true,
+    );
+  });
+
+  it('nao confunde resposta HTTP de erro com falha de rede', () => {
+    const httpError = Object.assign(new Error('Forbidden'), {
+      code: 'ETIMEDOUT', // codigo enganoso: o que manda e ter havido resposta
+      response: { status: 403 },
+    });
+
+    expect(isNetworkError(httpError)).toBe(false);
+  });
+
+  it('nao trata erro comum como falha de rede', () => {
+    expect(isNetworkError(new Error('Wrong recipient'))).toBe(false);
+    expect(isNetworkError(null)).toBe(false);
+    expect(isNetworkError('ETIMEDOUT')).toBe(false);
+  });
+
+  it('nao entra em loop com cause circular', () => {
+    const err: any = new Error('circular');
+    err.cause = err;
+    expect(isNetworkError(err)).toBe(false);
+  });
+});
 
 describe('withRetry', () => {
   it('should resolve immediately on first success', async () => {

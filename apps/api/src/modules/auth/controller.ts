@@ -1,7 +1,18 @@
 import type { Request, Response } from 'express';
 import { authService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
+import { AppError } from '../../shared/errors/index.js';
 import type { AuthenticatedRequest } from '../../shared/types/index.js';
+
+/**
+ * 401 aqui significa "sua credencial nao vale" e o front reage a isso jogando o
+ * usuario para /login?expired=1. Erro de infra (503) e falta de permissao (403)
+ * precisam sair com o proprio status, senao viram "sessao expirou" e a pessoa
+ * fica repetindo o login sem nunca ver o motivo real.
+ */
+function authStatusCode(error: unknown): number {
+  return error instanceof AppError ? error.statusCode : 401;
+}
 
 export const authController = {
   async login(req: Request, res: Response) {
@@ -10,7 +21,7 @@ export const authController = {
       const result = await authService.login(email, password);
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message, 401);
+      sendError(res, error.message, authStatusCode(error));
     }
   },
 
@@ -23,7 +34,7 @@ export const authController = {
       const result = await authService.loginWithGoogle(credential);
       sendSuccess(res, result);
     } catch (error: any) {
-      sendError(res, error.message, 401);
+      sendError(res, error.message, authStatusCode(error));
     }
   },
 

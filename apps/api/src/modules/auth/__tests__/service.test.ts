@@ -15,9 +15,11 @@ vi.mock('../../integrations/google-groups.service.js', () => ({
   googleGroupsService: { isAllowed: vi.fn().mockResolvedValue(true) },
 }));
 
+const { mockVerifyIdToken } = vi.hoisted(() => ({ mockVerifyIdToken: vi.fn() }));
+
 vi.mock('google-auth-library', () => ({
   OAuth2Client: class {
-    verifyIdToken = vi.fn();
+    verifyIdToken = (...args: any[]) => mockVerifyIdToken(...args);
   },
 }));
 
@@ -45,6 +47,8 @@ process.env.JWT_SECRET = 'test-secret';
 
 const { authService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
+const { googleGroupsService } = await import('../../integrations/google-groups.service.js');
+const { ForbiddenError, ServiceUnavailableError } = await import('../../../shared/errors/index.js');
 
 describe('authService', () => {
   beforeEach(() => {
@@ -119,6 +123,80 @@ describe('authService', () => {
       await expect(authService.login('test@example.com', 'wrongpass')).rejects.toThrow(
         'Credenciais',
       );
+    });
+  });
+
+  describe('loginWithGoogle()', () => {
+    const ticketFor = (email: string) => ({
+      getPayload: () => ({ email, name: 'Fulano' }),
+    });
+
+    beforeEach(() => {
+      vi.mocked(googleGroupsService.isAllowed).mockResolvedValue(true);
+    });
+
+    it('sinaliza indisponibilidade (503) quando o Google esta inalcancavel', async () => {
+      // Formato real do erro do incidente de 08/2026: Gaxios embrulhando um
+      // ETIMEDOUT de socket, sem `response`.
+      const gaxiosTimeout = Object.assign(new Error('request to google failed'), {
+        code: 'ETIMEDOUT',
+        error: { code: 'ETIMEDOUT' },
+      });
+      mockVerifyIdToken.mockRejectedValueOnce(gaxiosTimeout);
+
+      await expect(authService.loginWithGoogle('cred')).rejects.toBeInstanceOf(
+        ServiceUnavailableError,
+      );
+    });
+
+    it('trata token adulterado como credencial invalida, nao como queda', async () => {
+      mockVerifyIdToken.mockRejectedValueOnce(new Error('Wrong recipient'));
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err.message).toBe('Token Google inválido');
+      expect(err).not.toBeInstanceOf(ServiceUnavailableError);
+    });
+
+    it('devolve 403 (nao 401) para quem nao esta no grupo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('fora@grupounico.com'));
+      vi.mocked(googleGroupsService.isAllowed).mockResolvedValue(false);
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('devolve 403 para conta desativada', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('inativo@grupounico.com'));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 9,
+            name: 'Inativo',
+            email: 'inativo@grupounico.com',
+            role: 'analyst',
+            isActive: false,
+          },
+        ]),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect(err.statusCode).toBe(403);
+    });
+
+    it('emite token para usuario ativo e no grupo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('ok@grupounico.com'));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 6, name: 'Fulano', email: 'ok@grupounico.com', role: 'analyst', isActive: true },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(result.token).toBe('mock-jwt-token');
+      expect(result.user.email).toBe('ok@grupounico.com');
     });
   });
 

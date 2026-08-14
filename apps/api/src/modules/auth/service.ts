@@ -8,6 +8,9 @@ import { users } from '../../shared/database/schema.js';
 import type { CreateUserInput, UpdateUserInput } from './schema.js';
 import { auditService } from '../audit/service.js';
 import { googleGroupsService } from '../integrations/google-groups.service.js';
+import { ForbiddenError, ServiceUnavailableError } from '../../shared/errors/index.js';
+import { isNetworkError } from '../../shared/utils/resilience.js';
+import { logger } from '../../shared/utils/logger.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
@@ -59,10 +62,24 @@ export const authService = {
   },
 
   async loginWithGoogle(credential: string) {
-    const ticket = await googleClient.verifyIdToken({
-      idToken: credential,
-      audience: GOOGLE_CLIENT_ID,
-    });
+    // verifyIdToken tambem busca as chaves publicas do Google pela rede. Sem
+    // separar os dois casos, uma queda de rede era reportada como credencial
+    // invalida (401) e o front mostrava "sessao expirou".
+    let ticket;
+    try {
+      ticket = await googleClient.verifyIdToken({
+        idToken: credential,
+        audience: GOOGLE_CLIENT_ID,
+      });
+    } catch (err) {
+      if (isNetworkError(err)) {
+        logger.error({ err }, 'Google: falha de rede ao verificar o id_token');
+        throw new ServiceUnavailableError(
+          'Nao foi possivel falar com o Google agora. Tente novamente em alguns minutos.',
+        );
+      }
+      throw new Error('Token Google inválido');
+    }
 
     const payload = ticket.getPayload();
     if (!payload || !payload.email) {
@@ -70,7 +87,7 @@ export const authService = {
     }
 
     if (ALLOWED_DOMAIN && !payload.email.endsWith(`@${ALLOWED_DOMAIN}`)) {
-      throw new Error(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
+      throw new ForbiddenError(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
     }
 
     const allowed = await googleGroupsService.isAllowed(payload.email);
@@ -83,7 +100,7 @@ export const authService = {
         { email: payload.email, reason: 'not_in_group' },
         null,
       );
-      throw new Error('Acesso negado: usuário não pertence ao grupo autorizado');
+      throw new ForbiddenError('Acesso negado: usuário não pertence ao grupo autorizado');
     }
 
     let [user] = await db.select().from(users).where(eq(users.email, payload.email)).limit(1);
@@ -103,7 +120,7 @@ export const authService = {
     }
 
     if (!user.isActive) {
-      throw new Error('Conta desativada');
+      throw new ForbiddenError('Conta desativada');
     }
 
     const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, {

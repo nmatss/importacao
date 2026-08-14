@@ -3,6 +3,15 @@ import { redirectToLogin } from './session-expired';
 const BASE_URL = import.meta.env.VITE_API_URL || '';
 const TOKEN_KEY = 'importacao_token';
 
+/**
+ * Endpoints que *produzem* a sessao. Um 401 vindo deles nao e sessao expirada —
+ * e a tentativa de login que falhou. Redirecionar para /login?expired=1 aqui
+ * recarrega a pagina antes de o LoginPage conseguir mostrar o erro real, e o
+ * usuario fica em loop lendo "sua sessao expirou" (incidente de 13-14/08/2026,
+ * quando a API perdeu saida para o Google).
+ */
+const SESSION_ISSUING_ENDPOINTS = ['/api/auth/login', '/api/auth/google'];
+
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem(TOKEN_KEY);
 
@@ -20,7 +29,9 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
     headers,
   });
 
-  if (response.status === 401) {
+  const isSessionIssuing = SESSION_ISSUING_ENDPOINTS.some((path) => url.startsWith(path));
+
+  if (response.status === 401 && !isSessionIssuing) {
     localStorage.removeItem(TOKEN_KEY);
     redirectToLogin();
     throw new Error('Unauthorized');
