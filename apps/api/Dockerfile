@@ -1,5 +1,5 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 # Refresh OS packages to pick up the latest patched libcrypto3 / libssl3 /
 # zlib — otherwise Trivy (aquasecurity/trivy-action) finds fixable HIGH
@@ -19,7 +19,7 @@ WORKDIR /app/apps/api
 RUN npm run build
 
 # Production stage
-FROM node:22-alpine
+FROM node:26-alpine
 
 RUN apk upgrade --no-cache && apk add --no-cache \
   su-exec \
