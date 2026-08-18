@@ -146,5 +146,6 @@ Testes: `apps/cert-api/tests/test_stock_snapshot_guard.py`, 14 casos.
   sem alerta de conflito de cadastro.
 - `ALTO`: estoque tem apenas sincronizacao diaria e nenhum SLA bloqueante de
   frescor. O gate acima impede o zero falso, mas nao torna o dado mais novo.
-- As correcoes desta pagina estao no working tree local; nenhum deploy ou sync
-  de producao foi executado, pois deploy exige autorizacao explicita.
+- Publicado em producao em 17/08/2026 as 21:31 BRT (SHA `ce70f41`), 8/8 etapas
+  do `deploy.sh` OK. Nenhum sync de estoque foi disparado manualmente; o gate de
+  volume so age na proxima execucao do cron.

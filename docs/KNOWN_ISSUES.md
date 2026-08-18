@@ -54,11 +54,11 @@ Causa-raiz apurada em 17/08 (ver
 
 Status:
 
-- **ABERTO / ALTO** ate publicar e remedir. As correcoes estao no working tree,
-  **sem deploy**. Nenhum documento foi reprocessado de proposito: reprocessar
-  antes de publicar rodaria o codigo antigo e so gastaria orcamento. Ordem
-  correta: publicar, reclassificar os documentos 44 e 28, resolver as
-  duplicatas, reprocessar, medir.
+- **ABERTO / ALTO** ate remedir. As correcoes foram **publicadas em 17/08 as
+  21:31 BRT** (SHA `ce70f41`). Falta a parte de dado, que segue sem execucao:
+  reclassificar os documentos 44 (OHBL como invoice) e 28 (captura de tela),
+  resolver as 14 duplicatas, reprocessar os 17 documentos em falha e medir o
+  antes/depois. O reprocessamento exige token admin.
 
 ## ALTO - Regra Desconhecida Bloqueia O IP Da API Na ia-local-net
 
@@ -178,7 +178,7 @@ Correcao (2026-08-17):
 
 Status:
 
-- **RESOLVIDO / no working tree, sem deploy.** Ver
+- **RESOLVIDO / publicado em 17/08 as 21:31 BRT (SHA `ce70f41`).** Ver
   `docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`.
 
 ## ALTO - Estoque De Certificacao Sem Agendamento Proprio

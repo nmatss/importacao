@@ -110,9 +110,16 @@ Detalhe em `docs/STATUS-2026-08-17-IMPORTACAO-PEDIDOS-EDUARDA.md` e
   quais 8 auto-criados por e-mail com referencia truncada, um deles um codigo
   de ITEM e outro `teste123`). Zero lease presa, zero FK orfa, zero codigo de
   processo duplicado.
-- Nenhum documento foi reprocessado de proposito: as correcoes nao estao
-  publicadas, entao reprocessar agora rodaria o codigo antigo e so gastaria
-  orcamento de IA. Ordem correta registrada no STATUS.
+- **Publicado em producao em 17/08/2026 as 21:31 BRT, SHA `ce70f41`**, 8/8
+  etapas do `deploy.sh` OK, backup de banco e snapshot da release anterior
+  feitos no passo 1. Verificado depois do deploy: `/health/live` responde com
+  `aiProvider=vertex`, `/health/integrations` devolve 401 sem autenticacao,
+  as tres metricas novas aparecem em `/metrics`, o log de boot registra
+  `Document ingestion source: email`, zero erro no log e rota default correta
+  (`172.20.0.1`, nao `ia-local-net`).
+- Nenhum documento foi reprocessado: agora que o codigo esta publicado isso e
+  viavel, mas depende de token admin e da reclassificacao previa dos documentos
+  44 e 28. Ordem correta registrada no STATUS.
 - Suites: api 961, web 128, cert-api 509. `tsc` e `eslint --max-warnings=0`
   limpos; `ruff check` limpo; `bash -n scripts/deploy.sh` OK; build OK.
 
