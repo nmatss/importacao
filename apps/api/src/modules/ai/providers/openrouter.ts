@@ -8,6 +8,10 @@ import type { AIProvider, ChatMessage, ChatOptions, ChatResponse } from './types
  */
 export class OpenRouterProvider implements AIProvider {
   readonly name = 'openrouter' as const;
+  // Vision models behind OpenRouter take images in `image_url`; PDF support is
+  // model-specific and goes through a different `file` part, so treat it as
+  // unsupported and rasterize instead of gambling per model.
+  readonly acceptsPdfInput = false;
   private readonly baseUrl: string;
   private readonly apiKey: string;
 

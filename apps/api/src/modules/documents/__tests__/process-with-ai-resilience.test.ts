@@ -34,6 +34,10 @@ vi.mock('../../ai/service.js', async () => {
       extractEspelhoData,
       extractProformaData,
       extractDUIMPData,
+      // These cases are about resilience of the AI round-trip, not about how a
+      // scanned PDF is encoded, so keep the raw-PDF path (Vertex-like).
+      acceptsPdfInput: true,
+      providerName: 'vertex',
     },
   };
 });

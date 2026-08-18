@@ -1,11 +1,64 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-14 (ver `docs/INCIDENTE-2026-08-14-EGRESS-API.md`,
+Ultima atualizacao: 2026-08-17 (ver
+`docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`,
+`docs/INCIDENTE-2026-08-14-EGRESS-API.md`,
 `docs/REVISAO-2026-08-07.md`,
 `docs/STATUS-2026-08-07-CERTIFICACAO-RELATORIO-ESTOQUE.md`,
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## ALTO - 23% Das Invoices Ficam Em Falha Terminal E Desenham A Tela Toda Com "-"
+
+Descricao:
+
+- A Eduarda relatou em 17/08 que "a maioria dos campos esta trazendo so um
+  `-`". Medicao read-only em producao no mesmo dia mostrou que **nao** e
+  extracao parcial: nas 46 invoices que extraem com sucesso a cobertura media de
+  campos e de **99,7%** (20,3 de 20,3 campos; pior caso 95%).
+- O "-" vem de documento em **falha terminal**, onde todo campo fica vazio. Sao
+  17 documentos: 6 com JSON invalido devolvido pelo modelo, 5 com
+  `fetch failed` (de 22/06, evento anterior ao egress de 01-14/08), 4 com
+  timeout de 180s (tambem de 22/06) e 2 genuinamente ilegiveis.
+- Por tipo: invoice **15 de 65 (23%)**, packing_list 1 de 18, ohbl 1 de 10.
+- Passivo separado: 19 documentos de tipo `other` criados em 11/03/2026, nunca
+  processados — `other` nao tem extractor dedicado.
+- Config real de producao conferida: `AI_PROVIDER=vertex`,
+  `AI_ALLOW_EXTERNAL=true`, `AI_MONTHLY_BUDGET_USD=200`,
+  `DOCUMENT_OCR_ENABLED=1`, `NODE_ENV=production`. A hipotese de "modelo local
+  pequeno preenchendo poucos campos" foi **refutada**.
+
+Impacto:
+
+- Enquanto a taxa de falha terminal ficar em 23%, sempre havera documento
+  aparecendo vazio para o time, independente de melhoria de cobertura de campo.
+- Os 9 documentos de causa transporte/timeout estao parados desde 22/06 sem
+  nenhuma retentativa.
+
+Causa-raiz apurada em 17/08 (ver
+`docs/STATUS-2026-08-17-CAUSA-RAIZ-FALHA-EXTRACAO.md`):
+
+- A hipotese de resposta truncada por teto de tokens foi **REFUTADA**: o teto e
+  16.384 e a maior saida ja registrada foi 8.993.
+- A assinatura real e o **tamanho do prompt**. Das 22 chamadas de
+  `invoice_extraction`, as 10 com prompt acima de 10k tokens tiveram latencia
+  media de 68,9 s e **nenhuma** chegou ao passo seguinte; as 12 de prompt normal
+  levaram 19,3 s e 8 seguiram normalmente.
+- Tres defeitos de codigo alimentavam isso e foram corrigidos: parse sem
+  tolerancia a texto em volta do JSON, escalonamento de modelo que ignorava
+  violacao de contrato, e planilha convertida em texto sem limite algum (3 dos 4
+  timeouts eram XLSX de 25 a 36 KB).
+- Classificacao errada explica os 2 de "sem dados uteis" (um OHBL e uma captura
+  de tela classificados como invoice), e ha duplicatas reais (146/151, 125/129).
+
+Status:
+
+- **ABERTO / ALTO** ate publicar e remedir. As correcoes estao no working tree,
+  **sem deploy**. Nenhum documento foi reprocessado de proposito: reprocessar
+  antes de publicar rodaria o codigo antigo e so gastaria orcamento. Ordem
+  correta: publicar, reclassificar os documentos 44 e 28, resolver as
+  duplicatas, reprocessar, medir.
 
 ## ALTO - Regra Desconhecida Bloqueia O IP Da API Na ia-local-net
 
@@ -34,12 +87,41 @@ Status:
   experimento decisivo (subir container forcado no `.4`) exige janela, porque
   derruba o acesso a IA local.
 
-## ALTO - Falha De Egress E De Cron Nao Gera Alerta
+## CRITICO - O Canal De Alerta Nunca Entregou Nada (corrige o item abaixo)
+
+Descricao:
+
+- Medicao em 17/08: a tabela `alerts` tem **6.349 registros** e
+  **`sent_to_chat = true` em ZERO**. `acknowledged` em **1**. Dos **82
+  `critical`**, nenhum reconhecido. O `GOOGLE_CHAT_WEBHOOK_URL` **esta
+  configurado** no container.
+- **O alerta de egress EXISTIU.** `Falha no job: sydle-sync` foi criado todo dia
+  as 18:20, de 08/08 a 13/08 (18 registros). A deteccao funcionou; a entrega
+  nao. O item seguinte deste documento, que afirma "nao gera alerta", esta
+  incorreto e fica mantido apenas como historico.
+- Agravante: `Processo Parado` responde por **6.152 dos 6.349** alertas (97%),
+  ~74 por dia util numa base de 104 processos. Mesmo com a entrega funcionando,
+  o sinal estaria afogado.
+
+Impacto:
+
+- Todo mecanismo de deteccao do sistema termina num canal que nao chega a
+  ninguem. Enquanto isso valer, nenhum outro alerta serve para nada.
+
+Status:
+
+- **ABERTO / CRITICO.** Causa exata NAO determinada — confirmar exige disparar
+  uma mensagem de teste ao webhook (acao externa, nao executada por conta
+  propria). Detalhe e proximos passos em `docs/GAPS-2026-08-17.md` (G1 e G2).
+
+## ALTO - Falha De Egress E De Cron Nao Gera Alerta (SUPERADO — ver acima)
 
 Descricao:
 
 - O `sydle-sync` falhou 1.864 vezes seguidas, 144 por dia, por 12 dias, sem
   disparar nada. A ingestao Gmail e o `pre-cons-drive-sync` falhavam junto.
+- **Correcao factual (17/08):** o alerta era gerado diariamente; o que falhou
+  foi a entrega. Ver o item CRITICO acima.
 - O `/health/ready` cobre API, banco e Redis. Ficou verde durante todo o
   incidente, e o deploy de 07/08 passou nos 8 checks com o sistema quebrado.
 - O incidente so foi descoberto porque uma usuaria insistiu no WhatsApp.
@@ -73,6 +155,32 @@ Status:
 
 - **EM OBSERVACAO / BAIXO.** Reavaliar apos alguns dias de janela limpa.
 
+## RESOLVIDO - Snapshot Vazio Zerava O Estoque De Uma Fonte Inteira
+
+Descricao:
+
+- `sync_stock_all` fazia `DELETE FROM cert_stock WHERE source = X` e depois
+  inseria o que a fonte devolveu, sem conferir volume. Uma consulta que
+  retornasse zero linha **sem levantar excecao** apagava o estoque daquela fonte
+  e deixava todo SKU com 0 no CD.
+- E o mesmo sintoma que a Leticia relatou em `PI7223Y` ("o item sumiu do WMS"),
+  mas na escala da base toda — e indistinguivel, no log, de um dia de estoque
+  legitimamente baixo.
+
+Correcao (2026-08-17):
+
+- `_assert_snapshot_plausible` em `apps/cert-api/app/services/wms_service.py`
+  roda dentro da transacao, antes do `DELETE`: recusa snapshot vazio e recusa
+  queda acima de `CERT_STOCK_SYNC_MAX_DROP_PCT` (padrao 50%). O rollback
+  preserva o snapshot anterior. Primeira carga passa; `CERT_STOCK_SYNC_FORCE=1`
+  e a saida manual.
+- 14 testes em `apps/cert-api/tests/test_stock_snapshot_guard.py`.
+
+Status:
+
+- **RESOLVIDO / no working tree, sem deploy.** Ver
+  `docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`.
+
 ## ALTO - Estoque De Certificacao Sem Agendamento Proprio
 
 Descricao:
@@ -98,8 +206,9 @@ Status:
 
 Descricao:
 
-- 41 dos 567 produtos das abas de produto estao com a coluna V ("Descricao
-  E-commerce") vazia na planilha STATUS CERTIFICACAO.
+- Em 07/08 eram 41 ocorrencias vazias. Em 17/08 restam 18 ocorrencias ou 14
+  SKUs efetivamente vazios: 6 Imaginarium e 8 Puket. Puket Escolares esta
+  162/162 preenchida na coluna I.
 - Ate 2026-08-07 isso ficava escondido porque o sync caia para
   `certification_type` quando a coluna V estava vazia — o que gerava comparacao
   contra texto que nao e frase de certificacao.
@@ -109,12 +218,29 @@ Descricao:
 
 Impacto:
 
-- Esses 41 SKUs aparecem como nao conformes ate o time fiscal preencher a coluna
+- Esses 14 SKUs aparecem como nao conformes ate o time fiscal preencher a coluna
   V. O status esta correto: a frase realmente nao esta cadastrada.
 
 Status:
 
 - **ABERTO / MEDIO.** Depende de preenchimento na planilha (time fiscal).
+
+## MEDIO - Descricoes Conflitantes Em SKUs Duplicados Da Planilha
+
+Descricao:
+
+- Ha 15 SKUs com mais de uma ocorrencia e Descricao E-commerce conflitante: 13
+  na Imaginarium e 2 na Puket. O sync atual aplica last-write-wins.
+
+Impacto:
+
+- Reordenar linhas ou editar apenas uma duplicata pode trocar silenciosamente o
+  texto esperado usado na comparacao com o site.
+
+Status:
+
+- **ABERTO / MEDIO.** Consolidar as duplicatas na fonte e adicionar diagnostico
+  de conflito no sync antes do upsert.
 
 ## ALTO - 110 Produtos Viram "Nao Conforme" No Proximo Cron
 
@@ -244,9 +370,14 @@ Status:
   cobre dry-run por padrao, batch ID, retomada por JSONL, selecao canonica,
   exclusao do processo 264 e ritmo proprio de requisicao, tudo sobre as rotas
   HTTP existentes (nenhuma escrita direta no banco).
+- **VALIDADO EM LOTE / risco residual MEDIO. 2026-08-17:** o script passou a
+  filtrar por ETD, incluir opcionalmente ETD nulo, excluir espelho PDF e esperar
+  cada processo ficar terminal. Um override de compose suprimiu Drive/Chat e
+  ampliou a lease durante a janela. O snapshot de 37 documentos fechou sem
+  pendencias (32 sucessos, 5 falhas isoladas).
 - Continua ABERTO no lado do servidor: nao ha modo de manutencao para diferir
-  validacao, Drive e Google Chat, nem exclusao mutua entre lotes concorrentes.
-  Enquanto isso, o lote so deve rodar em janela combinada com a operacao.
+  validacao, Drive e Google Chat de forma transacional, nem exclusao mutua entre
+  lotes concorrentes. O override e operacional e exige restauracao explicita.
 
 ## MEDIO - Assuntos De E-mail Da Rodada DUIMP Nao Existem No Portal
 
@@ -292,8 +423,30 @@ Impacto:
 
 Status:
 
-- **ABERTO / ALTO antes do lote.** Ajustar para no minimo `1500000` e validar o
-  comportamento em piloto.
+- **ABERTO / ALTO.** A janela de 2026-08-17 usou `1500000` e o piloto/lote
+  terminaram sem lease concorrente, mas o compose normal voltou corretamente a
+  `600000`. Persistir o valor seguro e adicionar validacao fail-fast continuam
+  pendentes.
+
+## MEDIO - Seis Invoices Em Quarentena Apos O Replay De 2026-08-17
+
+Descricao:
+
+- Os documentos 76, 88, 92, 151 e 154 retornaram falha de extracao com resposta
+  invalida/nao parseavel. O documento 28 nao trouxe dado significativo legivel.
+- Cinco pertenciam ao snapshot do lote; o documento 154 entrou por upload
+  concorrente durante a janela.
+
+Impacto:
+
+- Esses seis documentos nao projetam dados operacionais nem devem ser tratados
+  como leitura valida. Os demais 34 documentos canonicos atuais concluiram.
+
+Status:
+
+- **ABERTO / MEDIO.** Revisar classificacao, qualidade e legibilidade de cada
+  arquivo e reprocessar individualmente apenas depois da correcao da causa. O
+  documento 151 ja recebeu uma tentativa limitada adicional, com a mesma falha.
 
 ## MEDIO - Base Documental Exige Triagem Antes Do Reprocessamento Integral
 

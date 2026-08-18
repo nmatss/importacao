@@ -1523,3 +1523,36 @@ Observacao operacional:
   documentos com `extractionFailed`/`error`. O patch publicado preserva
   confiança zero e impede projeção enganosa; dados existentes afetados foram
   reparados em produção.
+
+## 2026-08-17 — Limpeza historica e replay solicitado pela Odett
+
+- Dry-run confirmou 274 processos, 170 anteriores a 2025-05-01, 17 sem ETD
+  nao-DEMO e o DEMO 264 com 11 documentos.
+- Dump e uploads foram copiados; `pg_restore --list`, `tar -tzf` e restore
+  integral em banco temporario passaram antes da mutacao.
+- A limpeza serializavel removeu exatamente 170 processos. O fechamento trouxe
+  104 processos, nenhum anterior ao corte, 17 sem ETD e o DEMO intacto.
+- Replay canonico: 37 documentos/19 processos; 32 completaram e 5 falharam.
+  Tres uploads concorrentes completaram dois e adicionaram uma falha. Estado
+  terminal corrente: 34 completos, 6 falhos, 0 processando.
+- Todos os 19 processos foram reconciliados via API e revalidados com 29 checks;
+  fila nao terminal = 0, leases = 0, alertas Chat na janela = 0.
+- Compose normal restaurado; readiness confirmou PostgreSQL e Redis e o proxy
+  respondeu. Drive root continua no placeholder historico, portanto inativo.
+- Os seis documentos em quarentena sao 28, 76, 88, 92, 151 e 154. Nao repetir
+  em massa; revisar arquivo/classificacao e reprocessar individualmente.
+
+## 2026-08-17 — Retorno Leticia: certificacao, descricao e PI7223Y
+
+- Auditoria em paralelo confirmou Imaginarium/Puket H/P/V e Encerramentos G/H.
+- Puket Escolares tinha bug real: `tipo` casava C (ESTOJO/LANCHEIRA); a nova
+  coluna correta e D. Layout corrigido para D/E/H/I e coberto por sentinelas.
+- O relatorio de validacao comparava com a descricao correta, mas exibia o tipo
+  como Texto Esperado. JSON e XLSX agora separam Tipo Certificacao da Descricao
+  E-commerce efetivamente comparada.
+- Contagem atual: 14 SKUs efetivamente sem descricao; nenhum escolar. Os 41 eram
+  a fotografia de 07/08. Ha 15 conflitos entre duplicatas, ainda last-write-wins.
+- PI7223Y conferido ao vivo: WMS 7 fisicos, 7 reservados, 0 disponiveis; ERP
+  e-commerce 28. O 0/28 esta correto. Painel/XLSX agora rotulam CD disponivel e
+  o painel mostra o detalhe 0/7 mesmo quando todas as unidades estao reservadas.
+- Nenhum deploy ou sync de certificacao foi executado nesta sessao.

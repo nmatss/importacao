@@ -20,11 +20,58 @@ const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || '';
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
+export type LoginFailureReason =
+  | 'network_error'
+  | 'invalid_token'
+  | 'wrong_domain'
+  | 'not_in_group'
+  | 'inactive_user'
+  | 'unknown_user';
+
+export function domainOf(email: string): string {
+  const at = email.lastIndexOf('@');
+  return at >= 0 ? email.slice(at + 1).toLowerCase() : 'desconhecido';
+}
+
+/**
+ * Registra por que uma tentativa de login falhou.
+ *
+ * Ate 17/08 so o caso `not_in_group` deixava rastro; os demais — inclusive a
+ * falha de REDE, que derrubou o acesso por 12 dias em 08/2026 — sumiam sem
+ * registro. Como `audit_logs` so guardava login bem-sucedido, o unico detector
+ * de problema de acesso passou a ser a usuaria reclamando no WhatsApp.
+ *
+ * LGPD: guarda o e-mail apenas quando ele ja e nosso (usuario existente na
+ * base). Para dominio de fora vai so o dominio — suficiente para investigar,
+ * sem colecionar endereco de terceiro.
+ *
+ * Nunca lanca: instrumentacao nao pode derrubar o fluxo que observa.
+ */
+export async function recordLoginFailure(
+  userId: number | null,
+  reason: LoginFailureReason,
+  emailOrDomain?: string,
+): Promise<void> {
+  try {
+    await auditService.log(
+      userId,
+      'login_failed',
+      'user',
+      userId,
+      { reason, ...(emailOrDomain ? { origem: emailOrDomain } : {}) },
+      null,
+    );
+  } catch (err) {
+    logger.warn({ err, reason }, 'Falha ao registrar tentativa de login malsucedida');
+  }
+}
+
 export const authService = {
   async login(email: string, password: string) {
     const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
 
     if (!user || !user.isActive) {
+      // Este caminho ja registrava; nao duplicar.
       await auditService.log(
         null,
         'login_failed',
@@ -74,19 +121,28 @@ export const authService = {
     } catch (err) {
       if (isNetworkError(err)) {
         logger.error({ err }, 'Google: falha de rede ao verificar o id_token');
+        // Ate 17/08 apenas o caso `not_in_group` deixava rastro. Justamente o
+        // caminho de rede — o que derrubou o login por 12 dias em 08/2026 —
+        // sumia sem registro, e o unico detector virou a usuaria no WhatsApp.
+        await recordLoginFailure(null, 'network_error');
         throw new ServiceUnavailableError(
           'Nao foi possivel falar com o Google agora. Tente novamente em alguns minutos.',
         );
       }
+      await recordLoginFailure(null, 'invalid_token');
       throw new Error('Token Google inválido');
     }
 
     const payload = ticket.getPayload();
     if (!payload || !payload.email) {
+      await recordLoginFailure(null, 'invalid_token');
       throw new Error('Token Google inválido');
     }
 
     if (ALLOWED_DOMAIN && !payload.email.endsWith(`@${ALLOWED_DOMAIN}`)) {
+      // Dominio de fora: guarda so o dominio, nunca o endereco completo. E
+      // pessoa que nao e nossa, e o dominio ja basta para investigar.
+      await recordLoginFailure(null, 'wrong_domain', domainOf(payload.email));
       throw new ForbiddenError(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
     }
 
@@ -120,6 +176,7 @@ export const authService = {
     }
 
     if (!user.isActive) {
+      await recordLoginFailure(user.id, 'inactive_user', payload.email);
       throw new ForbiddenError('Conta desativada');
     }
 

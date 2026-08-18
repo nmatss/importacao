@@ -20,6 +20,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
+import { filterCandidatesByFollowUp, getReferenceSource } from '../follow-up/reference-registry.js';
 import {
   extractMailboxAddress,
   isAllowedSenderFromEnv,
@@ -493,6 +494,7 @@ function escapeLikePattern(str: string): string {
  */
 async function fuzzyMatchProcessCode(
   code: string,
+  options: { exactOnly?: boolean } = {},
 ): Promise<{ id: number; processCode: string } | null> {
   // Try exact match first
   const [exact] = await db
@@ -509,6 +511,12 @@ async function fuzzyMatchProcessCode(
     .where(ilike(importProcesses.processCode, escapeLikePattern(code)))
     .limit(1);
   if (caseInsensitive) return caseInsensitive;
+
+  // Substring matching is what turns a truncated reference into a link to the
+  // wrong process ("referencias incompletas", Eduarda 17/08): PK2052602 is a
+  // substring of PK2052602TJ. When the Follow Up allow-list is the authority
+  // the candidate is already canonical, so nothing below is needed.
+  if (options.exactOnly) return null;
 
   // Partial (substring) match — only for candidates long enough to be specific.
   // A real Uni.co code normalizes to >= 9 chars; we require >= 7 to allow the
@@ -721,10 +729,75 @@ export const emailProcessor = {
           allCodes.push(aiPlausibleCode);
         }
 
+        // ── Step 5b: Follow Up allow-list ────────────────────────────
+        // A planilha Follow Up passa a ser a autoridade sobre o que e uma
+        // referencia de processo valida. O regex e a IA continuam propondo
+        // candidatos; a planilha decide. Sem isso, codigo de item e
+        // referencia truncada entravam como processo (Eduarda, 17/08).
+        const referenceSource = getReferenceSource();
+        let allowListUnavailable = false;
+
+        if (referenceSource === 'follow_up' && allCodes.length > 0) {
+          const filtered = await filterCandidatesByFollowUp(allCodes);
+          const canonicalCodes = filtered.canonical;
+          const rejected = filtered.rejected;
+          allowListUnavailable = filtered.status === 'unavailable';
+
+          if (allowListUnavailable) {
+            // Fail closed on CREATION only: without the allow-list we cannot
+            // tell a real reference from an item code, and inventing
+            // processes is the failure the user asked us to stop. Linking to
+            // an already existing process stays allowed below.
+            logger.error(
+              { allCodes, subject: email.subject },
+              'Follow Up allow-list unavailable — refusing to create processes from this email',
+            );
+          } else {
+            if (rejected.length > 0) {
+              logger.info(
+                { rejected, accepted: canonicalCodes, subject: email.subject },
+                'Candidates rejected: not listed in the Follow Up sheet',
+              );
+            }
+            allCodes.length = 0;
+            allCodes.push(...canonicalCodes);
+            processCode = canonicalCodes[0] ?? null;
+
+            if (!processCode) {
+              // Every candidate was rejected. Without this the e-mail fell
+              // through in total silence: `processCode` null skips the
+              // unmatched-code branch below, which is where the operator alert
+              // used to come from. Rejecting garbage is the point of the
+              // allow-list; rejecting it QUIETLY would repeat the pattern that
+              // let a 12-day outage be discovered by a user on WhatsApp.
+              detectionMethod = null;
+              try {
+                await alertService.create({
+                  severity: 'warning',
+                  title: 'Email recebido com referencia fora da planilha Follow Up',
+                  message: `Nenhum dos codigos encontrados no e-mail consta na planilha Follow Up, entao nada foi vinculado nem criado: ${rejected.join(', ') || '(nenhum codigo legivel)'}. Se a referencia e legitima, inclua-a na planilha; se for codigo de item, pode ignorar. Assunto: ${email.subject}`,
+                });
+              } catch (alertErr) {
+                logger.warn(
+                  { err: alertErr, rejected },
+                  'Failed to create alert for candidates outside the Follow Up sheet',
+                );
+              }
+            }
+          }
+        }
+
+        // Vale mesmo quando o allow-list esta fora do ar. Cair de volta no
+        // match por substring durante a indisponibilidade reabriria justamente
+        // o defeito relatado — referencia truncada anexando documento ao
+        // processo errado — e de forma silenciosa. Nao vincular e visivel
+        // (documento fica solto e o operador e alertado); vincular errado nao.
+        const exactOnly = referenceSource === 'follow_up';
+
         // Try each candidate code against the DB, best match first
         if (allCodes.length > 0) {
           for (const candidate of allCodes) {
-            const matched = await fuzzyMatchProcessCode(candidate);
+            const matched = await fuzzyMatchProcessCode(candidate, { exactOnly });
             if (matched) {
               processId = matched.id;
               processCode = matched.processCode;
@@ -739,11 +812,34 @@ export const emailProcessor = {
 
         if (processCode && !processId) {
           // None of the candidates matched — fall back to auto-create logic
-          const matched = await fuzzyMatchProcessCode(processCode);
+          const matched = await fuzzyMatchProcessCode(processCode, { exactOnly });
           if (matched) {
             processId = matched.id;
             processCode = matched.processCode;
-          } else if (!isStrongUnicoCode(processCode)) {
+          } else if (allowListUnavailable) {
+            // The Follow Up sheet is the authority and we could not read it.
+            // Creating here would resurrect exactly the behaviour the user
+            // asked us to stop, so we surface it instead of guessing.
+            try {
+              await alertService.create({
+                severity: 'warning',
+                title: 'Planilha Follow Up indisponivel — processo nao criado',
+                message: `Nao foi possivel ler a planilha Follow Up para validar o codigo "${processCode}". Nenhum processo foi criado automaticamente. Verifique o acesso da conta de servico a planilha e reprocesse o e-mail. Assunto: ${email.subject}`,
+              });
+            } catch (alertErr) {
+              logger.warn(
+                { err: alertErr, processCode },
+                'Failed to create alert for unavailable Follow Up allow-list',
+              );
+            }
+            // Este ramo so e alcancado quando o allow-list ESTAVA legivel (o
+            // ramo anterior ja tratou a indisponibilidade), portanto aqui
+            // `exactOnly` equivale a "a planilha declarou este codigo" e
+            // `processCode` e a grafia canonica dela. O gate de formato Uni.co
+            // existe para impedir palpite de virar processo; o que o time
+            // digitou na planilha nao e palpite, e pode legitimamente ter outro
+            // formato (IMP-2025-001) e ainda assim merecer criacao.
+          } else if (!isStrongUnicoCode(processCode) && !exactOnly) {
             // Weak candidate (generic/low-confidence code that didn't match the
             // DB). NÃO criar processo — só códigos no formato forte Uni.co
             // (IM/PK + 7 dígitos) justificam auto-criação. Anexa como "não

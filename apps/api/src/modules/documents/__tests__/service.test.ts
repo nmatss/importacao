@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
 const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
@@ -25,6 +25,10 @@ vi.mock('../../ai/service.js', () => ({
     extractInvoiceData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.9 }),
     extractPackingListData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.85 }),
     extractBLData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.88 }),
+    // Default to the Vertex-like capability so the pre-existing cases keep
+    // exercising the raw-PDF path; the rasterization cases flip it explicitly.
+    acceptsPdfInput: true,
+    providerName: 'vertex',
   },
   flattenAiData: vi.fn((data) => data),
 }));
@@ -61,6 +65,7 @@ vi.mock('pdf-parse', () => ({
 
 vi.mock('../ocr.js', () => ({
   ocrScannedPdf: vi.fn().mockResolvedValue(null),
+  rasterizePdfPages: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('xlsx', () => ({
@@ -75,7 +80,8 @@ vi.mock('xlsx', () => ({
 
 const { documentService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
-const { ocrScannedPdf } = await import('../ocr.js');
+const { ocrScannedPdf, rasterizePdfPages } = await import('../ocr.js');
+const { aiService } = await import('../../ai/service.js');
 
 describe('documentService', () => {
   beforeEach(() => {
@@ -120,6 +126,8 @@ describe('documentService', () => {
       queryQueue.push(createResolvedChain([])); // assert process not locked
       // insert document returning
       queryQueue.push(createResolvedChain([mockDoc]));
+      // checagem de duplicata — sem duplicata
+      queryQueue.push(createResolvedChain([]));
       // select docs to check all 3 present -> only 1 doc
       queryQueue.push(createResolvedChain([{ type: 'invoice' }]));
 
@@ -156,6 +164,8 @@ describe('documentService', () => {
       queryQueue.push(createResolvedChain([])); // assert process not locked
       // insert doc
       queryQueue.push(createResolvedChain([mockDoc]));
+      // checagem de duplicata (mesmo nome + tamanho no processo) — sem duplicata
+      queryQueue.push(createResolvedChain([]));
       // select all docs for process
       queryQueue.push(createResolvedChain(allDocs));
       // select current process status
@@ -178,6 +188,37 @@ describe('documentService', () => {
       expect(mockDb.update).toHaveBeenCalled();
     });
 
+    it('avisa quando o mesmo arquivo ja existe no processo, sem bloquear o upload', async () => {
+      // 14 grupos de duplicata em 133 documentos na base de 17/08. Duplicata
+      // dobra o custo de reprocessamento e confunde a conferencia — mas
+      // recusar o upload atrapalharia mais, porque reenviar a mesma invoice
+      // corrigida com o mesmo nome e pratica legitima do time.
+      const { alertService } = await import('../../alerts/service.js');
+      const mockDoc = { id: 9, processId: 1, type: 'invoice' };
+      const mockFile = {
+        originalname: 'KIOM INV - PK2052602TJ.pdf',
+        path: '/tmp/inv.pdf',
+        mimetype: 'application/pdf',
+        size: 223881,
+      } as Express.Multer.File;
+
+      queryQueue.push(createResolvedChain([])); // processo nao travado
+      queryQueue.push(createResolvedChain([mockDoc])); // insert
+      queryQueue.push(createResolvedChain([{ id: 5 }])); // JA EXISTE outro igual
+      queryQueue.push(createResolvedChain([{ processCode: 'PK2052602TJ' }])); // processCode p/ alerta
+      queryQueue.push(createResolvedChain([{ type: 'invoice' }])); // docs do processo
+
+      const result = await documentService.upload(1, 'invoice', mockFile, 1);
+
+      expect(result).toMatchObject({ id: 9 });
+      expect(alertService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Documento duplicado no processo',
+          severity: 'warning',
+        }),
+      );
+    });
+
     it('should treat Draft BL as BL for documents_received milestone', async () => {
       const mockDoc = { id: 4, processId: 1, type: 'draft_bl' };
       const mockFile = {
@@ -191,6 +232,7 @@ describe('documentService', () => {
 
       queryQueue.push(createResolvedChain([])); // assert process not locked
       queryQueue.push(createResolvedChain([mockDoc])); // insert doc
+      queryQueue.push(createResolvedChain([])); // checagem de duplicata — sem duplicata
       queryQueue.push(createResolvedChain(allDocs)); // select all docs for process
       queryQueue.push(createResolvedChain([{ status: 'draft' }])); // select current process status
       queryQueue.push(createResolvedChain(undefined)); // update process status
@@ -947,6 +989,112 @@ describe('documentService', () => {
       );
 
       expect(result.text).toContain('col1,col2');
+    });
+
+    describe('planilha: ruido e teto de tamanho', () => {
+      // Quando alguem formata uma coluna inteira, o range usado vai ate a
+      // ultima linha da planilha e o CSV vira centenas de milhares de linhas
+      // de virgulas. Um xlsx de 27 KB gerava prompt suficiente para estourar
+      // o teto de 180 s da extracao — 3 dos 4 timeouts de producao.
+      const csvMock = async () =>
+        (await import('xlsx')).utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>;
+
+      it('descarta linhas que so tem separador', async () => {
+        (await csvMock()).mockReturnValueOnce('sku,qtd\nA1,10\n,,,\n,,\nB2,5\n');
+
+        const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
+
+        expect(result.text).toBe('sku,qtd\nA1,10\nB2,5');
+      });
+
+      it('trunca acima do teto e diz que truncou', async () => {
+        process.env.DOCUMENT_SPREADSHEET_MAX_CHARS = '50';
+        (await csvMock()).mockReturnValueOnce('x'.repeat(500));
+
+        const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
+
+        expect(result.text).toContain('[TEXTO TRUNCADO');
+        expect(result.text.length).toBeLessThan(200);
+        delete process.env.DOCUMENT_SPREADSHEET_MAX_CHARS;
+      });
+
+      it('nao trunca planilha dentro do teto', async () => {
+        (await csvMock()).mockReturnValueOnce('sku,qtd\nA1,10');
+
+        const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
+
+        expect(result.text).not.toContain('TRUNCADO');
+      });
+    });
+
+    describe('scanned PDF on a provider that cannot read PDF parts', () => {
+      // Regression guard for the "a maioria dos campos está trazendo só um
+      // '-'" report: a scanned PDF was handed to Ollama/OpenRouter as
+      // `data:application/pdf;base64,...`, which they cannot decode, so the
+      // extraction "succeeded" with almost every field empty.
+      const setProvider = (acceptsPdfInput: boolean, providerName = 'ialocal') => {
+        Object.defineProperty(aiService, 'acceptsPdfInput', {
+          value: acceptsPdfInput,
+          configurable: true,
+        });
+        Object.defineProperty(aiService, 'providerName', {
+          value: providerName,
+          configurable: true,
+        });
+      };
+
+      afterEach(() => setProvider(true, 'vertex'));
+
+      it('sends rasterized PNG pages instead of the raw PDF', async () => {
+        setProvider(false);
+        const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>;
+        pdfParse.mockResolvedValueOnce({ text: '', numpages: 2 });
+        vi.mocked(rasterizePdfPages).mockResolvedValueOnce(['page1b64', 'page2b64']);
+
+        const result = await documentService.extractText('/tmp/scan.pdf', 'application/pdf');
+
+        expect(result.imageMimeType).toBe('image/png');
+        expect(result.imageBase64).toBe('page1b64');
+        expect(result.additionalImagesBase64).toEqual(['page2b64']);
+      });
+
+      it('fails loudly when it cannot rasterize, instead of returning empty fields', async () => {
+        setProvider(false);
+        const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>;
+        pdfParse.mockResolvedValueOnce({ text: '', numpages: 1 });
+        vi.mocked(rasterizePdfPages).mockResolvedValueOnce(null);
+
+        await expect(
+          documentService.extractText('/tmp/scan.pdf', 'application/pdf'),
+        ).rejects.toThrow(/rasterizar/i);
+      });
+
+      it('still sends the raw PDF when the provider accepts it', async () => {
+        setProvider(true, 'vertex');
+        const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>;
+        pdfParse.mockResolvedValueOnce({ text: '', numpages: 1 });
+
+        const result = await documentService.extractText('/tmp/scan.pdf', 'application/pdf');
+
+        expect(result.imageMimeType).toBe('application/pdf');
+        expect(rasterizePdfPages).not.toHaveBeenCalled();
+      });
+
+      it('prefers OCR text over rasterization when OCR is available', async () => {
+        setProvider(false);
+        const pdfParse = (await import('pdf-parse')).default as unknown as ReturnType<typeof vi.fn>;
+        pdfParse.mockResolvedValueOnce({ text: '', numpages: 1 });
+        vi.mocked(ocrScannedPdf).mockResolvedValueOnce({
+          text: 'INVOICE 123',
+          pageTexts: ['INVOICE 123'],
+          pageCount: 1,
+        });
+
+        const result = await documentService.extractText('/tmp/scan.pdf', 'application/pdf');
+
+        expect(result.text).toBe('INVOICE 123');
+        expect(rasterizePdfPages).not.toHaveBeenCalled();
+      });
     });
 
     it('uses bounded local OCR text for a scanned PDF when available', async () => {

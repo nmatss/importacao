@@ -43,6 +43,9 @@ function assertAllowedEndpoint(baseUrl: string): void {
  */
 export class IALocalProvider implements AIProvider {
   readonly name = 'ialocal' as const;
+  // Ollama's /v1 vision path decodes the data URL as an image. A PDF byte
+  // stream is not one, so it must be rasterized before it gets here.
+  readonly acceptsPdfInput = false;
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly model: string;

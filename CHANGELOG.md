@@ -5,6 +5,166 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-08-17 - Pedidos da Eduarda na importacao e gate de estoque
+
+Detalhe em `docs/STATUS-2026-08-17-IMPORTACAO-PEDIDOS-EDUARDA.md` e
+`docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`.
+
+### Added
+
+- Allow-list de referencias de processo vindo da coluna A da planilha Follow Up
+  (`modules/follow-up/reference-registry.ts`), com cache por TTL, coalescencia
+  de chamadas e match exato. `PROCESS_REFERENCE_SOURCE=legacy` restaura o fluxo
+  antigo.
+- Ingestao de documentos a partir da pasta do processo no Google Drive
+  (`modules/documents/drive-ingestion.service.ts`), com dedupe por
+  `driveFileId`, cron `*/10` e a chave `DOCUMENT_SOURCE` (`email` | `drive` |
+  `both`, padrao `email`).
+- `rasterizePdfPages()` em `documents/ocr.ts`: rasteriza PDF escaneado para PNG
+  via Poppler quando o provider de IA nao le PDF nativamente.
+- `googleDriveService.findProcessFolder()`, que localiza a pasta do processo sem
+  criar a arvore como efeito colateral.
+- Gate de volume no sync de estoque de certificacao
+  (`_assert_snapshot_plausible` em `cert-api/app/services/wms_service.py`).
+
+### Fixed
+
+- Parse da resposta da IA tolera texto em volta do JSON (cerca markdown,
+  preambulo, rodape) recortando o payload balanceado, em vez de derrubar a
+  extracao inteira e deixar o documento com todos os campos vazios. O erro
+  restante passa a distinguir `truncated` de `no_json`.
+- Escalonamento para o modelo de upgrade passa a valer tambem para violacao do
+  contrato JSON, nao so para confianca baixa. Antes a excecao subia e o
+  documento morria sem o modelo melhor ser tentado — a telemetria de producao
+  mostrou 10 de 10 extracoes de prompt grande falhando assim.
+- Texto de planilha enviado a IA passa a descartar linhas so-separador e a
+  respeitar um teto de caracteres. Uma coluna formatada inteira gerava CSV de
+  centenas de milhares de linhas de virgulas e estourava o timeout de 180 s —
+  3 dos 4 timeouts de producao eram XLSX de 25 a 36 KB.
+- Referencia de processo truncada deixa de anexar documento ao processo errado.
+  O terceiro estagio do match era `ilike('%CODE%')`, e `PK2052602` casava com
+  `PK2052602TJ`.
+- PDF escaneado deixa de ser enviado como `data:application/pdf;base64,...` para
+  provider que so decodifica imagem (`ialocal`, `openrouter`). Era o que fazia a
+  extracao concluir com quase todos os campos vazios e a tela mostrar "-".
+- Multimodal passa a aceitar mais de uma imagem
+  (`ImageExtractionOpts.additionalImagesBase64`); antes uma invoice de duas
+  paginas perdia a tabela de itens.
+- Extracao sem OCR e sem rasterizacao possivel falha com motivo explicito em vez
+  de gravar documento de campos vazios que se apresenta como lido.
+- Snapshot vazio de WMS/ERP deixa de apagar o estoque da fonte e zerar o CD de
+  toda a base.
+
+### Changed
+
+- `stalled-process` deixa de emitir um alerta por processo parado a cada
+  execucao diaria e passa a emitir por marco de escalada (3, 7, 14, 30, 60
+  dias), com `critical` a partir de 30, mais um resumo diario. Era a origem de
+  6.152 dos 6.349 alertas da base (97%). O marco e o MAIOR ja alcancado, com
+  janela de deduplicacao casada ao espacamento — assim uma execucao perdida do
+  cron (dia de deploy recria o container) atrasa o alerta em vez de cancela-lo,
+  e um processo que volta a parar torna a alertar.
+- `alertService.hasDuplicateRecent` aceita janela configuravel; o padrao segue
+  24h para todos os chamadores existentes.
+- Falha de entrega de alerta sobe de `warn` para `error` e ganha o contador
+  `alert_delivery_total{channel,outcome}`.
+- `login_failed` passa a cobrir `network_error`, `invalid_token`,
+  `wrong_domain`, `inactive_user` e `unknown_user` — antes so `not_in_group`
+  deixava rastro, e o caminho de rede (o do incidente de 12 dias) sumia.
+- Upload avisa (sem bloquear) quando o mesmo arquivo ja existe no processo.
+- `deploy.sh` arquiva o log dos containers antes de recria-los, retencao 30 dias.
+- Novas metricas: `ai_contract_violations_total{context,reason}` e
+  `ai_prompt_tokens{context}`.
+- Novo `GET /health/integrations` (ADMIN): integracao configurada versus ativa,
+  com aviso nominal das inertes. Sempre 200 — nao entra no readiness. Usa
+  `googleDriveService.isRootConfigured()` como autoridade em vez de reimplementar
+  a checagem.
+
+### Operational notes
+
+- Nenhuma mudanca altera o comportamento no momento do deploy: `DOCUMENT_SOURCE`
+  nasce em `email`, e o allow-list degrada para o fluxo antigo enquanto
+  `GOOGLE_SHEETS_FOLLOW_UP_ID` nao estiver configurado.
+- Ligar de fato depende de configuracao: ID real em
+  `GOOGLE_DRIVE_ROOT_FOLDER_ID` (hoje placeholder), ID da planilha Follow Up, e
+  as duas pastas/planilha compartilhadas com a SA.
+- Diagnostico medido em producao: o "-" relatado vem de 17 documentos em falha
+  terminal (invoice 15 de 65, 23%), nao de extracao parcial — nas invoices que
+  concluem a cobertura de campos e de 99,7%. Producao roda `AI_PROVIDER=vertex`
+  com OCR ligado, portanto a correcao de rasterizacao e latente e nao altera o
+  comportamento atual. Registrado em `docs/KNOWN_ISSUES.md`.
+- Acesso da Odett verificado: conta ativa, login com sucesso as 12:09:56 e
+  16:05:45 BRT de 17/08, egress da API sadio, `sydle_sync` 144/144 com sucesso
+  em 24h. Problema transiente, sem correcao a aplicar.
+- Revisao adversarial pos-entrega achou 5 defeitos no proprio trabalho — recusa
+  silenciosa de e-mail, substring sobrevivendo na indisponibilidade, espelho
+  reimportado, varredura sem trava de reentrancia e typecheck quebrado por
+  teste. Todos corrigidos com teste. Detalhe no STATUS.
+- Analise de gaps do sistema em `docs/GAPS-2026-08-17.md`, medida em producao.
+  O achado principal corrige o `KNOWN_ISSUES`: o canal de alerta tem 6.349
+  registros e **zero** entregues ao Chat, e o alerta de falha do `sydle-sync`
+  EXISTIU durante o incidente de 12 dias (18 registros, um por dia). A deteccao
+  funcionava; a entrega nunca funcionou.
+- Varredura de dados em producao: 133 documentos, 17 em falha terminal, 14
+  grupos de duplicata, 28 processos com codigo fora do formato Uni.co (dos
+  quais 8 auto-criados por e-mail com referencia truncada, um deles um codigo
+  de ITEM e outro `teste123`). Zero lease presa, zero FK orfa, zero codigo de
+  processo duplicado.
+- Nenhum documento foi reprocessado de proposito: as correcoes nao estao
+  publicadas, entao reprocessar agora rodaria o codigo antigo e so gastaria
+  orcamento de IA. Ordem correta registrada no STATUS.
+- Suites: api 961, web 128, cert-api 509. `tsc` e `eslint --max-warnings=0`
+  limpos; `ruff check` limpo; `bash -n scripts/deploy.sh` OK; build OK.
+
+---
+
+## [Unreleased] - 2026-08-17 - Limpeza historica e replay documental controlado
+
+### Added
+
+- Executor de limpeza com dry-run padrao, gates de contagem, verificacao de
+  backup, transacao serializavel, preservacao explicita do DEMO e reconciliacao
+  de relacionamentos.
+- Replay documental por janela de ETD, incluindo processos sem ETD, exclusao
+  segura de espelho PDF, espera por estado terminal por processo e retomada por
+  evidencia JSONL.
+- Override operacional para pausar Drive/Chat e ampliar temporariamente a lease
+  durante replay controlado.
+
+### Operational notes
+
+- Backup e restore test passaram antes da exclusao. Foram removidos 170
+  processos anteriores a 2025-05-01; restaram 104 e o DEMO 264 permaneceu com
+  11 documentos.
+- O snapshot de 37 documentos terminou com 32 sucessos e 5 invoices em
+  quarentena. Tres uploads concorrentes elevaram o estado final a 40
+  documentos, 34 sucessos e 6 falhas terminais.
+- Os 19 processos foram reconciliados e revalidados; fila e leases fecharam em
+  zero e a configuracao normal da API foi restaurada.
+- Evidencias completas em
+  `docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`.
+
+## [Unreleased] - 2026-08-17 - Certificacao: layout escolar, relatorio e estoque
+
+### Fixed
+
+- Puket Escolares passa a ler o tipo de certificacao da nova coluna D, sem
+  confundir a categoria de produto da coluna C; os fallbacks de numero, status
+  e Descricao E-commerce acompanham o layout E/H/I.
+- O relatorio de validacao mostra separadamente o tipo de certificacao e a
+  Descricao E-commerce realmente usada como Texto Esperado.
+- Painel e XLSX deixam claro que o total do CD e estoque disponivel. Um item com
+  estoque fisico totalmente reservado continua expondo o detalhe, mesmo quando
+  o disponivel e zero.
+
+### Operational notes
+
+- PI7223Y foi conferido diretamente: WMS com 7 fisicos/7 reservados/0
+  disponiveis e ERP e-commerce com 28. O resultado 0 + 28 esta correto.
+- A planilha atual tem 14 SKUs efetivamente sem Descricao E-commerce; os 41 eram
+  a fotografia de 07/08. Detalhes em
+  `docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`.
+
 ## [Unreleased] - 2026-08-14 - Egress da API restaurado e erro de login honesto
 
 ### Fixed

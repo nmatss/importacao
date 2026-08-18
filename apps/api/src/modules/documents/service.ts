@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { eq, desc, sql, and } from 'drizzle-orm';
+import { eq, desc, sql, and, ne } from 'drizzle-orm';
 import path from 'node:path';
 import fs from 'fs/promises';
 import pdfParse from 'pdf-parse';
@@ -43,7 +43,7 @@ import { buildEspelhoFromAiData } from './utils/build-espelho.js';
 import type { AcceptComparisonInput, EditComparisonFieldInput } from './schema.js';
 import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
-import { ocrScannedPdf } from './ocr.js';
+import { ocrScannedPdf, rasterizePdfPages } from './ocr.js';
 import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
 
 /**
@@ -862,6 +862,7 @@ export const documentService = {
     type: string,
     file: Express.Multer.File,
     userId: number | null = null,
+    options: { driveFileId?: string } = {},
   ) {
     try {
       await assertDocumentProcessNotLocked(processId);
@@ -881,12 +882,73 @@ export const documentService = {
           storagePath: file.path,
           mimeType: file.mimetype,
           fileSize: file.size,
+          // Set when the document was ingested FROM Drive. It is also the
+          // dedupe key for the Drive ingestion job — without it a re-run would
+          // re-import every file on every pass.
+          driveFileId: options.driveFileId,
         })
         .returning();
     } catch (error) {
       // Clean up the uploaded file if DB insert fails
       await fs.unlink(file.path).catch(() => {});
       throw error;
+    }
+
+    // Duplicata: mesmo processo, mesmo nome, mesmo tamanho. Em 17/08 a base
+    // tinha 14 grupos assim em 133 documentos, dois deles entre os documentos
+    // em falha — um reprocessamento em lote gastaria o dobro no mesmo arquivo.
+    // AVISA, nao bloqueia: reenviar a mesma invoice corrigida com o mesmo nome
+    // e pratica legitima do time, e recusar o upload atrapalharia mais do que
+    // ajuda. A deteccao definitiva pede hash de conteudo, que exige migration.
+    try {
+      // Sem tamanho nao da para afirmar duplicata: dois arquivos legitimamente
+      // diferentes podem ter o mesmo nome. Avisar errado gasta a atencao do
+      // time, que e exatamente o recurso que este trabalho esta tentando poupar.
+      if (file.size == null) throw new Error('skip-duplicate-check');
+
+      const duplicatas = await db
+        .select({ id: documents.id })
+        .from(documents)
+        .where(
+          and(
+            eq(documents.processId, processId),
+            eq(documents.originalFilename, file.originalname),
+            eq(documents.fileSize, file.size),
+            ne(documents.id, doc.id),
+          ),
+        )
+        .limit(5);
+
+      if (duplicatas.length > 0) {
+        logger.warn(
+          {
+            documentId: doc.id,
+            processId,
+            fileName: file.originalname,
+            anteriores: duplicatas.map((d) => d.id),
+          },
+          'Documento duplicado no processo (mesmo nome e tamanho)',
+        );
+        const [proc] = await db
+          .select({ processCode: importProcesses.processCode })
+          .from(importProcesses)
+          .where(eq(importProcesses.id, processId))
+          .limit(1);
+        alertService
+          .create({
+            processId,
+            severity: 'warning',
+            title: 'Documento duplicado no processo',
+            message: `O arquivo "${file.originalname}" ja existe no processo ${proc?.processCode ?? processId} com o mesmo tamanho (documento ${duplicatas.map((d) => d.id).join(', ')}). Confirme qual versao vale e remova a outra — duplicata dobra o custo de reprocessamento e confunde a conferencia.`,
+            processCode: proc?.processCode,
+          })
+          .catch((err) => logger.warn({ err }, 'Failed to create duplicate-document alert'));
+      }
+    } catch (err) {
+      // Deteccao de duplicata nunca pode derrubar o upload.
+      if ((err as Error)?.message !== 'skip-duplicate-check') {
+        logger.warn({ err, documentId: doc.id }, 'Duplicate check failed');
+      }
     }
 
     // Auto-set hasCertification when a certificate is uploaded
@@ -1262,7 +1324,11 @@ export const documentService = {
 
       // Build extraction options with optional image data for multimodal processing
       const extractionOpts = extracted.imageBase64
-        ? { imageBase64: extracted.imageBase64, imageMimeType: extracted.imageMimeType }
+        ? {
+            imageBase64: extracted.imageBase64,
+            imageMimeType: extracted.imageMimeType,
+            additionalImagesBase64: extracted.additionalImagesBase64,
+          }
         : undefined;
 
       const text = extracted.text;
@@ -2112,6 +2178,7 @@ export const documentService = {
     text: string;
     imageBase64?: string;
     imageMimeType?: string;
+    additionalImagesBase64?: string[];
     pageTexts?: string[];
     ocrUsed?: boolean;
   }> {
@@ -2171,6 +2238,35 @@ export const documentService = {
           { filePath, textLength: text.length, charsPerPage: Math.round(charsPerPage) },
           'PDF has minimal text, treating as scanned document for multimodal processing',
         );
+
+        // Only Vertex reads a raw PDF part (it becomes Gemini inline_data).
+        // IA_LOCAL (Ollama) and OpenRouter vision models expect a real image,
+        // and used to receive `data:application/pdf;base64,...` — which they
+        // cannot decode, so the extraction came back with nearly every field
+        // empty and the UI showed "-" everywhere. Rasterize first.
+        if (!aiService.acceptsPdfInput) {
+          const pages = await rasterizePdfPages(filePath);
+          if (pages && pages.length > 0) {
+            logger.info(
+              { filePath, pages: pages.length, provider: aiService.providerName },
+              'Scanned PDF rasterized to PNG for a provider that cannot read PDF parts',
+            );
+            return {
+              text,
+              imageBase64: pages[0],
+              imageMimeType: 'image/png',
+              additionalImagesBase64: pages.slice(1),
+            };
+          }
+          // No OCR and no rasterizer: there is genuinely nothing readable to
+          // send. Failing here is what makes the document show up as "failed"
+          // with a reason the operator can act on, instead of silently
+          // producing a document whose fields are all empty.
+          throw new Error(
+            `PDF escaneado sem camada de texto e sem como rasterizar (provider "${aiService.providerName}" não lê PDF). Instale o Poppler (pdftoppm) ou habilite DOCUMENT_OCR_ENABLED=1 no servidor.`,
+          );
+        }
+
         const base64 = buffer.toString('base64');
         return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
       }
@@ -2185,10 +2281,30 @@ export const documentService = {
       ext === '.xls'
     ) {
       const workbook = XLSX.read(buffer, { type: 'buffer' });
-      let text = '';
+      const parts: string[] = [];
       for (const sheetName of workbook.SheetNames) {
         const sheet = workbook.Sheets[sheetName];
-        text += XLSX.utils.sheet_to_csv(sheet) + '\n';
+        // `blankrows: false` + descarte de linhas so-separador: quando alguem
+        // formata uma coluna inteira, o range usado da planilha vai ate a linha
+        // 1048576 e o CSV vira centenas de milhares de linhas de virgulas. Um
+        // xlsx de 27 KB gerava prompt suficiente para estourar o teto de 180 s
+        // da extracao — foi assim que 3 dos 4 timeouts de producao nasceram.
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+        const util = csv
+          .split('\n')
+          .filter((line) => line.replace(/[,;\s]/g, '').length > 0)
+          .join('\n');
+        if (util) parts.push(util);
+      }
+      let text = parts.join('\n');
+
+      const maxChars = Number(process.env.DOCUMENT_SPREADSHEET_MAX_CHARS) || 200_000;
+      if (text.length > maxChars) {
+        logger.warn(
+          { filePath, chars: text.length, maxChars },
+          'Spreadsheet text truncated before AI extraction',
+        );
+        text = `${text.slice(0, maxChars)}\n[TEXTO TRUNCADO: a planilha excede o limite de ${maxChars} caracteres]`;
       }
       return { text };
     }

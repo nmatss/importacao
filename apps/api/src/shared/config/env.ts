@@ -46,6 +46,18 @@ const envSchema = z
     GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
     GOOGLE_SHEETS_FOLLOW_UP_ID: z.string().optional(),
 
+    // Origem da verdade das referencias de processo. 'follow_up' (default)
+    // aceita apenas codigos declarados na coluna A da planilha Follow Up;
+    // 'legacy' restaura o comportamento antigo (regex/IA sobre o e-mail).
+    PROCESS_REFERENCE_SOURCE: z.enum(['follow_up', 'legacy']).default('follow_up'),
+
+    // De onde vem os documentos de um processo. 'drive' le apenas a pasta do
+    // processo no Google Drive; 'email' e o comportamento historico.
+    DOCUMENT_SOURCE: z.enum(['email', 'drive', 'both']).default('email'),
+    DRIVE_INGESTION_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
+    FOLLOW_UP_REFERENCE_TTL_MS: z.coerce.number().int().positive().optional(),
+    FOLLOW_UP_AUTO_CREATE: z.enum(['0', '1']).default('1'),
+
     // AI (IA_LOCAL by default; external providers require explicit opt-in)
     AI_PROVIDER: z.enum(['vertex', 'openrouter', 'ialocal']).default('ialocal'),
     AI_ALLOW_EXTERNAL: z.enum(['true', 'false']).default('false'),
@@ -63,6 +75,10 @@ const envSchema = z
     AI_SELF_REPAIR_PAID: z.enum(['0', '1']).default('0'),
     AI_SELF_REPAIR_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
     AI_UPGRADE_ON_LOW_CONFIDENCE: z.enum(['0', '1']).default('1'),
+    // Reextrai uma vez com o modelo de upgrade quando o primario devolve algo
+    // fora do contrato JSON. Exclusivo de violacao de contrato — orcamento e
+    // timeout nao escalonam. Ver STATUS-2026-08-17-CAUSA-RAIZ-FALHA-EXTRACAO.
+    AI_UPGRADE_ON_CONTRACT_ERROR: z.enum(['0', '1']).default('1'),
     AI_UPGRADE_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
     AI_UPGRADE_MIN_DELTA: z.coerce.number().min(0).max(1).default(0.05),
     ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(768),
@@ -87,8 +103,18 @@ const envSchema = z
     AI_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     AI_LOCAL_CHAT_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     DOCUMENT_AI_EXTRACTION_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
+    // Teto de caracteres do texto extraido de planilha antes de ir para a IA.
+    // Uma coluna formatada inteira faz o CSV virar centenas de milhares de
+    // linhas de virgulas e estourar o timeout de extracao.
+    DOCUMENT_SPREADSHEET_MAX_CHARS: z.coerce.number().int().positive().optional(),
     DOCUMENT_EXTRACTION_LEASE_MS: z.coerce.number().int().min(120000).optional(),
     DOCUMENT_OCR_ENABLED: z.enum(['0', '1']).default('0'),
+    // Rasterizacao de PDF escaneado para PNG quando o provider de IA nao le
+    // PDF nativamente (ialocal, openrouter). Ver documents/ocr.ts.
+    DOCUMENT_PDF_RASTERIZE_ENABLED: z.enum(['0', '1']).default('1'),
+    DOCUMENT_PDF_RASTERIZE_MAX_PAGES: z.coerce.number().int().positive().optional(),
+    DOCUMENT_PDF_RASTERIZE_DPI: z.coerce.number().int().positive().optional(),
+    DOCUMENT_PDF_RASTERIZE_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
     DOCUMENT_OCR_COMMAND: z.string().min(1).optional(),
     DOCUMENT_OCR_PDF_RENDERER: z.string().min(1).optional(),
     DOCUMENT_OCR_LANGUAGES: z.string().min(1).optional(),

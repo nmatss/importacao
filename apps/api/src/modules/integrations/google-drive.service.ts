@@ -23,7 +23,7 @@ let driveClient: drive_v3.Drive | null = null;
 // LRU-like cache with max size to prevent unbounded memory growth
 const FOLDER_CACHE_MAX = 1000;
 const folderCache = new Map<string, string>();
-const ROOT_FOLDER_PLACEHOLDERS = new Set(['your-root-folder-id']);
+export const ROOT_FOLDER_PLACEHOLDERS = new Set(['your-root-folder-id']);
 
 function getConfiguredRootFolderId(): string | null {
   const rootFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID?.trim();
@@ -176,6 +176,25 @@ export const googleDriveService = {
     }
 
     return { processFolderId, subfolders };
+  },
+
+  /**
+   * Locate the folder of an existing process WITHOUT creating anything.
+   *
+   * `ensureProcessFolder` is the write path and creates the brand/process/
+   * subfolder tree as a side effect. Ingestion must never do that: a process
+   * whose folder does not exist yet simply has no documents to read, and
+   * creating empty folders in the team's Drive would be noise.
+   */
+  async findProcessFolder(processCode: string, brand: string): Promise<string | null> {
+    const rootFolderId = getConfiguredRootFolderId();
+    if (!rootFolderId) return null;
+
+    const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+    const brandFolderId = await this.findFolder(rootFolderId, brandName);
+    if (!brandFolderId) return null;
+
+    return this.findFolder(brandFolderId, processCode);
   },
 
   async uploadToProcessFolder(

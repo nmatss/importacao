@@ -77,6 +77,50 @@ export const documentOcrDuration = new Histogram({
 });
 
 /**
+ * Entrega de alerta ao canal externo, por desfecho.
+ *
+ * Existe porque a tabela `alerts` acumulou 6.349 registros com ZERO entregues
+ * ao Chat, e nada no sistema expunha isso: a deteccao funcionava e o aviso
+ * morria na saida. Um contador de `failed` subindo enquanto `sent` fica parado
+ * e o sinal de que o canal esta morto.
+ */
+export const alertDeliveryTotal = new Counter({
+  name: 'alert_delivery_total',
+  help: 'Alert deliveries to the external channel by outcome',
+  labelNames: ['channel', 'outcome'] as const,
+  registers: [register],
+});
+
+/**
+ * Resposta da IA que veio fora do contrato JSON.
+ *
+ * A chamada em si e registrada como sucesso em `ai_usage_log` (o modelo
+ * respondeu; o parse e que falhou depois), entao sem este contador a telemetria
+ * mostra 100% de sucesso enquanto documentos ficam com todos os campos vazios.
+ */
+export const aiContractViolationsTotal = new Counter({
+  name: 'ai_contract_violations_total',
+  help: 'AI responses that were not usable JSON, by context and reason',
+  labelNames: ['context', 'reason'] as const,
+  registers: [register],
+});
+
+/**
+ * Tamanho do prompt de extracao, em tokens estimados.
+ *
+ * Medicao de 17/08: das 22 extracoes de invoice, as 10 com prompt acima de 10k
+ * tokens falharam TODAS; as de prompt normal passaram. Sem esta serie a
+ * correlacao so aparece cavando o banco a mao.
+ */
+export const aiPromptTokens = new Histogram({
+  name: 'ai_prompt_tokens',
+  help: 'Estimated prompt size per AI extraction call',
+  labelNames: ['context'] as const,
+  buckets: [500, 1000, 2500, 5000, 10000, 20000, 40000, 80000],
+  registers: [register],
+});
+
+/**
  * Normalize path to avoid high-cardinality labels.
  * Replaces UUID-like and numeric path segments with placeholders.
  */

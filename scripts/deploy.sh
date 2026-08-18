@@ -310,6 +310,28 @@ success "Migrations applied."
 # Deploy: build + restart application services
 # ---------------------------------------------------------------------------
 info "[7/8] Building and deploying api + web + cert-api..."
+
+# Preserva o log dos containers ANTES de recria-los.
+#
+# `up -d --build` recria api/web/cert-api e o `docker logs` do container antigo
+# vai junto. Isso ja atrapalhou investigacao duas vezes em 17/08/2026 — a
+# janela do problema de login da Odett e a das falhas de extracao ficaram sem
+# evidencia porque o container tinha sido recriado. Como `audit_logs` so
+# registrava login bem-sucedido, o log do container era a unica trilha fina.
+#
+# Nao pode abortar deploy: e captura de evidencia, nao gate de qualidade.
+LOG_ARCHIVE_DIR="/home/${DEPLOY_USER}/backups/importacao/logs"
+LOG_STAMP="$(date +%Y-%m-%d_%H%M%S)"
+info "Arquivando log dos containers antes da recriacao..."
+ssh "${DEPLOY_USER}@${SERVER}" "mkdir -p ${LOG_ARCHIVE_DIR} && \
+  for c in importacao-api importacao-web importacao-cert-api; do \
+    docker logs --timestamps \"\$c\" > ${LOG_ARCHIVE_DIR}/\${c}_${LOG_STAMP}.log 2>&1 || true; \
+    gzip -f ${LOG_ARCHIVE_DIR}/\${c}_${LOG_STAMP}.log || true; \
+  done; \
+  find ${LOG_ARCHIVE_DIR} -name '*.log.gz' -mtime +30 -delete 2>/dev/null || true" \
+  && success "Log arquivado em ${LOG_ARCHIVE_DIR} (retencao 30 dias)." \
+  || warn "Nao foi possivel arquivar o log dos containers; seguindo com o deploy."
+
 info "Initializing cert-api persistent volume permissions..."
 if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && (docker compose -f ${COMPOSE_FILE} rm -f -s cert-volumes-init >/dev/null 2>&1 || true) && docker compose -f ${COMPOSE_FILE} run --rm --no-deps cert-volumes-init"; then
   error "cert-api volume initialization failed. Deploy aborted before restarting cert-api."

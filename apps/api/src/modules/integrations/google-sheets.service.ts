@@ -242,4 +242,35 @@ export const googleSheetsService = {
       return [];
     }
   },
+
+  /**
+   * Process references declared in column A of the Follow Up sheet (header
+   * row excluded).
+   *
+   * Deliberately THROWS when the sheet cannot be read, unlike the readers
+   * above that swallow the error and return an empty array. The caller
+   * (`follow-up/reference-registry`) uses this list as an allow-list, so
+   * "the sheet says there are no processes" and "we could not reach the
+   * sheet" must never collapse into the same empty answer — that ambiguity
+   * is what let a 12-day integration outage go unnoticed in 08/2026.
+   */
+  async readProcessReferences(): Promise<string[]> {
+    if (!this.isConfigured()) {
+      throw new Error(
+        'Follow Up sheet not configured (GOOGLE_SHEETS_FOLLOW_UP_ID / GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY)',
+      );
+    }
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
+    const sheets = getSheetsClient();
+
+    const response = await withTimeout(
+      sheets.spreadsheets.values.get({ spreadsheetId, range: 'A2:A' }),
+      'readProcessReferences',
+    );
+
+    return (response.data.values ?? [])
+      .map((row) => (row?.[0] != null ? String(row[0]).trim() : ''))
+      .filter((value) => value.length > 0);
+  },
 };

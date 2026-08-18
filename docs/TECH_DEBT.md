@@ -86,8 +86,10 @@ Ultima atualizacao: 2026-08-14
   e-commerce podem ter timestamps diferentes. Em 2026-06-19 o XLSX passou a
   expor `Sincronizado em`, mas ainda falta politica/SLA de bloqueio por dado
   velho.
-- Harmonizar limpeza de estoque entre fontes: WMS apaga/reinsere `wms_biguacu`,
-  mas e-commerce faz upsert sem remover SKUs que desapareceram da origem.
+- Adicionar gate de volume/queda anormal ao replace de estoque. WMS e e-commerce
+  ja usam `DELETE + INSERT` transacional desde `e243ca2`, portanto removem SKU
+  ausente; a divida atual e impedir que uma resposta vazia ou truncada, mas sem
+  excecao, substitua um snapshot saudavel inteiro.
 - Resolver residuais de `npm audit` moderados sem downgrade inseguro: raiz do
   workspace com 11 moderadas; builder Docker da API com 8 moderadas de
   dev/tooling; runtime Docker da API sem vulnerabilidades em

@@ -17,6 +17,34 @@ Evidencias:
 
 Grau de confianca: alto.
 
+## Limpeza Historica E Replay De 2026-08-17
+
+- A regra operacional aprovada preserva `etd >= 2025-05-01`, preserva ETD nulo
+  por nao provar antiguidade e preserva sempre o DEMO 264.
+- Um backup PostgreSQL custom-format e um tar do volume de uploads devem passar
+  validacao e restore test antes de qualquer nova limpeza destrutiva.
+- A execucao de 2026-08-17 removeu 170 processos e terminou com 104. O DEMO
+  manteve 11 documentos; nao houve FK orfa nem codigo duplicado.
+- O replay deve usar documento canonico por `process_id + type`, excluir
+  `other` e espelho PDF, operar um processo por vez, esperar estado terminal e
+  registrar JSONL para retomada.
+- Estado apos a janela: 40 documentos canonicos, 34 concluidos e seis invoices
+  isoladas em falha terminal (IDs 28, 76, 88, 92, 151 e 154).
+- O valor normal de `DOCUMENT_EXTRACTION_LEASE_MS` continua 600000 e e menor
+  que o pior timeout; a janela usou 1500000 apenas como override.
+- `GOOGLE_DRIVE_ROOT_FOLDER_ID` de producao continua no placeholder
+  `your-root-folder-id`; o Drive ja estava inativo e nao foi alterado pela
+  operacao.
+
+Evidencias:
+
+- `docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`
+- `docs/operations/backfill-plan-2026-08-17-process-cleanup-reprocess.yaml`
+- `docs/operations/release-gate-evidence-2026-08-17-process-cleanup-reprocess.yaml`
+
+Grau de confianca: alto para banco, fila e API; alto para a lista de falhas,
+apurada no estado terminal corrente.
+
 ## Arquitetura Atual
 
 Monorepo npm workspaces com:
@@ -351,6 +379,32 @@ Evidencias:
 - `docs/INCIDENTE-2026-08-14-EGRESS-API.md`
 
 Grau de confianca: alto.
+
+## Certificacao — Layout E Estoque Validados Em 2026-08-17
+
+- Imaginarium e Puket usam H como tipo, P como numero e V como Descricao
+  E-commerce. Puket Escolares usa D como tipo, E como numero, H como status e I
+  como Descricao E-commerce; C e apenas categoria ESTOJO/LANCHEIRA.
+- A comparacao com a VTEX prioriza a Descricao E-commerce. O relatorio de
+  validacao deve serializar esse texto como `expected_cert_text` e manter
+  `certification_type` em campo/coluna separado.
+- A planilha atual tem 14 SKUs efetivamente sem descricao (6 Imaginarium, 8
+  Puket) e nenhum Puket Escolar sem descricao. Ha 15 SKUs duplicados com
+  descricoes conflitantes; o sync ainda usa last-write-wins.
+- Estoque CD significa `available`, nao quantidade fisica. PI7223Y foi validado
+  diretamente com 7 fisicos, 7 reservados, 0 disponiveis no WMS e 28 no ERP
+  e-commerce. A UI deve continuar mostrando o detalhe fisico mesmo com total
+  disponivel zero.
+- WMS e e-commerce ja usam replace transacional por fonte. A divida residual e
+  um gate contra snapshot vazio/truncado e um SLA de frescor; o sync permanece
+  diario.
+
+Evidencia:
+
+- `docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`
+
+Grau de confianca: alto; cabecalhos, contagens, ultimo XLSX, Oracle WMS, ERP e
+PostgreSQL foram consultados em modo read-only.
 
 ## Riscos Persistentes
 

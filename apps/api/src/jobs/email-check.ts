@@ -1,4 +1,8 @@
 import { logger } from '../shared/utils/logger.js';
+import {
+  getDocumentSource,
+  isEmailIngestionEnabled,
+} from '../modules/documents/drive-ingestion.service.js';
 
 let isRunning = false;
 
@@ -14,6 +18,14 @@ function buildAllowedSenderFilter(): string | null {
 export async function checkEmails() {
   const enabled = process.env.EMAIL_INGESTION_ENABLED === 'true';
   if (!enabled) return;
+
+  // DOCUMENT_SOURCE=drive means the process folder in Drive is the only source
+  // the team wants trusted for now; e-mail ingestion stands down without
+  // needing EMAIL_INGESTION_ENABLED to be flipped (and later restored).
+  if (!isEmailIngestionEnabled()) {
+    logger.debug({ source: getDocumentSource() }, 'Email ingestion off via DOCUMENT_SOURCE');
+    return;
+  }
 
   if (isRunning) {
     logger.debug('Email check already running, skipping');
@@ -49,6 +61,14 @@ export async function checkEmails() {
 export async function doubleCheckEmails() {
   const enabled = process.env.EMAIL_INGESTION_ENABLED === 'true';
   if (!enabled) return;
+
+  // DOCUMENT_SOURCE=drive means the process folder in Drive is the only source
+  // the team wants trusted for now; e-mail ingestion stands down without
+  // needing EMAIL_INGESTION_ENABLED to be flipped (and later restored).
+  if (!isEmailIngestionEnabled()) {
+    logger.debug({ source: getDocumentSource() }, 'Email ingestion off via DOCUMENT_SOURCE');
+    return;
+  }
 
   if (isRunning) {
     logger.info('Email check already running, skipping double-check');

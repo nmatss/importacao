@@ -57,6 +57,8 @@ import {
 import { tryParseLIText } from './utils/li-text-parser.js';
 import { tryParseProformaText, fillProformaNullsFromText } from './utils/proforma-text-parser.js';
 import { fillDUIMPNullsFromText, tryParseDUIMPText } from './utils/duimp-text-parser.js';
+import { parseModelJson, AIResponseContractError } from './utils/json-payload.js';
+import { aiContractViolationsTotal, aiPromptTokens } from '../../shared/metrics/index.js';
 
 export { AIBudgetExceededError };
 
@@ -102,6 +104,12 @@ interface OpenRouterMessage {
 export interface ImageExtractionOpts {
   imageBase64: string;
   imageMimeType?: string;
+  /**
+   * Extra pages, when a scanned PDF had to be rasterized into one image per
+   * page. `imageBase64` stays the first page so every existing caller keeps
+   * working; these are appended after it, in page order.
+   */
+  additionalImagesBase64?: string[];
 }
 
 export interface EmailAnalysisResult {
@@ -329,6 +337,20 @@ class AIService {
     logger.info({ provider: this.provider.name }, 'AIService initialized');
   }
 
+  /** Active provider name — used by callers that must adapt the payload. */
+  get providerName(): AIProvider['name'] {
+    return this.provider.name;
+  }
+
+  /**
+   * Whether the active provider can read a raw PDF sent as a multimodal part.
+   * When false, a scanned PDF must be rasterized to images first or it comes
+   * back with almost every field empty.
+   */
+  get acceptsPdfInput(): boolean {
+    return this.provider.acceptsPdfInput;
+  }
+
   /**
    * Build a multimodal user message with image if available, falling back to text-only.
    */
@@ -344,6 +366,11 @@ class AIService {
           image_url: { url: `data:${mime};base64,${imageOpts.imageBase64}` },
         },
       ];
+      // Rasterized pages 2..N of a scanned PDF. Sending only the first page
+      // meant a two-page invoice lost its item table.
+      for (const page of imageOpts.additionalImagesBase64 ?? []) {
+        parts.push({ type: 'image_url', image_url: { url: `data:image/png;base64,${page}` } });
+      }
       if (textContent) {
         parts.unshift({ type: 'text', text: textContent });
       }
@@ -395,11 +422,12 @@ class AIService {
         // and let it slip past the hard cap) — floor it at a conservative
         // default so the R$/day guard always accounts for output cost.
         const estimatedOutputTokens = effectiveMaxOutputTokens ?? BUDGET_OUTPUT_TOKEN_FLOOR;
-        const estimatedCostUSD = estimateCostUSD(
-          currentModel,
-          estimatePromptTokens(messages),
-          estimatedOutputTokens,
-        );
+        const promptTokens = estimatePromptTokens(messages);
+        // Serie por contexto: em 17/08 as 10 extracoes de invoice com prompt
+        // acima de 10k tokens falharam TODAS, e as de prompt normal passaram.
+        // Sem esta metrica a correlacao so aparece cavando o banco a mao.
+        aiPromptTokens.observe({ context: context.slice(0, 60) }, promptTokens);
+        const estimatedCostUSD = estimateCostUSD(currentModel, promptTokens, estimatedOutputTokens);
         // Budget gate: block before the provider call when the current spend
         // plus this call's conservative estimate would exceed the monthly/daily
         // cap. This is especially important for the R$100/day Vertex guard.
@@ -502,7 +530,34 @@ class AIService {
     upgrade: string,
     runOnce: (model: string) => Promise<T>,
   ): Promise<T> {
-    const first = await runOnce(primary);
+    let first: T;
+    try {
+      first = await runOnce(primary);
+    } catch (err) {
+      // O escalonamento so olhava confianca baixa. Se o modelo primario
+      // devolvia algo fora do contrato, a excecao subia e o documento morria
+      // em falha terminal — com TODOS os campos vazios na tela — sem que o
+      // modelo melhor fosse sequer tentado.
+      //
+      // A telemetria de producao de 17/08 mostrou a assinatura: das 22
+      // extracoes de invoice, as 10 com prompt acima de 10k tokens tiveram
+      // latencia media de 69 s e NENHUMA chegou ao passo seguinte; as de
+      // prompt normal levaram 19 s e 8 de 12 seguiram normalmente. Prompt
+      // grande faz o primario abandonar o contrato, e ai o `pro` tem chance
+      // real de acertar o mesmo documento.
+      //
+      // Escalona APENAS violacao de contrato: orcamento estourado e timeout
+      // nao melhoram com um modelo mais lento e mais caro.
+      if (!(err instanceof AIResponseContractError)) throw err;
+      if (process.env.AI_UPGRADE_ON_CONTRACT_ERROR === '0') throw err;
+
+      logger.warn(
+        { label, primary, upgrade, reason: err.reason },
+        'Primary model broke the response contract — retrying once with the upgrade model',
+      );
+      return await runOnce(upgrade);
+    }
+
     if (process.env.AI_UPGRADE_ON_LOW_CONFIDENCE === '0') return first;
     const threshold = Number(process.env.AI_UPGRADE_CONFIDENCE_THRESHOLD ?? '0.7');
     const minDelta = Number(process.env.AI_UPGRADE_MIN_DELTA ?? '0.05');
@@ -805,15 +860,45 @@ Responda SOMENTE com JSON estrito no formato:
   }
 
   private safeJsonParse(response: string, context: string): any {
-    try {
-      return JSON.parse(response);
-    } catch (err) {
-      logger.error(
-        { err, context, responseLength: response.length },
-        'Failed to parse AI JSON response',
-      );
-      throw new Error(`Failed to parse AI response for ${context}: invalid JSON`);
+    const outcome = parseModelJson(response);
+
+    if (outcome.ok) {
+      if (outcome.how === 'salvaged') {
+        // Nao e erro, mas nao pode ser invisivel: se passar a ser frequente,
+        // o prompt/response_format do provider e que precisa de ajuste.
+        logger.warn(
+          { context, responseLength: response.length },
+          'AI response carried text around the JSON — payload recortado antes do parse',
+        );
+      }
+      return outcome.value;
     }
+
+    // A chamada em si entra em `ai_usage_log` como SUCESSO — o modelo
+    // respondeu; quem falhou foi o parse, depois. Sem este contador a
+    // telemetria mostra 100% de sucesso enquanto o documento fica com todos os
+    // campos vazios, que foi exatamente o ponto cego de 17/08.
+    aiContractViolationsTotal.inc({
+      context: context.slice(0, 60),
+      reason: outcome.reason ?? 'no_json',
+    });
+    logger.error(
+      { context, responseLength: response.length, reason: outcome.reason },
+      'Failed to parse AI JSON response',
+    );
+
+    // A causa muda a acao do operador: truncado pede teto de tokens maior;
+    // "sem JSON" pede olhar o prompt ou o documento. A mensagem vira o motivo
+    // gravado em `ai_parsed_data.reason` e aparece na tela, entao dizer
+    // apenas "invalid JSON" desperdica a unica pista que o time recebe.
+    const detalhe =
+      outcome.reason === 'truncated'
+        ? 'resposta truncada (provavel teto de tokens de saida — ver AI_EXTRACTION_TABLE_MAX_OUTPUT_TOKENS)'
+        : 'nenhum JSON balanceado na resposta';
+    throw new AIResponseContractError(
+      `Failed to parse AI response for ${context}: ${detalhe}`,
+      outcome.reason ?? 'no_json',
+    );
   }
 
   /**

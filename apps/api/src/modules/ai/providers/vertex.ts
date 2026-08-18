@@ -156,6 +156,9 @@ export function toVertexSchema(node: unknown): unknown {
 
 export class VertexAIProvider implements AIProvider {
   readonly name = 'vertex' as const;
+  // The data URL is converted to Gemini `inline_data`, which accepts
+  // application/pdf natively — see toVertexParts below.
+  readonly acceptsPdfInput = true;
   private readonly project: string;
   private readonly location: string;
 

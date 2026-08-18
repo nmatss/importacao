@@ -34,6 +34,16 @@ export interface ChatResponse {
 export interface AIProvider {
   readonly name: 'openrouter' | 'vertex' | 'ialocal';
   /**
+   * Whether the provider accepts a raw PDF as a multimodal part.
+   *
+   * Vertex does (the data-URL becomes Gemini `inline_data`). Ollama's
+   * OpenAI-compatible layer and OpenRouter vision models expect a real image,
+   * so handing them `data:application/pdf;base64,...` yields an empty or
+   * garbage extraction instead of an error. Callers must rasterize first when
+   * this is false.
+   */
+  readonly acceptsPdfInput: boolean;
+  /**
    * Normalize a generic model id for the concrete provider.
    * Example: 'gemini-2.5-flash' → 'google/gemini-2.5-flash' for OpenRouter,
    * unchanged for Vertex.

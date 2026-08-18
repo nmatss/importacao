@@ -2,6 +2,10 @@ import cron from 'node-cron';
 import { checkDeadlines } from './deadline-check.js';
 import { checkStalledProcesses } from './stalled-process.js';
 import { checkEmails, doubleCheckEmails } from './email-check.js';
+import {
+  ingestAllProcessesFromDrive,
+  getDocumentSource,
+} from '../modules/documents/drive-ingestion.service.js';
 import { runLogisticSync } from './logistic-sync.js';
 import { runFinancialCheck } from './financial-check.js';
 import { runSydleSync } from './sydle-sync.js';
@@ -35,6 +39,10 @@ export function startScheduler() {
       'GOOGLE_DRIVE_PRE_CONS_FOLDER_ID não configurado: a sync de Pre-Cons do Drive (*/6h) será pulada',
     );
   }
+
+  // Qual fonte alimenta os processos hoje. Fica no boot porque trocar isso
+  // muda de onde vem TODO documento — nao pode ser descoberto so pelo silencio.
+  logger.info({ source: getDocumentSource() }, 'Document ingestion source');
 
   // Daily at 8:00 AM - Check deadlines (LI + currency)
   cron.schedule(
@@ -83,6 +91,22 @@ export function startScheduler() {
         await checkEmails();
       } catch (error) {
         await handleCronError('email-check', error);
+      }
+    },
+    tz,
+  );
+
+  // Every 10 minutes - Read documents from each process folder in Drive.
+  // Only active when DOCUMENT_SOURCE inclui "drive"; the function itself is a
+  // no-op otherwise, so the schedule is harmless while the team still works
+  // by e-mail.
+  cron.schedule(
+    '*/10 * * * *',
+    async () => {
+      try {
+        await ingestAllProcessesFromDrive();
+      } catch (error) {
+        await handleCronError('drive-ingestion', error);
       }
     },
     tz,

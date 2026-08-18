@@ -2,6 +2,7 @@ import { eq, desc, and, sql, count, gte } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { alerts, systemSettings } from '../../shared/database/schema.js';
 import { sendToGoogleChat } from './google-chat.service.js';
+import { alertDeliveryTotal } from '../../shared/metrics/index.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
 import { NotFoundError } from '../../shared/errors/index.js';
@@ -116,6 +117,11 @@ export const alertService = {
             .set({ sentToChat: true, sentAt: new Date() })
             .where(eq(alerts.id, alert.id));
         }
+      } else {
+        // Sem webhook o envio nem e tentado, entao o contador la dentro nunca
+        // seria incrementado e o alerta morreria no banco em silencio — o
+        // mesmo desfecho dos 6.349 registros com `sent_to_chat` falso.
+        alertDeliveryTotal.inc({ channel: 'google_chat', outcome: 'unconfigured' });
       }
     } catch {
       logger.error({ alertId: alert.id }, 'Failed to send alert to Google Chat');
@@ -133,10 +139,22 @@ export const alertService = {
     return alert;
   },
 
-  async hasDuplicateRecent(processId: number | undefined, title: string): Promise<boolean> {
+  /**
+   * @param windowHours janela da deduplicacao. O padrao de 24h serve para o
+   *   caso comum (job diario). O `stalled-process` passa uma janela maior,
+   *   casada com o espacamento dos marcos de escalada: assim um marco alerta
+   *   uma vez por episodio de parada, sobrevive a uma execucao perdida do cron,
+   *   e volta a alertar se o processo parar de novo depois de trabalhado.
+   */
+  async hasDuplicateRecent(
+    processId: number | undefined,
+    title: string,
+    windowHours = 24,
+  ): Promise<boolean> {
     // Dedupe by processId + title when a process is set; otherwise (cron alerts
     // with no processId) dedupe by title alone, matching only rows where
     // processId IS NULL, so recurring job failures collapse into one alert.
+    const horas = Number.isFinite(windowHours) && windowHours > 0 ? Math.floor(windowHours) : 24;
     const [existing] = await db
       .select({ id: alerts.id })
       .from(alerts)
@@ -144,7 +162,7 @@ export const alertService = {
         and(
           processId ? eq(alerts.processId, processId) : sql`${alerts.processId} IS NULL`,
           eq(alerts.title, title),
-          sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
+          sql`${alerts.createdAt} > NOW() - (${horas} * INTERVAL '1 hour')`,
         ),
       )
       .limit(1);
