@@ -5,7 +5,11 @@ from datetime import UTC, datetime
 import openpyxl
 import pytest
 
-from app.services.report_service import generate_products_report, generate_stock_report
+from app.services.report_service import (
+    generate_products_report,
+    generate_stock_report,
+    generate_validation_report_xlsx,
+)
 
 
 def _patch_reports_db(mocker, rows=None):
@@ -122,6 +126,40 @@ def _header_index(ws, label: str) -> int:
     return headers.index(label) + 1
 
 
+def test_validation_xlsx_separates_certification_type_from_expected_description(
+    mocker, tmp_path
+):
+    """O Excel mostra o tipo e a descricao realmente comparada em colunas distintas."""
+    mocker.patch("app.services.report_service.REPORTS_DIR", tmp_path)
+    mocker.patch("app.services.report_service._fetch_stock_map", return_value={})
+    source = tmp_path / "validation_layout.json"
+    source.write_text(
+        """{
+          "summary": {"total": 1, "ok": 1},
+          "products": [{
+            "sku": "ESC001",
+            "name": "ESTOJO ESCOLAR",
+            "brand": "Puket Escolares",
+            "status": "OK",
+            "score": 1.0,
+            "certification_type": "INMETRO SISTEMA 5",
+            "expected_cert_text": "Produto certificado conforme Portaria 423."
+          }]
+        }""",
+        encoding="utf-8",
+    )
+
+    output = generate_validation_report_xlsx(source.name)
+    ws = openpyxl.load_workbook(output)["Validação"]
+    headers = [cell.value for cell in ws[5]]
+
+    assert ws.cell(row=6, column=headers.index("Tipo Certificacao") + 1).value == "INMETRO SISTEMA 5"
+    assert (
+        ws.cell(row=6, column=headers.index("Texto Esperado") + 1).value
+        == "Produto certificado conforme Portaria 423."
+    )
+
+
 def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
     """User-controlled text exported to XLSX must not execute as formulas."""
     _patch_products_report_io(mocker, tmp_path)
@@ -195,7 +233,7 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
     assert cell("Status E-commerce") == "Conforme"
     assert cell("Status Licenciamento") == "Vencido"
     assert cell("Licen. - Prazo") == "2026-01-31"
-    assert cell("Estoque CD") == 10
+    assert cell("Estoque CD Disponivel") == 10
     assert cell("Total Estoque") == 15
     assert cell("Estoque Atualizado Em") == "2026-08-07T09:00:00"
 

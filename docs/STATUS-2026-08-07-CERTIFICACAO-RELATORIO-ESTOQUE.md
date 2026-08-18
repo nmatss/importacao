@@ -201,3 +201,16 @@ PI7560Y    venda permitida    cert=ATIVO      site=CONFORME  comercializacao=DEN
    validacao (uma vez por dia, 06:00). Se o time precisar de estoque mais fresco,
    vale um `cert_schedules` com tipo de job proprio — hoje a tabela nao tem
    coluna de tipo.
+
+## Atualizacao De 2026-08-17
+
+- Leticia confirmou que H e Tipo de certificacao e P e Numero Certificado; as
+  duas permanecem separadas no relatorio.
+- Puket Escolares ganhou uma coluna: D agora e Tipo de certificacao, E e Numero,
+  H e Status e I e Descricao E-commerce. O mapeamento e o relatorio de validacao
+  foram corrigidos no working tree.
+- Os 41 vazios cairam para 14 SKUs efetivamente sem descricao (6 Imaginarium, 8
+  Puket); Puket Escolares esta 162/162 preenchida.
+- PI7223Y nao sumiu do WMS: 7 fisicos, 7 reservados e 0 disponiveis, mais 28 no
+  e-commerce. Relatorio 0/28 confirmado.
+- Evidencias: `docs/STATUS-2026-08-17-CERTIFICACAO-COLUNAS-DESCRICAO-WMS.md`.

@@ -183,4 +183,38 @@ describe('CertProdutosPage (server-authoritative)', () => {
     // No license_deadline emitted -> graceful "--" placeholder present.
     expect(screen.getAllByText('--').length).toBeGreaterThan(0);
   });
+
+  it('keeps WMS physical stock visible when all units are reserved', async () => {
+    mockedFetch.mockResolvedValue({
+      products: [
+        {
+          sku: 'PI7223Y',
+          brand: 'Imaginarium',
+          name: 'Produto reservado',
+          stock_cd: 0,
+          stock_ecommerce: 28,
+          stock_total: 28,
+          stock_detail: [
+            {
+              source: 'wms_biguacu',
+              warehouse: 'CD EXPEDIÇÃO',
+              quantity: 7,
+              available: 0,
+            },
+          ],
+        },
+      ],
+      total: 1,
+      total_pages: 1,
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByRole('button', {
+        name: 'Mostrar estoque disponivel e fisico do CD para o SKU PI7223Y',
+      }),
+    ).toHaveTextContent('0');
+    expect(screen.getByText('0 / 7')).toBeInTheDocument();
+  });
 });

@@ -1,6 +1,72 @@
 """Tests for route authentication and basic contract."""
 
+import json
+
 import pytest
+
+
+def _db_context(mocker, rows=None):
+    cursor = mocker.MagicMock()
+    cursor.fetchall.return_value = rows or []
+    conn = mocker.MagicMock()
+    context = mocker.MagicMock()
+    context.__enter__.return_value = (conn, cursor)
+    context.__exit__.return_value = False
+    return context
+
+
+def test_validation_report_serializes_the_description_actually_compared(mocker, tmp_path):
+    """O JSON nao pode chamar o tipo de certificacao de 'Texto Esperado'."""
+    from app.routes import certifications
+
+    product = {
+        "sku": "ESC001",
+        "name": "ESTOJO ESCOLAR",
+        "brand": "Puket Escolares",
+        "certification_type": "INMETRO ARTIGOS ESCOLARES SISTEMA 5",
+        "ecommerce_description": "Produto certificado conforme Portaria 423.",
+        "sheet_status": "ATIVO",
+        "is_expired": False,
+        "sale_deadline_date": None,
+    }
+    contexts = [
+        _db_context(mocker, [product]),
+        _db_context(mocker),
+        _db_context(mocker),
+    ]
+    mocker.patch.object(certifications, "DATABASE_URL", "postgres://test")
+    mocker.patch.object(certifications, "REPORTS_DIR", tmp_path)
+    mocker.patch.object(certifications, "VTEX_REQUEST_DELAY", 0)
+    mocker.patch.object(certifications, "db", side_effect=contexts)
+    mocker.patch.object(
+        certifications,
+        "validate_single_product",
+        return_value={
+            "status": "OK",
+            "score": 1.0,
+            "url": "https://example.invalid/esc001",
+            "actual_cert_text": "Produto certificado conforme Portaria 423.",
+            "error": None,
+        },
+    )
+    run_id = "00000000-0000-0000-0000-000000000001"
+    certifications._running_validations[run_id] = {
+        "status": "running",
+        "processed": 0,
+        "total": 0,
+        "events": [],
+    }
+
+    try:
+        certifications._run_validation(run_id, None, None)
+        report_path = next(tmp_path.glob("validation_*.json"))
+        result = json.loads(report_path.read_text(encoding="utf-8"))["products"][0]
+    finally:
+        certifications._running_validations.pop(run_id, None)
+
+    assert result["certification_type"] == product["certification_type"]
+    assert result["expected_cert_text"] == product["ecommerce_description"]
+    assert result["expected_cert_text"] != result["certification_type"]
 
 
 @pytest.mark.asyncio

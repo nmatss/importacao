@@ -1,5 +1,6 @@
 """WMS + ERP stock synchronization service."""
 
+import os
 from collections import defaultdict
 from datetime import UTC, datetime
 
@@ -13,6 +14,67 @@ _ECOMMERCE_SOURCES = (
     ("puket", "ecommerce_puket", "puket"),
     ("imaginarium", "ecommerce_imaginarium", "imaginarium"),
 )
+
+# Queda percentual maxima tolerada entre o snapshot anterior e o novo antes de
+# recusar a substituicao.
+_DEFAULT_MAX_DROP_PCT = 50.0
+
+
+class StockSnapshotRejectedError(Exception):
+    """Snapshot novo pequeno demais para substituir o que ja esta gravado."""
+
+
+def _assert_snapshot_plausible(cur, source: str, incoming: int) -> None:
+    """Recusa substituir o estoque de uma fonte por um snapshot suspeito.
+
+    O sync e um `DELETE` da fonte seguido do `INSERT` do que veio agora. Uma
+    consulta que devolve zero linha SEM levantar excecao — sessao sem
+    permissao, filtro que nao casa nada, mapa de barcode que nao traduziu
+    nada — apagava o estoque inteiro e deixava todo SKU com 0 no CD. E
+    exatamente o sintoma "o item sumiu do WMS", mas na escala da base toda.
+
+    Levantar aqui, dentro do `with db()`, faz o rollback preservar o snapshot
+    anterior: estoque velho e ruim, estoque zerado por engano e pior.
+
+    Args:
+        cur: cursor aberto na transacao do sync.
+        source: valor da coluna `source` em `cert_stock`.
+        incoming: quantidade de linhas que o snapshot novo traz.
+
+    Raises:
+        StockSnapshotRejectedError: quando a queda excede o limite tolerado.
+    """
+    if os.getenv("CERT_STOCK_SYNC_FORCE") == "1":
+        return
+
+    cur.execute("SELECT COUNT(*) AS n FROM cert_stock WHERE source = %s", (source,))
+    row = cur.fetchone() or {}
+    previous = int(row.get("n") or 0)
+
+    # Primeira carga da fonte: nao ha nada para proteger.
+    if previous == 0:
+        return
+
+    if incoming == 0:
+        raise StockSnapshotRejectedError(
+            f"snapshot vazio para '{source}' enquanto havia {previous} linhas gravadas; "
+            "substituicao recusada (use CERT_STOCK_SYNC_FORCE=1 para forcar)"
+        )
+
+    try:
+        max_drop = float(os.getenv("CERT_STOCK_SYNC_MAX_DROP_PCT", ""))
+    except ValueError:
+        max_drop = _DEFAULT_MAX_DROP_PCT
+    if not 0 < max_drop <= 100:
+        max_drop = _DEFAULT_MAX_DROP_PCT
+
+    drop_pct = (previous - incoming) / previous * 100
+    if drop_pct > max_drop:
+        raise StockSnapshotRejectedError(
+            f"snapshot de '{source}' caiu {drop_pct:.1f}% ({previous} -> {incoming}), "
+            f"acima do limite de {max_drop:.0f}%; substituicao recusada "
+            "(use CERT_STOCK_SYNC_FORCE=1 para forcar)"
+        )
 
 
 def _to_int(value: object) -> int:
@@ -139,6 +201,11 @@ def sync_stock_all() -> dict:
     conservava para sempre a ultima quantidade conhecida — com o `synced_at`
     velho junto.
 
+    A substituicao passa por `_assert_snapshot_plausible`: snapshot vazio, ou
+    queda acima de `CERT_STOCK_SYNC_MAX_DROP_PCT` (padrao 50%), e recusado e a
+    fonte conserva o snapshot anterior. Sem esse gate, uma consulta que
+    devolvia zero linha sem excecao zerava o CD de toda a base.
+
     Returns:
         Dict with keys: wms, ecommerce_puket, ecommerce_imaginarium, errors.
     """
@@ -149,6 +216,7 @@ def sync_stock_all() -> dict:
     try:
         wms_rows = _aggregate_wms(fetch_wms_stock(), _load_barcode_maps())
         with db() as (conn, cur):
+            _assert_snapshot_plausible(cur, "wms_biguacu", len(wms_rows))
             cur.execute("DELETE FROM cert_stock WHERE source = 'wms_biguacu'")
             for item in wms_rows:
                 cur.execute(
@@ -171,6 +239,11 @@ def sync_stock_all() -> dict:
                     ),
                 )
         results["wms"] = len(wms_rows)
+    except StockSnapshotRejectedError as e:
+        # Nao e falha de conexao: a fonte respondeu, mas com volume incompativel.
+        # O estoque anterior foi preservado pelo rollback e precisa de olho humano.
+        log.error(f"WMS Oracle snapshot rejected: {e}")
+        results["errors"].append(f"WMS Oracle (snapshot recusado): {e!s}")
     except Exception as e:
         log.warning(f"WMS Oracle sync failed: {e}")
         results["errors"].append(f"WMS Oracle: {e!s}")
@@ -180,6 +253,7 @@ def sync_stock_all() -> dict:
         try:
             items = _aggregate_ecommerce(fetch_ecommerce_stock(brand))
             with db() as (conn, cur):
+                _assert_snapshot_plausible(cur, source, len(items))
                 cur.execute("DELETE FROM cert_stock WHERE source = %s", (source,))
                 for item in items:
                     cur.execute(
@@ -194,6 +268,9 @@ def sync_stock_all() -> dict:
                         (item["sku"], stock_brand, source, item["quantity"], item["quantity"], now),
                     )
             results[source] = len(items)
+        except StockSnapshotRejectedError as e:
+            log.error(f"ERP {brand} snapshot rejected: {e}")
+            results["errors"].append(f"ERP {brand} (snapshot recusado): {e!s}")
         except Exception as e:
             log.warning(f"ERP {brand} sync failed: {e}")
             results["errors"].append(f"ERP {brand}: {e!s}")

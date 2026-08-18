@@ -17,7 +17,7 @@ from app.utils.logging import log
 # ---------------------------------------------------------------------------
 # Cada campo é (candidatos de cabeçalho, índice de fallback 0-based). O
 # cabeçalho manda; o índice só entra quando a coluna foi renomeada. Letras de
-# coluna conferidas contra a planilha em 2026-08-07.
+# coluna conferidas contra a planilha em 2026-08-17.
 
 _DESC_ECOMMERCE_HEADERS = (
     "descrição e-commerce", "descricao e-commerce",
@@ -45,11 +45,20 @@ _ATIVOS_SHEETS = (
         "fields": {
             "sku": (("sku",), 0),                                           # A
             "name": (("nome comercial (certificado)",), 1),                 # B
-            "certification_type": (("tipo",), 2),                           # C
-            "sheet_status": (("status",), 6),                               # G
-            "numero_certificado": (("certificado",), 3),                    # D
+            # C e a categoria do produto (ESTOJO/LANCHEIRA). A coluna de tipo
+            # de certificacao foi adicionada em D; o candidato generico "tipo"
+            # fazia o match exato escolher C e contaminava painel/relatorio.
+            "certification_type": (
+                ("tipo de certificação", "tipo de certificacao"),
+                3,
+            ),                                                                 # D
+            "sheet_status": (("status",), 7),                               # H
+            "numero_certificado": (
+                ("número certificado", "numero certificado", "certificado"),
+                4,
+            ),                                                                 # E
             "situacao": ((), None),
-            "ecommerce_description": (_DESC_ECOMMERCE_HEADERS, 7),          # H
+            "ecommerce_description": (_DESC_ECOMMERCE_HEADERS, 8),          # I
         },
     },
 )

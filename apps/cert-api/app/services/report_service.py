@@ -272,7 +272,7 @@ _PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Trava Fat. Certificacao", 26),
     ("Trava Fat. Licenciamento", 26),
     # Estoque.
-    ("Estoque CD", 12),
+    ("Estoque CD Disponivel", 20),
     ("Estoque E-commerce", 18),
     ("Total Estoque", 14),
     ("Estoque Atualizado Em", 22),
@@ -280,43 +280,6 @@ _PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
 
 # 1-based, usada para pintar a celula de status de certificacao.
 _COL_STATUS_CERT = 4
-
-
-# Colunas do relatorio de produtos, na ordem. A lista existe para o cabecalho, a
-# largura e a montagem da linha ficarem sempre em sincronia.
-_PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
-    ("SKU", 15),
-    ("Nome", 40),
-    ("Marca", 18),
-    # As tres dimensoes do painel, com os mesmos rotulos da tela.
-    ("Status Certificacao", 18),
-    ("Status E-commerce", 18),
-    ("Motivo (E-commerce)", 38),
-    ("Status Licenciamento", 20),
-    # Cadastro vindo das abas Imaginarium/Puket.
-    ("Tipo Certificacao", 32),          # coluna H
-    ("Numero Certificado", 20),         # coluna P
-    ("Texto Esperado", 45),             # coluna V
-    ("Texto Encontrado", 45),
-    ("Pontuacao", 11),
-    ("URL", 45),
-    # Aba Encerramentos.
-    ("Prazo Final Venda", 16),          # coluna G
-    ("Situacao da Venda", 26),          # coluna H
-    ("Licen. - Prazo", 16),
-    # Travas de faturamento gravadas no Linx.
-    ("Trava Fat. Certificacao", 26),
-    ("Trava Fat. Licenciamento", 26),
-    # Estoque.
-    ("Estoque CD", 12),
-    ("Estoque E-commerce", 18),
-    ("Total Estoque", 14),
-    ("Estoque Atualizado Em", 22),
-)
-
-# 1-based, usada para pintar a celula de status de certificacao.
-_COL_STATUS_CERT = 4
-
 
 def generate_products_report(
     rows: list[dict],
@@ -572,11 +535,12 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
         "Marca",
         "Status",
         "Pontuacao",
+        "Tipo Certificacao",
         "Texto Esperado",
         "Texto Encontrado",
         "URL",
         "Erro",
-        "Estoque CD",
+        "Estoque CD Disponivel",
         "Estoque E-commerce",
         "Total Estoque",
     ]
@@ -595,6 +559,7 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
             _safe_text(p.get("brand", "")),
             _safe_text(status_label),
             _safe_text(score_str),
+            _safe_text(p.get("certification_type", "")),
             _safe_text(p.get("expected_cert_text", "")),
             _safe_text(p.get("actual_cert_text", "")),
             _safe_text(p.get("url", "")),
@@ -611,11 +576,11 @@ def generate_validation_report_xlsx(json_filename: str) -> Path:
         if status_raw in _STATUS_FILLS:
             status_cell.fill = _STATUS_FILLS[status_raw]
 
-    col_widths = [15, 40, 18, 18, 12, 40, 40, 50, 40, 12, 18, 14]
+    col_widths = [15, 40, 18, 18, 12, 32, 40, 40, 50, 40, 12, 18, 14]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
-    ws.auto_filter.ref = f"A{header_row}:L{ws.max_row}"
+    ws.auto_filter.ref = f"A{header_row}:M{ws.max_row}"
 
     excel_filename = json_filename.replace(".json", ".xlsx")
     excel_path = REPORTS_DIR / excel_filename

@@ -26,9 +26,9 @@ MARCA_HEADERS = [
 ]
 
 ESCOLARES_HEADERS = [
-    "SKU", "NOME COMERCIAL (CERTIFICADO)", "TIPO", "CERTIFICADO", "REGISTRO",
-    "INCLUSÃO", "STATUS", "Descrição E-commerce", "Coleção", "Prazo Final Venda",
-    "NOME COMERCIAL TAG",
+    "SKU", "NOME COMERCIAL (CERTIFICADO)", "TIPO", "TIPO DE CERTIFICAÇÃO",
+    "CERTIFICADO", "REGISTRO", "INCLUSÃO", "STATUS", "Descrição E-commerce",
+    "Coleção", "Prazo Final Venda", "NOME COMERCIAL TAG",
 ]
 
 ENCERRAMENTOS_HEADERS = [
@@ -59,8 +59,8 @@ class _FakeSpreadsheet:
 class TestFindColByHeader:
     def test_match_exato_vence_substring(self):
         """Na aba 'Puket escolares', 'certificado' casava com 'NOME COMERCIAL
-        (CERTIFICADO)' (B) antes da coluna 'CERTIFICADO' (D)."""
-        assert _find_col_by_header(ESCOLARES_HEADERS, "certificado") == 3
+        (CERTIFICADO)' (B) antes da coluna exata 'CERTIFICADO' (E)."""
+        assert _find_col_by_header(ESCOLARES_HEADERS, "certificado") == 4
 
     def test_substring_ainda_funciona_como_fallback(self):
         assert _find_col_by_header(MARCA_HEADERS, "prazo final venda") == 22
@@ -86,9 +86,10 @@ class TestResolveColumns:
         cfg = next(c for c in _ATIVOS_SHEETS if c["name"] == "Puket escolares")
         cols = _resolve_columns(ESCOLARES_HEADERS, cfg["fields"], "Puket escolares")
         assert cols["sku"] == 0
-        assert cols["numero_certificado"] == 3
-        assert cols["sheet_status"] == 6
-        assert cols["ecommerce_description"] == 7
+        assert cols["certification_type"] == 3  # D, nao C (categoria)
+        assert cols["numero_certificado"] == 4  # E
+        assert cols["sheet_status"] == 7         # H
+        assert cols["ecommerce_description"] == 8  # I
 
     def test_coluna_deslocada_e_seguida_pelo_cabecalho(self):
         deslocado = ["EXTRA", *MARCA_HEADERS]
@@ -127,6 +128,26 @@ class TestReadAtivos:
         linha = self._linha("PUKET", "100400496\n100400497")
         ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, linha]})
         assert {p["sku"] for p in _read_ativos_from_sheets(ss)} == {"100400496", "100400497"}
+
+    def test_puket_escolares_separa_categoria_tipo_numero_e_descricao(self):
+        """A coluna C descreve o produto; so D e o tipo de certificacao."""
+        row = [""] * len(ESCOLARES_HEADERS)
+        row[0] = "ESC001"
+        row[1] = "ESTOJO ESCOLAR"
+        row[2] = "ESTOJO"
+        row[3] = "INMETRO ARTIGOS ESCOLARES SISTEMA 5 - PORTARIA 423"
+        row[4] = "CERT-2026-001"
+        row[7] = "ATIVO"
+        row[8] = "Produto certificado pelo Inmetro conforme Portaria 423."
+
+        ss = _FakeSpreadsheet({"Puket escolares": [ESCOLARES_HEADERS, row]})
+        product = _read_ativos_from_sheets(ss)[0]
+
+        assert product["certification_type"] == row[3]
+        assert product["certification_type"] != row[2]
+        assert product["numero_certificado"] == row[4]
+        assert product["sheet_status"] == row[7]
+        assert product["ecommerce_description"] == row[8]
 
     def test_aba_ausente_nao_derruba_o_sync(self):
         ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, self._linha("PUKET", "X1")]})

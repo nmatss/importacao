@@ -563,7 +563,7 @@ export default function CertProdutosPage() {
                     Licen. - Prazo
                   </th>
                   <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    CD
+                    CD disp.
                   </th>
                   <th className="text-right px-4 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     E-com
@@ -678,11 +678,14 @@ export default function CertProdutosPage() {
                       )}
                     </td>
                     <td className="px-4 py-3.5 text-right">
-                      {(p.stock_cd ?? 0) > 0 ? (
+                      {(p.stock_cd ?? 0) > 0 ||
+                      (p.stock_detail ?? []).some(
+                        (detail) => detail.source === 'wms_biguacu' && (detail.quantity ?? 0) > 0,
+                      ) ? (
                         <div className="group/cd relative inline-block">
                           <button
                             type="button"
-                            aria-label={`Mostrar estoque CD do SKU ${p.sku}`}
+                            aria-label={`Mostrar estoque disponivel e fisico do CD para o SKU ${p.sku}`}
                             className="text-xs font-mono font-semibold tabular-nums text-slate-700 dark:text-slate-300 underline decoration-dotted underline-offset-2 hover:text-emerald-600 cursor-pointer"
                           >
                             {(p.stock_cd ?? 0).toLocaleString('pt-BR')}
@@ -690,7 +693,7 @@ export default function CertProdutosPage() {
                           <div className="absolute z-50 bottom-full right-0 mb-2 hidden group-hover/cd:block">
                             <div className="bg-slate-800 text-white text-[11px] rounded-xl shadow-xl px-3 py-2.5 whitespace-nowrap min-w-[220px]">
                               <p className="font-bold text-[10px] uppercase tracking-wider text-slate-400 mb-1.5">
-                                CD Biguacu - Localizacao
+                                CD Biguacu - Disponivel / Fisico
                               </p>
                               {(p.stock_detail ?? [])
                                 .filter(
@@ -714,7 +717,8 @@ export default function CertProdutosPage() {
                                       )}
                                     </span>
                                     <span className="font-mono font-bold">
-                                      {(d.available ?? d.quantity ?? 0).toLocaleString('pt-BR')}
+                                      {(d.available ?? 0).toLocaleString('pt-BR')} /{' '}
+                                      {(d.quantity ?? 0).toLocaleString('pt-BR')}
                                     </span>
                                   </div>
                                 ))}

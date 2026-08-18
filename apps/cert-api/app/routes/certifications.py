@@ -204,7 +204,13 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                     "score": score,
                     "url": vresult.get("url"),
                     "actual_cert_text": vresult.get("actual_cert_text"),
-                    "expected_cert_text": expected_cert,
+                    # A comparacao prioriza a Descricao E-commerce. O relatorio
+                    # antigo exibia `certification_type` como "Texto Esperado",
+                    # embora nao fosse esse o texto comparado, escondendo a
+                    # descricao das lancheiras/estojos. Preserve os dois campos
+                    # com seus significados reais.
+                    "certification_type": expected_cert,
+                    "expected_cert_text": ecommerce_desc,
                     "error": vresult.get("error"),
                 }
             )
