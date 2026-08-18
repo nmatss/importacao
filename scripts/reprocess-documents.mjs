@@ -16,10 +16,14 @@
  *     e por `req.path`, entao cada documento cai num bucket diferente e NAO
  *     protege o worker — o freio tem de vir daqui;
  *   - log JSONL append-only com batch ID; `--resume` pula o que ja concluiu.
+ *   - `--wait-per-process` espera cada processo chegar a estado terminal antes
+ *     de iniciar o seguinte;
+ *   - espelho PDF fica fora por padrao: o parser seguro de espelho exige XLSX.
  *
- * NAO faz: reclassificacao, escrita direta no banco, supressao de Drive/Chat.
- * Enquanto o modo de manutencao da Fase 0 nao existir, cada reprocessamento
- * ainda dispara validacao, Drive e alertas — rode em janela combinada.
+ * NAO faz: reclassificacao, escrita direta no banco ou supressao por conta
+ * propria. Para uma janela sem publicacao externa, suba a API com o override
+ * `docker-compose.reprocess.yml`, valide que Drive/Chat ficaram vazios e
+ * restaure o compose normal ao terminar.
  *
  * Uso:
  *   API_TOKEN=<jwt admin> node scripts/reprocess-documents.mjs            # dry-run
@@ -59,6 +63,12 @@ function parseArgs(argv) {
     limit: Infinity,
     out: null,
     resume: null,
+    fromEtd: null,
+    includeNullEtd: false,
+    includeUnsupportedEspelho: false,
+    waitPerProcess: false,
+    pollMs: 5000,
+    waitTimeoutMs: 30 * 60 * 1000,
   };
 
   for (const raw of argv) {
@@ -95,6 +105,24 @@ function parseArgs(argv) {
       case '--resume':
         args.resume = value;
         break;
+      case '--from-etd':
+        args.fromEtd = value;
+        break;
+      case '--include-null-etd':
+        args.includeNullEtd = true;
+        break;
+      case '--include-unsupported-espelho':
+        args.includeUnsupportedEspelho = true;
+        break;
+      case '--wait-per-process':
+        args.waitPerProcess = true;
+        break;
+      case '--poll-ms':
+        args.pollMs = Number(value);
+        break;
+      case '--wait-timeout-ms':
+        args.waitTimeoutMs = Number(value);
+        break;
       case '--help':
       case '-h':
         console.log(
@@ -107,6 +135,16 @@ function parseArgs(argv) {
       default:
         throw new Error(`Flag desconhecida: ${flag}`);
     }
+  }
+  if (args.fromEtd && !/^\d{4}-\d{2}-\d{2}$/.test(args.fromEtd)) {
+    throw new Error('--from-etd deve usar YYYY-MM-DD');
+  }
+  for (const [name, value] of [
+    ['--delay-ms', args.delayMs],
+    ['--poll-ms', args.pollMs],
+    ['--wait-timeout-ms', args.waitTimeoutMs],
+  ]) {
+    if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} deve ser positivo`);
   }
   return args;
 }
@@ -180,6 +218,70 @@ function loadDone(resumePath) {
   return done;
 }
 
+function isInsideProcessWindow(proc, args) {
+  if (!args.fromEtd) return true;
+  if (!proc.etd) return args.includeNullEtd;
+  return String(proc.etd).slice(0, 10) >= args.fromEtd;
+}
+
+function isSupportedEspelho(doc, args) {
+  if (doc.documentType !== 'espelho' || args.includeUnsupportedEspelho) return true;
+  const mime = String(doc.mimeType ?? '').toLowerCase();
+  const filename = String(doc.fileName ?? '').toLowerCase();
+  return (
+    mime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    filename.endsWith('.xlsx')
+  );
+}
+
+async function waitForProcessTargets(processId, targets, args, batchId, outPath) {
+  const targetIds = new Set(targets.map((target) => target.documentId));
+  const deadline = Date.now() + args.waitTimeoutMs;
+
+  while (Date.now() < deadline) {
+    const body = await apiFetch(`/api/documents/process/${processId}`);
+    const rows = (body.data ?? []).filter((doc) => targetIds.has(doc.id));
+    const byId = new Map(rows.map((doc) => [doc.id, doc]));
+    const missing = targets.filter((target) => !byId.has(target.documentId));
+    if (missing.length > 0) {
+      throw new Error(
+        `Documentos desapareceram durante o replay: ${missing.map((target) => target.documentId).join(',')}`,
+      );
+    }
+
+    const processing = targets.filter(
+      (target) => byId.get(target.documentId)?.aiProcessingStatus === 'processing',
+    );
+    if (processing.length === 0) {
+      const failed = targets.filter(
+        (target) => byId.get(target.documentId)?.aiProcessingStatus === 'failed',
+      );
+      for (const target of targets) {
+        const status = byId.get(target.documentId)?.aiProcessingStatus;
+        appendFileSync(
+          outPath,
+          `${JSON.stringify({
+            batchId,
+            at: new Date().toISOString(),
+            ...target,
+            status: status === 'completed' ? 'terminal_completed' : 'terminal_failed',
+          })}\n`,
+        );
+      }
+      return { completed: targets.length - failed.length, failed: failed.length };
+    }
+
+    console.log(
+      `[${batchId}] proc=${processId} aguardando ${processing.length}/${targets.length} documento(s)`,
+    );
+    await sleep(args.pollMs);
+  }
+
+  throw new Error(
+    `Timeout aguardando processo ${processId} apos ${Math.round(args.waitTimeoutMs / 60000)} min`,
+  );
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!TOKEN) throw new Error('API_TOKEN ausente no ambiente.');
@@ -197,9 +299,12 @@ async function main() {
   for (const proc of processes) {
     if (args.excludeProcessIds.has(proc.id)) continue;
     if (args.processIds && !args.processIds.has(proc.id)) continue;
+    if (!isInsideProcessWindow(proc, args)) continue;
 
     const docs = await apiFetch(`/api/documents/process/${proc.id}`);
-    const rows = (docs.data ?? []).filter((doc) => args.types.has(doc.documentType));
+    const rows = (docs.data ?? []).filter(
+      (doc) => args.types.has(doc.documentType) && isSupportedEspelho(doc, args),
+    );
     const selected = args.canonicalOnly ? selectCanonical(rows) : rows;
     for (const doc of selected) {
       if (alreadyDone.has(doc.id)) continue;
@@ -222,6 +327,11 @@ async function main() {
   );
   console.log(`[${batchId}] processos elegiveis: ${new Set(plan.map((t) => t.processId)).size}`);
   console.log(`[${batchId}] documentos no lote: ${plan.length}`, byType);
+  if (args.fromEtd) {
+    console.log(
+      `[${batchId}] janela ETD: >=${args.fromEtd}; ETD nulo=${args.includeNullEtd ? 'incluido' : 'excluido'}`,
+    );
+  }
 
   // A state machine nao aceita completed -> validating: a extracao termina mas a
   // revalidacao automatica falha. Sinalizado, nao bloqueado.
@@ -248,30 +358,84 @@ async function main() {
 
   let ok = 0;
   let failed = 0;
-  for (const [index, target] of plan.entries()) {
-    const record = { batchId, at: new Date().toISOString(), ...target };
-    try {
-      await apiFetch(`/api/documents/${target.documentId}/reprocess`, { method: 'POST' });
-      ok += 1;
-      appendFileSync(outPath, `${JSON.stringify({ ...record, status: 'enqueued' })}\n`);
-      console.log(
-        `  [${index + 1}/${plan.length}] OK doc=${target.documentId} ${target.documentType}`,
-      );
-    } catch (error) {
-      failed += 1;
-      appendFileSync(
-        outPath,
-        `${JSON.stringify({ ...record, status: 'failed', error: error.message, httpStatus: error.status ?? null })}\n`,
-      );
-      console.error(
-        `  [${index + 1}/${plan.length}] FALHA doc=${target.documentId}: ${error.message}`,
-      );
+  let terminalCompleted = 0;
+  let terminalFailed = 0;
+  const grouped = new Map();
+  for (const target of plan) {
+    const group = grouped.get(target.processId) ?? [];
+    group.push(target);
+    grouped.set(target.processId, group);
+  }
+  const processGroups = [...grouped.entries()];
+  let globalIndex = 0;
+
+  for (const [processIndex, [processId, processTargets]] of processGroups.entries()) {
+    const enqueuedTargets = [];
+    for (const target of processTargets) {
+      globalIndex += 1;
+      const record = { batchId, at: new Date().toISOString(), ...target };
+      try {
+        await apiFetch(`/api/documents/${target.documentId}/reprocess`, { method: 'POST' });
+        ok += 1;
+        enqueuedTargets.push(target);
+        appendFileSync(outPath, `${JSON.stringify({ ...record, status: 'enqueued' })}\n`);
+        console.log(
+          `  [${globalIndex}/${plan.length}] OK doc=${target.documentId} ${target.documentType}`,
+        );
+      } catch (error) {
+        failed += 1;
+        appendFileSync(
+          outPath,
+          `${JSON.stringify({ ...record, status: 'enqueue_failed', error: error.message, httpStatus: error.status ?? null })}\n`,
+        );
+        console.error(
+          `  [${globalIndex}/${plan.length}] FALHA doc=${target.documentId}: ${error.message}`,
+        );
+      }
+      if (globalIndex < plan.length) await sleep(args.delayMs);
     }
-    if (index < plan.length - 1) await sleep(args.delayMs);
+
+    if (args.waitPerProcess && enqueuedTargets.length > 0) {
+      try {
+        const terminal = await waitForProcessTargets(
+          processId,
+          enqueuedTargets,
+          args,
+          batchId,
+          outPath,
+        );
+        terminalCompleted += terminal.completed;
+        terminalFailed += terminal.failed;
+        console.log(
+          `[${batchId}] proc=${processId} terminal: completos=${terminal.completed} falhos=${terminal.failed}`,
+        );
+      } catch (error) {
+        failed += enqueuedTargets.length;
+        appendFileSync(
+          outPath,
+          `${JSON.stringify({
+            batchId,
+            at: new Date().toISOString(),
+            processId,
+            status: 'wait_failed',
+            error: error.message,
+          })}\n`,
+        );
+        console.error(`[${batchId}] proc=${processId} FALHA NA ESPERA: ${error.message}`);
+        break;
+      }
+    }
+
+    if (processIndex < processGroups.length - 1 && globalIndex < plan.length) {
+      await sleep(args.delayMs);
+    }
   }
 
-  console.log(`[${batchId}] enfileirados=${ok} falhas=${failed} log=${outPath}`);
-  if (failed) process.exitCode = 1;
+  console.log(
+    `[${batchId}] enfileirados=${ok} falhas=${failed} ` +
+      `terminais_ok=${terminalCompleted} terminais_falha=${terminalFailed} log=${outPath}`,
+  );
+  if (failed || terminalFailed) process.exitCode = 1;
 }
 
 main().catch((error) => {

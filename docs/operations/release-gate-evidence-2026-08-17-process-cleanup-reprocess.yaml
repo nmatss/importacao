@@ -1,0 +1,106 @@
+release_gate_evidence:
+  plan_id: process-cleanup-reprocess-2026-08-17
+  status: completed_with_quarantine
+  checked_at: '2026-08-17T16:22:38-03:00'
+  operator: Nicolas
+
+  approval:
+    status: passed
+    evidence: 'Usuario autorizou prosseguir em 2026-08-17.'
+
+  dry_run:
+    status: passed
+    transaction_read_only: true
+    process_count_before: 274
+    delete_target_count: 170
+    process_count_expected_after: 104
+    demo_document_count: 11
+    null_etd_non_demo_count: 17
+
+  backup:
+    status: passed
+    created_at: '2026-08-17T15:36:10-03:00'
+    database_file: /home/nicolas/backups/importacao/importacao_2026-08-17_183610.pgdump
+    database_sha256: a4cbc9a2f6cf62def097429d7aa6e3b66ea79155342d928c4e2a3f6b7de0614c
+    database_integrity: 'pg_restore --list OK; full restore test OK (40 tables, 274 processes)'
+    uploads_file: /home/nicolas/backups/importacao/importacao_2026-08-17_183610_uploads.tar.gz
+    uploads_sha256: 5e0420fc7ccfd66ec56873ed5639cecd4356e75dffc3eed8b9033e18233e0eef
+    uploads_integrity: tar_list_ok
+
+  cleanup:
+    status: passed
+    batch_id: cleanup-processes-20260817T1538BRT
+    deleted_processes: 170
+    process_count_after: 104
+    old_process_count_after: 0
+    demo_count_after: 1
+    demo_document_count_after: 11
+    preserved_null_etd_non_demo_after: 17
+    duplicate_process_code_groups: 0
+    orphan_fk_count: 0
+    api_health_after: passed
+
+  pilot:
+    status: passed_with_one_quarantined_document
+    process_id: 259
+    process_code: PK2052602TJ
+    document_ids: [147, 148, 149, 150, 151]
+    started_at: '2026-08-17T15:44:30-03:00'
+    completed_at: '2026-08-17T15:49:59-03:00'
+    enqueued: 5
+    terminal_success: 4
+    terminal_failure: 1
+    bounded_retry_document_id: 151
+    bounded_retry_result: terminal_failed
+    evidence_files:
+      - /home/nicolas/backups/importacao/pilot-reprocess-20260817.jsonl
+      - /home/nicolas/backups/importacao/pilot-retry-invoice-20260817.jsonl
+
+  replay:
+    status: completed_with_quarantine
+    batch_id: reproc-2026-08-17T18-51-15-941Z
+    snapshot_candidate_documents: 37
+    snapshot_processes: 19
+    enqueued: 37
+    terminal_success: 32
+    terminal_failure: 5
+    pending: 0
+    excluded_espelho_pdf: 2
+    evidence_file: /home/nicolas/backups/importacao/reprocess-full-20260817.jsonl
+    quarantined_document_ids: [28, 76, 88, 92, 151]
+    concurrent_uploads_during_window:
+      documents: 3
+      document_ids: [152, 153, 154]
+      terminal_success: 2
+      terminal_failure: 1
+      note: >-
+        Estes documentos entraram depois do snapshot do lote. Foram processados
+        pela fila normal e incorporados a reconciliacao final; o documento 154
+        ficou em quarentena junto dos cinco erros do snapshot.
+
+  final_reconciliation:
+    status: passed_with_six_quarantined_invoices
+    acceptable_variance: 0
+    current_canonical_documents: 40
+    terminal_success: 34
+    terminal_failure: 6
+    terminal_processing: 0
+    quarantined_document_ids: [28, 76, 88, 92, 151, 154]
+    reconciled_processes: 19
+    reconciliation_http_failures: 0
+    validation_processes: 19
+    validation_checks_per_process: 29
+    queue_non_terminal: 0
+    active_leases: 0
+    demo_unchanged: true
+    demo_extraction_runs_since_replay: 0
+    demo_history_rows_since_replay: 0
+    chat_messages_sent_during_window: 0
+    api_configuration_restored: true
+    drive_root_operational_after_restore: false
+    drive_root_note: >-
+      O compose normal foi restaurado, mas o valor de producao continua sendo o
+      placeholder historico "your-root-folder-id"; o Drive ja estava inativo
+      antes desta janela e nenhuma configuracao foi perdida pela operacao.
+    health_ready: passed
+    health_checks: [db, redis, reverse_proxy]

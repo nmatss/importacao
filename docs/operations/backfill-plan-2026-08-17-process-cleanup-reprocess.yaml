@@ -1,0 +1,170 @@
+backfill_plan:
+  id: process-cleanup-reprocess-2026-08-17
+  status: completed_with_quarantine
+  owner: Nicolas
+  requested_by: Odett Hammes dos Santos
+  approved_by: user
+  approval_evidence: "Conversa de 2026-08-17: 'pode seguir com o que a Odett solicitou'"
+  reason: >-
+    Remover a sujeira historica importada antes de maio de 2025, preservar o
+    DEMO e reprocessar os documentos operacionais com as regras atuais.
+  target_table: import_processes
+  partition_count: 170
+  size_per_partition_mb: 0.1
+  concurrency: 1
+  minutes_per_partition: 0.01
+  downstream_tables:
+    - alerts
+    - communications
+    - comparison_acceptances
+    - comparison_field_overrides
+    - currency_exchanges
+    - document_corrections
+    - document_extracted_fields
+    - document_extraction_history
+    - document_extraction_runs
+    - documents
+    - email_attachment_documents
+    - email_ingestion_logs
+    - espelhos
+    - follow_up_tracking
+    - li_tracking
+    - process_custom_stages
+    - process_events
+    - process_items
+    - process_operational_records
+    - sydle_purchase_payments
+    - validation_result_history
+    - validation_results
+    - validation_runs
+
+  source_of_truth:
+    database: importacao
+    process_table: import_processes
+    document_table: documents
+    process_date_column: etd
+    cutoff_inclusive: '2025-05-01'
+    preserved_demo:
+      process_id: 264
+      process_code: DEMO-IM0712602NB-E227210
+    null_etd_policy: preserve
+    null_etd_reason: >-
+      Os 17 processos sem ETD sao operacionais recentes, criados entre marco e
+      junho de 2026; varios possuem documentos e eventos. ETD nulo nao prova
+      que o processo seja anterior ao corte.
+
+  cleanup:
+    mode: delete
+    target_table: import_processes
+    predicate: "etd < DATE '2025-05-01' AND id <> 264"
+    expected_processes_before: 274
+    expected_processes_deleted: 170
+    expected_processes_after: 104
+    expected_old_processes_after: 0
+    expected_demo_after: 1
+    expected_null_etd_non_demo_after: 17
+    direct_relationships_impacted: 24
+    known_affected_rows:
+      alerts_set_null: 3794
+      communications_set_null: 1
+      document_corrections_cascade: 8
+      documents_cascade: 2
+      email_ingestion_logs_set_null_explicitly: 1
+      follow_up_tracking_cascade: 170
+      li_tracking_set_null_explicitly: 19
+      process_events_cascade: 172
+      validation_results_cascade: 26
+    idempotency: >-
+      A selecao e estritamente limitada por ETD e pelo ID do DEMO. Depois da
+      primeira execucao reconciliada, repetir a limpeza seleciona zero linhas.
+
+  reprocess:
+    mode: replay
+    process_scope: >-
+      Processos remanescentes com ETD nulo ou ETD maior/igual a 2025-05-01,
+      sempre excluindo process_id 264.
+    canonical_key: [process_id, document_type]
+    canonical_order: [created_at_desc, id_desc]
+    supported_types:
+      - invoice
+      - proforma_invoice
+      - packing_list
+      - ohbl
+      - draft_bl
+      - draft_duimp
+      - duimp
+      - certificate
+      - espelho
+    exclusions:
+      - process_id 264 (DEMO)
+      - document type other (requires human triage)
+      - espelho PDF (parser only supports XLSX safely)
+    expected_canonical_documents: 37
+    expected_processes: 19
+    concurrency: 1
+    retry_policy: 'API/queue retryLimit=2; operator resumes only from JSONL evidence'
+    idempotency: >-
+      Re-extraction is not fully idempotent because it archives history and can
+      emit Drive/Chat side effects. Resume logs prevent duplicate POSTs, and
+      publish must remain paused until reconciliation passes.
+
+  execution:
+    trigger: manual_maintenance_window
+    publish_pause_state: restored
+    downstream_notification: >-
+      Odett/operacao devem considerar os processos em manutencao durante o
+      lote; nenhuma validacao operacional deve ser tomada como final ate o
+      fechamento da reconciliacao.
+    batches:
+      - name: cleanup
+        size: 170
+        transaction: serializable_single_transaction
+      - name: pilot
+        size: one_process
+      - name: document_replay
+        size: one_process_at_a_time
+    stop_conditions:
+      - DEMO ausente ou alterado
+      - contagem de limpeza diferente de 170
+      - backup sem integridade ou uploads sem snapshot
+      - fila ou lease ativa antes do piloto
+      - falha sistemica de OCR, Vertex, Drive, Chat, banco ou Redis
+      - candidato sem estado terminal ao fim do timeout
+
+  rollback:
+    database: >-
+      Restaurar o pg_dump custom-format criado imediatamente antes da limpeza.
+      A restauracao integral exige janela de incidente e substitui todo o banco.
+    uploads: >-
+      Restaurar o tar.gz do volume uploads criado no mesmo batch do pg_dump.
+    external_side_effects: >-
+      Restauracao do banco nao remove arquivos do Drive nem mensagens do Chat.
+      Por isso o reprocessamento so pode iniciar com publicacao pausada ou com
+      supressao explicita desses efeitos.
+
+  reconciliation:
+    acceptable_variance: 0
+    gates:
+      - 'import_processes total = 104'
+      - 'processos com etd < 2025-05-01, exceto DEMO = 0'
+      - 'DEMO ID 264 existe, codigo confere e possui 11 documentos'
+      - 'processos ETD nulo nao-DEMO = 17'
+      - 'duplicidade de process_code = 0'
+      - 'FKs orfas = 0'
+      - 'todos os candidatos de replay possuem run novo ou falha terminal'
+      - 'fila vazia e leases ativas = 0'
+      - 'historico anterior preservado'
+      - 'API, PostgreSQL e Redis saudaveis'
+    evidence_file: docs/operations/release-gate-evidence-2026-08-17-process-cleanup-reprocess.yaml
+
+  risk:
+    level: medium
+    reasons:
+      - five snapshot invoices and one concurrent invoice need manual review
+      - the normal production Drive root remains a placeholder
+      - the normal extraction lease is shorter than the slowest observed extraction
+    residual_controls:
+      - all replay candidates reached a terminal state
+      - six failed invoices are explicitly quarantined and were not projected
+      - queue has no non-terminal job and documents have no active lease
+      - API, PostgreSQL, Redis and reverse proxy passed the final health gate

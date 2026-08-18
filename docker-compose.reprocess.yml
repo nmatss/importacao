@@ -1,0 +1,21 @@
+# Temporary production override for a controlled document replay window.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.reprocess.yml up -d --no-deps api
+#
+# Restore the normal API configuration after reconciliation:
+#   docker compose -f docker-compose.prod.yml up -d --no-deps api
+services:
+  api:
+    environment:
+      # Prevent duplicate files/reports and external operational noise while
+      # stored extraction data is rebuilt. Vertex credentials remain enabled.
+      GOOGLE_DRIVE_ROOT_FOLDER_ID: ''
+      GOOGLE_DRIVE_PRE_CONS_FOLDER_ID: ''
+      GOOGLE_CHAT_WEBHOOK_URL: ''
+      # Match the 25-minute queue expiry. A shorter lease could allow a second
+      # worker to claim a legitimately slow OCR extraction.
+      DOCUMENT_EXTRACTION_LEASE_MS: '1500000'
+      # Avoid creating derived espelhos between document updates. Reconcile
+      # once per process after the replay reaches a terminal state.
+      AUTO_GENERATE_ESPELHO: '0'
