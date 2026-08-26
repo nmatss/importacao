@@ -314,3 +314,51 @@ Gmail continua operacional; fallback IMAP e raiz do Drive continuam pendentes.
 - `docker compose config --quiet` e `git diff --check`: passaram;
 - `npm run format:check`: continua falhando nos mesmos 19 arquivos do baseline;
   nenhum arquivo desta correção está na lista.
+
+## Complemento — Fechamento Operacional E Qualidade — 2026-08-26
+
+### Estado Atual Das Integrações
+
+| Integração    | Evidência sanitizada                             | Estado                                           |
+| ------------- | ------------------------------------------------ | ------------------------------------------------ |
+| Gmail         | `getProfile`, scheduler ativo e logs terminais   | **PASSOU**                                       |
+| SMTP          | `transport.verify()`, sem mensagem               | **PASSOU**                                       |
+| IMAP          | login/logout                                     | **FALHOU**; fallback indisponível                |
+| Drive         | acesso read-only da raiz                         | **FALHOU**; 404/inacessível                      |
+| SYDLE         | três runs mais recentes, 2 updates e 0 erro cada | **PASSOU**                                       |
+| Cert-API      | health interno, banco e Sheets                   | **PASSOU**                                       |
+| Odoo          | autenticação read-only                           | **FALHOU**; DNS `ENOTFOUND`                      |
+| Google Groups | configuração obrigatória presente                | **CONFIGURADO**; sem identidade real de teste    |
+| Google Chat   | URL válida, nenhuma publicação nesta rodada      | **NÃO PROVADO AO VIVO**                          |
+| IA            | Vertex ativo; documentos recentes processados    | **EVIDÊNCIA HISTÓRICA**; smoke pago não repetido |
+
+O probe IMAP expôs e levou à correção de um risco separado da credencial: um
+evento `error` tardio do socket podia derrubar o processo Node. O novo smoke
+sanitizado é retomável e não lê conteúdo nem dispara mensagens.
+
+### Qualidade E Performance
+
+- `format:check` passou após normalização mecânica do baseline de 19 arquivos;
+- relatórios runtime da Cert-API foram retirados do escopo do Prettier;
+- o build web agora força `NODE_ENV=production`; `ProcessDetailPage` mede
+  246,60 kB no artefato real e o warning anterior de ~515 kB desapareceu;
+- nenhuma mudança de banco ou migration foi necessária.
+
+### Gate Atualizado
+
+- lint e typecheck: passaram;
+- unitários: API 981 + 1 skip; web 135;
+- integração: API E2E 48/48; Playwright 4/4 desktop/mobile;
+- Cert-API: Ruff, 509 testes e `pip-audit` passaram;
+- build, `format:check`, `git diff --check` e audit alto/crítico passaram;
+- seis advisories npm moderados permanecem aceitos/documentados;
+- Compose local passou; Compose produtivo local falhou fechado sem secret, e a
+  configuração real deve ser revalidada no host via SOPS durante o deploy.
+
+### Bloqueios Que Não Podem Ser Corrigidos Pelo Código
+
+- credencial/app password IMAP;
+- ID/compartilhamento da raiz do Drive;
+- DNS/hostname do Odoo;
+- webhook/chave do Google Chat e destinatário controlado para prova real;
+- conferência humana/ground truth dos documentos de baixa confiança.

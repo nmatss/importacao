@@ -15,31 +15,38 @@ Ultima atualizacao: 2026-08-26 (ver
 
 - Gmail API autenticou no probe local e a produção registrou ingestão até
   26/08, sem mensagem presa em `processing`. IMAP ainda recusa autenticação e a
-  raiz do Google Drive respondeu HTTP 404 no ambiente local.
+  raiz do Google Drive respondeu HTTP 404. O health administrativo agora prova
+  acesso read-only e não confunde ID presente com pasta disponível.
 - O código anterior tentava autenticar o relay SMTP com usuário placeholder e
   recebia `EAUTH`. O release `41d0190` reconhece o relay sem auth e passou em
   `transport.verify()` dentro do contêiner de produção, sem envio.
 - Sem IMAP, o fallback de leitura está indisponível. O Drive falha de forma não
   bloqueante e o documento ainda pode ser salvo localmente, mas a
   cópia/organização externa não ocorre.
+- Um timeout tardio do ImapFlow podia emitir `error` sem listener depois do
+  probe e encerrar o processo Node. O código e o smoke foram corrigidos; isso
+  evita a queda, mas não conserta a credencial do provider.
 - O sandbox descartável GreenMail provou o caminho SMTP/IMAPS da aplicação,
   inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
   corrente em credencial/provider/operação, não no contrato básico do código.
 
-Status: **PARCIALMENTE RESOLVIDO / ALTO.** SMTP publicado e verificado; validar
-credencial/app password do IMAP, corrigir ou compartilhar o folder raiz e usar
-destinatário controlado antes do primeiro envio real.
+Status: **PARCIALMENTE RESOLVIDO / ALTO.** SMTP e Gmail publicados e
+verificados; validar credencial/app password do IMAP, corrigir ou compartilhar
+o folder raiz e usar destinatário controlado antes do primeiro envio real.
 
-## ALTO - Integrações Auxiliares Continuam Sem Configuração Corrente
+## ALTO - Integrações Auxiliares Parcialmente Operacionais
 
-- `GOOGLE_SHEETS_SPREADSHEET_ID`, ID de Follow-Up e chave da Cert-API estão
-  ausentes. O Compose local agora valida e permite subir serviços independentes
-  sem essas credenciais; os endpoints correspondentes continuam fail-closed.
-- Odoo e IA local apontam para DNS da rede Compose e não resolvem fora dela.
-- SYDLE está desabilitado e sem configuração completa.
+- A API principal continua sem ID de Follow-Up Sheets. A Cert-API, porém, está
+  healthy em produção, com banco conectado e Sheets configurado no próprio
+  container.
+- Odoo está configurado, mas a autenticação falha por DNS `ENOTFOUND`.
+- SYDLE está habilitado em `sydle_one_class`: as três últimas execuções
+  observadas passaram com dois registros atualizados e zero erro.
+- Produção usa Vertex com egress externo permitido; o histórico documental
+  recente prova execução, mas nenhum smoke pago foi disparado nesta rodada.
 
-Status: **ABERTO / ALTO** para prontidão integrada; corrigir configuração sem
-registrar secrets no Git e executar smoke dentro da rede do projeto.
+Status: **PARCIALMENTE RESOLVIDO / ALTO**; corrigir Follow-Up/Odoo sem registrar
+secrets no Git. SYDLE e Cert-API estão operacionais no recorte observado.
 
 ## RESOLVIDO - Correcoes De Frete, Packing List E Importador Implantadas
 

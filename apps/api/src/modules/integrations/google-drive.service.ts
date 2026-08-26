@@ -130,6 +130,31 @@ export const googleDriveService = {
     return (await this.isConfigured()) && Boolean(getConfiguredRootFolderId());
   },
 
+  /** Read-only proof that the configured root exists, is a folder and is accessible. */
+  async testRootAccess(): Promise<boolean> {
+    const rootFolderId = getConfiguredRootFolderId();
+    if (!(await this.isConfigured()) || !rootFolderId) return false;
+
+    try {
+      const drive = getDriveClient();
+      const response = await withTimeout(
+        drive.files.get({
+          fileId: rootFolderId,
+          fields: 'id,mimeType,trashed',
+          supportsAllDrives: true,
+        }),
+        'testRootAccess',
+      );
+      return (
+        response.data.mimeType === 'application/vnd.google-apps.folder' &&
+        response.data.trashed !== true
+      );
+    } catch (error) {
+      logger.warn({ err: error }, 'Configured Google Drive root is not accessible');
+      return false;
+    }
+  },
+
   async findFolder(parentId: string, folderName: string): Promise<string | null> {
     const drive = getDriveClient();
     const response = await withTimeout(

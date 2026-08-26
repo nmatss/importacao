@@ -16,7 +16,7 @@
     "dev:web": "npm run dev -w apps/web",
     "build": "npm run build:api && npm run build:web",
     "build:api": "npm run build -w apps/api",
-    "build:web": "npm run build -w apps/web",
+    "build:web": "NODE_ENV=production npm run build -w apps/web",
     "db:generate": "npm run db:generate -w apps/api",
     "db:migrate": "npm run db:migrate -w apps/api",
     "db:seed": "npm run db:seed -w apps/api",
@@ -33,6 +33,7 @@
     "test:watch": "npm test -w apps/api -- --watch",
     "smoke:ia-local-docintel": "node scripts/smoke-ia-local-docintel.mjs",
     "smoke:ai-service-docintel": "tsx scripts/smoke-ai-service-docintel.mjs",
+    "smoke:integrations": "node scripts/smoke-integrations.mjs --network",
     "prepare": "husky"
   },
   "lint-staged": {

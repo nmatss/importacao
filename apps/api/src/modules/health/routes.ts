@@ -96,12 +96,18 @@ router.get(
     // A resposta do proprio servico, nao uma segunda opiniao. Reimplementar aqui
     // a nocao de "raiz configurada" criaria duas definicoes que podem divergir, e
     // um /health que mente e pior que um /health que nao existe.
-    const driveRootOk = await googleDriveService.isRootConfigured().catch(() => false);
+    const driveRootConfigured = await googleDriveService.isRootConfigured().catch(() => false);
+    const driveRootAccessible = driveRootConfigured
+      ? await googleDriveService.testRootAccess().catch(() => false)
+      : false;
 
     const integracoes = {
       googleDrive: {
         credenciais: configured(process.env.GOOGLE_DRIVE_CLIENT_EMAIL),
-        pastaRaiz: driveRootOk,
+        // Campo legado preservado: agora representa disponibilidade real.
+        pastaRaiz: driveRootAccessible,
+        pastaRaizConfigurada: driveRootConfigured,
+        pastaRaizAcessivel: driveRootAccessible,
         pastaPreCons: configured(process.env.GOOGLE_DRIVE_PRE_CONS_FOLDER_ID),
       },
       followUpSheet: {
@@ -124,15 +130,17 @@ router.get(
     // Cada aviso e uma integracao que o operador provavelmente pensa estar
     // ligada e nao esta.
     const avisos: string[] = [];
-    if (!integracoes.googleDrive.pastaRaiz) {
+    if (!integracoes.googleDrive.pastaRaizConfigurada) {
       avisos.push('GOOGLE_DRIVE_ROOT_FOLDER_ID ausente ou placeholder — Drive inativo');
+    } else if (!integracoes.googleDrive.pastaRaizAcessivel) {
+      avisos.push('GOOGLE_DRIVE_ROOT_FOLDER_ID configurado, mas inacessivel — Drive inativo');
     }
     if (!integracoes.followUpSheet.planilha) {
       avisos.push(
         'GOOGLE_SHEETS_FOLLOW_UP_ID vazio — allow-list da Follow Up degrada para o fluxo antigo',
       );
     }
-    if (integracoes.documentos.fonte !== 'email' && !integracoes.googleDrive.pastaRaiz) {
+    if (integracoes.documentos.fonte !== 'email' && !integracoes.googleDrive.pastaRaizAcessivel) {
       avisos.push('DOCUMENT_SOURCE inclui drive mas a pasta raiz nao esta configurada');
     }
     if (!integracoes.alertas.canalChat) {

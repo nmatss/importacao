@@ -394,7 +394,13 @@ npm run docker:up     # Docker Compose up
 npm run docker:down   # Docker Compose down
 npm run docker:build  # Docker Compose build
 bash scripts/backup-db.sh  # Backup PostgreSQL (retenção 7 dias)
+# Após build/deploy: prova integrações sem ler conteúdo nem enviar mensagem
+docker exec importacao-api node /app/scripts/smoke-integrations.mjs --network
 ```
+
+O smoke de integrações imprime somente estados sanitizados. Ele autentica
+Gmail/IMAP, verifica o transporte SMTP e faz leitura de metadados da raiz do
+Drive. O Google Chat tem apenas formato validado: nenhuma mensagem é publicada.
 
 ### Endpoints de Operacao
 

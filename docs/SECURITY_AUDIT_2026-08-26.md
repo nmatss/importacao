@@ -11,6 +11,10 @@ Express, JavaScript/React e FastAPI.
 Não houve pentest em produção, alteração de secret, envio de e-mail, deploy ou
 escrita remota. As classificações seguem impacto potencial no produto.
 
+Atualização da continuação: os releases auditados foram posteriormente
+implantados com autorização, backup e smoke. A revisão adicional abaixo fez
+probes read-only em produção, sem revelar valores nem enviar e-mail/Chat.
+
 ## Achados Corrigidos
 
 ### ALTO — Reinterpretação Do Envelope SMTP Pelo `From`
@@ -81,6 +85,26 @@ Testes removem `script`, `style`, SVG, iframe, handlers, `javascript:`, `data:` 
 CSS fora da allow-list, preservando apenas a tabela e os estilos usados pelos
 templates.
 
+### ALTO — Erro Tardio Do IMAP Podia Encerrar A API
+
+Após `testConnection()` já retornar `false`, o ImapFlow ainda podia emitir um
+evento `error` de timeout sem listener. Em Node, isso encerra o processo. O
+cliente agora registra o evento de forma redigida e fecha o socket em todos os
+desfechos. Um teste reproduz falha de conexão seguida por erro assíncrono.
+
+- `apps/api/src/modules/email-ingestion/imap.service.ts`
+- `apps/api/src/modules/email-ingestion/__tests__/imap.service.test.ts`
+
+### MÉDIO — Health Do Drive Confundia Configuração Com Disponibilidade
+
+O health administrativo só validava presença de credencial/ID e podia mostrar
+Drive pronto com uma raiz inexistente. O serviço ganhou `testRootAccess()`,
+read-only, e o contrato agora separa `pastaRaizConfigurada` de
+`pastaRaizAcessivel`, sem expor o ID.
+
+- `apps/api/src/modules/integrations/google-drive.service.ts`
+- `apps/api/src/modules/health/routes.ts`
+
 ## Controles Confirmados
 
 - Helmet está habilitado; CORS falha fechado em produção sem origem explícita;
@@ -124,12 +148,14 @@ com `--omit=dev`, somente React Router/React Router DOM permanecem no runtime.
 Não foi usado `npm audit fix --force`. Criar trilhas separadas de upgrade com
 regressão de rotas, migrations e E2E.
 
-### MÉDIO — Integrações Com Credenciais/IDs Inválidos Ou Inacessíveis
+### ALTO — Integrações Com Credenciais/IDs Inválidos Ou Inacessíveis
 
-SMTP e IMAP recusaram autenticação; a raiz do Drive respondeu 404. Não há
-evidência de comprometimento, mas há indisponibilidade. Validar conta, app
-password/permissões e compartilhamento do folder; rotacionar credenciais apenas
-se o responsável confirmar expiração ou exposição.
+SMTP e Gmail passam em produção. IMAP não autentica, a raiz do Drive responde
+404 e Odoo não resolve o hostname configurado. O webhook do Chat tem formato
+válido, mas a última entrega autorizada falhou por chave inválida. Não há
+evidência de comprometimento; há indisponibilidade parcial. Validar conta, app
+password, DNS/permissões, compartilhamento do folder e webhook; rotacionar
+credenciais apenas pelo responsável.
 
 ### BAIXO — Escopo Amplo Do Service Account Do Drive
 
@@ -140,12 +166,11 @@ operações fora dela.
 
 ## Resultado
 
-Nenhum achado CRÍTICO foi confirmado. Os três achados ALTOS no código foram
-corrigidos e testados, mas aguardam commit/deploy autorizado. Os bloqueios de
-credencial/configuração impedem afirmar prontidão operacional de e-mail e Drive.
+Nenhum achado CRÍTICO foi confirmado. Os achados ALTOS no código foram
+corrigidos e testados. Os bloqueios de credencial/configuração ainda impedem
+afirmar prontidão total das integrações.
 
-O gate final passou em lint, typecheck, 977 testes API, 131 testes web, 48 testes
-E2E da API, quatro Playwright desktop/mobile, 509 testes Python, build,
-`npm audit` para alto/crítico e `pip-audit`. O
-`format:check` permanece vermelho apenas pelos mesmos 19 arquivos fora do padrão
-já presentes no baseline.
+O gate final atualizado passou em lint, typecheck, 981 testes API, 135 testes
+web, 48 testes E2E da API, quatro Playwright desktop/mobile, 509 testes Python,
+build, `format:check`, `npm audit` para alto/crítico e `pip-audit`. Seis
+advisories npm moderados permanecem documentados.

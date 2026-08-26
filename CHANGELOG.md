@@ -13,6 +13,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   Câmbios durante o carregamento assíncrono do detalhe do processo.
 - Testes de nomes acessíveis nos carrosséis mobile do fluxo do processo e do
   ciclo logístico.
+- Smoke sanitizado e reutilizável para Gmail, IMAP, SMTP, Drive e Google Chat,
+  sem leitura de conteúdo, envio de mensagem ou exposição de credenciais.
+- Probe read-only que distingue pasta raiz do Drive meramente configurada de
+  pasta realmente acessível.
 
 ### Fixed
 
@@ -20,6 +24,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   redirecionado prematuramente para Documentos.
 - Setas mobile do timeline e do ciclo logístico, além do fechamento do seletor
   de status, agora possuem tipo e nome acessível explícitos.
+- Erros tardios de socket do IMAP deixam de encerrar o processo Node após um
+  teste/login malsucedido; o cliente também é fechado em todos os desfechos.
+- Build web passa a fixar `NODE_ENV=production`, eliminando artefatos locais
+  aproximadamente duas vezes maiores e o falso warning de chunk.
+- Baseline de 19 arquivos fora do Prettier foi normalizado; relatórios JSON
+  gerados pela Cert-API foram excluídos do escopo de formatação.
 
 ### Verification
 
@@ -29,6 +39,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   nenhum pendente/lease/erro de extração e nenhum e-mail em `processing`.
 - Qualidade documental não foi declarada 100%: 41 documentos permanecem com
   confiança abaixo de 90%, incluindo 16 `other` sem extrator dedicado.
+- Produção: Gmail/SMTP/SYDLE/Cert-API passaram; IMAP, Drive e Odoo continuam
+  bloqueados externamente; Google Chat não recebeu publicação de teste.
 
 ## [41d0190] - 2026-08-26 - Auditoria de integrações, e-mail e UX
 

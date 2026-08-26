@@ -15,5 +15,6 @@ apps/web/dist
 apps/api/dist
 apps/cert-api/__pycache__
 apps/cert-api/.pytest_cache
-scripts/
+scripts/*
+!scripts/smoke-integrations.mjs
 docs/

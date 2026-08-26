@@ -1703,3 +1703,27 @@ Evidências:
 - Gate: lint, typecheck, 977 testes API + 1 skip, 135 web, build, Playwright
   4/4, audit sem alto/crítico, Compose e diff check passaram. `format:check`
   preserva os mesmos 19 arquivos preexistentes.
+
+## 2026-08-26 — Fechamento de integrações, robustez e baseline
+
+- Produção read-only: Gmail e SMTP passaram; IMAP falhou. O probe IMAP revelou
+  um `error` tardio sem listener que podia encerrar Node após o resultado; o
+  cliente agora absorve/loga o evento e sempre fecha o socket.
+- O health do Drive deixou de tratar apenas presença de ID como disponibilidade:
+  `testRootAccess()` prova read-only que a raiz existe, é pasta e não está na
+  lixeira. A raiz produtiva continua inacessível/404.
+- Novo `scripts/smoke-integrations.mjs` verifica configuração e rede de
+  Gmail/IMAP/SMTP/Drive, validando Chat sem publicar e sem imprimir valores.
+- Estado das integrações: SYDLE passou nas três últimas execuções observadas;
+  Cert-API está healthy com banco/Sheets; Odoo falha por DNS; Google Groups está
+  configurado fail-closed; Chat não foi publicado nesta rodada.
+- `NODE_ENV=production` foi fixado no build web. O chunk de detalhe caiu do
+  artefato local enganoso de ~515 kB para 246,60 kB, igual ao container de
+  produção e sem warning.
+- Os 19 arquivos do baseline foram formatados mecanicamente e relatórios
+  gerados da Cert-API entraram no `.prettierignore`; `format:check` passou.
+- Gate local: lint/typecheck; API 981 + 1 skip; web 135; API E2E 48; Playwright
+  4; Python 509; build, format, audit alto/crítico, pip-audit e diff check
+  passaram. Seis moderadas npm continuam documentadas.
+- Limites: não houve e-mail/Chat real sem destino aprovado, nem replay cego dos
+  41 documentos abaixo de 90%; estado processado não certifica acurácia.

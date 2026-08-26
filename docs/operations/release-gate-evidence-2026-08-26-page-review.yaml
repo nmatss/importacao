@@ -61,3 +61,40 @@ release_gate_evidence:
     real_external_email_delivery: not_executed_without_controlled_recipient
     imap_fallback: failed_auth
     google_drive_root: failed_404
+
+  continuation_closure:
+    checked_at: '2026-08-26T10:25:00-03:00'
+    code:
+      imap_late_error_listener: passed
+      imap_client_cleanup: passed
+      drive_root_read_only_probe: passed
+      integration_smoke_sanitized: passed
+      deterministic_production_web_build: passed
+      repository_format_check: passed
+    integrations_production_read_only:
+      gmail: passed
+      smtp_transport: passed_without_send
+      imap: failed_auth_or_timeout
+      google_drive_root: failed_404
+      sydle_last_three_runs: passed
+      cert_api_database: passed
+      cert_api_sheets: passed
+      odoo: failed_dns
+      google_groups: configured_not_identity_tested
+      google_chat: configured_not_sent
+      vertex_ai: historical_execution_only
+    validation:
+      lint: passed
+      typecheck: passed
+      api_tests_passed: 981
+      api_tests_skipped: 1
+      web_tests_passed: 135
+      api_e2e_passed: 48
+      web_e2e_passed: 4
+      cert_api_tests_passed: 509
+      build: passed_without_chunk_warning
+      format_check: passed
+      npm_audit_high_critical: passed
+      npm_audit_moderate: 6
+      pip_audit: passed
+      git_diff_check: passed

@@ -21,7 +21,7 @@ function createClient() {
   const secure = process.env.IMAP_SECURE !== 'false';
   const rejectUnauthorized = process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== 'false';
 
-  return new ImapFlow({
+  const client = new ImapFlow({
     host: process.env.IMAP_HOST || 'imap.gmail.com',
     port: Number(process.env.IMAP_PORT) || 993,
     secure,
@@ -40,6 +40,15 @@ function createClient() {
     maxLiteralSize: 60 * 1024 * 1024,
     logger: false,
   });
+
+  // ImapFlow can emit a socket error after connect()/logout() has already
+  // rejected. Without an EventEmitter listener that late error terminates the
+  // Node process, turning a degraded fallback into an API outage.
+  client.on('error', (error) => {
+    logger.warn({ err: error }, 'IMAP client emitted an asynchronous error');
+  });
+
+  return client;
 }
 
 export const imapService = {
@@ -110,6 +119,7 @@ export const imapService = {
       } catch {
         /* ignore */
       }
+      client.close();
       throw err;
     }
 
@@ -135,6 +145,7 @@ export const imapService = {
       } catch {
         /* ignore */
       }
+      client.close();
       throw err;
     }
   },
@@ -148,6 +159,8 @@ export const imapService = {
       return true;
     } catch {
       return false;
+    } finally {
+      client.close();
     }
   },
 };
