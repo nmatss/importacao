@@ -54,4 +54,10 @@ describe('CertificacoesLayout permissions', () => {
     expect(screen.getByRole('link', { name: 'Configurações' })).toBeInTheDocument();
     expect(checkCertApiHealth).toHaveBeenCalled();
   });
+
+  it('reserves mobile scroll clearance for the floating assistant', () => {
+    renderLayout('analyst');
+
+    expect(screen.getByRole('main')).toHaveClass('pb-24');
+  });
 });

@@ -397,7 +397,7 @@ export function AppLayout({
         </header>
 
         {/* Content */}
-        <main id="main" role="main" className="flex-1 overflow-auto p-4 lg:p-6">
+        <main id="main" role="main" className="flex-1 overflow-auto p-4 pb-24 lg:p-6">
           {children}
         </main>
       </div>

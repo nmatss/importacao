@@ -45,6 +45,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   aproximadamente duas vezes maiores e o falso warning de chunk.
 - Baseline de 19 arquivos fora do Prettier foi normalizado; relatórios JSON
   gerados pela Cert-API foram excluídos do escopo de formatação.
+- Conteúdo rolável dos módulos agora reserva espaço inferior em telas móveis,
+  permitindo afastar os últimos controles do botão flutuante do assistente.
 
 ### Verification
 
