@@ -26,14 +26,11 @@ export default function processReference(input: CheckInput): CheckResult {
   const checkName = 'process-reference';
 
   const invRaw = input.invoiceData?.invoiceNumber ?? input.invoiceData?.referenceNumber;
-  const plRaw =
-    input.packingListData?.packingListNumber ?? input.packingListData?.referenceNumber;
+  const plRaw = input.packingListData?.packingListNumber ?? input.packingListData?.referenceNumber;
   // IMPORTANT: do NOT use bl.blNumber here — that's the shipping document ID
   // (e.g. SHYY26021495A), not the customer/process reference.
   const blRaw =
-    input.blData?.customerReference ??
-    input.blData?.orderNumber ??
-    input.blData?.referenceNumber;
+    input.blData?.customerReference ?? input.blData?.orderNumber ?? input.blData?.referenceNumber;
 
   const invRef = normalize(invRaw);
   const plRef = normalize(plRaw);
@@ -57,7 +54,7 @@ export default function processReference(input: CheckInput): CheckResult {
 
   // BL has only blNumber but no customerReference/orderNumber — flag so operator is aware.
   const blHasOnlyBlNumber =
-    !blRaw && (input.blData?.blNumber != null && String(input.blData.blNumber).trim() !== '');
+    !blRaw && input.blData?.blNumber != null && String(input.blData.blNumber).trim() !== '';
 
   if (values.length < 2) {
     if (blHasOnlyBlNumber) {

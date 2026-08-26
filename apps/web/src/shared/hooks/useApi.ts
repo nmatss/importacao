@@ -1,4 +1,9 @@
-import { useQuery, useMutation, type UseQueryOptions, type UseMutationOptions } from '@tanstack/react-query';
+import {
+  useQuery,
+  useMutation,
+  type UseQueryOptions,
+  type UseMutationOptions,
+} from '@tanstack/react-query';
 import { api } from '@/shared/lib/api-client';
 
 export function useApiQuery<T>(

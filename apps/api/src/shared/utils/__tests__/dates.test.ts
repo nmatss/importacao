@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, addDays, daysBetween, isDeadlineCritical, calculateLiDeadline } from '../dates.js';
+import {
+  formatDate,
+  addDays,
+  daysBetween,
+  isDeadlineCritical,
+  calculateLiDeadline,
+} from '../dates.js';
 
 describe('formatDate', () => {
   it('should format a Date object to YYYY-MM-DD', () => {

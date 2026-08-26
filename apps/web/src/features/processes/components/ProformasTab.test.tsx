@@ -86,7 +86,14 @@ describe('ProformasTab', () => {
     mockAggregate([
       makeProforma({
         items: [
-          { itemCode: 'A1', description: 'Caneca', ncmCode: '6912', quantity: 100, unitPrice: 2, totalPrice: 200 },
+          {
+            itemCode: 'A1',
+            description: 'Caneca',
+            ncmCode: '6912',
+            quantity: 100,
+            unitPrice: 2,
+            totalPrice: 200,
+          },
         ],
         itemCount: 1,
         totalFobValue: 200,

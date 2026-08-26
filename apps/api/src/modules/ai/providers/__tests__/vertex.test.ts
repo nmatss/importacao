@@ -128,7 +128,6 @@ describe('VertexAIProvider', () => {
   });
 });
 
-
 describe('toVertexSchema (incidente 2026-06-22 — Vertex 400 no structured output)', () => {
   it('converte type-array nullable do Zod e remove campos nao suportados', async () => {
     const { toVertexSchema } = await import('../vertex.js');

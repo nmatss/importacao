@@ -76,10 +76,7 @@ const MONTHS: Record<string, number> = {
 
 /** Strip accents + lowercase so "março"/"MARÇO" both resolve to "marco". */
 function deburr(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
+  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
 function monthFromName(token: string): number | null {
@@ -231,16 +228,10 @@ function escapeLabel(label: string): string {
  * whitespace (compact PDF layouts glue label and value with no delimiter, e.g.
  * "CI DATE22-Feb-26").
  */
-export function findLabeledDate(
-  text: string,
-  labels: string[] = DATE_LABELS,
-): string | null {
+export function findLabeledDate(text: string, labels: string[] = DATE_LABELS): string | null {
   if (!text) return null;
   for (const label of labels) {
-    const re = new RegExp(
-      `${escapeLabel(label)}\\s*[:#-]?\\s*(${DATE_VALUE_PATTERN})`,
-      'i',
-    );
+    const re = new RegExp(`${escapeLabel(label)}\\s*[:#-]?\\s*(${DATE_VALUE_PATTERN})`, 'i');
     const m = text.match(re);
     if (m?.[1]) {
       const iso = normalizeDate(m[1]);

@@ -14,13 +14,17 @@ interface CorrectionData {
 export function kiomCorrectionTemplate(data: CorrectionData) {
   const subject = `Correção Necessária - ${data.processCode} - ${data.brand}`;
 
-  const checkRows = data.failedChecks.map((check, i) => `
+  const checkRows = data.failedChecks
+    .map(
+      (check, i) => `
     <tr style="${i % 2 === 0 ? 'background-color: #f5f5f5;' : ''}">
       <td style="padding: 8px; border: 1px solid #ddd;">${check.checkName}</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${check.expectedValue || '-'}</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${check.actualValue || '-'}</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${check.message}</td>
-    </tr>`).join('');
+    </tr>`,
+    )
+    .join('');
 
   const body = `
 <div style="font-family: Arial, sans-serif; color: #333;">

@@ -16,8 +16,6 @@ export function getErrorMessage(err: unknown): string {
   return 'Ocorreu um erro inesperado';
 }
 
-export function isApiError(
-  err: unknown,
-): err is { response?: { data?: { error?: string } } } {
+export function isApiError(err: unknown): err is { response?: { data?: { error?: string } } } {
   return err !== null && typeof err === 'object' && 'response' in err;
 }

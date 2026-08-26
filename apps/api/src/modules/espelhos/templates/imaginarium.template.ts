@@ -99,17 +99,17 @@ export function generateImaginariumSheet(items: ImaginariumItem[]): XLSX.WorkShe
     { wch: 15 }, // Ref.
     { wch: 40 }, // Descricao do Produto
     { wch: 18 }, // Cor/Acabamento
-    { wch: 8 },  // Tam.
+    { wch: 8 }, // Tam.
     { wch: 12 }, // NCM
     { wch: 14 }, // Vlr Unit.
-    { wch: 8 },  // Qtd.
+    { wch: 8 }, // Qtd.
     { wch: 14 }, // Vlr Total
     { wch: 10 }, // N Caixas
     { wch: 12 }, // Peso Liq.
     { wch: 12 }, // Peso Bruto
-    { wch: 6 },  // FOC
-    { wch: 8 },  // Req. LI
-    { wch: 9 },  // Req. Cert.
+    { wch: 6 }, // FOC
+    { wch: 8 }, // Req. LI
+    { wch: 9 }, // Req. Cert.
   ];
 
   // Store formatting metadata

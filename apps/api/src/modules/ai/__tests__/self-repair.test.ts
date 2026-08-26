@@ -77,9 +77,7 @@ describe('self-repair loop (invoice path)', () => {
       // primary extraction: exporterName empty
       .mockResolvedValueOnce(lowExporterInvoice(0.9))
       // self-repair: returns the missing exporterName with high confidence
-      .mockResolvedValueOnce(
-        JSON.stringify({ exporterName: cf('KIOM GLOBAL LIMITED', 0.88) }),
-      );
+      .mockResolvedValueOnce(JSON.stringify({ exporterName: cf('KIOM GLOBAL LIMITED', 0.88) }));
 
     const result = await aiService.extractInvoiceData(SOURCE);
 

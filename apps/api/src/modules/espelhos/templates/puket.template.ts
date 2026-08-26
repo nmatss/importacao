@@ -104,12 +104,12 @@ export function generatePuketSheet(items: PuketItem[]): XLSX.WorkSheet {
     { wch: 16 }, // Preco Unit.
     { wch: 12 }, // Quantidade
     { wch: 14 }, // Total
-    { wch: 8 },  // Caixas
+    { wch: 8 }, // Caixas
     { wch: 12 }, // Peso Liq.
     { wch: 12 }, // Peso Bruto
-    { wch: 6 },  // FOC
-    { wch: 6 },  // LI
-    { wch: 6 },  // Cert.
+    { wch: 6 }, // FOC
+    { wch: 6 }, // LI
+    { wch: 6 }, // Cert.
   ];
 
   // Store formatting metadata in sheet comments for downstream consumers

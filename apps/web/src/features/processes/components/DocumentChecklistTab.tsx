@@ -126,7 +126,9 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   }
 
   if ((isError || error) && !followUp) {
-    return <ErrorState message="Erro ao carregar checklist documental." onRetry={() => refetch()} />;
+    return (
+      <ErrorState message="Erro ao carregar checklist documental." onRetry={() => refetch()} />
+    );
   }
 
   const hasBackgroundError = Boolean((isError || error) && followUp);
@@ -234,7 +236,9 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                   <span className="inline-flex flex-col items-end gap-0.5 text-[11px] text-emerald-600">
                     <span className="inline-flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {completedByName ? `Concluido por ${completedByName} em ${timestamp}` : timestamp}
+                      {completedByName
+                        ? `Concluido por ${completedByName} em ${timestamp}`
+                        : timestamp}
                     </span>
                   </span>
                 ) : (

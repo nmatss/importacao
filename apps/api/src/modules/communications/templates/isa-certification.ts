@@ -26,31 +26,51 @@ export function isaCertificationTemplate(data: ProcessData) {
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Marca</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${data.brand}</td>
     </tr>
-    ${data.exporterName ? `
+    ${
+      data.exporterName
+        ? `
     <tr style="background-color: #f5f5f5;">
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Exportador</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${data.exporterName}</td>
-    </tr>` : ''}
-    ${data.importerName ? `
+    </tr>`
+        : ''
+    }
+    ${
+      data.importerName
+        ? `
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Importador</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${data.importerName}</td>
-    </tr>` : ''}
-    ${data.totalFobValue ? `
+    </tr>`
+        : ''
+    }
+    ${
+      data.totalFobValue
+        ? `
     <tr style="background-color: #f5f5f5;">
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Valor FOB</td>
       <td style="padding: 8px; border: 1px solid #ddd;">USD ${data.totalFobValue}</td>
-    </tr>` : ''}
-    ${data.totalBoxes ? `
+    </tr>`
+        : ''
+    }
+    ${
+      data.totalBoxes
+        ? `
     <tr>
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Total de Volumes</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${data.totalBoxes}</td>
-    </tr>` : ''}
-    ${data.eta ? `
+    </tr>`
+        : ''
+    }
+    ${
+      data.eta
+        ? `
     <tr style="background-color: #f5f5f5;">
       <td style="padding: 8px; border: 1px solid #ddd; font-weight: bold;">Previsão de Chegada</td>
       <td style="padding: 8px; border: 1px solid #ddd;">${data.eta}</td>
-    </tr>` : ''}
+    </tr>`
+        : ''
+    }
   </table>
 
   <p>Os documentos técnicos e amostras seguem em anexo para análise e emissão dos certificados necessários.</p>

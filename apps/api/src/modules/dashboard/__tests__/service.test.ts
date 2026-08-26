@@ -21,12 +21,12 @@ describe('dashboardService', () => {
       const mockProcesses = [{ id: 1, processCode: 'IMP-001' }];
 
       // 6 parallel queries in Promise.all
-      queryQueue.push(createResolvedChain([{ count: 5 }]));        // active count
-      queryQueue.push(createResolvedChain([{ count: 3 }]));        // completed count
-      queryQueue.push(createResolvedChain([{ total: '50000' }]));  // fob total
-      queryQueue.push(createResolvedChain([{ count: 1 }]));        // overdue count
-      queryQueue.push(createResolvedChain(mockAlerts));             // recent alerts
-      queryQueue.push(createResolvedChain(mockProcesses));          // recent processes
+      queryQueue.push(createResolvedChain([{ count: 5 }])); // active count
+      queryQueue.push(createResolvedChain([{ count: 3 }])); // completed count
+      queryQueue.push(createResolvedChain([{ total: '50000' }])); // fob total
+      queryQueue.push(createResolvedChain([{ count: 1 }])); // overdue count
+      queryQueue.push(createResolvedChain(mockAlerts)); // recent alerts
+      queryQueue.push(createResolvedChain(mockProcesses)); // recent processes
 
       const result = await dashboardService.getOverview();
 
@@ -47,13 +47,13 @@ describe('dashboardService', () => {
     it('should return all 8 SLA categories', async () => {
       // 8 parallel queries
       queryQueue.push(createResolvedChain([{ id: 1, processCode: 'IMP-001' }])); // docsOverdue
-      queryQueue.push(createResolvedChain([]));   // liUrgent
-      queryQueue.push(createResolvedChain([]));   // withDivergences
-      queryQueue.push(createResolvedChain([]));   // pendingFenicia
-      queryQueue.push(createResolvedChain([]));   // noEspelho
-      queryQueue.push(createResolvedChain([]));   // noFollowUpUpdate
-      queryQueue.push(createResolvedChain([]));   // agingByUser
-      queryQueue.push(createResolvedChain([]));   // upcomingPayments
+      queryQueue.push(createResolvedChain([])); // liUrgent
+      queryQueue.push(createResolvedChain([])); // withDivergences
+      queryQueue.push(createResolvedChain([])); // pendingFenicia
+      queryQueue.push(createResolvedChain([])); // noEspelho
+      queryQueue.push(createResolvedChain([])); // noFollowUpUpdate
+      queryQueue.push(createResolvedChain([])); // agingByUser
+      queryQueue.push(createResolvedChain([])); // upcomingPayments
 
       const result = await dashboardService.getSla();
 

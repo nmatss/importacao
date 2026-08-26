@@ -330,10 +330,7 @@ export const espelhoService = {
     const espelho = await this.getEspelho(processId);
     if (!espelho) return null;
 
-    const rows = await db
-      .select()
-      .from(processItems)
-      .where(eq(processItems.processId, processId));
+    const rows = await db.select().from(processItems).where(eq(processItems.processId, processId));
 
     const items = (Array.isArray(rows) ? rows : []).map((it) => ({
       id: it.id,
