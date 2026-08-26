@@ -108,7 +108,7 @@ function parseArgs(argv) {
   if (!Number.isFinite(args.delayMs) || args.delayMs < 0) {
     throw new Error('--delay-ms deve ser zero ou positivo');
   }
-  if (!Number.isFinite(args.limit) || args.limit <= 0) {
+  if (args.limit !== Infinity && (!Number.isFinite(args.limit) || args.limit <= 0)) {
     throw new Error('--limit deve ser positivo');
   }
   return args;
