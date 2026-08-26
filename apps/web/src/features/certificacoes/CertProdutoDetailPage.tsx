@@ -1,8 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
-import { fetchCertProductDetail, verifyCertProduct } from '@/shared/lib/cert-api-client';
-import { cn, formatDateTime } from '@/shared/lib/utils';
+import {
+  fetchCertProductDetail,
+  lookupCertificateLinx,
+  verifyCertProduct,
+  type CertLinxLookup,
+} from '@/shared/lib/cert-api-client';
+import { cn, formatDateOnly, formatDateTime } from '@/shared/lib/utils';
 import {
   ArrowLeft,
   ExternalLink,
@@ -17,7 +22,19 @@ import {
   Hash,
   Tag,
   CheckCircle2,
+  CalendarDays,
+  Database,
 } from 'lucide-react';
+
+function linxDateLabel(
+  lookup: CertLinxLookup,
+  field: 'validade_certificado' | 'vencimento_licenciamento',
+): string {
+  if (lookup[field]) return formatDateOnly(lookup[field] as string);
+  const detail = lookup.properties[field];
+  if (detail.state === 'invalid') return `Valor inválido: ${detail.raw_value || 'vazio'}`;
+  return 'Sem data efetiva';
+}
 
 export default function CertProdutoDetailPage() {
   const { sku: rawSku } = useParams();
@@ -27,6 +44,9 @@ export default function CertProdutoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [liveResult, setLiveResult] = useState<any>(null);
+  const [linxLookup, setLinxLookup] = useState<CertLinxLookup | null>(null);
+  const [linxLoading, setLinxLoading] = useState(false);
+  const [linxError, setLinxError] = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -36,6 +56,18 @@ export default function CertProdutoDetailPage() {
       .catch((e) => setError(e.message || 'Erro ao carregar produto'))
       .finally(() => setLoading(false));
   }, [sku]);
+
+  useEffect(() => {
+    if (!product?.brand || !sku) return;
+    const brandKey = String(product.brand).toLowerCase().replaceAll(' ', '_');
+    setLinxLoading(true);
+    setLinxLookup(null);
+    setLinxError(null);
+    lookupCertificateLinx(brandKey, sku)
+      .then(setLinxLookup)
+      .catch((e) => setLinxError(e instanceof Error ? e.message : 'Linx indisponível'))
+      .finally(() => setLinxLoading(false));
+  }, [product?.brand, sku]);
 
   async function handleVerify() {
     if (!product) return;
@@ -142,11 +174,15 @@ export default function CertProdutoDetailPage() {
                   <Tag className="w-4 h-4 text-slate-400" />
                   <span>{product.brand}</span>
                 </div>
-                <div className="w-px h-4 bg-slate-200" />
-                <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                  <FileText className="w-4 h-4 text-slate-400" />
-                  <span>Linha {product.excel_row}</span>
-                </div>
+                {product.excel_row != null && (
+                  <>
+                    <div className="w-px h-4 bg-slate-200" />
+                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <FileText className="w-4 h-4 text-slate-400" />
+                      <span>Linha {product.excel_row}</span>
+                    </div>
+                  </>
+                )}
                 {validation?.status && (
                   <>
                     <div className="w-px h-4 bg-slate-200" />
@@ -260,6 +296,84 @@ export default function CertProdutoDetailPage() {
               )}
             </div>
           )}
+
+          {/* Certificate sources: Sheets metadata + live Linx properties */}
+          <div className="rounded-2xl border border-slate-200/60 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-800">
+            <div className="flex flex-col gap-2 border-b border-slate-100 px-6 py-4 dark:border-slate-700 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="rounded-lg bg-emerald-100 p-1.5 dark:bg-emerald-900/40">
+                  <CalendarDays className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Dados do Certificado
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Cadastro da planilha e propriedades atuais do Linx
+                  </p>
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                <Database className="h-3.5 w-3.5" />
+                {linxLoading
+                  ? 'Consultando Linx…'
+                  : linxLookup
+                    ? `Produto ${linxLookup.produto_codigo}`
+                    : 'Linx não consultado'}
+              </div>
+            </div>
+            <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Nº do certificado · Planilha
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {product.numero_certificado || 'Não preenchido'}
+                </p>
+              </div>
+              <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Tipo · Planilha
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {product.certification_type || 'Não preenchido'}
+                </p>
+              </div>
+              <div className="rounded-xl bg-emerald-50/70 p-4 dark:bg-emerald-950/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Validade · Linx
+                  {linxLookup &&
+                    ` · prop ${linxLookup.properties.validade_certificado.property_code}`}
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {linxLookup
+                    ? linxDateLabel(linxLookup, 'validade_certificado')
+                    : linxLoading
+                      ? 'Consultando…'
+                      : 'Não verificada'}
+                </p>
+              </div>
+              <div className="rounded-xl bg-emerald-50/70 p-4 dark:bg-emerald-950/30">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Licenciamento · Linx
+                  {linxLookup &&
+                    ` · prop ${linxLookup.properties.vencimento_licenciamento.property_code}`}
+                </p>
+                <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {linxLookup
+                    ? linxDateLabel(linxLookup, 'vencimento_licenciamento')
+                    : linxLoading
+                      ? 'Consultando…'
+                      : 'Não verificada'}
+                </p>
+              </div>
+            </div>
+            {linxError && (
+              <div className="mx-5 mb-5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                Não foi possível consultar as propriedades Linx agora. {linxError}
+              </div>
+            )}
+          </div>
 
           {/* Side-by-side Text Comparison */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

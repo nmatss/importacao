@@ -68,6 +68,9 @@ describe('cert-api gateway access policy', () => {
     expect(requiredCertApiScope('GET', '/cert-api/api/stats?brand=puket')).toBe('cert.read');
     expect(requiredCertApiScope('GET', '/cert-api/api/products/SKU-123')).toBe('cert.read');
     expect(requiredCertApiScope('GET', '/cert-api/api/certificates/cert-1/pdf')).toBe('cert.read');
+    expect(
+      requiredCertApiScope('GET', '/cert-api/api/certificates/linx-lookup?brand=puket&sku=SKU-123'),
+    ).toBe('cert.read');
     expect(requiredCertApiScope('GET', '/cert-api/api/schedules/schedule-1/history')).toBe(
       'cert.read',
     );

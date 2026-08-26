@@ -49,9 +49,11 @@ def test_brand_puket_escolares_maps_to_puket_codes():
     assert cfg["prop_validade_certificado"] == "00224"
 
 
-def test_brand_unknown_raises():
+@pytest.mark.parametrize("brand", ["nike", "notpuket", "puket filial"])
+def test_brand_unknown_raises(brand):
+    # A substring such as "notpuket" must never select a production database.
     with pytest.raises(ValueError):
-        _brand_linx("nike")
+        _brand_linx(brand)
 
 
 # --------------------------------------------------------------------------- #
@@ -72,6 +74,49 @@ def test_format_date_empty():
 
 def test_format_date_already_brazilian_passthrough():
     assert linx_service._format_date("31/12/2026") == "31/12/2026"
+
+
+# --------------------------------------------------------------------------- #
+# read_certificate_from_linx — read-only lookup for form prefill
+# --------------------------------------------------------------------------- #
+@pytest.mark.parametrize(
+    ("value", "expected", "state"),
+    [
+        ("31/12/2027", "2027-12-31", "found"),
+        ("2027-12-31", "2027-12-31", "found"),
+        ("01/01/1900", None, "empty"),
+        (None, None, "empty"),
+        ("texto inesperado", None, "invalid"),
+    ],
+)
+def test_parse_linx_date(value, expected, state):
+    assert linx_service._parse_linx_date(value) == (expected, state)
+
+
+def test_read_certificate_from_linx_uses_brand_properties(monkeypatch):
+    monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda brand, sku: "P-123")
+    monkeypatch.setattr(
+        linx_service,
+        "fetch_produto_propriedades",
+        lambda brand, props, products: {
+            "P-123": {"00224": "31/12/2027", "00225": "01/01/1900"}
+        },
+    )
+
+    out = linx_service.read_certificate_from_linx("puket", "  SKU-1  ")
+
+    assert out["produto_codigo"] == "P-123"
+    assert out["validade_certificado"] == "2027-12-31"
+    assert out["vencimento_licenciamento"] is None
+    assert out["properties"]["validade_certificado"]["property_code"] == "00224"
+    assert out["properties"]["vencimento_licenciamento"]["state"] == "empty"
+    assert out["status"] == "found"
+
+
+def test_read_certificate_from_linx_rejects_unknown_sku(monkeypatch):
+    monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda brand, sku: None)
+    with pytest.raises(LookupError, match="nao encontrado"):
+        linx_service.read_certificate_from_linx("imaginarium", "NAO-EXISTE")
 
 
 # --------------------------------------------------------------------------- #
@@ -181,7 +226,8 @@ def test_write_error_when_resolution_unconfigured(monkeypatch):
     monkeypatch.setattr(linx_service, "LINX_WRITE_ENABLED", True)
     out = linx_service.write_certificate_to_linx("imaginarium", "SKU-1", "2026-12-31", None)
     assert out["status"] == "error"
-    assert "resolver" in out["error"].lower() or "configurada" in out["error"].lower()
+    assert out["error"] == "Falha ao resolver o SKU no Linx"
+    assert "configurada" not in out["error"].lower()
 
 
 def test_write_error_when_sku_unresolved(monkeypatch):

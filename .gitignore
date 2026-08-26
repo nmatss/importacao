@@ -10,6 +10,10 @@ certifications.db
 .playwright-cli/
 output/playwright/
 
+# Local dotcontext runtime/session traces are registered by the harness provider,
+# not shipped with application releases.
+.context/runtime/
+
 # SOPS encrypted file.
 # Ignored to avoid accidental plaintext adds; the encrypted production file is
 # intentionally tracked with `git add -f .env.sops.yaml`.

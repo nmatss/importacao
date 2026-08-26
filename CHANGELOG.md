@@ -9,6 +9,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Consulta read-only das propriedades de certificado no Linx, com
+  pré-preenchimento conservador do cadastro e card de fontes no detalhe do produto.
+- Cobertura de regressão para códigos de propriedade Puket/Imaginarium, sentinela
+  `01/01/1900`, autorização do gateway, preenchimento da UI e descarte de resposta
+  obsoleta após troca de SKU.
 - Cobertura de regressão para deep links das abas condicionais Espelho e
   Câmbios durante o carregamento assíncrono do detalhe do processo.
 - Testes de nomes acessíveis nos carrosséis mobile do fluxo do processo e do
@@ -20,6 +25,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Cadastro de certificado valida marca, limites e datas antes do banco; seleção da
+  base Linx deixa de aceitar correspondências por substring e exceções internas do
+  SQL Server deixam de aparecer em respostas/logs operacionais.
+- Resposta atrasada de consulta Linx deixa de preencher campos depois que o operador
+  troca marca ou SKU.
+- Detalhe de produto passa a mostrar número/tipo da planilha e datas atuais do Linx,
+  sem renderizar o rótulo órfão `Linha` quando a coluna não existe.
 - Refresh ou link direto para `?tab=espelho` e `?tab=cambios` deixa de ser
   redirecionado prematuramente para Documentos.
 - Setas mobile do timeline e do ciclo logístico, além do fechamento do seletor
@@ -36,6 +48,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Verification
 
+- Produção consultada somente em leitura: 674 produtos, conexões Puket/Imaginarium
+  ativas, 444 datas de validade efetivas e 59 datas de licenciamento efetivas; a
+  tabela de operações do formulário permanece vazia.
 - Playwright CLI: 30 rotas em desktop e mobile (60/60), 15 estados de abas do
   processo e cinco abas de Configurações nos dois viewports.
 - Produção consultada somente por agregados: 117 processos, 51 documentos,

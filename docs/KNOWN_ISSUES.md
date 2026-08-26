@@ -1,6 +1,7 @@
 # Known Issues
 
 Ultima atualizacao: 2026-08-26 (ver
+`docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`,
 `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`,
 `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`,
 `docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`,
@@ -10,6 +11,19 @@ Ultima atualizacao: 2026-08-26 (ver
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## ALTO - Acesso Linx Da Cert-API Ainda Usa Contas Pessoais
+
+- As duas bases estão acessíveis e a escrita está ligada, mas a configuração
+  operacional documentada ainda usa logins pessoais distintos para Puket e
+  Imaginarium.
+- A saída ou bloqueio da pessoa interrompe consulta, relatórios e cadastro; permissões
+  pessoais também dificultam menor privilégio, rotação e atribuição de auditoria.
+- Nenhuma credencial foi exibida ou alterada nesta auditoria.
+
+Status: **ABERTO / ALTO.** Criar contas de serviço separadas por base, conceder apenas
+leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
+`PROP_PRODUTOS`, rotacionar via SOPS e revogar os logins pessoais após smoke controlado.
 
 ## ALTO - Fallback IMAP E Drive Nao Estao Prontos
 

@@ -28,6 +28,12 @@ export function formatDate(date: string): string {
   return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
+/** Format a date-only ISO value without applying a timezone offset. */
+export function formatDateOnly(date: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : formatDate(date);
+}
+
 export function formatWeight(kg: number | string): string {
   return `${Number(kg).toFixed(3)} kg`;
 }

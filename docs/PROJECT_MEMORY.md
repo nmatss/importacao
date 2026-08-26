@@ -478,6 +478,25 @@ Evidência:
 Grau de confiança: alto para código, testes e probes executados; médio para
 estado externo até repetir dentro do Compose; não estabelecido para produção.
 
+## Certificados E Propriedades Linx — Regras Duráveis De 2026-08-26
+
+- Número/tipo do certificado vêm da planilha sincronizada em `cert_products`; validade
+  e vencimento do licenciamento vêm das propriedades do próprio Linx.
+- Códigos: Imaginarium `00106/00107`; Puket e Puket Escolares `00224/00225`.
+- `cert_certificates` é trilha das operações feitas pelo formulário, não fonte de
+  verdade da trava. Tabela vazia não implica Linx vazio.
+- `01/01/1900` é sentinela de ausência e nunca deve virar data vencida na UI.
+- Consulta e escrita devem usar a mesma resolução SKU→produto e marca exata
+  normalizada. Correspondência por substring pode selecionar a base errada.
+- Pré-preenchimento da UI nunca substitui valor já digitado pelo operador.
+- Não completar lacunas em massa a partir de inferência: Puket Escolares tinha poucas
+  datas efetivas em 26/08 e exige decisão fiscal.
+
+Evidência: `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`.
+
+Grau de confiança: alto para conectividade, contratos e contagens observadas; não
+estabelecido para a regra de negócio das lacunas sem validação fiscal.
+
 ## Riscos Persistentes
 
 Ver detalhes em:

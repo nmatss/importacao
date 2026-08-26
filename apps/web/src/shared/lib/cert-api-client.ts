@@ -581,6 +581,25 @@ export interface CreateCertificateInput {
   pdf?: File | null;
 }
 
+export type LinxPropertyState = 'found' | 'empty' | 'invalid';
+
+export interface CertLinxLookup {
+  status: 'found' | 'empty';
+  sku: string;
+  brand: string;
+  produto_codigo: string;
+  validade_certificado: string | null;
+  vencimento_licenciamento: string | null;
+  properties: Record<
+    'validade_certificado' | 'vencimento_licenciamento',
+    {
+      property_code: string;
+      raw_value: string | null;
+      state: LinxPropertyState;
+    }
+  >;
+}
+
 export async function createCertificate(input: CreateCertificateInput): Promise<CertCertificate> {
   const fd = new FormData();
   fd.set('sku', input.sku);
@@ -614,6 +633,11 @@ export async function fetchCertificates(params?: {
   if (params?.linx_status) query.set('linx_status', params.linx_status);
   const qs = query.toString();
   return certFetch<CertCertificatesResponse>(`/api/certificates${qs ? `?${qs}` : ''}`);
+}
+
+export async function lookupCertificateLinx(brand: string, sku: string): Promise<CertLinxLookup> {
+  const query = new URLSearchParams({ brand, sku });
+  return certFetch<CertLinxLookup>(`/api/certificates/linx-lookup?${query.toString()}`);
 }
 
 export async function retryCertificateLinx(id: string): Promise<CertCertificate> {

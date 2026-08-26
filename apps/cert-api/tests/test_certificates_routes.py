@@ -32,6 +32,7 @@ def _mock_certificates_env(mocker, row=_ROW, tmp_path=None):
         Tuple (mock_cursor, mock_linx) for assertions.
     """
     mocker.patch("app.routes.certificates.DATABASE_URL", "postgres://test")
+    mocker.patch("app.routes.certificates.is_brand_supported", return_value=True)
     if tmp_path is not None:
         mocker.patch("app.routes.certificates.CERTS_DIR", tmp_path)
 
@@ -86,6 +87,38 @@ async def test_create_requires_at_least_one_date(test_client, api_key_headers, m
     )
     assert resp.status_code == 400
     assert "ao menos uma data" in resp.json()["detail"]
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_invalid_date_before_database(
+    test_client, api_key_headers, mocker
+):
+    cur, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={"sku": "S1", "brand": "puket", "validade_certificado": "31/12/2027"},
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 400
+    assert "AAAA-MM-DD" in resp.json()["detail"]
+    cur.execute.assert_not_called()
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_brand_without_linx_integration(
+    test_client, api_key_headers, mocker
+):
+    _, linx = _mock_certificates_env(mocker)
+    mocker.patch("app.routes.certificates.is_brand_supported", return_value=False)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={"sku": "S1", "brand": "outra", "validade_certificado": "2027-12-31"},
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 400
+    assert "integracao Linx" in resp.json()["detail"]
     linx.assert_not_called()
 
 
@@ -208,6 +241,81 @@ async def test_list_certificates_empty_shape_without_db(test_client, api_key_hea
 async def test_get_certificate_404_without_db(test_client, api_key_headers):
     """Without a DATABASE_URL a certificate lookup returns 404, not 500."""
     resp = await test_client.get(f"{CREATE_URL}/abc", headers=api_key_headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_linx_lookup_returns_read_only_property_values(
+    test_client, api_key_headers, mocker
+):
+    lookup = mocker.patch(
+        "app.routes.certificates.read_certificate_from_linx",
+        return_value={
+            "status": "found",
+            "sku": "SKU1",
+            "brand": "puket",
+            "produto_codigo": "P-1",
+            "validade_certificado": "2027-12-31",
+            "vencimento_licenciamento": None,
+            "properties": {
+                "validade_certificado": {
+                    "property_code": "00224",
+                    "raw_value": "31/12/2027",
+                    "state": "found",
+                },
+                "vencimento_licenciamento": {
+                    "property_code": "00225",
+                    "raw_value": "01/01/1900",
+                    "state": "empty",
+                },
+            },
+        },
+    )
+
+    resp = await test_client.get(
+        f"{CREATE_URL}/linx-lookup",
+        params={"sku": " SKU1 ", "brand": "puket"},
+        headers=api_key_headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["validade_certificado"] == "2027-12-31"
+    lookup.assert_called_once_with("puket", "SKU1")
+
+
+@pytest.mark.asyncio
+async def test_linx_lookup_does_not_expose_connection_error(
+    test_client, api_key_headers, mocker
+):
+    mocker.patch(
+        "app.routes.certificates.read_certificate_from_linx",
+        side_effect=OSError("Login failed for private-user@private-host"),
+    )
+
+    resp = await test_client.get(
+        f"{CREATE_URL}/linx-lookup",
+        params={"sku": "SKU1", "brand": "imaginarium"},
+        headers=api_key_headers,
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["detail"] == "Linx indisponivel para consulta"
+    assert "private" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_linx_lookup_returns_404_for_unknown_product(
+    test_client, api_key_headers, mocker
+):
+    mocker.patch(
+        "app.routes.certificates.read_certificate_from_linx",
+        side_effect=LookupError("SKU nao encontrado no Linx"),
+    )
+    resp = await test_client.get(
+        f"{CREATE_URL}/linx-lookup",
+        params={"sku": "UNKNOWN", "brand": "puket"},
+        headers=api_key_headers,
+    )
     assert resp.status_code == 404
 
 

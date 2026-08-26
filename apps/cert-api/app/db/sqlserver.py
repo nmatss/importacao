@@ -82,7 +82,7 @@ def _brand_linx(brand: str) -> dict[str, str]:
     """Resolve the Linx connection + property-code config for a brand.
 
     Args:
-        brand: Brand name (case-insensitive). 'puket escolares' must match before 'puket'.
+        brand: Brand name (case-insensitive); underscores and repeated spaces are normalized.
 
     Returns:
         The LINX_BRANDS entry for the brand.
@@ -90,13 +90,9 @@ def _brand_linx(brand: str) -> dict[str, str]:
     Raises:
         ValueError: If the brand is not mapped to a Linx database.
     """
-    key = (brand or "").lower().strip()
+    key = " ".join((brand or "").lower().replace("_", " ").split())
     if key in LINX_BRANDS:
         return LINX_BRANDS[key]
-    # tolerate substrings ('puket escolares' before 'puket' so the longer key wins)
-    for cfg_key in sorted(LINX_BRANDS, key=len, reverse=True):
-        if cfg_key in key or key in cfg_key:
-            return LINX_BRANDS[cfg_key]
     raise ValueError(f"Brand '{brand}' is not mapped to a Linx database")
 
 

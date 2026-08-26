@@ -10,6 +10,7 @@ from datetime import date, datetime
 from app.config import LINX_BRANDS, LINX_SCHEMA, LINX_WRITE_ENABLED
 from app.db.sqlserver import (
     _brand_linx,
+    fetch_produto_propriedades,
     read_produto_propriedade,
     resolve_produto_codigo,
     upsert_produto_propriedade,
@@ -53,6 +54,98 @@ def is_brand_supported(brand: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _parse_linx_date(value: object) -> tuple[str | None, str]:
+    """Convert a Linx text property into an ISO date and a lookup state.
+
+    The ERP represents an unfilled date with ``01/01/1900``.  Returning that
+    sentinel as a real certificate date would make the HTML date input look
+    populated with an expired certificate, so it is explicitly classified as
+    ``empty``.  Unexpected text is preserved by the caller as ``raw_value`` but
+    is never injected into a date input.
+
+    Returns:
+        Tuple ``(iso_date, state)`` where state is ``found``, ``empty`` or
+        ``invalid``.
+    """
+    if value is None:
+        return None, "empty"
+    if isinstance(value, datetime):
+        parsed = value.date()
+    elif isinstance(value, date):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None, "empty"
+        parsed = None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
+            try:
+                parsed = datetime.strptime(text, fmt).date()
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            return None, "invalid"
+    if parsed.year <= 1900:
+        return None, "empty"
+    return parsed.isoformat(), "found"
+
+
+def read_certificate_from_linx(brand: str, sku: str) -> dict:
+    """Read the two certificate properties currently stored in Linx.
+
+    This is deliberately read-only and uses the same SKU resolution and brand
+    mapping as the write path, preventing the registration form from showing a
+    value from one product and writing to another.
+
+    Args:
+        brand: Portal brand/slug (Puket Escolares maps to the Puket database).
+        sku: Portal product code.
+
+    Returns:
+        Lookup payload with the resolved Linx product, ISO dates suitable for
+        HTML date inputs and per-property diagnostic metadata.
+
+    Raises:
+        ValueError: Unsupported brand or blank SKU.
+        LookupError: SKU does not exist in the selected Linx database.
+        Exception: Connection/query failure.
+    """
+    clean_sku = sku.strip()
+    if not clean_sku:
+        raise ValueError("SKU obrigatorio")
+
+    cfg = _brand_linx(brand)
+    produto = resolve_produto_codigo(brand, clean_sku)
+    if not produto:
+        raise LookupError("SKU nao encontrado no Linx")
+
+    fields = (
+        ("validade_certificado", cfg["prop_validade_certificado"]),
+        ("vencimento_licenciamento", cfg["prop_vencimento_licenciamento"]),
+    )
+    props = fetch_produto_propriedades(brand, [code for _, code in fields], [produto])
+    values = props.get(produto, {})
+    details: dict[str, dict[str, str | None]] = {}
+    result: dict = {
+        "sku": clean_sku,
+        "brand": brand.strip(),
+        "produto_codigo": produto,
+    }
+    for field, code in fields:
+        raw_value = values.get(code)
+        iso_date, state = _parse_linx_date(raw_value)
+        result[field] = iso_date
+        details[field] = {
+            "property_code": code,
+            "raw_value": raw_value,
+            "state": state,
+        }
+    result["properties"] = details
+    result["status"] = "found" if any(result[field] for field, _ in fields) else "empty"
+    return result
 
 
 def write_certificate_to_linx(
@@ -101,12 +194,18 @@ def write_certificate_to_linx(
         produto = resolve_produto_codigo(brand, sku)
     except Exception as e:
         result["status"] = "error"
-        result["error"] = f"Falha ao resolver SKU '{sku}' -> produto: {e}"
+        result["error"] = "Falha ao resolver o SKU no Linx"
+        sku_log = sku.replace("\r", " ").replace("\n", " ")
+        brand_log = brand.replace("\r", " ").replace("\n", " ")
+        log.error(
+            f"Linx SKU resolution failed for sku={sku_log} brand={brand_log} "
+            f"type={type(e).__name__}"
+        )
         return result
 
     if not produto:
         result["status"] = "error"
-        result["error"] = f"SKU '{sku}' nao encontrado no Linx ({cfg['db']})"
+        result["error"] = f"SKU '{sku}' nao encontrado no Linx"
         return result
 
     result["produto_codigo"] = produto
@@ -141,10 +240,13 @@ def write_certificate_to_linx(
             )
     except Exception as e:
         result["status"] = "error"
-        result["error"] = f"Falha ao gravar propriedade no Linx: {e}"
+        result["error"] = "Falha ao gravar propriedade no Linx"
         sku_log = sku.replace("\r", " ").replace("\n", " ")
         brand_log = brand.replace("\r", " ").replace("\n", " ")
-        log.error(f"Linx write failed for sku={sku_log} brand={brand_log}: {e}", exc_info=True)
+        log.error(
+            f"Linx write failed for sku={sku_log} brand={brand_log} "
+            f"type={type(e).__name__}"
+        )
         return result
 
     result["status"] = "applied"

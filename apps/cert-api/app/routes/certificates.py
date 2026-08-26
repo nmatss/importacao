@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -11,13 +11,37 @@ from slowapi.util import get_remote_address
 
 from app.config import CERTS_DIR, DATABASE_URL
 from app.db.postgres import db
-from app.services.linx_service import write_certificate_to_linx
+from app.services.linx_service import (
+    is_brand_supported,
+    read_certificate_from_linx,
+    write_certificate_to_linx,
+)
 from app.utils.logging import log
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 _MAX_PDF_BYTES = 15 * 1024 * 1024  # 15 MB
+
+
+def _bounded(value: str, label: str, max_length: int) -> str:
+    """Trim and length-check a multipart text field."""
+    clean = value.strip()
+    if len(clean) > max_length:
+        raise HTTPException(400, f"{label} excede {max_length} caracteres")
+    return clean
+
+
+def _iso_date(value: str, label: str) -> str:
+    """Validate an optional browser date field before it reaches PostgreSQL/Linx."""
+    clean = value.strip()
+    if not clean:
+        return ""
+    try:
+        date.fromisoformat(clean)
+    except ValueError as exc:
+        raise HTTPException(400, f"{label} deve estar no formato AAAA-MM-DD") from exc
+    return clean
 
 
 def _serialize(row: dict) -> dict:
@@ -103,10 +127,20 @@ def create_certificate(
     if not DATABASE_URL:
         raise HTTPException(500, "Banco de dados nao configurado")
 
-    sku = sku.strip()
-    brand = brand.strip()
+    sku = _bounded(sku, "SKU", 100)
+    brand = _bounded(brand, "Marca", 100)
+    validade_certificado = _iso_date(validade_certificado, "Validade do certificado")
+    vencimento_licenciamento = _iso_date(
+        vencimento_licenciamento, "Vencimento do licenciamento"
+    )
+    numero_certificado = _bounded(numero_certificado, "Numero do certificado", 255)
+    ocp = _bounded(ocp, "OCP", 255)
+    orgao_certificador = _bounded(orgao_certificador, "Orgao certificador", 255)
+    created_by = _bounded(created_by, "Responsavel", 320)
     if not sku or not brand:
         raise HTTPException(400, "SKU e marca sao obrigatorios")
+    if not is_brand_supported(brand):
+        raise HTTPException(400, "Marca sem integracao Linx configurada")
     if not validade_certificado and not vencimento_licenciamento:
         raise HTTPException(
             400, "Informe ao menos uma data (validade do certificado ou vencimento do licenciamento)"
@@ -117,7 +151,7 @@ def create_certificate(
     # over the client-controlled form field so saved certificates are traceable
     # to the real portal actor.
     gateway_actor = (request.headers.get("X-Cert-Actor-Email") or "").strip()
-    effective_created_by = gateway_actor or created_by.strip() or None
+    effective_created_by = gateway_actor[:320] or created_by or None
 
     cert_id = str(uuid.uuid4())
     pdf_filename = _save_pdf(pdf, cert_id) if pdf is not None and pdf.filename else None
@@ -214,6 +248,41 @@ def list_certificates(
         "per_page": per_page,
         "total_pages": max(1, (total + per_page - 1) // per_page),
     }
+
+
+@router.get("/api/certificates/linx-lookup")
+@limiter.limit("60/minute")
+def lookup_linx_certificate(
+    request: Request,
+    sku: str = Query(..., min_length=1, max_length=100),
+    brand: str = Query(..., min_length=1, max_length=100),
+) -> dict:
+    """Read the product certificate properties directly from Linx.
+
+    The endpoint never writes to Linx or PostgreSQL.  It is intentionally
+    declared before ``/{cert_id}`` so the static path cannot be consumed by the
+    certificate-detail route.
+
+    Raises:
+        HTTPException: 400 for an unsupported brand, 404 for an unknown SKU or
+            503 when the selected Linx database is unavailable.
+    """
+    try:
+        return read_certificate_from_linx(brand.strip(), sku.strip())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except Exception as exc:
+        # SQL Server exceptions can carry host/login details.  Keep the public
+        # response generic and log only the exception class plus sanitized input.
+        sku_log = sku.replace("\r", " ").replace("\n", " ")
+        brand_log = brand.replace("\r", " ").replace("\n", " ")
+        log.warning(
+            f"Linx certificate lookup failed for sku={sku_log} brand={brand_log} "
+            f"type={type(exc).__name__}"
+        )
+        raise HTTPException(503, "Linx indisponivel para consulta") from exc
 
 
 @router.get("/api/certificates/{cert_id}")

@@ -1729,3 +1729,24 @@ Evidências:
   passaram. Seis moderadas npm continuam documentadas.
 - Limites: não houve e-mail/Chat real sem destino aprovado, nem replay cego dos
   41 documentos abaixo de 90%; estado processado não certifica acurácia.
+
+## 2026-08-26 — Certificados e propriedades Linx
+
+- Produção foi consultada somente em leitura. Cert-API, PostgreSQL, Sheets e as
+  conexões Linx Puket/Imaginarium estavam operacionais; escrita configurada como ativa.
+- Em 674 produtos, a planilha tinha número do certificado em 674. O Linx tinha datas
+  efetivas de validade em 263 Imaginarium, 178 Puket e 3 Puket Escolares; datas de
+  licenciamento em 44, 8 e 7, respectivamente. Não havia valor de formato inválido.
+- `cert_certificates` estava vazia; isso mede uso do formulário, não cobertura do ERP.
+- Implementado lookup read-only autenticado, pré-preenchimento conservador no cadastro
+  e card Planilha/Linx no detalhe do produto.
+- Corrigidos seleção de marca por substring, validação de datas/limites e exposição de
+  exceções SQL Server. Nenhuma gravação Linx, sync ou migração remota foi executada no
+  diagnóstico.
+- O cadastro agora invalida requests em voo quando marca/SKU mudam, evitando que uma
+  resposta antiga preencha o produto novo. Playwright desktop/mobile não encontrou
+  overflow ou erro de console nas duas telas alteradas.
+- Gate completo: API Node 981 + 1 skip, web 139, Cert-API 523, lint/typecheck/build,
+  Ruff, Compose e diff check passaram. Audit do requirements do Cert-API ficou limpo;
+  duas moderadas runtime do React Router 6 permanecem como dívida conhecida.
+- Evidência: `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`.

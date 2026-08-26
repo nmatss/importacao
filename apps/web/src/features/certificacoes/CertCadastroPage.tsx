@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import {
   FilePlus2,
@@ -9,15 +9,20 @@ import {
   Upload,
   RefreshCw,
   FileText,
+  Search,
 } from 'lucide-react';
 import { SubmitButton } from '@/shared/components/SubmitButton';
-import { cn } from '@/shared/lib/utils';
+import { cn, formatDateOnly } from '@/shared/lib/utils';
 import {
   createCertificate,
   downloadCertificatePdf,
+  fetchCertProductDetail,
   fetchCertificates,
+  lookupCertificateLinx,
   retryCertificateLinx,
   type CertCertificate,
+  type CertLinxLookup,
+  type CertProduct,
   type LinxStatus,
 } from '@/shared/lib/cert-api-client';
 
@@ -62,6 +67,17 @@ function LinxBadge({ status }: { status: LinxStatus }) {
   );
 }
 
+function linxPropertyLabel(
+  lookup: CertLinxLookup,
+  field: 'validade_certificado' | 'vencimento_licenciamento',
+): string {
+  const isoDate = lookup[field];
+  const detail = lookup.properties[field];
+  if (isoDate) return formatDateOnly(isoDate);
+  if (detail.state === 'invalid') return `valor inválido (${detail.raw_value || 'vazio'})`;
+  return 'sem data efetiva';
+}
+
 const inputCls =
   'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none';
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1';
@@ -83,6 +99,11 @@ export default function CertCadastroPage() {
   const [recent, setRecent] = useState<CertCertificate[]>([]);
   const [retrying, setRetrying] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+  const [lookingUpLinx, setLookingUpLinx] = useState(false);
+  const [linxLookup, setLinxLookup] = useState<CertLinxLookup | null>(null);
+  const [portalProduct, setPortalProduct] = useState<CertProduct | null>(null);
+  const [linxLookupError, setLinxLookupError] = useState<string | null>(null);
+  const linxLookupRequest = useRef(0);
 
   // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
   // e o converte para dd/mm/AAAA somente na escrita do Linx (_format_date).
@@ -111,6 +132,40 @@ export default function CertCadastroPage() {
     setOcp('');
     setOrgao('');
     setPdf(null);
+    setLinxLookup(null);
+    setPortalProduct(null);
+    setLinxLookupError(null);
+  }
+
+  async function handleLinxLookup() {
+    const cleanSku = sku.trim();
+    if (!cleanSku) {
+      setLinxLookupError('Informe o SKU antes de consultar o Linx.');
+      return;
+    }
+    const requestId = ++linxLookupRequest.current;
+    setLookingUpLinx(true);
+    setLinxLookup(null);
+    setLinxLookupError(null);
+    try {
+      const [data, product] = await Promise.all([
+        lookupCertificateLinx(brand, cleanSku),
+        fetchCertProductDetail(cleanSku).catch(() => null),
+      ]);
+      if (requestId !== linxLookupRequest.current) return;
+      setLinxLookup(data);
+      setPortalProduct(product);
+      // Preserve anything the operator already typed. Existing Linx dates only
+      // fill empty fields, avoiding a silent overwrite during the review.
+      setValidade((current) => current || data.validade_certificado || '');
+      setVencimento((current) => current || data.vencimento_licenciamento || '');
+      setNumero((current) => current || String(product?.numero_certificado || ''));
+    } catch (err) {
+      if (requestId !== linxLookupRequest.current) return;
+      setLinxLookupError(err instanceof Error ? err.message : 'Falha ao consultar o Linx.');
+    } finally {
+      if (requestId === linxLookupRequest.current) setLookingUpLinx(false);
+    }
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -264,7 +319,14 @@ export default function CertCadastroPage() {
               id="cert-brand"
               className={inputCls}
               value={brand}
-              onChange={(e) => setBrand(e.target.value)}
+              onChange={(e) => {
+                linxLookupRequest.current += 1;
+                setBrand(e.target.value);
+                setLookingUpLinx(false);
+                setLinxLookup(null);
+                setPortalProduct(null);
+                setLinxLookupError(null);
+              }}
             >
               {BRANDS.map((b) => (
                 <option key={b.value} value={b.value}>
@@ -277,14 +339,67 @@ export default function CertCadastroPage() {
             <label htmlFor="cert-sku" className={labelCls}>
               SKU do produto *
             </label>
-            <input
-              id="cert-sku"
-              className={inputCls}
-              value={sku}
-              onChange={(e) => setSku(e.target.value)}
-              placeholder="Ex.: 12345 ou produto+cor+tamanho"
-            />
+            <div className="flex gap-2">
+              <input
+                id="cert-sku"
+                className={inputCls}
+                value={sku}
+                onChange={(e) => {
+                  linxLookupRequest.current += 1;
+                  setSku(e.target.value);
+                  setLookingUpLinx(false);
+                  setLinxLookup(null);
+                  setPortalProduct(null);
+                  setLinxLookupError(null);
+                }}
+                placeholder="Ex.: 12345 ou produto+cor+tamanho"
+              />
+              <button
+                type="button"
+                onClick={handleLinxLookup}
+                disabled={lookingUpLinx || !sku.trim()}
+                className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+              >
+                {lookingUpLinx ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                <span className="hidden md:inline">Buscar no Linx</span>
+                <span className="md:hidden">Linx</span>
+              </button>
+            </div>
           </div>
+          {(linxLookup || linxLookupError) && (
+            <div className="sm:col-span-2" aria-live="polite">
+              {linxLookup ? (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">
+                  <p className="font-medium">
+                    Produto Linx {linxLookup.produto_codigo}: dados atuais consultados.
+                  </p>
+                  <p className="mt-1">
+                    Validade (prop {linxLookup.properties.validade_certificado.property_code}):{' '}
+                    {linxPropertyLabel(linxLookup, 'validade_certificado')} · Licenciamento (prop{' '}
+                    {linxLookup.properties.vencimento_licenciamento.property_code}):{' '}
+                    {linxPropertyLabel(linxLookup, 'vencimento_licenciamento')}
+                  </p>
+                  {portalProduct?.numero_certificado && (
+                    <p className="mt-1">
+                      Nº do certificado na planilha: {portalProduct.numero_certificado}.
+                    </p>
+                  )}
+                  <p className="mt-1 text-emerald-700/80 dark:text-emerald-300/80">
+                    Os valores encontrados preencheram apenas os campos que estavam vazios. Revise
+                    antes de gravar.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+                  {linxLookupError}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label htmlFor="cert-validade" className={labelCls}>
               Validade do Certificado

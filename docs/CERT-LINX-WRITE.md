@@ -32,8 +32,14 @@ diferente → **UPDATE**; se já bate → **nada** (`unchanged`).
 ```
 Painel (apps/web)                     cert-api (FastAPI)                 Bancos
 ─────────────────                     ──────────────────                 ──────
-CertCadastroPage  ──multipart──▶  POST /api/certificates
-  (form + PDF)                        │
+CertCadastroPage
+        ├────GET───────────────▶  /api/certificates/linx-lookup
+        │                             ├─ resolve SKU → produto
+        │                             └─ SELECT props atuais ──────────▶ SQL Server (Linx)
+        │                                  (pré-preenche sem gravar)
+        │
+        └──multipart (form+PDF)──▶ POST /api/certificates
+                                      │
                                       ├─▶ salva PDF em CERTS_DIR (disco)
                                       ├─▶ INSERT cert_certificates ─────▶ PostgreSQL (auditoria)
                                       │     linx_status = 'pending'
@@ -70,7 +76,7 @@ Puket Escolares usa o **mesmo** Linx/códigos da Puket.
 - `app/db/sqlserver.py` — `_ident` (guarda de identificador), `_brand_linx`, `_connect`,
   `resolve_produto_codigo`, `upsert_produto_propriedade`.
 - `app/services/linx_service.py` — orquestra a escrita das 2 propriedades, formatação de
-  data e a política fail-closed.
+  data, consulta read-only para pré-preenchimento e a política fail-closed.
 - `app/routes/certificates.py` — endpoints REST + upload/validação de PDF.
 - `app/db/postgres.py` — cria a tabela `cert_certificates` em `ensure_tables()`.
 - `app/main.py` — registra o router `certificates`.
@@ -80,9 +86,12 @@ Puket Escolares usa o **mesmo** Linx/códigos da Puket.
 
 ### Frontend — `apps/web`
 
-- `src/features/certificacoes/CertCadastroPage.tsx` — formulário + lista de recentes.
+- `src/features/certificacoes/CertCadastroPage.tsx` — formulário, consulta Linx,
+  pré-preenchimento e lista de recentes.
+- `src/features/certificacoes/CertProdutoDetailPage.tsx` — exibe número/tipo da
+  planilha e as duas propriedades atuais do Linx.
 - `src/shared/lib/cert-api-client.ts` — `createCertificate`, `fetchCertificates`,
-  `retryCertificateLinx`, `getCertificatePdfUrl` + tipos.
+  `lookupCertificateLinx`, `retryCertificateLinx`, download de PDF + tipos.
 - `src/app/routes.tsx` — rota `/certificacoes/cadastro`.
 - `src/shared/components/CertificacoesLayout.tsx` — item de menu "Cadastrar Certificado".
 
@@ -96,6 +105,7 @@ Todas sob o prefixo de proxy `/cert-api` no painel.
 | ------ | ----------------------------------- | ---------------------------------------------------------------------- |
 | `POST` | `/api/certificates`                 | Cadastra (multipart: campos + PDF) e grava no Linx. Rate-limit 30/min. |
 | `GET`  | `/api/certificates`                 | Lista paginada (filtros `sku`, `brand`, `linx_status`).                |
+| `GET`  | `/api/certificates/linx-lookup`     | Resolve SKU e lê as props atuais no Linx. Rate-limit 60/min.           |
 | `GET`  | `/api/certificates/{id}`            | Detalhe.                                                               |
 | `GET`  | `/api/certificates/{id}/pdf`        | Download do PDF anexado.                                               |
 | `POST` | `/api/certificates/{id}/retry-linx` | Reprocessa a escrita no Linx. Rate-limit 30/min.                       |
@@ -122,6 +132,15 @@ linx_detail (jsonb), linx_applied_at, created_by, created_at, updated_at`.
 - **SQL-injection-proof:** nomes de tabela/coluna vêm **apenas** de config/env e passam por
   `_ident` (`^[A-Za-z0-9_]+$`); produto, código de propriedade e valor são **sempre bind params**.
   Nenhum input de request alcança um identificador.
+- **Marca fail-closed:** somente `imaginarium`, `puket` e `puket escolares`
+  (incluindo o slug com underscore) são aceitas. Substrings como `notpuket` não
+  selecionam mais uma base produtiva.
+- **Consulta segura:** a rota de lookup é `GET`, não persiste dados, tem limite de
+  tamanho nos parâmetros, rate limit e resposta de erro genérica. Exceções do driver
+  SQL Server não expõem host/login ao browser nem são copiadas para `linx_error`.
+- **Pré-preenchimento conservador:** datas Linx e número do certificado da planilha
+  preenchem somente campos vazios; valor digitado pelo operador não é substituído.
+  A sentinela Linx `01/01/1900` é tratada como campo vazio.
 - **Upsert seguro (anti-race + anti-trigger):** lê o valor atual com
   `SELECT … WITH (UPDLOCK, HOLDLOCK)`, o que serializa o caso "linha ausente" (dois cadastros
   simultâneos do mesmo par produto/propriedade não inserem em duplicidade), e então decide:
@@ -213,10 +232,15 @@ caminho de rollback — o Linx não versiona PROP_PRODUTOS.
 
 ## 8. Limitações conhecidas / próximos passos
 
-- Schema de `PROP_PRODUTOS`/`PROPRIEDADE` **confirmado** em 2026-07-16 (§6). Falta só
-  ligar `LINX_WRITE_ENABLED` com as credenciais por marca.
+- Schema e escrita estão confirmados e ligados em produção. A auditoria read-only de
+  2026-08-26 confirmou conectividade nas duas bases e `LINX_WRITE_ENABLED=true`.
 - `write_certificate_to_linx` grava **2 propriedades fixas**; não há suporte a N props
   (bloqueado, de todo modo, pela ausência da propriedade de prazo — §6).
 - PDF é armazenado em disco (`CERTS_DIR`); migrar para Google Drive é possível (cert-api já usa
   service account para Sheets) mas não foi feito.
 - Não há edição/exclusão de certificado pela UI (apenas cadastro, listagem e retry).
+- `cert_certificates` registra somente operações feitas pelo formulário. Ela estava
+  vazia em 2026-08-26 embora o Linx tivesse datas: não usar essa tabela para inferir
+  ausência de trava. Relatórios e telas consultam o próprio Linx.
+- Os logins ERP por marca ainda dependem de conta pessoal. Migrar para contas de
+  serviço de menor privilégio permanece pendente operacional.
