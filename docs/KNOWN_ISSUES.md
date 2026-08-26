@@ -62,6 +62,13 @@ Status: **ABERTO / ALTO** até conferência humana contra o documento original.
 
 ## ALTO - 23% Das Invoices Ficam Em Falha Terminal E Desenham A Tela Toda Com "-"
 
+Atualização read-only de 26/08 após a reconciliação: o recorte histórico abaixo
+não representa mais a fila corrente. Produção possui 51 documentos, todos com
+`is_processed=true`, `ai_parsed_data` presente, nenhuma lease e nenhum marcador
+de erro de extração. O risco de qualidade continua aberto sob outra métrica:
+41/51 têm confiança abaixo de 90%, incluindo 16 `other` sem extrator; confiança
+não mede acurácia e não autoriza replay cego.
+
 Descricao:
 
 - A Eduarda relatou em 17/08 que "a maioria dos campos esta trazendo so um
@@ -105,11 +112,11 @@ Causa-raiz apurada em 17/08 (ver
 
 Status:
 
-- **ABERTO / ALTO** ate remedir. As correcoes foram **publicadas em 17/08 as
-  21:31 BRT** (SHA `ce70f41`). Falta a parte de dado, que segue sem execucao:
-  reclassificar os documentos 44 (OHBL como invoice) e 28 (captura de tela),
-  resolver as 14 duplicatas, reprocessar os 17 documentos em falha e medir o
-  antes/depois. O reprocessamento exige token admin.
+- **PARCIALMENTE RESOLVIDO / ALTO.** A fila terminal e os marcadores de erro
+  foram zerados pela reconciliação/reprocessamento de 25/08. Permanece a
+  necessidade de revisar baixa confiança contra os originais, classificar os
+  `other` quando houver extrator aplicável e criar corpus rotulado antes de
+  garantir qualidade por campo.
 
 ## ALTO - Regra Desconhecida Bloqueia O IP Da API Na ia-local-net
 

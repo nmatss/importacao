@@ -114,6 +114,8 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
       {/* Mobile: carousel with arrows + dots */}
       <div className="md:hidden flex items-center justify-between px-2 py-2">
         <button
+          type="button"
+          aria-label="Etapa anterior do processo"
           onClick={() => setMobileIndex((prev) => Math.max(0, prev - 1))}
           disabled={mobileIndex === 0}
           className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
@@ -188,6 +190,8 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
         </div>
 
         <button
+          type="button"
+          aria-label="Próxima etapa do processo"
           onClick={() => setMobileIndex((prev) => Math.min(STEPS.length - 1, prev + 1))}
           disabled={mobileIndex === STEPS.length - 1}
           className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"

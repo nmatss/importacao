@@ -1,6 +1,7 @@
+import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import type { ImportProcess } from '@/shared/types';
-import { buildLogisticProps, deriveLogisticStep } from './LogisticStatusBar';
+import { buildLogisticProps, deriveLogisticStep, LogisticStatusBar } from './LogisticStatusBar';
 
 const AWAITING_SHIPMENT_STEP = 1; // LOGISTIC_STAGES index for 'Ag. Embarque'
 const IN_TRANSIT_STEP = 2; // LOGISTIC_STAGES index for 'in_transit' / 'Em Transito'
@@ -161,5 +162,14 @@ describe('buildLogisticProps', () => {
     );
 
     expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
+  });
+});
+
+describe('LogisticStatusBar', () => {
+  it('names the mobile carousel controls for assistive technologies', () => {
+    render(<LogisticStatusBar {...buildLogisticProps(makeProcess())} />);
+
+    expect(screen.getByRole('button', { name: 'Etapa logística anterior' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Próxima etapa logística' })).toBeEnabled();
   });
 });

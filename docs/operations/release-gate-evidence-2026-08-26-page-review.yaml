@@ -1,0 +1,63 @@
+release_gate_evidence:
+  plan_id: page-review-2026-08-26
+  status: validated_for_release
+  checked_at: '2026-08-26T09:40:00-03:00'
+  production_baseline_revision: 88f0b72cd1117c9e804c54bfc0feb893fc77c848
+
+  browser:
+    tool: playwright_cli
+    synthetic_data_only: true
+    production_mutations: false
+    routes: 30
+    desktop_routes_passed: 30
+    mobile_routes_passed: 30
+    settings_states_passed: 10
+    process_tab_states_passed: 15
+    global_overflow_failures: 0
+    page_or_console_errors: 0
+    visible_unnamed_buttons_after_fix: 0
+
+  fixes:
+    process_mobile_carousel_accessible_names: passed
+    logistic_mobile_carousel_accessible_names: passed
+    logistic_dropdown_close_accessible_name: passed
+    espelho_deep_link_during_loading: passed
+    cambios_deep_link_during_loading: passed
+
+  production_read_only:
+    api_ready: 200
+    web: 200
+    proxy_api: 200
+    public_https: 200
+    public_api: 200
+    processes: 117
+    documents: 51
+    unprocessed_documents: 0
+    active_document_leases: 0
+    documents_without_ai_data: 0
+    documents_with_extraction_error_marker: 0
+    documents_confidence_below_90: 41
+    email_completed: 222
+    email_processing: 0
+    email_failed: 0
+
+  validation:
+    lint: passed
+    typecheck: passed
+    api_tests_passed: 977
+    api_tests_skipped: 1
+    web_tests_passed: 135
+    web_e2e_passed: 4
+    build: passed_with_known_chunk_warning
+    npm_audit_high_critical: passed
+    npm_audit_moderate: 6
+    compose_config: passed
+    git_diff_check: passed
+    repository_format_check: failed_preexisting
+    repository_format_preexisting_files: 19
+
+  limitations:
+    document_accuracy: not_established_without_labeled_ground_truth
+    real_external_email_delivery: not_executed_without_controlled_recipient
+    imap_fallback: failed_auth
+    google_drive_root: failed_404

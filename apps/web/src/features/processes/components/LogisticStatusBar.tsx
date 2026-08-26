@@ -254,6 +254,8 @@ function StatusDropdown({
       <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
         <span>Alterar Status</span>
         <button
+          type="button"
+          aria-label="Fechar seleção de status logístico"
           onClick={onClose}
           className="p-0.5 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 rounded"
         >
@@ -414,6 +416,8 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
       {/* Mobile view: show active step with arrows */}
       <div className="md:hidden flex items-center justify-between px-4 py-3">
         <button
+          type="button"
+          aria-label="Etapa logística anterior"
           onClick={() => setMobileIndex((prev) => Math.max(0, prev - 1))}
           disabled={mobileIndex === 0}
           className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"
@@ -486,6 +490,8 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
         </div>
 
         <button
+          type="button"
+          aria-label="Próxima etapa logística"
           onClick={() => setMobileIndex((prev) => Math.min(LOGISTIC_STAGES.length - 1, prev + 1))}
           disabled={mobileIndex === LOGISTIC_STAGES.length - 1}
           className="p-1 rounded-lg hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 disabled:opacity-30 transition-colors"

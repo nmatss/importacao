@@ -313,6 +313,7 @@ export function ProcessDetailPage() {
   // Lightweight check for cambios data (cached — CambiosTab won't re-fetch)
   const {
     data: cambiosData,
+    isLoading: isLoadingCambios,
     error: cambiosError,
     refetch: refetchCambios,
   } = useApiQuery<CambiosTotalsResponse>(
@@ -354,11 +355,16 @@ export function ProcessDetailPage() {
 
   // Reset active tab if it becomes hidden
   useEffect(() => {
+    // Conditional tabs depend on asynchronous data. Validating too early used
+    // to discard deep links such as ?tab=espelho on the first render and
+    // ?tab=cambios while the exchange summary was still loading.
+    if (!process || isLoading || (activeTab === 'cambios' && isLoadingCambios)) return;
+
     const visibleKeys = new Set(visibleTabs.map((t) => t.key));
     if (!visibleKeys.has(activeTab)) {
       setActiveTab(activeTab === 'validacao' ? 'comparativo' : 'documentos');
     }
-  }, [visibleTabs, activeTab, setActiveTab]);
+  }, [visibleTabs, activeTab, setActiveTab, process, isLoading, isLoadingCambios]);
 
   const handleTabChange = useCallback((key: string) => setActiveTab(key), [setActiveTab]);
   const handleBack = useCallback(() => navigate('/importacao/processos'), [navigate]);

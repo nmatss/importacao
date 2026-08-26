@@ -5,6 +5,31 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-08-26 - Revisão página a página
+
+### Added
+
+- Cobertura de regressão para deep links das abas condicionais Espelho e
+  Câmbios durante o carregamento assíncrono do detalhe do processo.
+- Testes de nomes acessíveis nos carrosséis mobile do fluxo do processo e do
+  ciclo logístico.
+
+### Fixed
+
+- Refresh ou link direto para `?tab=espelho` e `?tab=cambios` deixa de ser
+  redirecionado prematuramente para Documentos.
+- Setas mobile do timeline e do ciclo logístico, além do fechamento do seletor
+  de status, agora possuem tipo e nome acessível explícitos.
+
+### Verification
+
+- Playwright CLI: 30 rotas em desktop e mobile (60/60), 15 estados de abas do
+  processo e cinco abas de Configurações nos dois viewports.
+- Produção consultada somente por agregados: 117 processos, 51 documentos,
+  nenhum pendente/lease/erro de extração e nenhum e-mail em `processing`.
+- Qualidade documental não foi declarada 100%: 41 documentos permanecem com
+  confiança abaixo de 90%, incluindo 16 `other` sem extrator dedicado.
+
 ## [41d0190] - 2026-08-26 - Auditoria de integrações, e-mail e UX
 
 Detalhe em `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md` e

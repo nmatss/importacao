@@ -1683,3 +1683,23 @@ Evidências:
 - O rsync revelou que ignorados do Git ainda eram copiados. Foram removidos do
   host apenas `.playwright-cli`, caches Ruff/Pytest e `output/`; o deploy ganhou
   exclusões explícitas para esses artefatos, coverage e relatórios E2E.
+
+## 2026-08-26 — Revisão página a página e deep links condicionais
+
+- Playwright CLI isolado cobriu 30 rotas em desktop/mobile (60/60), cinco abas
+  de Configurações em dois viewports (10/10) e 15 variantes do detalhe do
+  processo. Evidência raster sintética ficou ignorada em
+  `output/playwright/page-audit-2026-08-26/`.
+- Foram encontrados e corrigidos quatro botões de seta mobile sem nome
+  acessível e o fechamento icon-only do seletor de status logístico.
+- Deep links/refresh em `?tab=espelho` e `?tab=cambios` eram descartados antes
+  de processo/câmbios carregarem. O efeito agora aguarda as dependências e dois
+  testes reproduzem a corrida.
+- Produção read-only: 117 processos, 51 documentos, zero pendente, lease,
+  `aiParsedData` ausente ou marcador de erro; 222 e-mails `completed`, zero
+  `processing`/`failed`; serviços e HTTP interno/público saudáveis.
+- 41 documentos têm confiança abaixo de 90%, sendo 16 `other` sem extrator.
+  Decisão: não executar replay cego; processado é diferente de acurácia.
+- Gate: lint, typecheck, 977 testes API + 1 skip, 135 web, build, Playwright
+  4/4, audit sem alto/crítico, Compose e diff check passaram. `format:check`
+  preserva os mesmos 19 arquivos preexistentes.

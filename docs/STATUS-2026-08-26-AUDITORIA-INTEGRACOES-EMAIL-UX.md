@@ -253,3 +253,64 @@ Próximos gates operacionais:
 1. realizar envio controlado quando houver destinatário operacional aprovado;
 2. corrigir IMAP e a raiz/permissão do Drive;
 3. revisar humanamente o packing list abaixo de 90%.
+
+## Complemento — Revisão Página A Página E Estado Real — 2026-08-26
+
+### Fatos Observados
+
+- inventário atual: 30 rotas funcionais autenticadas, além de login, redirects
+  legados e páginas de rota inválida;
+- Playwright CLI com API sintética e sem efeitos externos passou em **60/60**
+  combinações: 30 rotas em 1440x900 e 390x844;
+- em todas as 60 combinações houve HTTP 200, conteúdo principal, ausência de
+  Error Boundary, erro de página/console, overflow global, imagem sem `alt` ou
+  botão visível sem nome acessível após as correções;
+- as cinco abas de Configurações passaram nos dois viewports (**10/10**);
+- as 15 variantes do detalhe do processo passaram, incluindo as 13 abas
+  centrais e os deep links condicionais de Espelho e Câmbios;
+- foram corrigidos quatro botões de seta sem nome acessível no mobile e o botão
+  de fechamento do seletor de status logístico;
+- foi corrigida uma corrida real: a validação de aba escondida acontecia antes
+  de processo/câmbios carregarem e descartava `?tab=espelho`/`?tab=cambios`.
+
+Screenshots sintéticas da rodada estão em
+`output/playwright/page-audit-2026-08-26/` e permanecem ignoradas pelo Git.
+
+### Produção — Read-only
+
+- `/home/nicolas/importacao/REVISION` estava em `88f0b72` antes deste candidato;
+- API, web, proxy, HTTPS público, PostgreSQL, Redis e Cert-API estavam
+  saudáveis; Prometheus/Grafana/Alertmanager também estavam ativos;
+- banco: 117 processos, 51 documentos, zero não processado, zero lease ativa,
+  zero `aiParsedData` ausente e zero marcador de erro de extração;
+- e-mail: 222 logs `completed`, zero `processing` e zero `failed`;
+- 41/51 documentos possuem confiança abaixo de 90%: invoice 4/11,
+  packing list 9/9, OHBL 7/7, draft BL 5/5 e `other` 16/16; espelho 0/3.
+
+### Decisão E Limites
+
+Estado terminal não prova acurácia. Não foi disparado replay cego em produção:
+`other` não possui extrator e reprocessar documentos de baixa confiança sem
+ground truth pode consumir orçamento e substituir evidência útil por saída
+pior. A afirmação correta é: **todos os documentos existentes estão
+processados, mas a qualidade de todos não está certificada**.
+
+Também permanece incorreto afirmar que o envio real está 100% provado. O
+caminho completo passou no GreenMail e o relay real passou em `verify()`, mas
+nenhuma mensagem externa foi enviada sem destinatário controlado aprovado.
+Gmail continua operacional; fallback IMAP e raiz do Drive continuam pendentes.
+
+### Gate Da Correção
+
+- `npm run lint`: passou;
+- `npm run typecheck`: passou após completar o fixture tipado do novo teste;
+- `npm test`: API 977 + 1 skip; web 135/135;
+- `npm run build`: passou, mantendo apenas o warning conhecido do chunk de
+  detalhe do processo (514,95 kB);
+- `npm run test:e2e:web`: 4/4 passou após isolar os navegadores; uma primeira
+  execução concorrente teve flake de foco no desktop, não reproduzido na
+  repetição isolada nem na suíte completa final;
+- `npm audit --audit-level=high`: passou, com seis moderados conhecidos;
+- `docker compose config --quiet` e `git diff --check`: passaram;
+- `npm run format:check`: continua falhando nos mesmos 19 arquivos do baseline;
+  nenhum arquivo desta correção está na lista.
