@@ -87,7 +87,8 @@ O workflow oficial também foi acionado para o SHA `f6113a9` (run
 `DEPLOY_USER` e `DEPLOY_SSH_KEY` não estão configurados no ambiente GitHub.
 Nenhum backup, rsync, container ou dado produtivo foi alterado. O workflow
 agora possui preflight explícito para reportar esse estado sem tentar
-`ssh-keyscan` com host vazio.
+`ssh-keyscan` com host vazio. O dry-run posterior `33020506135`, já no SHA
+`19e525c`, passou integralmente.
 
 Quando a rota voltar, a ordem obrigatória é:
 

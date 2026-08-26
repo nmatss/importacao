@@ -1,8 +1,9 @@
 release_gate_evidence:
   plan_id: process-completeness-replay-2026-08-26
   status: local_validation_passed_remote_execution_pending
-  checked_at: '2026-08-26T19:41:00-03:00'
+  checked_at: '2026-08-26T19:42:41-03:00'
   baseline_revision: e7d170805b07034da8acc8f4b059237b0d2d9a46
+  release_revision: 19e525c1579a1ec5d07ba72980b7daf04f1beba4
 
   baseline:
     processes: 117
@@ -56,6 +57,8 @@ release_gate_evidence:
     github_actions_run: 33020393982
     github_actions_result: failed_before_deploy_missing_required_secrets
     github_actions_preflight_fix: implemented
+    github_actions_dry_run: 33020506135
+    github_actions_dry_run_result: passed
     backup: not_executed
     restore_test: not_executed
     deploy: not_executed
