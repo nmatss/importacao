@@ -4,7 +4,10 @@ import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-process.env.LOG_LEVEL ||= 'fatal';
+// The container normally defines LOG_LEVEL=info. Override it for this sanitized
+// diagnostic so imported services cannot add provider/runtime log lines to the
+// machine-readable output.
+process.env.LOG_LEVEL = 'fatal';
 
 const networkEnabled = process.argv.includes('--network');
 const scriptDir = dirname(fileURLToPath(import.meta.url));
