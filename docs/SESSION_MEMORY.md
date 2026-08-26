@@ -1799,6 +1799,10 @@ Evidências:
   explicitamente na imagem, sem ampliar a superfície HTTP pública.
 - Bloqueio operacional atual: o host `192.168.168.124` ficou sem rota a partir
   desta etapa. Backup, piloto, replay, validação dos 117, relatório produtivo,
-  commit/push/deploy e smokes pós-deploy ainda não foram executados neste lote.
+  deploy e smokes pós-deploy ainda não foram executados neste lote.
+- Commit `f6113a9` foi publicado em `origin/master`. O workflow oficial
+  `33020393982` parou no Configure SSH porque os três secrets de deploy estavam
+  vazios, antes de qualquer mudança produtiva; um preflight explícito foi
+  adicionado ao workflow.
 - Ground truth/aceite humano permanece obrigatório para qualquer declaração de
   acurácia 100%; o operador nunca marca aprovação automaticamente.

@@ -47,6 +47,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ETD histórica deixa de ser falsa falha de consistência e passa a aviso de
   frescor; inversões cronológicas continuam bloqueantes.
 - Campo estruturado `gmailQuery` passa pela política de redação dos logs.
+- Workflow manual de produção agora falha no preflight com os nomes dos
+  secrets ausentes, antes de criar chave/known_hosts ou chamar o deploy.
 
 - React Router foi migrado de 6.30.4 para 7.18.2, removendo os advisories de
   open redirect e hydration/constructor injection sem alterar as rotas públicas.

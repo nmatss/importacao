@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Dry run (simulate only - no actual deploy)"
+        description: 'Dry run (simulate only - no actual deploy)'
         required: false
-        default: "true"
+        default: 'true'
         type: boolean
       confirm:
-        description: "Type DEPLOY to confirm production deployment"
+        description: 'Type DEPLOY to confirm production deployment'
         required: true
-        default: ""
+        default: ''
 
 jobs:
   deploy:
@@ -31,6 +31,23 @@ jobs:
         run: |
           if [ "${{ inputs.confirm }}" != "DEPLOY" ]; then
             echo "ERROR: You must type DEPLOY in the confirm field to proceed."
+            exit 1
+          fi
+
+      - name: Validate deploy secrets
+        if: ${{ !inputs.dry_run }}
+        env:
+          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
+          DEPLOY_USER_SECRET: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          missing=()
+          [[ -n "${DEPLOY_SERVER}" ]] || missing+=(DEPLOY_SERVER)
+          [[ -n "${DEPLOY_USER_SECRET}" ]] || missing+=(DEPLOY_USER)
+          [[ -n "${DEPLOY_SSH_KEY}" ]] || missing+=(DEPLOY_SSH_KEY)
+          if (( ${#missing[@]} > 0 )); then
+            echo "::error::Missing required production secret(s): ${missing[*]}"
             exit 1
           fi
 

@@ -12,6 +12,18 @@ Ultima atualizacao: 2026-08-26 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## ALTO - Deploy Remoto Sem Rota E Workflow Sem Secrets
+
+- O acesso local oficial a `192.168.168.124` responde `No route to host`.
+- O workflow manual de produção `33020393982` parou antes do deploy porque os
+  secrets `DEPLOY_SERVER`, `DEPLOY_USER` e `DEPLOY_SSH_KEY` estão ausentes.
+- Não houve backup, rsync ou alteração parcial. O workflow passou a validar os
+  três nomes antes de configurar SSH, sem revelar valores.
+
+Status: **ABERTO / ALTO.** Restaurar a rota LAN/VPN documentada ou configurar
+um runner aprovado com alcance ao host e os secrets no environment
+`production`. Depois repetir o workflow e confirmar backup, health e revisão.
+
 ## ALTO - Completude Documental Nao Possui Ground Truth Integral
 
 - Os 117 processos oficiais foram reconciliados contra a planilha mestre, mas

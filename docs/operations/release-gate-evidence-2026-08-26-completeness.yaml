@@ -1,7 +1,7 @@
 release_gate_evidence:
   plan_id: process-completeness-replay-2026-08-26
   status: local_validation_passed_remote_execution_pending
-  checked_at: '2026-08-26T19:37:46-03:00'
+  checked_at: '2026-08-26T19:41:00-03:00'
   baseline_revision: e7d170805b07034da8acc8f4b059237b0d2d9a46
 
   baseline:
@@ -53,6 +53,9 @@ release_gate_evidence:
 
   remote_execution:
     ssh: blocked_no_route_to_host
+    github_actions_run: 33020393982
+    github_actions_result: failed_before_deploy_missing_required_secrets
+    github_actions_preflight_fix: implemented
     backup: not_executed
     restore_test: not_executed
     deploy: not_executed
@@ -69,4 +72,7 @@ release_gate_evidence:
     - fiscal_decision_for_missing_puket_escolares_properties
     - controlled_recipient_if_real_email_delivery_must_be_proven
 
-  next_gate: restore_production_network_route_and_execute_bounded_remote_plan
+  next_gate: >-
+    Restore production network route or configure an approved routable GitHub
+    runner plus DEPLOY_SERVER, DEPLOY_USER and DEPLOY_SSH_KEY; then execute the
+    bounded remote plan.

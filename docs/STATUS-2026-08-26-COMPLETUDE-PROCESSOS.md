@@ -82,6 +82,13 @@ O host `192.168.168.124` passou a responder `No route to host` durante esta
 etapa. Por segurança, não houve tentativa de contornar o runner nem uso de uma
 rota alternativa não documentada.
 
+O workflow oficial também foi acionado para o SHA `f6113a9` (run
+`33020393982`), mas encerrou antes do deploy porque `DEPLOY_SERVER`,
+`DEPLOY_USER` e `DEPLOY_SSH_KEY` não estão configurados no ambiente GitHub.
+Nenhum backup, rsync, container ou dado produtivo foi alterado. O workflow
+agora possui preflight explícito para reportar esse estado sem tentar
+`ssh-keyscan` com host vazio.
+
 Quando a rota voltar, a ordem obrigatória é:
 
 1. confirmar revisão/saúde e refazer inventário agregado;
