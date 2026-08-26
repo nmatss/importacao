@@ -1804,5 +1804,8 @@ Evidências:
   `33020393982` parou no Configure SSH porque os três secrets de deploy estavam
   vazios, antes de qualquer mudança produtiva; um preflight explícito foi
   adicionado e publicado em `19e525c`. O dry-run `33020506135` passou.
+- `importacao.grupounico.com` resolve localmente para `10.106.185.28`; HTTP e
+  SSH falham porque o WSL não possui rota corporativa para `10.106.*` ou
+  `192.168.168.*`. Retomar somente após LAN/VPN oficial voltar.
 - Ground truth/aceite humano permanece obrigatório para qualquer declaração de
   acurácia 100%; o operador nunca marca aprovação automaticamente.

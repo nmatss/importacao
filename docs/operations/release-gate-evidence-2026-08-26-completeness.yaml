@@ -1,7 +1,7 @@
 release_gate_evidence:
   plan_id: process-completeness-replay-2026-08-26
   status: local_validation_passed_remote_execution_pending
-  checked_at: '2026-08-26T19:42:41-03:00'
+  checked_at: '2026-08-26T19:43:54-03:00'
   baseline_revision: e7d170805b07034da8acc8f4b059237b0d2d9a46
   release_revision: 19e525c1579a1ec5d07ba72980b7daf04f1beba4
 
@@ -54,6 +54,8 @@ release_gate_evidence:
 
   remote_execution:
     ssh: blocked_no_route_to_host
+    public_health_from_agent: blocked_private_dns_without_corporate_route
+    public_domain_resolved_ipv4: 10.106.185.28
     github_actions_run: 33020393982
     github_actions_result: failed_before_deploy_missing_required_secrets
     github_actions_preflight_fix: implemented
@@ -76,6 +78,6 @@ release_gate_evidence:
     - controlled_recipient_if_real_email_delivery_must_be_proven
 
   next_gate: >-
-    Restore production network route or configure an approved routable GitHub
+    Restore the corporate LAN/VPN route or configure an approved routable GitHub
     runner plus DEPLOY_SERVER, DEPLOY_USER and DEPLOY_SSH_KEY; then execute the
     bounded remote plan.

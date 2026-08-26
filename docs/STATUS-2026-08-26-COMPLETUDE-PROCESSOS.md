@@ -90,6 +90,11 @@ agora possui preflight explícito para reportar esse estado sem tentar
 `ssh-keyscan` com host vazio. O dry-run posterior `33020506135`, já no SHA
 `19e525c`, passou integralmente.
 
+O domínio público resolve neste ambiente para `10.106.185.28` e também não é
+alcançável. A tabela de rotas do WSL não possui rota para `10.106.*` nem
+`192.168.168.*`, confirmando ausência do túnel/rota corporativa, não falha da
+aplicação observável por HTTP.
+
 Quando a rota voltar, a ordem obrigatória é:
 
 1. confirmar revisão/saúde e refazer inventário agregado;
