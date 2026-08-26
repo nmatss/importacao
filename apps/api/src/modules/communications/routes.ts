@@ -3,7 +3,17 @@ import { communicationController } from './controller.js';
 import { authMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
-import { createCommunicationSchema, driveImportSchema, updateDraftSchema } from './schema.js';
+import {
+  communicationIdParamSchema,
+  communicationListQuerySchema,
+  communicationProcessIdParamSchema,
+  communicationProcessListQuerySchema,
+  createCommunicationSchema,
+  driveFilesQuerySchema,
+  driveImportSchema,
+  sendCommunicationSchema,
+  updateDraftSchema,
+} from './schema.js';
 
 const router = Router();
 const sendLimiter = createRateLimiter(10, 60_000); // 10 sends per minute
@@ -13,9 +23,18 @@ const driveImportLimiter = createRateLimiter(20, 60_000);
 
 router.use(authMiddleware);
 
-router.get('/', communicationController.list);
-router.get('/process/:processId', communicationController.listByProcess);
-router.get('/drive/files', communicationController.listDriveFiles);
+router.get('/', validate(communicationListQuerySchema, 'query'), communicationController.list);
+router.get(
+  '/process/:processId',
+  validate(communicationProcessIdParamSchema, 'params'),
+  validate(communicationProcessListQuerySchema, 'query'),
+  communicationController.listByProcess,
+);
+router.get(
+  '/drive/files',
+  validate(driveFilesQuerySchema, 'query'),
+  communicationController.listDriveFiles,
+);
 router.post(
   '/drive/import',
   driveImportLimiter,
@@ -23,7 +42,18 @@ router.post(
   communicationController.importDriveFile,
 );
 router.post('/', validate(createCommunicationSchema), communicationController.create);
-router.post('/:id/send', sendLimiter, communicationController.send);
-router.patch('/:id/draft', validate(updateDraftSchema), communicationController.updateDraft);
+router.post(
+  '/:id/send',
+  validate(communicationIdParamSchema, 'params'),
+  validate(sendCommunicationSchema),
+  sendLimiter,
+  communicationController.send,
+);
+router.patch(
+  '/:id/draft',
+  validate(communicationIdParamSchema, 'params'),
+  validate(updateDraftSchema),
+  communicationController.updateDraft,
+);
 
 export { router as communicationRoutes };

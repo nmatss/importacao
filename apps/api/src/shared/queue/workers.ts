@@ -74,7 +74,7 @@ async function handleEmailSend(data: EmailSendJob): Promise<void> {
   const { buildOutgoingMail, getSmtpTransport } = await import('../mail/mailer.js');
   const mail = await buildOutgoingMail(data.to);
 
-  const transporter = getSmtpTransport();
+  const transporter = await getSmtpTransport();
   await transporter.sendMail({
     from: mail.from,
     to: mail.to,

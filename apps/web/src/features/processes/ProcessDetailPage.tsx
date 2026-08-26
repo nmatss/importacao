@@ -409,7 +409,7 @@ export function ProcessDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:-mx-6 sm:px-6">
         <Breadcrumbs
           items={[
             { label: 'Processos', href: '/importacao/processos' },

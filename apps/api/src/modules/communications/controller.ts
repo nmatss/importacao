@@ -69,9 +69,6 @@ export const communicationController = {
   async listDriveFiles(req: Request, res: Response) {
     try {
       const processId = Number(req.query.processId);
-      if (!Number.isInteger(processId) || processId <= 0) {
-        return sendError(res, 'ID do processo invalido', 400);
-      }
       const files = await driveAttachmentsService.listProcessFiles(processId);
       sendSuccess(res, files);
     } catch (error: any) {
@@ -96,9 +93,6 @@ export const communicationController = {
   async updateDraft(req: Request, res: Response) {
     try {
       const id = Number(req.params.id);
-      if (isNaN(id) || id <= 0) {
-        return sendError(res, 'ID da comunicacao invalido', 400);
-      }
       const communication = await communicationService.updateDraft(
         id,
         req.body,

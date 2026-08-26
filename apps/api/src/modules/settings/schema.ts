@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidMailFrom } from '../../shared/mail/mail-address.js';
 
 const emailListSchema = z
   .string()
@@ -21,10 +22,25 @@ export const updateSettingSchema = z.object({
 });
 
 export const smtpSettingsSchema = z.object({
-  smtp_host: z.string().optional(),
-  smtp_port: z.string().optional(),
-  smtp_user: z.string().optional(),
-  smtp_from: z.string().optional(),
+  smtp_host: z.string().trim().max(253).optional(),
+  smtp_port: z
+    .string()
+    .trim()
+    .refine(
+      (value) =>
+        value === '' || (/^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 65535),
+      'Informe uma porta SMTP entre 1 e 65535',
+    )
+    .optional(),
+  smtp_user: z.union([z.literal(''), z.string().trim().email().max(254)]).optional(),
+  smtp_from: z
+    .string()
+    .trim()
+    .max(320)
+    .refine((value) => value === '' || isValidMailFrom(value), {
+      message: 'Use endereco@dominio.com ou "Nome" <endereco@dominio.com>',
+    })
+    .optional(),
 });
 
 export const integrationSettingsSchema = z.object({

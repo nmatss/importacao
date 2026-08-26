@@ -3,7 +3,24 @@ export function cn(...classes: (string | undefined | null | false)[]): string {
 }
 
 export function formatCurrency(value: number | string, currency = 'USD'): string {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(Number(value));
+  const numericValue = Number(value);
+  const normalizedCurrency = currency.trim().toUpperCase();
+
+  try {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: normalizedCurrency,
+    }).format(numericValue);
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error;
+
+    const formattedValue = new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numericValue);
+
+    return normalizedCurrency ? `${formattedValue} ${normalizedCurrency}` : formattedValue;
+  }
 }
 
 export function formatDate(date: string): string {

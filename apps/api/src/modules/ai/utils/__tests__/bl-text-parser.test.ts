@@ -59,4 +59,24 @@ describe('BL text parser', () => {
     expect(filled.portOfLoading.value).toBe('NINGBO');
     expect(filled.totalGrossWeight.value).toBe(2345.6);
   });
+
+  it('treats PREPAID as a payment term and never backfills a freight amount', () => {
+    const prepaidText = `OCEAN BILL OF LADING
+B/L No: PK2112606NB
+Freight PREPAID
+Total Gross Weight: 6165668 KGS`;
+    const parsed = tryParseBLText(prepaidText);
+    const filled = fillBLNullsFromText(
+      {
+        freightValue: { value: 6165668, confidence: 0.8 },
+        freightCurrency: { value: 'PREPAID', confidence: 0.95 },
+      },
+      prepaidText,
+    );
+
+    expect(parsed?.freightValue.value).toBeNull();
+    expect(parsed?.freightCurrency.value).toBe('PREPAID');
+    expect(filled.freightValue.value).toBeNull();
+    expect(filled.freightCurrency.value).toBe('PREPAID');
+  });
 });

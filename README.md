@@ -257,8 +257,14 @@ npm run db:seed      # Seed inicial
 ## Testes
 
 ```bash
-# Rodar todos os testes
-npm test -w apps/api
+# Unitários API + Web
+npm test
+
+# E2E da API (PostgreSQL e GreenMail descartáveis; requer Docker)
+npm run test:e2e -w apps/api
+
+# E2E do Web em Chromium desktop/mobile (Vite iniciado pelo harness)
+npm run test:e2e:web
 
 # Com watch mode
 npm run test:watch -w apps/api
@@ -267,12 +273,14 @@ npm run test:watch -w apps/api
 npm run test:coverage -w apps/api
 ```
 
-Arquivos de teste por servico: **API ~49** (Vitest), **Web 5** (Vitest), **Cert API 6** (pytest).
+Baseline validado em 2026-08-26: **API 977 testes unitários + 48 E2E**,
+**Web 131 unitários + 4 Playwright** e **Cert API 509 pytest**.
 
 - **Unitarios**: state machine, validation checks, AI service, date utils
 - **Integracao**: process, validation, document, espelho, dashboard services
 - **Snapshot**: templates Excel (Puket/Imaginarium), templates email (3 tipos)
 - **Cert API (pytest)**: health, rotas de certificados, cert service, linx service, stock, rotas gerais
+- **E-mail E2E**: SMTP/IMAPS, PDF, flags, lease de ingestão, sanitização e envio pela API sem egress externo
 
 ## CI/CD
 

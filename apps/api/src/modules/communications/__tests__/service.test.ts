@@ -235,9 +235,9 @@ describe('communicationService', () => {
         expect.objectContaining({
           from: '"Uni.co Importacao" <global@grupounico.com>',
           to: 'to@example.com',
-          // A caixa operacional e sempre exigida (ver ccRecipients auditado),
-          // mas sai do header por ja ser o remetente.
-          cc: 'global@example.com',
+          // A copia configurada e a caixa operacional de registro permanecem
+          // no header exatamente como ficam persistidas para auditoria.
+          cc: 'global@example.com, global@grupounico.com',
           subject: 'Test',
         }),
       );
@@ -466,17 +466,17 @@ describe('communicationService', () => {
 
       await communicationService.send(1);
 
-      // Sem cadastro, a copia obrigatoria e a propria caixa operacional — que ja
-      // e o remetente, entao o header CC sai vazio por deduplicacao.
+      // Sem cadastro, a copia obrigatoria e a propria caixa operacional e deve
+      // permanecer explicitamente no header enviado e no registro auditado.
       const sent = mockSendMail.mock.calls[0][0];
       expect(sent.from).toBe('"Uni.co Importacao" <global@grupounico.com>');
-      expect(sent.cc).toBeUndefined();
+      expect(sent.cc).toBe('global@grupounico.com');
     });
 
-    it('should keep the operational mailbox in copy when MAIL_FORCE_OPERATIONAL_CC is on', async () => {
+    it('should ignore the legacy flag when it would suppress the mandatory copy', async () => {
       mockGetOperationalRecipient.mockResolvedValue('');
       process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
-      process.env.MAIL_FORCE_OPERATIONAL_CC = 'true';
+      process.env.MAIL_FORCE_OPERATIONAL_CC = 'false';
 
       const mockComm = {
         id: 1,

@@ -7,6 +7,8 @@ uploads/
 coverage/
 *.tsbuildinfo
 certifications.db
+.playwright-cli/
+output/playwright/
 
 # SOPS encrypted file.
 # Ignored to avoid accidental plaintext adds; the encrypted production file is

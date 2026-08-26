@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const authGate = vi.hoisted(() => ({ adminAllowed: true }));
 const settingsStore = vi.hoisted(() => new Map<string, string>());
+const mockVerifySmtpConnection = vi.hoisted(() => vi.fn());
+
+vi.mock('../../../shared/mail/mailer.js', () => ({
+  verifySmtpConnection: (...args: any[]) => mockVerifySmtpConnection(...args),
+}));
 
 vi.mock('../../../shared/middleware/auth.js', () => ({
   authMiddleware: (req: any, _res: any, next: any) => {
@@ -70,6 +75,7 @@ describe('settingsRoutes recipients', () => {
     settingsStore.clear();
     authGate.adminAllowed = true;
     process.env = { ...originalEnv };
+    mockVerifySmtpConnection.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -134,5 +140,37 @@ describe('settingsRoutes recipients', () => {
     expect(res.body.data).toEqual(
       expect.arrayContaining([{ key: 'kiom_email', value: 'contact@kiomglobal.com' }]),
     );
+  });
+
+  it('tests SMTP authentication without sending an e-mail', async () => {
+    const res = await request(makeApp()).post('/api/settings/smtp/test');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ connected: true });
+    expect(mockVerifySmtpConnection).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an invalid SMTP port and sender before persisting them', async () => {
+    const res = await request(makeApp()).put('/api/settings/smtp').send({
+      smtp_port: '70000',
+      smtp_from: '"Uni.co" <global@grupounico.com>Bcc: attacker@evil.test',
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Dados inválidos');
+    expect(settingsStore.has('smtp_port')).toBe(false);
+    expect(settingsStore.has('smtp_from')).toBe(false);
+  });
+
+  it('returns an actionable message when SMTP authentication is refused', async () => {
+    mockVerifySmtpConnection.mockRejectedValue(
+      Object.assign(new Error('provider details'), { code: 'EAUTH' }),
+    );
+
+    const res = await request(makeApp()).post('/api/settings/smtp/test');
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toContain('Autenticação SMTP recusada');
+    expect(res.body.error).not.toContain('provider details');
   });
 });

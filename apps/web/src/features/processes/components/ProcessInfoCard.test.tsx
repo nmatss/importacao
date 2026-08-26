@@ -191,6 +191,23 @@ describe('ProcessInfoCard', () => {
     expect(screen.queryByText(/€\s?1\.500,00/)).not.toBeInTheDocument();
   });
 
+  it('renders PREPAID as a freight term instead of passing it as an ISO currency', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            ohbl: {
+              freightValue: 3200,
+              freightCurrency: 'PREPAID',
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.getByText('PREPAID · 3.200,00 (moeda não informada)')).toBeInTheDocument();
+  });
+
   it('reads Data Embarque, Frete and Container straight from the BL doc before the espelho is built', () => {
     render(
       <ProcessInfoCard

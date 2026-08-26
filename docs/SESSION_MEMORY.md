@@ -1556,3 +1556,112 @@ Observacao operacional:
   e-commerce 28. O 0/28 esta correto. Painel/XLSX agora rotulam CD disponivel e
   o painel mostra o detalhe 0/7 mesmo quando todas as unidades estao reservadas.
 - Nenhum deploy ou sync de certificacao foi executado nesta sessao.
+
+## 2026-08-25 — Reconciliação Follow Up, frete e replay Gemini
+
+- A fonte operacional atual foi confirmada na planilha Follow Up: 117 processos
+  com ETD a partir de 2025-05-01 e 115 colunas reconciliadas.
+- Backup e restore test passaram antes da operação. A base ficou com 117
+  processos, 117 follow-ups, 51 documentos processados, zero lease e zero par
+  `PREPAID|COLLECT + freightValue`.
+- Dezoito registros de validação foram removidos; 18 documentos válidos foram
+  movidos e 31 duplicados/mal classificados removidos em transação
+  serializável. Dez PDFs sem extrator ficaram preservados como `other`.
+- Seis documentos foram reprocessados: confiança média 93,23%, todos `trusted`,
+  cinco >=90%; packing list 122 ficou em 86,63% e requer revisão humana.
+- Processo 275: validação final 13/9/6/1 (passed/failed/warning/skipped).
+  Processo 259: revisão parcial 10/9/10/0, preservando estado completed.
+- O crash de moeda vem de `PREPAID` usado como ISO currency e de backfill de BL
+  atravessando linhas. O bloqueio da fonte Perplexity pela CSP é correto e não
+  deve ser relaxado.
+- `SIM`/`NÃO` da planilha foi removido do campo de workflow e preservado como
+  `sheetDocumentCorrection`; restou somente um `pending_correction` real.
+- Google Chat falhou com chave de API inválida. Nenhum push ou deploy foi feito;
+  correções permanecem locais e aguardam autorização.
+
+Evidência: `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`.
+
+## 2026-08-26 — Auditoria De Integrações, E-mail, Segurança E UX
+
+- Ambiente corrente sem containers do projeto: Gmail autenticou; IMAP e SMTP
+  recusaram autenticação; Drive respondeu 404; Odoo/IA local não resolveram a
+  rede Compose; Follow-Up/Cert-API estão sem IDs/chave; SYDLE está desligado.
+- Nenhum e-mail real foi enviado. O novo teste administrativo usa somente
+  `transport.verify()`, com rate limit e mensagem sanitizada.
+- Corrigida exceção pós-persistência da ingestão: `.some()` era chamado no
+  objeto `enrichedData`; agora o desfecho avalia `processedAttachments` e
+  distingue formato não suportado de duplicata.
+- Transporte SMTP passa a honrar host/porta/usuário salvos no banco com fallback
+  para env; senha continua fora do banco. `From` recebe parser estrito e a cópia
+  operacional não pode mais ser removida por ser também remetente.
+- `mailparser`, `undici`, DOMPurify e React Router receberam patches compatíveis.
+  Restam dez advisories moderados que exigem major/tooling; nenhum alto/crítico
+  no gate `npm audit --audit-level=high`.
+- Logs HTTP/Gmail e campos comuns de e-mail/documento foram redigidos; erro de
+  métricas deixou de ser refletido ao cliente.
+- Playwright local com dados simulados cobriu 31 variantes de rota em desktop e
+  mobile, cinco abas de Configurações e 13 abas do detalhe de processo. Corrigidos
+  overflow do header sticky no detalhe e corte das datas da Pré-Conferência.
+- Banco local alcançável tinha 1.375 processos, zero documento e 20 e-mails
+  ignorados, sem as tabelas novas de telemetria. Não confundir com validação de
+  25/08 (117 processos/51 documentos) nem com produção, não consultada.
+- Nenhum push, deploy, migração, sync externo ou reprocessamento foi executado.
+- Gate final: lint, typecheck, 974 testes API, 131 web, 44 E2E, 509 Python,
+  build, audit npm sem alto/crítico e pip-audit passaram. O harness E2E foi
+  alinhado às migrations `0019–0025`. `format:check` preserva o passivo
+  preexistente de 19 arquivos.
+
+Evidências:
+
+- `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`
+- `docs/SECURITY_AUDIT_2026-08-26.md`
+- screenshots locais ignoradas em `output/playwright/`.
+
+## 2026-08-26 — Continuação: round-trip de e-mail, lease e E2E mutável
+
+- GreenMail 2.1.13 e PostgreSQL descartáveis provaram SMTP→IMAPS com PDF,
+  marcação como lido, rascunho criado pela API, sanitização HTML e envio pela
+  aplicação. Nenhum destino externo foi contatado.
+- Corrigida perda silenciosa após crash: log `processing` recente não é
+  reconhecido nem marcado como lido por outro worker; lease vencida é reclamada
+  atomicamente e retomada no mesmo registro. O E2E provou simultaneamente os
+  dois estados.
+- IMAP recebeu TLS 1.2 mínimo, certificado fail-closed, timeouts e limites de
+  memória. `IMAP_TLS_REJECT_UNAUTHORIZED=false` ficou documentado somente para
+  sandbox self-signed.
+- Sanitização HTML regex foi substituída por `sanitize-html` com allow-list;
+  IDs, datas, paginação e corpo do envio passaram a ser validados na rota.
+- `docker compose config --quiet` e `--services` passaram localmente sem
+  credenciais Cert-API opcionais; produção não foi relaxada.
+- Playwright foi versionado: composição/confirmação/envio interceptado e
+  save/teste SMTP passaram em desktop e Pixel 7, com foco, Escape, restore focus,
+  console e overflow verificados.
+- Testcontainers foi atualizado para 12.1.0. Audit final: zero alto/crítico,
+  seis moderados totais e dois no runtime (React Router 6 → correção major 7).
+- Gate final: lint/typecheck, API 977 testes + 1 skip, web 131, API E2E 48,
+  Playwright 4, Cert API 509, Ruff, build, Compose, diff check e pip-audit
+  passaram. Warning residual: chunk `ProcessDetailPage` 514,61 kB.
+- Bloqueios externos continuam: SMTP/IMAP reais recusam credencial, Drive 404,
+  IDs/chaves de Follow-Up/Cert-API ausentes e serviços Compose não iniciados.
+  Nenhum push, deploy, migração remota, sync ou e-mail real foi executado.
+
+## 2026-08-26 — Continuação: preflight de produção e gate de release
+
+- Produção foi consultada em modo read-only: 117 processos, 51 documentos,
+  zero documento pendente, zero lease ativa, zero par inválido de frete e zero
+  estado de correção inválido. O checkpoint de reprocessamento permanece
+  íntegro, sem equivaler a acurácia humana certificada.
+- Gmail segue como canal primário e houve ingestão no dia; nenhum log ficou em
+  `processing`. IMAP ainda recusa autenticação.
+- O `EAUTH` SMTP foi isolado ao código implantado tentar autenticar um relay
+  sem auth com usuário placeholder. A lógica nova passou em `verify()` dentro
+  do contêiner de produção, sem enviar mensagem.
+- API, web e proxy responderam 200; containers críticos estavam healthy; SOPS
+  em `$HOME/bin`, chave age, rede `ia-local-net`, espaço e backups estavam
+  disponíveis.
+- O runner oficial de migrations terminava em `0024`; foi alinhado ao E2E e
+  agora inclui a `0025_ai_usage_telemetry.sql`, idempotente e já aplicada no
+  host.
+- O usuário autorizou continuar pelos passos de release até o deploy. Como
+  SYDLE já está live e documentado, o deploy deve usar o guard rail existente
+  `ALLOW_SYDLE_SYNC_DEPLOY=1`, preservando a configuração atual.

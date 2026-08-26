@@ -234,15 +234,23 @@ export function tryParseBLText(text: string): Record<string, any> | null {
     /\bTotal\s*(?:CBM|M\s*3|M3|C\.M\.|Cubic\s*Metres?)\b[^\d]{0,12}([\d.,]+)/i,
     /\bVolume\b[^\d]{0,12}([\d.,]+)\s*(?:M3|CBM|CUBIC)?/i,
   ]);
-  const freightValue = matchFirst(source, [
-    /\bFreight\b[^\d]{0,50}?([\d.,]+)\s*(?:USD|EUR|CNY)?/i,
-    /\bFreight\s*([A-Z]{3})?\s*[^\d]{0,20}([\d.,]+)(?:\s*(?:USD|EUR|CNY))?/i,
-  ]);
+  const freightPaymentTerm = matchFirst(source, [
+    /\bFreight\b[^\r\n]{0,50}?\b(PREPAID|COLLECT)\b/i,
+    /\b(PREPAID|COLLECT)\b[^\r\n]{0,50}?\bFreight\b/i,
+  ])?.toUpperCase();
+  const freightValue = freightPaymentTerm
+    ? null
+    : matchFirst(source, [
+        /\bFreight\b[^\d\r\n]{0,50}?([\d.,]+)\s*(?:USD|EUR|CNY)?/i,
+        /\bFreight\s*([A-Z]{3})?\s*[^\d\r\n]{0,20}([\d.,]+)(?:\s*(?:USD|EUR|CNY))?/i,
+      ]);
   const freightCurrency =
+    freightPaymentTerm ??
     matchFirst(source, [
-      /\b(USD|EUR|CNY)\b(?=[\s\S]{0,80}\bFreight\b)/i,
-      /\bFreight\b[\s\S]{0,80}\b(USD|EUR|CNY)\b/i,
-    ])?.toUpperCase() ?? null;
+      /\b(USD|EUR|CNY)\b(?=[^\r\n]{0,80}\bFreight\b)/i,
+      /\bFreight\b[^\r\n]{0,80}\b(USD|EUR|CNY)\b/i,
+    ])?.toUpperCase() ??
+    null;
   const containerType = extractContainerType(source);
   const freeTime = matchFirst(source, [
     /\bFree\s*Time\s*(?:days?)?\s*[:#-]?\s*([\d]{1,4})\b/i,
@@ -351,33 +359,44 @@ const BL_FILL_KEYS: string[] = [
 
 export function fillBLNullsFromText(data: Record<string, any>, text: string): Record<string, any> {
   const parsed = tryParseBLText(text);
-  if (!parsed) return data;
-
   const out = { ...data };
-  for (const key of BL_FILL_KEYS) {
-    const parsedField = parsed[key];
-    const currentField = out[key];
-    const currentValue = unwrapValue(currentField);
+  if (parsed) {
+    for (const key of BL_FILL_KEYS) {
+      const parsedField = parsed[key];
+      const currentField = out[key];
+      const currentValue = unwrapValue(currentField);
 
-    if (!isFieldEmpty(currentValue) && currentField !== null && currentField !== undefined) {
-      continue;
+      if (!isFieldEmpty(currentValue) && currentField !== null && currentField !== undefined) {
+        continue;
+      }
+
+      if (!isFieldEmpty(unwrapValue(parsedField))) {
+        out[key] = parsedField;
+      }
     }
 
-    if (!isFieldEmpty(unwrapValue(parsedField))) {
-      out[key] = parsedField;
+    if (
+      (out.ncmList == null || isFieldEmpty(unwrapValue(out.ncmList))) &&
+      parsed.ncmList &&
+      !isFieldEmpty(parsed.ncmList)
+    ) {
+      out.ncmList = parsed.ncmList;
+    }
+
+    if (out.woodDeclaration == null && !isFieldEmpty(unwrapValue(parsed.woodDeclaration))) {
+      out.woodDeclaration = parsed.woodDeclaration;
     }
   }
 
-  if (
-    (out.ncmList == null || isFieldEmpty(unwrapValue(out.ncmList))) &&
-    parsed.ncmList &&
-    !isFieldEmpty(parsed.ncmList)
-  ) {
-    out.ncmList = parsed.ncmList;
-  }
-
-  if (out.woodDeclaration == null && !isFieldEmpty(unwrapValue(parsed.woodDeclaration))) {
-    out.woodDeclaration = parsed.woodDeclaration;
+  const freightCurrency = String(unwrapValue(out.freightCurrency) ?? '')
+    .trim()
+    .toUpperCase();
+  if (freightCurrency === 'PREPAID' || freightCurrency === 'COLLECT') {
+    const currentFreightValue = out.freightValue;
+    out.freightValue =
+      currentFreightValue && typeof currentFreightValue === 'object'
+        ? { ...currentFreightValue, value: null }
+        : { value: null, confidence: 0 };
   }
 
   return out;

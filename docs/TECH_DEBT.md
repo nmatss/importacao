@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-08-14
+Ultima atualizacao: 2026-08-26
 
 ## Validacao E Comparativo
 
@@ -15,11 +15,17 @@ Ultima atualizacao: 2026-08-14
 - Fortalecer E2E do fluxo documental com upload multipart real, magic-byte
   negativo, preview/download, permissao admin para reprocess/delete, processo
   travado e validacao ponta a ponta usando as rotas reais.
-- Tornar o intake por e-mail idempotente antes do ack/mark-as-read: hoje a
-  auditoria indica risco de mensagem marcada como lida antes do processamento
-  completo em caso de crash entre leitura e upload/processamento.
 
 ## IA E Extracao
+
+- Substituir o short-circuit binário dos parsers determinísticos por política
+  versionada de qualidade e telemetria. O gate pontual de packing list impede
+  `PHONE:` como código, mas layouts novos ainda exigem corpus anonimizado.
+- Implementar chunking/continuação para invoices e packing lists tabulares
+  grandes. Em 25/08 duas invoices precisaram de teto de saída e timeout maiores,
+  e um packing list só acionou o Gemini após rejeitar o parser determinístico.
+- Separar confiança do modelo de acurácia medida: criar amostra rotulada,
+  métricas por campo/tipo e gate >=90% antes de qualquer garantia de negócio.
 
 - Criar executor administrativo de reprocessamento em lote com dry-run,
   selecao canonica, exclusao explicita de processos, batch ID, checkpoint,
@@ -53,6 +59,11 @@ Ultima atualizacao: 2026-08-14
 
 ## Banco E Dados
 
+- Separar definitivamente o indicador histórico de correção da planilha do
+  estado de workflow. O importador agora preserva
+  `sheetDocumentCorrection` no JSON, mas falta uma coluna tipada ou tabela de
+  origem por campo.
+
 - Criar documento de indices por tabela e queries criticas.
 - Auditar indices redundantes e queries com risco de full scan.
 - Sydle: obter catalogo/permissao ou view/API consolidada para dados
@@ -72,6 +83,10 @@ Ultima atualizacao: 2026-08-14
 - Adicionar runbook especifico para reprocessamento documental: backup de banco
   e `uploads`, piloto, pausa, criterios de encerramento e reconciliacao de
   efeitos externos.
+- Completar o ambiente E2E descartável para Gmail API/Drive/Odoo. PostgreSQL,
+  SMTP e IMAPS já usam Testcontainers + GreenMail com PDF, envio pela API,
+  flags de leitura e leases de idempotência; Gmail API, Drive, scheduler e Odoo
+  ainda não possuem emulador/fixture integrado.
 - Adicionar chave operacional para suprimir notificacoes e uploads externos em
   manutencoes controladas, sem desligar silenciosamente integracoes normais.
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
@@ -91,12 +106,12 @@ Ultima atualizacao: 2026-08-14
   ausente; a divida atual e impedir que uma resposta vazia ou truncada, mas sem
   excecao, substitua um snapshot saudavel inteiro.
 - Resolver residuais de `npm audit` moderados sem downgrade inseguro: raiz do
-  workspace com 11 moderadas; builder Docker da API com 8 moderadas de
-  dev/tooling; runtime Docker da API sem vulnerabilidades em
-  `npm audit --omit=dev --audit-level=high`. Pendencias principais:
-  `drizzle-kit` via `@esbuild-kit/*`/`esbuild`, `@opentelemetry/*` transitivo do
-  Sentry e `testcontainers` 11 via `dockerode`/`uuid` (v12 exige Node 22.19+ e
-  quebrou E2E local em Node 20).
+  workspace com seis moderadas após patches e upgrade do Testcontainers para
+  12.1.0; runtime deve
+  continuar validado separadamente em
+  `npm audit --omit=dev --audit-level=high`. Pendências: `drizzle-kit` via
+  `@esbuild-kit/*`/`esbuild` no tooling e React Router 6 no runtime (correção
+  apenas no major 7, exigindo migração e regressão de rotas).
 - Criar probe sintetico de egress externo da API e alerta por sequencia de
   falhas de cron. O incidente de 01-14/08/2026 rodou 1.864 falhas seguidas do
   `sydle-sync` em 12 dias com `/health/ready` verde; o detector foi o usuario

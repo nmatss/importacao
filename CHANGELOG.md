@@ -5,6 +5,97 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-08-26 - Auditoria de integrações, e-mail e UX
+
+Detalhe em `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md` e
+`docs/SECURITY_AUDIT_2026-08-26.md`.
+
+### Added
+
+- Probe SMTP administrativo autenticado e limitado por taxa, usando
+  `transport.verify()` sem enviar mensagem.
+- Validação estrita e compartilhada de remetente SMTP e cobertura do desfecho
+  de anexos ignorados/duplicados na ingestão.
+- Evidência Playwright local de 31 variantes de rota em desktop e mobile, mais
+  as cinco abas de Configurações e 13 abas do detalhe do processo.
+- Harness versionado de Playwright para os fluxos mutáveis de comunicação e
+  SMTP em Chromium desktop/mobile.
+- Round-trip descartável PostgreSQL + GreenMail para SMTP, IMAPS, anexo PDF,
+  flags de leitura, sanitização e envio pela API.
+
+### Fixed
+
+- Processador de e-mail deixa de chamar `.some()` no objeto de metadados após
+  persistir anexos e passa a avaliar a lista correta.
+- Host, porta e usuário SMTP salvos na UI passam a controlar o transporte real;
+  a senha continua somente em env/SOPS.
+- `From` inválido não alcança o Nodemailer, e a caixa operacional permanece
+  explicitamente em `Cc` para manter envio e auditoria consistentes.
+- Logs HTTP/Gmail deixam de persistir query, assunto, endereços e nomes de
+  documentos; erro de métricas não é mais refletido ao cliente.
+- Cabeçalho do detalhe de processo e intervalo de datas da Pré-Conferência não
+  causam mais overflow horizontal em desktop/mobile.
+- Dependências vulneráveis do caminho de e-mail/browser receberam patches
+  compatíveis, sem upgrade major.
+- Banco descartável E2E passa a aplicar também as migrations manuais
+  `0019–0025`, eliminando falsos `400` por schema defasado.
+- Lease de ingestão impede que uma execução concorrente/abandonada seja marcada
+  como lida antes do estado terminal; leases vencidas são retomadas.
+- Sanitização HTML deixa a blacklist regex e passa para allow-list de tags,
+  atributos, esquemas e CSS com `sanitize-html`.
+- IDs, paginação, datas e payload do envio de comunicações recebem validação
+  Zod na borda HTTP.
+- IMAP recebe TLS 1.2 mínimo, verificação de certificado por padrão, timeouts e
+  limites de linha/literal.
+- Compose local não exige credenciais de integrações opcionais da Cert-API;
+  produção continua estrita.
+- Runner oficial de produção passa a aplicar também a migration idempotente
+  `0025_ai_usage_telemetry.sql`, alinhado ao harness E2E.
+
+### Changed
+
+- Testcontainers/PostgreSQL atualizados de 11 para 12.1.0 após regressão E2E,
+  reduzindo o audit total de dez para seis moderados.
+
+### Operations
+
+- Gmail autenticou e a ingestão de produção está ativa. IMAP e Drive continuam
+  pendentes. O SMTP corrigido passou em `verify()` no contêiner de produção sem
+  envio real; publicação ainda não concluída neste checkpoint.
+
+## [Unreleased] - 2026-08-25 - Reconciliação de processos e documentos Gemini
+
+Detalhe em `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`.
+
+### Added
+
+- Parsers reutilizáveis de número localizado, percentual e datas de planilha,
+  com testes Node independentes do banco.
+- Seleção exata `--document-id` no operador de reprocessamento.
+- Scripts SQL serializáveis e auditáveis para reconciliar registros de
+  validação com processos oficiais e normalizar o estado de correção.
+
+### Fixed
+
+- `PREPAID`/`COLLECT` deixam de ser enviados a `Intl.NumberFormat` como moeda e
+  o parser de BL não preenche frete com número encontrado em outra linha.
+- Packing list com linha de contato confundida com item cai para o Gemini em
+  vez de aceitar silenciosamente uma extração determinística incompleta.
+- Importador Follow Up passa a interpretar datas pt-BR, percentuais como fração
+  e números monetários localizados, preservando projeções documentais existentes.
+- Valor `SIM`/`NÃO` da coluna de correção da planilha deixa de sobrescrever o
+  estado interno do workflow.
+- Importador Follow Up deixa de conter fallback de credencial de banco e passa
+  a exigir `DATABASE_URL` explicitamente.
+
+### Operations
+
+- Ambiente de validação reconciliado para 117 processos oficiais, 51
+  documentos processados, zero lease e zero par inválido de frete.
+- Seis documentos reprocessados com confiança média de 93,23%; cinco acima de
+  90% e um packing list em revisão humana a 86,63%.
+- Nenhum push ou deploy executado.
+
 ## [Unreleased] - 2026-08-17 - Pedidos da Eduarda na importacao e gate de estoque
 
 Detalhe em `docs/STATUS-2026-08-17-IMPORTACAO-PEDIDOS-EDUARDA.md` e

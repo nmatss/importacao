@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'crypto';
 import { fileTypeFromBuffer } from 'file-type';
 import pdfParse from 'pdf-parse';
 import * as XLSX from 'xlsx';
-import { eq, desc, count, sql, ilike, and, gte } from 'drizzle-orm';
+import { eq, desc, count, sql, ilike, and, gte, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   emailAttachmentDocuments,
@@ -26,6 +26,7 @@ import {
   isAllowedSenderFromEnv,
   isEmailAllowedByPatterns,
 } from './sender-policy.js';
+import { hasUnsupportedAttachmentSkip } from './attachment-outcomes.js';
 
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
 
@@ -48,6 +49,12 @@ const EMAIL_ATTACHMENT_EXT_MIME_ALIASES: Record<string, Set<string>> = {
 };
 
 const MAX_STORED_EMAIL_BODY_CHARS = Number(process.env.EMAIL_BODY_MAX_CHARS) || 20000;
+const configuredEmailProcessingStaleMinutes = Number(process.env.EMAIL_PROCESSING_STALE_MINUTES);
+const EMAIL_PROCESSING_STALE_MINUTES =
+  Number.isFinite(configuredEmailProcessingStaleMinutes) &&
+  configuredEmailProcessingStaleMinutes > 0
+    ? configuredEmailProcessingStaleMinutes
+    : 30;
 
 type EmailAttachment = {
   filename: string;
@@ -586,48 +593,131 @@ export const emailProcessor = {
     }
 
     for (const email of emails) {
-      const [existing] = await db
+      let [existing] = await db
         .select()
         .from(emailIngestionLogs)
         .where(eq(emailIngestionLogs.messageId, email.messageId))
         .limit(1);
 
       if (existing) {
-        logger.debug({ messageId: email.messageId }, 'Email already processed, skipping');
-        await markEmailAsReadAfterDurableLog(email, usingGmail);
-        continue;
+        const terminalStatuses = new Set(['completed', 'ignored', 'failed', 'reprocessed']);
+        if (terminalStatuses.has(existing.status)) {
+          logger.debug(
+            { messageId: email.messageId, status: existing.status },
+            'Email already reached a durable terminal status, skipping',
+          );
+          await markEmailAsReadAfterDurableLog(email, usingGmail);
+          continue;
+        }
+
+        const staleBefore = new Date(Date.now() - EMAIL_PROCESSING_STALE_MINUTES * 60_000);
+        if (
+          existing.status === 'processing' &&
+          existing.updatedAt &&
+          existing.updatedAt > staleBefore
+        ) {
+          // Another worker may still own this message. Leaving it unread is the
+          // acknowledgement barrier: a later poll can recover it if the owner
+          // crashes and the lease becomes stale.
+          logger.info(
+            { messageId: email.messageId, logId: existing.id },
+            'Email processing lease is still active; leaving message unread',
+          );
+          continue;
+        }
+
+        const claimCondition =
+          existing.status === 'processing'
+            ? and(
+                eq(emailIngestionLogs.id, existing.id),
+                eq(emailIngestionLogs.status, 'processing'),
+                or(
+                  isNull(emailIngestionLogs.updatedAt),
+                  lte(emailIngestionLogs.updatedAt, staleBefore),
+                ),
+              )
+            : and(eq(emailIngestionLogs.id, existing.id), eq(emailIngestionLogs.status, 'pending'));
+
+        const [claimed] = await db
+          .update(emailIngestionLogs)
+          .set({
+            status: 'processing',
+            errorMessage: null,
+            updatedAt: new Date(),
+          })
+          .where(claimCondition)
+          .returning();
+
+        if (!claimed) {
+          logger.info(
+            { messageId: email.messageId, logId: existing.id },
+            'Email processing claim was acquired by another worker; leaving message unread',
+          );
+          continue;
+        }
+
+        existing = claimed;
+        logger.warn(
+          { messageId: email.messageId, logId: existing.id },
+          'Resuming email from an abandoned processing lease',
+        );
       }
 
       // Filter by allowed senders. This is enforced even for manual Gmail
       // queries to prevent an operator query from bypassing the allowlist.
       if (!isAllowedSender(email.from)) {
         logger.debug({ from: email.from }, 'Email from non-allowed sender, ignoring');
-        await db.insert(emailIngestionLogs).values({
-          messageId: email.messageId,
-          fromAddress: email.from,
-          subject: email.subject,
-          receivedAt: email.date,
-          attachmentsCount: email.attachments.length,
-          bodyText: storedEmailBody(email.body),
-          status: 'ignored',
-          errorMessage: 'Remetente não autorizado',
-        });
+        if (existing) {
+          await db
+            .update(emailIngestionLogs)
+            .set({
+              status: 'ignored',
+              errorMessage: 'Remetente não autorizado',
+              updatedAt: new Date(),
+            })
+            .where(eq(emailIngestionLogs.id, existing.id));
+        } else {
+          await db.insert(emailIngestionLogs).values({
+            messageId: email.messageId,
+            fromAddress: email.from,
+            subject: email.subject,
+            receivedAt: email.date,
+            attachmentsCount: email.attachments.length,
+            bodyText: storedEmailBody(email.body),
+            status: 'ignored',
+            errorMessage: 'Remetente não autorizado',
+          });
+        }
         await markEmailAsReadAfterDurableLog(email, usingGmail);
         continue;
       }
 
-      const [logEntry] = await db
-        .insert(emailIngestionLogs)
-        .values({
-          messageId: email.messageId,
-          fromAddress: email.from,
-          subject: email.subject,
-          receivedAt: email.date,
-          attachmentsCount: email.attachments.length,
-          bodyText: storedEmailBody(email.body),
-          status: 'processing',
-        })
-        .returning();
+      let logEntry = existing;
+      if (!logEntry) {
+        const [created] = await db
+          .insert(emailIngestionLogs)
+          .values({
+            messageId: email.messageId,
+            fromAddress: email.from,
+            subject: email.subject,
+            receivedAt: email.date,
+            attachmentsCount: email.attachments.length,
+            bodyText: storedEmailBody(email.body),
+            status: 'processing',
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing()
+          .returning();
+
+        if (!created) {
+          logger.info(
+            { messageId: email.messageId },
+            'Another worker created the email log first; leaving message unread',
+          );
+          continue;
+        }
+        logEntry = created;
+      }
 
       try {
         // Detect email category early for KIOM handling
@@ -1407,12 +1497,7 @@ export const emailProcessor = {
         // Só alerta "formato não suportado" quando houve anexo pulado POR
         // FORMATO — e-mail cujos anexos foram todos pulados como DUPLICATA já
         // está no processo; alertar induziria upload manual duplicado.
-        const hasUnsupportedSkip = enrichedData.some(
-          (att: { status?: string; skipReason?: string }) =>
-            att.status === 'skipped' &&
-            typeof att.skipReason === 'string' &&
-            !att.skipReason.startsWith('duplicate'),
-        );
+        const hasUnsupportedSkip = hasUnsupportedAttachmentSkip(processedAttachments);
         if (finalStatus === 'ignored' && hasUnsupportedSkip) {
           await alertService
             .create({

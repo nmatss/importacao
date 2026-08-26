@@ -63,7 +63,10 @@ app.use(correlationId);
 // Request logging
 app.use((req, _res, next) => {
   const log = req.log || logger;
-  log.info({ method: req.method, url: req.url }, 'incoming request');
+  // Query values can contain process references, supplier names and free-text
+  // searches. Keep the route useful for operations without persisting those
+  // values in application logs.
+  log.info({ method: req.method, path: req.path }, 'incoming request');
   next();
 });
 
@@ -112,7 +115,8 @@ app.get(
       res.set('Content-Type', register.contentType);
       res.end(await register.metrics());
     } catch (err) {
-      res.status(500).end(String(err));
+      logger.error({ err }, 'Failed to render Prometheus metrics');
+      res.status(500).end('Metrics unavailable');
     }
   },
 );

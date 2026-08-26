@@ -64,6 +64,42 @@ function invoiceResponse(confidence: number, overrides: Record<string, unknown> 
   });
 }
 
+function packingListResponse(confidence: number) {
+  return JSON.stringify({
+    packingListNumber: cf('PL-001', confidence),
+    invoiceNumber: cf('INV-001', confidence),
+    date: cf('2026-06-01', confidence),
+    shipmentDate: cf(null, 0),
+    etd: cf(null, 0),
+    shippedOnBoardDate: cf(null, 0),
+    exporterName: cf('EXPORTER X', confidence),
+    exporterAddress: cf('NINGBO, CHINA', confidence),
+    exporterTaxId: cf(null, 0),
+    importerName: cf('IMPORTER Y', confidence),
+    importerAddress: cf('BRAZIL', confidence),
+    importerCnpj: cf(null, 0),
+    portOfLoading: cf('NINGBO', confidence),
+    portOfDischarge: cf('ITAPOA', confidence),
+    items: [
+      {
+        itemCode: cf('PI7752Y', confidence),
+        ean: cf(null, 0),
+        description: cf('PRODUCT', confidence),
+        color: cf(null, 0),
+        size: cf(null, 0),
+        quantity: cf(100, confidence),
+        boxQuantity: cf(10, confidence),
+        netWeight: cf(50, confidence),
+        grossWeight: cf(55, confidence),
+      },
+    ],
+    totalBoxes: cf(10, confidence),
+    totalNetWeight: cf(50, confidence),
+    totalGrossWeight: cf(55, confidence),
+    totalCbm: cf(1.5, confidence),
+  });
+}
+
 describe('extractWithUpgrade behavior (invoice path)', () => {
   beforeEach(() => {
     delete process.env.AI_UPGRADE_ON_LOW_CONFIDENCE;
@@ -126,6 +162,19 @@ Data de Desembaraco: 10/07/2026`,
     expect(result.data._trust).toEqual(
       expect.objectContaining({ trust: 'trusted', checkedAt: expect.any(String) }),
     );
+  });
+
+  it('falls back to AI when the packing-list parser mistakes a contact line for an item', async () => {
+    process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(packingListResponse(0.95));
+
+    const result = await aiService.extractPackingListData(`PACKING LIST PL-001 INV-001
+EXPORTER X NINGBO CHINA IMPORTER Y BRAZIL NINGBO ITAPOA
+PHONE: +86 755 8659 5020
+PI7752Y PRODUCT 100 10 50 55 TOTAL CBM 1.5`);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(result.data.items[0].itemCode.value).toBe('PI7752Y');
   });
 
   it('returns primary result when confidence is above threshold (no upgrade call)', async () => {

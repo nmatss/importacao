@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   tryParsePackingListText,
   fillPackingListNullsFromText,
+  isReliablePackingListParse,
 } from '../packing-list-text-parser.js';
 
 describe('tryParsePackingListText', () => {
@@ -76,8 +77,24 @@ Item Code Description Qty Cartons NW GW EAN
     expect(robe.ean.value).toBe('7909692093303');
     expect(bag.ean.value).toBeNull(); // 1234567890123 has a bad check digit
   });
-});
 
+  it('rejects column-bleed contact labels before they suppress the AI fallback', () => {
+    const parsed = tryParsePackingListText(`PACKING LIST
+PHONE: +86 755 8659 5020
+TOTAL CARTONS: 48`);
+
+    expect(parsed?.items[0].itemCode.value).toBe('PHONE:');
+    expect(isReliablePackingListParse(parsed!)).toBe(false);
+  });
+
+  it('accepts alphanumeric and numeric-only catalogue item codes', () => {
+    expect(
+      isReliablePackingListParse({
+        items: [{ itemCode: { value: 'PI7752Y' } }, { itemCode: { value: '050404424' } }],
+      }),
+    ).toBe(true);
+  });
+});
 
 describe('fillPackingListNullsFromText', () => {
   const cf = (value: unknown, confidence = 0.9) => ({ value, confidence });

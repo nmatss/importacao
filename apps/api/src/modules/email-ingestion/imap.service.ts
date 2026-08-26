@@ -18,14 +18,26 @@ interface FetchedEmail {
 }
 
 function createClient() {
+  const secure = process.env.IMAP_SECURE !== 'false';
+  const rejectUnauthorized = process.env.IMAP_TLS_REJECT_UNAUTHORIZED !== 'false';
+
   return new ImapFlow({
     host: process.env.IMAP_HOST || 'imap.gmail.com',
     port: Number(process.env.IMAP_PORT) || 993,
-    secure: true,
+    secure,
     auth: {
       user: process.env.IMAP_USER!,
       pass: process.env.IMAP_PASS!,
     },
+    tls: {
+      rejectUnauthorized,
+      minVersion: 'TLSv1.2',
+    },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
+    maxLineLength: 1024 * 1024,
+    maxLiteralSize: 60 * 1024 * 1024,
     logger: false,
   });
 }

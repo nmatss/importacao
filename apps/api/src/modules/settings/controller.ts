@@ -3,6 +3,7 @@ import { settingsService } from './service.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { odooService } from '../integrations/odoo.service.js';
+import { verifySmtpConnection } from '../../shared/mail/mailer.js';
 import {
   OPERATIONAL_RECIPIENT_KEYS,
   getOperationalRecipientSettings,
@@ -108,6 +109,24 @@ export const settingsController = {
     } catch (error: any) {
       const status = error.statusCode || 400;
       sendError(res, error.message, status);
+    }
+  },
+
+  async testSmtp(_req: Request, res: Response) {
+    try {
+      await verifySmtpConnection();
+      sendSuccess(res, { connected: true });
+    } catch (error: any) {
+      const code = typeof error?.code === 'string' ? error.code : '';
+      const message =
+        code === 'EAUTH'
+          ? 'Autenticação SMTP recusada. Revise usuário, senha de aplicativo e permissões da conta.'
+          : ['ETIMEDOUT', 'ECONNECTION', 'ECONNREFUSED', 'ENOTFOUND'].includes(code)
+            ? 'Servidor SMTP indisponível. Revise host, porta, TLS e conectividade de rede.'
+            : code === 'SMTP_NOT_CONFIGURED'
+              ? 'SMTP não configurado. Defina o host antes de testar.'
+              : 'Não foi possível validar a conexão SMTP.';
+      sendError(res, message, error?.statusCode || 503);
     }
   },
 

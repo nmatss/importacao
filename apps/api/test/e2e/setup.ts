@@ -41,6 +41,13 @@ const PENDING_MIGRATIONS = [
   '0016_pre_cons_tables.sql',
   '0017_sydle_purchase_payments.sql',
   '0018_validation_run_links.sql',
+  '0019_logistic_status_index.sql',
+  '0020_document_lineage_and_email_dedupe.sql',
+  '0021_sydle_report_columns.sql',
+  '0022_odett_operational_feedback.sql',
+  '0023_communications_audit.sql',
+  '0024_document_analysis_hardening.sql',
+  '0025_ai_usage_telemetry.sql',
 ];
 
 function isCI(): boolean {

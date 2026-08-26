@@ -5,6 +5,7 @@ import {
   parseEmailList,
 } from '../../modules/settings/operational-recipients.js';
 import { AppError } from '../errors/index.js';
+import { parseMailFrom } from './mail-address.js';
 
 /**
  * Central mail plane.
@@ -30,7 +31,7 @@ export const DEFAULT_MAIL_FROM = `"Uni.co Importacao" <${OPERATIONAL_MAILBOX}>`;
 
 const MAX_CC_HEADER_LENGTH = 500;
 
-/** Strips CR/LF so a configured value can never inject extra SMTP headers. */
+/** Strips CR/LF from list headers whose addresses are validated separately. */
 function sanitizeHeader(value: string): string {
   return value.replace(/[\r\n]/g, '').trim();
 }
@@ -62,7 +63,16 @@ export async function resolveMailFrom(): Promise<string> {
   const envValue = process.env.SMTP_FROM?.trim() ?? '';
   const resolved = dbValue || envValue || DEFAULT_MAIL_FROM;
 
-  return sanitizeHeader(resolved) || DEFAULT_MAIL_FROM;
+  const parsed = parseMailFrom(resolved);
+  if (!parsed) {
+    throw new AppError(
+      'Remetente SMTP inválido. Use endereco@dominio.com ou "Nome" <endereco@dominio.com>.',
+      503,
+      'SMTP_FROM_INVALID',
+    );
+  }
+
+  return parsed.header;
 }
 
 /**
@@ -110,24 +120,19 @@ export interface OutgoingMailHeaders {
 /**
  * Builds the `from`/`to`/`cc` headers for one outgoing message.
  *
- * De-duplication: an address is dropped from CC when it is already the sender or
- * already a primary recipient, so the mailbox never receives the same message
- * twice from a single send.
+ * De-duplication: an address is dropped from CC only when it is already a
+ * primary recipient. The sender is intentionally not considered coverage.
  *
- * Sender case caveat: with the default configuration the sender *is* the
- * operational mailbox, so the copy is dropped and the archive depends on the
- * sending account keeping a Sent copy — true for Gmail/Workspace, false for a
- * plain SMTP relay. Set `MAIL_FORCE_OPERATIONAL_CC=true` to keep the mailbox in
- * CC even when it is also the sender, which guarantees an inbox copy on any relay.
+ * The operational mailbox remains explicitly in CC even when it is also the
+ * sender. Besides preserving the contractual header on every relay, this keeps
+ * the persisted/audited copy aligned with what Nodemailer actually sends.
  */
 export async function buildOutgoingMail(recipientEmail: string): Promise<OutgoingMailHeaders> {
   const from = await resolveMailFrom();
   const mandatoryCc = await resolveMandatoryCc();
 
-  const fromAddress = extractEmailAddress(from);
   const toRecipients = parseEmailList(recipientEmail);
-  const forceSelfCopy = process.env.MAIL_FORCE_OPERATIONAL_CC === 'true';
-  const alreadyCovered = new Set(forceSelfCopy ? toRecipients : [fromAddress, ...toRecipients]);
+  const alreadyCovered = new Set(toRecipients);
 
   const effectiveCc = mandatoryCc.filter((recipient) => !alreadyCovered.has(recipient));
 
@@ -146,10 +151,23 @@ export async function buildOutgoingMail(recipientEmail: string): Promise<Outgoin
  * credentials); certificate verification follows NODE_ENV unless an operator
  * explicitly opts out for a self-signed internal relay.
  */
-export function getSmtpTransport() {
-  const port = Number(process.env.SMTP_PORT) || 587;
+async function resolveTransportSetting(key: string, envKey: string): Promise<string> {
+  const setting = await settingsService.get(key).catch(() => undefined);
+  const dbValue = typeof setting?.value === 'string' ? setting.value.trim() : '';
+  return dbValue || process.env[envKey]?.trim() || '';
+}
+
+export async function getSmtpTransport() {
+  const [host, portSetting, user] = await Promise.all([
+    resolveTransportSetting('smtp_host', 'SMTP_HOST'),
+    resolveTransportSetting('smtp_port', 'SMTP_PORT'),
+    resolveTransportSetting('smtp_user', 'SMTP_USER'),
+  ]);
+  const port = Number(portSetting) || 587;
+  if (!host) {
+    throw new AppError('SMTP não configurado', 503, 'SMTP_NOT_CONFIGURED');
+  }
   const secure = process.env.SMTP_SECURE === 'true';
-  const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   const hasAuth = user && pass && user !== 'noreply@grupounico.com';
 
@@ -159,10 +177,23 @@ export function getSmtpTransport() {
       : process.env.NODE_ENV === 'production';
 
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
+    host,
     port,
     secure,
     ...(hasAuth ? { auth: { user, pass } } : {}),
     tls: { rejectUnauthorized, minVersion: 'TLSv1.2' },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
   });
+}
+
+/** Verifies SMTP connectivity and authentication without sending a message. */
+export async function verifySmtpConnection(): Promise<void> {
+  const transport = await getSmtpTransport();
+  try {
+    await transport.verify();
+  } finally {
+    transport.close();
+  }
 }

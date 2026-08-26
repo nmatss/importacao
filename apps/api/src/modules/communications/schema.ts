@@ -30,15 +30,17 @@ export const communicationAttachmentSchema = z
     message: 'Informe documentId ou espelhoId para anexos',
   });
 
-export const createCommunicationSchema = z.object({
-  processId: z.number().optional(),
-  // communications.recipient é varchar(255); manter o zod alinhado à coluna.
-  recipient: z.string().min(1, 'Destinatário obrigatório').max(255),
-  recipientEmail: emailListSchema,
-  subject: z.string().min(1, 'Assunto obrigatório').max(500),
-  body: z.string().min(1, 'Corpo do e-mail obrigatório').max(100000),
-  attachments: z.array(communicationAttachmentSchema).max(20).optional(),
-});
+export const createCommunicationSchema = z
+  .object({
+    processId: z.number().int().positive().optional(),
+    // communications.recipient é varchar(255); manter o zod alinhado à coluna.
+    recipient: z.string().trim().min(1, 'Destinatário obrigatório').max(255),
+    recipientEmail: emailListSchema,
+    subject: z.string().trim().min(1, 'Assunto obrigatório').max(500),
+    body: z.string().min(1, 'Corpo do e-mail obrigatório').max(100000),
+    attachments: z.array(communicationAttachmentSchema).max(20).optional(),
+  })
+  .strict();
 
 export type CreateCommunicationInput = z.infer<typeof createCommunicationSchema>;
 
@@ -71,10 +73,64 @@ export const driveImportSchema = z.object({
 
 export type DriveImportInput = z.infer<typeof driveImportSchema>;
 
-export const updateDraftSchema = z.object({
-  subject: z.string().min(1).max(500).optional(),
-  body: z.string().min(1).max(100000).optional(),
-  recipient: z.string().min(1).max(255).optional(),
-  recipientEmail: emailListSchema.optional(),
-  attachments: z.array(communicationAttachmentSchema).max(20).optional(),
+export const updateDraftSchema = z
+  .object({
+    subject: z.string().trim().min(1).max(500).optional(),
+    body: z.string().min(1).max(100000).optional(),
+    recipient: z.string().trim().min(1).max(255).optional(),
+    recipientEmail: emailListSchema.optional(),
+    attachments: z.array(communicationAttachmentSchema).max(20).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: 'Informe ao menos um campo para atualizar',
+  });
+
+const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato inválido (YYYY-MM-DD)')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return (
+      date.getUTCFullYear() === year &&
+      date.getUTCMonth() === month - 1 &&
+      date.getUTCDate() === day
+    );
+  }, 'Data inválida');
+
+export const communicationListQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    processId: z.coerce.number().int().positive().optional(),
+    startDate: isoDateSchema.optional(),
+    endDate: isoDateSchema.optional(),
+  })
+  .refine((value) => !value.startDate || !value.endDate || value.startDate <= value.endDate, {
+    message: 'A data inicial não pode ser posterior à data final',
+    path: ['endDate'],
+  });
+
+export const communicationProcessListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
+
+export const communicationIdParamSchema = z.object({
+  id: z.coerce.number().int().positive('ID da comunicação deve ser positivo'),
+});
+
+export const communicationProcessIdParamSchema = z.object({
+  processId: z.coerce.number().int().positive('ID do processo deve ser positivo'),
+});
+
+export const driveFilesQuerySchema = z.object({
+  processId: z.coerce.number().int().positive('ID do processo deve ser positivo'),
+});
+
+export const sendCommunicationSchema = z
+  .object({
+    signatureId: z.coerce.number().int().positive().nullable().optional(),
+  })
+  .strict();

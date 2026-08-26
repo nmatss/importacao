@@ -74,6 +74,27 @@ export function tryParsePackingListText(text: string): Record<string, any> | nul
   };
 }
 
+/**
+ * Rejects obvious PDF column-bleed before a partial deterministic result can
+ * suppress the AI fallback. Contact/header labels followed by several numbers
+ * (for example `PHONE:`) otherwise satisfy the compact row heuristic.
+ */
+export function isReliablePackingListParse(data: Record<string, any>): boolean {
+  const items = Array.isArray(data.items) ? data.items : [];
+  if (items.length === 0) return false;
+
+  return items.every((item: Record<string, any>) => {
+    const rawCode = item?.itemCode?.value;
+    const code = typeof rawCode === 'string' ? rawCode.trim() : '';
+    return (
+      code.length >= 3 &&
+      code.length <= 40 &&
+      /\d/.test(code) &&
+      /^[A-Z0-9][A-Z0-9._/-]*$/i.test(code)
+    );
+  });
+}
+
 function isPackingList(text: string): boolean {
   const upper = text.toUpperCase();
   if (
@@ -268,7 +289,9 @@ export function fillPackingListNullsFromText(
     if (v) out.exporterName = cf(v, FILLED);
   }
   if (isNull(out.importerName)) {
-    const v = normalizeImporterName(extractLabeledValue(source, ['importer', 'consignee', 'buyer']));
+    const v = normalizeImporterName(
+      extractLabeledValue(source, ['importer', 'consignee', 'buyer']),
+    );
     if (v) out.importerName = cf(v, FILLED);
   }
   if (isNull(out.importerCnpj)) {
@@ -298,7 +321,9 @@ export function fillPackingListNullsFromText(
     if (v != null) out.totalGrossWeight = cf(v, FILLED);
   }
   if (isNull(out.totalCbm)) {
-    const v = parseNumber(matchFirst(source, [/\btotal\s*(?:cbm|m3|m\u00b3|volume)\b[^\d]{0,20}([\d.,]+)/i]));
+    const v = parseNumber(
+      matchFirst(source, [/\btotal\s*(?:cbm|m3|m\u00b3|volume)\b[^\d]{0,20}([\d.,]+)/i]),
+    );
     if (v != null) out.totalCbm = cf(v, FILLED);
   }
 

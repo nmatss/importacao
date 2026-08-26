@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { settingsController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import {
   updateSettingSchema,
   smtpSettingsSchema,
@@ -14,6 +15,7 @@ import {
 } from './schema.js';
 
 const router = Router();
+const integrationProbeLimiter = createRateLimiter(5, 60_000);
 
 router.use(authMiddleware);
 
@@ -49,6 +51,7 @@ router.use(adminMiddleware);
 
 router.get('/smtp', settingsController.getSmtp);
 router.put('/smtp', validate(smtpSettingsSchema), settingsController.saveSmtp);
+router.post('/smtp/test', integrationProbeLimiter, settingsController.testSmtp);
 router.get('/recipients', settingsController.getRecipients);
 router.put('/recipients', validate(recipientSettingsSchema), settingsController.saveRecipients);
 router.get('/integrations', settingsController.getIntegrations);
@@ -57,8 +60,8 @@ router.put(
   validate(integrationSettingsSchema),
   settingsController.saveIntegrations,
 );
-router.post('/integrations/test-drive', settingsController.testDrive);
-router.post('/integrations/test-odoo', settingsController.testOdoo);
+router.post('/integrations/test-drive', integrationProbeLimiter, settingsController.testDrive);
+router.post('/integrations/test-odoo', integrationProbeLimiter, settingsController.testOdoo);
 
 router.get('/', settingsController.getAll);
 router.get('/:key', settingsController.get);

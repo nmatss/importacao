@@ -80,6 +80,24 @@ function displayScalar(value: unknown): string | null {
   return String(unwrapped);
 }
 
+const FREIGHT_PAYMENT_TERMS = new Set(['PREPAID', 'COLLECT']);
+
+function formatFreight(value: number | string, currency?: string): string {
+  const normalizedCurrency = currency?.trim().toUpperCase();
+  if (normalizedCurrency && FREIGHT_PAYMENT_TERMS.has(normalizedCurrency)) {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue) || numericValue === 0) return normalizedCurrency;
+
+    const formattedValue = new Intl.NumberFormat('pt-BR', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(numericValue);
+    return `${normalizedCurrency} · ${formattedValue} (moeda não informada)`;
+  }
+
+  return formatCurrency(value, normalizedCurrency);
+}
+
 function readPath(source: Record<string, unknown> | null | undefined, ...path: string[]) {
   let current: unknown = source;
   for (const key of path) {
@@ -465,9 +483,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             icon={Truck}
             label="Frete"
             value={
-              freightValue.value != null
-                ? formatCurrency(freightValue.value, freightCurrency)
-                : null
+              freightValue.value != null ? formatFreight(freightValue.value, freightCurrency) : null
             }
             source={freightValue.source}
           />

@@ -1,0 +1,116 @@
+release_gate_evidence:
+  plan_id: process-reconciliation-gemini-2026-08-25
+  status: completed_with_manual_review_required
+  checked_at: '2026-08-25T15:09:37-03:00'
+  environment: validation
+  deployed_revision: ce70f41e473ed4680cbcd68931469eea591d906c
+  local_base_revision: cfbf2a26717fdbf48f0d3b80d358015ffad33a82
+
+  authorization:
+    production_deploy: authorized_by_user_2026-08-26
+    git_push: authorized_as_required_release_step_2026-08-26
+    validation_data_cleanup_and_gemini_review: authorized_by_user
+
+  source_reconciliation:
+    spreadsheet_rows_selected: 117
+    spreadsheet_columns: 115
+    cutoff_etd: '2025-05-01'
+    process_codes_matched: 117
+    etd_values_matched: 117
+    semantic_content_gate: passed
+
+  backup:
+    status: passed
+    database_file: /home/nicolas/backups/importacao/importacao_2026-08-25_165234.pgdump
+    database_sha256: 6fee9e52b33a3a81fc1dbe993fa1e7f35f3c76dcf5c8b51c4272e6d125ad3893
+    uploads_file: /home/nicolas/backups/importacao/importacao_2026-08-25_165234_uploads.tar.gz
+    uploads_sha256: 7335f1df1a0e8dd065234798c2f313b6ac7385cebd4aae001074cebd9c377756
+    replay_log: /home/nicolas/backups/importacao/reprocess-2026-08-25.jsonl
+    replay_log_sha256: b34cd2b8fc02edb1562176d248acb6be8c250b7348e51e00b410d1d8b8228b8a
+    permissions: '0600'
+    database_integrity: 'pg_restore --list OK; full temporary restore OK'
+
+  cleanup:
+    transaction: serializable
+    imported_rows: 117
+    processes_created: 31
+    processes_updated: 86
+    import_errors: 0
+    invalid_processes_removed: 18
+    documents_moved: 18
+    duplicate_or_misclassified_documents_removed: 31
+    final_processes: 117
+    final_follow_up_rows: 117
+    final_documents: 51
+    processes_with_documents: 12
+    final_unprocessed_documents: 0
+    final_active_leases: 0
+    final_invalid_freight_pairs: 0
+    invalid_workflow_values_normalized: 88
+    pending_correction_processes: 1
+
+  ai_reprocessing:
+    provider: vertex
+    target_documents: 6
+    terminal_success: 6
+    trusted: 6
+    average_confidence: 0.9323
+    confidence_ge_0_90: 5
+    manual_review_document_id: 122
+    manual_review_confidence: 0.8663
+    accuracy_claim: not_established_without_labeled_ground_truth
+
+  validation:
+    process_275:
+      mode: final
+      total: 29
+      passed: 13
+      failed: 9
+      warning: 6
+      skipped: 1
+      correction_required: true
+    process_259:
+      mode: partial
+      total: 29
+      passed: 10
+      failed: 9
+      warning: 10
+      skipped: 0
+      note: completed state intentionally preserved
+
+  security:
+    csp_external_font_block: expected_and_preserved
+    secrets_exposed: false
+    importer_default_database_credential: removed
+    importer_database_url_required: true
+    google_chat_delivery: failed_invalid_api_key
+    external_ai_allowed_by_environment: true
+
+  verification:
+    changed_files_prettier: passed
+    repository_format_check: failed_preexisting
+    repository_format_preexisting_files: 19
+    lint: passed
+    typecheck_api: passed
+    typecheck_web: passed
+    api_test_files_passed: 107
+    api_test_files_skipped: 1
+    api_tests_passed: 965
+    api_tests_skipped: 1
+    web_test_files_passed: 24
+    web_tests_passed: 131
+    script_tests_passed: 3
+    build_api: passed
+    build_web: passed_with_chunk_size_warning
+    git_diff_check: passed
+    api_health: passed
+    reverse_proxy_http: 200
+    csp_header: passed
+    temporary_restore_database_removed: true
+    temporary_sensitive_files_removed: true
+
+  remaining_gates:
+    - human_review_document_122_and_failed_checks
+    - normalize_preexisting_repository_format_baseline
+    - commit_push_and_production_deploy
+    - authenticated_browser_smoke_after_deploy

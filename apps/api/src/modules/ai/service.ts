@@ -47,6 +47,7 @@ import {
 import {
   tryParsePackingListText,
   fillPackingListNullsFromText,
+  isReliablePackingListParse,
 } from './utils/packing-list-text-parser.js';
 import { fillBLNullsFromText } from './utils/bl-text-parser.js';
 import {
@@ -1142,7 +1143,7 @@ Responda SOMENTE com JSON estrito no formato:
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
     const deterministic = tryParsePackingListText(text);
-    if (deterministic && Array.isArray(deterministic.items) && deterministic.items.length > 0) {
+    if (deterministic && isReliablePackingListParse(deterministic)) {
       stripSpuriousItemPrefix(deterministic.items);
       const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
       logger.info(
@@ -1161,6 +1162,13 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+      );
+    }
+
+    if (deterministic) {
+      logger.warn(
+        { itemCount: Array.isArray(deterministic.items) ? deterministic.items.length : 0 },
+        'Deterministic packing list parse rejected by quality gate — falling back to AI',
       );
     }
 

@@ -32,8 +32,8 @@ O script:
 4. Solicita confirmacao.
 5. Executa backup PostgreSQL obrigatorio.
 6. Cria snapshot de rollback do codigo remoto.
-7. Sincroniza codigo por rsync, preservando `.env`, `.env.sops.yaml`, uploads
-   e logs remotos.
+7. Sincroniza codigo por rsync, preservando `.env`, uploads e logs remotos; o
+   `.env.sops.yaml` criptografado e versionado e atualizado pelo release.
 8. Gera `.env` remoto via SOPS + age a partir de `.env.sops.yaml`; se falhar,
    o deploy aborta para evitar subir com segredo remoto obsoleto.
 9. Bloqueia deploy se o `.env` remoto estiver com `SYDLE_SYNC_ENABLED=true`,

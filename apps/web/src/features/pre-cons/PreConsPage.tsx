@@ -572,8 +572,8 @@ export function PreConsPage() {
             </div>
 
             {/* ETD date range */}
-            <div className="flex items-center gap-2 min-w-[280px]">
-              <div className="relative flex-1">
+            <div className="grid w-full min-w-0 grid-cols-1 items-center gap-2 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:w-auto lg:min-w-[280px]">
+              <div className="relative min-w-0">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                 <input
                   id="pre-cons-etd-from"
@@ -586,11 +586,11 @@ export function PreConsPage() {
                   }}
                   placeholder="ETD de"
                   title="ETD a partir de"
-                  className="w-full pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
+                  className="w-full min-w-0 pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
                 />
               </div>
               <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">ate</span>
-              <div className="relative flex-1">
+              <div className="relative min-w-0">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                 <input
                   id="pre-cons-etd-to"
@@ -603,7 +603,7 @@ export function PreConsPage() {
                   }}
                   placeholder="ETD ate"
                   title="ETD ate"
-                  className="w-full pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
+                  className="w-full min-w-0 pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
                 />
               </div>
             </div>

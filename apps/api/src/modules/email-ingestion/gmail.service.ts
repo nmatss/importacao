@@ -171,6 +171,7 @@ export const gmailService = {
     const emails: FetchedEmail[] = [];
 
     let searchQuery: string;
+    let senderFilterConfigured = false;
     if (queryOverride) {
       searchQuery = queryOverride;
     } else {
@@ -179,6 +180,7 @@ export const gmailService = {
         process.env.EMAIL_ALLOWED_SENDERS?.split(',')
           .map((s) => s.trim())
           .filter(Boolean) || [];
+      senderFilterConfigured = allowedSenders.length > 0;
       const fromFilter =
         allowedSenders.length > 0 ? `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}` : '';
       const unreadFilter = includeRead ? '' : 'is:unread';
@@ -189,7 +191,16 @@ export const gmailService = {
         .trim();
     }
 
-    logger.info({ searchQuery }, 'Gmail search query');
+    // The query can embed sender addresses and a subject during reprocessing.
+    // Log only operational shape, never mailbox content or personal data.
+    logger.info(
+      {
+        includeRead,
+        customQuery: Boolean(queryOverride),
+        senderFilterConfigured,
+      },
+      'Gmail search prepared',
+    );
 
     try {
       // List unread messages with pagination to fetch ALL
@@ -318,11 +329,8 @@ export const gmailService = {
       const gmail = getGmailClient();
       const sharedMailbox = resolveSharedMailbox();
 
-      const profile = await withTimeout(
-        gmail.users.getProfile({ userId: sharedMailbox }),
-        'getProfile',
-      );
-      logger.info({ email: profile.data.emailAddress }, 'Gmail API connection successful');
+      await withTimeout(gmail.users.getProfile({ userId: sharedMailbox }), 'getProfile');
+      logger.info('Gmail API connection successful');
       return true;
     } catch (err) {
       logger.error({ err }, 'Gmail API connection test failed');

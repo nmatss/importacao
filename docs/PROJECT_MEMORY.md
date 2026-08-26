@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-08-14
+Ultima atualizacao: 2026-08-26
 
 ## Objetivo
 
@@ -405,6 +405,78 @@ Evidencia:
 
 Grau de confianca: alto; cabecalhos, contagens, ultimo XLSX, Oracle WMS, ERP e
 PostgreSQL foram consultados em modo read-only.
+
+## Importacao Follow Up E Extracao Documental — Regras Duraveis De 2026-08-25
+
+- `correction_status` pertence exclusivamente ao workflow interno; valores de
+  planilha como `SIM`/`NÃO` devem ficar em evidência de origem
+  (`aiExtractedData.sheetDocumentCorrection`) e em `document_corrections`.
+- Dados da planilha usam datas pt-BR, números localizados e percentuais. Não
+  usar `new Date(string)` nem remover pontuação de forma genérica; percentuais
+  precisam ser persistidos como fração.
+- `ai_extracted_data` contém projeções de documentos e metadados de planilha.
+  Importações parciais devem fazer merge, nunca substituir o JSON inteiro.
+- No BL, `PREPAID` e `COLLECT` são condições de pagamento, não moedas. Sempre
+  manter `freightValue = null` quando não houver moeda/valor explícitos.
+- Parser determinístico de tabela só pode suprimir o Gemini depois de passar um
+  gate de qualidade. Linhas de contato/cabeçalho com vários números podem se
+  parecer com itens.
+- Confiança do modelo/harness não é acurácia contra ground truth. Garantia de
+  90% exige corpus rotulado, medição por campo/tipo e aceite humano dos casos
+  abaixo do limiar.
+- Reconciliações de dados operacionais devem usar transação serializável,
+  assertions pré/pós, backup restaurado em banco temporário e trilha em
+  `audit_logs`.
+
+Evidência:
+
+- `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`
+- `scripts/reconcile-validation-processes-2026-08-25.sql`
+- `scripts/normalize-validation-workflow-state-2026-08-25.sql`
+
+Grau de confiança: alto para as regras de contrato e o estado pós-operação;
+médio para acurácia documental até existir ground truth rotulado.
+
+## E-mail, Integrações E UX — Regras Duráveis De 2026-08-26
+
+- Configuração salva de SMTP (`smtp_host`, `smtp_port`, `smtp_user`) deve ser a
+  mesma configuração usada pelo transporte; senha permanece apenas em env/SOPS.
+- Teste de SMTP é handshake/autenticação com `verify()`, nunca mensagem real.
+- `smtp_from` aceita exatamente uma mailbox. CR/LF, lista e sintaxe de grupo
+  falham fechadas antes do Nodemailer.
+- A caixa operacional de registro permanece explicitamente em `Cc` mesmo sendo
+  remetente, salvo se já estiver em `To`; header e auditoria devem coincidir.
+- Logs não devem conter query string, assunto, remetente, destinatário, corpo ou
+  nome original de documento.
+- Configuração presente não é evidência de integração rodando. O checkpoint de
+  26/08 confirmou apenas Gmail; SMTP/IMAP recusaram autenticação, Drive retornou
+  404 e dependências de rede Compose estavam fora do ar.
+- Evidência de reprocessamento é por ambiente: em validação, 51 documentos de
+  12/117 processos estavam processados em 25/08; isso não prova o estado de
+  produção nem cria documentos para os outros 105 processos.
+- Smoke visual local usa dados simulados e cobre renderização/responsividade,
+  não ações externas ou mutáveis. Baseline de 26/08: 31 variantes de rota,
+  cinco abas de Configurações e 13 abas do detalhe sem exceção.
+- Acknowledgement de ingestão exige estado terminal durável. Log `processing`
+  com lease ativa mantém a mensagem não lida; após
+  `EMAIL_PROCESSING_STALE_MINUTES`, outro worker pode reclamar o mesmo log e
+  retomar sem criar um segundo registro.
+- HTML de comunicação é fronteira não confiável: DOMPurify protege a renderização
+  React e `sanitize-html` com allow-list independente protege persistência e
+  envio. Não substituir por regex.
+- O harness local de e-mail usa GreenMail 2.1.13 + Testcontainers 12.1.0. Ele
+  prova SMTP/IMAPS e a API sem egress, mas nunca substitui o probe de credencial
+  do provider real.
+- O Compose de desenvolvimento aceita integrações Cert-API vazias para permitir
+  trabalho independente; `docker-compose.prod.yml` deve permanecer estrito.
+
+Evidência:
+
+- `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`
+- `docs/SECURITY_AUDIT_2026-08-26.md`
+
+Grau de confiança: alto para código, testes e probes executados; médio para
+estado externo até repetir dentro do Compose; não estabelecido para produção.
 
 ## Riscos Persistentes
 

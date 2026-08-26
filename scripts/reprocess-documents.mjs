@@ -58,6 +58,7 @@ function parseArgs(argv) {
     canonicalOnly: true,
     excludeProcessIds: new Set([264]), // DEMO-IM0712602NB-E227210
     processIds: null,
+    documentIds: null,
     types: new Set(DEFAULT_TYPES),
     delayMs: 6500,
     limit: Infinity,
@@ -89,6 +90,10 @@ function parseArgs(argv) {
       case '--process-id':
         args.processIds ??= new Set();
         for (const id of String(value).split(',')) args.processIds.add(Number(id));
+        break;
+      case '--document-id':
+        args.documentIds ??= new Set();
+        for (const id of String(value).split(',')) args.documentIds.add(Number(id));
         break;
       case '--type':
         args.types = new Set(String(value).split(','));
@@ -305,7 +310,11 @@ async function main() {
     const rows = (docs.data ?? []).filter(
       (doc) => args.types.has(doc.documentType) && isSupportedEspelho(doc, args),
     );
-    const selected = args.canonicalOnly ? selectCanonical(rows) : rows;
+    const selected = args.documentIds
+      ? rows.filter((doc) => args.documentIds.has(doc.id))
+      : args.canonicalOnly
+        ? selectCanonical(rows)
+        : rows;
     for (const doc of selected) {
       if (alreadyDone.has(doc.id)) continue;
       targets.push({

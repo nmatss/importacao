@@ -8,8 +8,18 @@
  *   --update: update existing processes instead of skipping duplicates
  */
 
-const XLSX = require('xlsx');
-const { Client } = require('pg');
+import XLSX from 'xlsx';
+import fs from 'node:fs';
+import pg from 'pg';
+import {
+  parseLocalizedNumber,
+  parsePercentage,
+  parseSpreadsheetDateISO,
+  parseSpreadsheetTimestamp,
+} from './lib/follow-up-values.mjs';
+
+const { Client } = pg;
+XLSX.set_fs(fs);
 
 const FILE_PATH = process.env.XLSX_PATH || '1_Follow Up Processos de Importação.xlsx';
 
@@ -114,45 +124,15 @@ const COL = {
 };
 
 function excelDateToISO(val) {
-  if (!val) return null;
-  if (typeof val === 'number') {
-    const d = new Date((val - 25569) * 86400 * 1000);
-    if (isNaN(d.getTime())) return null;
-    return d.toISOString().split('T')[0];
-  }
-  if (typeof val === 'string') {
-    const cleaned = val.trim();
-    if (!cleaned) return null;
-    const d = new Date(cleaned);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
-  }
-  return null;
+  return parseSpreadsheetDateISO(val);
 }
 
 function excelDateToTimestamp(val) {
-  if (!val) return null;
-  if (typeof val === 'number') {
-    const d = new Date((val - 25569) * 86400 * 1000);
-    if (isNaN(d.getTime())) return null;
-    return d.toISOString();
-  }
-  if (typeof val === 'string') {
-    const cleaned = val.trim();
-    if (!cleaned) return null;
-    const d = new Date(cleaned);
-    if (!isNaN(d.getTime())) return d.toISOString();
-  }
-  return null;
+  return parseSpreadsheetTimestamp(val);
 }
 
 function parseNumeric(val) {
-  if (val === null || val === undefined || val === '') return null;
-  if (typeof val === 'number') return val;
-  const s = String(val)
-    .replace(/[^\d.,-]/g, '')
-    .replace(',', '.');
-  const n = parseFloat(s);
-  return isNaN(n) ? null : n;
+  return parseLocalizedNumber(val);
 }
 
 function parseInt2(val) {
@@ -257,8 +237,10 @@ async function main() {
   }
 
   // Connect to DB
-  const dbUrl =
-    process.env.DATABASE_URL || 'postgresql://importacao:importacao123@localhost:5432/importacao';
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL ausente; o importador não usa credenciais padrão');
+  }
   console.log(`Connecting to DB: ${dbUrl.replace(/:[^:@]+@/, ':***@')}...`);
 
   const client = new Client({ connectionString: dbUrl });
@@ -303,7 +285,7 @@ async function main() {
     const shipper = cleanString(row[COL.shipper], 255);
     const observations = cleanString(row[COL.observations]);
     const urgency = cleanString(row[COL.urgency], 255);
-    const correctionStatus = cleanString(row[COL.docCorrection], 30);
+    const sheetDocumentCorrection = cleanString(row[COL.docCorrection], 30);
     const docsReceivedDate = excelDateToTimestamp(row[COL.docsReceivedDate]);
 
     // New 19 columns
@@ -325,7 +307,7 @@ async function main() {
     const cdArrivalAt = excelDateToTimestamp(row[COL.arrivalCD]);
     const freeTimeDays = parseInt2(row[COL.freeTime]);
     const numerarioValue = parseNumeric(row[COL.cashValue]);
-    const numerarioPct = parseNumeric(row[COL.numerarioPct]);
+    const numerarioPct = parsePercentage(row[COL.numerarioPct]);
 
     // Build notes from various text fields
     const noteParts = [];
@@ -356,6 +338,7 @@ async function main() {
       extraData.voyageConnection = cleanString(row[COL.voyageConnection]);
     if (parseNumeric(row[COL.diDollar])) extraData.diDollar = parseNumeric(row[COL.diDollar]);
     if (excelDateToISO(row[COL.diDate])) extraData.diDate = excelDateToISO(row[COL.diDate]);
+    if (sheetDocumentCorrection) extraData.sheetDocumentCorrection = sheetDocumentCorrection;
     extraData.sheetStatus = cleanString(row[COL.status], 100);
     extraData.importedFromSheet = true;
     extraData.importedAt = new Date().toISOString();
@@ -391,8 +374,8 @@ async function main() {
             etd = $6, eta = $7,
             total_fob_value = $8, freight_value = $9, total_cbm = $10,
             exporter_name = $11,
-            correction_status = $12,
-            ai_extracted_data = $13, notes = $14,
+            ai_extracted_data = COALESCE(ai_extracted_data, '{}'::jsonb) || $13::jsonb,
+            notes = $14,
             purchase_ref = $15, vessel_name = $16, bl_number = $17,
             shipping_line = $18, insurance_value = $19, consolidation_ref = $20,
             eta_carrier = $21, eta_actual = $22, container_count = $23,
@@ -415,7 +398,7 @@ async function main() {
             freight,
             cbm,
             exporterName,
-            correctionStatus,
+            null,
             JSON.stringify(extraData),
             notes,
             purchaseRef,
@@ -532,7 +515,7 @@ async function main() {
             freight,
             cbm,
             exporterName,
-            correctionStatus,
+            null,
             JSON.stringify(extraData),
             notes,
             purchaseRef,

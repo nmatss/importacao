@@ -70,8 +70,11 @@ services:
       GMAIL_SHARED_MAILBOX: ${GMAIL_SHARED_MAILBOX:-global@grupounico.com}
       EMAIL_INGESTION_ENABLED: ${EMAIL_INGESTION_ENABLED:-false}
       EMAIL_ALLOWED_SENDERS: ${EMAIL_ALLOWED_SENDERS:-}
+      EMAIL_PROCESSING_STALE_MINUTES: ${EMAIL_PROCESSING_STALE_MINUTES:-30}
       IMAP_HOST: ${IMAP_HOST:-}
       IMAP_PORT: ${IMAP_PORT:-993}
+      IMAP_SECURE: ${IMAP_SECURE:-true}
+      IMAP_TLS_REJECT_UNAUTHORIZED: ${IMAP_TLS_REJECT_UNAUTHORIZED:-true}
       IMAP_USER: ${IMAP_USER:-}
       IMAP_PASS: ${IMAP_PASS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -132,25 +135,28 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB required}
       GOOGLE_SHEETS_CLIENT_EMAIL: ${GOOGLE_DRIVE_CLIENT_EMAIL:-}
       GOOGLE_SHEETS_PRIVATE_KEY: ${GOOGLE_DRIVE_PRIVATE_KEY:-}
-      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:?GOOGLE_SHEETS_SPREADSHEET_ID required}
-      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:?WMS_ORACLE_HOST required}
-      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:?WMS_ORACLE_PORT required}
-      WMS_ORACLE_SID: ${WMS_ORACLE_SID:?WMS_ORACLE_SID required}
-      WMS_ORACLE_USER: ${WMS_ORACLE_USER:?WMS_ORACLE_USER required}
-      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:?WMS_ORACLE_PASS required}
-      ERP_PUKET_HOST: ${ERP_PUKET_HOST:?ERP_PUKET_HOST required}
-      ERP_PUKET_DB: ${ERP_PUKET_DB:?ERP_PUKET_DB required}
-      ERP_IMG_HOST: ${ERP_IMG_HOST:?ERP_IMG_HOST required}
-      ERP_IMG_DB: ${ERP_IMG_DB:?ERP_IMG_DB required}
-      ERP_MSSQL_USER: ${ERP_MSSQL_USER:?ERP_MSSQL_USER required}
-      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:?ERP_MSSQL_PASS required}
+      # Integrações externas são opcionais no Compose de desenvolvimento. Cada
+      # endpoint afetado falha fechado quando sua configuração não está presente;
+      # o Compose de produção continua exigindo estes valores explicitamente.
+      GOOGLE_SHEETS_SPREADSHEET_ID: ${GOOGLE_SHEETS_SPREADSHEET_ID:-}
+      WMS_ORACLE_HOST: ${WMS_ORACLE_HOST:-}
+      WMS_ORACLE_PORT: ${WMS_ORACLE_PORT:-1521}
+      WMS_ORACLE_SID: ${WMS_ORACLE_SID:-}
+      WMS_ORACLE_USER: ${WMS_ORACLE_USER:-}
+      WMS_ORACLE_PASS: ${WMS_ORACLE_PASS:-}
+      ERP_PUKET_HOST: ${ERP_PUKET_HOST:-}
+      ERP_PUKET_DB: ${ERP_PUKET_DB:-}
+      ERP_IMG_HOST: ${ERP_IMG_HOST:-}
+      ERP_IMG_DB: ${ERP_IMG_DB:-}
+      ERP_MSSQL_USER: ${ERP_MSSQL_USER:-}
+      ERP_MSSQL_PASS: ${ERP_MSSQL_PASS:-}
       # db01 (Puket) e db02 (Imaginarium) tem logins SEPARADOS; sem estas, as duas
       # marcas caem no ERP_MSSQL_* e uma delas falha o login.
       ERP_PUKET_USER: ${ERP_PUKET_USER:-}
       ERP_PUKET_PASS: ${ERP_PUKET_PASS:-}
       ERP_IMG_USER: ${ERP_IMG_USER:-}
       ERP_IMG_PASS: ${ERP_IMG_PASS:-}
-      CERT_API_KEY: ${CERT_API_KEY:?CERT_API_KEY required}
+      CERT_API_KEY: ${CERT_API_KEY:-}
     volumes:
       - cert-reports:/app/reports
       # Certificate PDFs (INMETRO/ANVISA evidence) live in CERTS_DIR=/app/certs

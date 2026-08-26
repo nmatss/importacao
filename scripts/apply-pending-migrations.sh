@@ -44,5 +44,6 @@ apply 0021_sydle_report_columns.sql
 apply 0022_odett_operational_feedback.sql
 apply 0023_communications_audit.sql
 apply 0024_document_analysis_hardening.sql
+apply 0025_ai_usage_telemetry.sql
 
 echo "[$(date '+%H:%M:%S')] done — pending migrations applied"

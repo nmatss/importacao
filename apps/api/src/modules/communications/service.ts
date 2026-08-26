@@ -23,6 +23,7 @@ import {
   parseEmailList,
 } from '../settings/operational-recipients.js';
 import { buildOutgoingMail, getSmtpTransport } from '../../shared/mail/mailer.js';
+import { sanitizeEmailHtml } from './html-sanitizer.js';
 
 interface StoredAttachment {
   filename?: unknown;
@@ -34,23 +35,6 @@ interface StoredAttachment {
 interface MailAttachment {
   filename: string;
   path: string;
-}
-
-function sanitizeHtml(html: string): string {
-  // Remove script tags and their content
-  let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  // Remove style tags and their content (can contain expressions)
-  clean = clean.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-  // Remove all event handler attributes (onclick, onerror, onload, etc.)
-  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  // Remove javascript:, vbscript:, data: URLs from href/src/action attributes
-  clean = clean.replace(
-    /(href|src|action)\s*=\s*(?:"(?:javascript|vbscript|data):[^"]*"|'(?:javascript|vbscript|data):[^']*')/gi,
-    '',
-  );
-  // Remove dangerous tags: svg, math, iframe, object, embed, form, base
-  clean = clean.replace(/<\/?(svg|math|iframe|object|embed|form|base|link|meta)\b[^>]*>/gi, '');
-  return clean;
 }
 
 function normalizeEmail(value: string): string {
@@ -262,7 +246,7 @@ export const communicationService = {
         recipient: input.recipient,
         recipientEmail,
         subject: input.subject,
-        body: sanitizeHtml(input.body),
+        body: sanitizeEmailHtml(input.body),
         attachments: input.attachments,
         status: 'draft',
         createdBy: userId,
@@ -348,11 +332,7 @@ export const communicationService = {
     // operational mailbox as sender and as mandatory copy.
     const mail = await buildOutgoingMail(communication.recipientEmail);
 
-    if (!process.env.SMTP_HOST) {
-      throw new Error('SMTP não configurado. Defina SMTP_HOST nas variáveis de ambiente.');
-    }
-
-    const transport = getSmtpTransport();
+    const transport = await getSmtpTransport();
 
     try {
       const mailAttachments = await resolveMailAttachments(communication);
@@ -385,11 +365,11 @@ export const communicationService = {
       await transport.sendMail({
         from: mail.from,
         to: mail.to,
-        // Empty when the operational mailbox is already the sender or a primary
-        // recipient — nodemailer omits the header instead of duplicating it.
+        // Empty only when every mandatory copy is already a primary recipient.
+        // The operational mailbox remains explicit in CC when it is the sender.
         ...(mail.cc ? { cc: mail.cc } : {}),
         subject: sanitizeHeader(communication.subject),
-        html: sanitizeHtml(htmlBody),
+        html: sanitizeEmailHtml(htmlBody),
         attachments: mailAttachments,
       });
 
@@ -688,7 +668,7 @@ export const communicationService = {
       changedFields.push('subject');
     }
     if (data.body !== undefined) {
-      updateData.body = sanitizeHtml(data.body);
+      updateData.body = sanitizeEmailHtml(data.body);
       changedFields.push('body');
     }
     if (data.recipientEmail !== undefined) {

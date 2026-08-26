@@ -1,6 +1,8 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-17 (ver
+Ultima atualizacao: 2026-08-26 (ver
+`docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`,
+`docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`,
 `docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`,
 `docs/INCIDENTE-2026-08-14-EGRESS-API.md`,
 `docs/REVISAO-2026-08-07.md`,
@@ -8,6 +10,57 @@ Ultima atualizacao: 2026-08-17 (ver
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## ALTO - Fallback IMAP E Drive Nao Estao Prontos
+
+- Gmail API autenticou no probe local e a produção registrou ingestão até
+  26/08, sem mensagem presa em `processing`. IMAP ainda recusa autenticação e a
+  raiz do Google Drive respondeu HTTP 404 no ambiente local.
+- O código implantado tenta autenticar o relay SMTP com usuário placeholder e
+  recebe `EAUTH`. A lógica corrigida deste release reconhece o relay sem auth e
+  passou em `transport.verify()` dentro do contêiner de produção, sem envio.
+- Sem IMAP, o fallback de leitura está indisponível. O Drive falha de forma não
+  bloqueante e o documento ainda pode ser salvo localmente, mas a
+  cópia/organização externa não ocorre.
+- O sandbox descartável GreenMail provou o caminho SMTP/IMAPS da aplicação,
+  inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
+  corrente em credencial/provider/operação, não no contrato básico do código.
+
+Status: **PARCIALMENTE RESOLVIDO / ALTO.** Publicar e repetir o probe SMTP pela
+rota administrativa; validar credencial/app password do IMAP, corrigir ou
+compartilhar o folder raiz e usar destinatário controlado antes do primeiro
+envio real.
+
+## ALTO - Integrações Auxiliares Continuam Sem Configuração Corrente
+
+- `GOOGLE_SHEETS_SPREADSHEET_ID`, ID de Follow-Up e chave da Cert-API estão
+  ausentes. O Compose local agora valida e permite subir serviços independentes
+  sem essas credenciais; os endpoints correspondentes continuam fail-closed.
+- Odoo e IA local apontam para DNS da rede Compose e não resolvem fora dela.
+- SYDLE está desabilitado e sem configuração completa.
+
+Status: **ABERTO / ALTO** para prontidão integrada; corrigir configuração sem
+registrar secrets no Git e executar smoke dentro da rede do projeto.
+
+## ALTO - Correcoes De Frete, Packing List E Importador Ainda Nao Implantadas
+
+- O dado atual foi normalizado, mas a revisão implantada continua em
+  `ce70f41`. Os guards para `PREPAID`/`COLLECT`, o fallback de packing list e a
+  correção do importador existem apenas no worktree local.
+- Até haver commit, push, deploy e smoke autenticado, uma nova entrada com a
+  mesma assinatura ainda pode reproduzir o defeito no ambiente.
+
+Status: **EM PUBLICAÇÃO / ALTO** na continuação autorizada de 2026-08-26.
+
+## ALTO - Packing List Abaixo De 90% Exige Revisao Humana
+
+- O documento 122 subiu de 64,76% para 86,63% após o Gemini substituir o falso
+  positivo do parser determinístico; o harness marcou `trusted`, mas 29 checks
+  do processo ainda retornam 9 falhas.
+- Confiança de extração não é medição de acurácia. Não há corpus rotulado para
+  sustentar garantia de 90% por campo.
+
+Status: **ABERTO / ALTO** até conferência humana contra o documento original.
 
 ## ALTO - 23% Das Invoices Ficam Em Falha Terminal E Desenham A Tela Toda Com "-"
 
@@ -110,9 +163,11 @@ Impacto:
 
 Status:
 
-- **ABERTO / CRITICO.** Causa exata NAO determinada — confirmar exige disparar
-  uma mensagem de teste ao webhook (acao externa, nao executada por conta
-  propria). Detalhe e proximos passos em `docs/GAPS-2026-08-17.md` (G1 e G2).
+- **ABERTO / CRITICO.** Em 25/08, notificações automáticas disparadas pelas
+  validações controladas falharam com resposta de chave de API inválida. Isso
+  confirma uma causa operacional atual sem expor a credencial. Rotacionar a
+  chave/webhook e executar teste autorizado de ponta a ponta. Detalhe e
+  próximos passos em `docs/GAPS-2026-08-17.md` (G1 e G2).
 
 ## ALTO - Falha De Egress E De Cron Nao Gera Alerta (SUPERADO — ver acima)
 
@@ -286,9 +341,10 @@ Impacto:
 
 Status:
 
-- **ABERTO / ALTO**, mas sem dano acumulado: so ha 5 comunicacoes `sent`, a mais
-  recente de 2026-06-29, anterior a este codigo. Nenhum e-mail saiu sob a versao
-  nova. Correcao: `MAIL_FORCE_OPERATIONAL_CC=true`, sem redeploy.
+- **RESOLVIDO NO CODIGO EM 2026-08-26 / AGUARDA DEPLOY.** `buildOutgoingMail`
+  agora mantem a caixa operacional explicitamente em `Cc` mesmo quando ela e o
+  remetente, e os testes congelam a igualdade entre header e auditoria. A flag
+  legada `MAIL_FORCE_OPERATIONAL_CC=false` nao pode mais suprimir a copia.
 
 ## ALTO - Injecao De Header No Remetente E `smtp_from` Sem Validacao
 
@@ -310,8 +366,11 @@ Impacto:
 
 Status:
 
-- **ABERTO / ALTO.** Correcao: validar o `From` resolvido com parser de endereco
-  em `resolveMailFrom` (fecha os dois de uma vez) e validar `smtp_from` no Zod.
+- **RESOLVIDO NO CODIGO EM 2026-08-26 / AGUARDA DEPLOY.** O remetente passa por
+  parser estrito de uma unica mailbox antes do Nodemailer; CR/LF, listas e
+  sintaxe de grupo falham fechadas. O Zod da rota administrativa tambem valida
+  `smtp_from` e a porta. Cobertura em `shared/mail/__tests__/mailer.test.ts` e
+  `modules/settings/__tests__/routes.test.ts`.
 
 ## ALTO - Login Google Intermitente Por Gateway Docker Da API
 

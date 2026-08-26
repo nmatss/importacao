@@ -234,6 +234,7 @@ function EmailSettingsTab() {
   const [defaultCcEmail, setDefaultCcEmail] = useState('');
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [savingSmtp, setSavingSmtp] = useState(false);
+  const [testingSmtp, setTestingSmtp] = useState(false);
   const [savingRecipients, setSavingRecipients] = useState(false);
   const [savedWebhook, setSavedWebhook] = useState(false);
   const [savedSmtp, setSavedSmtp] = useState(false);
@@ -317,6 +318,18 @@ function EmailSettingsTab() {
       setSavingSmtp(false);
     }
   }, [smtpHost, smtpPort, smtpUser, smtpFrom]);
+
+  const handleTestSmtp = useCallback(async () => {
+    setTestingSmtp(true);
+    try {
+      await api.post('/api/settings/smtp/test');
+      toast.success('Conexão SMTP autenticada com sucesso. Nenhum e-mail foi enviado.');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setTestingSmtp(false);
+    }
+  }, []);
 
   const handleSaveRecipients = useCallback(async () => {
     const invalidItems = [
@@ -515,7 +528,7 @@ function EmailSettingsTab() {
               </label>
               <input
                 id="smtp-from"
-                type="email"
+                type="text"
                 value={smtpFrom}
                 onChange={(e) => setSmtpFrom(e.target.value)}
                 placeholder="noreply@empresa.com"
@@ -523,7 +536,22 @@ function EmailSettingsTab() {
               />
             </div>
           </div>
-          <SaveButton onClick={handleSaveSmtp} saving={savingSmtp} saved={savedSmtp} />
+          <div className="flex flex-wrap items-center gap-3">
+            <SaveButton onClick={handleSaveSmtp} saving={savingSmtp} saved={savedSmtp} />
+            <button
+              type="button"
+              onClick={handleTestSmtp}
+              disabled={testingSmtp || savingSmtp}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              {testingSmtp ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Zap className="h-4 w-4" />
+              )}
+              Testar conexão
+            </button>
+          </div>
         </div>
       </SectionCard>
     </div>
