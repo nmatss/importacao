@@ -162,6 +162,7 @@ rsync -avz --delete \
   --exclude '.git' \
   --exclude '.claude' \
   --exclude '.codex' \
+  --exclude '.context' \
   --exclude '.playwright-cli' \
   --exclude '.pytest_cache' \
   --exclude '.ruff_cache' \

@@ -1749,4 +1749,10 @@ Evidências:
 - Gate completo: API Node 981 + 1 skip, web 139, Cert-API 523, lint/typecheck/build,
   Ruff, Compose e diff check passaram. Audit do requirements do Cert-API ficou limpo;
   duas moderadas runtime do React Router 6 permanecem como dívida conhecida.
+- Commit `86e1bbc` foi publicado e implantado com backup/snapshot/health verdes.
+  Smokes read-only confirmaram os códigos e valores atuais de uma amostra Puket e uma
+  Imaginarium; o gateway sem JWT respondeu 401 e não houve 5xx. Nenhuma escrita Linx
+  foi disparada.
+- O primeiro rsync copiou `.context/runtime` por não respeitar `.gitignore`; o runner
+  passou a excluir `.context` e a cópia exata foi removida do host.
 - Evidência: `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`.

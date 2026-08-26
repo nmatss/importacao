@@ -112,3 +112,22 @@ gravações de diagnóstico no ERP.
 2. Migrar credenciais pessoais do ERP para contas de serviço.
 3. No pós-deploy, repetir health/smoke read-only do endpoint com amostras Puket e
    Imaginarium; não acionar cadastro/retry/sync.
+
+## Deploy e smoke pós-release
+
+- O commit `86e1bbc08eb69b611df38434908b4f0367d6dfaf` foi publicado em `master` e
+  implantado pelo runner oficial em `192.168.168.124`.
+- Backup `importacao_2026-08-26_164534.pgdump` passou em `pg_restore --list`; volumes
+  de uploads/relatórios/certificados foram arquivados e o snapshot de rollback foi
+  criado antes do rsync.
+- API, Cert-API, web, proxy e endpoint HTTPS público passaram nos health checks; os
+  três containers de aplicação ficaram `healthy` e `REVISION` confirmou o SHA.
+- Smoke interno autenticado, somente leitura: Puket `100400496` retornou
+  `00224/00225`, validade `11/08/2027`; Imaginarium `PI7223Y` retornou `00106/00107`,
+  validade `24/07/2026`. Ambos resolveram o produto; licenciamento estava vazio nas
+  duas amostras. O acesso público sem JWT respondeu `401`.
+- Não houve erro, traceback, falha de lookup nem HTTP 5xx no Cert-API desde o deploy.
+- O rsync revelou que `.context/runtime` local era copiado mesmo ignorado pelo Git. O
+  runner passou a excluir `.context`, e a cópia exata no host foi removida; o estado
+  oficial permanece no provider do harness e na documentação versionada.
+- Nenhuma escrita Linx, cadastro, retry ou sync foi executado no smoke.

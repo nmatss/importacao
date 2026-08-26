@@ -48,6 +48,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Verification
 
+- Release de certificados implantado com backup íntegro, snapshot de rollback e
+  health checks verdes. Smokes read-only confirmaram propriedades Puket e Imaginarium;
+  nenhuma gravação Linx foi acionada.
+- Runtime local `.context` foi excluído do rsync de produção depois que o primeiro
+  deploy revelou sua cópia indevida.
 - Produção consultada somente em leitura: 674 produtos, conexões Puket/Imaginarium
   ativas, 444 datas de validade efetivas e 59 datas de licenciamento efetivas; a
   tabela de operações do formulário permanece vazia.
