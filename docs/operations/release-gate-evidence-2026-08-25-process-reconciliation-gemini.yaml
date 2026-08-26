@@ -1,15 +1,36 @@
 release_gate_evidence:
   plan_id: process-reconciliation-gemini-2026-08-25
-  status: completed_with_manual_review_required
+  status: deployed_with_manual_review_required
   checked_at: '2026-08-25T15:09:37-03:00'
   environment: validation
-  deployed_revision: ce70f41e473ed4680cbcd68931469eea591d906c
+  application_release_revision: 41d0190bfdedc563c9b741cf46ac142e51264b9f
   local_base_revision: cfbf2a26717fdbf48f0d3b80d358015ffad33a82
 
   authorization:
     production_deploy: authorized_by_user_2026-08-26
     git_push: authorized_as_required_release_step_2026-08-26
     validation_data_cleanup_and_gemini_review: authorized_by_user
+
+  production_release:
+    deployed_at: '2026-08-26T08:54:35-03:00'
+    backup_database: /home/nicolas/backups/importacao/importacao_2026-08-26_115053.pgdump
+    backup_integrity: passed
+    migrations_0011_through_0025: passed
+    api_ready: passed
+    cert_api_ready: passed
+    web_health: passed
+    proxy_health: passed
+    public_https_health: passed
+    smtp_verify_without_send: passed
+    gmail_profile: passed
+    imap_fallback: failed_auth
+    google_drive_root: failed_404
+    post_deploy_processes: 117
+    post_deploy_documents: 51
+    post_deploy_unprocessed_documents: 0
+    post_deploy_active_leases: 0
+    post_deploy_processing_emails: 0
+    operations_followup: deploy_exclusions_and_checkpoint_follow_in_git_history
 
   source_reconciliation:
     spreadsheet_rows_selected: 117

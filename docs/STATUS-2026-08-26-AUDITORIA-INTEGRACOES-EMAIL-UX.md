@@ -4,8 +4,9 @@
 
 Sessão de continuação com auditoria e correção autorizada de integrações,
 entrada e saída de e-mail, processamento documental, segurança, páginas,
-responsividade e operação. Nenhum push, deploy, envio real de e-mail, escrita
-remota de banco ou reprocessamento de produção foi executado.
+responsividade e operação. A auditoria inicial não fez mutação remota; a
+continuação autorizada publicou o release `41d0190` com backup, migrations e
+smoke. Nenhum e-mail real nem reprocessamento adicional foi disparado.
 
 ## Conclusão Executiva
 
@@ -15,9 +16,9 @@ real do host das limitações locais:
 
 - Gmail autentica e pode ser usado como canal primário de leitura;
 - IMAP recusou autenticação;
-- o código implantado ainda tenta autenticar o relay e recebe `EAUTH`; o mesmo
-  probe usando a lógica corrigida deste release omitiu autenticação para o relay
-  atual e passou em produção, sem enviar mensagem;
+- o código anterior tentava autenticar o relay e recebia `EAUTH`; o release
+  implantado omite autenticação para o relay atual e passou em produção, sem
+  enviar mensagem;
 - a raiz configurada do Google Drive respondeu HTTP 404;
 - Odoo e IA local dependem de nomes da rede Compose, mas os containers deste
   projeto não estão em execução;
@@ -230,12 +231,25 @@ Continuação de release em 2026-08-26:
 - `scripts/apply-pending-migrations.sh` foi corrigido para incluir a migration
   idempotente `0025_ai_usage_telemetry.sql`, já presente em produção;
 - o usuário autorizou seguir pelos gates de release até o deploy. O rollout
-  SYDLE já está live e documentado; o deploy deve preservar o gate com
+  SYDLE já estava live e foi preservado pelo gate
   `ALLOW_SYDLE_SYNC_DEPLOY=1`.
 
-Próximos gates operacionais após a publicação:
+Deploy concluído em 2026-08-26:
 
-1. executar smoke autenticado e repetir o probe SMTP pela rota administrativa;
-2. realizar envio controlado quando houver destinatário operacional aprovado;
-3. corrigir IMAP e a raiz/permissão do Drive;
-4. revisar humanamente o packing list abaixo de 90%.
+- commit `41d0190bfdedc563c9b741cf46ac142e51264b9f` publicado em `master` e
+  gravado em `/home/nicolas/importacao/REVISION`;
+- backup `importacao_2026-08-26_115053.pgdump` criado e validado por
+  `pg_restore --list`; uploads e volumes de certificados arquivados;
+- migrations `0011–0025`, Compose, API, cert-api, web, proxy `/api` e HTTPS
+  público passaram; API/web ficaram sem linha de erro desde o restart;
+- smoke implantado: SMTP `pass`, Gmail `pass`, IMAP `fail`, Drive `404`;
+- pós-deploy: 117 processos, 51 documentos, zero documento não processado,
+  zero lease e zero e-mail em `processing`;
+- caches e screenshots locais copiados pelo rsync foram removidos do host; o
+  script ganhou exclusões explícitas para impedir recorrência.
+
+Próximos gates operacionais:
+
+1. realizar envio controlado quando houver destinatário operacional aprovado;
+2. corrigir IMAP e a raiz/permissão do Drive;
+3. revisar humanamente o packing list abaixo de 90%.

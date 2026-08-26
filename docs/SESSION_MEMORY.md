@@ -1665,3 +1665,21 @@ Evidências:
 - O usuário autorizou continuar pelos passos de release até o deploy. Como
   SYDLE já está live e documentado, o deploy deve usar o guard rail existente
   `ALLOW_SYDLE_SYNC_DEPLOY=1`, preservando a configuração atual.
+
+## 2026-08-26 — Deploy e smoke final
+
+- Commit `41d0190bfdedc563c9b741cf46ac142e51264b9f` foi publicado em `master` e
+  implantado no servidor `192.168.168.124` pelo `scripts/deploy.sh`.
+- Backup obrigatório `importacao_2026-08-26_115053.pgdump` passou em
+  `pg_restore --list`; uploads e volumes cert-api foram arquivados. Snapshot de
+  rollback foi criado antes do rsync.
+- SOPS, gate SYDLE live, Compose e migrations `0011–0025` passaram. API,
+  cert-api, web, proxy e HTTPS público ficaram verdes; `REVISION` confirma o
+  SHA e não houve linha de erro da API/web desde o restart.
+- Smoke real sem efeitos comerciais: SMTP e Gmail passaram; IMAP recusou auth;
+  Drive manteve 404. Nenhum e-mail real foi enviado.
+- Pós-deploy: 117 processos, 51 documentos, zero pendente, zero lease ativa e
+  zero e-mail em `processing`.
+- O rsync revelou que ignorados do Git ainda eram copiados. Foram removidos do
+  host apenas `.playwright-cli`, caches Ruff/Pytest e `output/`; o deploy ganhou
+  exclusões explícitas para esses artefatos, coverage e relatórios E2E.

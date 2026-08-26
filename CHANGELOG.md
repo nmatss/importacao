@@ -5,7 +5,7 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased] - 2026-08-26 - Auditoria de integrações, e-mail e UX
+## [41d0190] - 2026-08-26 - Auditoria de integrações, e-mail e UX
 
 Detalhe em `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md` e
 `docs/SECURITY_AUDIT_2026-08-26.md`.
@@ -61,9 +61,11 @@ Detalhe em `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md` e
 
 - Gmail autenticou e a ingestão de produção está ativa. IMAP e Drive continuam
   pendentes. O SMTP corrigido passou em `verify()` no contêiner de produção sem
-  envio real; publicação ainda não concluída neste checkpoint.
+  envio real; release publicado com backup, migrations e health checks verdes.
+- Caches, screenshots e relatórios de teste locais foram excluídos do rsync de
+  produção e removidos do host após validação dos caminhos.
 
-## [Unreleased] - 2026-08-25 - Reconciliação de processos e documentos Gemini
+## [41d0190-data] - 2026-08-25 - Reconciliação de processos e documentos Gemini
 
 Detalhe em `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`.
 
@@ -94,7 +96,8 @@ Detalhe em `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`.
   documentos processados, zero lease e zero par inválido de frete.
 - Seis documentos reprocessados com confiança média de 93,23%; cinco acima de
   90% e um packing list em revisão humana a 86,63%.
-- Nenhum push ou deploy executado.
+- Correções preventivas publicadas em 26/08 no release `41d0190`; a operação de
+  dados permanece rastreada pelo backup e checkpoint de 25/08.
 
 ## [Unreleased] - 2026-08-17 - Pedidos da Eduarda na importacao e gate de estoque
 

@@ -16,9 +16,9 @@ Ultima atualizacao: 2026-08-26 (ver
 - Gmail API autenticou no probe local e a produção registrou ingestão até
   26/08, sem mensagem presa em `processing`. IMAP ainda recusa autenticação e a
   raiz do Google Drive respondeu HTTP 404 no ambiente local.
-- O código implantado tenta autenticar o relay SMTP com usuário placeholder e
-  recebe `EAUTH`. A lógica corrigida deste release reconhece o relay sem auth e
-  passou em `transport.verify()` dentro do contêiner de produção, sem envio.
+- O código anterior tentava autenticar o relay SMTP com usuário placeholder e
+  recebia `EAUTH`. O release `41d0190` reconhece o relay sem auth e passou em
+  `transport.verify()` dentro do contêiner de produção, sem envio.
 - Sem IMAP, o fallback de leitura está indisponível. O Drive falha de forma não
   bloqueante e o documento ainda pode ser salvo localmente, mas a
   cópia/organização externa não ocorre.
@@ -26,10 +26,9 @@ Ultima atualizacao: 2026-08-26 (ver
   inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
   corrente em credencial/provider/operação, não no contrato básico do código.
 
-Status: **PARCIALMENTE RESOLVIDO / ALTO.** Publicar e repetir o probe SMTP pela
-rota administrativa; validar credencial/app password do IMAP, corrigir ou
-compartilhar o folder raiz e usar destinatário controlado antes do primeiro
-envio real.
+Status: **PARCIALMENTE RESOLVIDO / ALTO.** SMTP publicado e verificado; validar
+credencial/app password do IMAP, corrigir ou compartilhar o folder raiz e usar
+destinatário controlado antes do primeiro envio real.
 
 ## ALTO - Integrações Auxiliares Continuam Sem Configuração Corrente
 
@@ -42,15 +41,14 @@ envio real.
 Status: **ABERTO / ALTO** para prontidão integrada; corrigir configuração sem
 registrar secrets no Git e executar smoke dentro da rede do projeto.
 
-## ALTO - Correcoes De Frete, Packing List E Importador Ainda Nao Implantadas
+## RESOLVIDO - Correcoes De Frete, Packing List E Importador Implantadas
 
-- O dado atual foi normalizado, mas a revisão implantada continua em
-  `ce70f41`. Os guards para `PREPAID`/`COLLECT`, o fallback de packing list e a
-  correção do importador existem apenas no worktree local.
-- Até haver commit, push, deploy e smoke autenticado, uma nova entrada com a
-  mesma assinatura ainda pode reproduzir o defeito no ambiente.
+- Os guards para `PREPAID`/`COLLECT`, o fallback de packing list e a correção do
+  importador foram publicados no release `41d0190` em 2026-08-26.
+- Build, health interno/público e agregados pós-deploy passaram. O packing list
+  abaixo de 90% continua como risco humano separado.
 
-Status: **EM PUBLICAÇÃO / ALTO** na continuação autorizada de 2026-08-26.
+Status: **RESOLVIDO EM PRODUÇÃO**; manter os testes de regressão.
 
 ## ALTO - Packing List Abaixo De 90% Exige Revisao Humana
 

@@ -162,8 +162,15 @@ rsync -avz --delete \
   --exclude '.git' \
   --exclude '.claude' \
   --exclude '.codex' \
+  --exclude '.playwright-cli' \
+  --exclude '.pytest_cache' \
+  --exclude '.ruff_cache' \
   --exclude '__pycache__' \
   --exclude '.venv' \
+  --exclude 'coverage' \
+  --exclude 'output' \
+  --exclude 'playwright-report' \
+  --exclude 'test-results' \
   --exclude '*.db' \
   --exclude 'reports/' \
   --exclude 'apps/cert-api/__pycache__' \
