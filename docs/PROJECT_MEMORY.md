@@ -531,3 +531,36 @@ Principais temas:
   permanece em SOPS/env.
 - Fluxos de aceite entre checklist e comparativo ainda podem ser melhor unificados.
 - Documentacao de IA possui divergencias historicas entre Vertex ideal e IA local atual.
+
+## Completude E Evidencia De Processos — Decisoes De 2026-08-26
+
+- A planilha Follow Up e a fonte mestre dos 117 processos. Somente 12 possuem
+  documentos locais; os 105 restantes devem ser rotulados `master_only`, não
+  como falha de extração.
+- Estado `is_processed=true`, confiança do extrator, completude de campos,
+  divergência cruzada e acurácia contra ground truth são métricas distintas.
+- Validação `partial` executa todos os checks sem efeitos de negócio e preserva
+  detalhes append-only em `validation_result_history` por `validation_run_id`.
+- Documento e terminal run são atômicos também para `failed`, `skipped` e
+  espelho `deterministic`; backfill histórico explicita provider
+  `historical_backfill` e não inventa hash/trecho-fonte ausente.
+- `process_items` é projeção editável opcional; a fonte canônica dos itens é o
+  documento vigente com sua linhagem (ADR 0006).
+- Replay usa lease de 25 minutos, concorrência 1, JSONL resumível e
+  `DOCUMENT_REPLAY_DEFER_DERIVED=1`; reconciliação e validação consolidadas
+  ocorrem ao final, não a cada documento.
+- Gmail deve ser reconciliado por Message-ID + índice/hash + FKs, nunca apenas
+  por status `completed`. Certificado usa número/tipo da planilha e datas das
+  propriedades Linx `00106/00107` ou `00224/00225`.
+- Nenhuma automação pode emitir aprovação 100% sem fonte original ou aceite
+  humano das exceções.
+
+Evidências:
+
+- `docs/operations/backfill-plan-2026-08-26-completeness.yaml`
+- `docs/adr/0006-document-items-source-of-truth.md`
+- `scripts/audit-process-completeness.mjs`
+- `apps/api/src/operators/`
+
+Grau de confiança: alto para arquitetura/código e baseline agregado; não
+estabelecido para acurácia de negócio até concluir a execução remota e o aceite.

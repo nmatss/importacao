@@ -94,9 +94,36 @@ repetir o processamento. A evidencia da extracao mais recente fica em
 Cada worker reivindica o `document_id` antes de iniciar OCR/IA. Uma mensagem
 duplicada apenas registra `Skipping duplicate AI extraction` e não consome
 modelo. Mantenha `DOCUMENT_EXTRACTION_LEASE_MS` acima do p99 de OCR+IA (o
-default é 10 minutos; a API recusa valor menor que 2 minutos). Se houver queda
+default é 25 minutos; a API recusa valor menor que 2 minutos). Se houver queda
 do worker, a lease expira e uma nova entrega retoma o documento; não apague ou
 altere a lease diretamente no banco durante uma extração em curso.
+
+### Auditoria e replay documental controlado
+
+Antes de qualquer replay, preencha e aprove um plano em `docs/operations/`,
+faça backup/restore test de banco e uploads e confirme fila/leases vazias. O
+override `docker-compose.reprocess.yml` desativa Drive/Chat, espelho automático
+e define `DOCUMENT_REPLAY_DEFER_DERIVED=1`, adiando validação/workflow até o
+fechamento reconciliado de cada processo.
+
+Operadores compilados disponíveis no container da API:
+
+```bash
+# Somente leitura: classifica sinais dos documentos other sem persistir texto.
+node dist/operators/triage-other-documents.js --out=/tmp/other-triage.json
+
+# Dry-run por padrão; --execute insere apenas runs históricos append-only.
+node dist/operators/backfill-document-terminal-lineage.js --out=/tmp/lineage.json
+
+# Somente leitura: Gmail permitido -> hash do anexo -> target no portal.
+node dist/operators/audit-gmail-source-reconciliation.js \
+  --after=2025/05/01 --out=/tmp/gmail-reconciliation.json
+```
+
+Os artefatos devem permanecer fora do repositório, com permissão `0600`. Para
+validar todos os processos sem efeitos de negócio, use
+`scripts/audit-process-completeness.mjs --execute`; o padrão ainda é dry-run e
+o script exige `API_TOKEN` apenas pelo ambiente.
 
 ### Deploy failed
 

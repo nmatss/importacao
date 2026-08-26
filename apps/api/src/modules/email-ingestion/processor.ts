@@ -261,7 +261,7 @@ function isStrongUnicoCode(code: string): boolean {
   return /^(?:IM|PK)\d{7}[A-Z]{0,4}$/i.test(code.replace(/[-_\s]/g, ''));
 }
 
-import { classifyDocument } from './classify-document.js';
+import { classifyDocument, classifyDocumentText } from './classify-document.js';
 export { classifyDocument };
 
 // ── AI-enhanced document classification using email body context ─────────
@@ -372,43 +372,6 @@ async function extractAttachmentTextForClassification(att: EmailAttachment): Pro
 }
 
 // ── Regex-based document type extraction from text ──────────────────────
-
-function extractDocumentTypesFromText(text: string): string[] {
-  const lower = text.toLowerCase();
-  const types: string[] = [];
-
-  // Proforma MUST be checked before "invoice" to win the type assignment.
-  if (/\b(proforma|pro[\s-]?forma)(\s+invoice)?\b/.test(lower)) types.push('proforma_invoice');
-  if (
-    /\b(invoice|fatura|commercial\s+invoice)\b/.test(lower) &&
-    !types.includes('proforma_invoice')
-  )
-    types.push('invoice');
-  if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
-  // Draft BL BEFORE final BL so a body mentioning "draft BL" is detected.
-  if (/\b(draft\s+bl|draft\s+bill|rascunho\s+(do\s+)?bl|bl\s+draft|preliminary\s+bl)\b/.test(lower))
-    types.push('draft_bl');
-  if (/\b(draft\s+duimp|minuta\s+duimp|rascunho\s+(da\s+)?duimp)\b/.test(lower))
-    types.push('draft_duimp');
-  if (/\bduimp\b/.test(lower) && !types.includes('draft_duimp')) types.push('duimp');
-  if (
-    /\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl)\b|(?:^|[^a-z])bl(?:$|[^a-z])/.test(
-      lower,
-    )
-  )
-    types.push('ohbl');
-  if (/\b(espelho)\b/.test(lower)) types.push('espelho');
-  if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o)\b|(?:^|[^a-z])li(?:$|[^a-z])/.test(lower))
-    types.push('li');
-  if (
-    /\b(certificado|certificate|cert\s+of\s+origin|fito(ssanit[aá]rio)?|phyto|fumiga[çc][aã]o|ispm|inmetro|anvisa)\b/.test(
-      lower,
-    )
-  )
-    types.push('certificate');
-
-  return [...new Set(types)];
-}
 
 // ── Regex-based email category detection ────────────────────────────────
 
@@ -752,7 +715,7 @@ export const emailProcessor = {
         let processCode = allCodes.length > 0 ? allCodes[0] : null;
 
         // ── Step 3: Regex-based document type & category detection ────
-        const regexDocTypes = extractDocumentTypesFromText(
+        const regexDocTypes = classifyDocumentText(
           `${email.subject} ${(email.body || '').substring(0, 3000)}`,
         );
         const regexCategory = detectEmailCategory(email.subject, email.body || '');
@@ -1289,7 +1252,7 @@ export const emailProcessor = {
 
           if (docType === 'other') {
             const attachmentText = await extractAttachmentTextForClassification(att);
-            const contentTypes = extractDocumentTypesFromText(attachmentText.slice(0, 10000));
+            const contentTypes = classifyDocumentText(attachmentText.slice(0, 10000));
             if (contentTypes.length === 1) {
               docType = contentTypes[0];
               logger.info(

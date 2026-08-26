@@ -562,50 +562,73 @@ async function persistExtractionLineage(params: {
   documentId: number;
   processId: number;
   documentType: string;
-  data: Record<string, any>;
-  confidenceScore: number;
-  sourceText: string;
+  data?: Record<string, any>;
+  confidenceScore?: number | null;
+  sourceText?: string;
   sourcePages?: string[];
+  extractionStatus?: 'completed' | 'failed' | 'skipped' | 'deterministic';
+  provider?: string | null;
+  model?: string | null;
+  documentUpdate?: {
+    aiParsedData: Record<string, unknown>;
+    confidenceScore: string;
+    isProcessed: boolean;
+    updatedAt: Date;
+  };
 }) {
-  const sourceTextHash = sha256Text(params.sourceText ?? '');
-  const [run] = await db
-    .insert(documentExtractionRuns)
-    .values({
-      documentId: params.documentId,
-      processId: params.processId,
-      documentType: params.documentType,
-      provider: process.env.AI_PROVIDER ?? null,
-      model: process.env.AI_MODEL ?? process.env.AI_ANALYSIS_MODEL ?? null,
-      confidence: String(params.confidenceScore),
-      sourceTextHash,
-      sourceTextLength: params.sourceText.length,
-      extractionStatus: 'completed',
-    })
-    .returning({ id: documentExtractionRuns.id });
-
-  const fields = collectExtractedFields(params.data)
+  const hasSourceText = typeof params.sourceText === 'string';
+  const sourceText = params.sourceText ?? '';
+  const sourceTextHash = hasSourceText ? sha256Text(sourceText) : null;
+  const fields = collectExtractedFields(params.data ?? {})
     .filter((field) => field.fieldPath.length <= 255)
     .slice(0, 1000);
 
-  if (fields.length === 0) return;
+  await db.transaction(async (tx) => {
+    if (params.documentUpdate) {
+      await tx
+        .update(documents)
+        .set(params.documentUpdate)
+        .where(eq(documents.id, params.documentId));
+    }
 
-  await db.insert(documentExtractedFields).values(
-    fields.map((field) => {
-      const evidence = findFieldEvidence(field.valueJson, params.sourcePages ?? []);
-      return {
-        runId: run.id,
+    const [run] = await tx
+      .insert(documentExtractionRuns)
+      .values({
         documentId: params.documentId,
         processId: params.processId,
         documentType: params.documentType,
-        fieldPath: field.fieldPath,
-        valueJson: field.valueJson as any,
-        confidence: field.confidence == null ? null : String(field.confidence),
+        provider: 'provider' in params ? params.provider : (process.env.AI_PROVIDER ?? null),
+        model:
+          'model' in params
+            ? params.model
+            : (process.env.AI_MODEL ?? process.env.AI_ANALYSIS_MODEL ?? null),
+        confidence: params.confidenceScore == null ? null : String(params.confidenceScore),
         sourceTextHash,
-        sourcePage: evidence.sourcePage,
-        sourceExcerpt: evidence.sourceExcerpt,
-      };
-    }),
-  );
+        sourceTextLength: hasSourceText ? sourceText.length : null,
+        extractionStatus: params.extractionStatus ?? 'completed',
+      })
+      .returning({ id: documentExtractionRuns.id });
+
+    if (fields.length === 0) return;
+
+    await tx.insert(documentExtractedFields).values(
+      fields.map((field) => {
+        const evidence = findFieldEvidence(field.valueJson, params.sourcePages ?? []);
+        return {
+          runId: run.id,
+          documentId: params.documentId,
+          processId: params.processId,
+          documentType: params.documentType,
+          fieldPath: field.fieldPath,
+          valueJson: field.valueJson as any,
+          confidence: field.confidence == null ? null : String(field.confidence),
+          sourceTextHash,
+          sourcePage: evidence.sourcePage,
+          sourceExcerpt: evidence.sourceExcerpt,
+        };
+      }),
+    );
+  });
 }
 
 async function invalidateComparisonAcceptances(processId: number, reason: string) {
@@ -1176,20 +1199,29 @@ export const documentService = {
       'AI extraction failed — marking document as processed-with-failure',
     );
 
-    await db
-      .update(documents)
-      .set({
-        aiParsedData: {
-          extractionFailed: true,
-          reason,
-          budgetExceeded: isBudget,
-          type,
-        } as Record<string, unknown>,
+    const failedData = {
+      extractionFailed: true,
+      reason,
+      budgetExceeded: isBudget,
+      type,
+    } as Record<string, unknown>;
+
+    await persistExtractionLineage({
+      documentId: doc.id,
+      processId: doc.processId,
+      documentType: type,
+      data: failedData,
+      confidenceScore: 0,
+      extractionStatus: 'failed',
+      provider: process.env.AI_PROVIDER ?? null,
+      model: process.env.AI_MODEL ?? process.env.AI_ANALYSIS_MODEL ?? null,
+      documentUpdate: {
+        aiParsedData: failedData,
         confidenceScore: '0',
         isProcessed: true,
         updatedAt: new Date(),
-      })
-      .where(eq(documents.id, doc.id));
+      },
+    });
 
     const [proc] = await db
       .select({ processCode: importProcesses.processCode })
@@ -1380,22 +1412,31 @@ export const documentService = {
             { documentId: doc.id, processId: doc.processId, type },
             'Document type has no AI extractor — marking processed without extraction',
           );
-          await db
-            .update(documents)
-            .set({
-              aiParsedData: {
-                skipped: true,
-                reason:
-                  type === 'li'
-                    ? 'Licença de Importação (LI) — extração automática ainda não implementada'
-                    : 'Tipo de documento sem extractor dedicado — revisar manualmente',
-                type,
-              } as Record<string, unknown>,
+          const skippedData = {
+            skipped: true,
+            reason:
+              type === 'li'
+                ? 'Licença de Importação (LI) — extração automática ainda não implementada'
+                : 'Tipo de documento sem extractor dedicado — revisar manualmente',
+            type,
+          } as Record<string, unknown>;
+
+          await persistExtractionLineage({
+            documentId,
+            processId: doc.processId,
+            documentType: type,
+            data: skippedData,
+            confidenceScore: 0,
+            extractionStatus: 'skipped',
+            provider: 'classification',
+            model: null,
+            documentUpdate: {
+              aiParsedData: skippedData,
               confidenceScore: '0',
               isProcessed: true,
               updatedAt: new Date(),
-            })
-            .where(eq(documents.id, documentId));
+            },
+          });
 
           const [proc] = await db
             .select({ processCode: importProcesses.processCode })
@@ -1451,16 +1492,6 @@ export const documentService = {
       return;
     }
 
-    await db
-      .update(documents)
-      .set({
-        aiParsedData: result.data,
-        confidenceScore: String(result.confidenceScore),
-        isProcessed: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(documents.id, documentId));
-
     await persistExtractionLineage({
       documentId,
       processId: doc.processId,
@@ -1469,6 +1500,12 @@ export const documentService = {
       confidenceScore: result.confidenceScore,
       sourceText,
       sourcePages,
+      documentUpdate: {
+        aiParsedData: result.data as Record<string, unknown>,
+        confidenceScore: String(result.confidenceScore),
+        isProcessed: true,
+        updatedAt: new Date(),
+      },
     });
 
     await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
@@ -1641,9 +1678,11 @@ export const documentService = {
     // corroboration against the operator-uploaded espelho. Runs on every doc
     // change so a sibling arriving later (e.g. the espelho after the invoice)
     // re-lifts the others. Non-fatal — never blocks extraction.
-    await reconcileProcessConfidence(doc.processId).catch((err) =>
-      logger.error({ err, processId: doc.processId }, 'Reconciliation after extraction failed'),
-    );
+    if (process.env.DOCUMENT_REPLAY_DEFER_DERIVED !== '1') {
+      await reconcileProcessConfidence(doc.processId).catch((err) =>
+        logger.error({ err, processId: doc.processId }, 'Reconciliation after extraction failed'),
+      );
+    }
   },
 
   /**
@@ -1656,6 +1695,15 @@ export const documentService = {
    * alertService (same processId + title within 24h).
    */
   async runDegradableGate(processId: number, mergedAiData: Record<string, any>) {
+    // A controlled replay rebuilds many documents of the same process. Defer
+    // validation, workflow and derived projections until the batch reaches a
+    // reconciled terminal state, otherwise every document creates transient
+    // results and external operational noise.
+    if (process.env.DOCUMENT_REPLAY_DEFER_DERIVED === '1') {
+      logger.info({ processId }, 'Derived document effects deferred during replay window');
+      return;
+    }
+
     // Boolean(obj) era true para um {} vazio — uma INV classificada mas sem
     // dado útil contava como "presente" e suprimia o alerta "Aguardando INV".
     const hasInvoice = hasMeaningfulAiData(mergedAiData.invoice);
@@ -2054,15 +2102,21 @@ export const documentService = {
             summary.generatedBy = 'ai_fallback';
             summary.generatedAt = new Date().toISOString();
 
-            await db
-              .update(documents)
-              .set({
-                aiParsedData: { summary, items } as Record<string, unknown>,
+            await persistExtractionLineage({
+              documentId: doc.id,
+              processId: doc.processId,
+              documentType: 'espelho',
+              data: { summary, items },
+              confidenceScore: result.confidenceScore,
+              sourceText: xlsxText,
+              extractionStatus: 'completed',
+              documentUpdate: {
+                aiParsedData: { summary, items },
                 confidenceScore: String(result.confidenceScore.toFixed(4)),
                 isProcessed: true,
                 updatedAt: new Date(),
-              })
-              .where(eq(documents.id, doc.id));
+              },
+            });
 
             const espelhoPatch = { espelho: { summary, items } };
             await db
@@ -2097,15 +2151,22 @@ export const documentService = {
         }
       }
 
-      await db
-        .update(documents)
-        .set({
-          aiParsedData: { error: parsed.error } as Record<string, unknown>,
+      await persistExtractionLineage({
+        documentId: doc.id,
+        processId: doc.processId,
+        documentType: 'espelho',
+        data: { error: parsed.error },
+        confidenceScore: 0,
+        extractionStatus: 'failed',
+        provider: 'deterministic',
+        model: null,
+        documentUpdate: {
+          aiParsedData: { error: parsed.error },
           confidenceScore: '0',
           isProcessed: true,
           updatedAt: new Date(),
-        })
-        .where(eq(documents.id, doc.id));
+        },
+      });
 
       const [proc] = await db
         .select({ processCode: importProcesses.processCode })
@@ -2127,24 +2188,28 @@ export const documentService = {
 
     const { summary, items, headerRowIndex, sheetName, rawRowCount } = parsed.data;
 
-    await db
-      .update(documents)
-      .set({
-        aiParsedData: { summary, items, headerRowIndex, sheetName, rawRowCount } as Record<
-          string,
-          unknown
-        >,
-        confidenceScore: '0.99',
-        isProcessed: true,
-        updatedAt: new Date(),
-      })
-      .where(eq(documents.id, doc.id));
-
     // Same atomic JSONB merge pattern as processWithAI — see the long
     // comment there for the full rationale. Espelho extraction runs in
     // parallel with the AI extractions of the other attachments in the
     // same email, so a JS-side merge here also races.
     const espelhoPatch = { espelho: { summary, items } };
+
+    await persistExtractionLineage({
+      documentId: doc.id,
+      processId: doc.processId,
+      documentType: 'espelho',
+      data: { summary, items, headerRowIndex, sheetName, rawRowCount },
+      confidenceScore: 0.99,
+      extractionStatus: 'deterministic',
+      provider: 'deterministic',
+      model: null,
+      documentUpdate: {
+        aiParsedData: { summary, items, headerRowIndex, sheetName, rawRowCount },
+        confidenceScore: '0.99',
+        isProcessed: true,
+        updatedAt: new Date(),
+      },
+    });
 
     await db
       .update(importProcesses)
@@ -2166,9 +2231,11 @@ export const documentService = {
 
     // The uploaded espelho is the trusted 0.99 source — recalibrate the
     // invoice/PL/proforma of this process against it now that it is available.
-    await reconcileProcessConfidence(doc.processId).catch((err) =>
-      logger.error({ err, processId: doc.processId }, 'Reconciliation after espelho failed'),
-    );
+    if (process.env.DOCUMENT_REPLAY_DEFER_DERIVED !== '1') {
+      await reconcileProcessConfidence(doc.processId).catch((err) =>
+        logger.error({ err, processId: doc.processId }, 'Reconciliation after espelho failed'),
+      );
+    }
   },
 
   async extractText(

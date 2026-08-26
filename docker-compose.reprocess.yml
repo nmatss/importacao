@@ -16,6 +16,9 @@ services:
       # Match the 25-minute queue expiry. A shorter lease could allow a second
       # worker to claim a legitimately slow OCR extraction.
       DOCUMENT_EXTRACTION_LEASE_MS: '1500000'
+      # Defer validation, workflow changes and derived projections until each
+      # process reaches a reconciled terminal state.
+      DOCUMENT_REPLAY_DEFER_DERIVED: '1'
       # Avoid creating derived espelhos between document updates. Reconcile
       # once per process after the replay reaches a terminal state.
       AUTO_GENERATE_ESPELHO: '0'

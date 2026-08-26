@@ -9,6 +9,17 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Modo diagnóstico `partial` para validação em lote, com persistência imutável
+  dos 29 checks por `validation_run_id`, sem transição de workflow, Drive,
+  correções ou notificações.
+- Operadores dry-run/somente leitura para triagem dos documentos `other`,
+  backfill append-only de linhagem terminal, reconciliação Gmail por SHA-256 e
+  relatório de completude por processo sem expor payloads comerciais.
+- Os operadores HTTP de replay/completude passam a integrar a imagem da API;
+  seus JSONL usam permissão `0600` e não registram nomes de arquivos.
+- ADR 0006 formalizando itens do documento vigente como fonte canônica e
+  `process_items` como projeção operacional editável e opcional.
+
 - Smoke E2E versionado para todas as 34 URLs de página e cinco redirects,
   executado em Chromium desktop e Pixel 7 com contratos simulados, espera de
   rede, detecção de exceções/console e gate de overflow horizontal.
@@ -27,6 +38,15 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   pasta realmente acessível.
 
 ### Fixed
+
+- Documento e run de extração terminal agora são persistidos na mesma
+  transação para sucesso, falha, skip e espelho determinístico; estados antes
+  invisíveis deixam de aparecer apenas como `is_processed=true`.
+- Lease padrão de extração em produção alinhada ao teto do job/OCR em 25
+  minutos, com efeitos derivados explicitamente adiados na janela de replay.
+- ETD histórica deixa de ser falsa falha de consistência e passa a aviso de
+  frescor; inversões cronológicas continuam bloqueantes.
+- Campo estruturado `gmailQuery` passa pela política de redação dos logs.
 
 - React Router foi migrado de 6.30.4 para 7.18.2, removendo os advisories de
   open redirect e hydration/constructor injection sem alterar as rotas públicas.
@@ -63,8 +83,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `npm ci`, `npm audit` e `npm audit --omit=dev` passaram com zero
   vulnerabilidades; `drizzle-kit check` aprovou a cadeia de migrations sem
   conectar nem modificar banco.
-- Gate local: formatter, lint, typecheck, 981 testes API + 1 skip, 140 testes
-  web, build de produção, 523 testes Cert-API, Ruff, pip-audit, Compose e
+- Gate local: formatter, lint, typecheck, 987 testes API + 1 skip, 140 testes
+  web, build de produção, imagem Docker, 523 testes Cert-API, Ruff, Compose e
   `git diff --check` passaram.
 - Release de certificados implantado com backup íntegro, snapshot de rollback e
   health checks verdes. Smokes read-only confirmaram propriedades Puket e Imaginarium;

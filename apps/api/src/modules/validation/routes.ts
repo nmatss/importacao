@@ -6,6 +6,7 @@ import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import {
   processIdParamSchema,
   resultIdParamSchema,
+  runValidationSchema,
   resolveManuallySchema,
   updateCorrectionSchema,
 } from './schema.js';
@@ -22,6 +23,7 @@ router.post(
   '/:processId/run',
   runChecksLimiter,
   validate(processIdParamSchema, 'params'),
+  validate(runValidationSchema),
   validationController.runAllChecks,
 );
 router.get(

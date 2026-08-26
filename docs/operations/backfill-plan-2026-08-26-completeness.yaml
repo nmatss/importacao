@@ -1,0 +1,118 @@
+backfill_plan:
+  id: process-completeness-replay-2026-08-26
+  status: approved_for_bounded_execution
+  owner: Nicolas
+  requested_by: user
+  approved_by: user
+  approval_evidence: >-
+    Conversa de 2026-08-26: executar os oito passos de classificacao,
+    reextracao, validacao, reconciliacao e relatorio de completude.
+  reason: >-
+    Produzir evidencia verificavel de cobertura e qualidade para os 117
+    processos oficiais sem confundir estado tecnico processado, confianca do
+    extrator e acuracia contra a fonte original.
+
+  baseline:
+    application_revision: e7d170805b07034da8acc8f4b059237b0d2d9a46
+    processes: 117
+    processes_with_documents: 12
+    processes_without_documents: 105
+    documents: 51
+    documents_processed: 51
+    documents_below_0_90: 41
+    documents_other: 16
+    process_items: 0
+    processes_with_validation_run: 10
+
+  source_of_truth:
+    process_master: Follow Up Processos de Importacao reconciliado em 2026-08-25
+    document_payload: arquivo local ou origem de e-mail vinculada ao documento
+    certificate_ownership: Linx/ERP consultado em modo somente leitura
+    acceptable_variance: 0
+    limitation: >-
+      Os 105 processos sem arquivo no portal podem ser reconciliados contra a
+      planilha mestre, mas nao podem receber certificacao documental sem que a
+      fonte original seja localizada no e-mail/Drive ou fornecida pela operacao.
+
+  execution:
+    mode: replay_and_append_only_validation
+    concurrency: 1
+    publish_pause_state: required_for_document_replay
+    external_side_effects:
+      drive: suppressed_during_replay
+      google_chat: suppressed_during_replay
+      email_send: forbidden
+      linx_write: forbidden
+    slices:
+      - name: inventory_and_other_triage
+        mutation: false
+        expected_documents: 16
+      - name: single_document_pilot
+        mutation: true
+        expected_documents: 1
+      - name: supported_low_confidence_replay
+        mutation: true
+        selection: >-
+          Documento vigente, tipo com extrator dedicado, confianca menor que
+          0.90, arquivo presente, excluindo DEMO e documentos other sem
+          classificacao inequivoca.
+      - name: all_process_partial_validation
+        mutation: append_only
+        expected_processes: 117
+        note: >-
+          Modo parcial nao altera estado, nao abre correcao, nao move pasta e
+          nao envia comunicacao; deve preservar resultados detalhados ligados
+          ao validation_run_id para auditoria.
+
+  idempotency:
+    document_replay: >-
+      Reextracao nao e estritamente idempotente porque cria historico. O
+      executor deve usar selecao exata, JSONL append-only e resume para nunca
+      enfileirar duas vezes o mesmo documento no mesmo batch.
+    validation: >-
+      Cada execucao parcial e uma evidencia append-only intencional. O batch ID
+      e o arquivo JSONL impedem repeticao acidental durante retomada.
+    reporting: read_only_and_repeatable
+
+  rollback:
+    required_before_mutation:
+      - pg_dump custom-format com pg_restore --list valido
+      - snapshot do volume de uploads com hash
+      - restore integral em banco temporario
+    database: >-
+      Restaurar o dump do mesmo batch somente em janela de incidente. Para um
+      documento isolado, o snapshot anterior em document_extraction_history
+      preserva a evidencia, mas nao substitui o rollback sistemico.
+    uploads: restaurar o snapshot do mesmo batch
+    code: snapshot rsync criado por scripts/deploy.sh e retorno a revisao baseline
+
+  stop_conditions:
+    - backup ou restore test falha
+    - documento de origem ausente ou hash muda durante a janela
+    - fila possui job nao terminal ou existe lease ativa antes do piloto
+    - piloto termina sem dados uteis, sem lineage run ou com contractFailure
+    - provedor de IA, PostgreSQL, Redis ou API fica indisponivel
+    - classificacao possui mais de um tipo plausivel
+    - contagens divergem do inventario aprovado
+
+  reconciliation_gates:
+    - total de processos permanece 117
+    - total de documentos permanece 51 salvo nova fonte explicitamente importada
+    - process_code duplicado = 0
+    - FKs orfas = 0
+    - documentos pendentes = 0 ao encerrar
+    - leases ativas = 0 ao encerrar
+    - todo documento reprocessado possui history anterior e run terminal novo
+    - toda reclassificacao possui tipo anterior, tipo novo e evidencia auditavel
+    - todos os 117 processos possuem run parcial do batch
+    - detalhes dos checks parciais estao vinculados ao validation_run_id
+    - relatorio lista origem, campos ausentes, cobertura documental e excecoes
+    - nenhum status de aprovacao automatica e emitido sem ground truth
+
+  required_approvals:
+    bounded_execution: approved_by_user_2026_08_26
+    production_deploy: approved_by_user_2026_08_26
+    git_push: approved_by_user_as_release_step_2026_08_26
+    human_data_acceptance: pending_business_owner
+
+  evidence_file: docs/operations/release-gate-evidence-2026-08-26-completeness.yaml

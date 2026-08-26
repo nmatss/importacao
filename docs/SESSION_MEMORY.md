@@ -1775,3 +1775,30 @@ Evidências:
   documentos abaixo de 90% de confiança.
 - Checkpoint detalhado:
   `docs/STATUS-2026-08-26-REMEDIACAO-SEM-CREDENCIAIS.md`.
+
+## 2026-08-26 — Preparação da auditoria integral de completude
+
+- Baseline confirmado em `e7d1708`, Git limpo e sincronizado antes das
+  alterações. O checkpoint anterior comprova deploy saudável, Gmail/SMTP
+  `verify` e 51/51 documentos processados; IMAP e Drive continuavam falhos.
+- Causa dos 105 processos sem documentos confirmada: foram reconciliados da
+  planilha oficial, mas não possuem arquivo local no portal.
+- Os 20 documentos sem run de extração eram explicados por 16 `other`, três
+  espelhos sem lineage no caminho determinístico e um documento legado/core.
+- Foram implementados: terminal lineage atômica para todos os desfechos, modo
+  de validação parcial com checks persistidos, correção da falsa falha de ETD
+  histórica, lease de 25 minutos, deferimento de derivados durante replay e
+  operadores seguros de triagem/Gmail/lineage/completude.
+- ADR 0006 justificou `process_items=0`: a tabela é projeção opcional; popular
+  cegamente misturaria versões e perderia a origem documental.
+- Gate local passou: formatter, lint, typecheck, API 987 + 1 skip, web 140,
+  builds API/web e imagem Docker da API, Cert-API 523, Ruff, Compose com
+  placeholders não secretos e audits npm sem vulnerabilidade.
+- A revisão de segurança do lote removeu nomes de arquivo dos registros de
+  replay e fixou permissão `0600` para evidências JSONL; os operadores entram
+  explicitamente na imagem, sem ampliar a superfície HTTP pública.
+- Bloqueio operacional atual: o host `192.168.168.124` ficou sem rota a partir
+  desta etapa. Backup, piloto, replay, validação dos 117, relatório produtivo,
+  commit/push/deploy e smokes pós-deploy ainda não foram executados neste lote.
+- Ground truth/aceite humano permanece obrigatório para qualquer declaração de
+  acurácia 100%; o operador nunca marca aprovação automaticamente.

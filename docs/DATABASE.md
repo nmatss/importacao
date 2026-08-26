@@ -78,6 +78,15 @@ Exemplos no schema:
   `validation_runs` e a entidade canonica de execucao; delete de documento deve
   arquivar extracao antes da remocao e a recuperacao operacional tambem pode
   ocorrer por `process_id` quando `document_id` foi anulado por delete.
+- Validacoes `partial` mantem `validation_results` como projecao exclusiva da
+  ultima validacao final e gravam seus checks append-only em
+  `validation_result_history`, vinculados ao `validation_run_id`.
+- `document_extraction_runs.extraction_status` registra tambem `failed`,
+  `skipped` e `deterministic`; atualizacao terminal do documento e criacao do
+  run sao uma unica transacao.
+- `process_items` e uma projecao operacional editavel e opcional. A fonte
+  canonica dos itens extraidos continua no documento vigente e em sua linhagem,
+  conforme ADR 0006.
 - Alteracoes em enums precisam de migration idempotente e atencao a deploy.
 
 ## Pendencias

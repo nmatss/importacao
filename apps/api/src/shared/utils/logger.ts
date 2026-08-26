@@ -85,6 +85,8 @@ export const logger = pino({
       '*.originalFilename',
       'searchQuery',
       '*.searchQuery',
+      'gmailQuery',
+      '*.gmailQuery',
       'req.headers.authorization',
       'req.headers.cookie',
       'headers.authorization',

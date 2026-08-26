@@ -1,0 +1,72 @@
+release_gate_evidence:
+  plan_id: process-completeness-replay-2026-08-26
+  status: local_validation_passed_remote_execution_pending
+  checked_at: '2026-08-26T19:37:46-03:00'
+  baseline_revision: e7d170805b07034da8acc8f4b059237b0d2d9a46
+
+  baseline:
+    processes: 117
+    processes_with_documents: 12
+    processes_without_documents: 105
+    documents: 51
+    documents_processed: 51
+    documents_below_0_90: 41
+    documents_other: 16
+    documents_without_extraction_run: 20
+    process_items: 0
+    processes_with_validation_run: 10
+
+  implementation:
+    terminal_lineage_atomic: passed
+    partial_validation_detailed_history: passed
+    historical_etd_false_failure: corrected
+    production_lease_default_ms: 1500000
+    replay_derived_effects_deferred: passed
+    replay_resume_requires_terminal_completed: passed
+    gmail_query_log_redaction: passed
+    other_triage_operator: built
+    terminal_lineage_backfill_operator: built
+    gmail_reconciliation_operator: built
+    process_completeness_operator: built
+    api_image_contains_operators: passed
+    operator_evidence_mode_0600: passed
+    operator_logs_exclude_filenames: passed
+    process_items_decision: docs/adr/0006-document-items-source-of-truth.md
+
+  local_verification:
+    format_check: passed
+    lint: passed
+    typecheck_api_web: passed
+    api_tests_passed: 987
+    api_tests_skipped: 1
+    web_tests_passed: 140
+    api_build: passed
+    web_build: passed
+    api_docker_image_build: passed
+    cert_api_tests_passed: 523
+    cert_api_ruff: passed
+    npm_audit_full: zero_vulnerabilities
+    npm_audit_runtime: zero_vulnerabilities
+    git_diff_check: passed
+    compose_config_with_non_secret_required_placeholders: passed
+    security_review_new_critical_high_findings: 0
+
+  remote_execution:
+    ssh: blocked_no_route_to_host
+    backup: not_executed
+    restore_test: not_executed
+    deploy: not_executed
+    other_triage: not_executed
+    document_pilot: not_executed
+    document_replay: not_executed
+    all_process_validation: not_executed
+    gmail_reconciliation: not_executed
+    linx_certificate_reconciliation: not_executed
+    production_report: not_generated
+
+  non_automatable_gates:
+    - ground_truth_or_human_acceptance_for_ambiguous_document_fields
+    - fiscal_decision_for_missing_puket_escolares_properties
+    - controlled_recipient_if_real_email_delivery_must_be_proven
+
+  next_gate: restore_production_network_route_and_execute_bounded_remote_plan

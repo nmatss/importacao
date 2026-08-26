@@ -12,6 +12,24 @@ Ultima atualizacao: 2026-08-26 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## ALTO - Completude Documental Nao Possui Ground Truth Integral
+
+- Os 117 processos oficiais foram reconciliados contra a planilha mestre, mas
+  apenas 12 possuem arquivos no portal. Os outros 105 são registros
+  `master_only`, não jobs de extração com falha.
+- Dos 51 documentos, 41 estavam abaixo de 90% de confiança e 16 eram `other`.
+  Confiança é sinal de revisão, não acurácia medida.
+- O código agora preserva checks diagnósticos por run, registra todos os estados
+  terminais de extração e fornece triagem/reconciliação segura. A operação
+  remota e o aceite humano dos casos ambíguos ainda não foram concluídos.
+- `process_items` vazia é compatível com a arquitetura: itens extraídos vivem no
+  documento canônico; a tabela é projeção editável opcional (ADR 0006).
+
+Status: **ABERTO / ALTO.** Executar o plano
+`docs/operations/backfill-plan-2026-08-26-completeness.yaml`, localizar fontes
+de e-mail ausentes, validar os 117 em modo parcial e obter aceite da área para
+divergências/ausências legítimas. Não promover automaticamente a “100%”.
+
 ## ALTO - Acesso Linx Da Cert-API Ainda Usa Contas Pessoais
 
 - As duas bases estão acessíveis e a escrita está ligada, mas a configuração

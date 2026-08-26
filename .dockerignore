@@ -16,5 +16,7 @@ apps/api/dist
 apps/cert-api/__pycache__
 apps/cert-api/.pytest_cache
 scripts/*
+!scripts/audit-process-completeness.mjs
+!scripts/reprocess-documents.mjs
 !scripts/smoke-integrations.mjs
 docs/

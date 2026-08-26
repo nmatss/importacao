@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, queryQueue } = createMockDb();
+const { mockDb, queryQueue, txQueue } = createMockDb();
+
+function queueLineageTransaction() {
+  const documentUpdate = createResolvedChain(undefined);
+  txQueue.push(documentUpdate);
+  txQueue.push(createResolvedChain([{ id: 9001 }]));
+  txQueue.push(createResolvedChain(undefined));
+  return documentUpdate;
+}
 
 vi.mock('../../../shared/database/connection.js', () => ({
   db: mockDb,
@@ -89,6 +97,7 @@ describe('processWithAI — extraction failure resilience', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    txQueue.length = 0;
   });
   afterEach(() => {
     delete process.env.ESPELHO_AI_FALLBACK;
@@ -138,9 +147,8 @@ describe('processWithAI — extraction failure resilience', () => {
 
     // select doc
     queryQueue.push(createResolvedChain([doc]));
-    // catch: update documents (mark failed)
-    const failUpdate = createResolvedChain(undefined);
-    queryQueue.push(failUpdate);
+    // catch: atomically update document + insert terminal run/fields
+    const failUpdate = queueLineageTransaction();
     // catch: select processCode for alert
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-042' }]));
     // catch: select processRow aiExtractedData for degradable gate
@@ -186,8 +194,7 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc]));
-    const failUpdate = createResolvedChain(undefined);
-    queryQueue.push(failUpdate);
+    const failUpdate = queueLineageTransaction();
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-042' }]));
     queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
 
@@ -232,7 +239,7 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc]));
-    queryQueue.push(createResolvedChain(undefined)); // mark empty extraction failed
+    queueLineageTransaction(); // mark empty extraction failed + lineage
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-042' }]));
     queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
 
@@ -261,8 +268,7 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc]));
-    const failUpdate = createResolvedChain(undefined);
-    queryQueue.push(failUpdate);
+    const failUpdate = queueLineageTransaction();
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-043' }]));
     queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
 
@@ -297,8 +303,7 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc]));
-    const failUpdate = createResolvedChain(undefined);
-    queryQueue.push(failUpdate);
+    const failUpdate = queueLineageTransaction();
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-044' }]));
     queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
 
@@ -334,8 +339,7 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc]));
-    const failUpdate = createResolvedChain(undefined);
-    queryQueue.push(failUpdate);
+    const failUpdate = queueLineageTransaction();
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-045' }]));
     queryQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
 
@@ -422,8 +426,8 @@ describe('processWithAI — extraction failure resilience', () => {
     };
 
     queryQueue.push(createResolvedChain([doc])); // select doc
-    const docUpdate = createResolvedChain(undefined);
-    queryQueue.push(docUpdate); // update document with evidence
+    const docUpdate = queueLineageTransaction(); // update document + lineage
+    queryQueue.push(createResolvedChain(undefined)); // invalidate comparison acceptance
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-045', aiExtractedData: {} }])); // alert/gate context
 
     await documentService.processWithAI(13, 'packing_list');
@@ -442,8 +446,8 @@ describe('processWithAI — extraction failure resilience', () => {
         title: 'Extração IA com Confiança Muito Baixa',
       }),
     );
-    // document update + comparison acceptance invalidation after a new extraction
-    expect(mockDb.update).toHaveBeenCalledTimes(2);
+    // document update is transactional; comparison acceptance invalidation stays separate
+    expect(mockDb.update).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -451,6 +455,7 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    txQueue.length = 0;
     tryParseEspelhoBuffer.mockReturnValue({ ok: false, error: 'unrecognised layout' });
   });
   afterEach(() => {
@@ -476,8 +481,8 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
 
     // select doc (processWithAI)
     queryQueue.push(createResolvedChain([espelhoDoc]));
-    // parse-failed path: update documents with error
-    queryQueue.push(createResolvedChain(undefined));
+    // parse-failed path: update document + terminal lineage
+    queueLineageTransaction();
     // select processCode for parse-failed alert
     queryQueue.push(createResolvedChain([{ processCode: 'IMP-050' }]));
 
@@ -498,8 +503,8 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
 
     // select doc
     queryQueue.push(createResolvedChain([espelhoDoc]));
-    // update documents with fallback result
-    queryQueue.push(createResolvedChain(undefined));
+    // update document + completed lineage
+    queueLineageTransaction();
     // update importProcesses (espelho patch)
     queryQueue.push(createResolvedChain(undefined));
 
@@ -519,7 +524,7 @@ describe('processEspelho — ESPELHO_AI_FALLBACK provider guard', () => {
     });
 
     queryQueue.push(createResolvedChain([espelhoDoc]));
-    queryQueue.push(createResolvedChain(undefined));
+    queueLineageTransaction();
     queryQueue.push(createResolvedChain(undefined));
 
     await documentService.processWithAI(9, 'espelho');

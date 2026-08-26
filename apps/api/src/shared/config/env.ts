@@ -108,6 +108,7 @@ const envSchema = z
     // linhas de virgulas e estourar o timeout de extracao.
     DOCUMENT_SPREADSHEET_MAX_CHARS: z.coerce.number().int().positive().optional(),
     DOCUMENT_EXTRACTION_LEASE_MS: z.coerce.number().int().min(120000).optional(),
+    DOCUMENT_REPLAY_DEFER_DERIVED: z.enum(['0', '1']).default('0'),
     DOCUMENT_OCR_ENABLED: z.enum(['0', '1']).default('0'),
     // Rasterizacao de PDF escaneado para PNG quando o provider de IA nao le
     // PDF nativamente (ialocal, openrouter). Ver documents/ocr.ts.

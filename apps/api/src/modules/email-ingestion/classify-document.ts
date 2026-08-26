@@ -126,3 +126,43 @@ export function classifyDocument(filename: string): string {
 
   return 'other';
 }
+
+/**
+ * Content-only classification for generic filenames and historical triage.
+ * Returns every unambiguous document family mentioned in the supplied text;
+ * callers must not choose automatically when more than one family is found.
+ */
+export function classifyDocumentText(text: string): string[] {
+  const lower = text.toLowerCase();
+  const types: string[] = [];
+
+  if (/\b(proforma|pro[\s-]?forma)(\s+invoice)?\b/.test(lower)) types.push('proforma_invoice');
+  if (
+    /\b(invoice|fatura|commercial\s+invoice)\b/.test(lower) &&
+    !types.includes('proforma_invoice')
+  )
+    types.push('invoice');
+  if (/\b(packing\s*list|romaneio|lista\s+de\s+embarque)\b/.test(lower)) types.push('packing_list');
+  if (/\b(draft\s+bl|draft\s+bill|rascunho\s+(do\s+)?bl|bl\s+draft|preliminary\s+bl)\b/.test(lower))
+    types.push('draft_bl');
+  if (/\b(draft\s+duimp|minuta\s+duimp|rascunho\s+(da\s+)?duimp)\b/.test(lower))
+    types.push('draft_duimp');
+  if (/\bduimp\b/.test(lower) && !types.includes('draft_duimp')) types.push('duimp');
+  if (
+    /\b(bill\s+of\s+lading|conhecimento\s+de\s+embarque|ohbl)\b|(?:^|[^a-z])bl(?:$|[^a-z])/.test(
+      lower,
+    )
+  )
+    types.push('ohbl');
+  if (/\b(espelho)\b/.test(lower)) types.push('espelho');
+  if (/\b(licen[çc]a\s+de\s+importa[çc][aã]o)\b|(?:^|[^a-z])li(?:$|[^a-z])/.test(lower))
+    types.push('li');
+  if (
+    /\b(certificado|certificate|cert\s+of\s+origin|fito(ssanit[aá]rio)?|phyto|fumiga[çc][aã]o|ispm|inmetro|anvisa)\b/.test(
+      lower,
+    )
+  )
+    types.push('certificate');
+
+  return [...new Set(types)];
+}

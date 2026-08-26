@@ -296,25 +296,59 @@ export const validationService = {
       errorTypes = getErrorTypesFromChecks(failedCheckNames);
 
       if (mode === 'partial') {
-        try {
-          const [run] = await db
-            .insert(validationRuns)
-            .values({
+        // Diagnostic runs must be reproducible after the HTTP response is gone.
+        // Keep the current final projection untouched, but persist every check
+        // as an immutable history row linked to the aggregate validation run.
+        // The run and its evidence are atomic so an interrupted batch cannot
+        // leave an aggregate without the corresponding field/check details.
+        await db.transaction(async (tx) => {
+          try {
+            const [run] = await tx
+              .insert(validationRuns)
+              .values({
+                processId,
+                triggeredBy: userId,
+                triggerType,
+                totalChecks: results.length,
+                passedChecks: passedCount,
+                failedChecks: failedCount,
+                warningChecks: warningCount,
+                duration,
+              })
+              .returning({ id: validationRuns.id });
+            validationRunId = run?.id ?? null;
+          } catch (runErr) {
+            logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
+            throw runErr;
+          }
+
+          if (!validationRunId) {
+            throw new Error('Falha ao registrar validation_runs para a validacao');
+          }
+
+          const runAt = new Date();
+          await tx.insert(validationResultHistory).values(
+            results.map((result) => ({
               processId,
-              triggeredBy: userId,
-              triggerType,
-              totalChecks: results.length,
-              passedChecks: passedCount,
-              failedChecks: failedCount,
-              warningChecks: warningCount,
-              duration,
-            })
-            .returning({ id: validationRuns.id });
-          validationRunId = run?.id ?? null;
-        } catch (runErr) {
-          logger.error({ err: runErr, processId, mode }, 'Failed to record validation run');
-          throw runErr;
-        }
+              validationRunId,
+              runAt,
+              checkName: result.checkName,
+              status: result.status,
+              message: result.message,
+              details: {
+                expectedValue: result.expectedValue ?? null,
+                actualValue: result.actualValue ?? null,
+                documentsCompared: result.documentsCompared ?? null,
+                dataSource: result.documentsCompared.includes('Sistema')
+                  ? 'system_vs_document'
+                  : 'cross_document',
+                mode,
+                triggerType,
+              },
+              resolvedManually: false,
+            })),
+          );
+        });
 
         if (!validationRunId) {
           throw new Error('Falha ao registrar validation_runs para a validacao');

@@ -364,6 +364,25 @@ export const openapiSpec = {
             schema: { type: 'string' as const },
           },
         ],
+        requestBody: {
+          required: false,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object' as const,
+                properties: {
+                  mode: {
+                    type: 'string' as const,
+                    enum: ['final', 'partial'],
+                    default: 'final',
+                    description:
+                      'partial records immutable diagnostic evidence without workflow, Drive or notification effects',
+                  },
+                },
+              },
+            },
+          },
+        },
         responses: { '200': { description: 'Validation results' } },
       },
     },

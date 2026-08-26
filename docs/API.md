@@ -34,7 +34,10 @@ Evidencias:
 ## Endpoints Criticos De Validacao
 
 - `GET /api/validation/:processId`
-- `POST /api/validation/:processId/run`
+- `POST /api/validation/:processId/run` — corpo opcional
+  `{ "mode": "final" | "partial" }`; `final` preserva o comportamento legado.
+  `partial` executa os checks e grava evidência imutável sem alterar workflow,
+  correção, Drive ou notificações.
 - `GET /api/validation/:processId/report`
 - `PATCH /api/validation/results/:id/resolve`
 - `POST /api/validation/:processId/anomalies`

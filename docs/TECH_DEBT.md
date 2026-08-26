@@ -30,15 +30,17 @@ Ultima atualizacao: 2026-08-26
 - Criar executor administrativo de reprocessamento em lote com dry-run,
   selecao canonica, exclusao explicita de processos, batch ID, checkpoint,
   retomada e exclusao mutua.
-- Criar modo de manutencao que separe reclassificacao de enqueue e diferir
-  validacao, reconciliacao, Drive, Chat e relatorios ate o fim de cada processo.
+- O modo de manutenção agora difere validação, reconciliação, Drive, Chat e
+  espelho automático. Dívida residual: separar reclassificação do enqueue e
+  persistir o batch/lock global no banco.
 - Tornar o limite de reprocessamento global por usuario/operacao, em vez de
   incluir o ID do documento em `req.path` como parte isolante da chave.
 - Implementar rollback controlado de extracao a partir de
   `document_extraction_history`; hoje a tabela preserva evidencia, mas nao ha
   endpoint/servico de restauracao.
-- Alinhar `DOCUMENT_EXTRACTION_LEASE_MS` ao timeout de texto/job em compose e
-  adicionar validacao fail-fast que rejeite lease menor que o pior timeout.
+- `DOCUMENT_EXTRACTION_LEASE_MS` foi alinhado em 25 minutos no Compose. Dívida
+  residual: medir p99 e adicionar validação fail-fast que rejeite lease menor
+  que o pior timeout configurado.
 - A lease/lock atomica por `document_id` foi entregue na migration `0024`; a
   divida residual e alinhar o valor efetivo de producao ao pior timeout e
   impedir lote concorrente em nivel de batch/processo.
@@ -52,8 +54,9 @@ Ultima atualizacao: 2026-08-26
   em 2026-06-18 a Invoice KIOM foi resolvida por parser deterministico, mas a
   chamada multimodal ao gateway local ainda pode bater `Headers Timeout Error`
   em ~300s quando realmente precisar de VLM/OCR.
-- Implementar classificador por conteudo para anexos genericos de e-mail que
-  hoje chegam como `other` quando nome/contexto nao resolvem tipo.
+- O classificador por conteúdo de anexos genéricos e o operador de triagem
+  histórica foram entregues. Dívida residual: corpus rotulado, score/matriz de
+  confusão e fila de aprovação humana antes de reclassificação em lote.
 - Deduplicar reprocessamentos concorrentes com update condicional atomico,
   `SELECT FOR UPDATE` ou singleton por `documentId` na fila.
 

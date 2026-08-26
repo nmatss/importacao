@@ -228,7 +228,8 @@ describe('validationService', () => {
         ]),
       ); // partial documents
       queryQueue.push(createResolvedChain([])); // followUp
-      queryQueue.push(createResolvedChain([{ id: 107 }])); // insert validation run
+      txQueue.push(createResolvedChain([{ id: 107 }])); // insert validation run
+      txQueue.push(createResolvedChain(undefined)); // insert immutable check evidence
 
       const results = await validationService.runAllChecks(1, null, { mode: 'partial' });
 
@@ -236,7 +237,7 @@ describe('validationService', () => {
         checkName: 'document-set-completeness',
         status: 'warning',
       });
-      expect(mockDb.transaction).not.toHaveBeenCalled();
+      expect(mockDb.transaction).toHaveBeenCalledOnce();
       expect(mockDb.update).not.toHaveBeenCalled();
       expect(alertService.create).not.toHaveBeenCalled();
       expect(auditService.log).toHaveBeenCalledWith(

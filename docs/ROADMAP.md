@@ -2,15 +2,16 @@
 
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
-Ultima atualizacao: 2026-08-03
+Ultima atualizacao: 2026-08-26
 
 ## P0 - Operacao E Confiabilidade
 
-- Preparar reprocessamento integral sem o DEMO: executor admin-only resumivel,
-  dry-run, selecao canonica, batch ID, modo de manutencao e exclusao obrigatoria
-  de `process_id=264`.
-- Corrigir a lease de producao para 25 minutos e validar um piloto antes de
-  liberar o lote de 42 documentos canonicos planejados.
+- Executar o plano aprovado
+  `docs/operations/backfill-plan-2026-08-26-completeness.yaml`: backup/restore
+  test, triagem dos 16 `other`, piloto unitário, replay dos documentos
+  suportados com causa identificada e reconciliação terminal.
+- Implantar a lease de 25 minutos e o modo de replay que difere efeitos
+  derivados; código e testes estão prontos, aguardando a janela remota.
 - Criar backup novo de PostgreSQL/`uploads` e comprovar restore/listagem antes
   da janela de reprocessamento.
 - Resolver ou monitorar o egress intermitente da API antes do lote, pois Vertex,
@@ -24,8 +25,11 @@ Ultima atualizacao: 2026-08-03
 
 ## P1 - Qualidade De Dados E Validacao
 
-- Confirmar 11 sugestoes de reclassificacao, triar 15 documentos `other` e
-  corrigir 2 espelhos PDF antes de declarar a base 100% operacional.
+- Executar a triagem atual dos 16 documentos `other`; manter como apoio os
+  inconclusivos e reclassificar apenas evidência unívoca. Não declarar acurácia
+  sem ground truth/aceite humano.
+- Executar validação diagnóstica auditável nos 117 processos e publicar o
+  relatório campo a campo com exceções por fonte.
 - Definir politica de reprocessamento para processos `completed`, que nao podem
   transicionar novamente para `validating` pela state machine atual.
 - Persistir origem por campo no backend (`source`, `sourceDocumentId`, `sourceVersion`, `generatedAt`).

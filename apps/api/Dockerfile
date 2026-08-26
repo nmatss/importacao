@@ -40,6 +40,8 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/drizzle ./drizzle
+COPY scripts/audit-process-completeness.mjs ./scripts/audit-process-completeness.mjs
+COPY scripts/reprocess-documents.mjs ./scripts/reprocess-documents.mjs
 COPY scripts/smoke-integrations.mjs ./scripts/smoke-integrations.mjs
 
 RUN mkdir -p uploads && chown node:node uploads

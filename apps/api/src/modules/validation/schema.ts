@@ -4,6 +4,18 @@ export const processIdParamSchema = z.object({
   processId: z.coerce.number().int().positive('ID do processo deve ser positivo'),
 });
 
+/**
+ * `partial` executes every applicable check but keeps the run diagnostic:
+ * no state transition, correction workflow, Drive move or notification.
+ * The default preserves the existing public API behaviour for callers that
+ * post an empty body.
+ */
+export const runValidationSchema = z
+  .object({
+    mode: z.enum(['final', 'partial']).default('final'),
+  })
+  .default({ mode: 'final' });
+
 export const resultIdParamSchema = z.object({
   id: z.coerce.number().int().positive('ID do resultado deve ser positivo'),
 });

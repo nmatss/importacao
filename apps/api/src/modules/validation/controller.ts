@@ -12,7 +12,11 @@ export const validationController = {
         return sendError(res, 'ID do processo invalido', 400);
       }
       const userId = (req as AuthenticatedRequest).user?.id ?? null;
-      const results = await validationService.runAllChecks(processId, userId);
+      const mode = req.body?.mode === 'partial' ? 'partial' : 'final';
+      const results = await validationService.runAllChecks(processId, userId, {
+        mode,
+        triggerType: mode === 'partial' ? 'auto_partial' : 'manual',
+      });
       sendSuccess(res, results);
     } catch (error: any) {
       const status = error.statusCode || 400;

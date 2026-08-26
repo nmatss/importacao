@@ -51,6 +51,7 @@ export default function dateSequenceCheck(input: CheckInput): CheckResult {
   }
 
   const issues: string[] = [];
+  const warnings: string[] = [];
   const today = new Date();
   today.setHours(23, 59, 59, 999);
 
@@ -73,12 +74,14 @@ export default function dateSequenceCheck(input: CheckInput): CheckResult {
     issues.push(`Data da invoice (${formatDate(invoiceDate)}) esta no futuro`);
   }
 
-  // ETD should not be more than 90 days in the past
+  // Historical ETD is expected for completed/older imports. Treat age as a
+  // freshness warning, never as proof that the source date is wrong. Logical
+  // inversions and future dates remain hard failures.
   if (etd) {
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
     if (etd < ninetyDaysAgo) {
-      issues.push(`ETD (${formatDate(etd)}) esta ha mais de 90 dias no passado`);
+      warnings.push(`ETD (${formatDate(etd)}) esta ha mais de 90 dias no passado`);
     }
   }
 
@@ -95,7 +98,18 @@ export default function dateSequenceCheck(input: CheckInput): CheckResult {
       expectedValue: 'Data INV <= Embarque <= ETA, sem datas futuras',
       actualValue: datesSummary.join(', '),
       documentsCompared: sources.join(' vs '),
-      message: issues.join('. ') + '.',
+      message: [...issues, ...warnings].join('. ') + '.',
+    };
+  }
+
+  if (warnings.length > 0) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: 'Data INV <= Embarque <= ETA, sem datas futuras',
+      actualValue: datesSummary.join(', '),
+      documentsCompared: sources.join(' vs '),
+      message: `${warnings.join('. ')}. A idade da ETD exige revisao de frescor, mas nao prova divergencia.`,
     };
   }
 

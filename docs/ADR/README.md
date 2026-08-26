@@ -16,3 +16,4 @@ ADRs atuais:
 - `../adr/0003-jwt-localstorage.md`
 - `../adr/0004-cert-api-separate-service.md`
 - `../adr/0005-design-system-v2.md`
+- `../adr/0006-document-items-source-of-truth.md`

@@ -30,11 +30,11 @@
  *   API_TOKEN=<jwt admin> node scripts/reprocess-documents.mjs --execute
  *
  * Env:
- *   API_BASE_URL  default http://localhost:3000
+ *   API_BASE_URL  default http://localhost:3001 (API container)
  *   API_TOKEN     obrigatorio (Bearer). Nunca passe o token por argumento.
  */
 
-import { appendFileSync, readFileSync, existsSync } from 'node:fs';
+import { appendFileSync, chmodSync, readFileSync, existsSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 // Tipos com extractor dedicado (apps/api/src/modules/documents/service.ts).
@@ -154,8 +154,13 @@ function parseArgs(argv) {
   return args;
 }
 
-const BASE_URL = (process.env.API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const BASE_URL = (process.env.API_BASE_URL || 'http://localhost:3001').replace(/\/+$/, '');
 const TOKEN = process.env.API_TOKEN;
+
+function appendEvidence(outPath, value) {
+  appendFileSync(outPath, `${JSON.stringify(value)}\n`, { encoding: 'utf8', mode: 0o600 });
+  chmodSync(outPath, 0o600);
+}
 
 async function apiFetch(path, init = {}) {
   const response = await fetch(`${BASE_URL}${path}`, {
@@ -209,18 +214,25 @@ function selectCanonical(docs) {
 }
 
 function loadDone(resumePath) {
-  const done = new Set();
-  if (!resumePath || !existsSync(resumePath)) return done;
+  const lastStatus = new Map();
+  if (!resumePath || !existsSync(resumePath)) return new Set();
   for (const line of readFileSync(resumePath, 'utf8').split('\n')) {
     if (!line.trim()) continue;
     try {
       const entry = JSON.parse(line);
-      if (entry.documentId && entry.status === 'enqueued') done.add(entry.documentId);
+      if (entry.documentId && entry.status) lastStatus.set(entry.documentId, entry.status);
     } catch {
       // linha parcial de uma execucao interrompida — ignora
     }
   }
-  return done;
+  // Enqueue is not a terminal outcome. A crashed operator may have recorded
+  // `enqueued` while the worker later failed; only a positively observed
+  // terminal completion is safe to skip during resume.
+  return new Set(
+    [...lastStatus.entries()]
+      .filter(([, status]) => status === 'terminal_completed')
+      .map(([documentId]) => documentId),
+  );
 }
 
 function isInsideProcessWindow(proc, args) {
@@ -263,15 +275,12 @@ async function waitForProcessTargets(processId, targets, args, batchId, outPath)
       );
       for (const target of targets) {
         const status = byId.get(target.documentId)?.aiProcessingStatus;
-        appendFileSync(
-          outPath,
-          `${JSON.stringify({
-            batchId,
-            at: new Date().toISOString(),
-            ...target,
-            status: status === 'completed' ? 'terminal_completed' : 'terminal_failed',
-          })}\n`,
-        );
+        appendEvidence(outPath, {
+          batchId,
+          at: new Date().toISOString(),
+          ...target,
+          status: status === 'completed' ? 'terminal_completed' : 'terminal_failed',
+        });
       }
       return { completed: targets.length - failed.length, failed: failed.length };
     }
@@ -323,7 +332,6 @@ async function main() {
         processStatus: proc.status,
         documentId: doc.id,
         documentType: doc.documentType,
-        filename: doc.fileName,
         confidence: doc.aiConfidence ?? null,
       });
     }
@@ -342,8 +350,9 @@ async function main() {
     );
   }
 
-  // A state machine nao aceita completed -> validating: a extracao termina mas a
-  // revalidacao automatica falha. Sinalizado, nao bloqueado.
+  // Fora da janela controlada, a state machine nao aceita completed -> validating:
+  // a extracao termina mas a revalidacao automatica falha. No override oficial
+  // DOCUMENT_REPLAY_DEFER_DERIVED=1 os efeitos derivados ficam postergados.
   const completed = plan.filter((t) => t.processStatus === 'completed');
   if (completed.length) {
     console.warn(
@@ -354,9 +363,7 @@ async function main() {
 
   if (!args.execute) {
     for (const t of plan) {
-      console.log(
-        `  DRY-RUN doc=${t.documentId} ${t.documentType} proc=${t.processCode} ${t.filename}`,
-      );
+      console.log(`  DRY-RUN doc=${t.documentId} ${t.documentType} proc=${t.processCode}`);
     }
     const minutes = ((plan.length * args.delayMs) / 60000).toFixed(1);
     console.log(
@@ -387,16 +394,18 @@ async function main() {
         await apiFetch(`/api/documents/${target.documentId}/reprocess`, { method: 'POST' });
         ok += 1;
         enqueuedTargets.push(target);
-        appendFileSync(outPath, `${JSON.stringify({ ...record, status: 'enqueued' })}\n`);
+        appendEvidence(outPath, { ...record, status: 'enqueued' });
         console.log(
           `  [${globalIndex}/${plan.length}] OK doc=${target.documentId} ${target.documentType}`,
         );
       } catch (error) {
         failed += 1;
-        appendFileSync(
-          outPath,
-          `${JSON.stringify({ ...record, status: 'enqueue_failed', error: error.message, httpStatus: error.status ?? null })}\n`,
-        );
+        appendEvidence(outPath, {
+          ...record,
+          status: 'enqueue_failed',
+          error: error.message,
+          httpStatus: error.status ?? null,
+        });
         console.error(
           `  [${globalIndex}/${plan.length}] FALHA doc=${target.documentId}: ${error.message}`,
         );
@@ -420,16 +429,13 @@ async function main() {
         );
       } catch (error) {
         failed += enqueuedTargets.length;
-        appendFileSync(
-          outPath,
-          `${JSON.stringify({
-            batchId,
-            at: new Date().toISOString(),
-            processId,
-            status: 'wait_failed',
-            error: error.message,
-          })}\n`,
-        );
+        appendEvidence(outPath, {
+          batchId,
+          at: new Date().toISOString(),
+          processId,
+          status: 'wait_failed',
+          error: error.message,
+        });
         console.error(`[${batchId}] proc=${processId} FALHA NA ESPERA: ${error.message}`);
         break;
       }

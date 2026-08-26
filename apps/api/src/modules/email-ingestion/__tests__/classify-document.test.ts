@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyDocument } from '../classify-document.js';
+import { classifyDocument, classifyDocumentText } from '../classify-document.js';
 
 describe('classifyDocument — convencao KIOM PI (incidente 2026-06-22)', () => {
   it('"KIOM PI - ..." classifica como proforma_invoice', () => {
@@ -15,6 +15,20 @@ describe('classifyDocument — convencao KIOM PI (incidente 2026-06-22)', () => 
   it('codigo de processo "PI4257Y" embutido NAO vira proforma', () => {
     // token "pi4257y" != "pi"; deve cair em invoice pelo INV/CI ou outro, nao proforma
     expect(classifyDocument('Commercial Invoice PI4257Y.pdf')).toBe('invoice');
+  });
+});
+
+describe('classifyDocumentText — triagem auditavel de conteudo', () => {
+  it('identifica um tipo unico a partir do cabecalho', () => {
+    expect(classifyDocumentText('COMMERCIAL INVOICE\nInvoice No. 123')).toEqual(['invoice']);
+    expect(classifyDocumentText('PACKING LIST\nGross Weight')).toEqual(['packing_list']);
+  });
+
+  it('preserva ambiguidade para revisao em vez de escolher silenciosamente', () => {
+    expect(classifyDocumentText('COMMERCIAL INVOICE attached to BILL OF LADING')).toEqual([
+      'invoice',
+      'ohbl',
+    ]);
   });
 });
 
