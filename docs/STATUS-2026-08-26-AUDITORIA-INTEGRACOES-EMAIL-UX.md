@@ -171,9 +171,10 @@ GreenMail da suíte da API.
   texto ao cliente autorizado; resposta agora é genérica.
 - **MÉDIO, residual:** JWT em `localStorage`, risco aceito no ADR 0003 e
   dependente de prevenção rigorosa de XSS.
-- **MÉDIO, residual:** seis advisories npm moderados no conjunto completo e dois
-  no runtime; não há alto/crítico. Testcontainers foi atualizado 11→12 e os
-  residuais de runtime são do React Router 6, cuja correção exige major 7.
+- **MÉDIO, corrigido na continuação de 26/08:** React Router foi migrado para
+  7.18.2 e o loader abandonado do Drizzle foi substituído por `tsx`. Instalação
+  limpa, audit completo/runtime, CLI do Drizzle e regressão de rotas passaram
+  com zero vulnerabilidades npm.
 
 Relatório detalhado: `docs/SECURITY_AUDIT_2026-08-26.md`.
 

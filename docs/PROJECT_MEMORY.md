@@ -497,6 +497,19 @@ Evidência: `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`.
 Grau de confiança: alto para conectividade, contratos e contagens observadas; não
 estabelecido para a regra de negócio das lacunas sem validação fiscal.
 
+## Dependências E Regressão De Rotas — Baseline De 2026-08-26
+
+- Frontend usa React Router 7.18.2; não reintroduzir os future flags do Router 6.
+- `@esbuild-kit/esm-loader` é substituído por `tsx` no override da raiz porque o
+  pacote foi descontinuado e mantinha `esbuild` vulnerável. Validar qualquer
+  mudança dessa exceção com `npm ci`, audit completo e `drizzle-kit check`.
+- `drizzle-orm` permanece dependência de runtime da API e dev dependency da raiz
+  para ser resolvido pelo `drizzle-kit` hoisted do workspace.
+- A regressão de rotas oficial está em `apps/web/e2e/route-smoke.spec.ts` e deve
+  acompanhar toda URL nova em desktop e Pixel 7.
+
+Evidência: `docs/STATUS-2026-08-26-REMEDIACAO-SEM-CREDENCIAIS.md`.
+
 ## Riscos Persistentes
 
 Ver detalhes em:

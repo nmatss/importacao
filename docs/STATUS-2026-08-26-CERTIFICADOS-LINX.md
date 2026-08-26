@@ -100,9 +100,9 @@ gravações de diagnóstico no ERP.
   Imaginarium renderizaram as propriedades corretas, sem overflow horizontal e sem
   erros de console. Evidências locais ignoradas pelo Git em `output/playwright/`.
 - `python3 -m pip_audit -r apps/cert-api/requirements.txt` não encontrou
-  vulnerabilidades conhecidas. `npm audit --omit=dev` manteve duas moderadas
-  preexistentes do React Router 6; a correção disponível exige migração major já
-  registrada em `docs/TECH_DEBT.md`.
+  vulnerabilidades conhecidas. Na continuação da sessão, React Router foi
+  migrado para 7.18.2 e a cadeia abandonada do Drizzle foi substituída por
+  `tsx`; audit npm completo e de runtime passaram com zero vulnerabilidades.
 - `docker compose config --quiet` e `git diff --check` passaram.
 
 ## Riscos e próximos passos

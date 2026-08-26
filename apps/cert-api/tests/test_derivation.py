@@ -52,7 +52,7 @@ class TestCertStatusCollapsed:
 
     @pytest.mark.parametrize(
         "sheet,expired,deadline",
-        itertools.product(SHEET_TEXTS, [True, False], DEADLINES),
+        list(itertools.product(SHEET_TEXTS, [True, False], DEADLINES)),
     )
     def test_cert_status_only_two_values(self, sheet, expired, deadline):
         status = derive_cert_status(sheet, expired, deadline)

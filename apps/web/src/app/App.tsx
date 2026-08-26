@@ -25,7 +25,7 @@ export function App() {
       <ThemeProvider>
         <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
           <QueryClientProvider client={queryClient}>
-            <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <BrowserRouter>
               <AuthProvider>
                 <a
                   href="#main"

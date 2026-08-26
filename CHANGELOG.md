@@ -9,6 +9,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Smoke E2E versionado para todas as 34 URLs de página e cinco redirects,
+  executado em Chromium desktop e Pixel 7 com contratos simulados, espera de
+  rede, detecção de exceções/console e gate de overflow horizontal.
 - Consulta read-only das propriedades de certificado no Linx, com
   pré-preenchimento conservador do cadastro e card de fontes no detalhe do produto.
 - Cobertura de regressão para códigos de propriedade Puket/Imaginarium, sentinela
@@ -25,6 +28,13 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- React Router foi migrado de 6.30.4 para 7.18.2, removendo os advisories de
+  open redirect e hydration/constructor injection sem alterar as rotas públicas.
+- Tooling do Drizzle deixou de carregar o `@esbuild-kit` abandonado: o pacote é
+  substituído por `tsx`, e `drizzle-orm` fica resolvível na raiz do workspace
+  para que o CLI valide o schema e as migrations de modo reproduzível.
+- Parametrização Python de derivação de certificado materializa o produto
+  cartesiano, eliminando o warning futuro do Pytest.
 - Cadastro de certificado valida marca, limites e datas antes do banco; seleção da
   base Linx deixa de aceitar correspondências por substring e exceções internas do
   SQL Server deixam de aparecer em respostas/logs operacionais.
@@ -50,6 +60,12 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Verification
 
+- `npm ci`, `npm audit` e `npm audit --omit=dev` passaram com zero
+  vulnerabilidades; `drizzle-kit check` aprovou a cadeia de migrations sem
+  conectar nem modificar banco.
+- Gate local: formatter, lint, typecheck, 981 testes API + 1 skip, 140 testes
+  web, build de produção, 523 testes Cert-API, Ruff, pip-audit, Compose e
+  `git diff --check` passaram.
 - Release de certificados implantado com backup íntegro, snapshot de rollback e
   health checks verdes. Smokes read-only confirmaram propriedades Puket e Imaginarium;
   nenhuma gravação Linx foi acionada.

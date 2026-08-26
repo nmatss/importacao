@@ -1756,3 +1756,22 @@ Evidências:
 - O primeiro rsync copiou `.context/runtime` por não respeitar `.gitignore`; o runner
   passou a excluir `.context` e a cópia exata foi removida do host.
 - Evidência: `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`.
+
+## 2026-08-26 — Remediação sem credenciais e migração Router 7
+
+- React Router foi migrado de 6.30.4 para 7.18.2 após confirmar os future flags,
+  React 18 e runtime Node compatíveis; rotas públicas e redirects foram preservados.
+- O loader `@esbuild-kit` abandonado do Drizzle foi substituído por `tsx`, e
+  `drizzle-orm` passou a ser resolvível pelo CLI hoisted na raiz. `npm ci`, audit
+  completo/runtime e `drizzle-kit check` passaram com zero vulnerabilidades.
+- O warning futuro do Pytest foi removido materializando o `itertools.product`;
+  Cert-API passou 523/523 sem warnings.
+- Um smoke Playwright versionado cobre 34 URLs de página e cinco redirects nos
+  projetos desktop e Pixel 7, com contratos simulados, console/page errors e
+  overflow horizontal como gates. O SDK Google é stubado localmente; nenhum
+  provider externo é necessário para a matriz.
+- Bloqueios restantes são externos/humanos: IMAP/Drive/Odoo/Follow-Up/alertas,
+  contas de serviço Linx, regra fiscal Puket Escolares e ground truth dos 41
+  documentos abaixo de 90% de confiança.
+- Checkpoint detalhado:
+  `docs/STATUS-2026-08-26-REMEDIACAO-SEM-CREDENCIAIS.md`.

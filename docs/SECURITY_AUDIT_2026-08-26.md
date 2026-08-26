@@ -170,7 +170,8 @@ Nenhum achado CRÍTICO foi confirmado. Os achados ALTOS no código foram
 corrigidos e testados. Os bloqueios de credencial/configuração ainda impedem
 afirmar prontidão total das integrações.
 
-O gate final atualizado passou em lint, typecheck, 981 testes API, 135 testes
-web, 48 testes E2E da API, quatro Playwright desktop/mobile, 509 testes Python,
-build, `format:check`, `npm audit` para alto/crítico e `pip-audit`. Seis
-advisories npm moderados permanecem documentados.
+O gate final atualizado passou em lint, typecheck, 981 testes API, 140 testes
+web, 48 testes E2E da API, Playwright desktop/mobile, 523 testes Python, build,
+`format:check` e `pip-audit`. Na continuação da sessão, React Router 7.18.2 e a
+substituição do loader abandonado do Drizzle eliminaram os seis advisories:
+`npm audit` completo e de runtime passaram com zero vulnerabilidades.

@@ -98,3 +98,38 @@ release_gate_evidence:
       npm_audit_moderate: 6
       pip_audit: passed
       git_diff_check: passed
+
+  credential_independent_remediation:
+    checked_at: '2026-08-26T15:50:00-03:00'
+    baseline_revision: 5b9ec85bc1aa10cefb1ccf6bb8a4f4801556671f
+    changes:
+      react_router_7_migration: passed
+      drizzle_deprecated_loader_replacement: passed
+      drizzle_schema_migration_check: passed
+      pytest_future_warning_removed: passed
+      versioned_all_route_smoke: passed
+    browser:
+      page_urls: 34
+      redirects: 5
+      viewports: 2
+      email_workflows_per_viewport: 2
+      total_tests_passed: 82
+      production_mutations: false
+      external_google_sdk_stubbed: true
+    validation:
+      clean_npm_install: passed
+      npm_audit_total: 0
+      npm_audit_runtime: 0
+      format_check: passed
+      lint: passed
+      typecheck: passed
+      api_tests_passed: 981
+      api_tests_skipped: 1
+      web_tests_passed: 140
+      cert_api_tests_passed: 523
+      cert_api_ruff: passed
+      pip_audit: passed
+      build: passed
+      compose_config: passed
+      deploy_script_syntax: passed
+      git_diff_check: passed

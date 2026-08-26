@@ -105,13 +105,10 @@ Ultima atualizacao: 2026-08-26
   ja usam `DELETE + INSERT` transacional desde `e243ca2`, portanto removem SKU
   ausente; a divida atual e impedir que uma resposta vazia ou truncada, mas sem
   excecao, substitua um snapshot saudavel inteiro.
-- Resolver residuais de `npm audit` moderados sem downgrade inseguro: raiz do
-  workspace com seis moderadas após patches e upgrade do Testcontainers para
-  12.1.0; runtime deve
-  continuar validado separadamente em
-  `npm audit --omit=dev --audit-level=high`. Pendências: `drizzle-kit` via
-  `@esbuild-kit/*`/`esbuild` no tooling e React Router 6 no runtime (correção
-  apenas no major 7, exigindo migração e regressão de rotas).
+- **Resolvido em 2026-08-26:** os seis advisories moderados foram eliminados.
+  React Router 7.18.2 passou na regressão de rotas; no tooling, o loader
+  `@esbuild-kit` abandonado foi substituído por `tsx`, conforme a própria
+  depreciação upstream. `npm ci`, audit completo e `drizzle-kit check` passaram.
 - Criar probe sintetico de egress externo da API e alerta por sequencia de
   falhas de cron. O incidente de 01-14/08/2026 rodou 1.864 falhas seguidas do
   `sydle-sync` em 12 dias com `/health/ready` verde; o detector foi o usuario
