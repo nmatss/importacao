@@ -1713,7 +1713,9 @@ Evidências:
   `testRootAccess()` prova read-only que a raiz existe, é pasta e não está na
   lixeira. A raiz produtiva continua inacessível/404.
 - Novo `scripts/smoke-integrations.mjs` verifica configuração e rede de
-  Gmail/IMAP/SMTP/Drive, validando Chat sem publicar e sem imprimir valores.
+  Gmail/IMAP/SMTP/Drive, validando Chat sem publicar e sem imprimir valores. O
+  CLI encerra explicitamente após o resumo porque importar os serviços
+  compilados também carrega o pool compartilhado de banco.
 - Estado das integrações: SYDLE passou nas três últimas execuções observadas;
   Cert-API está healthy com banco/Sheets; Odoo falha por DNS; Google Groups está
   configurado fail-closed; Chat não foi publicado nesta rodada.

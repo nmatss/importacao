@@ -334,7 +334,8 @@ Gmail continua operacional; fallback IMAP e raiz do Drive continuam pendentes.
 
 O probe IMAP expôs e levou à correção de um risco separado da credencial: um
 evento `error` tardio do socket podia derrubar o processo Node. O novo smoke
-sanitizado é retomável e não lê conteúdo nem dispara mensagens.
+sanitizado é retomável, não lê conteúdo nem dispara mensagens e encerra
+explicitamente depois do resumo para não reter o processo pelo pool compartilhado.
 
 ### Qualidade E Performance
 

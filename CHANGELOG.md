@@ -26,6 +26,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   de status, agora possuem tipo e nome acessível explícitos.
 - Erros tardios de socket do IMAP deixam de encerrar o processo Node após um
   teste/login malsucedido; o cliente também é fechado em todos os desfechos.
+- O smoke de integrações encerra explicitamente após emitir o resumo, sem ficar
+  preso pelo pool de banco carregado junto aos serviços compilados.
 - Build web passa a fixar `NODE_ENV=production`, eliminando artefatos locais
   aproximadamente duas vezes maiores e o falso warning de chunk.
 - Baseline de 19 arquivos fora do Prettier foi normalizado; relatórios JSON

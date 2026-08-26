@@ -124,4 +124,7 @@ result('operational-summary', operational, {
   driveReady: driveOk,
 });
 
-if (!operational) process.exitCode = 1;
+// Importing compiled services also imports the shared database pool. A CLI smoke
+// must terminate after reporting its result instead of waiting for that pool (or
+// a failed provider socket) to become idle indefinitely.
+process.exit(operational ? 0 : 1);
