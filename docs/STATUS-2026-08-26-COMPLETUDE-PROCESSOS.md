@@ -1,5 +1,11 @@
 # Status — Completude, Replay E Evidência Dos Processos
 
+> **Atualização posterior:** a operação remota, o deploy, o replay seguro, a
+> validação dos 117 processos e as reconciliações foram executados. O estado
+> final e as pendências humanas/externas estão em
+> `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`. A seção “Operação Remota
+> Pendente” abaixo permanece apenas como histórico do checkpoint anterior.
+
 Data: 2026-08-26
 
 Baseline: `e7d170805b07034da8acc8f4b059237b0d2d9a46`

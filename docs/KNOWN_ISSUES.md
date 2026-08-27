@@ -1,6 +1,7 @@
 # Known Issues
 
 Ultima atualizacao: 2026-08-26 (ver
+`docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`,
 `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`,
 `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`,
 `docs/STATUS-2026-08-25-RECONCILIACAO-PROCESSOS-GEMINI.md`,
@@ -12,35 +13,38 @@ Ultima atualizacao: 2026-08-26 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
-## ALTO - Deploy Remoto Sem Rota E Workflow Sem Secrets
+## MEDIO - Workflow GitHub De Deploy Continua Sem Secrets
 
-- O acesso local oficial a `192.168.168.124` responde `No route to host`.
+- O acesso pelo alias SSH oficial `n8n` voltou a funcionar e os releases
+  `c6ab0ca` e `72d19a4` foram implantados pelo runner local oficial com backup,
+  snapshot e health checks verdes.
 - O workflow manual de produção `33020393982` parou antes do deploy porque os
   secrets `DEPLOY_SERVER`, `DEPLOY_USER` e `DEPLOY_SSH_KEY` estão ausentes.
-- Não houve backup, rsync ou alteração parcial. O workflow passou a validar os
-  três nomes antes de configurar SSH, sem revelar valores.
+- O workflow passou a validar os três nomes antes de configurar SSH, sem
+  revelar valores; o problema agora é de automação CI, não de produção parada.
 
-Status: **ABERTO / ALTO.** Restaurar a rota LAN/VPN documentada ou configurar
-um runner aprovado com alcance ao host e os secrets no environment
-`production`. Depois repetir o workflow e confirmar backup, health e revisão.
+Status: **ABERTO / MEDIO.** Configurar um runner aprovado com alcance ao host e
+os secrets no environment `production`; manter `scripts/deploy.sh` como caminho
+oficial até lá.
 
 ## ALTO - Completude Documental Nao Possui Ground Truth Integral
 
 - Os 117 processos oficiais foram reconciliados contra a planilha mestre, mas
   apenas 12 possuem arquivos no portal. Os outros 105 são registros
   `master_only`, não jobs de extração com falha.
-- Dos 51 documentos, 41 estavam abaixo de 90% de confiança e 16 eram `other`.
+- Dos 51 documentos, 40 estão abaixo de 90% de confiança e 13 são `other`.
   Confiança é sinal de revisão, não acurácia medida.
-- O código agora preserva checks diagnósticos por run, registra todos os estados
-  terminais de extração e fornece triagem/reconciliação segura. A operação
-  remota e o aceite humano dos casos ambíguos ainda não foram concluídos.
+- O código preserva checks por run e todos os documentos têm evidência terminal.
+  Três `other` inequívocos foram reclassificados; quatro seguem ambíguos e nove
+  são apoio/ilegíveis. A validação final retornou 39 falhas, 1.607 avisos e
+  aprovação humana obrigatória nos 117 processos.
 - `process_items` vazia é compatível com a arquitetura: itens extraídos vivem no
   documento canônico; a tabela é projeção editável opcional (ADR 0006).
 
-Status: **ABERTO / ALTO.** Executar o plano
-`docs/operations/backfill-plan-2026-08-26-completeness.yaml`, localizar fontes
-de e-mail ausentes, validar os 117 em modo parcial e obter aceite da área para
-divergências/ausências legítimas. Não promover automaticamente a “100%”.
+Status: **ABERTO / ALTO.** Operação automática concluída e evidenciada em
+`docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`. Agora é necessário obter as
+fontes ausentes e aceite da área para divergências/ausências legítimas. Não
+promover automaticamente a “100%”.
 
 ## ALTO - Acesso Linx Da Cert-API Ainda Usa Contas Pessoais
 
@@ -61,9 +65,9 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
   26/08, sem mensagem presa em `processing`. IMAP ainda recusa autenticação e a
   raiz do Google Drive respondeu HTTP 404. O health administrativo agora prova
   acesso read-only e não confunde ID presente com pasta disponível.
-- O código anterior tentava autenticar o relay SMTP com usuário placeholder e
-  recebia `EAUTH`. O release `41d0190` reconhece o relay sem auth e passou em
-  `transport.verify()` dentro do contêiner de produção, sem envio.
+- O release reconhece o relay sem auth. Além de `transport.verify()`, um envio
+  real para a caixa operacional foi aceito (1/1, zero rejeição) e encontrado
+  pela leitura Gmail com assunto único.
 - Sem IMAP, o fallback de leitura está indisponível. O Drive falha de forma não
   bloqueante e o documento ainda pode ser salvo localmente, mas a
   cópia/organização externa não ocorre.
@@ -75,8 +79,8 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
   corrente em credencial/provider/operação, não no contrato básico do código.
 
 Status: **PARCIALMENTE RESOLVIDO / ALTO.** SMTP e Gmail publicados e
-verificados; validar credencial/app password do IMAP, corrigir ou compartilhar
-o folder raiz e usar destinatário controlado antes do primeiro envio real.
+verificados ponta a ponta; validar credencial/app password do IMAP e corrigir ou
+compartilhar o folder raiz do Drive.
 
 ## ALTO - Integrações Auxiliares Parcialmente Operacionais
 
@@ -86,8 +90,8 @@ o folder raiz e usar destinatário controlado antes do primeiro envio real.
 - Odoo está configurado, mas a autenticação falha por DNS `ENOTFOUND`.
 - SYDLE está habilitado em `sydle_one_class`: as três últimas execuções
   observadas passaram com dois registros atualizados e zero erro.
-- Produção usa Vertex com egress externo permitido; o histórico documental
-  recente prova execução, mas nenhum smoke pago foi disparado nesta rodada.
+- Produção usa Vertex com egress externo permitido. O replay controlado executou
+  chamadas reais; custo acumulado observado no mês: US$ 0,926817.
 
 Status: **PARCIALMENTE RESOLVIDO / ALTO**; corrigir Follow-Up/Odoo sem registrar
 secrets no Git. SYDLE e Cert-API estão operacionais no recorte observado.
@@ -110,6 +114,12 @@ Status: **RESOLVIDO EM PRODUÇÃO**; manter os testes de regressão.
   sustentar garantia de 90% por campo.
 
 Status: **ABERTO / ALTO** até conferência humana contra o documento original.
+
+Atualização operacional: packing lists `39` e `147` atingiram duas vezes o teto
+de 180 s do Vertex em tentativas controladas e foram restaurados do histórico.
+Os documentos `122`, `123`, `132`, `142` e `145` não devem receber nova
+tentativa cega; primeiro corrigir chunking/timeout ou usar estratégia de
+extração específica.
 
 ## ALTO - 23% Das Invoices Ficam Em Falha Terminal E Desenham A Tela Toda Com "-"
 

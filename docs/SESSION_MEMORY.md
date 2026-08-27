@@ -1809,3 +1809,30 @@ Evidências:
   `192.168.168.*`. Retomar somente após LAN/VPN oficial voltar.
 - Ground truth/aceite humano permanece obrigatório para qualquer declaração de
   acurácia 100%; o operador nunca marca aprovação automaticamente.
+
+## 2026-08-26/27 — Execução integral, replay, reconciliação e deploy
+
+- Acesso ao host foi obtido pelo alias SSH oficial `n8n`. Backup completo foi
+  restaurado em banco temporário (40 tabelas/117 processos) e removido; o deploy
+  final `72d19a4` criou novo backup/snapshot e passou migrations/health.
+- Backfill terminal inseriu 22 runs históricos e zerou ausência de lineage.
+  Três `other` inequívocos viraram invoice; restaram quatro ambíguos e nove de
+  apoio/ilegíveis.
+- Replay controlado da sessão ampla terminou 21 documentos, restaurou dois
+  packing lists após timeout e deixou 51/51 processados, zero lease/último run
+  falho. Baixa confiança caiu de 41 para 40; doc 38 chegou a 94,83%.
+- A validação final dos 117, sem `--limit`, concluiu sem falha de request: 39
+  falhas, 1.607 avisos, 1.646 skips, 101 passes e 117 aprovações humanas.
+- Backfill Gmail por hash único inseriu 12/12 vínculos sem colisão/órfão. O
+  auditor posterior confirmou 12 matches e 334 exceções (324 sem alvo e dez
+  conflitos bloqueados).
+- SMTP enviou uma mensagem real à caixa operacional: 1 aceita, zero rejeitada;
+  Gmail encontrou uma correspondência do assunto único. IMAP e Drive seguem
+  falhos; Odoo segue bloqueado por DNS.
+- Linx permaneceu disponível para 674 produtos; validade efetiva 263/178/3 e
+  licenciamento 44/8/7 para Imaginarium/Puket/Puket Escolares, sem escrita.
+- Gate local: format, lint, typecheck, API 991 + 1 skip, web 140, build, npm
+  audit zero e Playwright 82/82 desktop/mobile.
+- Evidências privadas `0600` estão em
+  `/home/nicolas/backups/importacao/evidence/2026-08-26/`; o checkpoint público
+  sanitizado é `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`.

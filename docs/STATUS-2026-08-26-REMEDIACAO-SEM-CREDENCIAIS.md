@@ -1,5 +1,10 @@
 # Status — Remediação Sem Credenciais E Release
 
+> **Atualização posterior:** acesso ao host foi restabelecido pelo alias oficial
+> `n8n` e o trabalho de produção autorizado foi executado. O estado final está
+> em `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`; este documento preserva
+> o checkpoint anterior e seus bloqueios de então.
+
 Data: 2026-08-26
 
 Sessão do harness: `2acaf72b-993b-4eae-a445-25c809ab59dc`

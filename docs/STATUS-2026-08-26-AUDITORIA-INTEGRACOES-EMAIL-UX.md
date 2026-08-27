@@ -1,5 +1,10 @@
 # Status — Auditoria De Integrações, E-mail, Reprocessamento E UX — 2026-08-26
 
+> **Atualização posterior:** o release `72d19a4` foi implantado; houve envio
+> SMTP real para a caixa operacional e leitura de volta pelo Gmail, além de
+> Playwright 82/82. IMAP e Drive continuam pendentes. Fechamento consolidado em
+> `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`.
+
 ## Objetivo E Escopo
 
 Sessão de continuação com auditoria e correção autorizada de integrações,

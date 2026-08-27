@@ -564,3 +564,23 @@ Evidências:
 
 Grau de confiança: alto para arquitetura/código e baseline agregado; não
 estabelecido para acurácia de negócio até concluir a execução remota e o aceite.
+
+## Fechamento Operacional De Completude — 2026-08-26/27
+
+- Reconciliação Gmail histórica só pode materializar vínculo automático quando
+  o SHA-256 é único e o código de processo não conflita. Repetição deve ser
+  idempotente pelos índices mensagem/anexo e processo/hash.
+- Um timeout de replay não pode apagar o último estado saudável: preservar o
+  run falho e restaurar `ai_parsed_data`/confiança do snapshot em uma transação,
+  com run `operator_restore` e audit log.
+- Packing lists grandes repetiram a assinatura de timeout de 180 s. Depois de
+  duas ocorrências, isolar a classe e corrigir a estratégia antes de retentar;
+  os demais tipos podem seguir em concorrência 1 como trabalho independente.
+- Produção final observada: 51/51 documentos processados, zero lease/último run
+  falho, 40 abaixo de 90%, 13 `other`, 39 checks falhos e 117 aprovações humanas
+  obrigatórias. Isso não autoriza declarar acurácia de 100%.
+- O envio de e-mail pode ser comprovado sem dado comercial: enviar uma única
+  mensagem à caixa operacional oficial e buscar o assunto único pelo Gmail,
+  reportando somente contagens.
+
+Evidência: `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`.

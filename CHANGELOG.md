@@ -9,6 +9,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Backfill idempotente de linhagem Gmail por SHA-256 único, com dry-run,
+  bloqueio de colisão/conflito de processo, lock transacional e evidência
+  sanitizada.
+
 - Modo diagnóstico `partial` para validação em lote, com persistência imutável
   dos 29 checks por `validation_run_id`, sem transição de workflow, Drive,
   correções ou notificações.
@@ -38,6 +42,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   pasta realmente acessível.
 
 ### Fixed
+
+- `audit-process-completeness.mjs` aceita o limite padrão infinito e pode
+  avaliar os 117 processos sem exigir `--limit` artificial.
 
 - Documento e run de extração terminal agora são persistidos na mesma
   transação para sucesso, falha, skip e espelho determinístico; estados antes
@@ -81,6 +88,18 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   permitindo afastar os últimos controles do botão flutuante do assistente.
 
 ### Verification
+
+- Release `72d19a4` implantado com backup/snapshot/health verdes. Gmail leu
+  350 mensagens/346 anexos; 12 vínculos exatos foram gravados e auditados.
+- Envio SMTP real para a caixa operacional foi aceito sem rejeição e encontrado
+  pela leitura Gmail com assunto único.
+- Replay controlado deixou 51/51 documentos terminais, zero lease/último run
+  falho e reduziu baixa confiança de 41 para 40; dois packing lists com timeout
+  foram restaurados a partir do histórico.
+- Validação final dos 117 processos: zero falha de requisição, 39 checks falhos,
+  1.607 avisos e 117 aprovações humanas ainda obrigatórias.
+- Playwright executou 82/82 cenários desktop/mobile; API passou 991 testes + 1
+  skip, web passou 140, e o audit npm ficou em zero vulnerabilidades.
 
 - `npm ci`, `npm audit` e `npm audit --omit=dev` passaram com zero
   vulnerabilidades; `drizzle-kit check` aprovou a cadeia de migrations sem
