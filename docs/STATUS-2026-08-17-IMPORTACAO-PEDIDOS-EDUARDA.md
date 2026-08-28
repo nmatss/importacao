@@ -1,5 +1,12 @@
 # Status — Os Tres Pedidos Da Eduarda Na Importacao — 2026-08-17
 
+> **Atualização de 28/08/2026:** o comportamento conservador descrito neste
+> checkpoint foi substituído pelo contrato fail-closed solicitado pela operação.
+> `DOCUMENT_SOURCE=drive` e `PROCESS_REFERENCE_SOURCE=follow_up` agora são os
+> padrões; ausência do Follow Up bloqueia vínculo/criação/ingestão, upload manual
+> é bloqueado em modo Drive-only e a varredura ignora processos fora da planilha.
+> Fonte atual: `docs/operations/document-intake-contract-2026-08-28.md`.
+
 ## Objetivo
 
 Atender o relato da Eduarda (WhatsApp, 17/08/2026), que pediu foco em tres
@@ -27,10 +34,9 @@ Codigo entregue e verde: `apps/api` **941** testes passando (baseline era 876),
 A causa-raiz das falhas de extracao (ponto 1) ganhou documento proprio:
 `docs/STATUS-2026-08-17-CAUSA-RAIZ-FALHA-EXTRACAO.md`.
 
-Nenhuma das tres mudancas altera o comportamento de producao no momento do
-deploy: as duas novas chaves nascem no valor que preserva o fluxo atual ou
-degradam sozinhas quando a dependencia externa nao esta configurada. Ligar de
-fato depende de acoes de configuracao listadas em "Pendente".
+Na entrega original, as chaves preservavam o fluxo anterior. A atualização de
+28/08 removeu esse fallback: o padrão agora é Follow Up + Drive e a ausência das
+dependências bloqueia a ingestão em vez de aceitar uma fonte não autorizada.
 
 ## Ponto 2 — Referencias so da planilha Follow Up
 
@@ -71,13 +77,13 @@ Regex e IA continuam propondo; a planilha decide.
 
 Comportamento em falha, deliberadamente diferente por tipo de falha:
 
-| Situacao                                                                          | Comportamento                                                                                                                                                                                                                                  |
-| --------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PROCESS_REFERENCE_SOURCE=legacy`                                                 | Fluxo antigo, inclusive match por substring.                                                                                                                                                                                                   |
-| Planilha **nao configurada** (sem `GOOGLE_SHEETS_FOLLOW_UP_ID` ou sem credencial) | Degrada para o fluxo antigo e avisa no log. Impor um allow-list que nao se consegue ler seria derrubar a criacao de processos no proprio dia do deploy.                                                                                        |
-| Planilha configurada e **fora do ar**, com cache                                  | Serve o ultimo cache bom, marcado como `stale`.                                                                                                                                                                                                |
-| Planilha configurada e **fora do ar**, sem cache                                  | Fail closed **so na criacao**: nenhum processo novo e inventado, e um alerta de operador e aberto. Vincular a processo ja existente continua permitido, mas **sempre por match exato** — nunca por substring, nem durante a indisponibilidade. |
-| Nenhum candidato consta na planilha                                               | Nada e vinculado nem criado, e um alerta nomeia os codigos recusados. Recusar em silencio repetiria o padrao de falha silenciosa da casa.                                                                                                      |
+| Situacao                                                                          | Comportamento                                                                                                                             |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `PROCESS_REFERENCE_SOURCE=legacy`                                                 | Fluxo antigo, inclusive match por substring.                                                                                              |
+| Planilha **nao configurada** (sem `GOOGLE_SHEETS_FOLLOW_UP_ID` ou sem credencial) | Fail closed: nenhum vínculo, criação ou documento do Drive é ingerido. O health administrativo informa o bloqueio.                        |
+| Planilha configurada e **fora do ar**, com cache                                  | Serve o ultimo cache bom, marcado como `stale`.                                                                                           |
+| Planilha configurada e **fora do ar**, sem cache                                  | Fail closed em vínculo, criação e varredura do Drive. Um alerta orienta corrigir o acesso e reprocessar.                                  |
+| Nenhum candidato consta na planilha                                               | Nada e vinculado nem criado, e um alerta nomeia os codigos recusados. Recusar em silencio repetiria o padrao de falha silenciosa da casa. |
 
 Uma consequencia intencional: uma referencia que consta na planilha mas nao tem
 o formato forte Uni.co (por exemplo `IMP-2025-001`) passa a poder criar processo.
@@ -238,8 +244,8 @@ Novo `apps/api/src/modules/documents/drive-ingestion.service.ts`, com a chave
 
 | Valor            | Efeito                                                                                                                                                       |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `email` (padrao) | Exatamente o comportamento de hoje. O job novo e no-op.                                                                                                      |
-| `drive`          | So a pasta do processo no Drive alimenta o processo. A ingestao por e-mail para sozinha, sem precisar mexer em `EMAIL_INGESTION_ENABLED` e depois restaurar. |
+| `email`          | Comportamento histórico, disponível apenas por configuração explícita.                                                                                       |
+| `drive` (padrao) | So a pasta do processo no Drive alimenta o processo. A ingestao por e-mail para sozinha, sem precisar mexer em `EMAIL_INGESTION_ENABLED` e depois restaurar. |
 | `both`           | As duas fontes.                                                                                                                                              |
 
 Detalhes que importam na operacao:
@@ -345,16 +351,16 @@ executada.
 5. **Ligar o ponto 2**: `GOOGLE_SHEETS_FOLLOW_UP_ID` preenchido (hoje esta
    **vazio** em producao, confirmado) e a planilha
    Follow Up compartilhada (leitor) com a SA em `GOOGLE_DRIVE_CLIENT_EMAIL`.
-   Enquanto isso nao existir, o codigo degrada para o fluxo antigo e avisa no
-   log — nao enforce nada. Confirmar tambem com a Eduarda que a coluna A e mesmo
-   a coluna de referencia na planilha que o time usa hoje.
+   Enquanto isso não existir, o contrato atualizado falha fechado e não
+   vincula, cria ou ingere. Confirmar também que a coluna A continua sendo a
+   coluna de referência usada pela operação.
 6. **Ligar o ponto 3**: `GOOGLE_DRIVE_ROOT_FOLDER_ID` com valor real. Hoje esta
    com o placeholder `your-root-folder-id`, ou seja a integracao Drive esta
    inativa (ja registrado em
    `docs/STATUS-2026-08-17-LIMPEZA-REPROCESSAMENTO.md`). A pasta raiz precisa
-   estar compartilhada com a SA. Depois disso, `DOCUMENT_SOURCE=drive`.
-   Recomendado subir primeiro como `both` por alguns dias, para comparar o que
-   entra por cada fonte antes de desligar o e-mail.
+   estar compartilhada com a SA. `DOCUMENT_SOURCE=drive` já é o padrão; sem
+   raiz real a varredura permanece bloqueada. O modo `both` só deve ser
+   reativado por decisão explícita da operação.
 7. **A convencao de pasta precisa ser confirmada com o time.** A ingestao
    procura `raiz/Marca/CODIGO`. Se o time organiza a pasta do processo de outra
    forma, o mapeamento muda — vale confirmar com a Eduarda antes de ligar.

@@ -438,6 +438,7 @@ export function PreConsPage() {
           <input
             ref={fileInputRef}
             type="file"
+            aria-label="Selecionar planilha de Pré-Conferência"
             accept=".xlsx,.xls"
             className="hidden"
             onChange={(e) => {

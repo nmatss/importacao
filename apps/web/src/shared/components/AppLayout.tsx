@@ -1,4 +1,4 @@
-import { useState, useEffect, type ElementType, type ReactNode } from 'react';
+import { useState, useEffect, useRef, type ElementType, type ReactNode } from 'react';
 import { NavLink, useLocation, Link } from 'react-router-dom';
 import {
   LogOut,
@@ -74,6 +74,12 @@ function getInitials(name: string): string {
     .join('');
 }
 
+function isDesktopViewport(): boolean {
+  return typeof window === 'undefined' || typeof window.matchMedia !== 'function'
+    ? true
+    : window.matchMedia('(min-width: 1024px)').matches;
+}
+
 export interface AppLayoutProps {
   children: ReactNode;
   /** Slug estável do módulo — chave do localStorage do collapse. */
@@ -111,7 +117,11 @@ export function AppLayout({
     }
   });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopViewport, setDesktopViewport] = useState(isDesktopViewport);
   const [apiOnline, setApiOnline] = useState(false);
+  const sidebarRef = useRef<HTMLElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const mobileCloseButtonRef = useRef<HTMLButtonElement>(null);
   const { user, logout } = useAuth();
   const location = useLocation();
   const a = ACCENT[accent];
@@ -131,6 +141,71 @@ export function AppLayout({
     // checkHealth é estável por módulo (função top-level do wrapper).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(min-width: 1024px)');
+    const handleChange = (event: MediaQueryListEvent) => setDesktopViewport(event.matches);
+    setDesktopViewport(media.matches);
+    media.addEventListener('change', handleChange);
+    return () => media.removeEventListener('change', handleChange);
+  }, []);
+
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    if (!desktopViewport && !mobileOpen) sidebar.setAttribute('inert', '');
+    else sidebar.removeAttribute('inert');
+  }, [desktopViewport, mobileOpen]);
+
+  useEffect(() => {
+    if (desktopViewport || !mobileOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const mobileMenuButton = mobileMenuButtonRef.current;
+    document.body.style.overflow = 'hidden';
+    const animationFrame = window.requestAnimationFrame(() =>
+      mobileCloseButtonRef.current?.focus(),
+    );
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMobileOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = Array.from(
+        sidebarRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      ).filter((element) => window.getComputedStyle(element).visibility !== 'hidden');
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener('keydown', handleKeyDown, true);
+      document.body.style.overflow = previousOverflow;
+      mobileMenuButton?.focus();
+    };
+  }, [desktopViewport, mobileOpen]);
 
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
@@ -157,6 +232,7 @@ export function AppLayout({
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
+          aria-hidden="true"
           className="fixed inset-0 z-40 bg-sidebar-950/60 backdrop-blur-sm lg:hidden"
           onClick={() => setMobileOpen(false)}
         />
@@ -164,8 +240,9 @@ export function AppLayout({
 
       {/* Sidebar — Dark Enterprise */}
       <aside
-        role="navigation"
-        aria-label={navAriaLabel}
+        ref={sidebarRef}
+        id={`${moduleKey}-navigation`}
+        aria-hidden={!desktopViewport && !mobileOpen}
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex flex-col border-r border-sidebar-800/50 transition-all duration-300 ease-in-out lg:relative',
           'bg-gradient-to-b from-sidebar-900 via-sidebar-900 to-sidebar-950',
@@ -192,6 +269,7 @@ export function AppLayout({
                 apiOnline ? 'bg-emerald-400' : 'bg-slate-500',
               )}
             />
+            <span className="sr-only">{apiOnline ? 'API online' : 'API indisponível'}</span>
           </div>
           {!collapsed && (
             <div className="overflow-hidden">
@@ -200,6 +278,7 @@ export function AppLayout({
             </div>
           )}
           <button
+            ref={mobileCloseButtonRef}
             type="button"
             onClick={() => setMobileOpen(false)}
             className="ml-auto rounded-lg p-1.5 text-sidebar-200/40 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
@@ -210,7 +289,7 @@ export function AppLayout({
         </div>
 
         {/* Nav links */}
-        <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
+        <nav aria-label={navAriaLabel} className="flex-1 overflow-y-auto px-3 py-3 space-y-4">
           {visibleNavSections.map((section) => (
             <div key={section.label}>
               {!collapsed && (
@@ -331,10 +410,13 @@ export function AppLayout({
         <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-slate-200/60 bg-white dark:bg-slate-900 dark:border-slate-700/60 px-4 lg:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <button
+              ref={mobileMenuButtonRef}
               type="button"
               onClick={() => setMobileOpen(true)}
               className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200 lg:hidden transition-colors"
               aria-label="Abrir menu"
+              aria-expanded={mobileOpen}
+              aria-controls={`${moduleKey}-navigation`}
             >
               <Menu className="h-5 w-5" />
             </button>
@@ -397,7 +479,12 @@ export function AppLayout({
         </header>
 
         {/* Content */}
-        <main id="main" role="main" className="flex-1 overflow-auto p-4 pb-24 lg:p-6">
+        <main
+          id="main"
+          role="main"
+          tabIndex={-1}
+          className="flex-1 overflow-auto p-4 pb-24 outline-none lg:p-6"
+        >
           {children}
         </main>
       </div>

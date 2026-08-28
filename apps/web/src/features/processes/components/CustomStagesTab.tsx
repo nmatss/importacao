@@ -106,6 +106,7 @@ export function CustomStagesTab({ processId }: { processId: string }) {
         className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/70 bg-white p-4 dark:border-slate-700/70 dark:bg-slate-800 md:grid-cols-[1fr_120px_1fr_auto]"
       >
         <input
+          aria-label="Nome da etapa"
           value={form.label}
           onChange={(event) => setForm((prev) => ({ ...prev, label: event.target.value }))}
           placeholder="Nome da etapa"
@@ -113,6 +114,7 @@ export function CustomStagesTab({ processId }: { processId: string }) {
         />
         <input
           type="number"
+          aria-label="Posição da etapa"
           min={0}
           value={form.position}
           onChange={(event) => setForm((prev) => ({ ...prev, position: event.target.value }))}
@@ -120,6 +122,7 @@ export function CustomStagesTab({ processId }: { processId: string }) {
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
         />
         <input
+          aria-label="Observação da etapa"
           value={form.notes}
           onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
           placeholder="Observacao"

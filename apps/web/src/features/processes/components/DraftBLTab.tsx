@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -27,6 +27,7 @@ import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { DRAFT_BL_CHECKS } from '@/shared/lib/constants';
 import { TableSkeleton } from '@/shared/components/Skeleton';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -42,7 +43,12 @@ interface Document {
 }
 
 interface ChecklistState {
-  [key: string]: { checked: boolean; timestamp: string | null };
+  [key: string]: {
+    checked: boolean;
+    timestamp: string | null;
+    checkedBy: number | null;
+    checkedByName: string | null;
+  };
 }
 
 interface ValidationCheck {
@@ -59,28 +65,6 @@ interface DraftBLTabProps {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
-
-function getStorageKey(processId: string) {
-  return `draft-bl-${processId}`;
-}
-
-function loadChecklist(processId: string): ChecklistState {
-  try {
-    const raw = localStorage.getItem(getStorageKey(processId));
-    if (raw) return JSON.parse(raw);
-  } catch {
-    /* ignore */
-  }
-  const initial: ChecklistState = {};
-  for (const check of DRAFT_BL_CHECKS) {
-    initial[check.key] = { checked: false, timestamp: null };
-  }
-  return initial;
-}
-
-function saveChecklist(processId: string, state: ChecklistState) {
-  localStorage.setItem(getStorageKey(processId), JSON.stringify(state));
-}
 
 function getFieldValue(data: Record<string, any> | undefined, key: string): any {
   if (!data) return null;
@@ -265,36 +249,48 @@ function DraftUploadSection({
 // ── Section B: Conference Checklist ────────────────────────────────────
 
 function ConferenceChecklist({ processId }: { processId: string }) {
-  const [checklist, setChecklist] = useState<ChecklistState>(() => loadChecklist(processId));
+  const [updatingKey, setUpdatingKey] = useState<string | null>(null);
+  const {
+    data: checklist,
+    isLoading: isChecklistLoading,
+    isError: isChecklistError,
+    refetch: refetchChecklist,
+  } = useApiQuery<ChecklistState>(
+    ['draft-bl-checklist', processId],
+    `/api/processes/${processId}/draft-bl-checklist`,
+  );
   const { data: validationChecks, refetch: refetchValidation } = useApiQuery<ValidationCheck[]>(
     ['validation', processId],
     `/api/validation/${processId}`,
   );
   const ncmCheck = validationChecks?.find((check) => check.checkName === 'ncm-bl-description');
 
-  useEffect(() => {
-    setChecklist(loadChecklist(processId));
-  }, [processId]);
+  const toggleCheck = async (key: string) => {
+    const checked = !(checklist?.[key]?.checked ?? false);
+    setUpdatingKey(key);
+    try {
+      await api.patch(`/api/processes/${processId}/draft-bl-checklist`, { key, checked });
+      await refetchChecklist();
+      toast.success(checked ? 'Aceite registrado no histórico' : 'Item reaberto no histórico');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao atualizar o checklist';
+      toast.error(message);
+    } finally {
+      setUpdatingKey(null);
+    }
+  };
 
-  const toggleCheck = useCallback(
-    (key: string) => {
-      setChecklist((prev) => {
-        const current = prev[key];
-        const updated = {
-          ...prev,
-          [key]: {
-            checked: !current?.checked,
-            timestamp: !current?.checked ? new Date().toISOString() : null,
-          },
-        };
-        saveChecklist(processId, updated);
-        return updated;
-      });
-    },
-    [processId],
-  );
+  if (isChecklistLoading) return <TableSkeleton rows={4} />;
+  if (isChecklistError) {
+    return (
+      <ErrorState
+        message="Erro ao carregar o checklist auditável do Draft BL."
+        onRetry={() => refetchChecklist()}
+      />
+    );
+  }
 
-  const completedCount = DRAFT_BL_CHECKS.filter((c) => checklist[c.key]?.checked).length;
+  const completedCount = DRAFT_BL_CHECKS.filter((c) => checklist?.[c.key]?.checked).length;
   const totalChecks = DRAFT_BL_CHECKS.length;
   const progressPct = Math.round((completedCount / totalChecks) * 100);
 
@@ -392,15 +388,17 @@ function ConferenceChecklist({ processId }: { processId: string }) {
       {/* Checklist items */}
       <div className="space-y-1">
         {DRAFT_BL_CHECKS.map((check, index) => {
-          const state = checklist[check.key];
+          const state = checklist?.[check.key];
           const isChecked = state?.checked ?? false;
           const timestamp = formatTimestamp(state?.timestamp ?? null);
+          const checkedByName = state?.checkedByName ?? null;
 
           return (
             <button
               key={check.key}
               type="button"
               onClick={() => toggleCheck(check.key)}
+              disabled={updatingKey !== null}
               className={cn(
                 'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
                 isChecked
@@ -435,9 +433,9 @@ function ConferenceChecklist({ processId }: { processId: string }) {
 
               <div className="shrink-0 text-right">
                 {isChecked && timestamp ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600">
+                  <span className="inline-flex max-w-[18rem] items-center gap-1 text-[11px] text-emerald-600">
                     <Clock className="h-3 w-3" />
-                    {timestamp}
+                    {checkedByName ? `${checkedByName} · ${timestamp}` : timestamp}
                   </span>
                 ) : (
                   <span className="text-[11px] text-slate-300 group-hover:text-slate-400">

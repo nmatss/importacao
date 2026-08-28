@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useId, useRef } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { ModalPortal } from './ModalPortal';
 
@@ -25,50 +25,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const titleId = useId();
   const descriptionId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const previouslyFocused =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCancel();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-
-      const focusable = Array.from(
-        dialogRef.current?.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-        ) ?? [],
-      ).filter((el) => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden'));
-
-      if (focusable.length === 0) {
-        e.preventDefault();
-        return;
-      }
-
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-
-    cancelButtonRef.current?.focus();
-    document.addEventListener('keydown', handler);
-    return () => {
-      document.removeEventListener('keydown', handler);
-      previouslyFocused?.focus();
-    };
-  }, [isOpen, onCancel]);
 
   if (!isOpen) return null;
 
@@ -78,11 +35,10 @@ export function ConfirmDialog({
       : 'bg-primary-600 hover:bg-primary-700 focus-visible:ring-primary-500';
 
   return (
-    <ModalPortal>
+    <ModalPortal onEscape={onCancel} initialFocusRef={cancelButtonRef}>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div className="fixed inset-0 bg-sidebar-950/40 backdrop-blur-sm" onClick={onCancel} />
         <div
-          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}

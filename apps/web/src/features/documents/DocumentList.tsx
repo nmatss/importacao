@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Eye,
   Download,
+  HardDrive,
   Pencil,
   X,
 } from 'lucide-react';
@@ -57,8 +58,9 @@ interface Document {
 }
 
 interface DocumentSource {
-  source: 'email' | 'manual';
+  source: 'email' | 'manual' | 'drive';
   emailSubject?: string;
+  driveFileId?: string;
 }
 
 interface DocumentListProps {
@@ -66,6 +68,20 @@ interface DocumentListProps {
 }
 
 const typeLabel = (type: string) => DOCUMENT_TYPES.find((d) => d.value === type)?.label ?? type;
+
+function sourceLabel(source: DocumentSource): string {
+  if (source.source === 'email') {
+    return `E-mail${source.emailSubject ? `: ${source.emailSubject}` : ''}`;
+  }
+  if (source.source === 'drive') return 'Pasta do processo no Drive';
+  return 'Upload manual';
+}
+
+function SourceIcon({ source, className }: { source: DocumentSource; className: string }) {
+  if (source.source === 'email') return <Mail className={className} />;
+  if (source.source === 'drive') return <HardDrive className={className} />;
+  return <Upload className={className} />;
+}
 
 // null = ainda sem score (doc não processado) → tratado como utilizável aqui;
 // o LIMIAR vem da fonte única em shared/lib/confidence.ts.
@@ -549,16 +565,8 @@ export function DocumentList({ processId }: DocumentListProps) {
                         </div>
                         {source && (
                           <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {source.source === 'email' ? (
-                              <Mail className="h-3 w-3 shrink-0" />
-                            ) : (
-                              <Upload className="h-3 w-3 shrink-0" />
-                            )}
-                            <span className="truncate">
-                              {source.source === 'email'
-                                ? `E-mail${source.emailSubject ? `: ${source.emailSubject}` : ''}`
-                                : 'Upload manual'}
-                            </span>
+                            <SourceIcon source={source} className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{sourceLabel(source)}</span>
                           </div>
                         )}
                         {failureMessage && (
@@ -577,31 +585,17 @@ export function DocumentList({ processId }: DocumentListProps) {
                             fetchSource(doc.id);
                           }}
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
-                          title={
-                            source
-                              ? source.source === 'email'
-                                ? `E-mail${source.emailSubject ? `: ${source.emailSubject}` : ''}`
-                                : 'Upload manual'
-                              : 'Ver origem'
-                          }
+                          title={source ? sourceLabel(source) : 'Ver origem'}
                           aria-label={
                             source
-                              ? source.source === 'email'
-                                ? `Origem e-mail de ${doc.fileName}`
-                                : `Origem upload manual de ${doc.fileName}`
+                              ? `Origem ${sourceLabel(source)} de ${doc.fileName}`
                               : `Ver origem de ${doc.fileName}`
                           }
                         >
                           {source ? (
-                            source.source === 'email' ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-primary-600">
-                                <Mail className="h-3 w-3" />
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400">
-                                <Upload className="h-3 w-3" />
-                              </span>
-                            )
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary-600">
+                              <SourceIcon source={source} className="h-3 w-3" />
+                            </span>
                           ) : (
                             <Mail className="h-3.5 w-3.5" />
                           )}

@@ -18,7 +18,9 @@ import type {
   UpdateCustomStageInput,
   CreateOperationalRecordInput,
   UpdateOperationalRecordInput,
+  UpdateDraftBlChecklistInput,
 } from './schema.js';
+import { DRAFT_BL_CHECK_KEYS } from './schema.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
@@ -107,6 +109,125 @@ export const processService = {
     ]);
 
     return { ...process, documents: processDocs, followUp };
+  },
+
+  async getDraftBlChecklist(processId: number) {
+    const [process] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!process) throw new NotFoundError('Processo', processId);
+
+    const events = await db
+      .select({
+        id: processEvents.id,
+        metadata: processEvents.metadata,
+        createdBy: processEvents.createdBy,
+        createdAt: processEvents.createdAt,
+        userName: users.name,
+      })
+      .from(processEvents)
+      .leftJoin(users, eq(processEvents.createdBy, users.id))
+      .where(
+        and(
+          eq(processEvents.processId, processId),
+          eq(processEvents.eventType, 'draft_bl_checklist_changed'),
+        ),
+      )
+      .orderBy(desc(processEvents.createdAt), desc(processEvents.id));
+
+    const allowedKeys = new Set<string>(DRAFT_BL_CHECK_KEYS);
+    const state: Record<
+      string,
+      {
+        checked: boolean;
+        timestamp: string | null;
+        checkedBy: number | null;
+        checkedByName: string | null;
+      }
+    > = Object.fromEntries(
+      DRAFT_BL_CHECK_KEYS.map((key) => [
+        key,
+        { checked: false, timestamp: null, checkedBy: null, checkedByName: null },
+      ]),
+    );
+    const resolved = new Set<string>();
+
+    for (const event of events) {
+      const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+      const key = typeof metadata.key === 'string' ? metadata.key : null;
+      if (!key || !allowedKeys.has(key) || resolved.has(key)) continue;
+
+      const checked = metadata.checked === true;
+      const metadataTimestamp = typeof metadata.timestamp === 'string' ? metadata.timestamp : null;
+      const createdAt = event.createdAt instanceof Date ? event.createdAt.toISOString() : null;
+      state[key] = {
+        checked,
+        timestamp: checked ? (metadataTimestamp ?? createdAt) : null,
+        checkedBy: checked ? (event.createdBy ?? null) : null,
+        checkedByName: checked
+          ? typeof metadata.checkedByName === 'string'
+            ? metadata.checkedByName
+            : (event.userName ?? null)
+          : null,
+      };
+      resolved.add(key);
+    }
+
+    return state;
+  },
+
+  async updateDraftBlChecklist(
+    processId: number,
+    input: UpdateDraftBlChecklistInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+    const [process] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!process) throw new NotFoundError('Processo', processId);
+
+    const [user] = userId
+      ? await db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1)
+      : [undefined];
+    const timestamp = new Date();
+
+    await db.insert(processEvents).values({
+      processId,
+      eventType: 'draft_bl_checklist_changed',
+      title: `Checklist Draft BL: ${input.key} ${input.checked ? 'validado' : 'reaberto'}`,
+      description: input.checked
+        ? 'Item do checklist do Draft BL validado por operador.'
+        : 'Validacao do item do checklist do Draft BL removida por operador.',
+      metadata: {
+        key: input.key,
+        checked: input.checked,
+        timestamp: timestamp.toISOString(),
+        checkedByName: user?.name ?? null,
+      },
+      createdBy: userId,
+    });
+
+    await auditService.log(
+      userId,
+      'draft_bl_checklist_update',
+      'process',
+      processId,
+      { key: input.key, checked: input.checked },
+      null,
+    );
+
+    return {
+      key: input.key,
+      checked: input.checked,
+      timestamp: input.checked ? timestamp.toISOString() : null,
+      checkedBy: input.checked ? userId : null,
+      checkedByName: input.checked ? (user?.name ?? null) : null,
+    };
   },
 
   async listCustomStages(processId: number) {

@@ -293,6 +293,8 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
       <div className="border-t border-slate-100 dark:border-slate-700 pt-3">
         <button
           type="button"
+          aria-expanded={showManualUpload}
+          aria-controls="manual-document-upload"
           onClick={() => setShowManualUpload(!showManualUpload)}
           className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:text-slate-800 dark:text-slate-100"
         >
@@ -307,7 +309,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
         </button>
 
         {showManualUpload && (
-          <div className="mt-2">
+          <div id="manual-document-upload" className="mt-2">
             <DocumentUpload processId={processId} />
           </div>
         )}

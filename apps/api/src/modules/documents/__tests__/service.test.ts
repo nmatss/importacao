@@ -470,6 +470,43 @@ describe('documentService', () => {
       });
       expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
+
+    it('reports Drive provenance without guessing from email logs', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 32,
+            processId: 1,
+            originalFilename: 'INV.pdf',
+            driveFileId: 'drive-file-32',
+            ingestionSource: 'drive',
+          },
+        ]),
+      );
+
+      await expect(documentService.getSource(32)).resolves.toEqual({
+        source: 'drive',
+        driveFileId: 'drive-file-32',
+      });
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps explicit email provenance when optional subject lineage is missing', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 33,
+            processId: 1,
+            originalFilename: 'PL.pdf',
+            ingestionSource: 'email',
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([])); // relational lineage
+      queryQueue.push(createResolvedChain([])); // legacy logs
+
+      await expect(documentService.getSource(33)).resolves.toEqual({ source: 'email' });
+    });
   });
 
   describe('rebuildProcessAiExtractedData()', () => {

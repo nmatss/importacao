@@ -894,6 +894,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       return (
         <div className="min-w-[240px] space-y-2">
           <textarea
+            aria-label={`Justificativa do aceite para ${target.fieldLabel}`}
             value={acceptNote}
             onChange={(event) => setAcceptNote(event.target.value)}
             rows={2}
@@ -1791,10 +1792,14 @@ export function DocumentComparison({ processId }: { processId: string }) {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <label
+                  htmlFor="comparison-edit-value"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400"
+                >
                   Valor
                 </label>
                 <textarea
+                  id="comparison-edit-value"
                   value={editValue}
                   onChange={(event) => setEditValue(event.target.value)}
                   rows={3}
@@ -1802,10 +1807,14 @@ export function DocumentComparison({ processId }: { processId: string }) {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <label
+                  htmlFor="comparison-edit-note"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400"
+                >
                   Observacao
                 </label>
                 <textarea
+                  id="comparison-edit-note"
                   value={editNote}
                   onChange={(event) => setEditNote(event.target.value)}
                   rows={2}

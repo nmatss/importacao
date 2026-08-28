@@ -246,18 +246,62 @@ export function SLADashboard() {
     navigate(`/importacao/processos/${id}`);
   }
 
+  function processRowProps(id: number, processCode: string) {
+    return {
+      onClick: () => goToProcess(id),
+      onKeyDown: (event: React.KeyboardEvent<HTMLTableRowElement>) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          goToProcess(id);
+        }
+      },
+      role: 'link' as const,
+      tabIndex: 0,
+      'aria-label': `Abrir processo ${processCode}`,
+    };
+  }
+
+  function handleTabKeyDown(event: React.KeyboardEvent<HTMLButtonElement>, index: number) {
+    const keyOffsets: Partial<Record<string, number>> = {
+      ArrowRight: 1,
+      ArrowDown: 1,
+      ArrowLeft: -1,
+      ArrowUp: -1,
+    };
+    let nextIndex = index;
+    if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = tabConfig.length - 1;
+    else if (keyOffsets[event.key]) {
+      nextIndex = (index + (keyOffsets[event.key] ?? 0) + tabConfig.length) % tabConfig.length;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    const nextTab = tabConfig[nextIndex];
+    setActiveTab(nextTab.key);
+    setSortField('');
+    document.getElementById(`sla-tab-${nextTab.key}`)?.focus();
+  }
+
   function SortHeader({ field, children }: { field: string; children: React.ReactNode }) {
+    const ariaSort = sortField !== field ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending';
     return (
       <th
-        className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 cursor-pointer hover:text-slate-700 dark:text-slate-300 select-none"
-        onClick={() => handleSort(field)}
+        aria-sort={ariaSort}
+        className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-300"
       >
-        <span className="inline-flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => handleSort(field)}
+          className="inline-flex items-center gap-1 rounded-sm uppercase hover:text-slate-700 dark:hover:text-slate-100"
+        >
           {children}
           <ArrowUpDown
+            aria-hidden="true"
             className={cn('h-3 w-3', sortField === field ? 'text-primary-500' : 'text-slate-300')}
           />
-        </span>
+        </button>
       </th>
     );
   }
@@ -305,16 +349,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaDocsOverdue).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.preventDefault();
-                  goToProcess(row.id);
-                }
-              }}
-              role="link"
-              tabIndex={0}
-              aria-label={`Abrir processo ${row.processCode}`}
+              {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
@@ -359,7 +394,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaLiUrgent).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
+              {...processRowProps(row.id, row.processCode)}
               className={cn(
                 'hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors',
                 urgencyBg(row.daysRemaining),
@@ -416,7 +451,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaWithDivergences).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
+              {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
@@ -455,7 +490,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaPendingFenicia).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
+              {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
@@ -501,7 +536,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaNoEspelho).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
+              {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
@@ -547,7 +582,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaNoFollowUpUpdate).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.id)}
+              {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
               <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
@@ -637,7 +672,7 @@ export function SLADashboard() {
           {sorted(items, sortField as keyof SlaUpcomingPayments).map((row) => (
             <tr
               key={row.id}
-              onClick={() => goToProcess(row.processId)}
+              {...processRowProps(row.processId, row.processCode)}
               className={cn(
                 'hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors',
                 urgencyBg(row.daysUntilDue),
@@ -720,7 +755,10 @@ export function SLADashboard() {
 
           return (
             <button
+              type="button"
               key={card.key}
+              aria-pressed={isActive}
+              aria-label={`${card.label}: ${value}. Mostrar detalhes`}
               onClick={() => {
                 setActiveTab(card.key);
                 setSortField('');
@@ -771,17 +809,28 @@ export function SLADashboard() {
       {/* Tab Content */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
         {/* Tab Bar */}
-        <div className="flex items-center gap-1 px-3 sm:px-4 pt-3 pb-0 overflow-x-auto scrollbar-thin">
-          {tabConfig.map((tab) => {
+        <div
+          role="tablist"
+          aria-label="Categorias de pendências"
+          className="flex items-center gap-1 px-3 sm:px-4 pt-3 pb-0 overflow-x-auto scrollbar-thin"
+        >
+          {tabConfig.map((tab, index) => {
             const isActive = activeTab === tab.key;
             const cnt = summary[tab.key] ?? 0;
             return (
               <button
+                type="button"
                 key={tab.key}
+                id={`sla-tab-${tab.key}`}
+                role="tab"
+                aria-selected={isActive}
+                aria-controls="sla-tab-panel"
                 onClick={() => {
                   setActiveTab(tab.key);
                   setSortField('');
                 }}
+                onKeyDown={(event) => handleTabKeyDown(event, index)}
+                tabIndex={isActive ? 0 : -1}
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all border-b-2',
                   isActive
@@ -809,7 +858,15 @@ export function SLADashboard() {
 
         {/* Active Tab Content */}
         <div className="border-t border-slate-100 dark:border-slate-700">
-          <div className="overflow-x-auto">{tabRenderers[activeTab]()}</div>
+          <div
+            id="sla-tab-panel"
+            role="tabpanel"
+            aria-labelledby={`sla-tab-${activeTab}`}
+            tabIndex={0}
+            className="overflow-x-auto outline-none"
+          >
+            {tabRenderers[activeTab]()}
+          </div>
         </div>
       </div>
     </div>

@@ -566,14 +566,6 @@ function UsersTab() {
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'analyst' });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setShowModal(false);
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
-
   const { data: users, isLoading } = useApiQuery<User[]>(userKeys.all, '/api/auth/users');
 
   const openCreate = () => {
@@ -778,7 +770,7 @@ function UsersTab() {
 
       {/* User modal */}
       {showModal && (
-        <ModalPortal>
+        <ModalPortal onEscape={() => setShowModal(false)}>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
             <div className="fixed inset-0" onClick={() => setShowModal(false)} />
             <div
@@ -1280,7 +1272,7 @@ function CommunicationTemplatesTab() {
       </SectionCard>
 
       {showModal && (
-        <ModalPortal>
+        <ModalPortal onEscape={() => setShowModal(false)}>
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
             <div className="fixed inset-0" onClick={() => setShowModal(false)} />
             <div
@@ -1414,17 +1406,6 @@ function SignaturesTab() {
     emailSignatureKeys.all,
     '/api/settings/email-signatures',
   );
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setShowModal(false);
-        setPreviewId(null);
-      }
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, []);
 
   const openCreate = () => {
     setEditSig(null);
@@ -1585,7 +1566,12 @@ function SignaturesTab() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <ModalPortal>
+        <ModalPortal
+          onEscape={() => {
+            setShowModal(false);
+            setPreviewId(null);
+          }}
+        >
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity p-4">
             <div className="fixed inset-0" onClick={() => setShowModal(false)} />
             <div

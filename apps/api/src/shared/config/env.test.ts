@@ -24,6 +24,13 @@ afterEach(() => {
 });
 
 describe('env IA policy', () => {
+  it('usa Follow Up e Drive como fontes operacionais seguras por padrao', async () => {
+    const env = await loadEnv({ IA_LOCAL_API_KEY: 'test-token' });
+
+    expect(env.PROCESS_REFERENCE_SOURCE).toBe('follow_up');
+    expect(env.DOCUMENT_SOURCE).toBe('drive');
+  });
+
   it('usa IA_LOCAL como provider default', async () => {
     const env = await loadEnv({ IA_LOCAL_API_KEY: 'test-token' });
 

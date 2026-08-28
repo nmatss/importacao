@@ -299,6 +299,7 @@ export function FollowUpPage() {
                             <div className={`h-1 rounded-t-xl ${status.accent}`} />
 
                             <button
+                              type="button"
                               onClick={() => navigate(`/importacao/processos/${proc.id}`)}
                               className="w-full px-3.5 pt-2.5 pb-2 text-left"
                             >
@@ -335,6 +336,10 @@ export function FollowUpPage() {
 
                             {/* Expand toggle */}
                             <button
+                              type="button"
+                              aria-label={`${isExpanded ? 'Ocultar' : 'Mostrar'} etapas do processo ${proc.processCode}`}
+                              aria-expanded={isExpanded}
+                              aria-controls={`follow-up-stages-${proc.id}`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setExpandedProcessId(isExpanded ? null : proc.id);
@@ -348,7 +353,10 @@ export function FollowUpPage() {
 
                             {/* Expanded timeline */}
                             {isExpanded && (
-                              <div className="border-t border-slate-100 dark:border-slate-700 px-3.5 pb-3 pt-2 space-y-1">
+                              <div
+                                id={`follow-up-stages-${proc.id}`}
+                                className="border-t border-slate-100 dark:border-slate-700 px-3.5 pb-3 pt-2 space-y-1"
+                              >
                                 {STAGE_DATE_LABELS.map((s) => {
                                   const val = proc[s.key] as string | null;
                                   return (

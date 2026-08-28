@@ -1,6 +1,6 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-08-26
+Ultima atualizacao: 2026-08-28
 
 ## Validacao E Comparativo
 
@@ -141,7 +141,8 @@ Ultima atualizacao: 2026-08-26
 - Criar experiencia mobile dedicada para tabelas largas e kanban operacional
   (cards por breakpoint, colunas prioritarias ou acordeoes), especialmente
   Cert Produtos, Pre-Cons, Email Ingestion e Follow-Up.
-- Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como anotacao local.
+- Avaliar uma visão unificada para o checklist auditável do Draft BL e os
+  aceites do comparativo, preservando suas fontes append-only atuais.
 
 ## Documentos, IA E E-mail Ingestion
 

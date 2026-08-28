@@ -30,6 +30,14 @@ vi.mock('../service.js', () => ({
   documentService: { upload: (...a: unknown[]) => mockUpload(...a) },
 }));
 
+const mockGetFollowUpReferences = vi.fn();
+vi.mock('../../follow-up/reference-registry.js', () => ({
+  getReferenceSource: () =>
+    process.env.PROCESS_REFERENCE_SOURCE === 'legacy' ? 'legacy' : 'follow_up',
+  getFollowUpReferences: (...a: unknown[]) => mockGetFollowUpReferences(...a),
+  normalizeReference: (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, ''),
+}));
+
 vi.mock('fs/promises', () => ({
   default: {
     mkdir: vi.fn().mockResolvedValue(undefined),
@@ -45,6 +53,7 @@ const {
   getDocumentSource,
   isDriveIngestionEnabled,
   isEmailIngestionEnabled,
+  isManualDocumentUploadEnabled,
 } = await import('../drive-ingestion.service.js');
 
 const PROCESS = {
@@ -68,10 +77,11 @@ describe('DOCUMENT_SOURCE', () => {
     delete process.env.DOCUMENT_SOURCE;
   });
 
-  it('defaults to email so nothing changes until the team opts in', () => {
-    expect(getDocumentSource()).toBe('email');
-    expect(isDriveIngestionEnabled()).toBe(false);
-    expect(isEmailIngestionEnabled()).toBe(true);
+  it('defaults to Drive-only as requested by the operation', () => {
+    expect(getDocumentSource()).toBe('drive');
+    expect(isDriveIngestionEnabled()).toBe(true);
+    expect(isEmailIngestionEnabled()).toBe(false);
+    expect(isManualDocumentUploadEnabled()).toBe(false);
   });
 
   it('drive turns the e-mail path off and the Drive path on', () => {
@@ -84,11 +94,12 @@ describe('DOCUMENT_SOURCE', () => {
     process.env.DOCUMENT_SOURCE = 'both';
     expect(isDriveIngestionEnabled()).toBe(true);
     expect(isEmailIngestionEnabled()).toBe(true);
+    expect(isManualDocumentUploadEnabled()).toBe(true);
   });
 
-  it('falls back to email on an unknown value instead of ingesting nothing', () => {
+  it('falls back to Drive-only on an unknown value', () => {
     process.env.DOCUMENT_SOURCE = 'sharepoint';
-    expect(getDocumentSource()).toBe('email');
+    expect(getDocumentSource()).toBe('drive');
   });
 });
 
@@ -114,7 +125,7 @@ describe('ingestProcessFromDrive()', () => {
       'invoice',
       expect.objectContaining({ originalname: 'invoice IM0712602NB.pdf' }),
       null,
-      { driveFileId: 'f1' },
+      { driveFileId: 'f1', ingestionSource: 'drive' },
     );
   });
 
@@ -129,6 +140,19 @@ describe('ingestProcessFromDrive()', () => {
 
     expect(result.imported).toBe(0);
     expect(result.skipped).toBe(1);
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Drive file whose content does not match its extension and declared MIME', async () => {
+    mockListProcessFiles.mockResolvedValue([
+      { id: 'fake', name: 'invoice.pdf', mimeType: 'application/pdf', size: '16' },
+    ]);
+    mockDownloadFileBuffer.mockResolvedValueOnce(Buffer.from('not a real PDF'));
+    noKnownDocuments();
+
+    const result = await ingestProcessFromDrive(PROCESS);
+
+    expect(result).toMatchObject({ imported: 0, failed: 1 });
     expect(mockUpload).not.toHaveBeenCalled();
   });
 
@@ -190,7 +214,7 @@ describe('ingestProcessFromDrive()', () => {
     noKnownDocuments();
     mockDownloadFileBuffer
       .mockRejectedValueOnce(new Error('403'))
-      .mockResolvedValueOnce(Buffer.from('ok'));
+      .mockResolvedValueOnce(Buffer.from('%PDF-1.4 conteudo'));
 
     const result = await ingestProcessFromDrive(PROCESS);
 
@@ -225,6 +249,11 @@ describe('ingestAllProcessesFromDrive()', () => {
     queryQueue.length = 0;
     process.env.DOCUMENT_SOURCE = 'drive';
     mockIsRootConfigured.mockResolvedValue(true);
+    mockGetFollowUpReferences.mockResolvedValue({
+      byNormalized: new Map([[PROCESS.processCode, PROCESS.processCode]]),
+      fetchedAt: new Date(),
+      stale: false,
+    });
     __resetDriveSweepLock();
   });
 
@@ -244,6 +273,30 @@ describe('ingestAllProcessesFromDrive()', () => {
 
     await expect(ingestAllProcessesFromDrive()).resolves.toEqual([]);
     expect(mockIsRootConfigured).not.toHaveBeenCalled();
+  });
+
+  it('falha fechado quando a lista do Follow Up esta indisponivel', async () => {
+    mockGetFollowUpReferences.mockResolvedValue(null);
+
+    await expect(ingestAllProcessesFromDrive()).resolves.toEqual([]);
+    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(mockListProcessFiles).not.toHaveBeenCalled();
+  });
+
+  it('ignora pastas de processos que nao constam no Follow Up', async () => {
+    const foraDaPlanilha = { ...PROCESS, id: 2, processCode: 'PI7223Y' };
+    queryQueue.push(createResolvedChain([PROCESS, foraDaPlanilha]));
+    mockListProcessFiles.mockResolvedValue([]);
+
+    const results = await ingestAllProcessesFromDrive();
+
+    expect(results[0]).toMatchObject({ processCode: PROCESS.processCode });
+    expect(results[0].skippedReason).toBeUndefined();
+    expect(results[1]).toMatchObject({
+      processCode: 'PI7223Y',
+      skippedReason: 'process not listed in Follow Up',
+    });
+    expect(mockListProcessFiles).toHaveBeenCalledTimes(1);
   });
 
   it('pula o tick quando uma varredura anterior ainda esta rodando', async () => {

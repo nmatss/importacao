@@ -108,6 +108,106 @@ describe('processService', () => {
     });
   });
 
+  describe('Draft BL checklist', () => {
+    it('rebuilds the shared state from the latest append-only event per item', async () => {
+      queryQueue.push(createResolvedChain([{ id: 1 }]));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 3,
+            metadata: {
+              key: 'draftReceivedOk',
+              checked: false,
+              timestamp: '2026-08-28T12:00:00.000Z',
+            },
+            createdBy: 7,
+            createdAt: new Date('2026-08-28T12:00:00.000Z'),
+            userName: 'Operadora A',
+          },
+          {
+            id: 2,
+            metadata: {
+              key: 'exporterOk',
+              checked: true,
+              timestamp: '2026-08-28T11:30:00.000Z',
+            },
+            createdBy: 8,
+            createdAt: new Date('2026-08-28T11:30:00.000Z'),
+            userName: 'Operadora B',
+          },
+          {
+            id: 1,
+            metadata: {
+              key: 'draftReceivedOk',
+              checked: true,
+              timestamp: '2026-08-28T11:00:00.000Z',
+            },
+            createdBy: 7,
+            createdAt: new Date('2026-08-28T11:00:00.000Z'),
+            userName: 'Operadora A',
+          },
+        ]),
+      );
+
+      const result = await processService.getDraftBlChecklist(1);
+
+      expect(result.draftReceivedOk).toEqual({
+        checked: false,
+        timestamp: null,
+        checkedBy: null,
+        checkedByName: null,
+      });
+      expect(result.exporterOk).toEqual({
+        checked: true,
+        timestamp: '2026-08-28T11:30:00.000Z',
+        checkedBy: 8,
+        checkedByName: 'Operadora B',
+      });
+      expect(result.containersOk.checked).toBe(false);
+    });
+
+    it('persists the acting user in both process history and the audit log', async () => {
+      queryQueue.push(createResolvedChain([])); // assertNotLocked
+      queryQueue.push(createResolvedChain([{ id: 1 }])); // process exists
+      queryQueue.push(createResolvedChain([{ name: 'Operadora A' }]));
+      const insertEvent = createResolvedChain([]);
+      queryQueue.push(insertEvent);
+
+      const result = await processService.updateDraftBlChecklist(
+        1,
+        { key: 'draftReceivedOk', checked: true },
+        7,
+      );
+
+      expect(insertEvent.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          eventType: 'draft_bl_checklist_changed',
+          createdBy: 7,
+          metadata: expect.objectContaining({
+            key: 'draftReceivedOk',
+            checked: true,
+            checkedByName: 'Operadora A',
+          }),
+        }),
+      );
+      expect(auditService.log).toHaveBeenCalledWith(
+        7,
+        'draft_bl_checklist_update',
+        'process',
+        1,
+        { key: 'draftReceivedOk', checked: true },
+        null,
+      );
+      expect(result).toMatchObject({
+        key: 'draftReceivedOk',
+        checked: true,
+        checkedBy: 7,
+        checkedByName: 'Operadora A',
+      });
+    });
+  });
+
   describe('updateStatus()', () => {
     it('should validate state transition before updating', async () => {
       const mockProcess = { id: 1, status: 'draft' };

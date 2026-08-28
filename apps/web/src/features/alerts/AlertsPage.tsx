@@ -439,6 +439,7 @@ export function AlertsPage() {
                     {!alert.acknowledged && (
                       <button
                         type="button"
+                        aria-label={`Marcar alerta como tratado: ${alert.title}`}
                         onClick={() => handleAcknowledge(alert.id)}
                         className="shrink-0 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                       >

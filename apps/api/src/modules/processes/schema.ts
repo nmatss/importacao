@@ -213,6 +213,25 @@ export const createOperationalRecordSchema = z.object({
 
 export const updateOperationalRecordSchema = createOperationalRecordSchema.partial();
 
+export const DRAFT_BL_CHECK_KEYS = [
+  'draftReceivedOk',
+  'exporterOk',
+  'consigneeOk',
+  'descriptionOk',
+  'referenceOk',
+  'ncmsOk',
+  'woodOk',
+  'freeTimeOk',
+  'weightCbmOk',
+  'freightOk',
+  'containersOk',
+] as const;
+
+export const updateDraftBlChecklistSchema = z.object({
+  key: z.enum(DRAFT_BL_CHECK_KEYS),
+  checked: z.boolean(),
+});
+
 export type CreateProcessInput = z.infer<typeof createProcessSchema>;
 export type UpdateProcessInput = z.infer<typeof updateProcessSchema>;
 export type ProcessFilter = z.infer<typeof processFilterSchema>;
@@ -220,3 +239,4 @@ export type CreateCustomStageInput = z.infer<typeof createCustomStageSchema>;
 export type UpdateCustomStageInput = z.infer<typeof updateCustomStageSchema>;
 export type CreateOperationalRecordInput = z.infer<typeof createOperationalRecordSchema>;
 export type UpdateOperationalRecordInput = z.infer<typeof updateOperationalRecordSchema>;
+export type UpdateDraftBlChecklistInput = z.infer<typeof updateDraftBlChecklistSchema>;

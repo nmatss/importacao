@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const driveMocks = vi.hoisted(() => ({
   filesGet: vi.fn(),
+  filesList: vi.fn(),
   Drive: vi.fn(),
   GoogleAuth: vi.fn(),
 }));
@@ -33,11 +34,42 @@ describe('googleDriveService root health', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     driveMocks.Drive.mockImplementation(function MockDrive() {
-      return { files: { get: driveMocks.filesGet } };
+      return { files: { get: driveMocks.filesGet, list: driveMocks.filesList } };
     });
     process.env.GOOGLE_DRIVE_CLIENT_EMAIL = 'service@example.test';
     process.env.GOOGLE_DRIVE_PRIVATE_KEY = 'test-key';
     process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = 'root-folder';
+  });
+
+  it('finds the real shared-drive layout Marca/Importado/Processo Nº codigo', async () => {
+    driveMocks.filesList.mockImplementation(({ q }: { q: string }) => {
+      if (q.includes("'root-folder' in parents") && q.includes("name = 'Puket'")) {
+        return Promise.resolve({ data: { files: [{ id: 'brand-folder', name: 'Puket' }] } });
+      }
+      if (q.includes("'brand-folder' in parents") && !q.includes('name =')) {
+        return Promise.resolve({
+          data: { files: [{ id: 'imported-folder', name: 'Importado' }] },
+        });
+      }
+      if (
+        q.includes("'imported-folder' in parents") &&
+        q.includes("name = 'Processo Nº PK2052602TJ'")
+      ) {
+        return Promise.resolve({
+          data: { files: [{ id: 'process-folder', name: 'Processo Nº PK2052602TJ' }] },
+        });
+      }
+      return Promise.resolve({ data: { files: [] } });
+    });
+    const service = await loadService();
+
+    await expect(service.findProcessFolder('PK2052602TJ', 'puket')).resolves.toBe('process-folder');
+    expect(driveMocks.filesList).toHaveBeenCalledWith(
+      expect.objectContaining({
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+      }),
+    );
   });
 
   afterEach(() => {

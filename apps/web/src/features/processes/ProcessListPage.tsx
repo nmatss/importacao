@@ -122,6 +122,7 @@ export function ProcessListPage() {
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-slate-400" />
               <select
+                aria-label="Filtrar processos por status"
                 value={status}
                 onChange={(e) => {
                   setStatus(e.target.value);
@@ -138,6 +139,7 @@ export function ProcessListPage() {
               </select>
             </div>
             <select
+              aria-label="Filtrar processos por marca"
               value={brand}
               onChange={(e) => {
                 setBrand(e.target.value);

@@ -27,6 +27,30 @@ export const processController = {
     }
   },
 
+  async getDraftBlChecklist(req: Request, res: Response) {
+    try {
+      const checklist = await processService.getDraftBlChecklist(Number(req.params.id));
+      sendSuccess(res, checklist);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async updateDraftBlChecklist(req: Request, res: Response) {
+    try {
+      const item = await processService.updateDraftBlChecklist(
+        Number(req.params.id),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, item);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async listCustomStages(req: Request, res: Response) {
     try {
       const stages = await processService.listCustomStages(Number(req.params.id));

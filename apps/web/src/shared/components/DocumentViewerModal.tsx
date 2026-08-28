@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Download, ExternalLink, FileText, Loader2, X } from 'lucide-react';
 import { ModalPortal } from './ModalPortal';
 import { ErrorState } from './ErrorState';
@@ -34,20 +34,13 @@ export function DocumentViewerModal({
   onClose,
 }: DocumentViewerModalProps) {
   const titleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
   const [kind, setKind] = useState<ViewerKind>('unsupported');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handleEscape);
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
 
   useEffect(() => {
     if (!documentId) return;
@@ -140,7 +133,7 @@ export function DocumentViewerModal({
   };
 
   return (
-    <ModalPortal>
+    <ModalPortal onEscape={onClose} initialFocusRef={closeButtonRef}>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6">
         <div className="fixed inset-0 bg-sidebar-950/50 backdrop-blur-sm" onClick={onClose} />
         <div
@@ -174,6 +167,7 @@ export function DocumentViewerModal({
                 </a>
               )}
               <button
+                ref={closeButtonRef}
                 type="button"
                 onClick={handleDownload}
                 disabled={downloading}

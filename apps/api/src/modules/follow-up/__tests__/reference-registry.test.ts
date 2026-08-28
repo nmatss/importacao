@@ -53,11 +53,12 @@ describe('Follow Up reference allow-list', () => {
       expect(getReferenceSource()).toBe('follow_up');
     });
 
-    it('degrades to legacy when the sheet was never configured, not on deploy day outage', () => {
-      // Enforcing an allow-list we cannot even read would stop every process
-      // from being created the moment this ships without the sheet ID set.
+    it('fails closed when the sheet was never configured', () => {
+      // A planilha e a autoridade solicitada pela operacao. Voltar para o
+      // regex/IA sem configuracao recria silenciosamente referencias de item
+      // e referencias truncadas.
       mockIsConfigured.mockReturnValue(false);
-      expect(getReferenceSource()).toBe('legacy');
+      expect(getReferenceSource()).toBe('follow_up');
     });
   });
 

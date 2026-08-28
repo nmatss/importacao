@@ -214,13 +214,17 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
       {/* Signature selector - show when there are drafts and signatures available */}
       {hasDrafts && emailSignatures && emailSignatures.length > 0 && (
         <div className="rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50 dark:bg-slate-900 p-4">
-          <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+          <label
+            htmlFor="process-email-signature"
+            className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5"
+          >
             <span className="inline-flex items-center gap-1.5">
               <FileSignature className="h-3.5 w-3.5" />
               Assinatura ao enviar
             </span>
           </label>
           <select
+            id="process-email-signature"
             value={selectedSignatureId ?? ''}
             onChange={(e) => setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)}
             className="w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
@@ -260,6 +264,8 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
               >
                 <button
                   type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`process-communication-${comm.id}`}
                   onClick={() => setExpandedId(isExpanded ? null : comm.id)}
                   className="w-full text-left"
                 >
@@ -298,7 +304,10 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                 </div>
 
                 {isExpanded && (
-                  <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+                  <div
+                    id={`process-communication-${comm.id}`}
+                    className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700"
+                  >
                     {isEditing ? (
                       <div className="space-y-3">
                         {communicationTemplates && communicationTemplates.length > 0 && (
@@ -319,6 +328,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                           <input
                             type="text"
+                            aria-label="Nome do destinatário"
                             value={draftForm.recipient}
                             onChange={(event) =>
                               setDraftForm((prev) => ({ ...prev, recipient: event.target.value }))
@@ -328,6 +338,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                           />
                           <input
                             type="text"
+                            aria-label="E-mail do destinatário"
                             value={draftForm.recipientEmail}
                             onChange={(event) =>
                               setDraftForm((prev) => ({
@@ -341,6 +352,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                         </div>
                         <input
                           type="text"
+                          aria-label="Assunto do atendimento"
                           value={draftForm.subject}
                           onChange={(event) =>
                             setDraftForm((prev) => ({ ...prev, subject: event.target.value }))
@@ -349,6 +361,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                           className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 transition-all focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
                         />
                         <textarea
+                          aria-label="Mensagem do atendimento"
                           value={draftForm.body}
                           onChange={(event) =>
                             setDraftForm((prev) => ({ ...prev, body: event.target.value }))

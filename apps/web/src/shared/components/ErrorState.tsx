@@ -23,8 +23,9 @@ export function ErrorState({
       </p>
       {onRetry && (
         <button
+          type="button"
           onClick={onRetry}
-          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-primary-700 active:scale-[0.98] shadow-sm"
+          className="mt-5 inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-all hover:bg-primary-700 active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2"
         >
           <RotateCcw className="h-3.5 w-3.5" />
           Tentar novamente

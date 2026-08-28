@@ -254,6 +254,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
             </div>
             <div className="mt-3 flex max-w-3xl flex-col gap-2 sm:flex-row sm:items-start">
               <textarea
+                aria-label="Observação urgente do processo"
                 value={urgentNote}
                 onChange={(event) => setUrgentNote(event.target.value)}
                 rows={1}

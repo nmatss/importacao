@@ -32,23 +32,13 @@ export interface E2EContext {
 // Drizzle's meta/_journal.json (some, like 0011, contain ALTER TYPE ADD VALUE
 // which cannot run inside the migrator's transaction). They are idempotent
 // (IF NOT EXISTS / ADD VALUE IF NOT EXISTS), so we apply them after migrate().
-const PENDING_MIGRATIONS = [
-  '0011_proforma_invoice.sql',
-  '0012_process_rename_and_lock.sql',
-  '0013_ai_usage_log.sql',
-  '0014_validation_resolution_note.sql',
-  '0015_validation_history.sql',
-  '0016_pre_cons_tables.sql',
-  '0017_sydle_purchase_payments.sql',
-  '0018_validation_run_links.sql',
-  '0019_logistic_status_index.sql',
-  '0020_document_lineage_and_email_dedupe.sql',
-  '0021_sydle_report_columns.sql',
-  '0022_odett_operational_feedback.sql',
-  '0023_communications_audit.sql',
-  '0024_document_analysis_hardening.sql',
-  '0025_ai_usage_telemetry.sql',
-];
+const PENDING_MIGRATIONS = fs
+  .readdirSync(MIGRATIONS_FOLDER)
+  .filter((file) => {
+    const match = /^(\d{4})_.+\.sql$/.exec(file);
+    return match && Number(match[1]) >= 11;
+  })
+  .sort();
 
 function isCI(): boolean {
   const value = process.env.CI?.trim().toLowerCase();

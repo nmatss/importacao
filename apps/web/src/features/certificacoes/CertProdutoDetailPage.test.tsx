@@ -64,8 +64,8 @@ describe('CertProdutoDetailPage certificate sources', () => {
     );
 
     await waitFor(() => expect(mockedLookup).toHaveBeenCalledWith('imaginarium', 'PI7223Y'));
-    expect(screen.getByText('CERT-2026-001')).toBeInTheDocument();
-    expect(screen.getByText(/prop 00106/i)).toBeInTheDocument();
+    expect(await screen.findByText('CERT-2026-001')).toBeInTheDocument();
+    expect(await screen.findByText(/prop 00106/i)).toBeInTheDocument();
     expect(screen.getByText(/prop 00107/i)).toBeInTheDocument();
     expect(screen.getByText('24/07/2027')).toBeInTheDocument();
     expect(screen.queryByText(/^Linha$/)).not.toBeInTheDocument();

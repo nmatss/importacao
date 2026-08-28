@@ -1,5 +1,50 @@
 # Session Memory
 
+## 2026-08-28 — Auditoria completa de UX/UI
+
+Objetivo:
+
+- Revisar e melhorar todas as páginas do frontend em desktop/mobile, preservando
+  rotas e contratos de negócio.
+
+Resultado:
+
+- As 34 URLs funcionais e cinco redirects foram exercitados nos dois viewports:
+  smoke final 78/78, sem erro de navegador ou overflow global.
+- Menu móvel e modais agora têm ciclo completo de foco, `Escape`, bloqueio de
+  scroll e restauração de foco; o menu fechado usa `inert` e `aria-hidden`.
+- Dashboard, tabs, ordenação, accordions, tooltips, filtros e formulários foram
+  corrigidos para teclado e tecnologias assistivas.
+- Varredura de todos os TSX fechou com zero campo potencialmente sem rótulo e
+  zero botão potencialmente sem nome acessível.
+- Gates finais: lint e typecheck aprovados; API 1.002 testes aprovados + 1 skip;
+  web 146 testes aprovados; E2E de e-mail 4/4; build do monorepo aprovado.
+- Nenhum deploy, push, migração ou alteração remota foi executado.
+
+Evidência canônica:
+
+- `docs/STATUS-2026-08-28-UX-UI-AUDITORIA-COMPLETA.md`
+
+## 2026-08-28 — Preflight do release UX + entrada documental
+
+- O usuário autorizou commit, push e deploy de todo o worktree.
+- O preflight encontrou dois gates que o script não detectava: a rotina de
+  migrations terminava em `0025`, e a nova `0026` ficaria sem aplicação; a
+  pasta real do Drive não estava acessível à conta de serviço.
+- `apply-pending-migrations.sh` passou a incluir `0026`.
+- A planilha oficial `1_Follow Up Processos de Importação` foi localizada pelo
+  Drive e cadastrada via SOPS sem texto claro. A primeira aba efetiva era uma
+  auxiliar e retornava 19 valores; por isso o contrato passou a fixar a aba
+  `Processos`, que contém os dois pilotos e 486 códigos com formato de processo.
+- A estrutura operacional real foi confirmada como
+  `<ano>/<Marca>/Importado/Processo Nº <código>` e o finder read-only foi
+  adaptado com suporte a Shared Drives.
+- A raiz de 2026 responde 404 para a conta de serviço. Para evitar interrupção,
+  o SOPS de produção mantém temporariamente `DOCUMENT_SOURCE=email`; o rollout
+  Drive-only continua bloqueado até compartilhamento e smoke.
+- Produção estava saudável antes da janela, com SYDLE já habilitado e 521 GB
+  livres no host.
+
 ## 2026-08-14 - Incidente De Egress Da API E Login Google
 
 Objetivo:
@@ -1836,3 +1881,45 @@ Evidências:
 - Evidências privadas `0600` estão em
   `/home/nicolas/backups/importacao/evidence/2026-08-26/`; o checkpoint público
   sanitizado é `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`.
+
+## 2026-08-28 — Auditoria do feedback e aceite do Draft BL
+
+- Histórico de solicitações de Importação/Certificação foi reconciliado contra
+  código, testes, status, memórias e release anterior. O resultado completo e a
+  mensagem para Jonathan estão em
+  `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.
+- Defeito comprovado: o checklist do Draft BL ainda persistia apenas em
+  `localStorage`, sem estado compartilhado ou autoria confiável.
+- Correção local: `GET/PATCH /api/processes/:id/draft-bl-checklist`, enumeração
+  Zod de chaves, respeito ao lock, eventos append-only e audit log; a UI mostra
+  usuário/data, refaz a consulta e expõe falha de persistência.
+- Nenhuma migration foi necessária; `process_events` permanece a fonte.
+- Um teste web preexistente de detalhe de certificação oscilou na suíte por não
+  aguardar o estado Linx; foi estabilizado com `findByText`.
+- Gate: formatter/lint/typecheck; API 994 + 1 skip; web 141; Cert-API 523;
+  build; audit npm zero; Ruff; Playwright 82/82 e diff check passaram.
+- Smoke público somente leitura: API 200; gateway Cert-API sem sessão 401,
+  conforme a política fail-closed.
+- Nenhum deploy/push, e-mail, replay, migração, sync externo ou escrita remota
+  foi executado. A alteração do Draft BL aguarda publicação e homologação.
+
+## 2026-08-28 — Contrato De Entrada Follow Up + Drive
+
+- A revisão do pedido urgente da Eduarda provou que a implementação de 17/08
+  existia, mas não estava efetiva: default de documentos era e-mail, Follow Up
+  degradava para legacy sem configuração e Compose não passava as variáveis.
+- Correção local: `follow_up` + `drive` são defaults fail-closed; varredura do
+  Drive filtra a allow-list; e-mail, histórico, reprocessamento e multipart são
+  bloqueados em Drive-only; UI orienta usar a pasta.
+- Migration `0026` adiciona procedência `legacy/manual/drive/email`. O E2E passa
+  a descobrir automaticamente todas as migrations SQL 0011+.
+- Hardening: downloads do Drive também validam magic bytes antes de gravar ou
+  acionar a extração; conteúdo incompatível falha com telemetria e não entra.
+- Gate final: API 1.002 + 1 skip; web 143; API E2E 48 com PostgreSQL/migrations; Cert
+  523; Playwright 82; format, lint, typecheck, build, Ruff, audit, Compose e diff
+  passaram.
+- Bloqueio externo: workspace sem `GOOGLE_SHEETS_FOLLOW_UP_ID` e com raiz Drive
+  placeholder. Nenhum deploy, push, migration remota, replay ou segredo mudou.
+- Contrato e handoff:
+  `docs/operations/document-intake-contract-2026-08-28.md` e
+  `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.

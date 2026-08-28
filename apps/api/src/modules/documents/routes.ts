@@ -1,8 +1,10 @@
-import { Router } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { documentController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { upload, validateMagicBytes } from '../../shared/middleware/upload.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
+import { getDocumentSourcePolicy, isManualDocumentUploadEnabled } from './source-policy.js';
+import { sendError, sendSuccess } from '../../shared/utils/response.js';
 
 const router = Router();
 
@@ -14,8 +16,23 @@ const uploadLimiter = createRateLimiter(20, 60_000);
 // action required by analysts after correcting a document classification.
 const reprocessLimiter = createRateLimiter(10, 60_000);
 
+export function requireManualDocumentUpload(_req: Request, res: Response, next: NextFunction) {
+  if (!isManualDocumentUploadEnabled()) {
+    return sendError(
+      res,
+      'Upload manual desativado: nesta fase, inclua o arquivo na pasta do processo no Google Drive.',
+      409,
+    );
+  }
+  next();
+}
+
+router.get('/source-policy', (_req, res) => sendSuccess(res, getDocumentSourcePolicy()));
+
 router.post(
   '/upload',
+  // Gate before Multer: a rejected request must not create a temporary file.
+  requireManualDocumentUpload,
   uploadLimiter,
   upload.single('file'),
   validateMagicBytes,

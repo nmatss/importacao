@@ -21,6 +21,8 @@ import { auditService } from '../audit/service.js';
 import { alertService } from '../alerts/service.js';
 import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 import { filterCandidatesByFollowUp, getReferenceSource } from '../follow-up/reference-registry.js';
+import { isEmailIngestionEnabled } from '../documents/source-policy.js';
+import { AppError } from '../../shared/errors/index.js';
 import {
   extractMailboxAddress,
   isAllowedSenderFromEnv,
@@ -544,6 +546,10 @@ async function analyzeEmailWithAI(
 
 export const emailProcessor = {
   async processNewEmails(includeRead = false, gmailQuery?: string) {
+    if (!isEmailIngestionEnabled()) {
+      logger.info('Email ingestion blocked by Drive-only document source policy');
+      return;
+    }
     // Prefer Gmail API (service account), fall back to IMAP
     let emails: FetchedEmailForProcessing[];
     const usingGmail = gmailService.isConfigured();
@@ -797,14 +803,28 @@ export const emailProcessor = {
           allowListUnavailable = filtered.status === 'unavailable';
 
           if (allowListUnavailable) {
-            // Fail closed on CREATION only: without the allow-list we cannot
-            // tell a real reference from an item code, and inventing
-            // processes is the failure the user asked us to stop. Linking to
-            // an already existing process stays allowed below.
+            // Fail closed on both linking and creation: without the allow-list
+            // we cannot prove that even an exact-looking code is currently an
+            // authorised process reference.
             logger.error(
               { allCodes, subject: email.subject },
-              'Follow Up allow-list unavailable — refusing to create processes from this email',
+              'Follow Up allow-list unavailable — refusing to link or create processes from this email',
             );
+            try {
+              await alertService.create({
+                severity: 'warning',
+                title: 'Planilha Follow Up indisponivel — e-mail nao vinculado',
+                message: `Nao foi possivel validar os codigos ${allCodes.join(', ') || '(nenhum codigo legivel)'}. Nenhum processo foi vinculado ou criado. Verifique o acesso da conta de servico a planilha e reprocesse o e-mail. Assunto: ${email.subject}`,
+              });
+            } catch (alertErr) {
+              logger.warn(
+                { err: alertErr, allCodes },
+                'Failed to create alert for unavailable Follow Up allow-list',
+              );
+            }
+            allCodes.length = 0;
+            processCode = null;
+            detectionMethod = null;
           } else {
             if (rejected.length > 0) {
               logger.info(
@@ -840,11 +860,7 @@ export const emailProcessor = {
           }
         }
 
-        // Vale mesmo quando o allow-list esta fora do ar. Cair de volta no
-        // match por substring durante a indisponibilidade reabriria justamente
-        // o defeito relatado — referencia truncada anexando documento ao
-        // processo errado — e de forma silenciosa. Nao vincular e visivel
-        // (documento fica solto e o operador e alertado); vincular errado nao.
+        // Match exato continua obrigatorio quando Follow Up e a autoridade.
         const exactOnly = referenceSource === 'follow_up';
 
         // Try each candidate code against the DB, best match first
@@ -869,29 +885,6 @@ export const emailProcessor = {
           if (matched) {
             processId = matched.id;
             processCode = matched.processCode;
-          } else if (allowListUnavailable) {
-            // The Follow Up sheet is the authority and we could not read it.
-            // Creating here would resurrect exactly the behaviour the user
-            // asked us to stop, so we surface it instead of guessing.
-            try {
-              await alertService.create({
-                severity: 'warning',
-                title: 'Planilha Follow Up indisponivel — processo nao criado',
-                message: `Nao foi possivel ler a planilha Follow Up para validar o codigo "${processCode}". Nenhum processo foi criado automaticamente. Verifique o acesso da conta de servico a planilha e reprocesse o e-mail. Assunto: ${email.subject}`,
-              });
-            } catch (alertErr) {
-              logger.warn(
-                { err: alertErr, processCode },
-                'Failed to create alert for unavailable Follow Up allow-list',
-              );
-            }
-            // Este ramo so e alcancado quando o allow-list ESTAVA legivel (o
-            // ramo anterior ja tratou a indisponibilidade), portanto aqui
-            // `exactOnly` equivale a "a planilha declarou este codigo" e
-            // `processCode` e a grafia canonica dela. O gate de formato Uni.co
-            // existe para impedir palpite de virar processo; o que o time
-            // digitou na planilha nao e palpite, e pode legitimamente ter outro
-            // formato (IMP-2025-001) e ainda assim merecer criacao.
           } else if (!isStrongUnicoCode(processCode) && !exactOnly) {
             // Weak candidate (generic/low-confidence code that didn't match the
             // DB). NÃO criar processo — só códigos no formato forte Uni.co
@@ -1334,7 +1327,9 @@ export const emailProcessor = {
               size: att.size,
             } as Express.Multer.File;
 
-            const doc = await documentService.upload(processId, docType, fakeFile);
+            const doc = await documentService.upload(processId, docType, fakeFile, null, {
+              ingestionSource: 'email',
+            });
 
             // Move from INBOX to PROCESSADOS
             if (sistemaFileId && processCode) {
@@ -1642,6 +1637,13 @@ export const emailProcessor = {
   },
 
   async reprocess(logId: number) {
+    if (!isEmailIngestionEnabled()) {
+      throw new AppError(
+        'Reprocessamento de e-mail desativado: os documentos entram somente pela pasta do processo no Google Drive.',
+        409,
+        'EMAIL_INGESTION_DISABLED_BY_SOURCE_POLICY',
+      );
+    }
     const [log] = await db
       .select()
       .from(emailIngestionLogs)

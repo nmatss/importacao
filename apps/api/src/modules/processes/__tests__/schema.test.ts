@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createOperationalRecordSchema,
   processFilterSchema,
+  updateDraftBlChecklistSchema,
   updateProcessSchema,
 } from '../schema.js';
 
@@ -58,5 +59,20 @@ describe('record type catalog', () => {
   it('keeps an uncatalogued type as free text', () => {
     // A coluna e livre desde a migration 0022 e ja tem valores em producao.
     expect(parseType('Sobreestadia de container')).toBe('Sobreestadia de container');
+  });
+});
+
+describe('updateDraftBlChecklistSchema', () => {
+  it('accepts only known checklist keys and a boolean state', () => {
+    expect(updateDraftBlChecklistSchema.parse({ key: 'draftReceivedOk', checked: true })).toEqual({
+      key: 'draftReceivedOk',
+      checked: true,
+    });
+    expect(
+      updateDraftBlChecklistSchema.safeParse({ key: 'arbitraryKey', checked: true }).success,
+    ).toBe(false);
+    expect(
+      updateDraftBlChecklistSchema.safeParse({ key: 'draftReceivedOk', checked: 'yes' }).success,
+    ).toBe(false);
   });
 });

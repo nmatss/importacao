@@ -718,6 +718,7 @@ export function CommunicationsPage() {
                   {/* AI with recipient selector */}
                   <div className="inline-flex items-center rounded-xl border border-violet-200 dark:border-violet-800 bg-gradient-to-r from-violet-50 to-violet-50 dark:from-violet-950/40 dark:to-violet-950/40 overflow-hidden">
                     <select
+                      aria-label="Destinatário do modelo gerado por IA"
                       value={aiRecipientType}
                       onChange={(e) => setAiRecipientType(e.target.value as 'fenicia' | 'isa')}
                       className="bg-transparent border-none text-xs font-medium text-violet-600 pl-3 pr-1 py-2 focus:ring-0"
@@ -1003,6 +1004,8 @@ export function CommunicationsPage() {
                       <div key={comm.id}>
                         <button
                           type="button"
+                          aria-expanded={isExpanded}
+                          aria-controls={`communication-details-${comm.id}`}
                           onClick={() => setExpandedId(isExpanded ? null : comm.id)}
                           className="w-full px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors"
                         >
@@ -1036,7 +1039,10 @@ export function CommunicationsPage() {
                           </div>
                         </button>
                         {isExpanded && (
-                          <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 px-3 sm:px-5 py-4">
+                          <div
+                            id={`communication-details-${comm.id}`}
+                            className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60 px-3 sm:px-5 py-4"
+                          >
                             <div className="mb-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                               <AtSign className="h-3 w-3" />
                               {comm.recipient} &lt;{comm.recipientEmail}&gt;
@@ -1109,7 +1115,7 @@ export function CommunicationsPage() {
       </div>
 
       {showDrivePicker && (
-        <ModalPortal>
+        <ModalPortal onEscape={() => setShowDrivePicker(false)}>
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div
               className="fixed inset-0 bg-sidebar-950/50 backdrop-blur-sm"

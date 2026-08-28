@@ -1,6 +1,7 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-26 (ver
+Ultima atualizacao: 2026-08-28 (ver
+`docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`,
 `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`,
 `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`,
 `docs/STATUS-2026-08-26-AUDITORIA-INTEGRACOES-EMAIL-UX.md`,
@@ -59,7 +60,7 @@ Status: **ABERTO / ALTO.** Criar contas de serviço separadas por base, conceder
 leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
 `PROP_PRODUTOS`, rotacionar via SOPS e revogar os logins pessoais após smoke controlado.
 
-## ALTO - Fallback IMAP E Drive Nao Estao Prontos
+## ALTO - Drive Ainda Nao Esta Compartilhado Para O Contrato De Entrada
 
 - Gmail API autenticou no probe local e a produção registrou ingestão até
   26/08, sem mensagem presa em `processing`. IMAP ainda recusa autenticação e a
@@ -68,9 +69,16 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
 - O release reconhece o relay sem auth. Além de `transport.verify()`, um envio
   real para a caixa operacional foi aceito (1/1, zero rejeição) e encontrado
   pela leitura Gmail com assunto único.
-- Sem IMAP, o fallback de leitura está indisponível. O Drive falha de forma não
-  bloqueante e o documento ainda pode ser salvo localmente, mas a
-  cópia/organização externa não ocorre.
+- O Follow Up oficial foi localizado, cadastrado no SOPS e validado em leitura
+  pela conta de serviço. A aba explícita `Processos` contém os pilotos
+  PK2052602TJ/IM0712602NB e 486 códigos com formato de processo; a seleção
+  implícita da primeira aba foi removida porque caía em uma aba auxiliar.
+- A pasta operacional de 2026 foi localizada e a estrutura real
+  `<ano>/<Marca>/Importado/Processo Nº <código>` passou a ser reconhecida pelo
+  código. A conta de serviço, porém, recebe 404 nessa pasta do Shared Drive.
+- Para não interromper a operação, o release mantém temporariamente
+  `DOCUMENT_SOURCE=email` no SOPS de produção. O default de código continua
+  Drive-only e será ativado somente após o compartilhamento e smoke.
 - Um timeout tardio do ImapFlow podia emitir `error` sem listener depois do
   probe e encerrar o processo Node. O código e o smoke foram corrigidos; isso
   evita a queda, mas não conserta a credencial do provider.
@@ -78,15 +86,16 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
   inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
   corrente em credencial/provider/operação, não no contrato básico do código.
 
-Status: **PARCIALMENTE RESOLVIDO / ALTO.** SMTP e Gmail publicados e
-verificados ponta a ponta; validar credencial/app password do IMAP e corrigir ou
-compartilhar o folder raiz do Drive.
+Status: **PARCIALMENTE RESOLVIDO / ALTO.** Follow Up está configurado e
+acessível. Para concluir o rollout Drive-only, adicionar a conta de serviço como
+leitora do Shared Drive/pasta operacional, cadastrar a raiz anual no SOPS e
+exigir `health/integrations` + smoke verdes. IMAP segue relevante enquanto o
+modo temporário `email` estiver ativo.
 
 ## ALTO - Integrações Auxiliares Parcialmente Operacionais
 
-- A API principal continua sem ID de Follow-Up Sheets. A Cert-API, porém, está
-  healthy em produção, com banco conectado e Sheets configurado no próprio
-  container.
+- A API principal agora possui o ID do Follow Up oficial no SOPS e a conta de
+  serviço confirmou leitura. A Cert-API continua com integração própria.
 - Odoo está configurado, mas a autenticação falha por DNS `ENOTFOUND`.
 - SYDLE está habilitado em `sydle_one_class`: as três últimas execuções
   observadas passaram com dois registros atualizados e zero erro.

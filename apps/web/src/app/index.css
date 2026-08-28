@@ -110,9 +110,36 @@ html {
 }
 
 body {
+  min-width: 320px;
+  min-height: 100vh;
   color: #1e293b;
   background: #f8fafc;
   line-height: 1.6;
+}
+
+/* Um foco consistente e visível em qualquer página, inclusive nos muitos
+   controles legados que ainda não usam o primitivo Button. */
+:where(a, button, input, select, textarea, summary, [role='button'], [role='link']):focus-visible {
+  outline: 2px solid #4f46e5;
+  outline-offset: 2px;
+}
+
+.dark
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [role='button'],
+    [role='link']
+  ):focus-visible {
+  outline-color: #a5b4fc;
+}
+
+:where(button, input, select, textarea):disabled {
+  cursor: not-allowed;
 }
 
 .dark body,
@@ -587,7 +614,8 @@ button:active:not(:disabled) {
   z-index: 50;
 }
 
-[data-tooltip]:hover::after {
+[data-tooltip]:hover::after,
+[data-tooltip]:focus-visible::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
@@ -643,6 +671,24 @@ main {
 
 .dark .bg-page {
   background: linear-gradient(180deg, #0f172a 0%, #020617 100%);
+}
+
+/* Evita o zoom automático do Safari/iOS e mantém alvos de toque operáveis sem
+   aumentar links textuais dentro de tabelas e parágrafos. */
+@media (max-width: 640px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role='button'] {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }
 
 /* ══════════════════════════════════════

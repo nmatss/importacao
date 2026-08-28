@@ -181,6 +181,7 @@ describe('driveAttachmentsService', () => {
           size: PDF_BUFFER.length,
         }),
         7,
+        { driveFileId: 'f1', ingestionSource: 'drive' },
       );
     });
 

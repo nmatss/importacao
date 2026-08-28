@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useId } from 'react';
-import { Upload, CheckCircle, FileText, Loader2, AlertCircle } from 'lucide-react';
+import { Upload, CheckCircle, FileText, Loader2, AlertCircle, FolderOpen } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/shared/lib/utils';
+import { useApiQuery } from '@/shared/hooks/useApi';
 import { invalidateDocumentWorkflow } from './queryInvalidation';
 
 interface DocumentUploadProps {
@@ -77,8 +78,19 @@ function formatFileSize(bytes: number): string {
 
 type UploadState = 'idle' | 'uploading' | 'success' | 'error';
 
+interface DocumentSourcePolicy {
+  source: 'email' | 'drive' | 'both';
+  driveOnly: boolean;
+  manualUploadEnabled: boolean;
+}
+
 export function DocumentUpload({ processId }: DocumentUploadProps) {
   const queryClient = useQueryClient();
+  const policy = useApiQuery<DocumentSourcePolicy>(
+    ['documents', 'source-policy'],
+    '/api/documents/source-policy',
+    { staleTime: 5 * 60_000 },
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
   const [docType, setDocType] = useState<string>('invoice');
@@ -198,6 +210,44 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
+
+  if (policy.isLoading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Verificando a origem autorizada dos documentos...
+      </div>
+    );
+  }
+
+  if (policy.isError || !policy.data) {
+    return (
+      <div
+        role="alert"
+        className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+      >
+        Não foi possível confirmar a política de documentos. O upload manual permanece bloqueado por
+        segurança.
+      </div>
+    );
+  }
+
+  if (!policy.data.manualUploadEnabled) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+        <FolderOpen className="mt-0.5 h-4 w-4 shrink-0" />
+        <div>
+          <p className="font-medium">
+            Documentos recebidos somente pela pasta do processo no Drive
+          </p>
+          <p className="mt-0.5 text-xs text-blue-700">
+            Inclua o arquivo na pasta correta. A sincronização automática fará a leitura e
+            registrará a origem.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

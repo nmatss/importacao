@@ -16,6 +16,7 @@ import {
   updateCustomStageSchema,
   createOperationalRecordSchema,
   updateOperationalRecordSchema,
+  updateDraftBlChecklistSchema,
 } from './schema.js';
 
 const router = Router();
@@ -26,6 +27,12 @@ router.get('/', validate(processFilterSchema, 'query'), processController.list);
 router.get('/stats', processController.getStats);
 router.get('/:id', processController.getById);
 router.get('/:id/events', processController.getEvents);
+router.get('/:id/draft-bl-checklist', processController.getDraftBlChecklist);
+router.patch(
+  '/:id/draft-bl-checklist',
+  validate(updateDraftBlChecklistSchema),
+  processController.updateDraftBlChecklist,
+);
 router.get('/:id/custom-stages', processController.listCustomStages);
 router.post(
   '/:id/custom-stages',

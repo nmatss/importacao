@@ -41,6 +41,7 @@ function folderCacheSet(key: string, value: string): void {
 }
 
 const SUBFOLDER_NAMES = ['Invoice', 'Packing List', 'BL', 'Espelho', 'Outros'] as const;
+const PROCESS_FOLDER_PREFIXES = ['', 'Processo Nº ', 'Processo N° ', 'Processo No '] as const;
 
 function escapeDriveQuery(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -162,10 +163,39 @@ export const googleDriveService = {
         q: `'${escapeDriveQuery(parentId)}' in parents and name = '${escapeDriveQuery(folderName)}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
         fields: 'files(id, name)',
         pageSize: 1,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
       }),
       `findFolder(${folderName})`,
     );
     return response.data.files?.[0]?.id ?? null;
+  },
+
+  async listChildFolders(parentId: string): Promise<Array<{ id: string; name: string }>> {
+    const drive = getDriveClient();
+    const folders: Array<{ id: string; name: string }> = [];
+    let pageToken: string | undefined;
+
+    do {
+      const response = await withTimeout(
+        drive.files.list({
+          q: `'${escapeDriveQuery(parentId)}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+          fields: 'nextPageToken, files(id, name)',
+          pageSize: 100,
+          pageToken,
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true,
+        }),
+        `listChildFolders(${parentId})`,
+      );
+
+      for (const folder of response.data.files ?? []) {
+        if (folder.id && folder.name) folders.push({ id: folder.id, name: folder.name });
+      }
+      pageToken = response.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return folders;
   },
 
   async ensureFolder(parentId: string, folderName: string): Promise<string> {
@@ -219,7 +249,25 @@ export const googleDriveService = {
     const brandFolderId = await this.findFolder(rootFolderId, brandName);
     if (!brandFolderId) return null;
 
-    return this.findFolder(brandFolderId, processCode);
+    const candidateNames = PROCESS_FOLDER_PREFIXES.map((prefix) => `${prefix}${processCode}`);
+    for (const candidateName of candidateNames) {
+      const directMatch = await this.findFolder(brandFolderId, candidateName);
+      if (directMatch) return directMatch;
+    }
+
+    // Estrutura operacional real observada no Shared Drive:
+    //   <ano>/<Marca>/Importado/Processo Nº <codigo>
+    // A busca fica limitada a um nível intermediário da marca para não fazer
+    // varredura recursiva ampla nem aceitar uma pasta homônima fora da raiz.
+    const operationalGroups = await this.listChildFolders(brandFolderId);
+    for (const group of operationalGroups) {
+      for (const candidateName of candidateNames) {
+        const nestedMatch = await this.findFolder(group.id, candidateName);
+        if (nestedMatch) return nestedMatch;
+      }
+    }
+
+    return null;
   },
 
   async uploadToProcessFolder(
@@ -531,6 +579,8 @@ export const googleDriveService = {
             fields: 'nextPageToken, files(id, name, mimeType, size, webViewLink, createdTime)',
             pageSize: 100,
             pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
           }),
           `listProcessFiles(${parentId})`,
         );

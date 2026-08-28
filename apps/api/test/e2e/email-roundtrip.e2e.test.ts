@@ -40,6 +40,7 @@ const originalMailEnv = {
   EMAIL_PROCESSING_STALE_MINUTES: process.env.EMAIL_PROCESSING_STALE_MINUTES,
   GOOGLE_DRIVE_CLIENT_EMAIL: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
   GOOGLE_DRIVE_PRIVATE_KEY: process.env.GOOGLE_DRIVE_PRIVATE_KEY,
+  DOCUMENT_SOURCE: process.env.DOCUMENT_SOURCE,
 };
 
 function restoreMailEnvironment(): void {
@@ -88,6 +89,9 @@ beforeAll(async () => {
     // Vitest happens to export real Google credentials.
     process.env.GOOGLE_DRIVE_CLIENT_EMAIL = '';
     process.env.GOOGLE_DRIVE_PRIVATE_KEY = '';
+    // This suite deliberately verifies the historical e-mail path. Production
+    // defaults to Drive-only and exercises that gate in documents.e2e.
+    process.env.DOCUMENT_SOURCE = 'email';
   } catch (err) {
     skipReason = handleE2ESetupFailure(err);
   }

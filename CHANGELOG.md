@@ -5,10 +5,77 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-08-28 - Auditoria completa de UX/UI
+
+### Added
+
+- Cobertura unitária do menu móvel e do contrato compartilhado de foco dos
+  modais.
+- Relatório rastreável da revisão em
+  `docs/STATUS-2026-08-28-UX-UI-AUDITORIA-COMPLETA.md`.
+
+### Changed
+
+- Menu móvel, modais e seletor de tema passam a conter e restaurar foco,
+  responder a teclado e impedir interação com conteúdo de fundo.
+- Dashboard SLA, filtros, accordions, estados de carregamento/erro/vazio,
+  botões e campos de formulário passam a expor semântica acessível consistente.
+- Foco visível, tooltips por teclado, alvos de toque e formulários mobile foram
+  normalizados em toda a aplicação.
+- A descoberta read-only das pastas de processo passa a reconhecer a estrutura
+  real do Shared Drive `<ano>/<Marca>/Importado/Processo Nº <código>` e a usar
+  os parâmetros de compatibilidade de Shared Drives.
+- A leitura do Follow Up passa a usar a aba configurável e explícita
+  `GOOGLE_SHEETS_FOLLOW_UP_TAB=Processos`; depender da primeira aba selecionava
+  uma grade auxiliar e bloqueava os processos reais.
+- A rotina oficial de deploy passa a aplicar também a migration aditiva `0026`;
+  antes ela terminava em `0025`, embora a nova coluna já fosse exigida pelo
+  código.
+
+### Security
+
+- O SOPS de produção recebeu a referência oficial do Follow Up, validada com a
+  conta de serviço. A fonte documental permanece temporariamente em `email`
+  porque a pasta operacional do Shared Drive ainda não está compartilhada com
+  essa conta; isso evita ativar um modo Drive-only indisponível.
+
+## [Unreleased] - 2026-08-28 - Contrato Follow Up e Drive fail-closed
+
+### Added
+
+- Linhagem explícita de entrada documental em `documents.ingestion_source`,
+  migration `0026`, endpoint autenticado `GET /api/documents/source-policy` e
+  origem Drive visível na lista de documentos.
+- Contrato operacional versionado em
+  `docs/operations/document-intake-contract-2026-08-28.md`.
+
+### Changed
+
+- `DOCUMENT_SOURCE` passa a usar `drive` por padrão. Upload manual é bloqueado
+  no servidor antes do Multer e ocultado na interface durante a fase Drive-only.
+- Follow Up deixa de degradar silenciosamente para regex/IA quando a planilha
+  não está configurada ou não pode ser lida. Sem snapshot válido, vínculo,
+  criação por e-mail e varredura do Drive falham fechados.
+- A varredura do Drive ignora processos fora da lista exata do Follow Up.
+- Docker Compose, SOPS de exemplo e `.env.example` passam as seis variáveis do
+  contrato para o contêiner; anteriormente defini-las no host não tinha efeito.
+
+### Fixed
+
+- Anexos de Drive, e-mail e upload manual passam a registrar procedência sem
+  inferir a origem por nome de arquivo ou cópia de backup no Drive.
+- A varredura automática do Drive agora valida a assinatura real do arquivo
+  com a mesma política do upload multipart e rejeita conteúdo renomeado antes
+  de gravá-lo ou enviá-lo ao extrator.
+
 ## [Unreleased] - 2026-08-26 - Revisão página a página
 
 ### Added
 
+- Checklist compartilhado e auditável do Draft BL, com usuário/data por item,
+  reabertura append-only e rotas autenticadas documentadas na OpenAPI.
+- Cobertura API e React para persistência, autoria e reabertura dos aceites do
+  Draft BL.
 - Backfill idempotente de linhagem Gmail por SHA-256 único, com dry-run,
   bloqueio de colisão/conflito de processo, lock transacional e evidência
   sanitizada.
@@ -43,6 +110,10 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Aceites do Draft BL deixaram de depender de `localStorage`; erros de
+  persistência agora ficam visíveis e o estado é consistente entre usuários.
+- Teste assíncrono do detalhe de certificação passou a aguardar a resposta Linx
+  antes de verificar os códigos de propriedade, eliminando flutuação na suíte.
 - `audit-process-completeness.mjs` aceita o limite padrão infinito e pode
   avaliar os 117 processos sem exigir `--limit` artificial.
 
@@ -89,6 +160,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Verification
 
+- Auditoria de 28/08: API 994 testes aprovados e 1 ignorado; web 141/141;
+  Cert-API 523/523; Playwright 82/82; formatter, lint, typecheck, build, Ruff,
+  audit npm sem vulnerabilidades e `git diff --check` aprovados.
 - Release `72d19a4` implantado com backup/snapshot/health verdes. Gmail leu
   350 mensagens/346 anexos; 12 vínculos exatos foram gravados e auditados.
 - Envio SMTP real para a caixa operacional foi aceito sem rejeição e encontrado

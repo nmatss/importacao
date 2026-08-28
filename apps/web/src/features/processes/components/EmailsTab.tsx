@@ -114,6 +114,8 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
               >
                 <button
                   type="button"
+                  aria-expanded={isExpanded}
+                  aria-controls={`email-log-details-${log.id}`}
                   onClick={() => setExpandedId(isExpanded ? null : log.id)}
                   className="w-full text-left"
                 >
@@ -196,7 +198,10 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                 )}
 
                 {isExpanded && (
-                  <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+                  <div
+                    id={`email-log-details-${log.id}`}
+                    className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700"
+                  >
                     <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
                       <MailOpen className="h-3.5 w-3.5" />
                       Corpo do e-mail

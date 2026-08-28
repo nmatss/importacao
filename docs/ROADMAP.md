@@ -2,9 +2,17 @@
 
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
-Ultima atualizacao: 2026-08-26
+Ultima atualizacao: 2026-08-28
 
 ## P0 - Operacao E Confiabilidade
+
+- Concluir o rollout Drive-only: Follow Up já está cadastrado e legível; falta
+  compartilhar a pasta operacional de 2026 com a conta de serviço, cadastrar a
+  raiz no SOPS e exigir `health/integrations` + smoke sem avisos antes de trocar
+  o override temporário `DOCUMENT_SOURCE=email` para `drive`.
+- Homologar Invoice, Packing List, BL e XLSX de Espelho vindos exclusivamente da
+  pasta de um processo listado no Follow Up; provar também os negativos de
+  código de item, referência incompleta e upload manual 409.
 
 - Executar o plano aprovado
   `docs/operations/backfill-plan-2026-08-26-completeness.yaml`: backup/restore
@@ -47,9 +55,9 @@ Ultima atualizacao: 2026-08-26
 
 ## P1 - UX Operacional
 
-- Consolidar aceite do checklist e aceite do comparativo.
-- Decidir se o checklist de Draft BL vira entidade auditavel ou permanece como
-  anotacao local.
+- Avaliar uma visão unificada entre o checklist auditável do Draft BL e os
+  aceites do comparativo; ambos já persistem autoria, mas usam fontes adequadas
+  a seus contratos (`process_events` e `comparison_acceptances`).
 - Migrar Settings, Communications e CertCadastro para validacao de formulario
   completa com erro por campo e cobertura de teste.
 - Criar padrao mobile para tabelas largas e kanban operacional.

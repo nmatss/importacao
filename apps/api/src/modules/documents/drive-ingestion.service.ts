@@ -8,7 +8,21 @@ import { googleDriveService } from '../integrations/google-drive.service.js';
 import { classifyDocument } from '../email-ingestion/classify-document.js';
 import { UPLOAD_DIR } from '../../shared/config/paths.js';
 import { logger } from '../../shared/utils/logger.js';
+import { isFileBufferTypeCompatible } from '../../shared/middleware/upload.js';
 import { documentService } from './service.js';
+import {
+  getFollowUpReferences,
+  getReferenceSource,
+  normalizeReference,
+} from '../follow-up/reference-registry.js';
+import { isDriveIngestionEnabled } from './source-policy.js';
+export {
+  getDocumentSource,
+  getDocumentSourcePolicy,
+  isDriveIngestionEnabled,
+  isEmailIngestionEnabled,
+  isManualDocumentUploadEnabled,
+} from './source-policy.js';
 
 /**
  * Ingest the documents a process has in ITS OWN Drive folder.
@@ -19,27 +33,10 @@ import { documentService } from './service.js';
  * (ODETT-STATUS item 6); isto inverte a fonte sem apagar a antiga.
  *
  * DOCUMENT_SOURCE decide quem alimenta os processos:
- *   email (default) — comportamento atual, este job nao roda
- *   drive           — so a pasta do processo no Drive
+ *   email           — comportamento historico, este job nao roda
+ *   drive (default) — so a pasta do processo no Drive
  *   both            — as duas fontes
  */
-
-export type DocumentSource = 'email' | 'drive' | 'both';
-
-export function getDocumentSource(): DocumentSource {
-  const raw = (process.env.DOCUMENT_SOURCE || 'email').toLowerCase();
-  return raw === 'drive' || raw === 'both' ? raw : 'email';
-}
-
-export function isDriveIngestionEnabled(): boolean {
-  const source = getDocumentSource();
-  return source === 'drive' || source === 'both';
-}
-
-export function isEmailIngestionEnabled(): boolean {
-  const source = getDocumentSource();
-  return source === 'email' || source === 'both';
-}
 
 const DEFAULT_MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -161,6 +158,10 @@ export async function ingestProcessFromDrive(process: {
     let filePath: string | null = null;
     try {
       const buffer = await googleDriveService.downloadFileBuffer(fileId);
+      const declaredMime = file.mimeType ?? 'application/octet-stream';
+      if (!(await isFileBufferTypeCompatible(name, declaredMime, buffer))) {
+        throw new Error(`Drive file content does not match its declared type: ${name}`);
+      }
       await fs.mkdir(UPLOAD_DIR, { recursive: true });
       const safeName = `${Date.now()}-${randomUUID()}-${name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       filePath = path.join(UPLOAD_DIR, safeName);
@@ -176,11 +177,14 @@ export async function ingestProcessFromDrive(process: {
       const fakeFile = {
         originalname: name,
         path: filePath,
-        mimetype: file.mimeType ?? 'application/octet-stream',
+        mimetype: declaredMime,
         size: buffer.length,
       } as Express.Multer.File;
 
-      await documentService.upload(process.id, docType, fakeFile, null, { driveFileId: fileId });
+      await documentService.upload(process.id, docType, fakeFile, null, {
+        driveFileId: fileId,
+        ingestionSource: 'drive',
+      });
       result.imported += 1;
       logger.info(
         { processCode: process.processCode, name, docType, fileId },
@@ -229,6 +233,17 @@ export async function ingestAllProcessesFromDrive(): Promise<DriveIngestionResul
     return [];
   }
 
+  // The same Follow Up allow-list that governs process creation also governs
+  // which process folders may feed documents. When it cannot be established,
+  // importing nothing is safer and visible; falling back would re-authorize
+  // stale/item-code processes.
+  const referenceSource = getReferenceSource();
+  const followUp = referenceSource === 'follow_up' ? await getFollowUpReferences() : null;
+  if (referenceSource === 'follow_up' && !followUp) {
+    logger.error('Follow Up allow-list unavailable — Drive ingestion sweep blocked');
+    return [];
+  }
+
   sweepRunning = true;
   try {
     const processes = await db
@@ -243,6 +258,17 @@ export async function ingestAllProcessesFromDrive(): Promise<DriveIngestionResul
 
     const results: DriveIngestionResult[] = [];
     for (const process of processes) {
+      if (followUp && !followUp.byNormalized.has(normalizeReference(process.processCode))) {
+        results.push({
+          processId: process.id,
+          processCode: process.processCode,
+          imported: 0,
+          skipped: 0,
+          failed: 0,
+          skippedReason: 'process not listed in Follow Up',
+        });
+        continue;
+      }
       try {
         results.push(await ingestProcessFromDrive(process));
       } catch (err) {

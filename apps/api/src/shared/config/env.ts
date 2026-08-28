@@ -45,6 +45,7 @@ const envSchema = z
     GOOGLE_DRIVE_CLIENT_EMAIL: z.string().optional(),
     GOOGLE_DRIVE_PRIVATE_KEY: z.string().optional(),
     GOOGLE_SHEETS_FOLLOW_UP_ID: z.string().optional(),
+    GOOGLE_SHEETS_FOLLOW_UP_TAB: z.string().min(1).default('Processos'),
 
     // Origem da verdade das referencias de processo. 'follow_up' (default)
     // aceita apenas codigos declarados na coluna A da planilha Follow Up;
@@ -53,7 +54,7 @@ const envSchema = z
 
     // De onde vem os documentos de um processo. 'drive' le apenas a pasta do
     // processo no Google Drive; 'email' e o comportamento historico.
-    DOCUMENT_SOURCE: z.enum(['email', 'drive', 'both']).default('email'),
+    DOCUMENT_SOURCE: z.enum(['email', 'drive', 'both']).default('drive'),
     DRIVE_INGESTION_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
     FOLLOW_UP_REFERENCE_TTL_MS: z.coerce.number().int().positive().optional(),
     FOLLOW_UP_AUTO_CREATE: z.enum(['0', '1']).default('1'),

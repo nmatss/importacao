@@ -11,6 +11,7 @@ import {
 } from '@/shared/lib/cert-api-client';
 import { cronToHuman, formatDateTime } from '@/shared/lib/utils';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
+import { ModalPortal } from '@/shared/components/ModalPortal';
 import {
   CalendarClock,
   Plus,
@@ -773,236 +774,244 @@ export default function CertAgendamentosPage() {
 
       {/* Create/Edit Modal */}
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => {
-              setShowForm(false);
-              resetForm();
-            }}
-          />
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="agendamento-modal-title"
-            className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 dark:border-slate-700/60 w-full max-w-md max-h-[90vh] overflow-y-auto"
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-700">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
-                  {editingId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                </div>
-                <h3
-                  id="agendamento-modal-title"
-                  className="text-base font-bold text-slate-900 dark:text-slate-100"
-                >
-                  {editingId ? 'Editar Agendamento' : 'Novo Agendamento'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  resetForm();
-                }}
-                className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 transition-colors"
-                aria-label="Fechar modal"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              {/* Name */}
-              <div>
-                <label
-                  htmlFor="schedule-name"
-                  className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-                >
-                  Nome
-                </label>
-                <input
-                  id="schedule-name"
-                  type="text"
-                  value={formName}
-                  onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Validação diária Imaginarium"
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                />
-              </div>
-
-              {/* Brand */}
-              <div>
-                <label
-                  htmlFor="schedule-brand"
-                  className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-                >
-                  Marca
-                </label>
-                <select
-                  id="schedule-brand"
-                  value={formBrand}
-                  onChange={(e) => setFormBrand(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                >
-                  {BRAND_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Frequency */}
-              <div>
-                <label
-                  htmlFor="schedule-frequency"
-                  className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-                >
-                  Frequência
-                </label>
-                <select
-                  id="schedule-frequency"
-                  value={formPreset}
-                  onChange={(e) => setFormPreset(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                >
-                  {FREQUENCY_PRESETS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Time (for non-custom presets) */}
-              {formPreset !== 'custom' && (
-                <div className="flex gap-3">
-                  <div className="flex-1">
-                    <label
-                      htmlFor="schedule-hour"
-                      className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-                    >
-                      Hora
-                    </label>
-                    <input
-                      id="schedule-hour"
-                      type="number"
-                      min={0}
-                      max={23}
-                      value={formHour}
-                      onChange={(e) => setFormHour(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
+        <ModalPortal
+          onEscape={() => {
+            setShowForm(false);
+            resetForm();
+          }}
+        >
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => {
+                setShowForm(false);
+                resetForm();
+              }}
+            />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="agendamento-modal-title"
+              className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 dark:border-slate-700/60 w-full max-w-md max-h-[90vh] overflow-y-auto"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-700">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
+                    {editingId ? <Pencil className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   </div>
-                  <div className="flex-1">
-                    <label
-                      htmlFor="schedule-minute"
-                      className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
-                    >
-                      Minuto
-                    </label>
-                    <input
-                      id="schedule-minute"
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={formMinute}
-                      onChange={(e) => setFormMinute(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Custom cron */}
-              {formPreset === 'custom' && (
-                <div>
-                  <label
-                    htmlFor="schedule-cron"
-                    className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                  <h3
+                    id="agendamento-modal-title"
+                    className="text-base font-bold text-slate-900 dark:text-slate-100"
                   >
-                    Expressão Cron
-                  </label>
-                  <input
-                    id="schedule-cron"
-                    type="text"
-                    value={formCustomCron}
-                    onChange={(e) => setFormCustomCron(e.target.value)}
-                    placeholder="0 8 * * 1-5"
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-mono"
-                  />
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    Formato: minuto hora dia mês dia_semana -- Ex: 0 8 * * 1-5 = dias úteis às 08:00
-                  </p>
+                    {editingId ? 'Editar Agendamento' : 'Novo Agendamento'}
+                  </h3>
                 </div>
-              )}
-
-              {/* Enabled toggle */}
-              <div className="flex items-center justify-between py-1">
-                <div>
-                  <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                    Status
-                  </span>
-                  <p className="text-xs text-slate-400 mt-0.5">
-                    {formEnabled
-                      ? 'O agendamento será executado automaticamente'
-                      : 'O agendamento está pausado'}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={formEnabled}
-                  aria-label={formEnabled ? 'Desativar agendamento' : 'Ativar agendamento'}
-                  onClick={() => setFormEnabled(!formEnabled)}
-                  className={`relative w-11 h-6 rounded-full transition-all duration-200 ${
-                    formEnabled
-                      ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-inner'
-                      : 'bg-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white dark:bg-slate-800 shadow-sm transition-all duration-200 ${
-                      formEnabled ? 'left-[22px]' : 'left-0.5'
-                    }`}
-                  />
-                </button>
-              </div>
-
-              {/* Error */}
-              {formError && (
-                <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-danger-50 border border-danger-100">
-                  <p className="text-sm text-danger-700 font-medium">{formError}</p>
-                </div>
-              )}
-
-              {/* Modal Footer */}
-              <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
                 <button
                   type="button"
                   onClick={() => {
                     setShowForm(false);
                     resetForm();
                   }}
-                  className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
+                  className="flex items-center justify-center w-8 h-8 rounded-xl text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400 transition-colors"
+                  aria-label="Fechar modal"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-sm disabled:opacity-50 active:scale-[0.98] transition-all"
-                >
-                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                  {editingId ? 'Salvar Alterações' : 'Criar Agendamento'}
+                  <X className="w-4 h-4" />
                 </button>
               </div>
-            </form>
+
+              {/* Modal Body */}
+              <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                {/* Name */}
+                <div>
+                  <label
+                    htmlFor="schedule-name"
+                    className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                  >
+                    Nome
+                  </label>
+                  <input
+                    id="schedule-name"
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    placeholder="Ex: Validação diária Imaginarium"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  />
+                </div>
+
+                {/* Brand */}
+                <div>
+                  <label
+                    htmlFor="schedule-brand"
+                    className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                  >
+                    Marca
+                  </label>
+                  <select
+                    id="schedule-brand"
+                    value={formBrand}
+                    onChange={(e) => setFormBrand(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  >
+                    {BRAND_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Frequency */}
+                <div>
+                  <label
+                    htmlFor="schedule-frequency"
+                    className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                  >
+                    Frequência
+                  </label>
+                  <select
+                    id="schedule-frequency"
+                    value={formPreset}
+                    onChange={(e) => setFormPreset(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                  >
+                    {FREQUENCY_PRESETS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Time (for non-custom presets) */}
+                {formPreset !== 'custom' && (
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label
+                        htmlFor="schedule-hour"
+                        className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                      >
+                        Hora
+                      </label>
+                      <input
+                        id="schedule-hour"
+                        type="number"
+                        min={0}
+                        max={23}
+                        value={formHour}
+                        onChange={(e) => setFormHour(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label
+                        htmlFor="schedule-minute"
+                        className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                      >
+                        Minuto
+                      </label>
+                      <input
+                        id="schedule-minute"
+                        type="number"
+                        min={0}
+                        max={59}
+                        value={formMinute}
+                        onChange={(e) => setFormMinute(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Custom cron */}
+                {formPreset === 'custom' && (
+                  <div>
+                    <label
+                      htmlFor="schedule-cron"
+                      className="block text-sm font-semibold text-slate-700 dark:text-slate-300 mb-1.5"
+                    >
+                      Expressão Cron
+                    </label>
+                    <input
+                      id="schedule-cron"
+                      type="text"
+                      value={formCustomCron}
+                      onChange={(e) => setFormCustomCron(e.target.value)}
+                      placeholder="0 8 * * 1-5"
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-mono"
+                    />
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Formato: minuto hora dia mês dia_semana -- Ex: 0 8 * * 1-5 = dias úteis às
+                      08:00
+                    </p>
+                  </div>
+                )}
+
+                {/* Enabled toggle */}
+                <div className="flex items-center justify-between py-1">
+                  <div>
+                    <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                      Status
+                    </span>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {formEnabled
+                        ? 'O agendamento será executado automaticamente'
+                        : 'O agendamento está pausado'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={formEnabled}
+                    aria-label={formEnabled ? 'Desativar agendamento' : 'Ativar agendamento'}
+                    onClick={() => setFormEnabled(!formEnabled)}
+                    className={`relative w-11 h-6 rounded-full transition-all duration-200 ${
+                      formEnabled
+                        ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 shadow-inner'
+                        : 'bg-slate-300'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 w-5 h-5 rounded-full bg-white dark:bg-slate-800 shadow-sm transition-all duration-200 ${
+                        formEnabled ? 'left-[22px]' : 'left-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Error */}
+                {formError && (
+                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-danger-50 border border-danger-100">
+                    <p className="text-sm text-danger-700 font-medium">{formError}</p>
+                  </div>
+                )}
+
+                {/* Modal Footer */}
+                <div className="flex items-center gap-3 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowForm(false);
+                      resetForm();
+                    }}
+                    className="flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 shadow-sm disabled:opacity-50 active:scale-[0.98] transition-all"
+                  >
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editingId ? 'Salvar Alterações' : 'Criar Agendamento'}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );

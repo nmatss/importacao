@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NextFunction, Request, Response } from 'express';
 
 const mocks = vi.hoisted(() => ({
+  fileTypeFromBuffer: vi.fn(),
   fileTypeFromFile: vi.fn(),
   unlink: vi.fn(),
 }));
 
 vi.mock('file-type', () => ({
+  fileTypeFromBuffer: mocks.fileTypeFromBuffer,
   fileTypeFromFile: mocks.fileTypeFromFile,
 }));
 
@@ -14,7 +16,7 @@ vi.mock('node:fs/promises', () => ({
   default: { unlink: mocks.unlink },
 }));
 
-const { validateMagicBytes } = await import('../upload.js');
+const { isFileBufferTypeCompatible, validateMagicBytes } = await import('../upload.js');
 
 function file(overrides: Partial<Express.Multer.File>): Express.Multer.File {
   return {
@@ -98,5 +100,30 @@ describe('validateMagicBytes', () => {
 
     expect(mocks.fileTypeFromFile).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledOnce();
+  });
+});
+
+describe('isFileBufferTypeCompatible', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('accepts a PDF buffer whose signature matches the declared type', async () => {
+    mocks.fileTypeFromBuffer.mockResolvedValueOnce({ mime: 'application/pdf', ext: 'pdf' });
+
+    await expect(
+      isFileBufferTypeCompatible('invoice.pdf', 'application/pdf', Buffer.from('%PDF-1.4')),
+    ).resolves.toBe(true);
+  });
+
+  it('rejects a renamed executable downloaded from an external source', async () => {
+    mocks.fileTypeFromBuffer.mockResolvedValueOnce({
+      mime: 'application/x-msdownload',
+      ext: 'exe',
+    });
+
+    await expect(
+      isFileBufferTypeCompatible('invoice.pdf', 'application/pdf', Buffer.from('MZ')),
+    ).resolves.toBe(false);
   });
 });

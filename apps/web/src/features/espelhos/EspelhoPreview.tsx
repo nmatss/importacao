@@ -225,6 +225,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
     if (isEditing) {
       return (
         <input
+          aria-label={`Editar ${field}`}
           autoFocus
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}

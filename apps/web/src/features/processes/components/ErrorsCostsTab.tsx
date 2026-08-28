@@ -127,6 +127,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
         className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200/70 bg-white p-4 dark:border-slate-700/70 dark:bg-slate-800 lg:grid-cols-[160px_1fr_110px_140px_90px_auto]"
       >
         <select
+          aria-label="Categoria do registro"
           value={form.recordKind}
           onChange={(event) =>
             setForm((prev) => ({
@@ -143,6 +144,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
           <option value="extra_cost">Custo extra</option>
         </select>
         <input
+          aria-label="Tipo de erro ou custo"
           value={form.recordType}
           onChange={(event) => setForm((prev) => ({ ...prev, recordType: event.target.value }))}
           placeholder="Tipo"
@@ -156,6 +158,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
         </datalist>
         <input
           type="number"
+          aria-label="Quantidade do erro documental"
           min={0}
           value={form.quantity}
           onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))}
@@ -164,6 +167,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
         />
         <input
+          aria-label="Valor do custo extra"
           value={form.amount}
           onChange={(event) => setForm((prev) => ({ ...prev, amount: event.target.value }))}
           placeholder="Valor"
@@ -171,6 +175,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
           className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 disabled:bg-slate-50 disabled:text-slate-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
         />
         <input
+          aria-label="Moeda do custo extra"
           value={form.currency}
           onChange={(event) => setForm((prev) => ({ ...prev, currency: event.target.value }))}
           placeholder="Moeda"
@@ -185,6 +190,7 @@ export function ErrorsCostsTab({ processId }: { processId: string }) {
           Salvar
         </button>
         <textarea
+          aria-label="Observação do registro"
           value={form.notes}
           onChange={(event) => setForm((prev) => ({ ...prev, notes: event.target.value }))}
           placeholder="Observacao"

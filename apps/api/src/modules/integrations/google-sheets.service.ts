@@ -4,6 +4,11 @@ import { logger } from '../../shared/utils/logger.js';
 
 const SHEETS_API_TIMEOUT_MS = 30_000;
 
+function followUpRange(range: string): string {
+  const tab = process.env.GOOGLE_SHEETS_FOLLOW_UP_TAB?.trim() || 'Processos';
+  return `'${tab.replace(/'/g, "''")}'!${range}`;
+}
+
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(
@@ -62,7 +67,7 @@ export const googleSheetsService = {
       const response = await withTimeout(
         sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: 'A:A',
+          range: followUpRange('A:A'),
         }),
         `findProcessRow(${processCode})`,
       );
@@ -109,7 +114,7 @@ export const googleSheetsService = {
       await withTimeout(
         sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `${column}${row}`,
+          range: followUpRange(`${column}${row}`),
           valueInputOption: 'USER_ENTERED',
           requestBody: {
             values: [[formattedDate]],
@@ -146,7 +151,7 @@ export const googleSheetsService = {
       const response = await withTimeout(
         sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: `A${row}:Z${row}`,
+          range: followUpRange(`A${row}:Z${row}`),
         }),
         `readProcessRow(${processCode})`,
       );
@@ -158,7 +163,7 @@ export const googleSheetsService = {
       const headerResponse = await withTimeout(
         sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: 'A1:Z1',
+          range: followUpRange('A1:Z1'),
         }),
         `readProcessRow.headers(${processCode})`,
       );
@@ -190,7 +195,7 @@ export const googleSheetsService = {
       const response = await withTimeout(
         sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: 'A:Z',
+          range: followUpRange('A:Z'),
         }),
         'readAllProcessRows',
       );
@@ -231,7 +236,7 @@ export const googleSheetsService = {
       const response = await withTimeout(
         sheets.spreadsheets.values.get({
           spreadsheetId,
-          range: 'A1:Z1',
+          range: followUpRange('A1:Z1'),
         }),
         'getSheetHeaders',
       );
@@ -265,7 +270,7 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     const response = await withTimeout(
-      sheets.spreadsheets.values.get({ spreadsheetId, range: 'A2:A' }),
+      sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A2:A') }),
       'readProcessReferences',
     );
 

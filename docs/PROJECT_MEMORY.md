@@ -1,6 +1,6 @@
 # Project Memory - Importacao
 
-Ultima atualizacao: 2026-08-26
+Ultima atualizacao: 2026-08-28
 
 ## Objetivo
 
@@ -16,6 +16,51 @@ Evidencias:
 - `docs/REVISAO-IMPORTACAO-WORKFLOW-2026-06-17.md` define o fluxo operacional de importacao.
 
 Grau de confianca: alto.
+
+## Contratos Duráveis De UX/UI — 2026-08-28
+
+- Toda rota funcional deve permanecer coberta pelo smoke desktop/mobile, com
+  falha para exceção de página, erro de console e overflow horizontal global.
+- Navegação móvel fechada deve permanecer `inert` e fora da árvore de
+  acessibilidade; aberta, deve bloquear scroll, conter foco, aceitar `Escape` e
+  restaurar foco ao acionador.
+- Novos modais devem reutilizar `ModalPortal`, que centraliza foco inicial,
+  contenção de `Tab`, `Escape`, scroll lock e restauração de foco.
+- Controles de ícone precisam de nome acessível; todo campo deve ter `label`,
+  `aria-label` ou `aria-labelledby` válido.
+- Accordions devem relacionar controle e painel com `aria-expanded` e
+  `aria-controls`; abas devem manter semântica `tablist`/`tab`/`tabpanel`.
+- Alvos interativos em ponteiro coarse mantêm mínimo de 44 px e formulários
+  mobile usam fonte de 16 px para evitar zoom automático.
+
+Evidência:
+
+- `docs/STATUS-2026-08-28-UX-UI-AUDITORIA-COMPLETA.md`
+
+Grau de confianca: alto para contratos estáticos e suites automatizadas; médio
+para densidade extrema de dados reais, que ainda depende de homologação visual.
+
+## Gate Durável Do Drive Operacional — 2026-08-28
+
+- A pasta real do processo não segue o layout legado `raiz/Marca/código`; em
+  2026 foi observada como `<ano>/<Marca>/Importado/Processo Nº <código>`.
+- A busca de ingestão deve permanecer read-only, limitada à raiz configurada e
+  compatível com Shared Drives (`supportsAllDrives` e
+  `includeItemsFromAllDrives`).
+- ID válido não prova acesso: o rollout Drive-only exige `testRootAccess()` com
+  a mesma conta de serviço usada pela API.
+- O Follow Up oficial está acessível à conta de serviço. A aba deve ser sempre
+  explícita (`GOOGLE_SHEETS_FOLLOW_UP_TAB=Processos`): a seleção implícita caiu
+  em uma aba auxiliar com 19 valores, enquanto `Processos` contém os pilotos e
+  486 códigos com formato de processo. A pasta operacional ainda não está
+  compartilhada.
+- Enquanto o acesso ao Drive não estiver verde, produção preserva
+  `DOCUMENT_SOURCE=email` explicitamente no SOPS; não se deve remover esse
+  override apenas porque o default do código é `drive`.
+- Toda migration nova deve ser adicionada a
+  `scripts/apply-pending-migrations.sh`; a `0026` foi incluída antes do release.
+
+Grau de confiança: alto para acesso e estrutura observados em 28/08/2026.
 
 ## Limpeza Historica E Replay De 2026-08-17
 
@@ -584,3 +629,45 @@ estabelecido para acurácia de negócio até concluir a execução remota e o ac
   reportando somente contagens.
 
 Evidência: `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`.
+
+## Aceite Auditável Do Draft BL — Decisão De 2026-08-28
+
+- Checklist do Draft BL não é estado local de interface: aceite/reabertura é
+  estado operacional compartilhado e precisa preservar usuário e data.
+- A fonte passa a ser a sequência append-only de eventos
+  `draft_bl_checklist_changed` em `process_events`; o estado atual é a última
+  ocorrência de cada chave por `created_at` e `id`.
+- As rotas são autenticadas, o payload usa uma enumeração fechada de chaves e
+  processos travados não aceitam alteração.
+- Desmarcar preserva o evento histórico, mas o estado atual retorna autoria e
+  timestamp nulos; marcar retorna o operador atual.
+- Não foi criada migration porque a trilha de eventos existente atende o
+  contrato sem duplicar fonte de verdade.
+
+Evidência: `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.
+
+Grau de confiança: alto para o contrato e os testes locais; implantação em
+produção ainda não executada.
+
+## Fontes Operacionais De Processo E Documento — Decisão De 2026-08-28
+
+- Durante a fase inicial, Follow Up é allow-list obrigatória de referências e a
+  pasta do processo no Drive é a única entrada documental por padrão.
+- Dependência ausente/indisponível sem cache falha fechado. Nunca retornar
+  automaticamente a regex/IA, e-mail ou upload manual.
+- Match de referência é exato após normalização e preserva sufixos. A varredura
+  não ingere processos fora do snapshot.
+- Origem documental é dado persistido (`ingestion_source`), não inferência por
+  nome ou `driveFileId`; registros anteriores ficam `legacy`.
+- Todo arquivo que cruza a fronteira do Drive deve usar a mesma validação de
+  assinatura real do multipart antes de persistência ou extração.
+- `isProcessed`, confiança, cobertura e acurácia são conceitos distintos.
+  Acurácia 100% exige ground truth e aceite humano.
+- Compose precisa transmitir as variáveis ao contêiner; configuração presente
+  apenas no host não é configuração efetiva.
+- O E2E deve descobrir migrations SQL pós-journal automaticamente para não
+  omitir a próxima migration aditiva.
+
+Evidência:
+`docs/operations/document-intake-contract-2026-08-28.md` e
+`docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.

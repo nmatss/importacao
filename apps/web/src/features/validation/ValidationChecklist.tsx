@@ -766,6 +766,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                             </span>
                           </label>
                           <textarea
+                            aria-label={`Justificativa do aceite manual para ${check.checkName}`}
                             value={resolveNote}
                             onChange={(e) => setResolveNote(e.target.value)}
                             rows={2}
@@ -1042,13 +1043,17 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
               {/* Signature Selector */}
               {emailSignatures && emailSignatures.length > 0 && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                  <label
+                    htmlFor="validation-email-signature"
+                    className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5"
+                  >
                     <span className="inline-flex items-center gap-1.5">
                       <FileSignature className="h-3.5 w-3.5" />
                       Assinatura de E-mail
                     </span>
                   </label>
                   <select
+                    id="validation-email-signature"
                     value={selectedSignatureId ?? ''}
                     onChange={(e) =>
                       setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)

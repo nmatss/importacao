@@ -41,21 +41,25 @@ function validChatWebhook() {
   }
 }
 
-const documentSource = process.env.DOCUMENT_SOURCE || 'email';
+const documentSource = process.env.DOCUMENT_SOURCE || 'drive';
+const referenceSource = process.env.PROCESS_REFERENCE_SOURCE || 'follow_up';
 const emailIngestionEnabled = process.env.EMAIL_INGESTION_ENABLED === 'true';
 const gmailConfigured =
   configured('GOOGLE_DRIVE_CLIENT_EMAIL') && configured('GOOGLE_DRIVE_PRIVATE_KEY');
 const imapConfigured = configured('IMAP_USER') && configured('IMAP_PASS');
 const smtpConfigured = configured('SMTP_HOST');
 const driveConfigured = gmailConfigured && configured('GOOGLE_DRIVE_ROOT_FOLDER_ID');
+const followUpConfigured = gmailConfigured && configured('GOOGLE_SHEETS_FOLLOW_UP_ID');
 
 result('configuration', true, {
   emailIngestionEnabled,
   documentSource,
+  referenceSource,
   gmailConfigured,
   imapConfigured,
   smtpConfigured,
   driveConfigured,
+  followUpConfigured,
   preConsDriveConfigured: configured('GOOGLE_DRIVE_PRE_CONS_FOLDER_ID'),
   googleChatWebhookValid: validChatWebhook(),
 });
@@ -73,6 +77,7 @@ let gmailOk = false;
 let imapOk = false;
 let smtpOk = false;
 let driveOk = false;
+let followUpOk = false;
 
 if (gmailConfigured) {
   const { gmailService } = await importCompiled('modules/email-ingestion/gmail.service.js');
@@ -113,18 +118,42 @@ if (driveConfigured) {
   result('google-drive-root', false, { reason: 'not_configured' });
 }
 
+if (followUpConfigured) {
+  try {
+    const { googleSheetsService } = await importCompiled(
+      'modules/integrations/google-sheets.service.js',
+    );
+    const references = await googleSheetsService.readProcessReferences();
+    followUpOk = references.length > 0;
+    result('follow-up-references', followUpOk, { references: references.length });
+  } catch (error) {
+    result('follow-up-references', false, { code: errorCode(error) });
+  }
+} else {
+  result('follow-up-references', false, { reason: 'not_configured' });
+}
+
 // A webhook do Google Chat só pode ser provado por envio real. O smoke valida
 // apenas o formato para não publicar mensagens durante health checks/deploys.
 result('google-chat', validChatWebhook(), { networkRequestSent: false });
 
 const readingOk = emailIngestionEnabled && (gmailOk || imapOk);
+const emailRequired = documentSource === 'email' || documentSource === 'both';
 const driveRequired = documentSource === 'drive' || documentSource === 'both';
-const operational = readingOk && smtpOk && (!driveRequired || driveOk);
+const followUpRequired = referenceSource !== 'legacy';
+const operational =
+  (!emailRequired || readingOk) &&
+  (!driveRequired || driveOk) &&
+  (!followUpRequired || followUpOk) &&
+  smtpOk;
 result('operational-summary', operational, {
+  emailRequired,
   emailReading: readingOk,
   emailSendingTransport: smtpOk,
   driveRequired,
   driveReady: driveOk,
+  followUpRequired,
+  followUpReady: followUpOk,
 });
 
 // Importing compiled services also imports the shared database pool. A CLI smoke

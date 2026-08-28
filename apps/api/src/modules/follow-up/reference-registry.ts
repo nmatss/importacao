@@ -30,27 +30,11 @@ export interface ReferenceSnapshot {
 let cache: { byNormalized: Map<string, string>; fetchedAt: number } | null = null;
 let inflight: Promise<ReferenceSnapshot | null> | null = null;
 
-let warnedUnconfigured = false;
-
 export function getReferenceSource(): ReferenceSource {
   if (process.env.PROCESS_REFERENCE_SOURCE === 'legacy') return 'legacy';
-
-  // "Not configured" and "configured but unreachable" are different failures
-  // and must not share a behaviour. Without GOOGLE_SHEETS_FOLLOW_UP_ID the
-  // operator simply has not set the feature up, and blocking every process
-  // would be a self-inflicted outage on deploy; we degrade to legacy and say
-  // so. Once the sheet IS configured, an outage fails closed instead — see
-  // fetchSnapshot.
-  if (!googleSheetsService.isConfigured()) {
-    if (!warnedUnconfigured) {
-      warnedUnconfigured = true;
-      logger.warn(
-        'PROCESS_REFERENCE_SOURCE=follow_up mas a planilha Follow Up nao esta configurada (GOOGLE_SHEETS_FOLLOW_UP_ID / credenciais da SA). Mantendo o comportamento legado ate configurar.',
-      );
-    }
-    return 'legacy';
-  }
-
+  // Follow Up is an allow-list, not a best-effort hint. Missing configuration
+  // must fail closed in the readers below; silently returning to regex/AI is
+  // exactly how item codes and truncated references became processes.
   return 'follow_up';
 }
 
@@ -190,5 +174,4 @@ export async function filterCandidatesByFollowUp(codes: string[]): Promise<Candi
 export function __resetFollowUpReferenceCache(): void {
   cache = null;
   inflight = null;
-  warnedUnconfigured = false;
 }

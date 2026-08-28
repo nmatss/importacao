@@ -46,6 +46,13 @@ export const documentTypeEnum = pgEnum('document_type', [
   'other',
 ]);
 
+export const documentIngestionSourceEnum = pgEnum('document_ingestion_source', [
+  'legacy',
+  'manual',
+  'drive',
+  'email',
+]);
+
 export const validationStatusEnum = pgEnum('validation_status', [
   'passed',
   'failed',
@@ -168,6 +175,9 @@ export const documents = pgTable(
     mimeType: varchar('mime_type', { length: 100 }),
     fileSize: integer('file_size'),
     driveFileId: varchar('drive_file_id', { length: 255 }),
+    // Explicit origin avoids guessing from filenames or the presence of a
+    // Drive backup id. `legacy` preserves rows created before this contract.
+    ingestionSource: documentIngestionSourceEnum('ingestion_source').default('legacy').notNull(),
     aiParsedData: jsonb('ai_parsed_data'),
     confidenceScore: numeric('confidence_score', { precision: 5, scale: 4 }),
     isProcessed: boolean('is_processed').default(false),
@@ -182,6 +192,7 @@ export const documents = pgTable(
   (table) => [
     index('documents_process_id_idx').on(table.processId),
     index('documents_process_type_idx').on(table.processId, table.type),
+    index('documents_ingestion_source_idx').on(table.ingestionSource),
     index('documents_extraction_lease_expires_idx').on(table.extractionLeaseExpiresAt),
   ],
 );

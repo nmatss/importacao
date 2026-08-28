@@ -228,12 +228,45 @@ export const openapiSpec = {
         responses: { '200': { description: 'Status updated' } },
       },
     },
+    '/api/processes/{id}/draft-bl-checklist': {
+      get: {
+        tags: ['Processes'],
+        summary: 'Get the audited Draft BL checklist',
+        parameters: [
+          { name: 'id', in: 'path' as const, required: true, schema: { type: 'string' as const } },
+        ],
+        responses: { '200': { description: 'Checklist state by item key' } },
+      },
+      patch: {
+        tags: ['Processes'],
+        summary: 'Validate or reopen one Draft BL checklist item',
+        parameters: [
+          { name: 'id', in: 'path' as const, required: true, schema: { type: 'string' as const } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object' as const,
+                required: ['key', 'checked'],
+                properties: {
+                  key: { type: 'string' as const },
+                  checked: { type: 'boolean' as const },
+                },
+              },
+            },
+          },
+        },
+        responses: { '200': { description: 'Updated checklist item' } },
+      },
+    },
 
     // ─── Documents ───────────────────────────────────────────
     '/api/documents/upload': {
       post: {
         tags: ['Documents'],
-        summary: 'Upload a document',
+        summary: 'Upload a document when the configured source policy permits manual intake',
         requestBody: {
           required: true,
           content: {
@@ -245,7 +278,21 @@ export const openapiSpec = {
             },
           },
         },
-        responses: { '201': { description: 'Document uploaded' } },
+        responses: {
+          '201': { description: 'Document uploaded' },
+          '409': { description: 'Manual upload disabled by the Drive-only source policy' },
+        },
+      },
+    },
+    '/api/documents/source-policy': {
+      get: {
+        tags: ['Documents'],
+        summary: 'Get the active document intake policy',
+        responses: {
+          '200': {
+            description: 'Source, Drive/email ingestion and manual-upload permissions',
+          },
+        },
       },
     },
     '/api/documents/process/{processId}': {
@@ -314,7 +361,7 @@ export const openapiSpec = {
     '/api/documents/{id}/source': {
       get: {
         tags: ['Documents'],
-        summary: 'Get document source file',
+        summary: 'Get document ingestion provenance (email, Drive or manual)',
         parameters: [
           { name: 'id', in: 'path' as const, required: true, schema: { type: 'string' as const } },
         ],

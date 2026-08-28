@@ -221,6 +221,7 @@ export const driveAttachmentsService = {
           stream: undefined as unknown as NodeJS.ReadableStream,
         } as Express.Multer.File,
         userId,
+        { driveFileId, ingestionSource: 'drive' },
       );
 
       logger.info(

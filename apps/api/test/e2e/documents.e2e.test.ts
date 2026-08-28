@@ -51,7 +51,7 @@ describe('Documents E2E', () => {
     expect([200, 404]).toContain(res.status);
   });
 
-  it('POST /api/documents/upload — missing file returns 400', async () => {
+  it('POST /api/documents/upload — Drive-only policy rejects before multipart parsing', async () => {
     if (skipReason) {
       console.warn(`SKIP: ${skipReason}`);
       return;
@@ -62,6 +62,7 @@ describe('Documents E2E', () => {
       .set('Authorization', `Bearer ${authToken}`)
       .send({});
 
-    expect([400, 404, 422]).toContain(res.status);
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Google Drive');
   });
 });

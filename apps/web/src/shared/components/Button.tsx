@@ -62,6 +62,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       // default explícito evita submit acidental dentro de <form>
       type={type ?? 'button'}
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
         'inline-flex items-center justify-center gap-2 rounded-xl font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50',
         size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-5 py-2.5 text-sm',
@@ -70,7 +71,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       )}
       {...rest}
     >
-      {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+      {loading && <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />}
       {children}
     </button>
   );

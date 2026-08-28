@@ -144,7 +144,11 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
             <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Salvar Filtro
             </p>
-            <button type="button" onClick={() => setShowSaveForm(false)}>
+            <button
+              type="button"
+              aria-label="Fechar formulário de filtro salvo"
+              onClick={() => setShowSaveForm(false)}
+            >
               <X className="h-4 w-4 text-slate-400" />
             </button>
           </div>
@@ -154,6 +158,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
             </p>
             <input
               type="text"
+              aria-label="Nome do filtro salvo"
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               placeholder="Nome do filtro..."

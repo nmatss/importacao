@@ -32,6 +32,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ModalPortal } from '@/shared/components/ModalPortal';
 import { cn, formatCurrency } from '@/shared/lib/utils';
 import { getErrorMessage } from '@/shared/utils/errors';
 
@@ -558,183 +559,185 @@ function PaymentDetailDrawer({ paymentId, onClose }: { paymentId: number; onClos
   );
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="sydle-payment-drawer-title"
-    >
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative flex h-full w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-800">
-        <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
-          <div className="min-w-0">
-            <h3
-              id="sydle-payment-drawer-title"
-              className="text-base font-semibold text-slate-900 dark:text-slate-100"
-            >
-              Detalhe da compra / pagamento
-            </h3>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-              {data?.purchaseRef || data?.externalId || `#${paymentId}`}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </header>
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
-          {isLoading ? (
-            <div className="flex justify-center py-12">
-              <LoadingSpinner />
+    <ModalPortal onEscape={onClose}>
+      <div
+        className="fixed inset-0 z-50 flex justify-end"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sydle-payment-drawer-title"
+      >
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative flex h-full w-full max-w-xl flex-col bg-white shadow-2xl dark:bg-slate-800">
+          <header className="flex items-center justify-between border-b border-slate-200 px-5 py-4 dark:border-slate-700">
+            <div className="min-w-0">
+              <h3
+                id="sydle-payment-drawer-title"
+                className="text-base font-semibold text-slate-900 dark:text-slate-100"
+              >
+                Detalhe da compra / pagamento
+              </h3>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                {data?.purchaseRef || data?.externalId || `#${paymentId}`}
+              </p>
             </div>
-          ) : isError || !data ? (
-            <ErrorState message="Falha ao carregar o detalhe da compra." onRetry={refetch} />
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge className={statusClass(data.paymentStatus)}>
-                  {paymentStatusLabels[data.paymentStatus]}
-                </Badge>
-                <Badge className={matchClass(data.matchStatus)}>
-                  {matchLabels[data.matchStatus]}
-                </Badge>
-                {data.logisticStatus && (
-                  <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
-                    {phaseLabel(data.logisticStatus)}
-                  </span>
-                )}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar"
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </header>
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
+            {isLoading ? (
+              <div className="flex justify-center py-12">
+                <LoadingSpinner />
               </div>
+            ) : isError || !data ? (
+              <ErrorState message="Falha ao carregar o detalhe da compra." onRetry={refetch} />
+            ) : (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className={statusClass(data.paymentStatus)}>
+                    {paymentStatusLabels[data.paymentStatus]}
+                  </Badge>
+                  <Badge className={matchClass(data.matchStatus)}>
+                    {matchLabels[data.matchStatus]}
+                  </Badge>
+                  {data.logisticStatus && (
+                    <span className="inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                      {phaseLabel(data.logisticStatus)}
+                    </span>
+                  )}
+                </div>
 
-              <DetailSection title="Compra" icon={FileText}>
-                <DetailRow
-                  label="Processo"
-                  value={
-                    data.processId ? (
-                      <Link
-                        to={`/importacao/processos/${data.processId}`}
-                        className="inline-flex items-center gap-1 text-primary-700 hover:underline dark:text-primary-300"
-                      >
-                        {data.portalProcessCode || data.processCode}
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </Link>
-                    ) : (
-                      data.processCode
-                    )
-                  }
-                />
-                <DetailRow
-                  label="Fase do processo"
-                  value={data.logisticStatus ? phaseLabel(data.logisticStatus) : null}
-                />
-                <DetailRow label="Protocolo SYDLE" value={data.sydleProtocol} />
-                <DetailRow label="Referencia da compra" value={data.purchaseRef} />
-                <DetailRow label="Pedido (PO)" value={data.purchaseOrder} />
-                <DetailRow label="Proforma (PI)" value={data.proformaNumber} />
-                <DetailRow label="Invoice" value={data.invoiceNumber} />
-                <DetailRow label="Fornecedor" value={data.supplierName} />
-                <DetailRow label="Marca" value={data.brand || data.portalBrand} />
-              </DetailSection>
+                <DetailSection title="Compra" icon={FileText}>
+                  <DetailRow
+                    label="Processo"
+                    value={
+                      data.processId ? (
+                        <Link
+                          to={`/importacao/processos/${data.processId}`}
+                          className="inline-flex items-center gap-1 text-primary-700 hover:underline dark:text-primary-300"
+                        >
+                          {data.portalProcessCode || data.processCode}
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Link>
+                      ) : (
+                        data.processCode
+                      )
+                    }
+                  />
+                  <DetailRow
+                    label="Fase do processo"
+                    value={data.logisticStatus ? phaseLabel(data.logisticStatus) : null}
+                  />
+                  <DetailRow label="Protocolo SYDLE" value={data.sydleProtocol} />
+                  <DetailRow label="Referencia da compra" value={data.purchaseRef} />
+                  <DetailRow label="Pedido (PO)" value={data.purchaseOrder} />
+                  <DetailRow label="Proforma (PI)" value={data.proformaNumber} />
+                  <DetailRow label="Invoice" value={data.invoiceNumber} />
+                  <DetailRow label="Fornecedor" value={data.supplierName} />
+                  <DetailRow label="Marca" value={data.brand || data.portalBrand} />
+                </DetailSection>
 
-              <DetailSection title="Pagamento" icon={Banknote}>
-                <DetailRow label="Moeda" value={data.currency} />
-                <DetailRow
-                  label="Valor da compra"
-                  value={money(data.purchaseAmount, data.currency)}
-                />
-                <DetailRow label="Pago" value={money(data.paidAmount, data.currency)} />
-                <DetailRow label="Em aberto" value={money(data.openAmount, data.currency)} />
-                <DetailRow label="Tipo" value={paymentTypeLabels[data.paymentType]} />
-                <DetailRow label="Status" value={paymentStatusLabels[data.paymentStatus]} />
-                <DetailRow label="Vencimento" value={dateLabel(data.dueDate)} />
-                <DetailRow label="Emissão Invoice/PI" value={dateLabel(data.invoiceIssuedDate)} />
-                <DetailRow label="Criação da tarefa" value={dateTimeLabel(data.taskCreatedAt)} />
-                <DetailRow label="Embarque" value={dateLabel(data.shipmentDate)} />
-                <DetailRow
-                  label="Prazo pós-embarque"
-                  value={
-                    data.paymentDeadlineAfterShipment != null
-                      ? `${data.paymentDeadlineAfterShipment} dia(s)`
-                      : null
-                  }
-                />
-                <DetailRow label="Exceção" value={data.exceptionStatus} />
-                <DetailRow label="Motivo da exceção" value={data.exceptionReason} />
-                <DetailRow label="Pago em" value={dateLabel(data.paidAt)} />
-                <DetailRow label="Agendado para" value={dateLabel(data.scheduledAt)} />
-              </DetailSection>
+                <DetailSection title="Pagamento" icon={Banknote}>
+                  <DetailRow label="Moeda" value={data.currency} />
+                  <DetailRow
+                    label="Valor da compra"
+                    value={money(data.purchaseAmount, data.currency)}
+                  />
+                  <DetailRow label="Pago" value={money(data.paidAmount, data.currency)} />
+                  <DetailRow label="Em aberto" value={money(data.openAmount, data.currency)} />
+                  <DetailRow label="Tipo" value={paymentTypeLabels[data.paymentType]} />
+                  <DetailRow label="Status" value={paymentStatusLabels[data.paymentStatus]} />
+                  <DetailRow label="Vencimento" value={dateLabel(data.dueDate)} />
+                  <DetailRow label="Emissão Invoice/PI" value={dateLabel(data.invoiceIssuedDate)} />
+                  <DetailRow label="Criação da tarefa" value={dateTimeLabel(data.taskCreatedAt)} />
+                  <DetailRow label="Embarque" value={dateLabel(data.shipmentDate)} />
+                  <DetailRow
+                    label="Prazo pós-embarque"
+                    value={
+                      data.paymentDeadlineAfterShipment != null
+                        ? `${data.paymentDeadlineAfterShipment} dia(s)`
+                        : null
+                    }
+                  />
+                  <DetailRow label="Exceção" value={data.exceptionStatus} />
+                  <DetailRow label="Motivo da exceção" value={data.exceptionReason} />
+                  <DetailRow label="Pago em" value={dateLabel(data.paidAt)} />
+                  <DetailRow label="Agendado para" value={dateLabel(data.scheduledAt)} />
+                </DetailSection>
 
-              <DetailSection title="Cambio e banco" icon={Landmark}>
-                <DetailRow
-                  label="Taxa de cambio"
-                  value={
-                    data.exchangeRate ? (
-                      <span>
-                        {Number(data.exchangeRate).toLocaleString('pt-BR', {
-                          maximumFractionDigits: 6,
-                        })}
-                      </span>
-                    ) : null
-                  }
-                />
-                <DetailRow
-                  label="Valor em BRL"
-                  value={data.amountBrl ? <span>{money(data.amountBrl, 'BRL')}</span> : null}
-                />
-                <DetailRow label="Banco" value={data.bankName} />
-                <DetailRow label="Contrato" value={data.contractNumber} />
-                <DetailRow label="Remessa" value={data.remittanceId} />
-                {!data.bankName && !data.contractNumber && !data.remittanceId && (
-                  <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                    Dados bancários, contrato e remessa da SYDLE ainda não disponíveis — o acesso de
-                    leitura às classes financeiras está pendente de liberação pela SYDLE.
-                  </p>
+                <DetailSection title="Cambio e banco" icon={Landmark}>
+                  <DetailRow
+                    label="Taxa de cambio"
+                    value={
+                      data.exchangeRate ? (
+                        <span>
+                          {Number(data.exchangeRate).toLocaleString('pt-BR', {
+                            maximumFractionDigits: 6,
+                          })}
+                        </span>
+                      ) : null
+                    }
+                  />
+                  <DetailRow
+                    label="Valor em BRL"
+                    value={data.amountBrl ? <span>{money(data.amountBrl, 'BRL')}</span> : null}
+                  />
+                  <DetailRow label="Banco" value={data.bankName} />
+                  <DetailRow label="Contrato" value={data.contractNumber} />
+                  <DetailRow label="Remessa" value={data.remittanceId} />
+                  {!data.bankName && !data.contractNumber && !data.remittanceId && (
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                      Dados bancários, contrato e remessa da SYDLE ainda não disponíveis — o acesso
+                      de leitura às classes financeiras está pendente de liberação pela SYDLE.
+                    </p>
+                  )}
+                </DetailSection>
+
+                <DetailSection title="Conciliacao" icon={Link2}>
+                  <DetailRow label="Status" value={matchLabels[data.matchStatus]} />
+                  <DetailRow
+                    label="Confiança"
+                    value={
+                      data.matchScore != null
+                        ? `${(Number(data.matchScore) * 100).toFixed(1)}%`
+                        : null
+                    }
+                  />
+                  <DetailRow label="Evidência" value={matchReasonLabel(data.matchReason)} />
+                </DetailSection>
+
+                <DetailSection title="Origem e auditoria">
+                  <DetailRow label="External ID" value={data.externalId} />
+                  <DetailRow label="Sistema" value={data.sourceSystem} />
+                  <DetailRow
+                    label="Atualizado na SYDLE"
+                    value={dateTimeLabel(data.sourceUpdatedAt)}
+                  />
+                  <DetailRow label="Sincronizado em" value={dateTimeLabel(data.syncedAt)} />
+                  <DetailRow label="Criado em" value={dateTimeLabel(data.createdAt)} />
+                </DetailSection>
+
+                {data.rawPayload && (
+                  <details className="rounded-lg border border-slate-200 dark:border-slate-700">
+                    <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                      Payload bruto (SYDLE)
+                    </summary>
+                    <pre className="max-h-80 overflow-auto border-t border-slate-200 bg-slate-50 p-3 text-[11px] leading-snug text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                      {JSON.stringify(data.rawPayload, null, 2)}
+                    </pre>
+                  </details>
                 )}
-              </DetailSection>
-
-              <DetailSection title="Conciliacao" icon={Link2}>
-                <DetailRow label="Status" value={matchLabels[data.matchStatus]} />
-                <DetailRow
-                  label="Confiança"
-                  value={
-                    data.matchScore != null
-                      ? `${(Number(data.matchScore) * 100).toFixed(1)}%`
-                      : null
-                  }
-                />
-                <DetailRow label="Evidência" value={matchReasonLabel(data.matchReason)} />
-              </DetailSection>
-
-              <DetailSection title="Origem e auditoria">
-                <DetailRow label="External ID" value={data.externalId} />
-                <DetailRow label="Sistema" value={data.sourceSystem} />
-                <DetailRow
-                  label="Atualizado na SYDLE"
-                  value={dateTimeLabel(data.sourceUpdatedAt)}
-                />
-                <DetailRow label="Sincronizado em" value={dateTimeLabel(data.syncedAt)} />
-                <DetailRow label="Criado em" value={dateTimeLabel(data.createdAt)} />
-              </DetailSection>
-
-              {data.rawPayload && (
-                <details className="rounded-lg border border-slate-200 dark:border-slate-700">
-                  <summary className="cursor-pointer px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                    Payload bruto (SYDLE)
-                  </summary>
-                  <pre className="max-h-80 overflow-auto border-t border-slate-200 bg-slate-50 p-3 text-[11px] leading-snug text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                    {JSON.stringify(data.rawPayload, null, 2)}
-                  </pre>
-                </details>
-              )}
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </ModalPortal>
   );
 }
 

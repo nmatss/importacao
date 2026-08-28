@@ -9,6 +9,7 @@ import {
   googleDriveService,
   ROOT_FOLDER_PLACEHOLDERS as PLACEHOLDERS,
 } from '../integrations/google-drive.service.js';
+import { googleSheetsService } from '../integrations/google-sheets.service.js';
 
 const router = Router();
 
@@ -100,6 +101,13 @@ router.get(
     const driveRootAccessible = driveRootConfigured
       ? await googleDriveService.testRootAccess().catch(() => false)
       : false;
+    const followUpConfigured = googleSheetsService.isConfigured();
+    const followUpAccessible = followUpConfigured
+      ? await googleSheetsService
+          .readProcessReferences()
+          .then(() => true)
+          .catch(() => false)
+      : false;
 
     const integracoes = {
       googleDrive: {
@@ -111,11 +119,14 @@ router.get(
         pastaPreCons: configured(process.env.GOOGLE_DRIVE_PRE_CONS_FOLDER_ID),
       },
       followUpSheet: {
-        planilha: configured(process.env.GOOGLE_SHEETS_FOLLOW_UP_ID),
+        // Campo legado preservado: agora representa disponibilidade real.
+        planilha: followUpAccessible,
+        planilhaConfigurada: followUpConfigured,
+        planilhaAcessivel: followUpAccessible,
         fonteDeReferencia: process.env.PROCESS_REFERENCE_SOURCE || 'follow_up',
       },
       documentos: {
-        fonte: process.env.DOCUMENT_SOURCE || 'email',
+        fonte: process.env.DOCUMENT_SOURCE || 'drive',
         ingestaoEmail: process.env.EMAIL_INGESTION_ENABLED === 'true',
       },
       alertas: {
@@ -135,9 +146,13 @@ router.get(
     } else if (!integracoes.googleDrive.pastaRaizAcessivel) {
       avisos.push('GOOGLE_DRIVE_ROOT_FOLDER_ID configurado, mas inacessivel — Drive inativo');
     }
-    if (!integracoes.followUpSheet.planilha) {
+    if (!integracoes.followUpSheet.planilhaConfigurada) {
       avisos.push(
-        'GOOGLE_SHEETS_FOLLOW_UP_ID vazio — allow-list da Follow Up degrada para o fluxo antigo',
+        'GOOGLE_SHEETS_FOLLOW_UP_ID vazio — referências e ingestão do Drive ficam bloqueadas (fail closed)',
+      );
+    } else if (!integracoes.followUpSheet.planilhaAcessivel) {
+      avisos.push(
+        'GOOGLE_SHEETS_FOLLOW_UP_ID configurado, mas inacessível — sem cache, referências e ingestão ficam bloqueadas',
       );
     }
     if (integracoes.documentos.fonte !== 'email' && !integracoes.googleDrive.pastaRaizAcessivel) {

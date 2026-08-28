@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import crypto from 'node:crypto';
 import multer from 'multer';
-import { fileTypeFromFile } from 'file-type';
+import { fileTypeFromBuffer, fileTypeFromFile } from 'file-type';
 import type { Request, Response, NextFunction } from 'express';
 
 import { UPLOAD_DIR } from '../config/paths.js';
@@ -62,11 +62,35 @@ const EXTENSION_MIME_ALIASES: Record<string, Set<string>> = {
   '.bmp': new Set(['image/bmp']),
 };
 
-function isDetectedMimeAllowed(file: Express.Multer.File, detectedMime: string): boolean {
-  const ext = path.extname(file.originalname).toLowerCase();
+function isDetectedMimeAllowed(
+  originalname: string,
+  declaredMime: string,
+  detectedMime: string,
+): boolean {
+  const ext = path.extname(originalname).toLowerCase();
   const aliases = EXTENSION_MIME_ALIASES[ext];
 
-  return detectedMime === file.mimetype || Boolean(aliases?.has(detectedMime));
+  return detectedMime === declaredMime || Boolean(aliases?.has(detectedMime));
+}
+
+/**
+ * Apply the same content-signature policy to in-memory files (for example,
+ * downloads from Google Drive) that multipart uploads receive on disk.
+ */
+export async function isFileBufferTypeCompatible(
+  originalname: string,
+  declaredMime: string,
+  buffer: Uint8Array,
+): Promise<boolean> {
+  const ext = path.extname(originalname).toLowerCase();
+  const hasMagicAlias = Boolean(EXTENSION_MIME_ALIASES[ext]);
+
+  if (SKIP_MAGIC_CHECK.has(declaredMime) && !hasMagicAlias) {
+    return true;
+  }
+
+  const detected = await fileTypeFromBuffer(buffer);
+  return Boolean(detected && isDetectedMimeAllowed(originalname, declaredMime, detected.mime));
 }
 
 const storage = multer.diskStorage({
@@ -155,7 +179,7 @@ export async function validateMagicBytes(
 
     const detected = await fileTypeFromFile(file.path);
 
-    if (!detected || !isDetectedMimeAllowed(file, detected.mime)) {
+    if (!detected || !isDetectedMimeAllowed(file.originalname, file.mimetype, detected.mime)) {
       // Clean up the rejected file
       await fs.unlink(file.path).catch(() => {});
       res.status(400).json({

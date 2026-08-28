@@ -885,7 +885,10 @@ export const documentService = {
     type: string,
     file: Express.Multer.File,
     userId: number | null = null,
-    options: { driveFileId?: string } = {},
+    options: {
+      driveFileId?: string;
+      ingestionSource?: 'legacy' | 'manual' | 'drive' | 'email';
+    } = {},
   ) {
     try {
       await assertDocumentProcessNotLocked(processId);
@@ -909,6 +912,7 @@ export const documentService = {
           // dedupe key for the Drive ingestion job — without it a re-run would
           // re-import every file on every pass.
           driveFileId: options.driveFileId,
+          ingestionSource: options.ingestionSource ?? 'manual',
         })
         .returning();
     } catch (error) {
@@ -2466,7 +2470,18 @@ export const documentService = {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new NotFoundError('Documento', id);
 
-    // Relational lineage is authoritative. The legacy filename/log scan could
+    if (doc.ingestionSource === 'drive') {
+      return {
+        source: 'drive' as const,
+        driveFileId: doc.driveFileId ?? undefined,
+      };
+    }
+    if (doc.ingestionSource === 'manual') {
+      return { source: 'manual' as const };
+    }
+
+    // Relational lineage is authoritative for explicit e-mail and legacy
+    // records. The legacy filename/log scan could
     // mislabel old email attachments after a process accumulated more than ten
     // logs, or attribute a same-named attachment to the wrong email.
     const [lineage] = await db
@@ -2505,6 +2520,12 @@ export const documentService = {
           return { source: 'email' as const, emailSubject: log.subject };
         }
       }
+    }
+
+    // New e-mail records carry explicit provenance. A missing subject/linkage
+    // is incomplete metadata, not evidence that the file was uploaded by hand.
+    if (doc.ingestionSource === 'email') {
+      return { source: 'email' as const };
     }
 
     return { source: 'manual' as const };
