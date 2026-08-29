@@ -1209,3 +1209,79 @@ erradas** e foram corrigidas dentro da mesma sessao — a refutacao incompleta d
 starvation (D-06) e a redacao de caminho que vazava com aparencia de tratada
 (D-03). Revisar a propria entrega depois de verde continua achando defeito real,
 toda vez.
+
+### Terceira rodada — o que o time de revisao trouxe
+
+Os relatorios chegaram depois do deploy de `3b5dd6f`. Dois achados novos, ambos
+CONFIRMADOS por execucao pelo proprio revisor, mais o inventario de filtros.
+
+#### D-08 (ALTA) — a queda do rate limiter para memoria era silenciosa
+
+`apps/api/src/shared/cache/redis.ts`
+
+`RedisCache.incr` tinha um `catch` **nu**. Qualquer erro do Redis ali faz o
+contador cair para `MemoryCache`, que **recomeca do 1** — num limitador de
+login, e a protecao contra forca bruta desaparecendo sem que ninguem saiba.
+
+Havia **dois** fallbacks em memoria, e o que efetivamente rodava era justamente
+o que nao avisava. O `logger.warn('Rate limiter cache error...')` escrito para
+este caso mora no catch do middleware e e **inalcancavel**: o catch do `incr`
+engole tudo, e `MemoryCache.incr` e logica sincrona que nao lanca.
+
+Prova do revisor, contra um Redis 7 real: chave gravada com uma string JSON no
+formato da versao anterior (para forcar o erro do `INCR`), duas chamadas
+seguidas devolveram `count` 1 e 2 onde deveriam ser 6 e 7, o valor envenenado
+ficou intacto ate o TTL vencer, e **zero linhas de log**.
+
+Correcao: aviso de dentro do `incr`, com janela de silencio de 60s (sem ela, uma
+queda do Redis viraria uma linha por requisicao — o mesmo problema de spam que
+levou ao circuit breaker do Chat). So o BUCKET vai para o log, nunca o
+identificador, que e o id do usuario ou o IP do cliente.
+
+#### D-09 (ALTA para o usuario) — quatro telas tratavam uma fatia como o conjunto
+
+Inventario completo do revisor de frontend: das 20 telas com controle de filtro,
+**16 tem a cadeia completa** verificada de ponta a ponta (estado do componente →
+queryKey → query string → uso real no schema/controller da API). As outras
+quatro nao quebravam no filtro, e sim no CONJUNTO sobre o qual ele opera. Com a
+base em ~117 processos:
+
+| tela | defeito | efeito |
+|---|---|---|
+| `currency-exchange` | `/api/processes` **sem `limit`**, default 20 | seletor MORTO do 21o processo em diante |
+| `desembaraco` | `limit=100`, sem paginacao | filtro cego alem de 100 e **cartoes somando a fatia como total** |
+| `numerario` | idem | idem, no `totalNumerario` |
+| `follow-up` | pedia `limit=200`, controller corta em 100 | no maximo 100 linhas, em silencio |
+
+As quatro rotas ja devolviam `sendPaginated`, entao um unico hook
+(`useAllPagesQuery`) resolve as quatro percorrendo a paginacao ate o fim. Sem UI
+nova e sem endpoint novo: o que existia passou a funcionar.
+
+O teto de 20 paginas do hook e trava contra laco infinito, e nao pode virar uma
+NOVA fatia silenciosa — que e o defeito que este trabalho corrige. Por isso o
+hook devolve `truncated` e as duas telas que exibem totais dizem, quando ele e
+atingido, que os numeros somam apenas a fatia carregada.
+
+#### Confirmado por execucao e por isso NAO alterado
+
+- **Migracoes 0027/0028 sao idempotentes de verdade.** O revisor rodou o runner
+  de producao (`migrate.ts`, o mesmo que o deploy executa) **duas vezes seguidas**
+  contra um Postgres 16 descartavel. Ambas exit 0; a segunda so emitiu
+  `NOTICE ... already exists, skipping`. Estado final conferido por query, nao
+  por log: 3 colunas novas em `alerts`, 3 em `process_items`, o indice parcial e
+  a FK com `DO $$` — todos presentes uma unica vez.
+- **O rate limiter e fixed window de verdade** (o `EXPIRE` so no primeiro
+  incremento), `Retry-After` bate com o TTL real medido no servidor, e queda de
+  conexao no meio da janela nao reseta o contador nem derruba a rota.
+- **A troca de `req.path` por `req.baseUrl + req.path` nao gerou colisao de
+  chave.** Os 17 limitadores estao todos dentro de routers montados, nenhum com
+  `baseUrl` vazio. A hipotese de "chave antiga com tipo errado sobrevivendo ao
+  deploy" nao se aplica a este deploy.
+- **F1 do revisor de runtime ja estava coberto.** Ele reportou que
+  `alertService.create()` continuava furando teto e backoff no HEAD, tendo
+  verificado `service.ts` — que de fato nao mudou. A guarda passou para
+  `delivery.service.ts`, dentro do `attemptDelivery`. Verificado com teste: um
+  duplicado com 99 tentativas e carimbo de agora nao faz nenhuma chamada ao
+  webhook e nenhum UPDATE. **E precisamente o argumento a favor de por a regra no
+  ponto de decisao e nao no chamador**: a correcao vale para um chamador que o
+  revisor nem inspecionou.
