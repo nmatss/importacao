@@ -46,3 +46,8 @@ __pycache__/
 
 # Python virtualenv (cert-api)
 apps/cert-api/.venv/
+
+# Saidas de execucao de teste (Playwright). Ficavam rastreadas e sujavam
+# o diff a cada rodada.
+test-results/
+playwright-report/
