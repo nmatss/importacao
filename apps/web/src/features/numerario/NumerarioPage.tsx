@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Banknote, Search, DollarSign, Percent, Calculator } from 'lucide-react';
-import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAllPagesQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -41,11 +41,10 @@ export function NumerarioPage() {
     isLoading,
     error,
     refetch,
-  } = useApiQuery<{
-    data: ProcessItem[];
-    pagination: unknown;
-  }>(['processes-numerario'], '/api/processes?limit=100');
+  } = useAllPagesQuery<ProcessItem>(['processes-numerario'], '/api/processes');
   const allProcesses = processResponse?.data;
+  // Mesma janela de 100 do Desembaraco, mesmo efeito no `totalNumerario`.
+  const fatiaIncompleta = processResponse?.truncated ?? false;
 
   // Filter only processes that have numerario data
   const numerarioProcesses = useMemo(() => {
@@ -128,6 +127,15 @@ export function NumerarioPage() {
       </div>
 
       {/* KPI Cards */}
+      {fatiaIncompleta && (
+        <p
+          role="status"
+          className="rounded-lg border border-warning-500/40 bg-warning-50 px-3 py-2 text-xs text-warning-700 dark:bg-warning-700/10 dark:text-warning-100"
+        >
+          Mostrando apenas parte dos processos: os numeros abaixo somam a fatia carregada, nao o
+          total.
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 stagger-children">
         {kpiCards.map((kpi) => (
           <div

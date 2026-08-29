@@ -9,7 +9,7 @@ import {
   ChevronDown,
   LayoutGrid,
 } from 'lucide-react';
-import { useApiQuery } from '@/shared/hooks/useApi';
+import { useApiQuery, useAllPagesQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
@@ -159,8 +159,10 @@ export function FollowUpPage() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
+  // Pedia `limit=200`; o controller corta em 100 sem avisar, entao o Follow Up
+  // mostrava no maximo 100 linhas e o filtro de periodo operava sobre essa
+  // fatia. A paginacao agora e percorrida ate o fim.
   const followUpParams = new URLSearchParams();
-  followUpParams.set('limit', '200');
   if (startDate) followUpParams.set('startDate', startDate);
   if (endDate) followUpParams.set('endDate', endDate);
   const followUpQs = followUpParams.toString();
@@ -170,7 +172,7 @@ export function FollowUpPage() {
     isLoading,
     error,
     refetch,
-  } = useApiQuery<{ data: RawFollowUpProcess[]; pagination: unknown }>(
+  } = useAllPagesQuery<RawFollowUpProcess>(
     ['follow-up', startDate, endDate],
     `/api/follow-up${followUpQs ? `?${followUpQs}` : ''}`,
   );

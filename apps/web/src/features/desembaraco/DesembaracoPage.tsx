@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Anchor, Search, Package, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
-import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAllPagesQuery } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -59,11 +59,12 @@ export function DesembaracoPage() {
     isLoading,
     error,
     refetch,
-  } = useApiQuery<{
-    data: ProcessItem[];
-    pagination: unknown;
-  }>(['processes-desembaraco'], '/api/processes?limit=100');
+  } = useAllPagesQuery<ProcessItem>(['processes-desembaraco'], '/api/processes');
   const allProcesses = processResponse?.data;
+  // O teto do `limit` no backend e 100. Enquanto a pagina pedia uma unica
+  // pagina, os filtros so enxergavam essa fatia E os cartoes somavam a fatia
+  // como se fosse o total.
+  const fatiaIncompleta = processResponse?.truncated ?? false;
 
   // Filter only processes that have aiExtractedData with customs-related fields
   const customsProcesses = useMemo(() => {
@@ -167,6 +168,15 @@ export function DesembaracoPage() {
         </div>
       </div>
 
+      {fatiaIncompleta && (
+        <p
+          role="status"
+          className="rounded-lg border border-warning-500/40 bg-warning-50 px-3 py-2 text-xs text-warning-700 dark:bg-warning-700/10 dark:text-warning-100"
+        >
+          Mostrando apenas parte dos processos: os numeros abaixo somam a fatia carregada, nao o
+          total.
+        </p>
+      )}
       {/* KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 stagger-children">
         {kpiCards.map((kpi) => (

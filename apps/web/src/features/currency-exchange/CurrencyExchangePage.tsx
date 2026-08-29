@@ -13,7 +13,7 @@ import {
   Search,
   ChevronDown,
 } from 'lucide-react';
-import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
+import { useApiQuery, useApiMutation, useAllPagesQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
@@ -66,10 +66,13 @@ export function CurrencyExchangePage() {
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: processResponse, isLoading: loadingProcesses } = useApiQuery<{
-    data: Process[];
-    pagination: unknown;
-  }>(['processes'], '/api/processes');
+  // Sem `limit`, o default do schema do backend e 20: o seletor abaixo so
+  // enxergava os 20 processos mais recentes e nenhum outro podia receber
+  // lancamento de cambio. Busca paginada completa.
+  const { data: processResponse, isLoading: loadingProcesses } = useAllPagesQuery<Process>(
+    ['processes', 'todos'],
+    '/api/processes',
+  );
   const processes = processResponse?.data;
 
   const { data: exchanges, isLoading: loadingExchanges } = useApiQuery<CurrencyExchange[]>(
