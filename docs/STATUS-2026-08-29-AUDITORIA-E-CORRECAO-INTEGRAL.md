@@ -1285,3 +1285,91 @@ atingido, que os numeros somam apenas a fatia carregada.
   webhook e nenhum UPDATE. **E precisamente o argumento a favor de por a regra no
   ponto de decisao e nao no chamador**: a correcao vale para um chamador que o
   revisor nem inspecionou.
+
+### Quarta rodada — os relatorios completos dos revisores
+
+Chegaram os dois relatorios que faltavam. Trouxeram o achado mais grave da
+sessao inteira e um levantamento de fuso que atinge numeros que o operador le
+na tela todos os dias.
+
+#### D-10 (CRITICA) — um arquivo de 4,7 MB derruba a API inteira
+
+`apps/api/src/modules/documents/service.ts`
+
+Medido pelo revisor: um `.xlsx` **valido** de 4,7 MB com 3 colunas x 400 mil
+linhas descomprime para 127 MB de XML e leva o RSS a **770 MB** so no
+`XLSX.read`. O container tem `memory: 512M` e os workers do pg-boss rodam
+**dentro** do processo da API — nao ha container de worker no compose. O alvo do
+OOM nao e um job: e a API.
+
+Nenhum caminho de entrada exige admin. Qualquer pessoa com escrita numa pasta de
+processo no Shared Drive (o sweep ingere, e xlsx passa no magic-byte check porque
+xlsx **e** zip); qualquer analista autenticado via
+`POST /api/communications/drive/import`; e `POST /api/ai/extract`, que chama a
+extracao **dentro da request HTTP** a 30 req/min — OOM-kill repetivel.
+
+O teto de `maxChars` que ja existia nao ajuda: protege o tamanho do PROMPT e so
+age depois que o parser terminou de alocar.
+
+Correcao: xlsx e docx sao ZIP, e o indice do ZIP declara o tamanho descomprimido
+de cada entrada. Da para decidir **sem descomprimir um byte** e sem dependencia
+nova. Limites de 64 MB descomprimidos e razao de 200x — os dois juntos, porque o
+arquivo medido expande so 27x: o teto absoluto pega este caso, a razao pega a
+bomba classica de arquivo minusculo. ZIP64 e recusado.
+
+#### D-11 (ALTA) — decisoes de calendario no fuso do container
+
+Levantamento do revisor de dados, **reproduzido por mim** contra um Postgres 16
+em UTC. Quatro classes, todas de um dia, todas nas tres horas entre 21:00 e
+meia-noite no Brasil — todos os dias:
+
+| onde | efeito |
+|---|---|
+| "dias restantes" da LI | prazo de **amanha** reportado como `0`, indistinguivel de "vence hoje" |
+| janela de proximos pagamentos | o vencido de ontem some, e entra um dia a mais na outra ponta |
+| "processo atrasado" | dispara **27h** antes da hora |
+| grafico por mes | processo criado as 22h do dia 31 conta no mes seguinte |
+
+```
+ prazo LI  | antigo | novo      vencimento | antigo | novo
+-----------+--------+------    ------------+--------+------
+ 29/08     |   0    |  0        28/08      |   f    |  t
+ 30/08     |   0    |  1        05/09      |   t    |  t
+ 31/08     |   1    |  2        06/09      |   t    |  f
+```
+
+`EXTRACT(DAY FROM prazo - now())` descarta o dia **parcial**. E
+`::date + interval '13 days' < now()` compara contra o **inicio** do dia do prazo.
+
+O agrupamento por mes precisa das **duas** conversoes, e a ordem importa: em
+`timestamp` sem fuso, `AT TIME ZONE 'America/Sao_Paulo'` **interpreta** o valor
+como se ja fosse local — o oposto do desejado.
+
+Tambem corrigidos `sydle/normalizer.ts` (gravava `overdue` tres horas antes de o
+dia acabar para quem paga), os tres nomes de arquivo exportado do SYDLE, e o
+ultimo `CURRENT_DATE` do `apps/api/src`. `executive.service.ts` ja usava o padrao
+correto — `dashboard`, `sydle` e `follow-up` eram os retardatarios.
+
+#### D-12 (MEDIA) — a primeira redacao deixou tres lacunas
+
+O revisor re-rodou a sonda pelos controllers **depois** da correcao. A mais
+constrangedora: o incidente citado no comentario da propria funcao continuava
+vazando. O `DATABASE_URL` conecta pelo **nome** do servico do compose, entao a
+mensagem real e `getaddrinfo ENOTFOUND postgres` — e um padrao de IPv4 nao ve
+nome nenhum. O padrao novo ancora no **errno**, e nao numa lista de servicos, de
+modo que servico novo do compose ja nasce coberto.
+
+### Divida registrada, nao corrigida
+
+- **79 outros `Number(req.params.X)` sem guarda, em 12 controllers.** O vazamento
+  esta fechado para todos pela redacao; o que falta e devolver `400 id invalido`
+  em vez de erro de banco. O repositorio ja tem o idioma — `validate(schema,
+  'params')`, usado em 14 rotas. 79 pontos e desproporcional a um turno, e o
+  risco de seguranca ja esta contido.
+- **`mammoth.extractRawText`** recebeu a mesma guarda de arquivo por simetria de
+  formato (docx tambem e ZIP), mas o consumo dele **nao foi medido** como o do
+  SheetJS.
+- **Injecao de prompt**: as sondas mostraram que homoglifo fullwidth e angulos
+  espacados sobrevivem ao saneamento. Falta o veredito de exploracao real — se o
+  modelo de fato obedece a um delimitador forjado. **Nao tratar como resolvido
+  nem como refutado.**
