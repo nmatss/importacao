@@ -34,7 +34,11 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
   }
 
   try {
-    const decoded = jwt.verify(token, secret) as UserPayload;
+    // Pin defensivo. Nao e correcao de bypass `alg:none` — o jsonwebtoken 9 ja
+    // restringe a HMAC quando o segredo e string —, e sim uma trava para que
+    // uma troca futura do segredo por chave/certificado nao abra a porta para
+    // o token escolher o algoritmo. `service.ts` assina sempre com HS256.
+    const decoded = jwt.verify(token, secret, { algorithms: ['HS256'] }) as UserPayload;
 
     const [user] = await db
       .select({ id: users.id, email: users.email, role: users.role, isActive: users.isActive })

@@ -29,6 +29,26 @@ class MemoryCache {
     this.store.delete(key);
   }
 
+  /**
+   * Incremento ATOMICO com janela fixa. Devolve o contador e quando a janela
+   * expira. O Node e single-threaded, entao ler e escrever aqui dentro do mesmo
+   * tick e atomico de fato — nao ha ponto de suspensao entre os dois.
+   */
+  async incr(key: string, ttlSeconds: number): Promise<{ count: number; resetAt: number }> {
+    const now = Date.now();
+    const entry = this.store.get(key);
+
+    if (!entry || now > entry.expiresAt) {
+      const expiresAt = now + ttlSeconds * 1000;
+      this.store.set(key, { value: '1', expiresAt });
+      return { count: 1, resetAt: expiresAt };
+    }
+
+    const count = Number(entry.value) + 1;
+    this.store.set(key, { value: String(count), expiresAt: entry.expiresAt });
+    return { count, resetAt: entry.expiresAt };
+  }
+
   async disconnect(): Promise<void> {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -51,6 +71,15 @@ export interface CacheClient {
   get(key: string): Promise<string | null>;
   set(key: string, value: string, ttlSeconds: number): Promise<void>;
   del(key: string): Promise<void>;
+  /**
+   * Incremento atomico com janela fixa, para contadores de rate limit.
+   *
+   * O limitador fazia `get` -> `JSON.parse` -> `set`, sem nada de atomico entre
+   * a leitura e a escrita: uma rajada concorrente lia o MESMO contador e
+   * escrevia o mesmo valor, entao o limite de 5 tentativas por janela do login
+   * podia ser ultrapassado com folga por requisicoes paralelas.
+   */
+  incr(key: string, ttlSeconds: number): Promise<{ count: number; resetAt: number }>;
   disconnect(): Promise<void>;
 }
 
@@ -131,6 +160,34 @@ class RedisCache implements CacheClient {
       }
     }
     await this.fallback.del(key);
+  }
+
+  async incr(key: string, ttlSeconds: number): Promise<{ count: number; resetAt: number }> {
+    if (this.connected && this.client) {
+      try {
+        // INCR e atomico no servidor: duas requisicoes concorrentes recebem
+        // valores diferentes, que e exatamente o que o limitador precisa.
+        const count = await this.client.incr(key);
+        // A janela e fixa: so o primeiro incremento define o TTL, entao a
+        // janela nao "anda para a frente" a cada tentativa.
+        if (count === 1) {
+          await this.client.expire(key, ttlSeconds);
+          return { count, resetAt: Date.now() + ttlSeconds * 1000 };
+        }
+        const ttl = await this.client.ttl(key);
+        // TTL -1 significa chave sem expiracao — so acontece se o processo
+        // morreu entre o INCR e o EXPIRE. Reaplica em vez de deixar o contador
+        // eterno, que travaria o usuario para sempre.
+        if (ttl < 0) {
+          await this.client.expire(key, ttlSeconds);
+          return { count, resetAt: Date.now() + ttlSeconds * 1000 };
+        }
+        return { count, resetAt: Date.now() + ttl * 1000 };
+      } catch {
+        // fall through to memory
+      }
+    }
+    return this.fallback.incr(key, ttlSeconds);
   }
 
   async disconnect(): Promise<void> {

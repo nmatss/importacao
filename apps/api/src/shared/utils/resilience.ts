@@ -14,6 +14,14 @@ export interface RetryOptions {
    * all existing callers that don't pass it.
    */
   shouldRetry?: (err: unknown) => boolean;
+  /**
+   * Optional per-error delay override. When it returns a number, that value
+   * replaces the exponential backoff for the next attempt — this is how a
+   * `Retry-After` header sent by the provider gets respected instead of being
+   * ignored in favour of our own guess. Still clamped by `maxDelayMs`, so a
+   * hostile or absurd header cannot park the sweep for an hour.
+   */
+  retryDelayMs?: (err: unknown) => number | null;
 }
 
 /**
@@ -24,7 +32,7 @@ export async function withRetry<T>(
   opts: RetryOptions,
   label?: string,
 ): Promise<T> {
-  const { attempts, baseDelayMs, maxDelayMs = 30_000, shouldRetry } = opts;
+  const { attempts, baseDelayMs, maxDelayMs = 30_000, shouldRetry, retryDelayMs } = opts;
   let lastError: Error | unknown;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -38,10 +46,15 @@ export async function withRetry<T>(
       if (shouldRetry && !shouldRetry(err)) throw err;
       if (attempt === attempts) break;
 
-      // Exponential backoff with full jitter
+      // Exponential backoff with full jitter, unless the provider told us how
+      // long to wait (Retry-After); then obey it instead of guessing.
+      const explicitDelay = retryDelayMs?.(err) ?? null;
       const expDelay = baseDelayMs * 2 ** (attempt - 1);
       const jitter = Math.random() * expDelay;
-      const delay = Math.min(expDelay + jitter, maxDelayMs);
+      const delay =
+        explicitDelay !== null && explicitDelay >= 0
+          ? Math.min(explicitDelay, maxDelayMs)
+          : Math.min(expDelay + jitter, maxDelayMs);
 
       logger.warn(
         { attempt, maxAttempts: attempts, delayMs: Math.round(delay), label, err },
@@ -59,6 +72,18 @@ export async function withRetry<T>(
 
 /**
  * Wrap a function call with an AbortController-based timeout.
+ *
+ * Faz as DUAS coisas, e as duas importam:
+ *
+ * 1. aborta o `signal`, para o cliente de verdade cancelar a requisicao em voo
+ *    em vez de continuar esperando resposta que ninguem vai ler;
+ * 2. rejeita o chamador no prazo de qualquer jeito.
+ *
+ * O item 2 nao e redundante. Se o callee ignorar o `signal` — cliente antigo,
+ * mock, biblioteca que so aceita o sinal de fachada — o `await fn(...)` nunca
+ * volta, e apenas abortar deixaria o chamador pendurado para sempre. Era essa
+ * a unica garantia do `Promise.race` que este helper substituiu; ela continua
+ * valendo, agora somada ao cancelamento real.
  */
 export async function withTimeout<T>(
   fn: (signal: AbortSignal) => Promise<T>,
@@ -66,22 +91,29 @@ export async function withTimeout<T>(
   label?: string,
 ): Promise<T> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), ms);
+  let timer: NodeJS.Timeout | undefined;
+
+  const timeoutError = () => {
+    const err = new Error(`Operation timed out after ${ms}ms${label ? ` [${label}]` : ''}`);
+    (err as any).code = 'ETIMEDOUT';
+    return err;
+  };
 
   try {
-    const result = await fn(controller.signal);
-    clearTimeout(timer);
-    return result;
+    return await new Promise<T>((resolve, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(timeoutError());
+      }, ms);
+      fn(controller.signal).then(resolve, reject);
+    });
   } catch (err) {
-    clearTimeout(timer);
-    if (controller.signal.aborted) {
-      const timeoutErr = new Error(
-        `Operation timed out after ${ms}ms${label ? ` [${label}]` : ''}`,
-      );
-      (timeoutErr as any).code = 'ETIMEDOUT';
-      throw timeoutErr;
-    }
+    // O abort chegou ao cliente e ele rejeitou com AbortError: quem pediu
+    // precisa ler "estourou o tempo", nao "operacao abortada".
+    if (controller.signal.aborted) throw timeoutError();
     throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 

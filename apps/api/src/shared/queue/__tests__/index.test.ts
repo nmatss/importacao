@@ -57,10 +57,49 @@ describe('job queue initialization', () => {
     expect(boss).toBe(pgBossMock.instances[0]);
     expect(pgBossMock.instances[0].start).toHaveBeenCalledTimes(1);
     expect(pgBossMock.instances[0].createQueue).toHaveBeenCalledTimes(QUEUE_NAMES.length);
-    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(1, 'email-send');
-    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(2, 'drive-sync');
-    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(3, 'sheets-sync');
-    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(4, 'ai-extraction');
+    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(
+      1,
+      'drive-sync',
+      expect.objectContaining({ name: 'drive-sync' }),
+    );
+    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(
+      2,
+      'sheets-sync',
+      expect.objectContaining({ name: 'sheets-sync' }),
+    );
+    expect(pgBossMock.instances[0].createQueue).toHaveBeenNthCalledWith(
+      3,
+      'ai-extraction',
+      expect.objectContaining({ name: 'ai-extraction' }),
+    );
+  });
+
+  it('declara a politica de retry, em vez de herdar o default da biblioteca', async () => {
+    // `createQueue(name)` sem opcoes deixava a politica a cargo do default do
+    // pg-boss, que muda entre versoes. `ai-extraction` ja passava `retryLimit`
+    // no envio; as outras duas filas herdavam um default que ninguem sabia qual
+    // era. Este caso congela a decisao explicita.
+    const { initQueue, QUEUE_RETRY_POLICY } = await import('../index.js');
+    await initQueue();
+
+    expect(QUEUE_RETRY_POLICY.retryLimit).toBeGreaterThan(0);
+    expect(QUEUE_RETRY_POLICY.retryBackoff).toBe(true);
+
+    for (const call of pgBossMock.instances[0].createQueue.mock.calls) {
+      expect(call[1]).toMatchObject(QUEUE_RETRY_POLICY);
+    }
+  });
+
+  it('nao cria mais a fila `email-send`', async () => {
+    // Removida em 2026-08-29: era um caminho morto (nenhum enfileirador em todo
+    // o repositorio) que enviava e-mail SEM a allow-list de destinatario e SEM
+    // a sanitizacao de HTML aplicadas por `communicationService.send()`. Este
+    // caso congela a remocao para que o atalho nao volte por conveniencia.
+    const { initQueue, QUEUE_NAMES } = await import('../index.js');
+    await initQueue();
+
+    expect(QUEUE_NAMES).not.toContain('email-send');
+    expect(pgBossMock.instances[0].createQueue).not.toHaveBeenCalledWith('email-send');
   });
 
   it('reuses an initialized queue without recreating queues', async () => {

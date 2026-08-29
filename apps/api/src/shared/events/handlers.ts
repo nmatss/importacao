@@ -71,7 +71,7 @@ export function registerEventHandlers(): void {
     if (payload.failed > 0) {
       try {
         const { db } = await import('../database/connection.js');
-        const { importProcesses, systemSettings } = await import('../database/schema.js');
+        const { importProcesses } = await import('../database/schema.js');
         const { eq } = await import('drizzle-orm');
 
         const [proc] = await db
@@ -80,19 +80,15 @@ export function registerEventHandlers(): void {
           .where(eq(importProcesses.id, payload.processId))
           .limit(1);
 
-        const [setting] = await db
-          .select()
-          .from(systemSettings)
-          .where(eq(systemSettings.key, 'google_chat_webhook_url'))
-          .limit(1);
-
-        const rawValue = setting?.value;
-        const webhookUrl =
-          (typeof rawValue === 'string'
-            ? rawValue
-            : typeof rawValue === 'object' && rawValue !== null && 'url' in rawValue
-              ? (rawValue as { url: string }).url
-              : null) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
+        // Resolucao UNICA do webhook. Este bloco reimplementava a leitura
+        // inline — banco primeiro, env de fallback, valor podendo vir como
+        // string ou como objeto `{url}`. Eram quatro copias da mesma regra no
+        // repositorio, e uma delas fazia `setting?.value as string`, que quebra
+        // no formato objeto. Divergencia entre copias e como o health ficava
+        // verde com o canal morto.
+        const { resolveGoogleChatWebhook } =
+          await import('../../modules/alerts/delivery.service.js');
+        const { url: webhookUrl } = await resolveGoogleChatWebhook();
         if (webhookUrl && proc) {
           const { sendToGoogleChat } = await import('../../modules/alerts/google-chat.service.js');
           const severity = payload.failed > 3 ? 'critical' : 'warning';

@@ -3,13 +3,6 @@ import { logger } from '../utils/logger.js';
 
 // ── Job type definitions ─────────────────────────────────────────────
 
-export interface EmailSendJob {
-  to: string;
-  subject: string;
-  body: string;
-  processId?: number;
-}
-
 export interface DriveSyncJob {
   processId: number;
   processCode: string;
@@ -67,22 +60,6 @@ function wrapWorker<T extends object>(
 }
 
 // ── Worker handlers ──────────────────────────────────────────────────
-
-async function handleEmailSend(data: EmailSendJob): Promise<void> {
-  // Mesmo plano de envio dos atendimentos: remetente e copia operacional
-  // obrigatoria resolvidos em um unico lugar (shared/mail/mailer.ts).
-  const { buildOutgoingMail, getSmtpTransport } = await import('../mail/mailer.js');
-  const mail = await buildOutgoingMail(data.to);
-
-  const transporter = await getSmtpTransport();
-  await transporter.sendMail({
-    from: mail.from,
-    to: mail.to,
-    ...(mail.cc ? { cc: mail.cc } : {}),
-    subject: data.subject,
-    html: data.body,
-  });
-}
 
 async function handleDriveSync(data: DriveSyncJob): Promise<void> {
   const { googleDriveService } = await import('../../modules/integrations/google-drive.service.js');
@@ -179,15 +156,24 @@ async function handleAIExtraction(data: AIExtractionJob): Promise<void> {
   await documentService.processWithAI(data.documentId, data.documentType);
 }
 
+/**
+ * A fila `email-send` foi REMOVIDA em 2026-08-29.
+ *
+ * Ela existia, tinha worker registrado e nenhum enfileirador em todo o
+ * repositorio — era um caminho morto que enviava e-mail SEM a allow-list de
+ * destinatario (`isRecipientAllowed`) e SEM a sanitizacao de HTML
+ * (`sanitizeEmailHtml`) que `communications/service.ts` aplica. O risco nao era
+ * corrente, era latente: o proximo a precisar de envio assincrono usaria o
+ * atalho "que ja existe" e contornaria os dois controles.
+ *
+ * Envio de e-mail passa exclusivamente por `communicationService.send()`, que
+ * resolve destinatario, sanitiza, anexa apenas documentos do proprio processo e
+ * grava auditoria. Envio assincrono, se voltar a ser necessario, deve enfileirar
+ * o ID de uma comunicacao ja persistida e delegar aquele servico.
+ */
 // ── Register all workers ─────────────────────────────────────────────
 
 export async function registerWorkers(boss: PgBoss): Promise<void> {
-  await boss.work<EmailSendJob>(
-    'email-send',
-    { batchSize: 1 },
-    wrapWorker('email-send', handleEmailSend),
-  );
-
   await boss.work<DriveSyncJob>(
     'drive-sync',
     { batchSize: 1 },
