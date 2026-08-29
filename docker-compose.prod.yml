@@ -102,6 +102,14 @@ services:
       SMTP_FROM: ${SMTP_FROM:-"Uni.co Importacao" <global@grupounico.com>}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
+      # Sem estas duas o operador podia definir a variavel no `.env` e nao ver
+      # efeito nenhum: o compose so repassa o que lista explicitamente.
+      # MAIL_DRY_RUN vazio = decide por NODE_ENV, que aqui e sempre `production`,
+      # entao o padrao continua sendo ENVIAR de verdade.
+      MAIL_DRY_RUN: ${MAIL_DRY_RUN:-}
+      # `none` e o que o relay interno precisa; um relay que autentica de fato
+      # exige SMTP_AUTH_MODE=login.
+      SMTP_AUTH_MODE: ${SMTP_AUTH_MODE:-none}
       KIOM_EMAIL: ${KIOM_EMAIL:-}
       FENICIA_EMAIL: ${FENICIA_EMAIL:-}
       ISA_EMAIL: ${ISA_EMAIL:-}
