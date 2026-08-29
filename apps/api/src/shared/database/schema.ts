@@ -221,10 +221,21 @@ export const processItems = pgTable(
     requiresLi: boolean('requires_li').default(false),
     requiresCertification: boolean('requires_certification').default(false),
     odooProductId: integer('odoo_product_id'),
+    // Linhagem exigida pela ADR 0006. Anulaveis de proposito: linhas
+    // materializadas antes de 2026-08-29 nao tem como recuperar a origem, e
+    // `null` aqui significa "origem desconhecida", nao "sem origem".
+    sourceDocumentId: integer('source_document_id').references(() => documents.id, {
+      onDelete: 'set null',
+    }),
+    extractionRunId: integer('extraction_run_id'),
+    materializedAt: timestamp('materialized_at'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },
-  (table) => [index('process_items_process_id_idx').on(table.processId)],
+  (table) => [
+    index('process_items_process_id_idx').on(table.processId),
+    index('process_items_source_document_id_idx').on(table.sourceDocumentId),
+  ],
 );
 
 export const validationResults = pgTable(
@@ -505,6 +516,11 @@ export const alerts = pgTable(
     message: text('message').notNull(),
     sentToChat: boolean('sent_to_chat').default(false),
     sentAt: timestamp('sent_at'),
+    // Estado da REENTREGA. `sent_to_chat = false` nao era lido por nenhum job
+    // ate 2026-08-29 — alerta que falhava na entrega morria no banco.
+    deliveryAttempts: integer('delivery_attempts').notNull().default(0),
+    lastDeliveryAttemptAt: timestamp('last_delivery_attempt_at'),
+    lastDeliveryError: text('last_delivery_error'),
     acknowledged: boolean('acknowledged').default(false),
     acknowledgedBy: integer('acknowledged_by').references(() => users.id),
     acknowledgedAt: timestamp('acknowledged_at'),
