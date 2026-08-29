@@ -57,3 +57,23 @@ groups:
         annotations:
           summary: "Fila possivelmente travada"
           description: "A fila {{ $labels.queue_name }} manteve jobs ativos (>0) sem cair a zero por 30 minutos — possível worker travado."
+
+      # ── Canal de alerta mudo ─────────────────────────────────────────
+      # alert_delivery_total{channel,outcome} conta cada tentativa de
+      # entrega. Dispara quando há tentativa e NENHUMA termina em `sent`:
+      # é o estado que a base viveu por meses (6.349 alertas, zero
+      # entregues) sem nada apontar para ele.
+      # `unless` e não `and sum(sent) == 0` de propósito: se a série
+      # `sent` nunca existiu — exatamente o caso pior — o `== 0` compara
+      # com vetor vazio e a regra nunca dispararia.
+      - alert: AlertDeliveryFailing
+        expr: |
+          sum(rate(alert_delivery_total{outcome!="sent"}[15m])) > 0
+          unless
+          sum(rate(alert_delivery_total{outcome="sent"}[15m])) > 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Canal de alerta não entrega"
+          description: "Houve tentativas de entrega de alerta nos últimos 15 minutos e nenhuma foi bem-sucedida — a detecção funciona e o aviso morre na saída."

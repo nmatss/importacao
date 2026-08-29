@@ -1,11 +1,10 @@
-import { eq, desc, and, sql, count, gte } from 'drizzle-orm';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { alerts, systemSettings } from '../../shared/database/schema.js';
-import { sendToGoogleChat } from './google-chat.service.js';
-import { alertDeliveryTotal } from '../../shared/metrics/index.js';
-import { logger } from '../../shared/utils/logger.js';
+import { alerts } from '../../shared/database/schema.js';
+import { attemptDelivery } from './delivery.service.js';
 import { auditService } from '../audit/service.js';
 import { NotFoundError } from '../../shared/errors/index.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 export const alertService = {
   async list(filters?: {
@@ -29,12 +28,14 @@ export const alertService = {
       );
     if (filters?.acknowledged !== undefined)
       conditions.push(eq(alerts.acknowledged, filters.acknowledged));
-    if (filters?.startDate) {
-      conditions.push(gte(alerts.createdAt, new Date(filters.startDate)));
+    // O dia escolhido no calendario local vira o intervalo UTC equivalente.
+    const start = filters?.startDate ? localDayStartUtc(filters.startDate) : null;
+    if (start) {
+      conditions.push(sql`${alerts.createdAt} >= ${start.toISOString()}`);
     }
-    if (filters?.endDate) {
-      const end = new Date(filters.endDate);
-      end.setDate(end.getDate() + 1);
+    // Limite superior EXCLUSIVO: inicio do dia local seguinte, em UTC.
+    const end = filters?.endDate ? localDayEndExclusiveUtc(filters.endDate) : null;
+    if (end) {
       conditions.push(sql`${alerts.createdAt} < ${end.toISOString()}`);
     }
 
@@ -81,6 +82,14 @@ export const alertService = {
         )
         .orderBy(desc(alerts.createdAt))
         .limit(1);
+
+      // A deduplicacao continua correta — errado era pular a ENTREGA junto com
+      // a criacao. Se a primeira tentativa da janela falhava, nenhuma das
+      // seguintes era sequer tentada: e o caso de `Falha no job: sydle-sync`,
+      // criado todo dia de 08/08 a 13/08 e nunca entregue.
+      if (existing && existing.sentToChat !== true) {
+        await attemptDelivery({ ...existing, processCode: data.processCode });
+      }
       return existing;
     }
 
@@ -94,38 +103,9 @@ export const alertService = {
       })
       .returning();
 
-    // Try sending to Google Chat
-    try {
-      const [setting] = await db
-        .select()
-        .from(systemSettings)
-        .where(eq(systemSettings.key, 'google_chat_webhook_url'))
-        .limit(1);
-
-      const rawValue = setting?.value;
-      const webhookUrl =
-        (typeof rawValue === 'string'
-          ? rawValue
-          : typeof rawValue === 'object' && rawValue !== null && 'url' in rawValue
-            ? (rawValue as { url: string }).url
-            : null) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
-      if (webhookUrl) {
-        const sent = await sendToGoogleChat(webhookUrl, { ...data, id: alert.id });
-        if (sent) {
-          await db
-            .update(alerts)
-            .set({ sentToChat: true, sentAt: new Date() })
-            .where(eq(alerts.id, alert.id));
-        }
-      } else {
-        // Sem webhook o envio nem e tentado, entao o contador la dentro nunca
-        // seria incrementado e o alerta morreria no banco em silencio — o
-        // mesmo desfecho dos 6.349 registros com `sent_to_chat` falso.
-        alertDeliveryTotal.inc({ channel: 'google_chat', outcome: 'unconfigured' });
-      }
-    } catch {
-      logger.error({ alertId: alert.id }, 'Failed to send alert to Google Chat');
-    }
+    // Uma unica tentativa aqui; o que nao entregar fica com `sent_to_chat`
+    // falso e o job `alert-redelivery` volta nele com backoff.
+    await attemptDelivery({ ...alert, processCode: data.processCode });
 
     auditService.log(
       null,

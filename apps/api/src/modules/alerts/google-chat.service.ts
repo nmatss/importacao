@@ -66,6 +66,18 @@ let chatSkipUntil = 0;
 const CHAT_FAIL_THRESHOLD = 3;
 const CHAT_COOLDOWN_MS = 30 * 60_000;
 
+/**
+ * O breaker esta segurando o envio agora?
+ *
+ * Existe para quem PERSISTE o estado da entrega: o cooldown recusa o envio e
+ * `sendToGoogleChat` devolve `false` igual a uma falha real. Sem separar os dois
+ * casos, o alerta recusado pelo cooldown consumiria tentativa do teto de
+ * reentrega — puniria o alerta por um problema que e do canal.
+ */
+export function isChatCooldownActive(now = Date.now()): boolean {
+  return now < chatSkipUntil;
+}
+
 export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promise<boolean> {
   if (!webhookUrl) {
     alertDeliveryTotal.inc({ channel: 'google_chat', outcome: 'unconfigured' });
