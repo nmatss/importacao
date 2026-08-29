@@ -1122,3 +1122,90 @@ Registrado porque hipotese refutada vale tanto quanto achado confirmado:
   CI roda apenas `ruff check` (que passa). O projeto nunca adotou `ruff format`;
   reformatar agora seria um diff de 28 arquivos sem relacao com a tarefa. Fica
   como divida registrada, nao como correcao.
+
+### Segunda rodada — o que a revisao adversarial achou no codigo ja implantado
+
+Tres defeitos no modulo de alertas, todos no codigo que subiu em 956f7d3.
+Os dois primeiros vem do mesmo engano de projeto: **a regra estava no chamador
+em vez de estar no ponto de decisao.**
+
+#### D-05 (ALTA) — a criacao de alerta furava o teto e o backoff
+
+`isDueForRetry` e `backoffMinutes` viviam so em `jobs/alert-redelivery.ts`. Mas
+o job nao e o unico chamador de `attemptDelivery`: `alertService.create()`
+tambem chama, no caminho de deduplicacao, e nao consultava nenhuma das duas.
+
+Como `handleCronError` cria um alerta a cada falha de cron, um job quebrado
+rodando de 5 em 5 minutos produzia **~288 tentativas por dia** contra um webhook
+que ja havia recusado — exatamente o que o teto de 5 existe para impedir.
+
+Correcao: as duas funcoes foram para `delivery.service.ts`, junto de
+`MAX_DELIVERY_ATTEMPTS`, e a decisao entrou no comeco de `attemptDelivery`.
+Qualquer chamador, inclusive um futuro, obedece por construcao.
+
+#### D-06 (ALTA) — duplicacao sem fim quando a persistencia falha
+
+O `catch` de `attemptDelivery` nao persistia nada.
+
+**Esta e uma correcao de uma analise minha.** Na primeira rodada eu refutei a
+hipotese de starvation com o argumento de que `sendToGoogleChat` tem try/catch
+total e nunca lanca. O argumento esta certo sobre o webhook e **incompleto**:
+dentro do mesmo `try` existe outro `await` — o UPDATE que marca a entrega.
+
+Cenario: o webhook ACEITA, a mensagem ja esta no canal corporativo, e o UPDATE
+falha por erro transitorio do Postgres. Nada era persistido; a linha seguia com
+`sent_to_chat = false` e `delivery_attempts = 0`; e a passada seguinte **postava
+a mesma mensagem de novo** — a cada 5 minutos pelas 24h da janela, sem nunca
+alcancar o teto.
+
+Marcar entrega antes do envio nao era alternativa: seria afirmar entrega que
+pode nao acontecer, o mesmo defeito do `MAIL_DRY_RUN`. O bloco de sucesso ganhou
+try/catch proprio e debita a tentativa, de modo que o teto passa a limitar a
+duplicacao. O catch externo usa uma flag `transportAttempted` para separar falha
+ANTES do transporte (problema de banco — nao debita, porque cinco blips do
+Postgres nao podem silenciar um alerta) de falha DEPOIS.
+
+#### D-07 (MEDIA) — passadas sobrepostas entregam duas vezes
+
+`node-cron` nao serializa execucoes. Com lote de 25 e timeout de 10s por chamada
+ao webhook, o pior caso e ~250s contra os 300s do intervalo. Duas passadas
+simultaneas leem a MESMA linha, porque o SELECT nao tem `FOR UPDATE`/`SKIP
+LOCKED` e `sent_to_chat` so muda depois do POST.
+
+O repositorio ja tinha os dois remedios para este problema: `email-check.ts`
+(mesma cadencia) usa latch `isRunning`, e `modules/sydle/service.ts` usa
+`pg_try_advisory_xact_lock`. O job novo nao tinha nenhum. Adotado o latch, que e
+o idioma do vizinho de mesma cadencia e cobre a topologia atual de uma
+instancia. Se a API passar a ter replicas, cada uma tera seu proprio scheduler e
+o latch em memoria deixa de bastar — ai o caminho e o advisory lock. Registrado
+aqui para nao ser redescoberto.
+
+Um dos testes novos existe so para o `finally`: sem ele, o job travaria para
+sempre depois do primeiro erro.
+
+### Observado e nao resolvido
+
+**Flake no E2E da API.** Numa das cinco execucoes, o caso
+`dashboard-event-dates.e2e.test.ts > Reabertura de processo — ponta a ponta >
+admin reabre um processo concluido com motivo e a trilha registra tudo` falhou.
+As quatro execucoes seguintes passaram 63/63. A falha ocorreu com a maquina sob
+carga do Playwright. Nao reproduzido e nao diagnosticado — registrado com o nome
+exato para que a proxima ocorrencia nao comece do zero. **Nao tratar como
+resolvido.**
+
+### Nota final de metodo
+
+Os sete defeitos desta revisao foram encontrados por dois caminhos, e nenhum
+deles foi "reler o codigo procurando erro":
+
+1. **Medir o sistema rodando** (D-01, D-02, E-01). O banco de producao respondeu
+   perguntas que nenhum teste faz.
+2. **Revisao adversarial com hipotese escrita antes da evidencia** (D-05 a D-07),
+   incluindo a disciplina de escrever um teste que AFIRMA o comportamento errado
+   de hoje: se ele passa, o defeito existe; quando passa a falhar, foi corrigido.
+
+E o achado mais desconfortavel: **duas das minhas proprias conclusoes estavam
+erradas** e foram corrigidas dentro da mesma sessao — a refutacao incompleta da
+starvation (D-06) e a redacao de caminho que vazava com aparencia de tratada
+(D-03). Revisar a propria entrega depois de verde continua achando defeito real,
+toda vez.
