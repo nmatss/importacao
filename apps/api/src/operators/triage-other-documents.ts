@@ -11,10 +11,10 @@ import { createHash } from 'node:crypto';
 import { chmod, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import pdfParse from 'pdf-parse';
-import * as XLSX from 'xlsx';
 import { eq } from 'drizzle-orm';
 import { db, pool } from '../shared/database/connection.js';
 import { documents, importProcesses } from '../shared/database/schema.js';
+import { spreadsheetBufferToText } from '../modules/documents/service.js';
 import {
   classifyDocument,
   classifyDocumentText,
@@ -33,10 +33,11 @@ function extractText(buffer: Buffer, filename: string, mimeType: string | null):
   const lower = filename.toLowerCase();
   const mime = (mimeType ?? '').toLowerCase();
   if (lower.endsWith('.xlsx') || lower.endsWith('.xls') || mime.includes('spreadsheet')) {
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-    return workbook.SheetNames.slice(0, 5)
-      .map((sheetName) => XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName]))
-      .join('\n');
+    // Helper unico (documents/service.ts): blankrows: false, descarte de linha
+    // so-separador, corte antecipado e teto de caracteres. O `slice(0, 5)` que
+    // vivia aqui limitava por aba, nao por tamanho — uma unica aba com range
+    // inflado passava inteira.
+    return spreadsheetBufferToText(buffer);
   }
   return '';
 }

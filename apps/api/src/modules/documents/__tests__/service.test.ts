@@ -25,6 +25,9 @@ vi.mock('../../ai/service.js', () => ({
     extractInvoiceData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.9 }),
     extractPackingListData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.85 }),
     extractBLData: vi.fn().mockResolvedValue({ data: {}, confidenceScore: 0.88 }),
+    extractEspelhoData: vi
+      .fn()
+      .mockResolvedValue({ data: { items: [{ itemCode: 'A1' }] }, confidenceScore: 0.7 }),
     // Default to the Vertex-like capability so the pre-existing cases keep
     // exercising the raw-PDF path; the rasterization cases flip it explicitly.
     acceptsPdfInput: true,
@@ -68,6 +71,18 @@ vi.mock('../ocr.js', () => ({
   rasterizePdfPages: vi.fn().mockResolvedValue(null),
 }));
 
+const { mockTryParseEspelhoBuffer } = vi.hoisted(() => ({
+  mockTryParseEspelhoBuffer: vi.fn(),
+}));
+
+vi.mock('../../espelho-parser/parser.js', () => ({
+  tryParseEspelhoBuffer: mockTryParseEspelhoBuffer,
+}));
+
+vi.mock('../reconcile.js', () => ({
+  reconcileProcessConfidence: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock('xlsx', () => ({
   read: vi.fn().mockReturnValue({
     SheetNames: ['Sheet1'],
@@ -79,6 +94,8 @@ vi.mock('xlsx', () => ({
 }));
 
 const { documentService } = await import('../service.js');
+const { alertService } = await import('../../alerts/service.js');
+const { googleDriveService } = await import('../../integrations/google-drive.service.js');
 const { auditService } = await import('../../audit/service.js');
 const { ocrScannedPdf, rasterizePdfPages } = await import('../ocr.js');
 const { aiService } = await import('../../ai/service.js');
@@ -453,6 +470,71 @@ describe('documentService', () => {
           expect.objectContaining({ fromType: 'other', toType: 'invoice' }),
           null,
         );
+      } finally {
+        enqueueSpy.mockRestore();
+      }
+    });
+
+    // Sem esta guarda: o worker A segura a lease extraindo como `invoice`, o
+    // operador reclassifica para `ohbl`, o job B perde a lease e retorna
+    // normalmente (pg-boss marca completed, sem retry), e o worker A grava
+    // dado de invoice num documento agora tipado `ohbl` — estado divergente e
+    // sem reextração agendada.
+    it('recusa (409) reclassificar enquanto ha extracao ativa, como reprocess()', async () => {
+      const inFlight = {
+        id: 22,
+        processId: 1,
+        type: 'invoice',
+        storagePath: '/tmp/inflight.pdf',
+        originalFilename: 'inflight.pdf',
+        isProcessed: false,
+        confidenceScore: null,
+        aiParsedData: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const enqueueSpy = vi.spyOn(documentService, 'enqueueAIExtraction').mockResolvedValue();
+
+      queryQueue.push(createResolvedChain([inFlight]));
+      queryQueue.push(createResolvedChain([]));
+
+      try {
+        await expect(documentService.reclassify(22, 'ohbl', 7)).rejects.toMatchObject({
+          statusCode: 409,
+        });
+        expect(mockDb.transaction).not.toHaveBeenCalled();
+        expect(enqueueSpy).not.toHaveBeenCalled();
+      } finally {
+        enqueueSpy.mockRestore();
+      }
+    });
+
+    it('permite reclassificar quando a extracao travada ja esta obsoleta', async () => {
+      const stale = {
+        id: 23,
+        processId: 1,
+        type: 'invoice',
+        storagePath: '/tmp/stale.pdf',
+        originalFilename: 'stale.pdf',
+        isProcessed: false,
+        confidenceScore: null,
+        aiParsedData: null,
+        createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+        updatedAt: new Date(Date.now() - 48 * 60 * 60 * 1000),
+      };
+      const enqueueSpy = vi.spyOn(documentService, 'enqueueAIExtraction').mockResolvedValue();
+
+      queryQueue.push(createResolvedChain([stale]));
+      queryQueue.push(createResolvedChain([]));
+      txQueue.push(createResolvedChain(undefined));
+      txQueue.push(createResolvedChain([]));
+      txQueue.push(createResolvedChain([{ aiExtractedData: {} }]));
+      txQueue.push(createResolvedChain(undefined));
+      queryQueue.push(createResolvedChain(undefined));
+
+      try {
+        await expect(documentService.reclassify(23, 'ohbl', 7)).resolves.toMatchObject({ id: 23 });
+        expect(enqueueSpy).toHaveBeenCalled();
       } finally {
         enqueueSpy.mockRestore();
       }
@@ -1012,6 +1094,201 @@ describe('documentService', () => {
     });
   });
 
+  describe('uploadToDrive()', () => {
+    // Cadeia comprovada por leitura cruzada: a varredura importa com o
+    // `driveFileId` ORIGINAL (drive-ingestion.service.ts), o re-upload criava
+    // uma CÓPIA e o UPDATE trocava o id original pelo da cópia. Como
+    // listProcessFiles é recursiva, a cópia passava a ser a única deduplicada
+    // e o arquivo original voltava a cada passada de 10 minutos.
+    it('nao re-sobe (nem sobrescreve o driveFileId) documento vindo do Drive', async () => {
+      vi.mocked(googleDriveService.isRootConfigured).mockResolvedValueOnce(true);
+      vi.mocked(googleDriveService.uploadToProcessFolder).mockResolvedValueOnce('copia-drive-id');
+      queryQueue.push(createResolvedChain([{ ingestionSource: 'drive' }]));
+      // O processo TEM de estar resolvível: sem isto o `if (!process) return`
+      // faria o teste passar mesmo sem a guarda — foi assim que a primeira
+      // versao deste caso passou verde com a guarda desligada.
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-001', brand: 'puket' }]));
+      queryQueue.push(createResolvedChain(undefined));
+
+      await documentService.uploadToDrive(31, 1, 'invoice', '/tmp/inv.pdf', 'INV.pdf');
+
+      expect(googleDriveService.uploadToProcessFolder).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('continua subindo o upload manual e gravando o driveFileId', async () => {
+      vi.mocked(googleDriveService.isRootConfigured).mockResolvedValueOnce(true);
+      vi.mocked(googleDriveService.uploadToProcessFolder).mockResolvedValueOnce('copia-drive-id');
+      queryQueue.push(createResolvedChain([{ ingestionSource: 'manual' }]));
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-001', brand: 'puket' }]));
+      const updateChain = createResolvedChain(undefined);
+      queryQueue.push(updateChain);
+
+      await documentService.uploadToDrive(32, 1, 'invoice', '/tmp/inv.pdf', 'INV.pdf');
+
+      expect(googleDriveService.uploadToProcessFolder).toHaveBeenCalledWith(
+        'IMP-001',
+        'puket',
+        'invoice',
+        '/tmp/inv.pdf',
+        'INV.pdf',
+      );
+      expect(updateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({ driveFileId: 'copia-drive-id' }),
+      );
+    });
+
+    it('trata ingestao por email como manual (o arquivo nao existe no Drive ainda)', async () => {
+      vi.mocked(googleDriveService.isRootConfigured).mockResolvedValueOnce(true);
+      vi.mocked(googleDriveService.uploadToProcessFolder).mockResolvedValueOnce('novo-id');
+      queryQueue.push(createResolvedChain([{ ingestionSource: 'email' }]));
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-002', brand: 'puket' }]));
+      queryQueue.push(createResolvedChain(undefined));
+
+      await documentService.uploadToDrive(33, 2, 'ohbl', '/tmp/bl.pdf', 'BL.pdf');
+
+      expect(googleDriveService.uploadToProcessFolder).toHaveBeenCalled();
+    });
+  });
+
+  describe('processEspelho()', () => {
+    const espelhoDoc = {
+      id: 40,
+      processId: 1,
+      type: 'espelho',
+      storagePath: '/tmp/espelho.xlsx',
+      originalFilename: 'espelho.xlsx',
+      isProcessed: false,
+      confidenceScore: null,
+      aiParsedData: null,
+    } as any;
+
+    function queueLineageChains() {
+      const updateChain = createResolvedChain(undefined);
+      txQueue.push(updateChain);
+      txQueue.push(createResolvedChain([{ id: 1 }]));
+      txQueue.push(createResolvedChain(undefined));
+      return updateChain;
+    }
+
+    // A planilha vazia era projetada no processo com o badge mais alto do
+    // sistema: o parser reconhecia o cabecalho e o codigo gravava 0.99 fixo.
+    it('trata espelho reconhecido com ZERO itens como falha de parse', async () => {
+      mockTryParseEspelhoBuffer.mockReturnValue({
+        ok: true,
+        data: {
+          summary: { processo: 'IMP-001' },
+          items: [],
+          headerRowIndex: 3,
+          sheetName: 'Espelho',
+          rawRowCount: 4,
+        },
+      });
+      const updateChain = queueLineageChains();
+      queryQueue.push(createResolvedChain([{ processCode: 'IMP-001' }]));
+
+      await documentService.processEspelho(espelhoDoc);
+
+      const persisted = updateChain.set.mock.calls[0][0];
+      expect(persisted.confidenceScore).toBe('0');
+      expect(String(persisted.aiParsedData.error)).toContain('nenhuma linha de item');
+      expect(alertService.create).toHaveBeenCalled();
+      // Nada foi projetado em import_processes.
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('mantem 0.99 quando o parser devolve itens', async () => {
+      mockTryParseEspelhoBuffer.mockReturnValue({
+        ok: true,
+        data: {
+          summary: { processo: 'IMP-001' },
+          items: [{ itemCode: 'A1', quantity: 2 }],
+          headerRowIndex: 3,
+          sheetName: 'Espelho',
+          rawRowCount: 5,
+        },
+      });
+      const updateChain = queueLineageChains();
+      queryQueue.push(createResolvedChain(undefined));
+
+      await documentService.processEspelho(espelhoDoc);
+
+      const persisted = updateChain.set.mock.calls[0][0];
+      expect(persisted.confidenceScore).toBe('0.99');
+      expect(persisted.aiParsedData.items).toHaveLength(1);
+      expect(alertService.create).not.toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    // A correcao de 2026-08-17 (blankrows + descarte de linha so-separador +
+    // teto de caracteres) vivia so em extractText(); o fallback de IA do
+    // espelho usava um segundo caminho sem nenhuma protecao — o mesmo defeito
+    // que causou os timeouts de producao, sobrevivendo em paralelo.
+    it('aplica as protecoes de planilha tambem no fallback de IA do espelho', async () => {
+      const previousFallback = process.env.ESPELHO_AI_FALLBACK;
+      const previousProvider = process.env.AI_PROVIDER;
+      process.env.ESPELHO_AI_FALLBACK = '1';
+      process.env.AI_PROVIDER = 'ialocal';
+
+      mockTryParseEspelhoBuffer.mockReturnValue({ ok: false, error: 'cabecalho ausente' });
+      const xlsx = await import('xlsx');
+      (xlsx.utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        'sku,qtd\nA1,10\n,,,\n,,\nB2,5\n',
+      );
+      queueLineageChains();
+      queryQueue.push(createResolvedChain(undefined));
+      queryQueue.push(createResolvedChain(undefined));
+
+      try {
+        await documentService.processEspelho(espelhoDoc);
+
+        expect(xlsx.utils.sheet_to_csv).toHaveBeenCalledWith(expect.anything(), {
+          blankrows: false,
+        });
+        const promptText = vi.mocked(aiService.extractEspelhoData).mock.calls[0][0] as string;
+        expect(promptText).toContain('--- Sheet: Sheet1 ---');
+        expect(promptText).toContain('sku,qtd\nA1,10\nB2,5');
+        expect(promptText).not.toContain(',,,');
+      } finally {
+        if (previousFallback === undefined) delete process.env.ESPELHO_AI_FALLBACK;
+        else process.env.ESPELHO_AI_FALLBACK = previousFallback;
+        if (previousProvider === undefined) delete process.env.AI_PROVIDER;
+        else process.env.AI_PROVIDER = previousProvider;
+      }
+    });
+
+    it('trunca a planilha do fallback acima do teto de caracteres', async () => {
+      const previousFallback = process.env.ESPELHO_AI_FALLBACK;
+      const previousProvider = process.env.AI_PROVIDER;
+      process.env.ESPELHO_AI_FALLBACK = '1';
+      process.env.AI_PROVIDER = 'ialocal';
+      process.env.DOCUMENT_SPREADSHEET_MAX_CHARS = '50';
+
+      mockTryParseEspelhoBuffer.mockReturnValue({ ok: false, error: 'cabecalho ausente' });
+      const xlsx = await import('xlsx');
+      (xlsx.utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        'x'.repeat(5000),
+      );
+      queueLineageChains();
+      queryQueue.push(createResolvedChain(undefined));
+      queryQueue.push(createResolvedChain(undefined));
+
+      try {
+        await documentService.processEspelho(espelhoDoc);
+
+        const promptText = vi.mocked(aiService.extractEspelhoData).mock.calls[0][0] as string;
+        expect(promptText).toContain('[TEXTO TRUNCADO');
+        expect(promptText.length).toBeLessThan(250);
+      } finally {
+        delete process.env.DOCUMENT_SPREADSHEET_MAX_CHARS;
+        if (previousFallback === undefined) delete process.env.ESPELHO_AI_FALLBACK;
+        else process.env.ESPELHO_AI_FALLBACK = previousFallback;
+        if (previousProvider === undefined) delete process.env.AI_PROVIDER;
+        else process.env.AI_PROVIDER = previousProvider;
+      }
+    });
+  });
+
   describe('extractText()', () => {
     it('should handle PDF files', async () => {
       const result = await documentService.extractText('/tmp/test.pdf', 'application/pdf');
@@ -1035,6 +1312,13 @@ describe('documentService', () => {
       // o teto de 180 s da extracao — 3 dos 4 timeouts de producao.
       const csvMock = async () =>
         (await import('xlsx')).utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>;
+
+      // vi.clearAllMocks() zera chamadas mas NAO implementacoes: sem isto o
+      // mockReturnValue dos casos de muitas abas vazaria para os testes
+      // seguintes do arquivo.
+      afterEach(async () => {
+        (await csvMock()).mockReturnValue('col1,col2\nval1,val2');
+      });
 
       it('descarta linhas que so tem separador', async () => {
         (await csvMock()).mockReturnValueOnce('sku,qtd\nA1,10\n,,,\n,,\nB2,5\n');
@@ -1061,6 +1345,46 @@ describe('documentService', () => {
         const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
 
         expect(result.text).not.toContain('TRUNCADO');
+      });
+
+      // O teto protegia o prompt, nao o trabalho: uma pasta com dezenas de abas
+      // era convertida INTEIRA para depois o slice jogar quase tudo fora.
+      async function mockWorkbookWithSheets(count: number, csvPerSheet: string) {
+        const xlsx = await import('xlsx');
+        const names = Array.from({ length: count }, (_, i) => `Sheet${i + 1}`);
+        (xlsx.read as unknown as ReturnType<typeof vi.fn>).mockReturnValueOnce({
+          SheetNames: names,
+          Sheets: Object.fromEntries(names.map((n) => [n, {}])),
+        });
+        (xlsx.utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+          csvPerSheet,
+        );
+        return xlsx.utils.sheet_to_csv as unknown as ReturnType<typeof vi.fn>;
+      }
+
+      it('para de converter abas assim que o acumulado passa do teto', async () => {
+        process.env.DOCUMENT_SPREADSHEET_MAX_CHARS = '50';
+        const csv = await mockWorkbookWithSheets(30, 'x'.repeat(100));
+
+        const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
+
+        // A primeira aba ja estoura o teto — as outras 29 nao sao convertidas.
+        expect(csv).toHaveBeenCalledTimes(1);
+        expect(result.text).toContain('[TEXTO TRUNCADO');
+        expect(result.text.length).toBeLessThan(250);
+        delete process.env.DOCUMENT_SPREADSHEET_MAX_CHARS;
+      });
+
+      it('nao para cedo demais: converte abas ate cobrir o teto', async () => {
+        process.env.DOCUMENT_SPREADSHEET_MAX_CHARS = '250';
+        const csv = await mockWorkbookWithSheets(30, 'x'.repeat(100));
+
+        const result = await documentService.extractText('/tmp/t.xlsx', 'application/vnd.ms-excel');
+
+        // 100, 201, 302 — a terceira aba e a primeira a ultrapassar 250.
+        expect(csv).toHaveBeenCalledTimes(3);
+        expect(result.text).toContain('[TEXTO TRUNCADO');
+        delete process.env.DOCUMENT_SPREADSHEET_MAX_CHARS;
       });
     });
 

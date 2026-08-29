@@ -4,6 +4,7 @@ import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import {
   acceptComparisonSchema,
   editComparisonFieldSchema,
+  removeComparisonFieldSchema,
   reclassifyDocumentSchema,
   uploadDocumentSchema,
 } from './schema.js';
@@ -20,6 +21,22 @@ export function isActiveContent(mimeType: string, filename?: string | null): boo
   );
 }
 
+/**
+ * Erro de validacao legivel para quem esta na tela.
+ *
+ * Os handlers devolviam `JSON.stringify(errors)`, entao uma nota curta demais
+ * chegava ao operador como
+ * `[{"field":"note","message":"String must contain at least 3 character(s)"}]`.
+ * Mensagem de validacao e texto de produto: quem le e o analista, nao o
+ * console.
+ */
+function validationMessage(issues: Array<{ field: string; message: string }>): string {
+  if (issues.length === 0) return 'Dados invalidos';
+  return issues
+    .map((issue) => (issue.field ? `${issue.field}: ${issue.message}` : issue.message))
+    .join('; ');
+}
+
 export const documentController = {
   async upload(req: Request, res: Response) {
     try {
@@ -32,7 +49,7 @@ export const documentController = {
           field: e.path.join('.'),
           message: e.message,
         }));
-        return sendError(res, JSON.stringify(errors), 400);
+        return sendError(res, validationMessage(errors), 400);
       }
       const { processId, documentType } = parsed.data;
       const userId = req.user?.id ?? null;
@@ -162,7 +179,7 @@ export const documentController = {
           field: e.path.join('.'),
           message: e.message,
         }));
-        return sendError(res, JSON.stringify(errors), 400);
+        return sendError(res, validationMessage(errors), 400);
       }
       const doc = await documentService.reclassify(
         Number(req.params.id),
@@ -225,7 +242,7 @@ export const documentController = {
           field: e.path.join('.'),
           message: e.message,
         }));
-        return sendError(res, JSON.stringify(errors), 400);
+        return sendError(res, validationMessage(errors), 400);
       }
       const userId = req.user?.id ?? null;
       const result = await documentService.acceptComparison(
@@ -248,9 +265,31 @@ export const documentController = {
           field: e.path.join('.'),
           message: e.message,
         }));
-        return sendError(res, JSON.stringify(errors), 400);
+        return sendError(res, validationMessage(errors), 400);
       }
       const result = await documentService.editComparisonField(
+        Number(req.params.processId),
+        parsed.data,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async removeComparisonField(req: Request, res: Response) {
+    try {
+      const parsed = removeComparisonFieldSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.map((e) => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return sendError(res, validationMessage(errors), 400);
+      }
+      const result = await documentService.removeComparisonFieldOverride(
         Number(req.params.processId),
         parsed.data,
         req.user?.id ?? null,

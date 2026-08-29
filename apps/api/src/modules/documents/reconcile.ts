@@ -11,6 +11,7 @@ import {
   importProcesses,
   documentExtractionRuns,
   documentExtractedFields,
+  documentExtractionHistory,
 } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import { flattenAiData } from '../ai/service.js';
@@ -38,6 +39,8 @@ interface DocRow {
   isProcessed: boolean | null;
   aiParsedData: unknown;
   confidenceScore: string | number | null;
+  originalFilename?: string | null;
+  storagePath?: string | null;
 }
 
 /**
@@ -59,6 +62,8 @@ export async function reconcileProcessConfidence(
         isProcessed: documents.isProcessed,
         aiParsedData: documents.aiParsedData,
         confidenceScore: documents.confidenceScore,
+        originalFilename: documents.originalFilename,
+        storagePath: documents.storagePath,
       })
       .from(documents)
       .where(eq(documents.processId, processId))
@@ -172,6 +177,23 @@ async function persistReconciliation(
   espelho: EspelhoSource | null,
   report: ReconcileReport,
 ): Promise<void> {
+  // Este update DESTRÓI o payload original da extração. Arquivar antes, como
+  // fazem reprocess/reclassify/reextract/delete — reconcileProcessConfidence
+  // roda a cada extração de documento irmão, então isto é rotina, não exceção,
+  // e sem o arquivamento o payload de origem não é recuperável.
+  if (doc.aiParsedData != null) {
+    await db.insert(documentExtractionHistory).values({
+      documentId: doc.id,
+      processId,
+      documentType: doc.type,
+      originalFilename: doc.originalFilename ?? null,
+      storagePath: doc.storagePath ?? null,
+      aiParsedData: doc.aiParsedData,
+      confidence: doc.confidenceScore != null ? String(doc.confidenceScore) : null,
+      reason: 'reconcile',
+    });
+  }
+
   await db
     .update(documents)
     .set({ aiParsedData: data, confidenceScore: String(score), updatedAt: new Date() })

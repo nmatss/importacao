@@ -7,6 +7,7 @@ import {
   espelhos,
   processItems,
   documents,
+  documentExtractionRuns,
   importProcesses,
   followUpTracking,
 } from '../../shared/database/schema.js';
@@ -21,8 +22,42 @@ import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { getOperationalRecipient } from '../settings/operational-recipients.js';
+import { MIN_OPERATIONAL_CONFIDENCE } from '../documents/constants.js';
 
 const UPLOAD_DIR = 'uploads';
+
+/**
+ * Coerção numérica que PRESERVA a distinção ausente vs zero: devolve `null`
+ * quando nenhum dos aliases traz valor e `0` quando a fonte realmente diz zero.
+ * `Number(x || 0)` transformava campo não lido em zero — e zero, aqui, é
+ * declaração aduaneira (Free Of Charge).
+ */
+function firstNumberOrNull(...values: unknown[]): number | null {
+  for (const value of values) {
+    if (value === null || value === undefined) continue;
+    // String vazia ou só espaço é célula não preenchida, não zero declarado.
+    if (typeof value === 'string' && value.trim() === '') continue;
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+/** Mesmo piso operacional da extração (documents/constants.ts). */
+function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
+  if (confidenceScore == null) return true;
+  const confidence =
+    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
+  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
+}
+
+function hasFailedExtraction(aiParsedData: unknown): boolean {
+  if (typeof aiParsedData !== 'object' || aiParsedData === null || Array.isArray(aiParsedData)) {
+    return false;
+  }
+  const data = aiParsedData as Record<string, unknown>;
+  return Boolean(data.extractionFailed || data.error || data.skipped);
+}
 
 // NCM chapters that typically require LI (import license)
 const LI_NCM_PREFIXES = [
@@ -137,11 +172,29 @@ export const espelhoService = {
           eq(documents.type, 'invoice'),
           eq(documents.isProcessed, true),
         ),
-      );
+      )
+      // ADR 0006: a geração de espelho seleciona o documento VIGENTE. Sem
+      // orderBy, `invoiceDocs[0]` era a ordem que o Postgres devolvesse — em
+      // processo com mais de uma Invoice a escolha era não determinística.
+      .orderBy(desc(documents.createdAt), desc(documents.id));
 
     if (invoiceDocs.length === 0) return [];
 
-    const doc = invoiceDocs[0];
+    // Mesmo piso operacional que documents/service.ts (shouldProjectAiData) e
+    // validation/service.ts aplicam: uma extração abaixo do piso ficou
+    // deliberadamente fora do processo e não pode entrar em process_items por
+    // esta porta lateral.
+    const doc = invoiceDocs.find(
+      (d) => hasOperationalConfidence(d.confidenceScore) && !hasFailedExtraction(d.aiParsedData),
+    );
+    if (!doc) {
+      logger.warn(
+        { processId, candidates: invoiceDocs.length },
+        'No invoice above the operational confidence floor — process items not auto-populated',
+      );
+      return [];
+    }
+
     const rawParsed = doc.aiParsedData as Record<string, unknown> | null;
     if (!rawParsed) return [];
     // Flatten { value, confidence } structures to plain values
@@ -149,10 +202,14 @@ export const espelhoService = {
     if (!parsed?.items || !Array.isArray(parsed.items)) return [];
 
     const itemsToInsert = parsed.items.map((raw: any) => {
-      const unitPrice = Number(raw.unitPrice || raw.unit_price || 0);
-      const qty = Number(raw.quantity || raw.qty || 0);
+      const unitPrice = firstNumberOrNull(raw.unitPrice, raw.unit_price);
+      const qty = firstNumberOrNull(raw.quantity, raw.qty);
       const desc = String(raw.description || '');
 
+      // FOC só é DERIVADO quando o preço está PRESENTE e é zero. Campo que a
+      // extração não leu (`null`) não é declaração de gratuidade — marcá-lo
+      // como FOC propagava para importProcesses.hasFreeOfCharge, que é
+      // declaração aduaneira.
       const isFoc =
         unitPrice === 0 || /\bfoc\b/i.test(desc) || /\bfree\s*(of\s*charge)?\b/i.test(desc);
 
@@ -167,10 +224,14 @@ export const espelhoService = {
         color: raw.color || null,
         size: raw.size || null,
         ncmCode: ncm || null,
-        unitPrice: unitPrice ? String(unitPrice) : null,
-        quantity: qty || null,
-        totalPrice: unitPrice && qty ? String(Math.round(unitPrice * qty * 100) / 100) : null,
-        boxQuantity: Number(raw.boxQuantity || raw.box_quantity || raw.boxes || 0) || null,
+        // Zero legítimo É o dado (item FOC tem preço 0): grava 0, não null.
+        unitPrice: unitPrice !== null ? String(unitPrice) : null,
+        quantity: qty,
+        totalPrice:
+          unitPrice !== null && qty !== null
+            ? String(Math.round(unitPrice * qty * 100) / 100)
+            : null,
+        boxQuantity: firstNumberOrNull(raw.boxQuantity, raw.box_quantity, raw.boxes),
         netWeight: raw.netWeight || raw.net_weight || null,
         grossWeight: raw.grossWeight || raw.gross_weight || null,
         manufacturer: raw.manufacturer || null,
@@ -183,11 +244,63 @@ export const espelhoService = {
 
     if (itemsToInsert.length === 0) return [];
 
-    const inserted = await db.insert(processItems).values(itemsToInsert).returning();
+    // Linhagem exigida pela ADR 0006: cada linha materializada aponta para o
+    // documento e a execucao de extracao que a originaram.
+    const [latestRun] = await db
+      .select({ id: documentExtractionRuns.id })
+      .from(documentExtractionRuns)
+      .where(eq(documentExtractionRuns.documentId, doc.id))
+      .orderBy(desc(documentExtractionRuns.createdAt), desc(documentExtractionRuns.id))
+      .limit(1);
+
+    const materializedAt = new Date();
+    const itemsWithLineage = itemsToInsert.map((item: Record<string, unknown>) => ({
+      ...item,
+      sourceDocumentId: doc.id,
+      extractionRunId: latestRun?.id ?? null,
+      materializedAt,
+    }));
+
+    // Dois `POST /generate` simultaneos liam `items.length === 0` e ambos
+    // inseriam o lote inteiro. O lock de transacao serializa a materializacao
+    // por processo e a RE-CHECAGEM sob o lock e o que impede a duplicata.
+    const materialized = await db.transaction(async (tx: any) => {
+      const lockResult = await tx.execute(
+        sql`SELECT pg_try_advisory_xact_lock(hashtext('espelho_auto_populate_items'), ${processId}) AS acquired`,
+      );
+      const lockRows = Array.isArray(lockResult) ? lockResult : (lockResult?.rows ?? []);
+      if (!lockRows[0]?.acquired) {
+        // Outra execucao esta materializando este processo: espera o commit
+        // dela (lock_timeout limita a espera) em vez de inserir em paralelo.
+        await tx.execute(sql`SET LOCAL lock_timeout = '10s'`);
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtext('espelho_auto_populate_items'), ${processId})`,
+        );
+      }
+
+      const existing = await tx
+        .select()
+        .from(processItems)
+        .where(eq(processItems.processId, processId));
+      if (existing.length > 0) return { rows: existing, inserted: false };
+
+      const rows = await tx.insert(processItems).values(itemsWithLineage).returning();
+      return { rows, inserted: true };
+    });
+
+    if (!materialized.inserted) {
+      logger.info(
+        { processId, count: materialized.rows.length },
+        'Process items already materialized by a concurrent generate — nothing inserted',
+      );
+      return materialized.rows;
+    }
+
+    const inserted = materialized.rows;
 
     // Update process flags
-    const hasLi = inserted.some((i) => i.requiresLi);
-    const hasFoc = inserted.some((i) => i.isFreeOfCharge);
+    const hasLi = inserted.some((i: any) => i.requiresLi);
+    const hasFoc = inserted.some((i: any) => i.isFreeOfCharge);
 
     await db
       .update(importProcesses)
@@ -267,8 +380,9 @@ export const espelhoService = {
   },
 
   async addItem(processId: number, data: any) {
-    const unitPrice = Number(data.unitPrice) || 0;
-    const qty = Number(data.quantity) || 0;
+    // Preserva ausente (null) vs zero declarado — ver firstNumberOrNull.
+    const unitPrice = firstNumberOrNull(data.unitPrice);
+    const qty = firstNumberOrNull(data.quantity);
 
     const [item] = await db
       .insert(processItems)
@@ -279,10 +393,13 @@ export const espelhoService = {
         color: data.color || null,
         size: data.size || null,
         ncmCode: data.ncmCode || null,
-        unitPrice: unitPrice ? String(unitPrice) : null,
-        quantity: qty || null,
-        totalPrice: unitPrice && qty ? String(Math.round(unitPrice * qty * 100) / 100) : null,
-        boxQuantity: Number(data.boxQuantity) || null,
+        unitPrice: unitPrice !== null ? String(unitPrice) : null,
+        quantity: qty,
+        totalPrice:
+          unitPrice !== null && qty !== null
+            ? String(Math.round(unitPrice * qty * 100) / 100)
+            : null,
+        boxQuantity: firstNumberOrNull(data.boxQuantity),
         netWeight: data.netWeight || null,
         grossWeight: data.grossWeight || null,
         isFreeOfCharge: data.isFreeOfCharge ?? false,
