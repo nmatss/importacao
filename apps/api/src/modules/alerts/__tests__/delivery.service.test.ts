@@ -220,6 +220,114 @@ describe('attemptDelivery()', () => {
     );
   });
 
+  /**
+   * Achado da revisao pos-deploy: o teto e o backoff viviam SO no job de
+   * reentrega, e o job nao e o unico chamador. `alertService.create()` tambem
+   * chama `attemptDelivery`, no caminho de deduplicacao, e furava as duas
+   * protecoes. Como `handleCronError` cria alerta a cada falha de cron, um job
+   * quebrado de 5 em 5 minutos gerava ~288 tentativas por dia contra um webhook
+   * que ja havia recusado.
+   *
+   * A regra agora mora dentro de `attemptDelivery`, entao qualquer chamador
+   * obedece por construcao — e estes dois casos provam que ela nao so recusa,
+   * como recusa SEM ESCREVER: nada de UPDATE, nada de metrica, nada de envio.
+   */
+  it('TETO: acima do limite nao envia e nao escreve nada', async () => {
+    const outcome = await attemptDelivery({
+      ...baseAlert,
+      deliveryAttempts: MAX_DELIVERY_ATTEMPTS,
+      lastDeliveryAttemptAt: null,
+    });
+
+    expect(outcome).toEqual({
+      delivered: false,
+      outcome: 'throttled',
+      error: expect.stringMatching(/backoff|teto/i),
+    });
+    expect(chat.sendToGoogleChat).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+    expect(metrics.alertDeliveryTotal.inc).not.toHaveBeenCalled();
+  });
+
+  it('BACKOFF: dentro da janela nao envia e nao escreve nada', async () => {
+    const outcome = await attemptDelivery({
+      ...baseAlert,
+      deliveryAttempts: 1,
+      lastDeliveryAttemptAt: new Date(), // tentado agora; backoff de 10 min
+    });
+
+    expect(outcome.outcome).toBe('throttled');
+    expect(chat.sendToGoogleChat).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('alerta recem-criado (zero tentativas) e entregue na hora', async () => {
+    queryQueue.push(createResolvedChain([{ value: WEBHOOK }]));
+    queryQueue.push(createResolvedChain([]));
+
+    const outcome = await attemptDelivery({
+      ...baseAlert,
+      deliveryAttempts: 0,
+      lastDeliveryAttemptAt: null,
+    });
+
+    expect(outcome.delivered).toBe(true);
+    expect(chat.sendToGoogleChat).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * O `catch` de `attemptDelivery` nao persistia nada, e a analise inicial parou
+   * em "`sendToGoogleChat` nunca lanca, logo nao ha como cair aqui". Verdade
+   * sobre o webhook — e incompleta: dentro do mesmo `try` ha outro `await`, o
+   * UPDATE que marca a entrega.
+   *
+   * Cenario: o webhook ACEITA (mensagem ja postada no canal corporativo) e o
+   * UPDATE falha por erro transitorio do Postgres. Nada era persistido, a linha
+   * seguia com `sent_to_chat = false` e `delivery_attempts = 0`, e a passada
+   * seguinte POSTAVA A MESMA MENSAGEM — a cada 5 minutos, pelas 24h da janela,
+   * sem nunca alcancar o teto de 5.
+   */
+  it('entrega confirmada com UPDATE falhando debita tentativa para limitar a duplicacao', async () => {
+    chat.sendToGoogleChat.mockResolvedValue(true);
+    queryQueue.push(createResolvedChain([{ value: WEBHOOK }]));
+    const updateQueFalha = createResolvedChain([]);
+    updateQueFalha._setResolveValue(Promise.reject(new Error('57014 canceling statement')));
+    queryQueue.push(updateQueFalha);
+    const updateDeFallback = createResolvedChain([]);
+    queryQueue.push(updateDeFallback);
+
+    const outcome = await attemptDelivery({ ...baseAlert });
+
+    // A mensagem saiu: o resultado tem de dizer isso, sob pena de o chamador
+    // reenfileirar achando que nao saiu.
+    expect(outcome).toEqual({ delivered: true, outcome: 'sent' });
+
+    // E a tentativa tem de ficar registrada, senao a duplicacao nao tem fim.
+    const patch = updateDeFallback.set.mock.calls[0][0];
+    expect(patch.deliveryAttempts).toBeDefined();
+    expect(patch.sentToChat).toBeUndefined();
+  });
+
+  /**
+   * O outro lado da mesma regra: falha ANTES do transporte e problema de banco,
+   * nao do alerta, e nao pode gastar o orcamento de reentrega dele — cinco
+   * blips do Postgres silenciariam o alerta para sempre.
+   */
+  it('falha ANTES do transporte nao debita tentativa', async () => {
+    const selectQueFalha = createResolvedChain([]);
+    selectQueFalha._setResolveValue(Promise.reject(new Error('ECONNRESET no pool')));
+    queryQueue.push(selectQueFalha);
+    const updateDeFallback = createResolvedChain([]);
+    queryQueue.push(updateDeFallback);
+
+    const outcome = await attemptDelivery({ ...baseAlert });
+
+    expect(outcome).toEqual({ delivered: false, outcome: 'error' });
+    expect(chat.sendToGoogleChat).not.toHaveBeenCalled();
+    const patch = updateDeFallback.set.mock.calls[0]?.[0];
+    expect(patch?.deliveryAttempts).toBeUndefined();
+  });
+
   it('nao propaga erro do canal — o alerta fica para a proxima passada', async () => {
     chat.sendToGoogleChat.mockRejectedValue(new Error('socket hang up'));
     queryQueue.push(createResolvedChain([{ value: WEBHOOK }]));

@@ -10,7 +10,13 @@ const delivery = vi.hoisted(() => ({
   attemptDelivery: vi.fn(async () => ({ delivered: true, outcome: 'sent' as const })),
   MAX_DELIVERY_ATTEMPTS: 5,
 }));
-vi.mock('../../modules/alerts/delivery.service.js', () => delivery);
+// So `attemptDelivery` e dublado. `isDueForRetry` e `backoffMinutes` continuam
+// sendo os reais: sao a regra sob teste aqui, e desde que passaram a morar em
+// `delivery.service.js` um mock total delas testaria o proprio mock.
+vi.mock('../../modules/alerts/delivery.service.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../modules/alerts/delivery.service.js')>();
+  return { ...actual, ...delivery };
+});
 
 const chat = vi.hoisted(() => ({ isChatCooldownActive: vi.fn(() => false) }));
 vi.mock('../../modules/alerts/google-chat.service.js', () => chat);
@@ -174,6 +180,59 @@ describe('runAlertRedelivery()', () => {
       aguardando: 0,
       skipped: 'cooldown',
     });
+  });
+
+  /**
+   * `node-cron` nao serializa execucoes: passada que demora mais que o periodo
+   * dispara junto com a proxima. Com lote de 25 e timeout de 10s por chamada ao
+   * webhook, o pior caso e ~250s contra os 300s do intervalo. Duas passadas
+   * simultaneas leem a MESMA linha — o SELECT nao tem FOR UPDATE/SKIP LOCKED e
+   * `sent_to_chat` so muda depois do POST — e a mesma mensagem vai duas vezes
+   * para o canal corporativo.
+   *
+   * Mesmo idioma de `email-check.ts`, que roda de 5 em 5 minutos como este.
+   */
+  it('CONCORRENCIA: passada sobreposta e recusada em vez de duplicar a entrega', async () => {
+    let liberar!: () => void;
+    const emVoo = new Promise<void>((r) => {
+      liberar = r;
+    });
+    delivery.attemptDelivery.mockImplementation(async () => {
+      await emVoo;
+      return { delivered: true, outcome: 'sent' as const };
+    });
+
+    queryQueue.push(createResolvedChain([pendente({ id: 77 })]));
+    queryQueue.push(createResolvedChain([pendente({ id: 77 })]));
+
+    const primeira = runAlertRedelivery();
+    const segunda = await runAlertRedelivery(); // entra com a primeira em voo
+
+    expect(segunda).toEqual({
+      scanned: 0,
+      delivered: 0,
+      failed: 0,
+      aguardando: 0,
+      skipped: 'running',
+    });
+
+    liberar();
+    await primeira;
+
+    // O alerta foi entregue UMA vez, nao duas.
+    expect(delivery.attemptDelivery).toHaveBeenCalledTimes(1);
+  });
+
+  it('o latch e liberado mesmo quando a passada falha', async () => {
+    const chainQueFalha = createResolvedChain([]);
+    chainQueFalha._setResolveValue(Promise.reject(new Error('PG fora do ar')));
+    queryQueue.push(chainQueFalha);
+
+    await expect(runAlertRedelivery()).rejects.toThrow('PG fora do ar');
+
+    // Sem o `finally`, o job ficaria travado para sempre depois de um erro.
+    queryQueue.push(createResolvedChain([]));
+    await expect(runAlertRedelivery()).resolves.toMatchObject({ scanned: 0 });
   });
 
   it('contabiliza a falha sem interromper o lote', async () => {

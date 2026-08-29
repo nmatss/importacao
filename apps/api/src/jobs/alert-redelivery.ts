@@ -1,7 +1,12 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../shared/database/connection.js';
 import { alerts } from '../shared/database/schema.js';
-import { attemptDelivery, MAX_DELIVERY_ATTEMPTS } from '../modules/alerts/delivery.service.js';
+import {
+  attemptDelivery,
+  backoffMinutes,
+  isDueForRetry,
+  MAX_DELIVERY_ATTEMPTS,
+} from '../modules/alerts/delivery.service.js';
 import { isChatCooldownActive } from '../modules/alerts/google-chat.service.js';
 import { logger } from '../shared/utils/logger.js';
 
@@ -18,36 +23,39 @@ import { logger } from '../shared/utils/logger.js';
 export const REDELIVERY_BATCH_SIZE = 25;
 /** So o que ainda e acionavel: alerta de ontem entregue hoje nao ajuda ninguem. */
 export const REDELIVERY_WINDOW_HOURS = 24;
-const BACKOFF_BASE_MINUTES = 5;
-
-/** 5, 10, 20, 40, 80 min. Teto no expoente para nao crescer sem limite. */
-export function backoffMinutes(attempts: number | null | undefined): number {
-  const n = Math.max(0, Math.floor(attempts ?? 0));
-  return BACKOFF_BASE_MINUTES * 2 ** Math.min(n, 4);
-}
+/**
+ * `backoffMinutes` e `isDueForRetry` moram em `delivery.service.ts`, junto com
+ * `MAX_DELIVERY_ATTEMPTS`, porque o job nao e o unico chamador de
+ * `attemptDelivery` — `alertService.create()` tambem chama. Reexportados aqui
+ * porque este continua sendo o lugar onde a regra e testada em conjunto com o
+ * SELECT que a alimenta.
+ */
+export { backoffMinutes, isDueForRetry };
 
 /**
- * Este alerta pode ser tentado agora?
+ * Latch contra passadas sobrepostas, no mesmo idioma de `email-check.ts`, que
+ * roda de 5 em 5 minutos, a mesma cadencia deste.
  *
- * A decisao mora aqui, em JS, e nao na clausula SQL: o teto e o backoff sao a
- * regra que impede o job de martelar o mesmo alerta a cada 5 minutos, e regra
- * assim precisa ser verificavel sem banco. O SELECT filtra por indice, esta
- * funcao decide.
+ * `node-cron` nao serializa execucoes: se uma passada demora mais que o
+ * periodo, a proxima dispara junto. Com lote de 25 e timeout de 10s por chamada
+ * ao webhook, o pior caso e ~250s, perto dos 300s do intervalo — e duas passadas
+ * simultaneas leem a MESMA linha (o SELECT nao tem FOR UPDATE/SKIP LOCKED, e
+ * `sent_to_chat` so muda depois do POST), postando a mesma mensagem duas vezes
+ * no canal corporativo.
+ *
+ * Cobre uma instancia, que e a topologia atual. Se a API passar a rodar com
+ * mais de uma replica, cada uma tera seu proprio scheduler e o latch em memoria
+ * nao basta — ai o caminho e o `pg_try_advisory_xact_lock` ja usado em
+ * `modules/sydle/service.ts`.
  */
-export function isDueForRetry(
-  row: { deliveryAttempts?: number | null; lastDeliveryAttemptAt?: Date | string | null },
-  now: number = Date.now(),
-): boolean {
-  const attempts = row.deliveryAttempts ?? 0;
-  if (attempts >= MAX_DELIVERY_ATTEMPTS) return false;
-  if (!row.lastDeliveryAttemptAt) return true;
-
-  const last = new Date(row.lastDeliveryAttemptAt).getTime();
-  if (!Number.isFinite(last)) return true;
-  return now - last >= backoffMinutes(attempts) * 60_000;
-}
+let isRunning = false;
 
 export async function runAlertRedelivery() {
+  if (isRunning) {
+    logger.debug('alert-redelivery ja esta rodando, pulando esta passada');
+    return { scanned: 0, delivered: 0, failed: 0, aguardando: 0, skipped: 'running' as const };
+  }
+
   // Com o breaker aberto NADA pode ser entregue, entao a passada inteira e
   // trabalho perdido. Sem esta saida cada ciclo varria 25 linhas e gravava 25
   // UPDATEs de no-op: medido em producao, 11 ciclos em 55 min, ~275 escritas,
@@ -60,6 +68,16 @@ export async function runAlertRedelivery() {
     return { scanned: 0, delivered: 0, failed: 0, aguardando: 0, skipped: 'cooldown' as const };
   }
 
+  isRunning = true;
+  try {
+    return await varrerLote();
+  } finally {
+    isRunning = false;
+  }
+}
+
+/** O lote em si. Separado para o latch acima ter um `finally` limpo. */
+async function varrerLote() {
   const rows = await db
     .select({
       id: alerts.id,

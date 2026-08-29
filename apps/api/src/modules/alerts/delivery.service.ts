@@ -36,13 +36,55 @@ export interface DeliverableAlert {
   message: string;
   processCode?: string;
   deliveryAttempts?: number | null;
+  lastDeliveryAttemptAt?: Date | string | null;
 }
 
 export interface DeliveryOutcome {
   delivered: boolean;
-  outcome: 'sent' | 'failed' | 'cooldown' | 'unconfigured' | 'error';
+  outcome: 'sent' | 'failed' | 'cooldown' | 'unconfigured' | 'error' | 'throttled';
   error?: string;
 }
+
+const BACKOFF_BASE_MINUTES = 5;
+
+/** 5, 10, 20, 40, 80 min. Teto no expoente para nao crescer sem limite. */
+export function backoffMinutes(attempts: number | null | undefined): number {
+  const n = Math.max(0, Math.floor(attempts ?? 0));
+  return BACKOFF_BASE_MINUTES * 2 ** Math.min(n, 4);
+}
+
+/**
+ * Este alerta pode receber uma tentativa AGORA?
+ *
+ * Mora aqui, e nao no job, porque o job nao e o unico chamador de
+ * `attemptDelivery`: `alertService.create()` tambem chama, no caminho de
+ * deduplicacao. Enquanto a regra vivia so no job, esse caminho furava as duas
+ * protecoes — reentregava alerta que ja tinha estourado o teto de tentativas e
+ * ignorava o backoff. Como `handleCronError` cria alerta a cada falha de cron, um
+ * job quebrado rodando de 5 em 5 minutos gerava ~288 tentativas por dia contra um
+ * webhook que ja havia recusado, que e exatamente o que o teto existe para
+ * impedir.
+ *
+ * Com a decisao dentro de `attemptDelivery`, qualquer chamador — inclusive um
+ * futuro — obedece por construcao.
+ */
+export function isDueForRetry(
+  row: { deliveryAttempts?: number | null; lastDeliveryAttemptAt?: Date | string | null },
+  now: number = Date.now(),
+): boolean {
+  const attempts = row.deliveryAttempts ?? 0;
+  if (attempts >= MAX_DELIVERY_ATTEMPTS) return false;
+  if (!row.lastDeliveryAttemptAt) return true;
+
+  const last = new Date(row.lastDeliveryAttemptAt).getTime();
+  if (!Number.isFinite(last)) return true;
+  return now - last >= backoffMinutes(attempts) * 60_000;
+}
+
+const THROTTLED_ERROR = 'Tentativa fora da janela de backoff ou acima do teto';
+const UNCONFIRMED_ERROR =
+  'Mensagem entregue ao canal, mas o registro da entrega falhou — pode duplicar';
+const TRANSPORT_ERROR_FALLBACK = 'Erro inesperado ao entregar (ver log do servidor)';
 
 function extractUrl(raw: unknown): string | null {
   if (typeof raw === 'string') return raw.trim() || null;
@@ -164,7 +206,16 @@ function failureMessage(alert: DeliverableAlert): string {
  * pendente continua elegivel para a proxima passada.
  */
 export async function attemptDelivery(alert: DeliverableAlert): Promise<DeliveryOutcome> {
+  // Separa "falhou ANTES de tentar o transporte" de "falhou DEPOIS". So o
+  // segundo pode debitar tentativa do teto do alerta.
+  let transportAttempted = false;
   try {
+    // Teto e backoff ANTES de tudo, e sem escrever nada: se o alerta nao pode
+    // ser tentado agora, a passada inteira e ruido.
+    if (!isDueForRetry(alert)) {
+      return { delivered: false, outcome: 'throttled', error: THROTTLED_ERROR };
+    }
+
     // Cooldown ANTES de resolver o webhook: `sendToGoogleChat` tambem recusa,
     // mas la o `false` seria indistinguivel de uma falha de transporte.
     if (isChatCooldownActive()) {
@@ -180,6 +231,7 @@ export async function attemptDelivery(alert: DeliverableAlert): Promise<Delivery
       return { delivered: false, outcome: 'unconfigured', error: UNCONFIGURED_ERROR };
     }
 
+    transportAttempted = true;
     const sent = await sendToGoogleChat(url, {
       id: alert.id,
       processId: alert.processId,
@@ -190,16 +242,33 @@ export async function attemptDelivery(alert: DeliverableAlert): Promise<Delivery
     });
 
     if (sent) {
-      await db
-        .update(alerts)
-        .set({
-          sentToChat: true,
-          sentAt: new Date(),
-          deliveryAttempts: sql`${alerts.deliveryAttempts} + 1`,
-          lastDeliveryAttemptAt: new Date(),
-          lastDeliveryError: null,
-        })
-        .where(eq(alerts.id, alert.id));
+      try {
+        await db
+          .update(alerts)
+          .set({
+            sentToChat: true,
+            sentAt: new Date(),
+            deliveryAttempts: sql`${alerts.deliveryAttempts} + 1`,
+            lastDeliveryAttemptAt: new Date(),
+            lastDeliveryError: null,
+          })
+          .where(eq(alerts.id, alert.id));
+      } catch (err) {
+        // A mensagem JA ESTA no canal corporativo. Se este UPDATE nao persistir,
+        // a linha continua com `sent_to_chat = false` e a proxima passada POSTA
+        // DE NOVO — sem fim, porque nada foi contabilizado. Marcar entrega antes
+        // do envio nao e alternativa: seria afirmar entrega que pode nao
+        // acontecer, o mesmo defeito do MAIL_DRY_RUN. O melhor disponivel e
+        // debitar a tentativa, para o teto limitar a duplicacao.
+        logger.error(
+          { err, alertId: alert.id },
+          'Alerta entregue ao canal, mas o registro da entrega falhou',
+        );
+        await recordFailedAttempt(alert, {
+          consumed: true,
+          error: UNCONFIRMED_ERROR,
+        }).catch(() => undefined);
+      }
       return { delivered: true, outcome: 'sent' };
     }
 
@@ -208,7 +277,21 @@ export async function attemptDelivery(alert: DeliverableAlert): Promise<Delivery
     return { delivered: false, outcome: 'failed', error };
   } catch (err) {
     // Sem `sent_to_chat = true` aqui: o alerta permanece elegivel a reentrega.
+    //
+    // Mas ELEGIVEL nao pode significar ETERNO. Enquanto este catch nao persistia
+    // nada, `delivery_attempts` ficava em zero e o teto de 5 era inatingivel por
+    // este caminho: o alerta era revarrido a cada 5 minutos pelas 24h da janela.
+    //
+    // `transportAttempted` separa os dois casos. `sendToGoogleChat` nunca lanca
+    // (tem try/catch total e devolve `false`), entao cair aqui depois dele
+    // significa falha na PERSISTENCIA, e ai a tentativa conta. Cair antes dele,
+    // na leitura do webhook, e problema de banco e nao pode consumir o orcamento
+    // de reentrega do alerta.
     logger.error({ err, alertId: alert.id }, 'Failed to send alert to Google Chat');
+    await recordFailedAttempt(alert, {
+      consumed: transportAttempted,
+      error: TRANSPORT_ERROR_FALLBACK,
+    }).catch(() => undefined);
     return { delivered: false, outcome: 'error' };
   }
 }
