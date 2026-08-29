@@ -44,11 +44,16 @@ vi.mock('jsonwebtoken', () => ({
 
 // Set env before importing service
 process.env.JWT_SECRET = 'test-secret';
+// A restricao de organizacao so existe quando ALLOWED_DOMAIN esta definido, e o
+// service le a variavel uma unica vez no import. Sem isto o caminho do claim
+// `hd` nunca era exercitado pelos testes.
+process.env.ALLOWED_DOMAIN = 'grupounico.com';
 
 const { authService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
 const { googleGroupsService } = await import('../../integrations/google-groups.service.js');
-const { ForbiddenError, ServiceUnavailableError } = await import('../../../shared/errors/index.js');
+const { ConflictError, ForbiddenError, ServiceUnavailableError, UnauthorizedError } =
+  await import('../../../shared/errors/index.js');
 
 describe('authService', () => {
   beforeEach(() => {
@@ -124,11 +129,52 @@ describe('authService', () => {
         'Credenciais',
       );
     });
+
+    /**
+     * A raiz do defeito de 29/08: sem uma classe que dissesse "isto e 401 de
+     * credencial", o controller usava o mesmo fallback para credencial errada e
+     * para banco fora do ar. A credencial precisa carregar o 401 nela mesma...
+     */
+    it('credencial errada lanca UnauthorizedError (401 de produto)', async () => {
+      queryQueue.push(createResolvedChain([]));
+
+      await expect(authService.login('bad@example.com', 'password')).rejects.toMatchObject({
+        constructor: UnauthorizedError,
+        statusCode: 401,
+        code: 'UNAUTHORIZED',
+        message: 'Credenciais inválidas',
+      });
+    });
+
+    /** ...e a queda do banco precisa NAO carregar. */
+    it('falha do banco sobe crua, sem virar 401 de credencial', async () => {
+      const dbDown = Object.assign(new Error('connect ECONNREFUSED 10.0.0.9:5432'), {
+        code: 'ECONNREFUSED',
+      });
+      queryQueue.push({
+        from: () => ({ where: () => ({ limit: () => Promise.reject(dbDown) }) }),
+      });
+
+      const error = await authService.login('test@example.com', 'x').catch((e: unknown) => e);
+
+      expect(error).toBe(dbDown);
+      expect(error).not.toBeInstanceOf(UnauthorizedError);
+    });
   });
 
   describe('loginWithGoogle()', () => {
-    const ticketFor = (email: string) => ({
-      getPayload: () => ({ email, name: 'Fulano' }),
+    // Payload minimo de um id_token de conta Workspace legitima. `email_verified`
+    // e `hd` fazem parte do contrato do Google e agora sao verificados; o helper
+    // anterior os omitia e por isso congelava um payload que nunca deveria ter
+    // sido aceito.
+    const ticketFor = (email: string, overrides: Record<string, unknown> = {}) => ({
+      getPayload: () => ({
+        email,
+        name: 'Fulano',
+        email_verified: true,
+        hd: 'grupounico.com',
+        ...overrides,
+      }),
     });
 
     beforeEach(() => {
@@ -198,6 +244,105 @@ describe('authService', () => {
       expect(result.token).toBe('mock-jwt-token');
       expect(result.user.email).toBe('ok@grupounico.com');
     });
+
+    it('recusa id_token cujo email nao foi verificado pelo Google', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('ok@grupounico.com', { email_verified: false }),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err.message).toBe('Token Google inválido');
+      expect(auditService.log).toHaveBeenCalledWith(
+        null,
+        'login_failed',
+        'user',
+        null,
+        expect.objectContaining({ reason: 'email_not_verified' }),
+        null,
+      );
+    });
+
+    it('aceita conta cujo hd confere com o dominio corporativo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('ok@grupounico.com'));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 6, name: 'Fulano', email: 'ok@grupounico.com', role: 'analyst', isActive: true },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+      expect(result.user.email).toBe('ok@grupounico.com');
+    });
+
+    it('recusa hd de outra organizacao mesmo com sufixo de e-mail correto', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('ok@grupounico.com', { hd: 'outraempresa.com' }),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+    });
+
+    it('NAO recusa por ausencia de hd — segue para as barreiras seguintes', async () => {
+      // Decisao deliberada: exigir a PRESENCA do claim tem modo de falha
+      // catastrofico e binario (se o Google parar de emitir `hd`, ninguem
+      // entra, e a recuperacao exige mexer no SOPS e redeployar durante o
+      // incidente). `email_verified` + sufixo + grupos continuam obrigatorios.
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('ok@grupounico.com', { hd: undefined }));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 6, name: 'Fulano', email: 'ok@grupounico.com', role: 'analyst', isActive: true },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(result.token).toBe('mock-jwt-token');
+      expect(result.user.email).toBe('ok@grupounico.com');
+    });
+
+    it('sem hd, o sufixo do e-mail continua barrando dominio de fora', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('alguem@outraempresa.com', { hd: undefined }),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+    });
+
+    it('sem hd, a barreira de grupos do Google continua valendo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('ok@grupounico.com', { hd: undefined }));
+      vi.mocked(googleGroupsService.isAllowed).mockResolvedValue(false);
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect(err.message).toContain('grupo autorizado');
+    });
+
+    it('sem hd, email_verified false continua sendo recusa dura', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('ok@grupounico.com', { hd: undefined, email_verified: false }),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err.message).toBe('Token Google inválido');
+    });
+
+    it('mantem o sufixo do e-mail como segunda barreira quando o hd confere', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('alguem@outraempresa.com'));
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      // So o dominio vai para o audit — nunca o endereco de terceiro.
+      expect(auditService.log).toHaveBeenCalledWith(
+        null,
+        'login_failed',
+        'user',
+        null,
+        { reason: 'wrong_domain', origem: 'outraempresa.com' },
+        null,
+      );
+    });
   });
 
   describe('createUser()', () => {
@@ -232,6 +377,33 @@ describe('authService', () => {
         2,
         { email: 'new@example.com' },
         null,
+      );
+    });
+
+    it('registra o admin que criou a conta e o IP de origem', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          { id: 3, name: 'Nova', email: 'nova@grupounico.com', role: 'analyst', isActive: true },
+        ]),
+      );
+
+      await authService.createUser(
+        {
+          name: 'Nova',
+          email: 'nova@grupounico.com',
+          password: 'securepass',
+          role: 'analyst' as const,
+        },
+        { id: 7, ip: '10.0.0.5' },
+      );
+
+      expect(auditService.log).toHaveBeenCalledWith(
+        7,
+        'user.created',
+        'user',
+        3,
+        { email: 'nova@grupounico.com' },
+        '10.0.0.5',
       );
     });
   });
@@ -312,14 +484,110 @@ describe('authService', () => {
 
       await expect(authService.updateUser(999, { name: 'X' })).rejects.toThrow('não encontrado');
     });
+
+    it('registra o admin que alterou a conta e o IP de origem', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          { id: 1, name: 'User', email: 'u@test.com', role: 'admin', isActive: true },
+        ]),
+      );
+
+      await authService.updateUser(1, { name: 'User' }, { id: 7, ip: '10.0.0.5' });
+
+      expect(auditService.log).toHaveBeenCalledWith(
+        7,
+        'user.updated',
+        'user',
+        1,
+        { email: 'u@test.com' },
+        '10.0.0.5',
+      );
+    });
+
+    it('impede que o admin desative a propria conta (409)', async () => {
+      const err = await authService
+        .updateUser(7, { isActive: false }, { id: 7, ip: '10.0.0.5' })
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.statusCode).toBe(409);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('impede que o admin rebaixe o proprio papel (409)', async () => {
+      const err = await authService
+        .updateUser(7, { role: 'analyst' }, { id: 7, ip: '10.0.0.5' })
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.statusCode).toBe(409);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('impede desativar o ULTIMO administrador ativo', async () => {
+      // alvo
+      queryQueue.push(createResolvedChain([{ id: 5, role: 'admin', isActive: true }]));
+      // administradores ativos restantes: so ele
+      queryQueue.push(createResolvedChain([{ id: 5 }]));
+
+      const err = await authService
+        .updateUser(5, { isActive: false }, { id: 7, ip: '10.0.0.5' })
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.message).toContain('último administrador ativo');
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('impede rebaixar o ULTIMO administrador ativo', async () => {
+      queryQueue.push(createResolvedChain([{ id: 5, role: 'admin', isActive: true }]));
+      queryQueue.push(createResolvedChain([{ id: 5 }]));
+
+      const err = await authService
+        .updateUser(5, { role: 'analyst' }, { id: 7, ip: '10.0.0.5' })
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('permite desativar um admin quando ainda resta outro ativo', async () => {
+      queryQueue.push(createResolvedChain([{ id: 5, role: 'admin', isActive: true }]));
+      queryQueue.push(createResolvedChain([{ id: 5 }, { id: 9 }]));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 5, name: 'Outro', email: 'o@test.com', role: 'admin', isActive: false },
+        ]),
+      );
+
+      const result = await authService.updateUser(5, { isActive: false }, { id: 7 });
+
+      expect(result.isActive).toBe(false);
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it('nao conta administradores quando o alvo ja e analista', async () => {
+      queryQueue.push(createResolvedChain([{ id: 5, role: 'analyst', isActive: true }]));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 5, name: 'Ana', email: 'a@test.com', role: 'analyst', isActive: false },
+        ]),
+      );
+
+      const result = await authService.updateUser(5, { isActive: false }, { id: 7 });
+
+      expect(result.id).toBe(5);
+      // alvo + update, sem a consulta de contagem
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('deleteUser()', () => {
     it('should soft delete by setting isActive=false', async () => {
-      const mockUser = { id: 1 };
-
+      // alvo da guarda de ultimo admin (analista: nao dispara contagem)
+      queryQueue.push(createResolvedChain([{ id: 1, role: 'analyst', isActive: true }]));
       // update returning
-      queryQueue.push(createResolvedChain([mockUser]));
+      queryQueue.push(createResolvedChain([{ id: 1 }]));
 
       const result = await authService.deleteUser(1);
 
@@ -328,10 +596,39 @@ describe('authService', () => {
       expect(auditService.log).toHaveBeenCalledWith(null, 'user.deleted', 'user', 1, null, null);
     });
 
+    it('registra o admin que desativou a conta e o IP de origem', async () => {
+      queryQueue.push(createResolvedChain([{ id: 1, role: 'analyst', isActive: true }]));
+      queryQueue.push(createResolvedChain([{ id: 1 }]));
+
+      await authService.deleteUser(1, { id: 7, ip: '10.0.0.5' });
+
+      expect(auditService.log).toHaveBeenCalledWith(7, 'user.deleted', 'user', 1, null, '10.0.0.5');
+    });
+
     it('should throw when user not found', async () => {
+      queryQueue.push(createResolvedChain([]));
       queryQueue.push(createResolvedChain([]));
 
       await expect(authService.deleteUser(999)).rejects.toThrow('não encontrado');
+    });
+
+    it('impede que o admin desative a si mesmo (409)', async () => {
+      const err = await authService.deleteUser(7, { id: 7, ip: '10.0.0.5' }).catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.statusCode).toBe(409);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('impede desativar o ULTIMO administrador ativo', async () => {
+      queryQueue.push(createResolvedChain([{ id: 5, role: 'admin', isActive: true }]));
+      queryQueue.push(createResolvedChain([{ id: 5 }]));
+
+      const err = await authService.deleteUser(5, { id: 7 }).catch((e) => e);
+
+      expect(err).toBeInstanceOf(ConflictError);
+      expect(err.message).toContain('último administrador ativo');
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });

@@ -84,6 +84,40 @@ describe('googleGroupsService.isAllowed', () => {
     expect(await googleGroupsService.isAllowed('externo@grupounico.com')).toBe(false);
   });
 
+  /**
+   * `hasMember` e GET puro. Um 503 de dois segundos do admin.googleapis.com nao
+   * pode virar login recusado nem consumir a sobrevida de quem nunca logou.
+   */
+  it('um 503 transitorio e re-tentado em vez de trancar o login', async () => {
+    mockRequest
+      .mockRejectedValueOnce(
+        Object.assign(new Error('backend error'), { response: { status: 503 } }),
+      )
+      .mockResolvedValueOnce(member);
+
+    expect(await googleGroupsService.isAllowed('nova2@grupounico.com')).toBe(true);
+    expect(mockRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it('404 e 403 NAO sao re-tentados — sao resposta definitiva', async () => {
+    mockRequest.mockRejectedValue(
+      Object.assign(new Error('Not Found'), { response: { status: 404 } }),
+    );
+
+    expect(await googleGroupsService.isAllowed('externo2@grupounico.com')).toBe(false);
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+
+    mockRequest.mockClear();
+    mockRequest.mockRejectedValue(
+      Object.assign(new Error('Forbidden'), { response: { status: 403 } }),
+    );
+
+    await expect(googleGroupsService.isAllowed('externo3@grupounico.com')).rejects.toBeInstanceOf(
+      ServiceUnavailableError,
+    );
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
+
   it('remover do grupo derruba a sobrevida junto', async () => {
     mockRequest.mockResolvedValueOnce(member);
     await googleGroupsService.isAllowed('saiu@grupounico.com');

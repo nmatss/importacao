@@ -111,6 +111,31 @@ describe('cert-api gateway access policy', () => {
     );
   });
 
+  it('keeps the no-percent invariant on the READ rules too', () => {
+    // Ate 29/08 as regexes de leitura usavam `[^/]+`, que aceita `%`, enquanto a
+    // unica regra de escrita usava `[^/%]+`. O Nginx resolve traversal
+    // percent-encoded ANTES de proxiar, entao um escopo decidido aqui sobre a
+    // URI crua podia liberar como `cert.read` um path que o cert-api serve como
+    // outra rota. Nao ha rota GET administrativa hoje — e por isso mesmo a falha
+    // seria silenciosa no dia em que existir.
+    expect(requiredCertApiScope('GET', '/cert-api/api/products/..%2fadmin')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/products/a%2Fb')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/validate/a%2Fb/stream')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/reports/a%2Fb/data')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/schedules/a%2Fb/history')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/certificates/a%2Fb/pdf')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/stock/a%2Fb')).toBe('cert.admin');
+    expect(requiredCertApiScope('GET', '/cert-api/api/licenciados/a%2Fb')).toBe('cert.admin');
+    expect(
+      requiredCertApiScope('GET', '/cert-api/api/certificates/%2e%2e%2f%2e%2e%2fapi%2fsync-stock'),
+    ).toBe('cert.admin');
+
+    // O caminho legitimo (id sem percent) continua sendo leitura.
+    expect(requiredCertApiScope('GET', '/cert-api/api/products/SKU-123')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/stock/SKU-123')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/licenciados/12')).toBe('cert.read');
+  });
+
   it('allows analysts only cert.read and cert.operate scopes', () => {
     expect(canAccessCertApi('analyst', 'cert.read')).toBe(true);
     expect(canAccessCertApi('analyst', 'cert.operate')).toBe(true);
@@ -145,6 +170,8 @@ describe('cert-api gateway access policy', () => {
     ['DELETE', '/cert-api/api/certificates/cert-1'],
     ['DELETE', '/cert-api/api/schedules/schedule-1'],
     ['GET', '/cert-api/api/not-yet-classified'],
+    ['GET', '/cert-api/api/products/..%2fadmin'],
+    ['GET', '/cert-api/api/certificates/a%2Fb/pdf'],
   ])('denies analyst access to %s %s', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 

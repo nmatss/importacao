@@ -1,7 +1,8 @@
 import { JWT } from 'google-auth-library';
 import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
-import { isNetworkError } from '../../shared/utils/resilience.js';
+import { isNetworkError, withRetry } from '../../shared/utils/resilience.js';
+import { integrationRetryOptions } from './retry-policy.js';
 import { cache } from '../../shared/cache/redis.js';
 import { ServiceUnavailableError } from '../../shared/errors/index.js';
 
@@ -78,7 +79,15 @@ async function isAllowed(userEmail: string): Promise<boolean> {
 
   try {
     const client = getClient();
-    const res = await client.request<{ isMember: boolean }>({ url });
+    // `hasMember` e GET puro: re-tentar nao muda nada no Workspace. Um 503 de
+    // dois segundos do admin.googleapis.com nao pode virar "acesso negado" nem
+    // consumir a sobrevida do cache. 404 (grupo/membro inexistente), 401 e 403
+    // NAO sao re-tentados — sao resposta definitiva, nao soluco.
+    const res = await withRetry(
+      () => client.request<{ isMember: boolean }>({ url }),
+      integrationRetryOptions,
+      'google-groups:hasMember',
+    );
     const isMember = res.data.isMember === true;
 
     if (isMember) {
