@@ -39,6 +39,20 @@ describe('redactInternalDetail()', () => {
     );
   });
 
+  /**
+   * Achado da auto-revisao: com a alternancia na ordem errada, "/apps/web/src"
+   * casava apenas "/app" e a substituicao devolvia "[caminho interno]s/web/src",
+   * vazando o resto do caminho colado no marcador.
+   */
+  it('nao parte o caminho ao meio quando a raiz e prefixo de outra', () => {
+    expect(redactInternalDetail('erro em /apps/web/src/main.tsx')).toBe(
+      'erro em [caminho interno]',
+    );
+    expect(redactInternalDetail('stack: /app/dist/server.js:12')).toBe(
+      'stack: [caminho interno]:12',
+    );
+  });
+
   it('PRESERVA a mensagem escrita para o operador', () => {
     const humanas = [
       'Processo não encontrado',

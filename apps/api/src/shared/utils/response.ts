@@ -41,7 +41,10 @@ const REDACOES: Array<[RegExp, string]> = [
   [/value too long for type [^,;]*/gi, 'valor acima do tamanho permitido'],
   // Caminho absoluto do servidor. Restrito as raizes reais do container para
   // nao pegar rota de API ("/api/processes") em mensagem legitima.
-  [/\/(?:home|app|uploads|var|usr|etc|tmp|root|opt)(?:\/[\w.@%+-]+)*/g, '[caminho interno]'],
+  // Alternancia da raiz mais longa para a mais curta e ancorada em fronteira de
+  // palavra: sem isso "/apps/web/src" casava so "/app" e sobrava "s/web/src"
+  // colado na substituicao.
+  [/\/(?:uploads|home|apps|app|var|usr|etc|tmp|root|opt)\b(?:\/[\w.@%+-]+)*/g, '[caminho interno]'],
 ];
 
 /** Aplica a redacao. Exportada para o teste poder exercitar caso a caso. */
