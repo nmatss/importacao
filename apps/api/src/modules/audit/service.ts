@@ -1,7 +1,8 @@
-import { eq, desc, and, gte, lte, count } from 'drizzle-orm';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { auditLogs, users } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 export interface AuditLogFilters {
   page: number;
@@ -44,8 +45,13 @@ export const auditService = {
     if (filters.entityType) conditions.push(eq(auditLogs.entityType, filters.entityType));
     if (filters.entityId) conditions.push(eq(auditLogs.entityId, filters.entityId));
     if (filters.userId) conditions.push(eq(auditLogs.userId, filters.userId));
-    if (filters.startDate) conditions.push(gte(auditLogs.createdAt, new Date(filters.startDate)));
-    if (filters.endDate) conditions.push(lte(auditLogs.createdAt, new Date(filters.endDate)));
+    // Limite superior EXCLUSIVO no inicio do dia local seguinte. Antes eram
+    // `>= startDate` e `<= endDate` como instantes: filtrar 29/08 ate 29/08
+    // virava `>= X AND <= X`, um unico instante, e a lista voltava vazia.
+    const start = filters.startDate ? localDayStartUtc(filters.startDate) : null;
+    if (start) conditions.push(sql`${auditLogs.createdAt} >= ${start.toISOString()}`);
+    const end = filters.endDate ? localDayEndExclusiveUtc(filters.endDate) : null;
+    if (end) conditions.push(sql`${auditLogs.createdAt} < ${end.toISOString()}`);
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     const offset = (filters.page - 1) * filters.limit;

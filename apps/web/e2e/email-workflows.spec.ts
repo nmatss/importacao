@@ -146,7 +146,11 @@ test('composes, confirms and submits an e-mail with accessible focus behavior', 
   await installApiSandbox(page, captured);
   await page.goto('/importacao/comunicacoes');
 
-  await expect(page.getByRole('heading', { name: 'Atendimentos e E-mails' })).toBeVisible();
+  // O titulo da tela agora e so o <h1> do shell ("Atendimentos"): o <h2>
+  // "Atendimentos e E-mails" que duplicava esse titulo no corpo foi removido.
+  // `exact` e obrigatorio aqui — sem ele o matcher (substring, case-insensitive)
+  // tambem casaria o <h3> "Historico de atendimentos".
+  await expect(page.getByRole('heading', { name: 'Atendimentos', exact: true })).toBeVisible();
   const processInput = page.getByRole('combobox', { name: 'Processo', exact: true });
   await processInput.fill('IM');
   await expect

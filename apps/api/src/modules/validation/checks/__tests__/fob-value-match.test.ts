@@ -136,6 +136,75 @@ describe('fob-calculation check', () => {
     expect(result.message).toContain('FOC');
   });
 
+  it('does not silently drop a zero-priced item without an FOC marker', () => {
+    // `hasZeroPrice` classificava como FOC e removia do somatorio: se a
+    // extracao devolveu 0 em vez de ausente, o item comercial sumia e o FOB
+    // "conferia".
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 1020,
+        items: [
+          { itemCode: 'PI7752Y', unitPrice: 8.5, quantity: 120, totalPrice: 1020 },
+          { itemCode: 'PI7753Y', unitPrice: 0, quantity: 50, totalPrice: 0 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('sem preco extraido e sem marcador de FOC');
+    expect(result.message).toContain('PI7753Y');
+  });
+
+  it('keeps excluding items with an explicit FOC marker', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 1020,
+        items: [
+          { unitPrice: 8.5, quantity: 120, totalPrice: 1020 },
+          { isFreeOfCharge: true, unitPrice: 0, quantity: 50, totalPrice: 0 },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('passed');
+    expect(result.message).toContain('FOC');
+  });
+
+  it('reads brazilian-formatted amounts', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 'US$ 24.312,52',
+        items: [{ quantity: 1, totalPrice: '24.312,52' }],
+      },
+    });
+
+    expect(result.status).toBe('passed');
+  });
+
+  it('does not let a line with no price at all count as zero', () => {
+    const result = fobCalculation({
+      invoiceData: {
+        totalFobValue: 1020,
+        items: [
+          { itemCode: 'PI7752Y', unitPrice: 8.5, quantity: 120, totalPrice: 1020 },
+          { itemCode: 'PI7799Y', quantity: 30, description: 'CAIXA MASTER' },
+        ],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('PI7799Y');
+  });
+
+  it('distinguishes a declared zero total from a missing total', () => {
+    const result = fobCalculation({
+      invoiceData: { totalFobValue: 0, items: [{ unitPrice: 10, quantity: 5 }] },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('declarado na Invoice e 0.00');
+  });
+
   it('should handle null/undefined item fields gracefully', () => {
     const result = fobCalculation({
       invoiceData: {

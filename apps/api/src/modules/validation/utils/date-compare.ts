@@ -51,39 +51,78 @@ const MONTH_NAMES: Record<string, number> = {
   dezembro: 11,
 };
 
+const MAX_YEAR = 2100;
+
+/**
+ * Ano <= 1900 é sentinela de "vazio" em sistema legado (Linx/WMS mandam
+ * 01/01/1900), nunca data real de um processo de importação.
+ */
+function isSentinelYear(year: number): boolean {
+  return year <= 1900 || year > MAX_YEAR;
+}
+
+/**
+ * Constrói a data UTC REJEITANDO componentes fora de faixa. `Date.UTC` rola
+ * silenciosamente: `03/15/2026` virava 2027-03-03 e `32/01/2026` virava
+ * 2026-02-01 — uma invoice americana ou um OCR ruim viravam data plausível e
+ * errada. A verificação de round-trip (ano/mês/dia da Date construída têm de
+ * bater com a entrada) mata o rollover, inclusive 31/02.
+ */
+function makeUtcDate(year: number, month: number, day: number): Date | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  if (isSentinelYear(year)) return null;
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > 31) return null;
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (isNaN(d.getTime())) return null;
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return null;
+  }
+  return d;
+}
+
+/** Aplica a mesma sentinela às datas que não passam por makeUtcDate. */
+function rejectSentinel(d: Date): Date | null {
+  if (isNaN(d.getTime())) return null;
+  return isSentinelYear(d.getUTCFullYear()) ? null : d;
+}
+
+function expandTwoDigitYear(raw: string): number {
+  const year = Number(raw);
+  if (year < 100) return year + (year < 70 ? 2000 : 1900);
+  return year;
+}
+
 export function parseDate(value: unknown): Date | null {
-  if (value == null || value === '') return null;
-  if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
+  // `0`/`false` não são datas — sem este corte `new Date('0')` devolveria
+  // 2000-01-01 (era o `if (!value) return null` do parser local de
+  // date-sequence-check, preservado aqui na unificação).
+  if (value == null || value === '' || value === 0 || value === false) return null;
+  if (value instanceof Date) return rejectSentinel(value);
   const s = String(value).trim();
   if (!s) return null;
 
   const iso = ISO_RE.exec(s);
   if (iso) {
-    const d = new Date(Date.UTC(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3])));
-    return isNaN(d.getTime()) ? null : d;
+    return makeUtcDate(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   }
 
   const dmy = DMY_RE.exec(s);
   if (dmy) {
-    let year = Number(dmy[3]);
-    if (year < 100) year += year < 70 ? 2000 : 1900;
-    const d = new Date(Date.UTC(year, Number(dmy[2]) - 1, Number(dmy[1])));
-    return isNaN(d.getTime()) ? null : d;
+    // Formato reconhecido: componente fora de faixa é entrada inválida e vira
+    // `null`. NÃO cai no `new Date(s)` abaixo, que reinterpretaria como MM/DD.
+    return makeUtcDate(expandTwoDigitYear(dmy[3]), Number(dmy[2]), Number(dmy[1]));
   }
 
   const dmyText = DMY_TEXT_RE.exec(s);
   if (dmyText) {
     const month = MONTH_NAMES[dmyText[2].toLowerCase()];
     if (month != null) {
-      let year = Number(dmyText[3]);
-      if (year < 100) year += year < 70 ? 2000 : 1900;
-      const d = new Date(Date.UTC(year, month, Number(dmyText[1])));
-      return isNaN(d.getTime()) ? null : d;
+      return makeUtcDate(expandTwoDigitYear(dmyText[3]), month + 1, Number(dmyText[1]));
     }
   }
 
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
+  return rejectSentinel(new Date(s));
 }
 
 export function daysBetween(a: Date, b: Date): number {

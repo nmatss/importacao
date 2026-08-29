@@ -1,3 +1,11 @@
+import {
+  describeNumericFailure,
+  parseDocumentNumber,
+  parseSystemNumber,
+  type ParsedNumericFail,
+} from '../utils/number-normalize.js';
+import { SYSTEM_REFERENCE_CURRENCY, compareCurrencies } from '../utils/currency-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -15,55 +23,80 @@ interface CheckResult {
   message: string;
 }
 
+const documentsCompared = 'BL vs Sistema';
+
 export default function freightVsFup(input: CheckInput): CheckResult {
   const checkName = 'freight-vs-fup';
 
-  const blFreightRaw =
-    input.blData?.freightValue != null ? Number(input.blData.freightValue) : null;
-  const processFreightRaw =
-    input.processData?.freightValue != null ? Number(input.processData.freightValue) : null;
-  const blFreight = blFreightRaw != null && !isNaN(blFreightRaw) ? blFreightRaw : null;
-  const processFreight =
-    processFreightRaw != null && !isNaN(processFreightRaw) ? processFreightRaw : null;
+  const blFreight = parseDocumentNumber(input.blData?.freightValue);
+  const processFreight = parseSystemNumber(input.processData?.freightValue);
 
-  if (processFreight == null) {
+  if (!processFreight.ok) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'BL vs Sistema',
-      message: 'Ignorado: Valor do frete nao cadastrado no processo.',
+      documentsCompared,
+      message:
+        processFreight.reason === 'absent'
+          ? 'Ignorado: Valor do frete nao cadastrado no processo.'
+          : `${describeNumericFailure('Frete do sistema', processFreight as ParsedNumericFail)}.`,
     };
   }
 
-  if (blFreight == null) {
+  if (!blFreight.ok) {
     return {
       checkName,
       status: 'warning',
-      expectedValue: processFreight.toFixed(2),
-      documentsCompared: 'BL vs Sistema',
-      message: 'Valor do frete nao encontrado no BL.',
+      expectedValue: processFreight.value.toFixed(2),
+      documentsCompared,
+      message:
+        blFreight.reason === 'absent'
+          ? 'Valor do frete nao encontrado no BL.'
+          : `${describeNumericFailure('Frete do BL', blFreight as ParsedNumericFail)}.`,
     };
   }
 
-  const difference = Math.abs(blFreight - processFreight);
+  // `blData.freightCurrency` tambem carrega "PREPAID"/"COLLECT" quando o frete
+  // nao esta valorado — nesse caso a moeda fica indefinida e a comparacao vira
+  // indicio, nunca veredito.
+  const currency = compareCurrencies(
+    'BL',
+    input.blData?.freightCurrency,
+    'Sistema',
+    SYSTEM_REFERENCE_CURRENCY,
+  );
+
+  if (currency.state === 'different') {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: `${processFreight.value.toFixed(2)} ${SYSTEM_REFERENCE_CURRENCY}`,
+      actualValue: `${blFreight.value.toFixed(2)} ${currency.leftCode}`,
+      documentsCompared,
+      message: `Moedas diferentes (${currency.left} vs ${currency.right}): comparacao do frete nao realizada.`,
+    };
+  }
+
+  const difference = Math.abs(blFreight.value - processFreight.value);
+  const currencyNote = currency.state === 'unknown' ? ` (${currency.detail})` : '';
 
   if (difference <= 0.01) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: processFreight.toFixed(2),
-      actualValue: blFreight.toFixed(2),
-      documentsCompared: 'BL vs Sistema',
-      message: 'Valor do frete no BL confere com o sistema.',
+      expectedValue: processFreight.value.toFixed(2),
+      actualValue: blFreight.value.toFixed(2),
+      documentsCompared,
+      message: `Valor do frete no BL confere com o sistema${currencyNote}.`,
     };
   }
 
   return {
     checkName,
-    status: 'failed',
-    expectedValue: processFreight.toFixed(2),
-    actualValue: blFreight.toFixed(2),
-    documentsCompared: 'BL vs Sistema',
-    message: `Divergencia no frete: BL=${blFreight.toFixed(2)} vs Sistema=${processFreight.toFixed(2)} (diff: ${difference.toFixed(2)}).`,
+    status: currency.state === 'equal' ? 'failed' : 'warning',
+    expectedValue: processFreight.value.toFixed(2),
+    actualValue: blFreight.value.toFixed(2),
+    documentsCompared,
+    message: `Divergencia no frete: BL=${blFreight.value.toFixed(2)} vs Sistema=${processFreight.value.toFixed(2)} (diff: ${difference.toFixed(2)})${currencyNote}.`,
   };
 }

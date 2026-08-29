@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -75,10 +76,76 @@ const processSchema = z
 
 type ProcessFormData = z.infer<typeof processSchema>;
 
-function normalizeProcessPayload(data: ProcessFormData): Partial<ProcessFormData> {
+/**
+ * Campos que `updateProcessSchema` (apps/api/src/modules/processes/schema.ts)
+ * aceita como `null` explicito para APAGAR o valor guardado.
+ *
+ * Tres ausencias sao DELIBERADAS, nao esquecimento:
+ *
+ * - `processCode` e `brand` sao obrigatorios; o Zod do formulario ja barra o
+ *   envio vazio, entao nunca chegam aqui.
+ * - `incoterm` o backend ate aceita como `null`, mas ele tem `default('FOB')`
+ *   no schema: esvaziar o campo e ambiguo (o usuario quer NULL ou quer voltar
+ *   para FOB?). Enquanto a operacao nao decidir, esvaziar incoterm continua
+ *   sendo descartado e o valor anterior permanece.
+ */
+const NULLABLE_PROCESS_FIELDS = new Set<keyof ProcessFormData>([
+  'portOfLoading',
+  'portOfDischarge',
+  'etd',
+  'eta',
+  'shipmentDate',
+  'exporterName',
+  'exporterAddress',
+  'importerName',
+  'importerAddress',
+  'notes',
+  'containerType',
+  'duimpNumber',
+  'registeredAt',
+  'customsChannel',
+  'customsClearanceAt',
+  'totalFobValue',
+  'freightValue',
+  'insuranceValue',
+  'customsValue',
+  'registrationDollar',
+  'totalCbm',
+  'totalNetWeight',
+  'totalGrossWeight',
+  'totalBoxes',
+]);
+
+/**
+ * Monta o corpo do PUT respeitando o contrato acertado com a API:
+ *
+ *   - chave AUSENTE  -> nao mexer no campo;
+ *   - chave com `null` -> apagar o valor.
+ *
+ * O `null` sai apenas para o campo que o usuario EFETIVAMENTE esvaziou (estava
+ * preenchido e ficou vazio), sinalizado pelo `dirtyFields` do react-hook-form,
+ * que compara com os defaultValues gravados pelo `reset()`. Mandar `null` para
+ * todo campo vazio do formulario apagaria dado que o usuario nem tocou — e, se
+ * outra pessoa tivesse preenchido o campo entre a carga da tela e o salvamento,
+ * essa alteracao seria perdida.
+ *
+ * Antes desta correcao o campo esvaziado era simplesmente descartado: a API
+ * mantinha o valor antigo, respondia 200 e a tela dizia "Processo atualizado
+ * com sucesso" — o ETD, o porto ou a DUIMP errada continuavam la.
+ */
+function normalizeProcessPayload(
+  data: ProcessFormData,
+  dirtyFields: Partial<Record<keyof ProcessFormData, unknown>>,
+): Partial<ProcessFormData> {
   const payload: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(data)) {
-    if (value === '' || value == null) continue;
+    const field = key as keyof ProcessFormData;
+    if (value === '' || value == null) {
+      if (NULLABLE_PROCESS_FIELDS.has(field) && dirtyFields[field]) {
+        payload[key] = null;
+      }
+      continue;
+    }
     payload[key] = value;
   }
   return payload as Partial<ProcessFormData>;
@@ -120,6 +187,7 @@ interface Process {
 export function ProcessEditPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const {
     data: process,
@@ -132,7 +200,7 @@ export function ProcessEditPage() {
     register,
     handleSubmit,
     reset,
-    formState: { errors, isSubmitting },
+    formState: { errors, isSubmitting, dirtyFields },
   } = useForm<ProcessFormData>({
     resolver: zodResolver(processSchema),
   });
@@ -178,6 +246,12 @@ export function ProcessEditPage() {
     'put',
     {
       onSuccess: () => {
+        // Sem isso o detalhe volta a renderizar o valor PRE-EDICAO: a query
+        // ['process', id] nao esta stale (staleTime 30s, refetchOnWindowFocus
+        // desligado em app/App.tsx), entao o toast verde aparece sobre o dado
+        // antigo por ate 30 segundos.
+        void queryClient.invalidateQueries({ queryKey: ['process', id] });
+        void queryClient.invalidateQueries({ queryKey: ['processes'] });
         toast.success('Processo atualizado com sucesso');
         navigate(`/importacao/processos/${id}`);
       },
@@ -191,7 +265,7 @@ export function ProcessEditPage() {
       toast.error('Destrave o processo antes de salvar alteracoes.');
       return;
     }
-    mutation.mutate(normalizeProcessPayload(data));
+    mutation.mutate(normalizeProcessPayload(data, dirtyFields));
   };
 
   if (isLoading) {

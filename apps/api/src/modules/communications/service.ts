@@ -1,4 +1,4 @@
-import { eq, desc, count, and, sql, gte } from 'drizzle-orm';
+import { eq, desc, count, and, sql } from 'drizzle-orm';
 import path from 'node:path';
 import { db } from '../../shared/database/connection.js';
 import {
@@ -17,12 +17,13 @@ import { kiomCorrectionTemplate } from './templates/kiom-correction.js';
 import { auditService } from '../audit/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { AppError } from '../../shared/errors/index.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 import {
   getOperationalRecipient,
   normalizeEmailList,
   parseEmailList,
 } from '../settings/operational-recipients.js';
-import { buildOutgoingMail, getSmtpTransport } from '../../shared/mail/mailer.js';
+import { buildOutgoingMail, deliverMail, getSmtpTransport } from '../../shared/mail/mailer.js';
 import { sanitizeEmailHtml } from './html-sanitizer.js';
 
 interface StoredAttachment {
@@ -204,12 +205,13 @@ export const communicationService = {
   async list(processId?: number, page = 1, limit = 20, startDate?: string, endDate?: string) {
     const conditions = [];
     if (processId) conditions.push(eq(communications.processId, processId));
-    if (startDate) {
-      conditions.push(gte(communications.createdAt, new Date(startDate)));
+    const start = startDate ? localDayStartUtc(startDate) : null;
+    if (start) {
+      conditions.push(sql`${communications.createdAt} >= ${start.toISOString()}`);
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setDate(end.getDate() + 1);
+    // Limite superior EXCLUSIVO: inicio do dia local seguinte, em UTC.
+    const end = endDate ? localDayEndExclusiveUtc(endDate) : null;
+    if (end) {
       conditions.push(sql`${communications.createdAt} < ${end.toISOString()}`);
     }
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -362,7 +364,9 @@ export const communicationService = {
       // Sanitize headers to prevent CRLF injection
       const sanitizeHeader = (v: string) => v.replace(/[\r\n]/g, '').trim();
 
-      await transport.sendMail({
+      // Single delivery point: `deliverMail` owns the MAIL_DRY_RUN gate, so a
+      // non-production environment never reaches a real mailbox.
+      const delivery = await deliverMail(transport, {
         from: mail.from,
         to: mail.to,
         // Empty only when every mandatory copy is already a primary recipient.
@@ -372,6 +376,23 @@ export const communicationService = {
         html: sanitizeEmailHtml(htmlBody),
         attachments: mailAttachments,
       });
+
+      // Dry-run NAO pode virar "enviado". O `deliverMail` devolve
+      // `delivered: false` quando o gate esta ativo, e ignorar esse retorno
+      // gravava `status: 'sent'` + `sentAt` e uma linha de timeline dizendo
+      // "E-mail enviado para X" — a tela mostrava Enviado, o destinatario nunca
+      // recebia, e so um mergulho no log revelava. E o mesmo padrao do incidente
+      // ja registrado no projeto: o banco afirmando um envio que nao aconteceu.
+      //
+      // Falhar aqui deixa o `catch` abaixo gravar `failed` com o motivo, que e a
+      // unica versao verdadeira do que aconteceu.
+      if (!delivery.delivered) {
+        throw new AppError(
+          'MAIL_DRY_RUN está ativo: nada foi enviado. Defina MAIL_DRY_RUN=false no ambiente para enviar de verdade.',
+          503,
+          'MAIL_DRY_RUN_ACTIVE',
+        );
+      }
 
       const sentAt = new Date();
       const [updated] = await db
@@ -391,13 +412,16 @@ export const communicationService = {
 
       const maskedRecipient = maskRecipientList(communication.recipientEmail);
       const maskedCc = maskRecipientList(mail.mandatoryCc);
-      logger.info({ id, recipient: maskedRecipient, cc: maskedCc }, 'E-mail enviado com sucesso');
+      logger.info(
+        { id, recipient: maskedRecipient, cc: maskedCc, dryRun: !delivery.delivered },
+        delivery.delivered ? 'E-mail enviado com sucesso' : 'E-mail registrado em modo dry-run',
+      );
       await auditService.log(
         userId ?? null,
         'email.sent',
         'communication',
         updated.id,
-        { recipient: maskedRecipient, ccRecipients: maskedCc },
+        { recipient: maskedRecipient, ccRecipients: maskedCc, dryRun: !delivery.delivered },
         null,
       );
 
@@ -428,6 +452,14 @@ export const communicationService = {
       logger.error({ id, error: error.message }, 'Falha ao enviar e-mail');
       if (error?.statusCode) throw error;
       throw new Error(`Falha ao enviar e-mail: ${error.message}`);
+    } finally {
+      // The transport is not pooled: without an explicit close every send leaves
+      // a socket open until the relay's idle timeout reaps it.
+      try {
+        transport.close();
+      } catch (closeErr) {
+        logger.warn({ id, err: closeErr }, 'Falha ao fechar o transporte SMTP');
+      }
     }
   },
 

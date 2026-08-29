@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isoDateSchema } from '../../shared/schemas/iso-date.js';
 
 export const createLiTrackingSchema = z.object({
   processId: z.number().optional(),
@@ -48,6 +49,11 @@ export const updateLiTrackingSchema = z.object({
   observations: z.string().nullable().optional(),
 });
 
+// `validate(schema, 'query')` SUBSTITUI `req.query` pelo resultado do Zod, e
+// `z.object()` descarta chave desconhecida. Enquanto `orgao`, `startDate` e
+// `endDate` faltaram aqui, a tela enviava os tres, o Zod os removia e o
+// controller lia `undefined` — os filtros de orgao anuente e de periodo nao
+// faziam nada e nenhum erro aparecia.
 export const liTrackingQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(50),
@@ -55,6 +61,9 @@ export const liTrackingQuerySchema = z.object({
     .enum(['pending', 'requested', 'submitted', 'deferred', 'expired', 'cancelled'])
     .optional(),
   processCode: z.string().max(100).optional(),
+  orgao: z.string().max(100).optional(),
+  startDate: isoDateSchema.optional(),
+  endDate: isoDateSchema.optional(),
 });
 
 export const liTrackingIdParamSchema = z.object({

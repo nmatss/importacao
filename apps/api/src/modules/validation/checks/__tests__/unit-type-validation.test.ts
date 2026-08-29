@@ -28,7 +28,11 @@ describe('unitTypeValidation', () => {
     expect(result.status).toBe('passed');
   });
 
-  it('keeps pair and set validation strict when the description requires it', () => {
+  // Comportamento atualizado de propósito: a unidade "esperada" é INFERIDA da
+  // descrição por heurística linguística, não lida de um campo do documento.
+  // `failed` marcava pending_correction, movia a pasta no Drive e gerava
+  // rascunho de e-mail para a KIOM a partir de um palpite de texto.
+  it('still detects pair/set mismatches, but only as a warning', () => {
     const result = unitTypeValidation({
       invoiceData: {
         items: [
@@ -41,7 +45,33 @@ describe('unitTypeValidation', () => {
       },
     });
 
-    expect(result.status).toBe('failed');
+    expect(result.status).toBe('warning');
     expect(result.message).toContain('esperado SET');
+  });
+
+  it.each([
+    ['PARKA JACKET', 'par'],
+    ['SEPARATE PANTS', 'par'],
+    ['CORSET', 'set'],
+    ['PARAFUSO SEXTAVADO', 'par'],
+  ])('does not detect a unit keyword inside the word %s (substring "%s")', (description) => {
+    const result = unitTypeValidation({
+      invoiceData: {
+        items: [{ itemCode: 'PI7799Y', description, unit: 'PC' }],
+      },
+    });
+
+    expect(result.status).toBe('passed');
+  });
+
+  it('still detects the keyword when it is a standalone word', () => {
+    const result = unitTypeValidation({
+      invoiceData: {
+        items: [{ itemCode: 'PI7798Y', description: 'MEIAS PAR ADULTO', unit: 'PC' }],
+      },
+    });
+
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('esperado PAR');
   });
 });

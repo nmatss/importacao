@@ -3,8 +3,7 @@ import path from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { fileTypeFromBuffer } from 'file-type';
 import pdfParse from 'pdf-parse';
-import * as XLSX from 'xlsx';
-import { eq, desc, count, sql, ilike, and, gte, isNull, lte, or } from 'drizzle-orm';
+import { eq, desc, count, sql, ilike, and, isNull, lte, or } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   emailAttachmentDocuments,
@@ -12,9 +11,9 @@ import {
   importProcesses,
   followUpTracking,
 } from '../../shared/database/schema.js';
-import { documentService } from '../documents/service.js';
+import { documentService, spreadsheetBufferToText } from '../documents/service.js';
 import { gmailService } from './gmail.service.js';
-import { resolveSharedMailbox } from './gmail.service.js';
+import { resolveAllowedSenders, resolveSharedMailbox } from './gmail.service.js';
 import { imapService } from './imap.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -23,6 +22,7 @@ import { aiService, type EmailAnalysisResult } from '../ai/service.js';
 import { filterCandidatesByFollowUp, getReferenceSource } from '../follow-up/reference-registry.js';
 import { isEmailIngestionEnabled } from '../documents/source-policy.js';
 import { AppError } from '../../shared/errors/index.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 import {
   extractMailboxAddress,
   isAllowedSenderFromEnv,
@@ -97,6 +97,84 @@ async function markEmailAsReadAfterDurableLog(
       'Email processed but could not be marked as read',
     );
   }
+}
+
+/**
+ * Acknowledging a message (marking it read) is irreversible from the system's
+ * side: the poll searches `is:unread`, and `failed` is a terminal status, so an
+ * acknowledged failure only comes back through a human `POST /reprocess/:logId`.
+ *
+ * A transient failure — Drive down, upload timeout, database blip — must
+ * therefore NOT consume the message. Only a failure that would repeat
+ * identically forever earns the acknowledgement.
+ *
+ * Deliberately conservative: anything not provably permanent is transient.
+ * Reprocessing is cheap; losing corporate correspondence is not.
+ */
+export function isPermanentProcessingError(error: unknown): boolean {
+  const status = (error as { statusCode?: unknown })?.statusCode;
+  if (typeof status !== 'number') return false;
+
+  // 408 Request Timeout and 429 Too Many Requests are retryable by definition.
+  if (status === 408 || status === 429) return false;
+
+  // 4xx from our own AppError means a rule was broken (bad format, business
+  // rule, sender not allowed): retrying changes nothing.
+  return status >= 400 && status < 500;
+}
+
+const TRANSIENT_ATTEMPT_PREFIX = 'Falha transitória';
+const MAX_TRANSIENT_ATTEMPTS = (() => {
+  const parsed = Number(process.env.EMAIL_TRANSIENT_MAX_ATTEMPTS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 5;
+})();
+
+/**
+ * Gmail queries used to re-fetch one specific message, most precise first.
+ *
+ * `rfc822msgid:` is the only exact address of a message. The `from`/`subject`
+ * fallback exists because the stored messageId can be a Gmail internal id when
+ * the message carried no `Message-ID` header.
+ */
+export function buildReprocessQueries(
+  messageId: string,
+  fromAddress: string | null | undefined,
+  subject: string | null | undefined,
+): string[] {
+  const queries: string[] = [];
+
+  const rfcId = messageId.trim().replace(/^<|>$/g, '');
+  if (rfcId && !/\s/.test(rfcId)) queries.push(`rfc822msgid:${rfcId}`);
+
+  // `fromAddress` stores the whole `From` header. Only the mailbox is a valid
+  // Gmail `from:` operand; the display name would become free-text terms.
+  const mailbox = fromAddress ? extractMailboxAddress(fromAddress) : '';
+  const cleanSubject = (subject ?? '').replace(/"/g, '').trim();
+  if (mailbox.includes('@') && cleanSubject) {
+    queries.push(`from:${mailbox} subject:"${cleanSubject}"`);
+  }
+
+  return queries;
+}
+
+export interface EmailProcessingSummary {
+  /** Messages returned by the transport for this run. */
+  fetched: number;
+  /** Messages that reached a successful terminal outcome in this run. */
+  processed: number;
+}
+
+/**
+ * Reads back the attempt counter this processor wrote into `errorMessage`.
+ *
+ * The log table has no retry column, so the counter rides in the message. It is
+ * only a poison-message brake: a message misclassified as transient gives up
+ * after `MAX_TRANSIENT_ATTEMPTS` instead of being re-fetched every 5 minutes
+ * forever.
+ */
+export function readTransientAttempt(errorMessage: string | null | undefined): number {
+  const match = /^Falha transitória \(tentativa (\d+)\//.exec(errorMessage ?? '');
+  return match ? Number(match[1]) : 0;
 }
 
 function sha256(buffer: Buffer): string {
@@ -265,6 +343,10 @@ function isStrongUnicoCode(code: string): boolean {
 
 import { classifyDocument, classifyDocumentText } from './classify-document.js';
 export { classifyDocument };
+// Exportado para teste, seguindo a convencao de classifyDocument acima: o
+// caminho de planilha desta funcao ja foi o quarto lugar do repositorio com a
+// conversao XLSX crua, e precisa de cobertura propria.
+export { extractAttachmentTextForClassification };
 
 // ── AI-enhanced document classification using email body context ─────────
 
@@ -356,13 +438,16 @@ async function extractAttachmentTextForClassification(att: EmailAttachment): Pro
       contentType.includes('spreadsheet') ||
       contentType.includes('excel')
     ) {
-      const workbook = XLSX.read(att.content, { type: 'buffer' });
-      return workbook.SheetNames.slice(0, 5)
-        .map((sheetName) => {
-          const sheet = workbook.Sheets[sheetName];
-          return `--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`;
-        })
-        .join('\n');
+      // Fonte UNICA da conversao XLSX -> texto (documents/service.ts). O
+      // caminho daqui era o ultimo `sheet_to_csv` cru do repositorio: sem
+      // `blankrows: false`, sem descarte de linha so-separador e sem teto de
+      // caracteres — o mesmo defeito que gerou os timeouts de 2026-08-17. O
+      // corte de 5 abas saiu junto: o helper para de converter assim que passa
+      // do teto, o que protege o mesmo risco sem cortar planilha legitima.
+      return spreadsheetBufferToText(att.content, {
+        sheetHeaders: true,
+        logContext: { filename: att.filename },
+      });
     }
   } catch (err) {
     logger.warn(
@@ -545,10 +630,13 @@ async function analyzeEmailWithAI(
 // ── Main processor ──────────────────────────────────────────────────────
 
 export const emailProcessor = {
-  async processNewEmails(includeRead = false, gmailQuery?: string) {
+  async processNewEmails(
+    includeRead = false,
+    gmailQuery?: string,
+  ): Promise<EmailProcessingSummary> {
     if (!isEmailIngestionEnabled()) {
       logger.info('Email ingestion blocked by Drive-only document source policy');
-      return;
+      return { fetched: 0, processed: 0 };
     }
     // Prefer Gmail API (service account), fall back to IMAP
     let emails: FetchedEmailForProcessing[];
@@ -561,12 +649,18 @@ export const emailProcessor = {
       emails = await imapService.fetchUnseenEmails();
     }
 
+    let processedCount = 0;
+
     for (const email of emails) {
       let [existing] = await db
         .select()
         .from(emailIngestionLogs)
         .where(eq(emailIngestionLogs.messageId, email.messageId))
         .limit(1);
+
+      // Read the transient attempt counter BEFORE the claim below clears
+      // `errorMessage`; otherwise a retryable failure would never exhaust.
+      const priorTransientAttempts = readTransientAttempt(existing?.errorMessage);
 
       if (existing) {
         const terminalStatuses = new Set(['completed', 'ignored', 'failed', 'reprocessed']);
@@ -1514,22 +1608,57 @@ export const emailProcessor = {
           },
           'Email processed successfully',
         );
+        processedCount += 1;
         await markEmailAsReadAfterDurableLog(email, usingGmail);
       } catch (error: any) {
-        await db
-          .update(emailIngestionLogs)
-          .set({ status: 'failed', errorMessage: error.message })
-          .where(eq(emailIngestionLogs.id, logEntry.id));
-        logger.error({ err: error, messageId: email.messageId }, 'Failed to process email');
-        await markEmailAsReadAfterDurableLog(email, usingGmail);
+        const permanent = isPermanentProcessingError(error);
+        const attempt = priorTransientAttempts + 1;
+        const exhausted = !permanent && attempt >= MAX_TRANSIENT_ATTEMPTS;
+
+        if (permanent || exhausted) {
+          await db
+            .update(emailIngestionLogs)
+            .set({
+              status: 'failed',
+              errorMessage: exhausted
+                ? `${TRANSIENT_ATTEMPT_PREFIX} persistente após ${attempt} tentativas: ${error.message}`
+                : error.message,
+              updatedAt: new Date(),
+            })
+            .where(eq(emailIngestionLogs.id, logEntry.id));
+          logger.error(
+            { err: error, messageId: email.messageId, permanent, attempt },
+            'Failed to process email — acknowledging message',
+          );
+          // Only a durable, non-retryable outcome consumes the message.
+          await markEmailAsReadAfterDurableLog(email, usingGmail);
+        } else {
+          // Retryable: back to `pending` and left UNREAD so the next poll
+          // recovers it without any human action.
+          await db
+            .update(emailIngestionLogs)
+            .set({
+              status: 'pending',
+              errorMessage: `${TRANSIENT_ATTEMPT_PREFIX} (tentativa ${attempt}/${MAX_TRANSIENT_ATTEMPTS}): ${error.message}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(emailIngestionLogs.id, logEntry.id));
+          logger.warn(
+            { err: error, messageId: email.messageId, attempt, max: MAX_TRANSIENT_ATTEMPTS },
+            'Transient failure processing email — leaving message unread for retry',
+          );
+        }
       }
     }
+
+    return { fetched: emails.length, processed: processedCount };
   },
 
   async getStatus() {
     const enabled = process.env.EMAIL_INGESTION_ENABLED === 'true';
     const gmailConfigured = gmailService.isConfigured();
     const imapConfigured = !!(process.env.IMAP_USER && process.env.IMAP_PASS);
+    const allowedSendersCount = resolveAllowedSenders().length;
 
     const [lastLog] = await db
       .select()
@@ -1556,7 +1685,14 @@ export const emailProcessor = {
       gmailConfigured,
       imapConfigured,
       sharedMailbox: resolveSharedMailbox(),
-      allowedSenders: process.env.EMAIL_ALLOWED_SENDERS || '(bloqueado - configure allowlist)',
+      // `GET /status` is authenticated but not admin-only: report whether the
+      // allow-list is configured and how large it is, never the addresses.
+      allowedSendersConfigured: allowedSendersCount > 0,
+      allowedSendersCount,
+      allowedSenders:
+        allowedSendersCount > 0
+          ? `${allowedSendersCount} remetente(s) autorizado(s)`
+          : '(bloqueado - configure allowlist)',
       lastRun: lastLog?.createdAt || null,
       todayStats: stats,
     };
@@ -1567,7 +1703,7 @@ export const emailProcessor = {
     limit = 20,
     startDate?: string,
     endDate?: string,
-    filters: { processId?: number; processCode?: string } = {},
+    filters: { processId?: number; processCode?: string; status?: string } = {},
   ) {
     const offset = (page - 1) * limit;
     const conditions = [];
@@ -1578,12 +1714,22 @@ export const emailProcessor = {
     if (filters.processCode) {
       conditions.push(ilike(emailIngestionLogs.processCode, filters.processCode));
     }
-    if (startDate) {
-      conditions.push(gte(emailIngestionLogs.receivedAt, new Date(startDate)));
+    if (filters.status) {
+      conditions.push(
+        eq(
+          emailIngestionLogs.status,
+          filters.status as (typeof emailIngestionLogs.status.enumValues)[number],
+        ),
+      );
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setDate(end.getDate() + 1);
+    // O dia escolhido no calendario local vira o intervalo UTC equivalente.
+    const start = startDate ? localDayStartUtc(startDate) : null;
+    if (start) {
+      conditions.push(sql`${emailIngestionLogs.receivedAt} >= ${start.toISOString()}`);
+    }
+    // Limite superior EXCLUSIVO: inicio do dia local seguinte, em UTC.
+    const end = endDate ? localDayEndExclusiveUtc(endDate) : null;
+    if (end) {
       conditions.push(sql`${emailIngestionLogs.receivedAt} < ${end.toISOString()}`);
     }
 
@@ -1656,30 +1802,75 @@ export const emailProcessor = {
     try {
       // Try to re-fetch from Gmail if configured
       if (gmailService.isConfigured() && log.messageId) {
-        // Preserve original log: rename messageId so processNewEmails won't skip it
+        const originalMessageId = log.messageId;
+        const parkedMessageId = `${originalMessageId}_reprocessed_${Date.now()}`;
+
+        // The messageId must be freed before the refetch, or processNewEmails
+        // finds this very row, sees a terminal `failed` and skips the message.
+        // The STATUS stays `failed` until a refetch actually succeeds — the old
+        // code declared `reprocessed` before knowing whether anything happened.
+        await db
+          .update(emailIngestionLogs)
+          .set({ messageId: parkedMessageId, updatedAt: new Date() })
+          .where(eq(emailIngestionLogs.id, logId));
+
+        // Primary query: the RFC822 Message-ID is the only exact address of a
+        // message in Gmail. Fallback: only the MAILBOX of the stored `From`
+        // header — `log.fromAddress` holds the whole `Nome <caixa@dominio>`
+        // header, which is not a valid Gmail clause and degrades into free
+        // text terms that match unrelated mail.
+        const queries = buildReprocessQueries(originalMessageId, log.fromAddress, log.subject);
+
+        let processed = 0;
+        let lastError: Error | null = null;
+        for (const query of queries) {
+          try {
+            const summary = await this.processNewEmails(true, query);
+            processed += summary.processed;
+            if (summary.processed > 0) break;
+          } catch (reprocessErr: any) {
+            lastError = reprocessErr;
+            logger.error({ err: reprocessErr, logId }, 'processNewEmails failed during reprocess');
+          }
+        }
+
+        if (processed > 0) {
+          await db
+            .update(emailIngestionLogs)
+            .set({
+              status: 'reprocessed',
+              errorMessage: `Reprocessado em ${new Date().toISOString()}. Log original preservado.`,
+              updatedAt: new Date(),
+            })
+            .where(eq(emailIngestionLogs.id, logId));
+
+          return { message: `Email reprocessado via Gmail API (${processed})`, processed };
+        }
+
+        // Nothing was reprocessed: restore the original identity so the log
+        // keeps pointing at the real message — unless the refetch already
+        // created a new row holding that messageId.
+        const [claimedByNewRow] = await db
+          .select({ id: emailIngestionLogs.id })
+          .from(emailIngestionLogs)
+          .where(eq(emailIngestionLogs.messageId, originalMessageId))
+          .limit(1);
+
+        const reason = lastError
+          ? `Reprocessamento falhou: ${lastError.message}`
+          : 'Reprocessamento não encontrou a mensagem no Gmail';
+
         await db
           .update(emailIngestionLogs)
           .set({
-            messageId: `${log.messageId}_reprocessed_${Date.now()}`,
-            status: 'reprocessed',
-            errorMessage: `Reprocessado em ${new Date().toISOString()}. Log original preservado.`,
+            ...(claimedByNewRow ? {} : { messageId: originalMessageId }),
+            status: 'failed',
+            errorMessage: reason,
+            updatedAt: new Date(),
           })
           .where(eq(emailIngestionLogs.id, logId));
 
-        // Build targeted Gmail query to fetch only the specific email
-        // Use rfc822msgid if available, otherwise search by subject+from
-        const targetQuery =
-          log.fromAddress && log.subject
-            ? `from:${log.fromAddress} subject:"${log.subject.replace(/"/g, '')}"`
-            : undefined;
-
-        try {
-          await this.processNewEmails(true, targetQuery);
-        } catch (reprocessErr: any) {
-          logger.error({ err: reprocessErr, logId }, 'processNewEmails failed during reprocess');
-        }
-
-        return { message: 'Email reprocessado via Gmail API' };
+        throw new AppError(reason, 502, 'EMAIL_REPROCESS_NOT_FOUND');
       }
 
       // Fallback: re-process from locally saved attachments if a process was created

@@ -12,6 +12,7 @@ import {
   User,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { userKeys } from '@/shared/api/query-keys';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -27,6 +28,12 @@ interface AuditLog {
   details: Record<string, unknown> | null;
   ipAddress: string | null;
   createdAt: string;
+}
+
+/** Subconjunto de `/api/auth/users` usado só para popular o filtro por usuário. */
+interface AuditUserOption {
+  id: number;
+  name: string;
 }
 
 interface ApiResponse {
@@ -152,6 +159,7 @@ export function AuditLogPage() {
   const [page, setPage] = useState(1);
   const [action, setAction] = useState('');
   const [entityType, setEntityType] = useState('');
+  const [userId, setUserId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const limit = 20;
@@ -161,6 +169,9 @@ export function AuditLogPage() {
   params.set('limit', String(limit));
   if (action) params.set('action', action);
   if (entityType) params.set('entityType', entityType);
+  // A API sempre aceitou `userId` (audit/schema.ts); a tela nunca ofereceu o
+  // filtro, e "quem fez" e a pergunta mais frequente numa auditoria.
+  if (userId) params.set('userId', userId);
   if (startDate) params.set('startDate', startDate);
   if (endDate) params.set('endDate', endDate);
 
@@ -170,17 +181,23 @@ export function AuditLogPage() {
     error,
     refetch,
   } = useApiQuery<ApiResponse>(
-    ['audit-logs', String(page), action, entityType, startDate, endDate],
+    ['audit-logs', String(page), action, entityType, userId, startDate, endDate],
     `/api/audit/logs?${params.toString()}`,
   );
 
+  // A rota /api/auth/users e admin-only, igual a esta tela (AdminRoute).
+  const { data: users } = useApiQuery<AuditUserOption[]>(userKeys.all, '/api/auth/users', {
+    staleTime: 5 * 60_000,
+  });
+
   const logs = response?.data ?? [];
   const pagination = response?.pagination;
-  const hasFilters = action || entityType || startDate || endDate;
+  const hasFilters = action || entityType || userId || startDate || endDate;
 
   const clearFilters = () => {
     setAction('');
     setEntityType('');
+    setUserId('');
     setStartDate('');
     setEndDate('');
     setPage(1);
@@ -199,12 +216,9 @@ export function AuditLogPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Page header */}
+      {/* Page header — o título é o <h1> do shell (AppLayout); aqui só o subtítulo. */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-          Auditoria do sistema
-        </h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           Registro de atividades, atendimentos e automações do sistema.
         </p>
       </div>
@@ -270,6 +284,31 @@ export function AuditLogPage() {
               {Object.entries(entityTypeLabels).map(([key, label]) => (
                 <option key={key} value={key}>
                   {label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-full sm:w-auto sm:min-w-[180px]">
+            <label
+              htmlFor="audit-user"
+              className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
+            >
+              Usuário
+            </label>
+            <select
+              id="audit-user"
+              value={userId}
+              onChange={(e) => {
+                setUserId(e.target.value);
+                setPage(1);
+              }}
+              className={selectClasses}
+            >
+              <option value="">Todos os usuários</option>
+              {users?.map((u) => (
+                <option key={u.id} value={String(u.id)}>
+                  {u.name}
                 </option>
               ))}
             </select>
@@ -467,7 +506,7 @@ export function AuditLogPage() {
         {pagination && pagination.pages > 1 && (
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4">
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Pagina{' '}
+              Página{' '}
               <span className="font-semibold text-slate-700 dark:text-slate-300">
                 {pagination.page}
               </span>{' '}
@@ -490,7 +529,7 @@ export function AuditLogPage() {
                 onClick={() => setPage(page + 1)}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
-                Proximo
+                Próximo
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>

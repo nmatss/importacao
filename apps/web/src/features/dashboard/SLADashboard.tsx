@@ -184,20 +184,22 @@ const tabConfig: {
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 function severityColor(count: number): string {
-  if (count === 0) return 'text-slate-300';
-  if (count <= 2) return 'text-amber-500';
-  return 'text-danger-500';
+  if (count === 0) return 'text-slate-300 dark:text-slate-600';
+  if (count <= 2) return 'text-amber-500 dark:text-amber-400';
+  return 'text-danger-500 dark:text-danger-500';
 }
 
+// As escalas `danger-*` definidas em app/index.css param em 700 — por isso o
+// par dark usa 700/30 e 200 em vez de 900/300, que nao gerariam classe alguma.
 function urgencyBg(days: number): string {
-  if (days <= 0) return 'bg-danger-50/50';
-  if (days <= 3) return 'bg-amber-50/50';
+  if (days <= 0) return 'bg-danger-50/50 dark:bg-danger-700/20';
+  if (days <= 3) return 'bg-amber-50/50 dark:bg-amber-900/20';
   return '';
 }
 
 function urgencyText(days: number): string {
-  if (days <= 0) return 'text-danger-700 font-bold';
-  if (days <= 3) return 'text-amber-700 font-semibold';
+  if (days <= 0) return 'text-danger-700 dark:text-danger-200 font-bold';
+  if (days <= 3) return 'text-amber-700 dark:text-amber-300 font-semibold';
   return 'text-slate-600 dark:text-slate-400';
 }
 
@@ -237,7 +239,18 @@ export function SLADashboard() {
       if (va == null && vb == null) return 0;
       if (va == null) return 1;
       if (vb == null) return -1;
-      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
+      // `amountUsd` chega como string (coluna numeric). Comparado com `<` a
+      // ordenacao era lexicografica e "9.00" caia depois de "10000.00".
+      const na = Number(va);
+      const nb = Number(vb);
+      const numeric =
+        typeof va !== 'boolean' &&
+        typeof vb !== 'boolean' &&
+        Number.isFinite(na) &&
+        Number.isFinite(nb) &&
+        String(va).trim() !== '' &&
+        String(vb).trim() !== '';
+      const cmp = numeric ? (na < nb ? -1 : na > nb ? 1 : 0) : va < vb ? -1 : va > vb ? 1 : 0;
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }

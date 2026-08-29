@@ -41,7 +41,9 @@ const BRAND_OPTIONS = [
   { value: 'puket_escolares', label: 'Puket Escolares' },
 ];
 
-const FREQUENCY_PRESETS = [
+// Expressões em convenção CRONTAB: `1` = segunda, `5` = sexta. O backend traduz
+// para o APScheduler na hora de montar o job.
+export const FREQUENCY_PRESETS = [
   { value: 'daily', label: 'Diário (06:00)', cron: '0 6 * * *' },
   { value: 'weekly_mon', label: 'Semanal (Segunda)', cron: '0 6 * * 1' },
   { value: 'weekly_fri', label: 'Semanal (Sexta)', cron: '0 6 * * 5' },
@@ -67,14 +69,36 @@ const CRON_MONTH_ALIASES: Record<string, number> = {
   dec: 12,
 };
 
+// Convenção CRONTAB (0 = domingo … 6 = sábado). O APScheduler usa 0 = segunda,
+// mas essa tradução é responsabilidade EXCLUSIVA do backend
+// (`app/utils/cron.py`): ele grava e devolve a expressão em crontab. Esta tabela
+// usava `mon: 0` (convenção do APScheduler) e discordava de `dayOfWeekNames` em
+// `shared/lib/utils.ts` — validação e exibição do mesmo cron diziam dias
+// opostos dentro da mesma tela.
 const CRON_DOW_ALIASES: Record<string, number> = {
-  mon: 0,
-  tue: 1,
-  wed: 2,
-  thu: 3,
-  fri: 4,
-  sat: 5,
-  sun: 6,
+  sun: 0,
+  mon: 1,
+  tue: 2,
+  wed: 3,
+  thu: 4,
+  fri: 5,
+  sat: 6,
+};
+
+/** crontab aceita 7 como sinônimo de domingo, além de 0. */
+const CRON_DOW_MAX = 7;
+
+const POLL_INTERVAL_MS = 3000;
+/** ~20 min: acima do pior caso observado de uma validação completa (~17 min). */
+const POLL_TIMEOUT_MS = 20 * 60 * 1000;
+/** Falhas seguidas antes de desistir do acompanhamento. */
+const POLL_MAX_FAILURES = 3;
+
+/** Rótulos e cores dos três estados reais de `cert_schedule_history.status`. */
+const HISTORY_STATUS: Record<string, { label: string; dot: string; text: string }> = {
+  completed: { label: 'Concluído', dot: 'bg-emerald-500', text: 'text-emerald-700' },
+  running: { label: 'Em execução', dot: 'bg-amber-500', text: 'text-amber-700' },
+  failed: { label: 'Falhou', dot: 'bg-danger-500', text: 'text-danger-700' },
 };
 
 function buildCron(preset: string, hour: string, minute: string): string {
@@ -139,7 +163,7 @@ function isValidCronField(
   });
 }
 
-function validateCronExpression(cron: string): string {
+export function validateCronExpression(cron: string): string {
   const parts = cron.trim().split(/\s+/);
   if (parts.length !== 5) return CRON_VALIDATION_ERROR;
 
@@ -149,7 +173,7 @@ function validateCronExpression(cron: string): string {
     isValidCronField(hour, 0, 23) &&
     isValidCronField(day, 1, 31) &&
     isValidCronField(month, 1, 12, CRON_MONTH_ALIASES) &&
-    isValidCronField(dayOfWeek, 0, 6, CRON_DOW_ALIASES);
+    isValidCronField(dayOfWeek, 0, CRON_DOW_MAX, CRON_DOW_ALIASES);
 
   return valid ? '' : CRON_VALIDATION_ERROR;
 }
@@ -212,6 +236,13 @@ export default function CertAgendamentosPage() {
     loadSchedules();
   }, [loadSchedules]);
 
+  const hasDateFilter = Boolean(startDate || endDate);
+
+  function clearDateFilter() {
+    setStartDate('');
+    setEndDate('');
+  }
+
   function resetForm() {
     setFormName('');
     setFormBrand('');
@@ -230,6 +261,10 @@ export default function CertAgendamentosPage() {
   }
 
   function openEditForm(schedule: Schedule) {
+    // resetForm() primeiro: sem ele `formCustomCron` (e os demais campos) vazavam
+    // da edição anterior — abrir um agendamento não-custom e trocar para
+    // "Personalizado" trazia a expressão do agendamento editado antes.
+    resetForm();
     setFormName(schedule.name);
     setFormBrand(schedule.brand_filter || '');
     const preset = detectPreset(schedule.cron_expression);
@@ -334,9 +369,20 @@ export default function CertAgendamentosPage() {
       const runId = result.run_id;
 
       // Poll for completion every 3s
+      let consecutiveFailures = 0;
+      let elapsedMs = 0;
+
+      const stopPolling = () => {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        setTriggeringId(null);
+      };
+
       pollRef.current = setInterval(async () => {
+        elapsedMs += POLL_INTERVAL_MS;
         try {
           const status = await fetchCertValidationStatus(runId);
+          consecutiveFailures = 0;
           setTriggerResult((prev) =>
             prev
               ? {
@@ -352,22 +398,38 @@ export default function CertAgendamentosPage() {
           );
 
           if (status.status === 'completed' || status.status === 'error') {
-            if (pollRef.current) clearInterval(pollRef.current);
-            pollRef.current = null;
-            setTriggeringId(null);
+            stopPolling();
             // Refresh schedules and clear history cache
             await loadSchedules();
             setHistoryData({});
+            return;
+          }
+
+          // Teto absoluto: sem ele, um run que nunca sai de 'running' mantinha o
+          // poll e o spinner vivos indefinidamente.
+          if (elapsedMs >= POLL_TIMEOUT_MS) {
+            stopPolling();
+            setTriggerResult(null);
+            toast.warning(
+              'Acompanhamento interrompido: a validacao passou do tempo esperado. Consulte o historico.',
+            );
           }
         } catch {
-          if (pollRef.current) clearInterval(pollRef.current);
-          pollRef.current = null;
-          setTriggeringId(null);
+          consecutiveFailures += 1;
+          // O run some do backend depois de concluir (cleanup do store em
+          // memoria). Antes o catch limpava o interval mas NAO o triggerResult,
+          // e o spinner "Validando... 0 produtos" ficava na tela para sempre.
+          if (consecutiveFailures >= POLL_MAX_FAILURES) {
+            stopPolling();
+            setTriggerResult(null);
+            toast.error('Nao foi possivel acompanhar a execucao. Consulte o historico.');
+          }
         }
-      }, 3000);
-    } catch {
+      }, POLL_INTERVAL_MS);
+    } catch (err) {
       setTriggeringId(null);
       setTriggerResult(null);
+      toast.error(err instanceof Error ? err.message : 'Falha ao executar o agendamento');
     }
   }
 
@@ -466,20 +528,43 @@ export default function CertAgendamentosPage() {
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-slate-100 dark:bg-slate-700 mb-4">
             <CalendarClock className="w-8 h-8 text-slate-300" />
           </div>
-          <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
-            Nenhum agendamento configurado
-          </p>
-          <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
-            Crie um agendamento para executar validações de certificações automaticamente
-          </p>
-          <button
-            type="button"
-            onClick={openCreateForm}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            Criar Agendamento
-          </button>
+          {/* "Nada existe" e "nada casa com o filtro" são estados diferentes. */}
+          {hasDateFilter ? (
+            <>
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                Nenhum agendamento no período
+              </p>
+              <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
+                Nenhuma execução entre as datas selecionadas. Agendamentos podem existir fora desse
+                intervalo.
+              </p>
+              <button
+                type="button"
+                onClick={clearDateFilter}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-sm font-semibold hover:bg-slate-50 dark:hover:bg-slate-700 active:scale-[0.98] transition-all"
+              >
+                <X className="w-4 h-4" />
+                Limpar filtro
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
+                Nenhum agendamento configurado
+              </p>
+              <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
+                Crie um agendamento para executar validações de certificações automaticamente
+              </p>
+              <button
+                type="button"
+                onClick={openCreateForm}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-semibold shadow-sm hover:shadow-md active:scale-[0.98] transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                Criar Agendamento
+              </button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid gap-4">
@@ -683,49 +768,59 @@ export default function CertAgendamentosPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {historyData[schedule.id].map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white rounded-xl border border-slate-100 dark:border-slate-700 px-4 py-3 text-sm"
-                        >
-                          <div className="flex items-center gap-3">
-                            <span
-                              className={`flex items-center justify-center w-2.5 h-2.5 rounded-full ${
-                                entry.status === 'completed'
-                                  ? 'bg-emerald-500 shadow-sm'
-                                  : 'bg-danger-500 shadow-sm'
-                              }`}
-                            />
-                            <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">
-                              {formatDateTime(entry.run_date)}
-                            </span>
-                          </div>
-                          {entry.summary && typeof entry.summary === 'object' && (
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
-                              <span className="text-slate-500 dark:text-slate-400 font-medium">
-                                {entry.summary.total ?? 0} produtos
+                      {historyData[schedule.id].map((entry) => {
+                        // 'running' e 'failed' viravam a MESMA bolinha vermelha
+                        // sem rótulo — indistinguíveis na tela.
+                        const statusInfo = HISTORY_STATUS[entry.status] ?? {
+                          label: entry.status,
+                          dot: 'bg-slate-400',
+                          text: 'text-slate-600',
+                        };
+                        return (
+                          <div
+                            key={entry.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 px-4 py-3 text-sm"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span
+                                className={`flex items-center justify-center w-2.5 h-2.5 rounded-full shadow-sm ${statusInfo.dot}`}
+                              />
+                              <span
+                                className={`text-[11px] font-semibold ${statusInfo.text} dark:text-slate-300`}
+                              >
+                                {statusInfo.label}
                               </span>
-                              {(entry.summary.ok ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
-                                  {entry.summary.ok} Conforme
-                                </span>
-                              )}
-                              {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0) >
-                                0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-danger-50 text-danger-700 font-semibold">
-                                  {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0)}{' '}
-                                  nao encontrados
-                                </span>
-                              )}
-                              {(entry.summary.inconsistent ?? 0) > 0 && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold">
-                                  {entry.summary.inconsistent} inconsist.
-                                </span>
-                              )}
+                              <span className="text-slate-600 dark:text-slate-400 font-medium text-xs">
+                                {formatDateTime(entry.run_date)}
+                              </span>
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {entry.summary && typeof entry.summary === 'object' && (
+                              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs">
+                                <span className="text-slate-500 dark:text-slate-400 font-medium">
+                                  {entry.summary.total ?? 0} produtos
+                                </span>
+                                {(entry.summary.ok ?? 0) > 0 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
+                                    {entry.summary.ok} Conforme
+                                  </span>
+                                )}
+                                {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0) >
+                                  0 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-danger-50 text-danger-700 font-semibold">
+                                    {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0)}{' '}
+                                    nao encontrados
+                                  </span>
+                                )}
+                                {(entry.summary.inconsistent ?? 0) > 0 && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold">
+                                    {entry.summary.inconsistent} inconsist.
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -792,7 +887,7 @@ export default function CertAgendamentosPage() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="agendamento-modal-title"
-              className="relative bg-white rounded-2xl shadow-2xl border border-slate-200/60 dark:border-slate-700/60 w-full max-w-md max-h-[90vh] overflow-y-auto"
+              className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200/60 dark:border-slate-700/60 w-full max-w-md max-h-[90vh] overflow-y-auto"
             >
               {/* Modal Header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100 dark:border-slate-700">

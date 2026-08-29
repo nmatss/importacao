@@ -1,6 +1,44 @@
 # Technical Debt
 
-Ultima atualizacao: 2026-08-28
+Ultima atualizacao: 2026-08-29
+
+## Divida Registrada Em 2026-08-29
+
+Levantada na auditoria integral. O relatorio completo, com evidencia
+`arquivo:linha`, esta em
+`docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`.
+
+- **Dead-letter das filas.** A politica de retry passou a ser declarada
+  explicitamente em `shared/queue/index.ts`, em vez do default implicito da
+  versao do pg-boss. Mas job que estoura as tentativas termina como `failed` e
+  NADA varre esse estado — o mesmo padrao do alerta que morria no banco. Exige
+  decidir onde a fila morta e observada antes de criar a fila.
+- **ADR 0006 completa.** `autoPopulateItems` recebeu ordenacao deterministica,
+  gate de confianca, lock contra `generate` concorrente e linhagem
+  (`source_document_id`, `extraction_run_id`, `materialized_at`). Falta o que a
+  ADR pede alem disso: chave unica por execucao, substituicao transacional
+  auditada, dry-run/diff e invalidacao explicita apos nova extracao.
+- **`processWithAI` nao lanca quando perde a lease.** A guarda de `reclassify`
+  foi aplicada, mas o job continua sendo marcado como concluido pelo pg-boss sem
+  retry. Fazer lancar exige provar que o retry nao dispara extracao de IA paga em
+  duplicidade em todos os caminhos, inclusive o fallback fora da fila.
+- **Certificacoes nao usa TanStack Query.** As nove telas usam
+  `useState` + `useEffect` + `fetch` manual: nenhuma mutation invalida cache e o
+  health da cert-api e consultado tres vezes ao abrir o dashboard. E a causa raiz
+  de inconsistencia de cache no modulo. Migracao ampla, adiada deliberadamente.
+- **Cancelamento de requisicao nos clientes Google.** O vazamento de timer foi
+  corrigido, mas o `withTimeout` local ainda nao cancela a requisicao em voo — o
+  cliente segue esperando a resposta depois do timeout, mantendo custo e efeito
+  colateral. Exige propagar `AbortSignal` ate o cliente.
+- **`cert_stock` em producao: tamanho nao confirmado.** A migracao para
+  `TIMESTAMPTZ` forca reescrita da tabela sob `ACCESS EXCLUSIVE` no startup.
+  Medido: 2,5 s para 500 mil linhas. O registro do projeto indica ~33 mil, o que
+  torna o custo desprezivel — mas isso nao foi confirmado contra o banco real.
+- **Centralizar stubs de jsdom em `apps/web/src/test/setup.ts`: FEITO**, com
+  stub ciente da query. Registrado aqui porque a primeira tentativa quebrou
+  quatro testes de layout: `AppLayout` trata a AUSENCIA de `matchMedia` como
+  desktop, entao um stub que responde `false` para tudo colapsa a aplicacao no
+  menu mobile.
 
 ## Validacao E Comparativo
 
@@ -95,10 +133,14 @@ Ultima atualizacao: 2026-08-28
 - Corrigir warnings conhecidos do script de backup para volumes ausentes.
 - Adicionar alerta externo para falha do `scripts/restore-test.sh` e medir RTO em
   execucao recorrente. Restore manual e cron semanal validados em 2026-06-17.
-- Evoluir autorizacao fina do proxy `/cert-api/`: em 2026-06-20 o Nginx passou
-  a exigir admin via `/api/auth/cert-api-access` antes de injetar `X-API-Key`.
-  Ainda falta separar escopos como `cert.read`, `cert.write`, `cert.sync` e
-  `cert.admin` quando o negocio definir usuarios leitores/escritores.
+- **Reescrito em 2026-08-29.** A separacao de escopos que este item pedia JA FOI
+  IMPLEMENTADA em `apps/api/src/modules/auth/cert-api-access.ts`
+  (`cert.read` / `cert.operate` / `cert.admin`, fail-closed em rota
+  desconhecida). A divida que sobra e outra: o modelo de papeis do PORTAL so tem
+  `admin` e `analyst`, entao `cert.operate` — que dispara escrita no ERP Linx de
+  producao — e concedido a todo analista. Enquanto `ERP_*_USER` for conta
+  pessoal, qualquer analista escreve no Linx sob a identidade de uma pessoa. Ver
+  `docs/KNOWN_ISSUES.md` (acesso Linx por contas pessoais).
 - Formalizar frescor minimo do estoque: o relatorio `Estoque Detalhado` exporta
   o cache `cert_stock`; se `/api/sync-stock` falhar parcialmente, WMS e
   e-commerce podem ter timestamps diferentes. Em 2026-06-19 o XLSX passou a

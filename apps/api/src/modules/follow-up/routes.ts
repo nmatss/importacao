@@ -2,13 +2,13 @@ import { Router } from 'express';
 import { followUpController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
-import { updateFollowUpSchema } from './schema.js';
+import { followUpQuerySchema, updateFollowUpSchema } from './schema.js';
 
 const router = Router();
 
 router.use(authMiddleware);
 
-router.get('/', followUpController.getAll);
+router.get('/', validate(followUpQuerySchema, 'query'), followUpController.getAll);
 router.get('/deadlines/li', followUpController.getLiDeadlines);
 router.get('/sheet-compare/:processCode', followUpController.compareWithSheet);
 router.post('/sync-from-sheet/:processCode', adminMiddleware, followUpController.syncFromSheet);

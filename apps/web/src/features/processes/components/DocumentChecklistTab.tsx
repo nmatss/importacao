@@ -17,12 +17,14 @@ import {
   ShieldCheck,
   Stamp,
 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
-import { useAuth } from '@/shared/hooks/useAuth';
+import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { CHECKLIST_STEPS } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface StepCompletedBy {
   completedBy: number | null;
@@ -74,7 +76,7 @@ function formatTimestamp(val: unknown): string | null {
 }
 
 export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
-  const { getToken } = useAuth();
+  const queryClient = useQueryClient();
   const [toggling, setToggling] = useState<string | null>(null);
 
   const {
@@ -88,24 +90,24 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   const toggleStep = async (stepKey: string) => {
     setToggling(stepKey);
     try {
-      const token = getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || '';
       const isCompleted = followUp && followUp[stepKey];
 
-      const res = await fetch(`${baseUrl}/api/follow-up/${processId}/step`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          step: stepKey,
-          completedAt: isCompleted ? null : new Date().toISOString(),
-        }),
+      // Via api-client: um 401 aqui precisa redirecionar para o login (a logica
+      // de sessao expirada vive la) e a mensagem real do backend precisa chegar
+      // ao operador — o `fetch` cru descartava as duas coisas.
+      await api.patch(`/api/follow-up/${processId}/step`, {
+        step: stepKey,
+        completedAt: isCompleted ? null : new Date().toISOString(),
       });
 
-      if (!res.ok) throw new Error('Falha ao atualizar passo');
-      await refetch();
+      // Invalidacao em cascata: so o refetch() local deixava a aba Follow-Up, a
+      // ProcessTimeline (alimentada por ['process', id]) e o SLA do dashboard
+      // exibindo o estado anterior.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['follow-up', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['process', processId] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard', 'sla'] }),
+      ]);
 
       const stepLabel = CHECKLIST_STEPS.find((s) => s.key === stepKey)?.label ?? stepKey;
       if (isCompleted) {
@@ -114,8 +116,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
         toast.success(`${stepLabel} concluido`);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao atualizar checklist';
-      toast.error(msg);
+      toast.error(getErrorMessage(err));
     } finally {
       setToggling(null);
     }

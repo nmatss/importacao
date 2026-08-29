@@ -46,14 +46,20 @@ function originalPath(value: string | undefined): string | null {
 function isReadPath(path: string): boolean {
   if (READ_PATHS.has(path)) return true;
 
+  // Same invariant as the POST rule below: the wildcard segment excludes `%`
+  // as well as `/`. Nginx resolves percent-encoded traversal before proxying,
+  // so `/cert-api/api/products/..%2fadmin` would be decided here as `cert.read`
+  // while the cert-api actually serves `/cert-api/api/admin`. No administrative
+  // GET route exists today, which is exactly why this must be closed now: the
+  // failure would be silent on the day one is added.
   return (
-    /^\/cert-api\/api\/products\/[^/]+$/.test(path) ||
-    /^\/cert-api\/api\/validate\/[^/]+(?:\/stream)?$/.test(path) ||
-    /^\/cert-api\/api\/reports\/[^/]+(?:\/data)?$/.test(path) ||
-    /^\/cert-api\/api\/schedules\/[^/]+\/history$/.test(path) ||
-    /^\/cert-api\/api\/certificates\/[^/]+(?:\/pdf)?$/.test(path) ||
-    /^\/cert-api\/api\/stock\/[^/]+$/.test(path) ||
-    /^\/cert-api\/api\/licenciados\/[^/]+$/.test(path)
+    /^\/cert-api\/api\/products\/[^/%]+$/.test(path) ||
+    /^\/cert-api\/api\/validate\/[^/%]+(?:\/stream)?$/.test(path) ||
+    /^\/cert-api\/api\/reports\/[^/%]+(?:\/data)?$/.test(path) ||
+    /^\/cert-api\/api\/schedules\/[^/%]+\/history$/.test(path) ||
+    /^\/cert-api\/api\/certificates\/[^/%]+(?:\/pdf)?$/.test(path) ||
+    /^\/cert-api\/api\/stock\/[^/%]+$/.test(path) ||
+    /^\/cert-api\/api\/licenciados\/[^/%]+$/.test(path)
   );
 }
 

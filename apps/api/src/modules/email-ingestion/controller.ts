@@ -31,9 +31,11 @@ export const emailIngestionController = {
       const endDate = req.query.endDate as string | undefined;
       const processId = req.query.processId ? Number(req.query.processId) : undefined;
       const processCode = req.query.processCode as string | undefined;
+      const status = req.query.status as string | undefined;
       const result = await emailProcessor.getLogs(page, limit, startDate, endDate, {
         processId,
         processCode,
+        status,
       });
       sendPaginated(res, result.data, result.total, result.page, result.limit);
     } catch (error: any) {
@@ -95,10 +97,14 @@ export const emailIngestionController = {
       const gmailQuery = parts.join(' ');
 
       // Process with includeRead=true to catch all historical emails
-      await emailProcessor.processNewEmails(true, gmailQuery);
+      const summary = await emailProcessor.processNewEmails(true, gmailQuery);
+      // The assembled query embeds every allowed sender address; report the
+      // shape of the scan instead of echoing the allow-list back to the client.
       sendSuccess(res, {
         message: `Varredura histórica de ${months} meses concluída`,
-        query: gmailQuery,
+        months,
+        fetched: summary.fetched,
+        processed: summary.processed,
       });
     } catch (error: any) {
       logger.error({ error }, 'Historical email scan failed');

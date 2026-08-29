@@ -1,3 +1,10 @@
+// Parser ÚNICO de data para todo o módulo de validação. O parser local daqui
+// usava `new Date(value)`, que interpreta '03/04/2026' como MM/DD, enquanto
+// date-compare interpreta DMY: a MESMA string virava 2026-03-04 aqui e
+// 2026-04-03 lá, e como inversão cronológica é `failed`, o artefato de parsing
+// gerava falha dura.
+import { parseDate } from '../utils/date-compare.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -13,12 +20,6 @@ interface CheckResult {
   actualValue?: string;
   documentsCompared: string;
   message: string;
-}
-
-function parseDate(value: any): Date | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return isNaN(d.getTime()) ? null : d;
 }
 
 function formatDate(d: Date): string {

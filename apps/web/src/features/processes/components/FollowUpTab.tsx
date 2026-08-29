@@ -39,12 +39,15 @@ const FOLLOW_UP_STEPS = [
 ] as const;
 
 export function FollowUpTab({ processId }: FollowUpTabProps) {
+  // Mesma chave que o DocumentChecklistTab usa: eram ['followup'] aqui e
+  // ['follow-up'] la, para o MESMO endpoint, entao marcar um passo no checklist
+  // nao atualizava esta aba.
   const {
     data: tracking,
     isLoading,
     isError,
     refetch,
-  } = useApiQuery<FollowUpTracking>(['followup', processId], `/api/follow-up/${processId}`);
+  } = useApiQuery<FollowUpTracking>(['follow-up', processId], `/api/follow-up/${processId}`);
 
   if (isLoading) return <TableSkeleton />;
   if (isError) {

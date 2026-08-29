@@ -10,6 +10,13 @@ import {
 } from '../../shared/database/schema.js';
 import { cache } from '../../shared/cache/redis.js';
 import { logger } from '../../shared/utils/logger.js';
+import { localMonthStartUtc } from '../../shared/utils/dates.js';
+import {
+  statusEnteredAt,
+  withUpdatedAtFallback,
+  isApproximate,
+  approximateCount,
+} from './event-dates.js';
 
 /**
  * Safe JSON.parse for cache entries: on malformed JSON, logs a warning and
@@ -27,6 +34,15 @@ function parseCachedOrNull<T>(raw: string, key: string): T | null {
   }
 }
 
+/**
+ * Janela, em dias, que define uma LI como urgente no painel de SLA.
+ *
+ * PARAMETRO DE NEGOCIO: o valor abaixo e o default operacional e deve ser
+ * confirmado com o time fiscal. `calculateLiDeadline` usa embarque + 13 dias,
+ * entao 15 dias cobre o prazo inteiro mais uma folga curta.
+ */
+const LI_URGENT_WINDOW_DAYS = 15;
+
 export const dashboardService = {
   async getOverview() {
     const cached = await cache.get('dashboard:overview');
@@ -35,8 +51,13 @@ export const dashboardService = {
       if (parsed !== null) return parsed;
     }
 
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    // Ver a nota em `localMonthStartUtc`: o recorte mensal precisa da meia-noite
+    // local, nao da meia-noite UTC.
+    const monthStart = localMonthStartUtc(0);
+
+    // Data real da conclusao (evento append-only), nao `updatedAt`. Ver a nota
+    // em event-dates.ts.
+    const completedAt = statusEnteredAt('completed');
 
     const [
       [activeResult],
@@ -53,10 +74,16 @@ export const dashboardService = {
           and(ne(importProcesses.status, 'completed'), ne(importProcesses.status, 'cancelled')),
         ),
       db
-        .select({ count: count() })
+        .select({
+          count: count(),
+          approximateCount: approximateCount(completedAt),
+        })
         .from(importProcesses)
         .where(
-          and(eq(importProcesses.status, 'completed'), gte(importProcesses.updatedAt, monthStart)),
+          and(
+            eq(importProcesses.status, 'completed'),
+            sql`${withUpdatedAtFallback(completedAt)} >= ${monthStart.toISOString()}`,
+          ),
         ),
       db
         .select({
@@ -76,13 +103,34 @@ export const dashboardService = {
           ),
         ),
       db.select().from(alerts).orderBy(desc(alerts.createdAt)).limit(5),
-      db.select().from(importProcesses).orderBy(desc(importProcesses.updatedAt)).limit(10),
+      // Projecao explicita: `db.select()` trazia os registros COMPLETOS —
+      // incluindo `aiExtractedData jsonb` — para exibir 5 colunas.
+      // Ordenacao por `createdAt DESC` (era `updatedAt DESC`) para casar com a
+      // coluna "Data Criacao" que a tabela do front mostra; `updatedAt` vai
+      // junto para quem quiser rotular a ultima edicao.
+      db
+        .select({
+          id: importProcesses.id,
+          processCode: importProcesses.processCode,
+          brand: importProcesses.brand,
+          status: importProcesses.status,
+          etd: importProcesses.etd,
+          createdAt: importProcesses.createdAt,
+          updatedAt: importProcesses.updatedAt,
+        })
+        .from(importProcesses)
+        .orderBy(desc(importProcesses.createdAt))
+        .limit(10),
     ]);
 
     const result = {
       activeProcesses: activeResult.count,
       overdueProcesses: overdueResult.count,
       completedThisMonth: completedResult.count,
+      // Quantos dos concluidos acima nao tinham evento `status_changed` e
+      // cairam no fallback `updatedAt` — o numero e aproximado quando > 0.
+      completedThisMonthApproximate: completedResult.approximateCount > 0,
+      completedThisMonthFallbackCount: completedResult.approximateCount,
       totalFobValue: fobResult.total,
       recentAlerts,
       recentProcesses,
@@ -134,6 +182,16 @@ export const dashboardService = {
       if (parsed !== null) return parsed;
     }
 
+    // Marcos reais, append-only. `espelhoGeneratedAt` (follow_up_tracking) e a
+    // fonte primaria de "espelho gerado" porque e o proprio marco de negocio; a
+    // transicao de status entra como segunda fonte, e `updatedAt` so como
+    // ultimo recurso (processos antigos). Ver event-dates.ts.
+    const espelhoGeneratedEventAt = statusEnteredAt('espelho_generated');
+    const espelhoAt = sql<Date>`COALESCE(${followUpTracking.espelhoGeneratedAt}, ${espelhoGeneratedEventAt}, ${importProcesses.updatedAt})`;
+    const espelhoAtIsApprox = sql<boolean>`(${followUpTracking.espelhoGeneratedAt} IS NULL AND ${espelhoGeneratedEventAt} IS NULL)`;
+    const validatedAtEvent = statusEnteredAt('validated');
+    const validatedAt = withUpdatedAtFallback(validatedAtEvent);
+
     const [
       docsOverdue,
       liUrgent,
@@ -165,7 +223,12 @@ export const dashboardService = {
         )
         .orderBy(sql`${importProcesses.shipmentDate} ASC`),
 
-      // 2. liUrgent: hasLiItems=true AND liDeadline is approaching or passed
+      // 2. liUrgent: LI cujo prazo ja venceu ou vence dentro da janela de
+      //    urgencia. Antes o WHERE so exigia hasLiItems + status aberto +
+      //    liDeadline NOT NULL, entao TODA LI em aberto contava como urgente:
+      //    um prazo daqui a seis meses inflava o cartao "LI Urgente" do painel
+      //    de SLA e o "prazo critico" do Meu Dia. O rotulo prometia urgencia e
+      //    a consulta entregava o total.
       db
         .select({
           id: importProcesses.id,
@@ -183,6 +246,7 @@ export const dashboardService = {
             ne(importProcesses.status, 'completed'),
             ne(importProcesses.status, 'cancelled'),
             sql`${followUpTracking.liDeadline} IS NOT NULL`,
+            sql`${followUpTracking.liDeadline}::date <= (now() AT TIME ZONE 'America/Sao_Paulo')::date + make_interval(days => ${LI_URGENT_WINDOW_DAYS})`,
           ),
         )
         .orderBy(sql`${followUpTracking.liDeadline} ASC`),
@@ -215,15 +279,16 @@ export const dashboardService = {
           id: importProcesses.id,
           processCode: importProcesses.processCode,
           brand: importProcesses.brand,
-          espelhoGeneratedDate: followUpTracking.espelhoGeneratedAt,
-          daysPending: sql<number>`EXTRACT(DAY FROM now() - COALESCE(${followUpTracking.espelhoGeneratedAt}, ${importProcesses.updatedAt}))::int`,
+          espelhoGeneratedDate: espelhoAt,
+          // `updatedAt` como data do espelho era falso: qualquer edicao no
+          // processo zerava o "dias parado" deste cartao.
+          espelhoGeneratedDateApproximate: espelhoAtIsApprox,
+          daysPending: sql<number>`EXTRACT(DAY FROM now() - ${espelhoAt})::int`,
         })
         .from(importProcesses)
         .leftJoin(followUpTracking, eq(importProcesses.id, followUpTracking.processId))
         .where(and(eq(importProcesses.status, 'espelho_generated')))
-        .orderBy(
-          sql`COALESCE(${followUpTracking.espelhoGeneratedAt}, ${importProcesses.updatedAt}) ASC`,
-        ),
+        .orderBy(sql`${espelhoAt} ASC`),
 
       // 5. noEspelho: status='validated' but no espelho generated
       db
@@ -231,12 +296,15 @@ export const dashboardService = {
           id: importProcesses.id,
           processCode: importProcesses.processCode,
           brand: importProcesses.brand,
-          validatedDate: importProcesses.updatedAt,
-          daysPending: sql<number>`EXTRACT(DAY FROM now() - ${importProcesses.updatedAt})::int`,
+          // Momento em que o processo ENTROU em 'validated' (process_events),
+          // nao a ultima edicao qualquer do registro.
+          validatedDate: validatedAt,
+          validatedDateApproximate: isApproximate(validatedAtEvent),
+          daysPending: sql<number>`EXTRACT(DAY FROM now() - ${validatedAt})::int`,
         })
         .from(importProcesses)
         .where(and(eq(importProcesses.status, 'validated')))
-        .orderBy(importProcesses.updatedAt),
+        .orderBy(sql`${validatedAt} ASC`),
 
       // 6. noFollowUpUpdate: follow_up_tracking.updatedAt > 5 days AND process not completed
       db
@@ -259,8 +327,11 @@ export const dashboardService = {
         .orderBy(followUpTracking.updatedAt),
 
       // 7. agingByUser: count open pendencias grouped by user
+      //    Agrupa pelo ID do usuario, nao pelo nome: dois "Ana Silva"
+      //    colapsavam numa unica linha com a soma das pendencias das duas.
       db
         .select({
+          userId: importProcesses.createdBy,
           userName: sql<string>`COALESCE(${users.name}, 'Sem usuario')`,
           pendingCount: count(),
           oldestPendingDays: sql<number>`MAX(EXTRACT(DAY FROM now() - ${importProcesses.createdAt}))::int`,
@@ -270,7 +341,7 @@ export const dashboardService = {
         .where(
           and(ne(importProcesses.status, 'completed'), ne(importProcesses.status, 'cancelled')),
         )
-        .groupBy(users.name)
+        .groupBy(importProcesses.createdBy, users.name)
         .orderBy(desc(count())),
 
       // 8. upcomingPayments: currency exchanges with paymentDeadline within 7 days

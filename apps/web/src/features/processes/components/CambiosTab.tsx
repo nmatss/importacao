@@ -40,7 +40,9 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
 
   const typeLabel = (t: string) => (t === 'deposit' ? 'Depósito' : 'Saldo');
   const typeColor = (t: string) =>
-    t === 'deposit' ? 'bg-amber-100 text-amber-700' : 'bg-primary-100 text-primary-700';
+    t === 'deposit'
+      ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300'
+      : 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300';
 
   return (
     <div className="space-y-4">

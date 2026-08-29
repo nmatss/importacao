@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import {
@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   AlertCircle,
   FileText,
-  Sparkles,
   Clock,
   Hash,
   Tag,
@@ -25,6 +24,18 @@ import {
   CalendarDays,
   Database,
 } from 'lucide-react';
+
+/**
+ * O cert-api devolve `detail` em inglês (FastAPI/HTTPException) e o client o
+ * prefixa com "Erro na API:". O operador não deve ver isso cru na tela.
+ */
+function translateDetailError(raw: string): string {
+  const message = raw.replace(/^Erro na API:\s*/i, '').trim();
+  if (/product not found/i.test(message)) return 'Produto não encontrado para este SKU.';
+  if (/not found/i.test(message)) return 'Registro não encontrado.';
+  if (!message) return 'Erro ao carregar produto';
+  return message;
+}
 
 function linxDateLabel(
   lookup: CertLinxLookup,
@@ -48,14 +59,21 @@ export default function CertProdutoDetailPage() {
   const [linxLoading, setLinxLoading] = useState(false);
   const [linxError, setLinxError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadProduct = useCallback(async () => {
     setLoading(true);
     setError(null);
-    fetchCertProductDetail(sku)
-      .then(setProduct)
-      .catch((e) => setError(e.message || 'Erro ao carregar produto'))
-      .finally(() => setLoading(false));
+    try {
+      setProduct(await fetchCertProductDetail(sku));
+    } catch (e) {
+      setError(translateDetailError(e instanceof Error ? e.message : ''));
+    } finally {
+      setLoading(false);
+    }
   }, [sku]);
+
+  useEffect(() => {
+    loadProduct();
+  }, [loadProduct]);
 
   useEffect(() => {
     if (!product?.brand || !sku) return;
@@ -77,6 +95,17 @@ export default function CertProdutoDetailPage() {
       const brandKey = product.brand.toLowerCase().replaceAll(' ', '_');
       const result = await verifyCertProduct(sku, brandKey);
       setLiveResult(result);
+      // Antes só `validation` era substituído: `cert_status`, `site_status` e
+      // `comercializacao_status` continuavam com o valor derivado ANTES da
+      // verificação, e o cabeçalho podia mostrar "Conforme" ao lado de
+      // "Site: Não Conforme" do run anterior. O backend já persistiu o
+      // resultado, então basta reler o detalhe.
+      try {
+        setProduct(await fetchCertProductDetail(sku));
+      } catch {
+        // A verificação em si deu certo; manter os dados antigos é melhor que
+        // esvaziar a tela — o resultado ao vivo já está em `liveResult`.
+      }
     } catch (e: any) {
       setLiveResult({ error: e.message || 'Erro na verificação' });
     } finally {
@@ -87,7 +116,8 @@ export default function CertProdutoDetailPage() {
   const validation = liveResult || product?.last_validation;
 
   return (
-    <div className="p-5 md:p-7 space-y-6 animate-fade-in">
+    // Sem `p-5 md:p-7`: o <main> do AppLayout já aplica `p-4 lg:p-6`.
+    <div className="space-y-6 animate-fade-in">
       {/* Back link */}
       <Link
         to="/certificacoes/produtos"
@@ -120,6 +150,14 @@ export default function CertProdutoDetailPage() {
           </div>
           <p className="text-sm font-medium text-danger-600">{error}</p>
           <p className="text-xs text-danger-400 mt-1">Tente novamente ou verifique o SKU</p>
+          <button
+            type="button"
+            onClick={loadProduct}
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-danger-200 px-4 py-2 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Tentar novamente
+          </button>
         </div>
       ) : product ? (
         <>
@@ -174,15 +212,8 @@ export default function CertProdutoDetailPage() {
                   <Tag className="w-4 h-4 text-slate-400" />
                   <span>{product.brand}</span>
                 </div>
-                {product.excel_row != null && (
-                  <>
-                    <div className="w-px h-4 bg-slate-200" />
-                    <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      <span>Linha {product.excel_row}</span>
-                    </div>
-                  </>
-                )}
+                {/* Removido o bloco "Linha {product.excel_row}": `excel_row` não
+                    existe em lugar nenhum do cert-api — nunca renderizava. */}
                 {validation?.status && (
                   <>
                     <div className="w-px h-4 bg-slate-200" />
@@ -200,7 +231,16 @@ export default function CertProdutoDetailPage() {
                   <>
                     <div className="w-px h-4 bg-slate-200" />
                     <span className="text-xs text-slate-500 font-medium">Site:</span>
-                    <CertStatusBadge status={product.site_status} />
+                    {/* `site_status_reason` aparecia na LISTA mas não aqui — que é
+                        a tela onde o operador vai entender o porquê. */}
+                    <div className="flex flex-col gap-0.5">
+                      <CertStatusBadge status={product.site_status} />
+                      {product.site_status === 'NAO_CONFORME' && product.site_status_reason && (
+                        <span className="max-w-[280px] text-[11px] leading-tight text-slate-500 dark:text-slate-400">
+                          {product.site_status_reason}
+                        </span>
+                      )}
+                    </div>
                   </>
                 )}
                 {product.license_status && product.license_status !== 'NAO_APLICAVEL' && (
@@ -473,26 +513,8 @@ export default function CertProdutoDetailPage() {
             </div>
           </div>
 
-          {/* AI Assessment */}
-          {validation?.ai_assessment && (
-            <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-gradient-to-r from-violet-50/60 to-violet-50/40">
-                <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-violet-600 text-white shadow-sm">
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                    Avaliação IA
-                  </h4>
-                </div>
-              </div>
-              <div className="p-6">
-                <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                  {validation.ai_assessment}
-                </p>
-              </div>
-            </div>
-          )}
+          {/* Removido o cartão "Avaliação IA": `ai_assessment` não existe em
+              nenhuma resposta do cert-api — o bloco nunca renderizava. */}
 
           {/* Error details */}
           {validation?.error && validation.status && (

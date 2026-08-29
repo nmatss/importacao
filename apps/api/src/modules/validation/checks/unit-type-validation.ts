@@ -35,10 +35,23 @@ const UNIT_TYPE_KEYWORDS: Record<string, string[]> = {
   SET: ['kit', 'kits', 'set', 'sets', 'conjunto', 'conjuntos'],
 };
 
+/**
+ * Casamento por PALAVRA INTEIRA. O `includes` anterior detectava a keyword no
+ * meio de outra palavra: "PARKA JACKET" e "SEPARATE PANTS" viravam PAR, e
+ * "CORSET" virava SET — e o check emitia `failed`, que marca o processo em
+ * pending_correction, move a pasta no Drive e gera rascunho de e-mail para a
+ * KIOM. Fronteira de palavra elimina essa classe inteira de falso positivo.
+ */
+const UNIT_TYPE_PATTERNS: Array<[string, RegExp[]]> = Object.entries(UNIT_TYPE_KEYWORDS).map(
+  ([unitType, keywords]) => [
+    unitType,
+    keywords.map((kw) => new RegExp(`(?:^|[^\\p{L}\\p{N}])${kw}(?:[^\\p{L}\\p{N}]|$)`, 'iu')),
+  ],
+);
+
 function detectUnitType(description: string): string {
-  const lower = description.toLowerCase();
-  for (const [unitType, keywords] of Object.entries(UNIT_TYPE_KEYWORDS)) {
-    if (keywords.some((kw) => lower.includes(kw))) return unitType;
+  for (const [unitType, patterns] of UNIT_TYPE_PATTERNS) {
+    if (patterns.some((pattern) => pattern.test(description))) return unitType;
   }
   return 'UN';
 }
@@ -129,13 +142,17 @@ export default function unitTypeValidation(input: CheckInput): CheckResult {
   }
 
   if (mismatches.length > 0) {
+    // `warning`, nao `failed`: a unidade "esperada" e inferida da DESCRICAO por
+    // heuristica linguistica, nao lida de um campo do documento. Uma heuristica
+    // de texto nao deve, sozinha, marcar pending_correction e disparar e-mail
+    // de correcao para fornecedor externo — quem decide isso e o operador.
     return {
       checkName,
-      status: 'failed',
+      status: 'warning',
       expectedValue: 'Tipos de unidade consistentes',
       actualValue: `${mismatches.length} divergencia(s)`,
       documentsCompared: plItems ? 'INV x PL' : 'INV',
-      message: `Divergencias de tipo de unidade encontradas: ${mismatches.join('; ')}.`,
+      message: `Possiveis divergencias de tipo de unidade (inferido da descricao, confirme no documento): ${mismatches.join('; ')}.`,
     };
   }
 

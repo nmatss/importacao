@@ -89,18 +89,25 @@ def _matches_derived_filters(
     cert_statuses: set[str],
     site_statuses: set[str],
     license_statuses: set[str],
+    comercializacao_statuses: set[str] | None = None,
 ) -> bool:
     """Return True when a serialized product matches all requested derived axes.
 
     Filtering is case-insensitive, AND across axes; an empty axis imposes no
-    constraint. The derived fields (cert_status/site_status/license_status) come
-    from `compute_status_dimensions`, so this must run AFTER serialization.
+    constraint. The derived fields (cert_status/site_status/license_status/
+    comercializacao_status) come from `compute_status_dimensions`, so this must
+    run AFTER serialization.
     """
     if cert_statuses and str(product.get("cert_status") or "").strip().lower() not in cert_statuses:
         return False
     if site_statuses and str(product.get("site_status") or "").strip().lower() not in site_statuses:
         return False
-    return not (license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses)
+    if license_statuses and str(product.get("license_status") or "").strip().lower() not in license_statuses:
+        return False
+    return not (
+        comercializacao_statuses
+        and str(product.get("comercializacao_status") or "").strip().lower() not in comercializacao_statuses
+    )
 
 
 def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, source: str | None = None) -> None:
@@ -315,8 +322,17 @@ def trigger_sync_sheets(request: Request) -> dict:
 def get_stats() -> dict:
     """Return aggregated certification stats.
 
+    Um erro de banco PROPAGA (500). O `except Exception` que devolvia zeros
+    pintava um PostgreSQL fora do ar como um sistema saudavel e vazio ("0" nos
+    quatro cartoes, "Todos os produtos estao em conformidade") e ainda deixava o
+    semaforo "Google Sheets" da tela de Configuracoes inalcancavel no vermelho.
+    "Vazio" nunca pode ser apresentado como "indisponivel".
+
     Returns:
         Dict with total_products, total_expired, last_run, by_brand.
+
+    Raises:
+        HTTPException: 500 quando a consulta ao banco falha.
     """
     if not DATABASE_URL:
         return {"total_products": 0, "total_expired": 0, "last_run": None, "by_brand": []}
@@ -346,8 +362,15 @@ def get_stats() -> dict:
                 SELECT brand,
                     COUNT(*) FILTER (WHERE last_validation_status = 'OK') as ok,
                     COUNT(*) FILTER (WHERE last_validation_status = 'INCONSISTENT') as inconsistent,
-                    COUNT(*) FILTER (WHERE last_validation_status NOT IN ('OK','INCONSISTENT')
-                        OR last_validation_status IS NULL) as not_found,
+                    -- `not_found` = validado e NAO localizado/consistente.
+                    -- `last_validation_status IS NULL` significa "nunca
+                    -- validado", nao "nao encontrado": incluir esses no
+                    -- not_found dava veredito NEGATIVO de conformidade a
+                    -- produto recem-importado da planilha. Vai em bucket
+                    -- proprio (`never_validated`).
+                    COUNT(*) FILTER (WHERE last_validation_status IS NOT NULL
+                        AND last_validation_status NOT IN ('OK','INCONSISTENT')) as not_found,
+                    COUNT(*) FILTER (WHERE last_validation_status IS NULL) as never_validated,
                     COUNT(*) FILTER (WHERE is_expired = TRUE) as expired
                 FROM cert_products
                 WHERE brand != ''
@@ -365,8 +388,9 @@ def get_stats() -> dict:
                 "last_run": last_run,
                 "by_brand": by_brand,
             }
-    except Exception:
-        return {"total_products": 0, "total_expired": 0, "last_run": None, "by_brand": []}
+    except Exception as exc:
+        log.error(f"/api/stats failed: {type(exc).__name__}: {exc}")
+        raise HTTPException(500, "Falha ao consultar as estatisticas de certificacao") from exc
 
 
 @router.get("/api/expired")
@@ -462,14 +486,21 @@ def list_products(
     cert_status: str = Query(""),
     site_status: str = Query(""),
     license_status: str = Query(""),
+    comercializacao_status: str = Query(""),
 ) -> dict:
     """List certification products with optional filters and stock enrichment.
 
-    The cert_status / site_status / license_status filters are derivation-time
-    dimensions (not DB columns). They are applied server-side AFTER status
-    derivation but BEFORE pagination, so total / total_pages reflect the FILTERED
-    result set. Each accepts a comma-separated, case-insensitive list; filtering
-    is AND across axes, and an empty axis imposes no constraint.
+    The cert_status / site_status / license_status / comercializacao_status
+    filters are derivation-time dimensions (not DB columns). They are applied
+    server-side AFTER status derivation but BEFORE pagination, so total /
+    total_pages reflect the FILTERED result set. Each accepts a comma-separated,
+    case-insensitive list; filtering is AND across axes, and an empty axis
+    imposes no constraint.
+
+    `comercializacao_status` era montado e enviado pelo cliente do frontend sem
+    estar declarado aqui — o FastAPI descarta query param nao declarado sem erro,
+    entregando um filtro que nao filtra e nunca acusa. Agora e um eixo derivado
+    como os outros tres.
 
     Returns:
         Paginated dict with products (enriched with stock), total, page, per_page,
@@ -488,7 +519,8 @@ def list_products(
     cert_statuses = _parse_csv_filter(cert_status)
     site_statuses = _parse_csv_filter(site_status)
     license_statuses = _parse_csv_filter(license_status)
-    derived_filtering = bool(cert_statuses or site_statuses or license_statuses)
+    comercializacao_statuses = _parse_csv_filter(comercializacao_status)
+    derived_filtering = bool(cert_statuses or site_statuses or license_statuses or comercializacao_statuses)
 
     with db() as (conn, cur):
         conditions = []
@@ -540,7 +572,11 @@ def list_products(
             )
             all_serialized = (_serialize_product(dict(r), license_map) for r in cur.fetchall())
             filtered = [
-                p for p in all_serialized if _matches_derived_filters(p, cert_statuses, site_statuses, license_statuses)
+                p
+                for p in all_serialized
+                if _matches_derived_filters(
+                    p, cert_statuses, site_statuses, license_statuses, comercializacao_statuses
+                )
             ]
             total = len(filtered)
             products_raw = filtered[offset : offset + per_page]

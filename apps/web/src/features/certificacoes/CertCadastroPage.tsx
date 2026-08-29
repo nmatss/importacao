@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { toast } from 'sonner';
 import {
   FilePlus2,
@@ -78,6 +78,26 @@ function linxPropertyLabel(
   return 'sem data efetiva';
 }
 
+const PER_PAGE = 10;
+
+const LINX_STATUS_FILTERS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Todos os status' },
+  { value: 'applied', label: 'Gravado no Linx' },
+  { value: 'pending', label: 'Pendente' },
+  { value: 'error', label: 'Erro no Linx' },
+  { value: 'disabled', label: 'Não gravado (Linx off)' },
+];
+
+/**
+ * Data de hoje no fuso LOCAL, em ISO (AAAA-MM-DD).
+ * `new Date().toISOString()` devolve a data em UTC — depois das 21:00 de
+ * Brasília isso já é o dia seguinte.
+ */
+export function todayLocalIso(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 const inputCls =
   'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none';
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1';
@@ -97,6 +117,15 @@ export default function CertCadastroPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [recent, setRecent] = useState<CertCertificate[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [filterSkuInput, setFilterSkuInput] = useState('');
+  const [filterSku, setFilterSku] = useState('');
+  const [filterBrand, setFilterBrand] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
   const [retrying, setRetrying] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
   const [lookingUpLinx, setLookingUpLinx] = useState(false);
@@ -107,22 +136,58 @@ export default function CertCadastroPage() {
 
   // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
   // e o converte para dd/mm/AAAA somente na escrita do Linx (_format_date).
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // `toISOString()` converte para UTC: depois das 21:00 de Brasília o "hoje" em
+  // UTC já é o dia seguinte, e um certificado que vence HOJE era sinalizado como
+  // vencido. A data tem de ser calculada no fuso local.
+  const todayIso = todayLocalIso();
   const hasPastDate =
     (validade !== '' && validade < todayIso) || (vencimento !== '' && vencimento < todayIso);
 
-  async function loadRecent() {
+  const loadRecent = useCallback(async () => {
+    setListLoading(true);
     try {
-      const data = await fetchCertificates({ per_page: 10 });
+      const data = await fetchCertificates({
+        page,
+        per_page: PER_PAGE,
+        sku: filterSku || undefined,
+        brand: filterBrand || undefined,
+        linx_status: filterStatus || undefined,
+      });
       setRecent(data.items);
-    } catch {
-      // silencioso — lista é complementar
+      setTotalPages(data.total_pages || 1);
+      setTotal(data.total ?? 0);
+      setListError(null);
+    } catch (err) {
+      // "Vazio" e "indisponível" são coisas diferentes: engolir a falha exibia
+      // "Nenhum certificado cadastrado ainda." para uma API fora do ar.
+      setListError(
+        err instanceof Error ? err.message : 'Não foi possível carregar os certificados.',
+      );
+      setRecent([]);
+      setTotal(0);
+      setTotalPages(1);
+    } finally {
+      setListLoading(false);
     }
-  }
+  }, [page, filterSku, filterBrand, filterStatus]);
 
   useEffect(() => {
     loadRecent();
-  }, []);
+  }, [loadRecent]);
+
+  function applyFilters(e: FormEvent) {
+    e.preventDefault();
+    setPage(1);
+    setFilterSku(filterSkuInput.trim());
+  }
+
+  function clearListFilters() {
+    setFilterSkuInput('');
+    setFilterSku('');
+    setFilterBrand('');
+    setFilterStatus('');
+    setPage(1);
+  }
 
   function resetForm() {
     setSku('');
@@ -502,19 +567,120 @@ export default function CertCadastroPage() {
       <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            Certificados recentes
+            Certificados cadastrados
+            {!listError && !listLoading && (
+              <span className="ml-2 text-xs font-normal text-slate-400">{total} no total</span>
+            )}
           </h3>
           <button
+            type="button"
             onClick={loadRecent}
             className="text-slate-400 hover:text-emerald-600"
             title="Atualizar"
+            aria-label="Atualizar lista de certificados"
           >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={cn('h-4 w-4', listLoading && 'animate-spin')} />
           </button>
         </div>
-        {recent.length === 0 ? (
+
+        {/* Filtros: sem eles não havia como achar um certificado antigo nem
+            revisar o backlog de linx_status='error'. */}
+        <form
+          onSubmit={applyFilters}
+          className="flex flex-wrap items-end gap-3 border-b border-slate-100 px-5 py-3 dark:border-slate-800"
+        >
+          <div className="min-w-[160px] flex-1">
+            <label htmlFor="cert-filter-sku" className={labelCls}>
+              SKU
+            </label>
+            <input
+              id="cert-filter-sku"
+              className={inputCls}
+              value={filterSkuInput}
+              onChange={(e) => setFilterSkuInput(e.target.value)}
+              placeholder="Filtrar por SKU"
+            />
+          </div>
+          <div className="min-w-[150px]">
+            <label htmlFor="cert-filter-brand" className={labelCls}>
+              Marca
+            </label>
+            <select
+              id="cert-filter-brand"
+              className={inputCls}
+              value={filterBrand}
+              onChange={(e) => {
+                setPage(1);
+                setFilterBrand(e.target.value);
+              }}
+            >
+              <option value="">Todas as marcas</option>
+              {BRANDS.map((b) => (
+                <option key={b.value} value={b.value}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="min-w-[170px]">
+            <label htmlFor="cert-filter-status" className={labelCls}>
+              Status Linx
+            </label>
+            <select
+              id="cert-filter-status"
+              className={inputCls}
+              value={filterStatus}
+              onChange={(e) => {
+                setPage(1);
+                setFilterStatus(e.target.value);
+              }}
+            >
+              {LINX_STATUS_FILTERS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <button
+            type="submit"
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
+          >
+            <Search className="h-4 w-4" />
+            Filtrar
+          </button>
+          {(filterSku || filterBrand || filterStatus) && (
+            <button
+              type="button"
+              onClick={clearListFilters}
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-500 transition-colors hover:text-danger-600 dark:border-slate-700"
+            >
+              Limpar
+            </button>
+          )}
+        </form>
+
+        {listError ? (
+          <div
+            role="alert"
+            className="flex flex-col items-center gap-3 px-5 py-6 text-center text-sm text-danger-700 dark:text-danger-300"
+          >
+            <span>Não foi possível carregar os certificados.</span>
+            <button
+              type="button"
+              onClick={loadRecent}
+              className="rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : listLoading ? (
+          <p className="px-5 py-6 text-center text-sm text-slate-400">Carregando…</p>
+        ) : recent.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-slate-400">
-            Nenhum certificado cadastrado ainda.
+            {filterSku || filterBrand || filterStatus
+              ? 'Nenhum certificado corresponde aos filtros.'
+              : 'Nenhum certificado cadastrado ainda.'}
           </p>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -522,14 +688,15 @@ export default function CertCadastroPage() {
               <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                 <span className="font-medium text-slate-800 dark:text-slate-100">{c.sku}</span>
                 <span className="text-xs text-slate-400">{c.brand}</span>
+                {/* `formatDateOnly` já estava importado — as datas saíam em ISO cru. */}
                 {c.validade_certificado && (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Cert: {c.validade_certificado}
+                    Cert: {formatDateOnly(c.validade_certificado)}
                   </span>
                 )}
                 {c.vencimento_licenciamento && (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
-                    Lic: {c.vencimento_licenciamento}
+                    Lic: {formatDateOnly(c.vencimento_licenciamento)}
                   </span>
                 )}
                 <LinxBadge status={c.linx_status} />
@@ -549,8 +716,13 @@ export default function CertCadastroPage() {
                       PDF
                     </button>
                   )}
-                  {(c.linx_status === 'error' || c.linx_status === 'disabled') && (
+                  {/* `pending` é exatamente a linha cujo UPDATE pós-Linx não
+                      completou — o caso que MAIS precisa de retry. */}
+                  {(c.linx_status === 'error' ||
+                    c.linx_status === 'disabled' ||
+                    c.linx_status === 'pending') && (
                     <button
+                      type="button"
                       onClick={() => handleRetry(c.id)}
                       disabled={retrying === c.id}
                       className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 disabled:opacity-50"
@@ -566,6 +738,32 @@ export default function CertCadastroPage() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {!listError && !listLoading && totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3 dark:border-slate-800">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Página {page} de {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                Próxima
+              </button>
+            </div>
           </div>
         )}
       </div>

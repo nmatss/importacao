@@ -41,6 +41,14 @@ export async function checkEmails() {
 
   if (!gmailConfigured && !imapConfigured) return;
 
+  // Fail closed like every other scan path: without an allow-list the Gmail
+  // query degrades to "is:unread has:attachment" over a shared corporate
+  // mailbox, and unrelated correspondence would be downloaded and marked read.
+  if (!buildAllowedSenderFilter()) {
+    logger.warn('Skipping email check: EMAIL_ALLOWED_SENDERS is not configured');
+    return;
+  }
+
   isRunning = true;
   try {
     const { emailProcessor } = await import('../modules/email-ingestion/processor.js');

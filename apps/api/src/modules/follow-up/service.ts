@@ -1,4 +1,4 @@
-import { eq, sql, count, and, gte, desc } from 'drizzle-orm';
+import { eq, sql, count, and, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   followUpTracking,
@@ -12,6 +12,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { processService } from '../processes/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 const TRACKING_STEPS = [
   'documentsReceivedAt',
@@ -171,12 +172,14 @@ export const followUpService = {
     const offset = (page - 1) * limit;
     const conditions = [];
 
-    if (startDate) {
-      conditions.push(gte(followUpTracking.updatedAt, new Date(startDate)));
+    // O dia escolhido no calendario local vira o intervalo UTC equivalente.
+    const start = startDate ? localDayStartUtc(startDate) : null;
+    if (start) {
+      conditions.push(sql`${followUpTracking.updatedAt} >= ${start.toISOString()}`);
     }
-    if (endDate) {
-      const end = new Date(endDate);
-      end.setDate(end.getDate() + 1);
+    // Limite superior EXCLUSIVO: inicio do dia local seguinte, em UTC.
+    const end = endDate ? localDayEndExclusiveUtc(endDate) : null;
+    if (end) {
       conditions.push(sql`${followUpTracking.updatedAt} < ${end.toISOString()}`);
     }
 

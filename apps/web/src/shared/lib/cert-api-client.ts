@@ -87,7 +87,17 @@ export interface CertBrandStats {
   ok: number;
   missing?: number;
   inconsistent: number;
+  /**
+   * Validado e NAO localizado/consistente. Desde a correcao do backend
+   * (2026-08-29) NAO inclui mais `last_validation_status IS NULL`.
+   */
   not_found: number;
+  /**
+   * Produto que ainda nao passou por nenhuma validacao. E ausencia de veredito,
+   * nao veredito negativo — por isso vive num bucket proprio e e pintado com cor
+   * neutra na UI.
+   */
+  never_validated?: number;
   expired: number;
   [key: string]: unknown;
 }
@@ -111,6 +121,10 @@ export interface CertStats {
   inconsistent?: number;
   expired?: number;
   last_run?: CertLastRun | null;
+  /**
+   * Contagens por marca. Cada linha traz `never_validated` desde a correcao do
+   * backend; sem exibi-lo a soma das barras fica MENOR que `total_products`.
+   */
   by_brand?: CertBrandStats[];
   // Breakdowns por status semântico derivado (port Verificao_status):
   by_cert_status?: Array<{ cert_status: CertStatusKind; count: number }>;
@@ -194,30 +208,35 @@ export interface CertReportData {
   [key: string]: unknown;
 }
 
+/**
+ * Espelha `_serialize_schedule` (`app/routes/schedules.py`) e as colunas de
+ * `cert_schedules`. A API devolve `cron_expression`/`last_run`/`next_run` — os
+ * antigos aliases `cron`/`last_run_at`/`next_run_at` NAO existem no payload e
+ * foram removidos daqui (auditoria 2026-08-29).
+ */
 export interface CertSchedule {
   id: string;
   name: string;
-  cron: string;
   cron_expression: string;
   brand_filter: string | null;
   enabled: boolean;
   last_run: string | null;
-  last_run_at: string | null;
   next_run: string | null;
-  next_run_at: string | null;
   created_at: string;
   [key: string]: unknown;
 }
 
+/**
+ * Espelha as colunas de `cert_schedule_history`: id, schedule_id, run_date,
+ * status, summary, report_file. `started_at`/`finished_at`/`total_checked`/
+ * `errors` nunca existiram na tabela nem na resposta.
+ */
 export interface CertScheduleHistoryEntry {
   id: string;
   schedule_id: string;
-  started_at: string;
   run_date: string;
-  finished_at: string | null;
+  /** 'running' | 'completed' | 'failed' */
   status: string;
-  total_checked: number;
-  errors: number;
   summary: CertHistorySummary | null;
   report_file: string | null;
   [key: string]: unknown;

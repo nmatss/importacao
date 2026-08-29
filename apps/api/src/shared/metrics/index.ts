@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { collectDefaultMetrics, Counter, Histogram, Gauge, Registry } from 'prom-client';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -121,14 +122,33 @@ export const aiPromptTokens = new Histogram({
 });
 
 /**
- * Normalize path to avoid high-cardinality labels.
- * Replaces UUID-like and numeric path segments with placeholders.
+ * Rotulo `path` das series HTTP.
+ *
+ * Ate 29/08 o rotulo era o caminho da requisicao normalizado por expressao
+ * regular: so segmento numerico e UUID viravam `:id`. Como `metricsMiddleware`
+ * roda ANTES de qualquer roteamento e de qualquer autenticacao, e `/api` e
+ * proxiado pelo edge, bastava pedir `/api/aaa1`, `/api/aaa2`, ... para criar
+ * uma serie nova por valor — permanente, sem autenticacao, num container de
+ * 512M. Cardinalidade ilimitada e memoria que nunca volta.
+ *
+ * Agora o rotulo vem da rota REGISTRADA no Express (`req.baseUrl` do router
+ * montado + `req.route.path` do handler que casou), o que limita o conjunto de
+ * valores ao numero de rotas do codigo. Requisicao que nao casa com nenhuma
+ * rota — 404, middleware puro, arquivo estatico — cai num unico rotulo
+ * `unknown`, entao N caminhos desconhecidos produzem UMA serie, nao N.
+ *
+ * Le-se dentro do `finish`: o handler responde e retorna sem chamar `next()`,
+ * entao a pilha do router nao desempilha e `baseUrl`/`route` continuam valendo
+ * o que valiam no handler.
  */
-function normalizePath(url: string): string {
-  return url
-    .split('?')[0]
-    .replace(/\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '/:id')
-    .replace(/\/\d+/g, '/:id');
+function routeLabel(req: Request): string {
+  const rawPath = req.route?.path as string | string[] | RegExp | undefined;
+  const routePath = Array.isArray(rawPath) ? rawPath[0] : rawPath;
+  if (typeof routePath !== 'string') return 'unknown';
+
+  const base = typeof req.baseUrl === 'string' ? req.baseUrl : '';
+  const label = routePath === '/' ? base : `${base}${routePath}`;
+  return label || 'unknown';
 }
 
 /**
@@ -136,9 +156,9 @@ function normalizePath(url: string): string {
  */
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction): void {
   const end = httpRequestDuration.startTimer();
-  const path = normalizePath(req.path);
 
   res.on('finish', () => {
+    const path = routeLabel(req);
     httpRequestsTotal.inc({
       method: req.method,
       path,
@@ -148,4 +168,21 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
   });
 
   next();
+}
+
+/**
+ * Comparacao de token em tempo constante.
+ *
+ * Usada pelo gate do endpoint `/metrics`. Tamanhos diferentes sao recusados
+ * antes do `timingSafeEqual` — que lanca quando os buffers divergem em tamanho
+ * — e isso vaza apenas o comprimento, nunca o conteudo.
+ */
+export function safeTokenEquals(provided: string | undefined, expected: string): boolean {
+  if (!provided || !expected) return false;
+
+  const a = Buffer.from(provided, 'utf8');
+  const b = Buffer.from(expected, 'utf8');
+  if (a.length !== b.length) return false;
+
+  return timingSafeEqual(a, b);
 }

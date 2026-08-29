@@ -100,6 +100,52 @@ describe('withRetry', () => {
     await expect(withRetry(fn, { attempts: 2, baseDelayMs: 1 })).rejects.toThrow('boom');
     expect(fn).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * Quando o provedor diz quanto esperar (Retry-After), obedecer e melhor que
+   * chutar: o backoff exponencial pode voltar cedo demais e so renovar o 429.
+   */
+  it('obedece ao atraso que o erro traz, em vez do backoff calculado', async () => {
+    vi.useFakeTimers();
+    try {
+      const err = new Error('429');
+      const fn = vi.fn().mockRejectedValueOnce(err).mockResolvedValueOnce('ok');
+
+      const promise = withRetry(fn, {
+        attempts: 2,
+        baseDelayMs: 10, // backoff calculado seria ~10-20ms
+        retryDelayMs: () => 5_000, // o provedor pediu 5s
+      });
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(fn).toHaveBeenCalledTimes(1); // ainda esperando os 5s pedidos
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await expect(promise).resolves.toBe('ok');
+      expect(fn).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('limita o atraso pedido a maxDelayMs', async () => {
+    vi.useFakeTimers();
+    try {
+      const fn = vi.fn().mockRejectedValueOnce(new Error('429')).mockResolvedValueOnce('ok');
+
+      const promise = withRetry(fn, {
+        attempts: 2,
+        baseDelayMs: 10,
+        maxDelayMs: 1_000,
+        retryDelayMs: () => 86_400_000, // cabecalho absurdo
+      });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await expect(promise).resolves.toBe('ok');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe('withTimeout', () => {
@@ -121,6 +167,37 @@ describe('withTimeout', () => {
     await expect(withTimeout(slowFn, 50, 'test-op')).rejects.toThrow(
       'Operation timed out after 50ms [test-op]',
     );
+  });
+
+  /**
+   * O helper aborta o signal, mas nao pode DEPENDER de o callee honrar o abort.
+   * Um cliente antigo (ou um mock) que ignora o signal deixaria o chamador
+   * pendurado para sempre — era exatamente a garantia que o `Promise.race`
+   * substituido dava.
+   */
+  it('rejeita no prazo mesmo quando o callee ignora o signal', async () => {
+    vi.useFakeTimers();
+    try {
+      const promise = withTimeout(() => new Promise<string>(() => {}), 1_000, 'ignora-signal');
+      const assertion = expect(promise).rejects.toThrow('Operation timed out after 1000ms');
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('aborta o signal entregue ao callee', async () => {
+    let seen: AbortSignal | undefined;
+    const fn = (signal: AbortSignal) =>
+      new Promise<string>((_resolve, reject) => {
+        seen = signal;
+        signal.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+
+    await expect(withTimeout(fn, 20)).rejects.toThrow('Operation timed out after 20ms');
+    expect(seen?.aborted).toBe(true);
   });
 });
 

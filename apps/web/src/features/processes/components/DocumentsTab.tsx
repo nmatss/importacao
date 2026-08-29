@@ -14,6 +14,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
+import { api } from '@/shared/lib/api-client';
+import { getErrorMessage } from '@/shared/utils/errors';
 import { DocumentUpload } from '@/features/documents/DocumentUpload';
 import { DocumentList } from '@/features/documents/DocumentList';
 import { invalidateDocumentWorkflow } from '@/features/documents/queryInvalidation';
@@ -110,7 +112,7 @@ function formatExtractedValue(value: unknown): string {
 
 export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) {
   const queryClient = useQueryClient();
-  const { getToken, user } = useAuth();
+  const { user } = useAuth();
   const [syncing, setSyncing] = useState(false);
   const [showManualUpload, setShowManualUpload] = useState(true);
   const [countdown, setCountdown] = useState(300);
@@ -148,20 +150,15 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
     }
     setSyncing(true);
     try {
-      const token = getToken();
-      const baseUrl = import.meta.env.VITE_API_URL || '';
-      const res = await fetch(`${baseUrl}/api/email-ingestion/trigger?includeRead=true`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error('Falha ao buscar e-mails');
+      // Via api-client: o `fetch` cru contornava o redirecionamento de sessao
+      // expirada (401) e descartava a mensagem real do backend em 403.
+      await api.post('/api/email-ingestion/trigger?includeRead=true');
       toast.success('E-mails verificados — documentos atualizados');
       // Refresh document list + reset countdown
       void invalidateDocumentWorkflow(queryClient, processId);
       resetCountdown();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar e-mails';
-      toast.error(msg);
+      toast.error(getErrorMessage(err));
     } finally {
       setSyncing(false);
     }

@@ -98,7 +98,11 @@ function toIso(year: number, month: number, day: number): string | null {
   if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
   if (month < 1 || month > 12) return null;
   if (day < 1 || day > 31) return null;
-  if (year < 1900 || year > 2100) return null;
+  // Sentinela de sistema legado: Linx/WMS enviam 01/01/1900 como "vazio".
+  // O lado Python já rejeita (`if parsed.year <= 1900: return None`); sem o
+  // mesmo corte aqui, 1900-01-01 entrava em aiParsedData como data real e era
+  // comparada no comparativo.
+  if (year <= 1900 || year > 2100) return null;
   // Reject impossible days for the month (e.g. 31/02).
   const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
   if (day > daysInMonth) return null;

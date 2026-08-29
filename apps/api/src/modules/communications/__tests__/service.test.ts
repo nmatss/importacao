@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import { dateRangeBounds } from '../../../__tests__/helpers/sql-inspect.js';
 
 const { mockDb, queryQueue } = createMockDb();
 const mockGetOperationalRecipient = vi.hoisted(() => vi.fn());
@@ -40,11 +41,13 @@ vi.mock('../../settings/operational-recipients.js', () => ({
 }));
 
 const mockSendMail = vi.fn().mockResolvedValue({ messageId: 'msg-1' });
+const mockTransportClose = vi.fn();
 
 vi.mock('nodemailer', () => ({
   default: {
     createTransport: vi.fn().mockReturnValue({
       sendMail: (...args: any[]) => mockSendMail(...args),
+      close: (...args: any[]) => mockTransportClose(...args),
     }),
   },
 }));
@@ -64,6 +67,9 @@ describe('communicationService', () => {
     vi.clearAllMocks();
     queryQueue.length = 0;
     process.env.SMTP_HOST = 'smtp.test.com';
+    // The mail plane refuses to deliver outside production unless told to.
+    // These cases assert the delivery path itself, so they lift the gate.
+    process.env.MAIL_DRY_RUN = 'false';
     process.env.COMMUNICATION_ALLOWED_RECIPIENTS = 'example.com';
     mockGetOperationalRecipient.mockImplementation(async (key: string) => {
       const recipients: Record<string, string> = {
@@ -250,6 +256,75 @@ describe('communicationService', () => {
           recipient: 't***@example.com',
           ccRecipients: 'g***@example.com, g***@grupounico.com',
         }),
+        null,
+      );
+    });
+
+    it('closes the SMTP transport after a successful send', async () => {
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
+
+      await communicationService.send(1);
+
+      // The transport is not pooled: without an explicit close the socket
+      // lingers until the relay's idle timeout.
+      expect(mockTransportClose).toHaveBeenCalledOnce();
+    });
+
+    it('closes the SMTP transport even when the send fails', async () => {
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([])); // update to failed
+      mockSendMail.mockRejectedValueOnce(new Error('relay recusou'));
+
+      await expect(communicationService.send(1)).rejects.toThrow('relay recusou');
+
+      expect(mockTransportClose).toHaveBeenCalledOnce();
+    });
+
+    it('em dry-run nao entrega E NAO registra como enviado', async () => {
+      // O gate impedia a entrega, mas o retorno `delivered: false` era ignorado:
+      // o registro virava `status: 'sent'` com `sentAt`, a timeline dizia
+      // "E-mail enviado para X" e a tela mostrava Enviado — enquanto o
+      // destinatario nunca recebia. E o mesmo padrao do incidente ja registrado
+      // no projeto, de o banco afirmar um envio que nao aconteceu.
+      delete process.env.MAIL_DRY_RUN; // NODE_ENV=test => dry-run ligado por default
+      const mockComm = {
+        id: 1,
+        status: 'draft',
+        recipientEmail: 'to@example.com',
+        subject: 'Test',
+        body: '<p>Content</p>',
+        attachments: null,
+      };
+      queryQueue.push(createResolvedChain([mockComm]));
+      queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
+
+      await expect(communicationService.send(1)).rejects.toThrow(/MAIL_DRY_RUN/i);
+
+      expect(mockSendMail).not.toHaveBeenCalled();
+      // E, sobretudo, nada de trilha afirmando envio.
+      expect(auditService.log).not.toHaveBeenCalledWith(
+        null,
+        'email.sent',
+        'communication',
+        expect.any(Number),
+        expect.anything(),
         null,
       );
     });
@@ -806,5 +881,31 @@ describe('communicationService', () => {
         'rascunhos',
       );
     });
+  });
+});
+
+describe('communicationService.list() — recorte por periodo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  it('cobre o dia local inteiro, com limite superior exclusivo', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await communicationService.list(undefined, 1, 20, '2026-08-29', '2026-08-29');
+
+    const where = mockDb.select.mock.results[0].value.where.mock.calls[0][0];
+    const { start, end } = dateRangeBounds(where);
+    // America/Sao_Paulo (UTC-3): meia-noite local = 03:00 UTC.
+    expect(start!.toISOString()).toBe('2026-08-29T03:00:00.000Z');
+    expect(end!.toISOString()).toBe('2026-08-30T03:00:00.000Z');
+
+    const ultimoInstanteLocal = new Date('2026-08-29T23:59:59.999-03:00');
+    const primeiroInstanteDoDiaSeguinte = new Date('2026-08-30T00:00:00.000-03:00');
+    expect(ultimoInstanteLocal.getTime()).toBeGreaterThanOrEqual(start!.getTime());
+    expect(ultimoInstanteLocal.getTime()).toBeLessThan(end!.getTime());
+    expect(primeiroInstanteDoDiaSeguinte.getTime()).toBeGreaterThanOrEqual(end!.getTime());
   });
 });

@@ -1,5 +1,9 @@
 import xmlrpc from 'xmlrpc';
 import { logger } from '../../shared/utils/logger.js';
+import { withRetry } from '../../shared/utils/resilience.js';
+import { integrationRetryOptions } from './retry-policy.js';
+
+const ODOO_TIMEOUT_MS = 30_000;
 
 let uid: number | null = null;
 let uidConfigKey: string | null = null;
@@ -88,7 +92,21 @@ function createClient(config: OdooConfig, path: string) {
   throw new Error(`Unsupported Odoo URL protocol: ${url.protocol}`);
 }
 
+/**
+ * Uma chamada XML-RPC com timeout de guarda.
+ *
+ * O `clearTimeout` e obrigatorio: sem ele cada chamada segurava um timer de 30s
+ * mesmo depois de responder. O erro sai com `code: 'ETIMEDOUT'` para que
+ * `isNetworkError` — e portanto a politica de re-tentativa — reconheca a
+ * indisponibilidade como transitoria em vez de tratar como falha definitiva.
+ *
+ * O cliente `xmlrpc` nao expoe cancelamento da requisicao em voo; o socket so
+ * e liberado quando o proprio Node desiste. Diferente do Drive/Sheets, aqui nao
+ * ha `AbortSignal` a propagar.
+ */
 function callAsync(client: xmlrpc.Client, method: string, params: any[]): Promise<any> {
+  let timer: NodeJS.Timeout | undefined;
+
   const call = new Promise((resolve, reject) => {
     client.methodCall(method, params, (err: any, result: any) => {
       if (err) reject(err);
@@ -96,11 +114,35 @@ function callAsync(client: xmlrpc.Client, method: string, params: any[]): Promis
     });
   });
 
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error('Odoo XML-RPC timeout after 30s')), 30_000),
-  );
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      const err = Object.assign(new Error('Odoo XML-RPC timeout after 30s'), {
+        code: 'ETIMEDOUT',
+      });
+      reject(err);
+    }, ODOO_TIMEOUT_MS);
+  });
 
-  return Promise.race([call, timeout]);
+  return Promise.race([call, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+/**
+ * Chamada de LEITURA com re-tentativa.
+ *
+ * Todas as chamadas deste servico sao leituras (`authenticate`, `search`,
+ * `read`), entao re-tentar nao duplica nada no Odoo. Se algum dia entrar uma
+ * escrita (`create`, `write`, `unlink`), ela deve usar `callAsync` direto —
+ * NUNCA esta funcao, sob pena de criar registro duplicado quando so a resposta
+ * se perder.
+ */
+function callReadAsync(client: xmlrpc.Client, method: string, params: any[]): Promise<any> {
+  return withRetry(
+    () => callAsync(client, method, params),
+    integrationRetryOptions,
+    `odoo:${method}`,
+  );
 }
 
 async function authenticateWithConfig(config: OdooConfig): Promise<number> {
@@ -112,7 +154,7 @@ async function authenticateWithConfig(config: OdooConfig): Promise<number> {
   if (uid && uidConfigKey === configKey) return uid;
 
   const commonClient = createClient(config, '/xmlrpc/2/common');
-  uid = await callAsync(commonClient, 'authenticate', [
+  uid = await callReadAsync(commonClient, 'authenticate', [
     config.db,
     config.user,
     config.password,
@@ -136,7 +178,7 @@ export const odooService = {
     const userId = await authenticateWithConfig(config);
     const objectClient = createClient(config, '/xmlrpc/2/object');
 
-    const ids = await callAsync(objectClient, 'execute_kw', [
+    const ids = await callReadAsync(objectClient, 'execute_kw', [
       config.db,
       userId,
       config.password,
@@ -147,7 +189,7 @@ export const odooService = {
 
     if (!ids || ids.length === 0) return [];
 
-    return callAsync(objectClient, 'execute_kw', [
+    return callReadAsync(objectClient, 'execute_kw', [
       config.db,
       userId,
       config.password,
@@ -163,7 +205,7 @@ export const odooService = {
     const userId = await authenticateWithConfig(config);
     const objectClient = createClient(config, '/xmlrpc/2/object');
 
-    const [product] = await callAsync(objectClient, 'execute_kw', [
+    const [product] = await callReadAsync(objectClient, 'execute_kw', [
       config.db,
       userId,
       config.password,

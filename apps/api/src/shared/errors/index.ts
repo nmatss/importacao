@@ -30,6 +30,22 @@ export class ConflictError extends AppError {
   }
 }
 
+/**
+ * Credencial invalida ou ausente — 401 de PRODUTO, escrito para a pessoa ler.
+ *
+ * Existe para separar "a senha esta errada" de "o banco caiu". Sem esta classe
+ * o controller de login colapsava os dois no mesmo fallback 401 "Credenciais
+ * invalidas": uma queda do Postgres durante o `login` respondia como se a
+ * pessoa tivesse digitado errado, e quem estava na tela repetia a senha em vez
+ * de acionar a infraestrutura. Agora so o que e credencial de verdade lanca
+ * 401; qualquer outra excecao volta a sair como 500 generico.
+ */
+export class UnauthorizedError extends AppError {
+  constructor(message: string) {
+    super(message, 401, 'UNAUTHORIZED');
+  }
+}
+
 export class ForbiddenError extends AppError {
   constructor(message: string) {
     super(message, 403, 'FORBIDDEN');

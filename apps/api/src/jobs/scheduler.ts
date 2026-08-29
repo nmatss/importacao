@@ -9,6 +9,7 @@ import {
 import { runLogisticSync } from './logistic-sync.js';
 import { runFinancialCheck } from './financial-check.js';
 import { runSydleSync } from './sydle-sync.js';
+import { runAlertRedelivery } from './alert-redelivery.js';
 import { logger } from '../shared/utils/logger.js';
 import { alertService } from '../modules/alerts/service.js';
 import { preConsService } from '../modules/pre-cons/service.js';
@@ -168,7 +169,22 @@ export function startScheduler() {
     tz,
   );
 
+  // Every 5 minutes - Reentrega dos alertas que nao chegaram ao Google Chat.
+  // Sem este job, `sent_to_chat = false` nao era lido por ninguem e o alerta
+  // que falhava na entrega morria no banco.
+  cron.schedule(
+    '*/5 * * * *',
+    async () => {
+      try {
+        await runAlertRedelivery();
+      } catch (error) {
+        await handleCronError('alert-redelivery', error);
+      }
+    },
+    tz,
+  );
+
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), sydle-sync (*/10 min), pre-cons-drive-sync (*/6h) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), sydle-sync (*/10 min), pre-cons-drive-sync (*/6h), alert-redelivery (*/5 min) - timezone: America/Sao_Paulo',
   );
 }

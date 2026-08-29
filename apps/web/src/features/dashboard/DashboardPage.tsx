@@ -32,6 +32,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { SLADashboard } from './SLADashboard';
+import { useChartTheme } from './chartTheme';
 import { ErrorState } from '@/shared/components/ErrorState';
 
 interface DashboardOverview {
@@ -95,23 +96,26 @@ interface EmailLogsResponse {
 
 const PIE_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#f43f5e'];
 
+// Cada entrada leva o par `dark:`: sem ele o texto escuro caia sobre fundo
+// claro dentro de uma pagina em tema escuro. `danger-*` so vai ate 700 no
+// @theme (app/index.css), por isso o par dark usa 700/20 e 200.
 const severityConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
   critical: {
     dot: 'bg-danger-500',
-    bg: 'bg-danger-50 border-danger-100',
-    text: 'text-danger-700',
+    bg: 'bg-danger-50 border-danger-100 dark:bg-danger-700/20 dark:border-danger-700/40',
+    text: 'text-danger-700 dark:text-danger-200',
     label: 'Crítico',
   },
   warning: {
     dot: 'bg-amber-500',
-    bg: 'bg-amber-50 border-amber-100',
-    text: 'text-amber-700',
+    bg: 'bg-amber-50 border-amber-100 dark:bg-amber-950/30 dark:border-amber-800',
+    text: 'text-amber-700 dark:text-amber-300',
     label: 'Alerta',
   },
   info: {
     dot: 'bg-primary-500',
-    bg: 'bg-primary-50 border-primary-100',
-    text: 'text-primary-700',
+    bg: 'bg-primary-50 border-primary-100 dark:bg-primary-950/40 dark:border-primary-800',
+    text: 'text-primary-700 dark:text-primary-300',
     label: 'Info',
   },
 };
@@ -143,6 +147,27 @@ function ChartSkeleton({ height = 'h-72' }: { height?: string }) {
     <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm">
       <Skeleton className="h-5 w-40 mb-6" />
       <Skeleton className={cn(height, 'w-full rounded-xl')} />
+    </div>
+  );
+}
+
+/**
+ * Aviso de falha por cartao, com recarga. Substitui o estado vazio quando a
+ * consulta daquele cartao falhou — "nao ha dados" e "nao consegui buscar" nao
+ * podem ficar iguais na tela.
+ */
+function CardLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center h-full gap-2 py-8 text-center">
+      <AlertTriangle className="h-6 w-6 text-amber-500" />
+      <p className="text-sm font-medium text-amber-700 dark:text-amber-300">{message}</p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:hover:bg-amber-950/60"
+      >
+        Recarregar
+      </button>
     </div>
   );
 }
@@ -200,6 +225,9 @@ const kpiConfig = [
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  // Recharts recebe cor por prop/inline style: as classes `dark:` do Tailwind
+  // nao alcancam grade, eixos e tooltip, que estavam fixos em claro.
+  const chartTheme = useChartTheme();
   const {
     data: overview,
     isLoading: loadingOverview,
@@ -212,17 +240,28 @@ export function DashboardPage() {
   >(['dashboard', 'by-status'], '/api/dashboard/by-status');
   const byStatus = rawByStatus?.map((s) => ({ ...s, label: STATUS_LABELS[s.status] || s.status }));
 
-  const { data: byMonth } = useApiQuery<MonthlyTrend[]>(
-    ['dashboard', 'by-month'],
-    '/api/dashboard/by-month',
-  );
+  // As tres consultas abaixo desestruturavam so `data`/`isLoading`: uma falha de
+  // rede caia no mesmo ramo do conjunto vazio e a tela dizia "Sem dados mensais
+  // disponiveis" / "Sem dados de FOB por marca" / "Nenhum e-mail processado
+  // recentemente" — o usuario lia "nao ha dados" quando a chamada falhou.
+  const {
+    data: byMonth,
+    error: byMonthError,
+    refetch: refetchByMonth,
+  } = useApiQuery<MonthlyTrend[]>(['dashboard', 'by-month'], '/api/dashboard/by-month');
 
-  const { data: fobByBrand } = useApiQuery<FobByBrand[]>(
-    ['dashboard', 'fob-by-brand'],
-    '/api/dashboard/fob-by-brand',
-  );
+  const {
+    data: fobByBrand,
+    error: fobByBrandError,
+    refetch: refetchFobByBrand,
+  } = useApiQuery<FobByBrand[]>(['dashboard', 'fob-by-brand'], '/api/dashboard/fob-by-brand');
 
-  const { data: emailLogs, isLoading: loadingEmails } = useApiQuery<EmailLogsResponse>(
+  const {
+    data: emailLogs,
+    isLoading: loadingEmails,
+    error: emailLogsError,
+    refetch: refetchEmailLogs,
+  } = useApiQuery<EmailLogsResponse>(
     ['email-ingestion', 'logs'],
     '/api/email-ingestion/logs?limit=5',
   );
@@ -263,10 +302,20 @@ export function DashboardPage() {
     );
   }
 
-  const kpiValues: Record<string, string | number> = {
+  // Guardar o numero ao lado do texto ja formatado: o ramo de zero comparava
+  // com a string '$0.00', mas formatCurrency produz "US$ 0,00" (Intl pt-BR),
+  // entao ele nunca disparava para o card de FOB.
+  const kpiNumbers: Record<string, number> = {
     active: overview?.activeProcesses ?? 0,
     overdue: overview?.overdueProcesses ?? 0,
     completed: overview?.completedThisMonth ?? 0,
+    fob: Number(overview?.totalFobValue ?? 0),
+  };
+
+  const kpiValues: Record<string, string | number> = {
+    active: kpiNumbers.active,
+    overdue: kpiNumbers.overdue,
+    completed: kpiNumbers.completed,
     fob: formatCurrency(overview?.totalFobValue ?? 0),
   };
 
@@ -289,7 +338,7 @@ export function DashboardPage() {
         {kpiConfig.map((card) => {
           const Icon = card.icon;
           const value = kpiValues[card.key];
-          const isZero = value === 0 || value === '0' || value === '$0.00';
+          const isZero = kpiNumbers[card.key] === 0;
 
           return (
             <div
@@ -309,7 +358,7 @@ export function DashboardPage() {
                   <p
                     className={cn(
                       'mt-2 text-lg sm:text-2xl font-bold tabular-nums tracking-tight',
-                      isZero ? 'text-slate-300' : card.valueColor,
+                      isZero ? 'text-slate-300 dark:text-slate-600' : card.valueColor,
                     )}
                   >
                     {value}
@@ -346,32 +395,24 @@ export function DashboardPage() {
           <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={byStatus ?? []} margin={{ bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
                 <XAxis
                   dataKey="label"
                   angle={-35}
                   textAnchor="end"
                   fontSize={11}
                   interval={0}
-                  tick={{ fill: '#64748b' }}
-                  axisLine={{ stroke: '#e2e8f0' }}
+                  tick={{ fill: chartTheme.axis }}
+                  axisLine={{ stroke: chartTheme.grid }}
                   tickLine={false}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tick={{ fill: chartTheme.axis, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                    fontSize: '14px',
-                  }}
-                />
+                <Tooltip contentStyle={chartTheme.tooltip} />
                 <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} name="Processos" />
               </BarChart>
             </ResponsiveContainer>
@@ -452,41 +493,38 @@ export function DashboardPage() {
             </h3>
           </div>
           <div className="h-56 sm:h-72">
-            {byMonth && byMonth.length > 0 ? (
+            {byMonthError ? (
+              <CardLoadError
+                message="Erro ao carregar a tendencia mensal."
+                onRetry={() => void refetchByMonth()}
+              />
+            ) : byMonth && byMonth.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={byMonth} margin={{ bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
                   <XAxis
                     dataKey="month"
                     fontSize={11}
-                    tick={{ fill: '#64748b' }}
-                    axisLine={{ stroke: '#e2e8f0' }}
+                    tick={{ fill: chartTheme.axis }}
+                    axisLine={{ stroke: chartTheme.grid }}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="left"
                     allowDecimals={false}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: chartTheme.axis, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: chartTheme.axis, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '14px',
-                    }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#64748b' }} />
+                  <Tooltip contentStyle={chartTheme.tooltip} />
+                  <Legend iconType="circle" wrapperStyle={chartTheme.legend} />
                   <Line
                     yAxisId="left"
                     type="monotone"
@@ -533,7 +571,12 @@ export function DashboardPage() {
             </h3>
           </div>
           <div className="h-56 sm:h-72">
-            {fobByBrand && fobByBrand.length > 0 ? (
+            {fobByBrandError ? (
+              <CardLoadError
+                message="Erro ao carregar o FOB por marca."
+                onRetry={() => void refetchFobByBrand()}
+              />
+            ) : fobByBrand && fobByBrand.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -545,7 +588,7 @@ export function DashboardPage() {
                     outerRadius={80}
                     innerRadius={40}
                     strokeWidth={2}
-                    stroke="#fff"
+                    stroke={chartTheme.surface}
                     label={({ brand, percent }) => `${brand} (${(percent * 100).toFixed(0)}%)`}
                   >
                     {fobByBrand.map((_entry, index) => (
@@ -553,13 +596,7 @@ export function DashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '14px',
-                    }}
+                    contentStyle={chartTheme.tooltip}
                     formatter={(value: number) => formatCurrency(value)}
                   />
                 </PieChart>
@@ -596,6 +633,11 @@ export function DashboardPage() {
               <Skeleton key={i} className="h-12 w-full" />
             ))}
           </div>
+        ) : emailLogsError ? (
+          <CardLoadError
+            message="Erro ao carregar os e-mails recentes."
+            onRetry={() => void refetchEmailLogs()}
+          />
         ) : emailLogItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 mb-4">

@@ -19,6 +19,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { cn } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
@@ -82,7 +83,7 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
       dot: 'bg-emerald-500',
       bg: 'bg-emerald-50',
       text: 'text-emerald-700',
-      label: 'Concluido',
+      label: 'Concluído',
     },
     failed: { dot: 'bg-danger-500', bg: 'bg-danger-50', text: 'text-danger-700', label: 'Falha' },
     processing: {
@@ -119,6 +120,11 @@ function formatDateTime(date: string): string {
 
 export function EmailIngestionPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // trigger e reprocess sao admin-only no servidor. Os botoes eram renderizados
+  // para todos e o analista so descobria clicando ("Acesso restrito a
+  // administradores").
+  const isAdmin = user?.role === 'admin';
   const [page, setPage] = useState(1);
   const [triggering, setTriggering] = useState(false);
   const [reprocessingId, setReprocessingId] = useState<number | null>(null);
@@ -230,13 +236,10 @@ export function EmailIngestionPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Page Header */}
+      {/* Page Header — o título é o <h1> do shell (AppLayout); aqui só o subtítulo. */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-          Ingestao de E-mail
-        </h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Monitore e gerencie a ingestao automatica de emails
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Monitore e gerencie a ingestão automática de e-mails.
         </p>
       </div>
 
@@ -288,7 +291,7 @@ export function EmailIngestionPage() {
                 {/* Details */}
                 <div className="flex flex-wrap items-center gap-4 text-sm">
                   <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <span className="font-medium text-slate-400">Metodo:</span>
+                    <span className="font-medium text-slate-400">Método:</span>
                     {status?.method === 'gmail_api' ? (
                       <span className="font-medium text-emerald-600">
                         Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}
@@ -296,7 +299,7 @@ export function EmailIngestionPage() {
                     ) : status?.method === 'imap' ? (
                       <span className="font-medium text-emerald-600">IMAP</span>
                     ) : (
-                      <span className="font-medium text-danger-600">Nao configurado</span>
+                      <span className="font-medium text-danger-600">Não configurado</span>
                     )}
                   </div>
                   <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
@@ -306,31 +309,33 @@ export function EmailIngestionPage() {
                   </div>
                   <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
                   <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <span className="font-medium text-slate-400">Ultima verificacao:</span>
+                    <span className="font-medium text-slate-400">Última verificação:</span>
                     <span>{status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Action buttons */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleTrigger(false)}
-                  disabled={triggering}
-                  className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
-                >
-                  <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
-                  Verificar Novos
-                </button>
-                <button
-                  onClick={() => handleTrigger(true)}
-                  disabled={triggering}
-                  className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 disabled:opacity-50 transition-all"
-                >
-                  <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
-                  Buscar Todos
-                </button>
-              </div>
+              {/* Action buttons — só admin (o endpoint /trigger é admin-only). */}
+              {isAdmin && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleTrigger(false)}
+                    disabled={triggering}
+                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary-600 to-primary-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-primary-700 hover:to-primary-800 disabled:opacity-50 transition-all"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                    Verificar Novos
+                  </button>
+                  <button
+                    onClick={() => handleTrigger(true)}
+                    disabled={triggering}
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 disabled:opacity-50 transition-all"
+                  >
+                    <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
+                    Buscar Todos
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -447,7 +452,7 @@ export function EmailIngestionPage() {
                       Status
                     </th>
                     <th className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                      Acoes
+                      Ações
                     </th>
                   </tr>
                 </thead>
@@ -526,7 +531,7 @@ export function EmailIngestionPage() {
                             </span>
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
-                            {log.status === 'failed' && (
+                            {log.status === 'failed' && isAdmin && (
                               <button
                                 onClick={() => handleReprocess(log.id)}
                                 disabled={reprocessingId === log.id}
@@ -591,7 +596,7 @@ export function EmailIngestionPage() {
             {pagination && totalPages > 1 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-3 sm:py-4">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Pagina {pagination.page} de {totalPages} ({pagination.total} registros)
+                  Página {pagination.page} de {totalPages} ({pagination.total} registros)
                 </p>
                 <div className="flex items-center gap-2">
                   <button
@@ -607,7 +612,7 @@ export function EmailIngestionPage() {
                     disabled={page >= totalPages}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
                   >
-                    Proximo
+                    Próximo
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 </div>

@@ -55,10 +55,10 @@ describe('googleSheetsService Follow Up ranges', () => {
     const service = await loadService();
 
     await expect(service.readProcessReferences()).resolves.toEqual(['PK2052602TJ', 'IM0712602NB']);
-    expect(sheetsMocks.valuesGet).toHaveBeenCalledWith({
-      spreadsheetId: 'follow-up-sheet',
-      range: "'Processos'!A2:A",
-    });
+    expect(sheetsMocks.valuesGet).toHaveBeenCalledWith(
+      { spreadsheetId: 'follow-up-sheet', range: "'Processos'!A2:A" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('escapes a configured tab name instead of falling back to the first sheet', async () => {
@@ -68,9 +68,9 @@ describe('googleSheetsService Follow Up ranges', () => {
 
     await service.readProcessReferences();
 
-    expect(sheetsMocks.valuesGet).toHaveBeenCalledWith({
-      spreadsheetId: 'follow-up-sheet',
-      range: "'Processos ''2026'''!A2:A",
-    });
+    expect(sheetsMocks.valuesGet).toHaveBeenCalledWith(
+      { spreadsheetId: 'follow-up-sheet', range: "'Processos ''2026'''!A2:A" },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 });

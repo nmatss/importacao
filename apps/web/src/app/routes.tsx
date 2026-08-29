@@ -112,12 +112,31 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
     return (
       <ModuleNotFound
         title="Acesso restrito"
-        message="Essa tela e restrita a administradores."
+        message="Essa tela é restrita a administradores."
         to="/portal"
         action="Ir para o portal"
       />
     );
   }
+  return <>{children}</>;
+}
+
+/**
+ * `/login` para quem ja tem sessao. Sem isso a tela de login era servida de novo
+ * ao usuario autenticado, que so saia dela digitando outra URL.
+ */
+function GuestRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-50">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
+          <span className="text-sm text-slate-500">Carregando...</span>
+        </div>
+      </div>
+    );
+  if (user) return <Navigate to="/portal" replace />;
   return <>{children}</>;
 }
 
@@ -145,7 +164,7 @@ function ModuleNotFound({
     <div className="flex min-h-[360px] items-center justify-center">
       <div className="max-w-md rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
-          Pagina nao encontrada
+          Página não encontrada
         </p>
         <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{message}</p>
@@ -171,7 +190,14 @@ function LegacyProcessRedirect() {
 export function AppRoutes() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/login"
+        element={
+          <GuestRoute>
+            <LoginPage />
+          </GuestRoute>
+        }
+      />
 
       {/* Portal */}
       <Route
@@ -210,14 +236,21 @@ export function AppRoutes() {
                   <Route path="/comunicacoes" element={<CommunicationsPage />} />
                   <Route path="/alertas" element={<AlertsPage />} />
                   <Route path="/email-ingestion" element={<EmailIngestionPage />} />
-                  <Route path="/auditoria" element={<AuditLogPage />} />
+                  <Route
+                    path="/auditoria"
+                    element={
+                      <AdminRoute>
+                        <AuditLogPage />
+                      </AdminRoute>
+                    }
+                  />
                   <Route path="/configuracoes" element={<SettingsPage />} />
                   <Route
                     path="*"
                     element={
                       <ModuleNotFound
-                        title="Rota de importacao invalida"
-                        message="Essa tela nao existe neste modulo. Volte para o dashboard ou use o menu lateral."
+                        title="Rota de importação inválida"
+                        message="Essa tela não existe neste módulo. Volte para o dashboard ou use o menu lateral."
                         to="/importacao/dashboard"
                         action="Ir para o dashboard"
                       />
@@ -265,8 +298,8 @@ export function AppRoutes() {
                     path="*"
                     element={
                       <ModuleNotFound
-                        title="Rota de certificacoes invalida"
-                        message="Essa tela nao existe no modulo de certificacoes. Volte para o dashboard ou use o menu lateral."
+                        title="Rota de certificações inválida"
+                        message="Essa tela não existe no módulo de certificações. Volte para o dashboard ou use o menu lateral."
                         to="/certificacoes"
                         action="Ir para certificacoes"
                       />

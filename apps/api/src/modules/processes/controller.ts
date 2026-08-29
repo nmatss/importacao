@@ -237,8 +237,11 @@ export const processController = {
   async updateStatus(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
-      const { status } = req.body;
-      const process = await processService.updateStatus(Number(req.params.id), status, userId);
+      const { status, reason } = req.body;
+      const process = await processService.updateStatus(Number(req.params.id), status, userId, {
+        reason: reason ?? null,
+        actorRole: req.user?.role ?? null,
+      });
       sendSuccess(res, process);
     } catch (error: any) {
       const status = error.statusCode || 400;
@@ -265,7 +268,14 @@ export const processController = {
   async delete(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
-      await processService.delete(Number(req.params.id), userId);
+      // Cancelar um processo ja CONCLUIDO exige motivo (ver assertReopenAllowed).
+      // O corpo do DELETE e opcional, entao o motivo tambem aceita ?reason=.
+      const reason =
+        (req.body?.reason as string | undefined) ?? (req.query.reason as string | undefined);
+      await processService.delete(Number(req.params.id), userId, {
+        reason: reason ?? null,
+        actorRole: req.user?.role ?? null,
+      });
       sendSuccess(res, { message: 'Processo cancelado' });
     } catch (error: any) {
       const status = error.statusCode || 400;
@@ -275,7 +285,9 @@ export const processController = {
 
   async getEvents(req: Request, res: Response) {
     try {
-      const limit = Number(req.query.limit) || 50;
+      // Teto igual ao de li-tracking: sem `Math.min`, `?limit=1000000` era
+      // aceito e a timeline inteira ia para a resposta.
+      const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
       const events = await processService.getEvents(Number(req.params.id), limit);
       sendSuccess(res, events);
     } catch (error: any) {

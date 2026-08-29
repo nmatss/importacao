@@ -10,6 +10,11 @@ import {
   ROOT_FOLDER_PLACEHOLDERS as PLACEHOLDERS,
 } from '../integrations/google-drive.service.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
+import {
+  getChatDeliverySummary,
+  isUsableWebhookUrl,
+  resolveGoogleChatWebhook,
+} from '../alerts/delivery.service.js';
 
 const router = Router();
 
@@ -109,6 +114,16 @@ router.get(
           .catch(() => false)
       : false;
 
+    // Mesma resolucao que a entrega usa (banco primeiro, env de fallback). Ler
+    // so o env aqui fazia o health divergir do canal real nas duas direcoes.
+    const chatWebhook = await resolveGoogleChatWebhook().catch(
+      () => ({ url: null, source: null }) as Awaited<ReturnType<typeof resolveGoogleChatWebhook>>,
+    );
+    const chatEntrega = await getChatDeliverySummary().catch(() => ({
+      lastSentAt: null,
+      pendentes24h: 0,
+    }));
+
     const integracoes = {
       googleDrive: {
         credenciais: configured(process.env.GOOGLE_DRIVE_CLIENT_EMAIL),
@@ -130,7 +145,14 @@ router.get(
         ingestaoEmail: process.env.EMAIL_INGESTION_ENABLED === 'true',
       },
       alertas: {
-        canalChat: configured(process.env.GOOGLE_CHAT_WEBHOOK_URL),
+        // Campo legado preservado: agora e o webhook REALMENTE resolvido, e
+        // usavel — nao "existe uma variavel de ambiente".
+        canalChat: isUsableWebhookUrl(chatWebhook.url),
+        canalChatOrigem: chatWebhook.source,
+        // A ultima entrega bem-sucedida e o que separa "nao houve alerta" de
+        // "alerta nao foi entregue"; o par de pendentes fecha a leitura.
+        ultimaEntregaEmChat: chatEntrega.lastSentAt ? chatEntrega.lastSentAt.toISOString() : null,
+        naoEntreguesUltimas24h: chatEntrega.pendentes24h,
       },
       ia: {
         provider: process.env.AI_PROVIDER || 'ialocal',
@@ -158,8 +180,19 @@ router.get(
     if (integracoes.documentos.fonte !== 'email' && !integracoes.googleDrive.pastaRaizAcessivel) {
       avisos.push('DOCUMENT_SOURCE inclui drive mas a pasta raiz nao esta configurada');
     }
-    if (!integracoes.alertas.canalChat) {
-      avisos.push('GOOGLE_CHAT_WEBHOOK_URL ausente — alertas nao saem do banco');
+    if (!chatWebhook.url) {
+      avisos.push(
+        'Webhook do Google Chat ausente (systemSettings e GOOGLE_CHAT_WEBHOOK_URL) — alertas nao saem do banco',
+      );
+    } else if (!integracoes.alertas.canalChat) {
+      // Nunca ecoar o valor: e segredo. So a origem.
+      avisos.push(
+        `Webhook do Google Chat configurado (origem: ${chatWebhook.source}) mas invalido — o canal esta quebrado`,
+      );
+    } else if (integracoes.alertas.naoEntreguesUltimas24h > 0) {
+      avisos.push(
+        `${integracoes.alertas.naoEntreguesUltimas24h} alerta(s) das ultimas 24h ainda nao entregues no Chat`,
+      );
     }
 
     res.json({ timestamp: new Date().toISOString(), integracoes, avisos });

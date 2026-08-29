@@ -7,6 +7,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listPendingSqlMigrationsSync } from '../../src/shared/database/pending-migrations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_FOLDER = path.resolve(__dirname, '../../drizzle');
@@ -32,13 +33,12 @@ export interface E2EContext {
 // Drizzle's meta/_journal.json (some, like 0011, contain ALTER TYPE ADD VALUE
 // which cannot run inside the migrator's transaction). They are idempotent
 // (IF NOT EXISTS / ADD VALUE IF NOT EXISTS), so we apply them after migrate().
-const PENDING_MIGRATIONS = fs
-  .readdirSync(MIGRATIONS_FOLDER)
-  .filter((file) => {
-    const match = /^(\d{4})_.+\.sql$/.exec(file);
-    return match && Number(match[1]) >= 11;
-  })
-  .sort();
+//
+// A descoberta vem do MESMO modulo que o runner de producao usa. Antes eram
+// duas implementacoes: esta, automatica, e uma lista enumerada a mao no
+// `migrate.ts` que parou na 0024 — o E2E aplicava a 0025/0026 e passava verde
+// enquanto producao as pulava em silencio.
+const PENDING_MIGRATIONS = listPendingSqlMigrationsSync(MIGRATIONS_FOLDER);
 
 function isCI(): boolean {
   const value = process.env.CI?.trim().toLowerCase();

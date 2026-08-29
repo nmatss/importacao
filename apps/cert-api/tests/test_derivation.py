@@ -8,7 +8,7 @@ Cobre os colapsos pedidos:
 """
 
 import itertools
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -676,3 +676,105 @@ class TestPrazoComparaData:
     def test_data_de_hoje_ainda_permite_vender(self):
         hoje = date.today()
         assert derive_cert_status(self.LIVRE, False, hoje.strftime("%d/%m/%Y")) == "ATIVO"
+
+
+# ---------------------------------------------------------------------------
+# MEDIO 7 — compute_status_dimensions tem de repassar sale_deadline_date e today
+# ---------------------------------------------------------------------------
+
+
+class TestEixosNaoPodemSeContradizer:
+    """`cert_status` e `within_sale_deadline` na MESMA linha da tabela.
+
+    `compute_status_dimensions` chamava `derive_cert_status` sem
+    `sale_deadline_date`/`today`: para um prazo TEXTUAL nao parseavel com
+    `sale_deadline_date` futuro, o fallback caia em ENCERRADO enquanto
+    `derive_within_sale_deadline` (que recebia a data) devolvia True.
+    """
+
+    FUTURO = date.today() + timedelta(days=365)
+
+    def _row(self, **overrides) -> dict:
+        row = {
+            "sku": "PI9999Y",
+            "sheet_status": "10/01/26 - Aguardando retorno do laboratorio.",
+            "is_expired": False,
+            "sale_deadline": "a definir",       # texto NAO parseavel
+            "sale_deadline_date": self.FUTURO,  # data valida e futura
+            "certification_type": "INMETRO",
+            "expected_cert_text": "INMETRO",
+            "last_validation_status": "OK",
+        }
+        row.update(overrides)
+        return row
+
+    def test_prazo_textual_ilegivel_com_data_futura_nao_contradiz(self):
+        dims = compute_status_dimensions(self._row())
+        assert dims["within_sale_deadline"] is True
+        assert dims["cert_status"] == "ATIVO", "cert_status contradiz within_sale_deadline"
+        assert dims["comercializacao_status"] != "ENCERRADA"
+
+    def test_data_passada_continua_encerrando_os_dois_eixos(self):
+        dims = compute_status_dimensions(
+            self._row(sale_deadline_date=date.today() - timedelta(days=1))
+        )
+        assert dims["within_sale_deadline"] is False
+        assert dims["cert_status"] == "ENCERRADO"
+
+    def test_today_explicito_chega_ao_cert_status(self):
+        """`today` parametrizado tem de valer para os DOIS eixos."""
+        deadline = date(2026, 6, 15)
+        row = self._row(sale_deadline_date=deadline)
+
+        antes = compute_status_dimensions(row, today=deadline - timedelta(days=1))
+        assert antes["cert_status"] == "ATIVO"
+        assert antes["within_sale_deadline"] is True
+
+        depois = compute_status_dimensions(row, today=deadline + timedelta(days=1))
+        assert depois["cert_status"] == "ENCERRADO"
+        assert depois["within_sale_deadline"] is False
+
+
+# ---------------------------------------------------------------------------
+# MEDIO 8 — "hoje" e o hoje de Brasilia, nao o do processo (container em UTC)
+# ---------------------------------------------------------------------------
+
+
+class TestHojeNoFusoDeSaoPaulo:
+    """Entre 21:00 e 23:59 de Brasilia o UTC ja virou o dia seguinte.
+
+    Com `date.today()` num container UTC, um prazo que vence HOJE era avaliado
+    como vencido tres horas antes do fim do dia util.
+    """
+
+    # 2026-08-30 01:00 UTC == 2026-08-29 22:00 em Sao Paulo
+    INSTANTE = datetime(2026, 8, 30, 1, 0, tzinfo=UTC)
+    HOJE_SP = date(2026, 8, 29)
+
+    @staticmethod
+    def _frozen(instant):
+        class _Frozen(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return instant.astimezone(tz) if tz is not None else instant.replace(tzinfo=None)
+
+        return _Frozen
+
+    def test_today_sp_usa_o_dia_de_brasilia(self, mocker):
+        mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
+        # O relogio do processo (UTC) ja esta no dia 30 — a regra de negocio, no 29.
+        assert derivation.datetime.now(UTC).date() == date(2026, 8, 30)
+        assert derivation._today_sp() == self.HOJE_SP
+
+    def test_prazo_que_vence_hoje_nao_vence_as_22h(self, mocker):
+        mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
+        assert derive_within_sale_deadline(None, "", self.HOJE_SP) is True
+
+    def test_cert_status_nao_encerra_antes_da_meia_noite_de_brasilia(self, mocker):
+        mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
+        livre = "10/01/26 - Aguardando retorno do laboratorio."
+        assert derive_cert_status(livre, False, "29/08/2026") == "ATIVO"
+
+    def test_prazo_de_ontem_continua_vencido(self, mocker):
+        mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
+        assert derive_within_sale_deadline(None, "", date(2026, 8, 28)) is False

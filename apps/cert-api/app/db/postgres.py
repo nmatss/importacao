@@ -9,6 +9,7 @@ import psycopg2.extras
 from psycopg2 import pool as pg_pool
 
 from app.config import DATABASE_URL
+from app.utils.logging import log
 
 _pool: pg_pool.ThreadedConnectionPool | None = None
 _pool_lock = threading.Lock()
@@ -93,6 +94,55 @@ def _add_column_if_not_exists(col: str, coltype: str) -> None:
                 pass
 
 
+def _migrate_stock_synced_at_to_timestamptz() -> None:
+    """Converte `cert_stock.synced_at` de `timestamp` naive para `TIMESTAMPTZ`.
+
+    A coluna nasceu `TIMESTAMP` (sem time zone) enquanto todo o resto da tabela
+    usa `TIMESTAMPTZ`. Os dois — e unicos — caminhos de escrita gravam UTC:
+
+    - `app/services/wms_service.py` insere `datetime.now(UTC).isoformat()`; numa
+      coluna naive o Postgres DESCARTA o offset `+00:00` e guarda o relogio UTC;
+    - o `DEFAULT NOW()` da propria coluna e avaliado no servidor, cujo container
+      nao define `TZ` (ver o servico `postgres` nos dois Compose), entao a sessao
+      tambem esta em UTC.
+
+    Logo `AT TIME ZONE 'UTC'` reinterpreta corretamente TODAS as linhas ja
+    existentes, independentemente de qual caminho as escreveu.
+
+    Sem a conversao, `synced_at.isoformat()` chega ao navegador sem sufixo de
+    fuso e e lido como horario LOCAL: a tela mostrava o sync 3 horas ADIANTE do
+    horario real de Brasilia, fazendo o estoque parecer mais fresco do que e.
+
+    Idempotente: consulta `information_schema` antes e nao faz nada quando a
+    coluna ja e `timestamp with time zone` (ou quando a tabela nao existe).
+    """
+    try:
+        with db() as (conn, cur):
+            cur.execute(
+                """
+                SELECT data_type
+                FROM information_schema.columns
+                WHERE table_schema = current_schema()
+                  AND table_name = 'cert_stock'
+                  AND column_name = 'synced_at'
+                """
+            )
+            row = cur.fetchone()
+            if row is None or row["data_type"] != "timestamp without time zone":
+                return
+            cur.execute(
+                "ALTER TABLE cert_stock "
+                "ALTER COLUMN synced_at TYPE TIMESTAMPTZ "
+                "USING synced_at AT TIME ZONE 'UTC'"
+            )
+        log.info("Migrated cert_stock.synced_at to TIMESTAMPTZ (values reinterpreted as UTC)")
+    except Exception as e:
+        # Nao bloqueia o startup: a leitura continua funcionando com a coluna
+        # naive (so com o deslocamento de fuso na tela) e a proxima subida tenta
+        # de novo.
+        log.warning(f"Could not migrate cert_stock.synced_at to TIMESTAMPTZ: {e}")
+
+
 def ensure_tables() -> None:
     """Create all cert tables and indexes if they do not exist, then run column migrations."""
     with db() as (conn, cur):
@@ -166,7 +216,10 @@ def ensure_tables() -> None:
                 in_transit INTEGER DEFAULT 0,
                 situation TEXT,
                 storage_area TEXT,
-                synced_at TIMESTAMP DEFAULT NOW(),
+                -- Bases novas ja nascem TIMESTAMPTZ; as antigas sao convertidas
+                -- por _migrate_stock_synced_at_to_timestamptz(). Naive aqui fazia
+                -- o navegador ler o UTC como horario local (sync 3h adiante).
+                synced_at TIMESTAMPTZ DEFAULT NOW(),
                 UNIQUE(sku, source, warehouse)
             )
         """)
@@ -228,6 +281,8 @@ def ensure_tables() -> None:
         ("encerramento_status", "TEXT"),
     ]:
         _add_column_if_not_exists(col, coltype)
+
+    _migrate_stock_synced_at_to_timestamptz()
 
 
 def ensure_li_tracking_table() -> None:

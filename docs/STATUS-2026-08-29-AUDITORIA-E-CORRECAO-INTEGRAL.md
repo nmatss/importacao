@@ -1,0 +1,883 @@
+# Status 2026-08-29 — Auditoria integral e correcao de filtros, dados, seguranca e UX
+
+## Objetivo
+
+Deixar o sistema funcional e pronto para uso do operador: concluir as paginas,
+fazer os filtros funcionarem de fato, corrigir defeitos que alteram dado
+aduaneiro, fechar lacunas de autorizacao e melhorar UX/UI — sem inventar
+funcionalidade nova e sem alterar contratos publicos desnecessariamente.
+
+## Baseline medido antes de qualquer alteracao
+
+Commit `4f7a991`, master limpa e sincronizada:
+
+```text
+npm run typecheck        -> exit 0
+npm run lint             -> exit 0
+npm test                 -> API 1005 passed + 1 skipped; web 146 passed; exit 0
+npm run build            -> exit 0
+npm run test:e2e:web     -> 82/82 passed
+npm audit --omit=dev     -> 0 vulnerabilidades
+```
+
+**Todos os gates estavam verdes.** Nenhum dos defeitos descritos abaixo era
+visivel por lint, typecheck, teste ou build. Isso e o achado transversal mais
+importante desta sessao: a suite congelava o comportamento existente, nao o
+comportamento correto.
+
+## Metodo
+
+Duas fases, com particao de arquivos para evitar edicao concorrente.
+
+1. **Auditoria** — oito agentes em modo somente leitura, um por area:
+   paginas centrais de Importacao; paginas operacionais; paginas
+   administrativas e shell; Certificacoes; pipeline de ingestao e leitura de
+   arquivos; apuracao, validacao e comparativo; e-mail e Google Drive;
+   integracoes externas e seguranca.
+2. **Correcao** — sete agentes em conjuntos de arquivos DISJUNTOS, mais os
+   arquivos que o orquestrador assumiu diretamente.
+
+Regra aplicada a todo achado: evidencia `arquivo:linha`, separacao explicita
+entre fato observado e inferencia, e verificacao na releitura antes de
+corrigir. Achados que nao se sustentaram estao registrados como refutados na
+secao final — nao foram "corrigidos".
+
+## Defeitos provados por execucao, nao por leitura
+
+Estes sete foram reproduzidos rodando o codigo, nao apenas lendo:
+
+### 1. Agendamento semanal disparava um dia depois (BLOQUEADOR)
+
+No APScheduler 3.x, `day_of_week` numerico e 0=segunda; a convencao crontab
+que a interface usa e 0=domingo. Execucao com a biblioteca instalada:
+
+```text
+CronTrigger(minute='0', hour='6', day_of_week='1') -> 2026-09-01 (TERCA)
+CronTrigger(minute='0', hour='6', day_of_week='5') -> 2026-09-05 (SABADO)
+CronTrigger.from_crontab('0 6 * * 1')              -> 2026-09-01 (TERCA)
+```
+
+O preset "Semanal (Segunda)" gera `0 6 * * 1` e rodava na terca; "Semanal
+(Sexta)" rodava no sabado. `from_crontab` tambem nao converte — os dois
+caminhos estavam errados. A tela exibia o dia errado junto.
+
+### 2. Filtros de Orgao e periodo do LI nao faziam nada (ALTO)
+
+`validate(schema, 'query')` SUBSTITUI `req.query` pelo resultado do Zod, e
+`z.object()` descarta chave desconhecida. `liTrackingQuerySchema` declarava
+apenas `page`, `limit`, `status` e `processCode`. Prova de execucao com o Zod
+do repositorio: entrada `{page, limit, orgao, startDate, endDate}` produzia
+saida `{page: 1, limit: 20}`. O controller e o service tinham o codigo
+completo desses tres filtros, inalcancavel. O operador selecionava o orgao,
+via o spinner e recebia a mesma lista.
+
+### 3. Filtro de um unico dia na Auditoria retornava zero (ALTO)
+
+`audit/service.ts` usava `gte(created_at, X)` e `lte(created_at, X)` sem o
+"+1 dia" que os outros modulos aplicavam. Filtrar de 29/08 ate 29/08 produzia
+um intervalo de duracao zero.
+
+### 4. Toda janela de data estava tres horas deslocada (ALTO)
+
+Os containers de API e Postgres rodam em UTC — nenhum `TZ` em
+`docker-compose.yml`, `docker-compose.prod.yml` ou `apps/api/Dockerfile` — e as
+colunas filtradas sao `timestamp` sem time zone. O operador escolhe a data num
+calendario brasileiro e a tela exibe o valor ja convertido para o fuso local.
+Tratar 'YYYY-MM-DD' como meia-noite UTC desloca a janela:
+
+- meia-noite local = `03:00Z` (verificado por teste);
+- um registro exibido como "29/08 22:00" tem `created_at` em
+  `2026-08-30 01:00` UTC e ficava FORA do filtro "29/08".
+
+Sete modulos afetados: processes, communications, email-ingestion, follow-up,
+li-tracking, alerts e audit.
+
+### 5. Drive-only entregaria zero documentos (CRITICO, nao registrado antes)
+
+A pasta operacional esta em Shared Drive. A API v3 do Drive exige
+`supportsAllDrives` em qualquer requisicao que toque item de shared drive.
+Das 13 chamadas em `google-drive.service.ts`, apenas as 4 de listagem tinham a
+flag; o **download de conteudo** e as 7 escritas/movimentacoes nao tinham.
+
+Efeito da virada de `DOCUMENT_SOURCE` para `drive` sem essa correcao: o sweep
+LISTA os arquivos com sucesso e falha 100% dos downloads com 404, cada falha
+caindo num `catch` que conta como `failed` sem alerta. Como o modo Drive-only
+tambem desliga a ingestao por e-mail e bloqueia o upload manual, o resultado
+seria nenhuma via de entrada documental funcional.
+
+### 6. "LI Urgente" contava toda LI em aberto (ALTO)
+
+O comentario dizia "liDeadline is approaching or passed", mas o WHERE exigia
+apenas `hasLiItems`, status aberto e `liDeadline NOT NULL`. Um prazo daqui a
+seis meses entrava no cartao de urgencia do painel de SLA e no "prazo critico"
+do Meu Dia.
+
+### 7. Entrada invalida devolvia mensagem interna em ingles (MEDIO)
+
+`processes`, `alerts` e `follow-up` aceitavam `startDate`/`endDate` como string
+livre. `new Date('abc').toISOString()` lanca `RangeError` (provado por
+execucao); o try/catch do controller transformava isso em HTTP 400 com a
+mensagem `Invalid time value`.
+
+## Correcoes aplicadas
+
+### Filtros e limites de data
+
+- `liTrackingQuerySchema` recebeu `orgao`, `startDate` e `endDate`.
+- Novos helpers em `shared/utils/dates.ts`: `isCalendarDate`,
+  `localDayStartUtc`, `localDayEndExclusiveUtc`, `localTodayIso` e
+  `localMonthStartUtc`, com 12 testes que congelam as bordas.
+- Os sete modulos passaram a delimitar o DIA LOCAL, sempre passando string ISO
+  na tag `sql` (nunca objeto `Date`, que seria serializado com o offset do
+  processo e voltaria a depender do `TZ` do container).
+- `isoDateSchema` compartilhado; `alertsQuerySchema` e `followUpQuerySchema`
+  novos, cobrindo TODOS os parametros que seus controllers ja liam.
+- Paginacao com desempate estavel por `id` em processes e li-tracking.
+- `dashboard/routes.ts`: removida a validacao de periodo que era descartada
+  pelo controller. O recorte por periodo NAO foi implementado — seria escopo
+  novo. Ver pendencia P-07.
+- `allSenders`: parametro aceito por dois schemas e nunca lido, removido.
+- Filtro por `status` adicionado a listagem de logs de e-mail.
+- Recorte mensal do dashboard e do executivo passou a usar o mes LOCAL;
+  `pendingPayments` deixou de incluir processos cancelados.
+- `liUrgent` ganhou janela de urgencia (`LI_URGENT_WINDOW_DAYS = 15`).
+  **Parametro de negocio a confirmar com o time fiscal.**
+
+### Integridade de dado
+
+- `PUT /api/processes/:id` nao muda mais status: `status` saiu do
+  `updateProcessSchema`. Antes um PUT levava um processo de `draft` a
+  `completed` num salto, sem `assertTransition` e sem gravar o evento
+  `status_changed` — a trilha registrava apenas "update".
+- `updateProcessSchema` passou a aceitar `null` explicito em 25 campos, com o
+  contrato: **chave ausente = nao mexe; chave com `null` = apaga**. Antes o
+  operador nao conseguia limpar NENHUM campo: o valor esvaziado era descartado,
+  o backend respondia 200 e a tela dizia "Processo atualizado com sucesso"
+  enquanto o dado errado continuava la.
+- `parseDate` rejeita mes/dia fora de faixa por verificacao de round-trip.
+  Antes `'03/15/2026'` virava 2027-03-03 e `'32/01/2026'` virava 2026-02-01 —
+  datas plausiveis e erradas, comparadas como se fossem reais.
+- Os dois parsers de data divergentes foram unificados. `date-sequence-check`
+  usava `new Date(value)` (MM/DD do JS) enquanto `date-compare` usava DMY: a
+  mesma string `'03/04/2026'` produzia duas datas no mesmo run, e a inversao
+  cronologica resultante era classificada como falha dura.
+- Sentinela `01/01/1900` passou a ser tratada como nula tambem no lado Node,
+  alinhando com a regra que so existia na cert-api.
+- Espelho: campo nao lido nao vira mais "Free Of Charge", e zero legitimo nao
+  vira mais `null`. As duas inversoes propagavam para
+  `importProcesses.hasFreeOfCharge`, que e declaracao aduaneira.
+- `autoPopulateItems` ganhou ordenacao deterministica e gate de confianca
+  operacional. Ver pendencia P-01 para o que falta da ADR 0006.
+- `reclassify` passou a respeitar a lease de extracao.
+- A reconciliacao arquiva o payload original antes de sobrescrever
+  `aiParsedData`.
+- Espelho com zero itens deixou de sair com confianca 0,99.
+- As protecoes de planilha (linhas em branco, linha so-separador, teto de
+  caracteres) foram unificadas num helper unico e aplicadas aos cinco caminhos
+  que faziam `sheet_to_csv` cru — antes so um deles estava protegido.
+- Pre-Cons: guard de plausibilidade do full refresh. O sync e um DELETE de tudo
+  seguido de INSERT, e o unico guard era `rows.length === 0` — uma planilha
+  truncada apagava a base inteira e ficava com o que sobrou. E a mesma classe
+  do incidente ja resolvido do estoque de certificacao.
+- Pre-Cons: `'0.00'` e string truthy, entao o guard antigo deixava passar FOB
+  zero e `diff / 0` classificava TODA divergencia como critica.
+- Cambio: cronograma incompleto (percentuais que nao somam 100) deixou de ser
+  silencioso e passa a gerar alerta.
+
+### Seguranca e autorizacao
+
+- Admin nao consegue mais se auto-desativar nem se rebaixar, e o ultimo admin
+  ativo esta protegido. Antes isso derrubava o acesso na requisicao seguinte e,
+  no caso do ultimo admin, so SQL direto recuperava.
+- Metricas Prometheus passaram a rotular pela rota REGISTRADA. Antes, um path
+  desconhecido criava uma serie nova por valor, sem autenticacao e inclusive em
+  404 — 25 paths desconhecidos agora produzem uma serie, nao 25.
+- Google OAuth exige `email_verified`. O claim `hd`, quando presente, tem que
+  bater com `ALLOWED_DOMAIN`. Ver a nota de risco em P-12.
+- `audit_logs` passou a registrar ator e IP na criacao, alteracao e
+  desativacao de usuario — antes uma escalacao de privilegio ficava registrada
+  como acao anonima.
+- Escrita de modelos de comunicacao virou admin-only. Antes qualquer analista
+  reescrevia o modelo que outra pessoa usa para escrever a KIOM/Fenicia/ISA.
+- Regexes de leitura do proxy da cert-api passaram a recusar `%`, fechando a
+  falha latente de traversal percent-encoded.
+- `userEmail` entrou na lista de redacao do logger.
+- Controllers de auth e settings pararam de devolver mensagem interna ao
+  cliente, preservando as mensagens de produto.
+- `jwt.verify` com algoritmo fixado; token de `/metrics` comparado em tempo
+  constante; Sentry com `beforeSend` e `sendDefaultPii: false`.
+- Fila `email-send` REMOVIDA: caminho morto, sem nenhum enfileirador em todo o
+  repositorio, que enviava e-mail sem a allow-list de destinatario e sem a
+  sanitizacao de HTML aplicadas por `communicationService.send()`.
+
+### Frontend e UX
+
+- `ProcessEditPage` passou a invalidar o cache: antes a tela de detalhe
+  renderizava o valor pre-edicao por ate 30 segundos, logo depois de um toast
+  verde dizendo que salvou.
+- Filtros da lista de processos migraram para a URL, o que tambem conserta os
+  links do Meu Dia, que passavam `?status=` para uma tela que ignorava o
+  parametro.
+- `PreConsTab` parou de exibir o badge verde "Sem divergencias" quando a
+  resposta era 403 — ausencia de autorizacao apresentada como ausencia de
+  problema.
+- `ComunicacoesTab` e tres queries do dashboard pararam de transformar falha de
+  carga em estado vazio.
+- Checklist e Follow-Up passaram a compartilhar a mesma query key e a invalidar
+  em cascata.
+- Auditoria virou admin-only tambem no menu e na rota; os botoes admin-only da
+  Ingestao de E-mail deixaram de aparecer para o analista.
+- Historico de Atendimentos ganhou paginacao — a partir do item 101 ele era
+  invisivel de forma permanente.
+- Alertas passaram a mostrar se foram entregues. Isso e diretamente relevante
+  ao incidente registrado de 6.349 alertas com zero entregas.
+- Foco inicial do visualizador de documentos saiu do botao "Baixar".
+- Dark mode corrigido nos mapas de severidade e nos graficos.
+- Acentuacao, titulos duplicados e alvos de toque normalizados.
+
+### cert-api
+
+- Traducao crontab -> APScheduler no dia da semana, com o mesmo caminho usado
+  na validacao e no disparo, de modo que "aceito na criacao" e "dispara no dia
+  certo" nao possam mais divergir.
+- `/api/stats` parou de engolir excecao e devolver zeros — uma queda do
+  PostgreSQL renderizava um sistema saudavel e vazio.
+- "Nao Encontrado" deixou de incluir produto nunca validado; bucket
+  `never_validated` acrescentado ao payload.
+- Execucao manual deixou de gravar historico eternamente em `running`, e o
+  historico deixou de gravar `completed` para run que quebrou.
+- "Proxima execucao" passou a ser recalculada apos cada disparo.
+- Filtro de periodo deixou de esconder agendamento nunca executado.
+- Os dois eixos de status pararam de se contradizer na mesma linha.
+- Derivacao passou a usar o dia no fuso de Sao Paulo.
+
+## Segunda rodada — fechamento do backlog
+
+A primeira rodada corrigiu o que impedia o uso e registrou 26 pendencias. A
+segunda atacou as que eram corrigiveis sem decisao de negocio.
+
+### O defeito que a segunda rodada encontrou antes de comecar
+
+**CRITICO — duas implementacoes divergentes do mesmo passo de migration, e a que
+os testes exercitam nao era a que roda em producao.**
+
+`shared/database/migrate.ts` enumerava as migrations forward-only numa lista
+ESCRITA A MAO que parava na `0024`. As migrations `0025_ai_usage_telemetry.sql` e
+`0026_document_ingestion_source.sql` existiam no disco e **nunca eram aplicadas
+por esse runner**. A `0026` cria `documents.ingestion_source`, coluna de que
+depende todo o contrato de entrada Drive-only entregue em 2026-08-28 — e de que
+depende tambem a correcao de deduplicacao do Drive feita nesta sessao.
+
+O defeito era invisivel para a suite porque `test/e2e/setup.ts` descobria os
+arquivos com `readdirSync`: o E2E aplicava as duas e passava verde (48/48),
+enquanto o caminho de producao as pulava em silencio.
+
+Correcao: `shared/database/pending-migrations.ts`, fonte unica consumida pelos
+dois lados. Sete testes comparam a descoberta com o CONTEUDO DO DISCO, entao uma
+migration nova entra sozinha e uma lista escrita a mao volta a falhar. Um deles
+verifica tambem que toda migration forward-only e idempotente — o runner
+reaplica todas a cada deploy, e uma sem guarda quebraria o SEGUNDO deploy
+enquanto o primeiro passava. Provado por mutacao: reintroduzir o corte na 0024
+derruba dois testes.
+
+### Corrigido na segunda rodada
+
+**Canal de alerta (P-15) — a causa era codigo, nao credencial.**
+A deduplicacao devolvia o alerta duplicado antes de tentar entregar;
+`sent_to_chat = false` nao era lido por nenhum job; e o cooldown do circuit
+breaker descartava em silencio. Agora: duplicado nao entregue tenta de novo;
+job de reentrega a cada 5 minutos com backoff (5/10/20/40/80 min), teto de 5
+tentativas e janela de 24h; cooldown e webhook ausente registram o motivo sem
+consumir tentativa e sem marcar como entregue; regra `AlertDeliveryFailing` no
+Prometheus sobre a metrica que ja existia e sobre a qual nada alertava; e
+`/health/integrations` passou a resolver o webhook pela MESMA funcao que a
+entrega usa — antes o health lia o env e o envio lia o banco, entao o health
+podia estar verde com o canal morto. `POST /api/alerts`, que publica no espaco
+corporativo do Chat, virou admin-only com rate limit.
+
+**Rate limiter nao era atomico.** `cache.get` -> `JSON.parse` -> `cache.set`, sem
+nada de atomico entre a leitura e a escrita: uma rajada concorrente lia o MESMO
+contador e escrevia o mesmo valor, e o limite de 5 tentativas por janela do login
+era ultrapassado com folga. Agora ha `cache.incr` atomico (INCR no Redis,
+contador sincrono no fallback em memoria), com janela FIXA — so o primeiro
+incremento define o TTL, senao a janela nunca fecharia. A chave passou a usar o
+caminho completo, e nao o `req.path` relativo do Router, que faria duas rotas
+homonimas de modulos diferentes compartilharem balde.
+
+**Injecao de prompt no assistente operacional.** O corpo de comunicacoes e o
+assunto/remetente de e-mails recebidos entravam no prompt sem delimitador e sem
+instrucao de ignorar comandos embutidos — um remetente externo que escreve para
+a caixa compartilhada controlava texto que o modelo lia como contexto. Agora cada
+fonte entra delimitada, o system prompt declara que o conteudo entre marcadores e
+DADO e nunca instrucao, e o conteudo e neutralizado antes de entrar: sem isso a
+defesa seria decorativa, bastando o remetente escrever o proprio marcador de
+fechamento para "sair" do bloco. Fonte de origem externa tambem e cortada mais
+curto. Provado por mutacao.
+
+**SYDLE: sucesso vazio nao era anunciado.** Falha dura ja gerava alerta critico
+via `handleCronError`; a lacuna era o run que termina com `status: 'success'` e
+`fetched: 0` — sintoma de contrato alterado do lado do SYDLE. A tela financeira
+congelava nos dados antigos sem sinal. Agora um run que traz zero logo depois de
+um run com registros gera alerta, e registro que chega sem identificador
+utilizavel e contado e anunciado separadamente.
+
+**`PUT /api/settings/:key` aceitava qualquer chave e qualquer valor.**
+`smtp_from` gravado por ali escapava do `isValidMailFrom`: o envio falhava
+fechado depois com 503, longe da tela onde o admin digitou o valor errado.
+Agora ha allow-list, e chave coberta por rota dedicada e recusada apontando a
+rota que valida.
+
+**`x-correlation-id` era aceito cru**, ia para todas as linhas de log e voltava
+no header — um valor com quebra de linha fazia `res.setHeader` lancar e virava 500. Agora exige `^[\w-]{1,64}$` e gera um proprio quando o valor nao serve.
+
+**Politica de retry das filas era o default implicito da biblioteca.** Agora e
+declarada. Dead-letter continua ausente e registrada como pendencia — e o mesmo
+padrao do alerta que morria no banco, e exige decidir onde a fila morta e
+observada antes de criar.
+
+**Resolucao do webhook do Chat estava duplicada em quatro pontos**, e uma das
+copias fazia `setting?.value as string`, que quebra quando o valor esta gravado
+no formato objeto. Unificadas na funcao unica.
+
+**Infra.** O `proxy_pass` com hostname literal em `infra/nginx/prod.conf` — o
+padrao que causou o 502 de 2026-06-22, reaberto em 2026-07-16 — foi corrigido, e
+a correcao foi validada reproduzindo o incidente: recriando o container da API
+com IP novo, o config antigo passa de 200 para 502 e o corrigido continua em 200.
+`TZ` foi acrescentado ao servico da cert-api e DELIBERADAMENTE nao ao `api` nem
+ao `postgres`: `formatDate` usa hora local do processo e o driver serializa
+`Date` em hora local ao gravar coluna `timestamp` sem tz, entao a API passaria a
+gravar relogio de Sao Paulo em colunas cujas linhas existentes sao UTC —
+corrupcao silenciosa que nenhum teste pegaria. `cert_stock.synced_at` foi
+migrada para `TIMESTAMPTZ` com conversao condicional e idempotente, validada
+contra um Postgres real pelos dois caminhos de escrita, com o custo do lock
+medido (2,5 s para 500 mil linhas; a tabela tem ~33 mil). E os 122 KB de
+`main.py` morto na cert-api foram removidos depois de provado o orfao — o
+arquivo ainda carregava copias dos mesmos defeitos corrigidos em `app/`.
+
+### Entregue pela segunda onda de agentes
+
+**E-mail e envio.** A busca do Gmail passou a FALHAR FECHADA sem
+`EMAIL_ALLOWED_SENDERS` — o cron de 5 minutos era o unico dos quatro caminhos
+que nao abortava, e com a allow-list vazia listava e baixava anexo de todo
+e-mail nao lido da caixa compartilhada, marcando como lida correspondencia nao
+relacionada. Falha TRANSITORIA deixou de consumir a mensagem: erro de rede,
+timeout ou 5xx devolve o log para `pending` e nao marca como lida, com contador
+de tentativas para nao criar poison message; so 4xx (exceto 408/429) e tratado
+como permanente. `MAIL_DRY_RUN` ligado por default fora de producao, num ponto
+unico de entrega. A sentinela literal que detectava relay sem auth virou
+`SMTP_AUTH_MODE`. Tetos de pagina, de mensagem e de bytes agregados na
+paginacao do Gmail. `reprocess()` parou de reportar sucesso sem prova: usa
+`rfc822msgid:`, extrai so o mailbox no fallback, devolve a contagem real e nao
+marca `reprocessed` antes do sucesso.
+
+**Validacao.** `Number()` cru sobre texto extraido por IA foi substituido por um
+normalizador unico em todos os checks monetarios e quantitativos —
+`Number('1.234')` valia 1,234 em vez de 1234, erro de mil vezes, e
+`Number('1.234,56')` era `NaN`, que degradava o check para "documentos
+insuficientes" apresentando como INDISPONIVEL um dado que existia. Comparacao
+monetaria sem confirmacao de moeda igual passou a `skipped`/`warning` explicito.
+`unit-type-validation` deixou de casar por substring ("PARKA" detectava "par",
+"CORSET" detectava "set") e foi rebaixado de `failed` para `warning`, porque a
+heuristica e linguistica e disparava e-mail de correcao para fornecedor externo.
+`item-level-match` parou de colapsar SKU repetido e de tratar quantidade ausente
+como zero.
+
+**Comparativo e aceites.** `comparison_acceptances` deixou de ser tabela
+write-only: `getComparison` passou a ler os aceites ATIVOS, e a tela para de
+exibir "Aceito por Fulano" sobre extracao nova — que era exatamente o que a
+invalidacao existia para impedir. O `evidence_hash` passou a cobrir os valores
+divergentes que estao sendo aceitos, e o upsert nao ressuscita mais aceite
+invalidado. `acceptComparison` passou a gravar em `audit_logs`. Editar celula
+passou a exigir justificativa, como aceitar ja exigia — a governanca estava
+invertida, porque editar transforma "Falha" em "Conforme" e era a unica das duas
+sem justificativa. `autoPopulateItems` ganhou lock consultivo com recheque sob o
+lock (dois `generate` concorrentes nao duplicam mais o lote) e passou a gravar a
+linhagem exigida pela ADR 0006.
+
+**Resiliencia.** Retry com backoff, jitter e `Retry-After` nas chamadas de
+leitura de Drive, Sheets, Groups e Odoo — antes so o modulo de IA usava os
+helpers que ja existiam. Escrita NAO entrou no retry: `files.create` nao e
+idempotente e re-tentar cria uma segunda pasta ou arquivo. O `AbortSignal` passou
+a chegar ao cliente do Google, entao o timeout cancela a requisicao em vez de so
+desistir de esperar. `UnauthorizedError` criada: queda do Postgres durante o
+login voltou a sair como 500 generico em vez de 401 "Credenciais invalidas".
+
+**Processos e SLA.** `completed` e `sent_to_fenicia` voltaram a ter caminho para
+`validating`, com motivo obrigatorio, restrito a admin e gravado em
+`process_events` — fechar o desvio do PUT sem oferecer o caminho legitimo teria
+deixado a operacao sem saida quando um OHBL corrigido chega depois do envio a
+Fenicia. SLA e KPIs de conclusao pararam de usar `updatedAt` como data do
+evento: editar uma nota num processo concluido em janeiro o recontabilizava como
+"concluido neste mes".
+
+### R-01 resolvido
+
+Ver a nota completa em R-01: a centralizacao dos stubs de jsdom foi feita na
+segunda tentativa, com stub CIENTE DA QUERY, e verificada nos dois sentidos.
+
+## Estado das pendencias apos a segunda rodada
+
+A lista P-01..P-26 abaixo foi escrita ao fim da PRIMEIRA rodada. A segunda
+fechou a maior parte. Leia esta tabela antes da lista:
+
+| Pendencia                                 | Estado                                                                                                                           |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| P-01 ADR 0006                             | PARCIAL — idempotencia (lock consultivo + recheque) e linhagem entregues; dry-run/diff e chave unica por execucao seguem abertos |
+| P-02 fonte canonica Desembaraco/Numerario | ABERTA — decisao de negocio                                                                                                      |
+| P-03 janela de urgencia da LI             | ABERTA — decisao de negocio                                                                                                      |
+| P-04 `numerarioPct` constante             | ABERTA — decisao de negocio                                                                                                      |
+| P-05 cards fantasma do Meu Dia            | FECHADA (removidos)                                                                                                              |
+| P-06 `completed` -> `validating`          | **FECHADA** — reabertura com motivo obrigatorio, admin e trilha                                                                  |
+| P-07 periodo nos dashboards               | ABERTA — por decisao, com o motivo detalhado abaixo                                                                              |
+| P-08 TanStack Query em Certificacoes      | ABERTA — refatoracao ampla, adiada                                                                                               |
+| P-09 `processWithAI` lancar na lease      | ABERTA — precisa de politica de retry                                                                                            |
+| P-10 `main.py` morto                      | **FECHADA** (122 KB removidos)                                                                                                   |
+| P-11 `cert_stock.synced_at`               | **FECHADA** — migracao idempotente, validada contra Postgres real                                                                |
+| P-12 risco do claim `hd`                  | FECHADA — checagem condicional, documentada                                                                                      |
+| P-13 `TZ` no compose                      | **FECHADA na cert-api**; `api` e `postgres` NAO, por decisao fundamentada                                                        |
+| P-14 bloqueadores do Drive                | CODIGO FECHADO; falta a confirmacao empirica contra o Shared Drive                                                               |
+| P-15 canal de alerta                      | **FECHADA** — reentrega, backoff, teto, regra Prometheus, health honesto                                                         |
+| P-16 aceites write-only                   | **FECHADA** — backend le e o frontend consome                                                                                    |
+| P-17 `evidence_hash`                      | **FECHADA**                                                                                                                      |
+| P-18 `Number()` cru                       | **FECHADA** — normalizador unico em todos os checks                                                                              |
+| P-19 unidades antes de comparar           | **FECHADA**                                                                                                                      |
+| P-20 `updatedAt` como data de evento      | **FECHADA** — `process_events` como fonte                                                                                        |
+| P-21 retry/breaker nas integracoes        | **FECHADA na leitura**; escrita deliberadamente fora                                                                             |
+| P-22 cancelamento no `withTimeout`        | **FECHADA** para Drive e Sheets; Odoo nao suporta                                                                                |
+| P-23 ingestao de e-mail                   | **FECHADA**                                                                                                                      |
+| P-24 `MAIL_DRY_RUN`                       | **FECHADA**                                                                                                                      |
+| P-25 `proxy_pass` do Nginx                | **FECHADA** — validada reproduzindo o 502                                                                                        |
+| P-26 `UnauthorizedError`                  | **FECHADA**                                                                                                                      |
+
+### Pendencias NOVAS, surgidas na segunda rodada
+
+- **Indice unico parcial de `comparison_acceptances`.** A correcao certa e
+  tornar `(process_id, scope, row_key, evidence_hash)` parcial
+  (`WHERE invalidated_at IS NULL`). Sem migration, a reafirmacao de uma evidencia
+  identica depois de invalidada entra sob um hash derivado
+  (`sha256(hash + ':reafirmacao')`), com teto de 50 encadeamentos. Funciona e
+  esta provado em E2E, mas o `evidence_hash` da segunda reafirmacao em diante
+  deixa de ser o hash puro da evidencia.
+- **Escopo OAuth de Drive e Sheets.** A reducao para `.readonly` esta desenhada e
+  NAO foi aplicada: falta confirmar com o admin do Workspace se o client ID da
+  service account esta como "Confiavel" ou "Limitado a escopos especificos". Um
+  dado que muda a analise: Drive e Sheets NAO usam Domain-Wide Delegation (so o
+  Groups usa), entao a autorizacao por escopo do admin provavelmente nao se
+  aplica a eles.
+- **Dead-letter das filas.** Politica de retry declarada; job que estoura as
+  tentativas ainda termina como `failed` sem ninguem varrer.
+- **`/health/integrations` nao cobre** Gmail API, SMTP, IMAP, SYDLE, Odoo nem
+  egress externo. `odooService.isConfigured()` existe pronto e nao e chamado.
+  A prova de entrega de alerta, que era lacuna, JA foi coberta.
+- **`/history-scan` continua sincrono** no ciclo HTTP; ganhou rate limit, mas a
+  correcao real e enfileirar.
+- **Anexos de e-mail continuam inteiros em memoria**, com orcamento agregado
+  limitando o dano. Streaming e refatoracao maior no `documentService.upload`.
+- **Contador de tentativa transitoria mora no `errorMessage`** dos logs de
+  ingestao, por falta de coluna propria. Funciona; `retry_count` seria o lugar
+  certo.
+- **Aceite de linha de cruzamento nao fica preso aos valores.** As linhas que a
+  tela monta a partir de `crossDocumentChecks` e a coluna Sistema nao existem em
+  `getComparison`, entao para elas o `evidence_hash` volta a ser praticamente so
+  identidade e nota. Fechar exige ler o relatorio de validacao dentro de
+  `acceptComparison`, com risco de import circular.
+- **Custo do `acceptComparison`** subiu: agora executa um `getComparison`
+  completo por aceite. E acao manual, uma por linha, mas e regressao real.
+
+## Pendencias que NAO foram resolvidas
+
+Cada item diz por que ficou aberto. Nenhum foi omitido por conveniencia.
+
+### Bloqueadas por decisao de negocio
+
+**P-01 — ADR 0006: materializacao idempotente de `process_items`.**
+`autoPopulateItems` recebeu ordenacao deterministica e gate de confianca, mas
+a ADR pede mais: `source_document_id`, `extraction_run_id`, chave unica por
+processo+execucao+identidade do item, substituicao transacional auditada,
+dry-run/diff e invalidacao explicita apos nova extracao. Sem isso, dois
+`generate` concorrentes ainda inserem o lote duas vezes. E trabalho de
+migration + refatoracao, nao de correcao pontual.
+
+**P-02 — fonte canonica de Desembaraco e Numerario.**
+As duas telas leem exclusivamente chaves de `ai_extracted_data`
+(`desembaraco`, `canal`, `numeroDI`, `freeTime`, `valorNumerario`...) cujo
+UNICO produtor e `scripts/update-processes-extra-data.js`, um script manual
+que nao e referenciado por nenhum `package.json`, cron, controller ou workflow.
+Enquanto isso, `ProcessEditPage` grava `customsChannel` e `customsClearanceAt`
+em colunas tipadas. **Um analista que preenche o canal aduaneiro no formulario
+do processo nunca ve o resultado na tela de Desembaraco.** Corrigir exige
+definir com o time fiscal qual e a fonte de verdade de cada campo — nao e
+decisao de engenharia.
+
+**P-03 — janela de urgencia da LI.** `LI_URGENT_WINDOW_DAYS = 15` foi escolhido
+por mim como default defensavel (`calculateLiDeadline` usa embarque + 13 dias).
+Precisa de confirmacao do time fiscal.
+
+**P-04 — `numerarioPct` e uma constante por construcao.**
+`financial/calculations.ts` calcula `numerarioValue / customsValueBrl` onde
+`numerarioValue = customsValueBrl * 0.6`, entao o resultado e sempre 0,6. O
+proprio docstring admite que falta a coluna de "aduaneiro de referencia", e o
+teste fixa `toBe(0.6)`. A coluna `numerario_pct` e persistida e qualquer
+leitura dela como indicador esta lendo uma constante. Ou remove a persistencia,
+ou a operacao fornece a referencia real.
+
+**P-05 — cards de Cambio, Numerario e Desembaraco do Meu Dia foram REMOVIDOS.**
+Eles nunca funcionaram: o tipo declarava `pendingCambio`, `pendingNumerario` e
+`pendingDesembaraco`, e `getSla()` nunca devolveu esses campos —
+`undefined?.length > 0` e sempre falso. Nao e regressao, e remocao de codigo
+morto. Se a operacao quiser a funcionalidade, e escopo novo: agregacoes em
+`getSla` mais as telas correspondentes.
+
+**P-06 — `completed` e `sent_to_fenicia` nao voltam para `validating`.**
+A state machine nao tem caminho de volta, e nem permite cancelar processo
+concluido. Chegando um OHBL corrigido depois do envio a Fenicia, nao existe
+caminho suportado para revalidar. O `PUT` que permitia o desvio foi FECHADO
+nesta sessao — o que torna a lacuna visivel em vez de contornavel sem trilha.
+Abrir `completed -> validating` com motivo obrigatorio e decisao de processo.
+
+### Escopo declarado fora desta rodada
+
+**P-07 — recorte por periodo nos dashboards.** A validacao fantasma foi
+removida; o filtro NAO foi implementado, e a decisao de nao implementar e
+deliberada.
+
+Nao e falta de tempo: e que "periodo" nao tem UM significado obvio para os
+indicadores que essas telas mostram, e escolher por conta propria seria inventar
+regra de negocio. Tres exemplos concretos do que precisa ser decidido antes:
+
+- "FOB no Mes" e "Concluidos no Mes" sao, por definicao, recortes MENSAIS. Com
+  um intervalo livre de 12/03 a 27/06, o rotulo deixa de fazer sentido — o
+  indicador passa a ser outro, com outro nome.
+- O `ChangeBadge` compara o valor com o MES ANTERIOR. Com intervalo livre, nao
+  existe "anterior" obvio: e o intervalo imediatamente anterior de mesma
+  duracao? O mesmo intervalo do ano passado? Nenhum dos dois e obviamente certo.
+- O `avgDaysInStatus` e um retrato do agora. Filtrar por periodo um indicador de
+  estado atual nao tem significado sem definir se "no periodo" quer dizer
+  "processos criados no periodo" ou "processos que estiveram naquele status
+  durante o periodo" — que sao numeros diferentes.
+
+O trabalho de encanamento e pequeno; a definicao e que falta. Levar para o time
+fiscal com estas tres perguntas fechadas e mais barato que implementar duas
+vezes.
+
+**P-08 — Certificacoes nao usa TanStack Query.** As 9 paginas usam
+`useState` + `useEffect` + `fetch` manual: nenhuma mutation invalida cache,
+`checkCertApiHealth()` e chamado 3x ao abrir o dashboard, e o dashboard nao tem
+botao de atualizar. E a causa raiz de varias inconsistencias do modulo.
+Migracao ampla, deliberadamente adiada.
+
+**P-09 — `processWithAI` nao lanca quando a lease falha.** A guarda de
+`reclassify` foi aplicada, mas o job continua sendo marcado como concluido pelo
+pg-boss quando perde a lease, sem retry. Fazer lancar exigiria provar que o
+retry nao dispara extracao de IA duplicada (e custo duplicado) em todos os
+caminhos, inclusive o fallback fora da fila. Precisa de decisao sobre
+`retryLimit`/backoff antes.
+
+**P-10 — `main.py` da cert-api (122 KB) e codigo morto.** O Dockerfile roda
+`app.main:app` e nada referencia `main:app`. Ele ainda carrega copias dos
+MESMOS defeitos corrigidos nesta sessao, incluindo o `day_of_week` errado.
+Remover merece PR proprio, junto com `main.py.legacy`.
+
+### Bloqueadas por acesso ou ambiente
+
+**P-11 — migracao de `cert_stock.synced_at` para `TIMESTAMPTZ`.**
+A coluna e naive e recebe `datetime.now(UTC).isoformat()`; o Postgres descarta
+o offset, o navegador le como horario local e a tela mostra o sync 3h ADIANTE
+do horario real. O statement correto e reversivel esta identificado
+(`ALTER TABLE cert_stock ALTER COLUMN synced_at TYPE TIMESTAMPTZ USING
+synced_at AT TIME ZONE 'UTC'`), mas provar que e segura exige inspecionar os
+dados de producao — saber se toda linha foi escrita pelo mesmo caminho,
+incluindo as que cairam no `DEFAULT NOW()`. Nao aplicada.
+
+**P-12 — risco residual do `hd` no login Google.** A verificacao de `hd` foi
+deliberadamente suavizada: **exigida apenas quando o claim esta presente**. Se
+fosse exigencia dura e o Google nao emitisse o claim, NINGUEM entraria no
+sistema, e a recuperacao exigiria mudar `ALLOWED_DOMAIN` no SOPS e redeployar
+durante o incidente. Com `email_verified` obrigatorio, o Google nao emite
+e-mail verificado do dominio para conta de consumidor, entao a suavizacao
+praticamente nao custa seguranca. Registrado para ninguem "endurecer de volta"
+sem entender o custo.
+
+**P-13 — `TZ: America/Sao_Paulo` no `docker-compose.prod.yml`.** O servico
+`cert-api` roda em UTC. A derivacao ja nao depende disso (passou a calcular o
+dia no fuso da operacao explicitamente), mas logs, `NOW()` do Postgres via
+default e qualquer `date.today()` futuro continuam em UTC. Alteracao de
+infraestrutura, fora do que foi autorizado.
+
+**P-14 — confirmacao empirica dos dois bloqueadores do Drive.**
+Os DOIS foram corrigidos no codigo, mas nenhum dos dois foi confirmado contra o
+Drive real, porque isso exige a pasta operacional compartilhada com a conta de
+servico — que e justamente o que ainda falta no rollout.
+
+- `supportsAllDrives` foi acrescentado ao download e as sete escritas, com
+  guarda estatica que falha se alguem adicionar uma chamada nova sem a flag.
+  So um download real de arquivo do Shared Drive prova que a virada funciona.
+- `driveFileId` deixou de ser sobrescrito: `uploadToDrive` agora recusa
+  re-subir documento cuja `ingestionSource` e `drive`. A guarda ficou no ponto
+  UNICO de escrita da coluna, e nao nos tres chamadores, para que nenhum
+  caminho novo consiga fura-la por esquecimento. Coberto por teste nos tres
+  casos (`drive`, `manual`, `email`). Falta inspecionar
+  `documents.drive_file_id` apos uma ingestao real para fechar o ciclo.
+
+### Canal de alerta — continua morto por construcao
+
+**P-15.** Este e o item mais grave ainda aberto, e a causa nao e credencial.
+Tres defeitos encadeados:
+
+1. `alerts/service.ts` retorna o alerta duplicado ANTES de tentar entregar,
+   sem verificar `sentToChat`. Se a primeira tentativa do dia falha, as
+   seguintes nem sao tentadas.
+2. `sent_to_chat = false` NAO E LIDO por nenhum job, rota ou servico em todo o
+   repositorio. Um alerta que falha na entrega morre no banco. E o mecanismo
+   exato dos 6.349 registros com zero entregas.
+3. O cooldown do circuit breaker do Google Chat descarta em silencio por 30
+   minutos, sem enfileirar nada.
+
+A UI passou a mostrar quais alertas nao foram entregues — o operador agora
+CONSEGUE ver o problema — mas a reentrega em si nao foi implementada. Exige
+uma fila de reentrega com backoff e teto, mais uma regra Prometheus sobre
+`alert_delivery_total`, que existe e esta bem instrumentada e sobre a qual
+nenhuma regra alerta.
+
+### Debito registrado, nao corrigido
+
+- **P-16** — `comparison_acceptances` e tabela write-only: e escrita e
+  invalidada, mas NENHUM `SELECT` existe no repositorio. A tela deriva o aceite
+  de `process_events`, entao o backend invalida um aceite que a tela continua
+  exibindo apos reprocessamento.
+- **P-17** — `evidence_hash` do aceite nao inclui os valores divergentes que
+  estao sendo aceitos; o nome promete uma coisa e o conteudo entrega outra.
+- **P-18** — `Number()` cru sobre texto extraido por IA em ~10 checks de peso,
+  CBM, caixas e frete: `Number('1.234,56')` e `NaN` e `Number('1.234')` e
+  1,234 — erro de mil vezes. Existem dois parsers corretos no repositorio que
+  nao sao usados nesses pontos.
+- **P-19** — nenhum check verifica UNIDADE antes de comparar peso, volume ou
+  moeda. Uma invoice em EUR gera falha de moeda E uma comparacao numerica
+  contra o FOB em outra moeda.
+- **P-20** — SLA e KPIs de conclusao usam `updatedAt` como se fosse a data do
+  evento. Editar uma nota num processo concluido em janeiro o recontabiliza
+  como "concluido neste mes".
+- **P-21** — `withRetry`/`CircuitBreaker` existem e sao usados apenas pelo
+  modulo de IA. Nenhuma chamada Gmail, Drive, Sheets, SMTP ou Chat usa retry
+  ou backoff.
+- **P-22** — o `withTimeout` local dos clientes Google teve o vazamento de
+  timer corrigido, mas continua sem cancelar a requisicao em voo. O
+  cancelamento real exige propagar `AbortSignal` ate o cliente.
+- **P-23** — ingestao de e-mail marca a mensagem como lida mesmo em falha
+  transitoria, e a query do Gmail falha ABERTA quando `EMAIL_ALLOWED_SENDERS`
+  esta vazio (o default no Compose e vazio) — os outros tres chamadores
+  abortam nesse caso; so o cron de 5 minutos nao.
+- **P-24** — `MAIL_DRY_RUN` inexistente: nada consulta `NODE_ENV` para
+  bloquear envio real fora de producao. A unica barreira e a allow-list de
+  destinatario, que um dump de producao herda.
+- **P-25** — `infra/nginx/prod.conf` usa `proxy_pass` com hostname literal,
+  o padrao que `apps/web/nginx.conf` documenta como causa raiz do incidente de 502. A correcao foi aplicada em apenas um dos dois arquivos de Nginx.
+- **P-26** — `UnauthorizedError` ausente em `shared/errors/`: `login` agora
+  responde 401 "Credenciais invalidas" tambem quando o Postgres cai. O
+  diagnostico piora para o usuario final e melhora no log; a correcao de raiz e
+  distinguir 401-de-credencial de 500-de-infra.
+
+### Decisoes tomadas nesta sessao que a operacao pode querer revisar
+
+**D-A — nunca-validados saiaram do denominador da taxa de conformidade.**
+Somar produto sem veredito nenhum afundava o percentual sem significar
+desconformidade. A decisao esta coberta por teste; se o time fiscal preferir o
+denominador cheio, e uma linha.
+
+**D-B — `incoterm` NAO e limpavel.** Os outros 24 campos do processo aceitam
+`null` para apagar; `incoterm` ficou de fora porque tem `default('FOB')` no
+banco e "apagar" e ambiguo (grava NULL ou volta para FOB?). Congelado em teste
+nas duas direcoes, para nao regredir sem alguem ver.
+
+**D-C — ordenacao da lista de produtos de Certificacao foi ROTULADA, nao
+removida.** O cert-api nao aceita `sort`/`order`, entao a reordenacao e local a
+pagina exibida. Sobre 25 linhas ela e util; o que nao podia ficar de pe era a
+ilusao de alcance global. Ordenacao de verdade exige mudanca de backend.
+
+**D-D — janela de urgencia da LI em 15 dias.** Ver P-03.
+
+### Mudanca de comportamento visivel
+
+**MC-01 — documento vindo do Drive nao ganha mais copia com nome padronizado.**
+A correcao que impede a sobrescrita do `driveFileId` faz `uploadToDrive` recusar
+re-subir documento cuja `ingestionSource` e `drive`. Como efeito, uma
+invoice/certificate ingerida pelo Drive mantem o nome que o operador deu, na
+pasta em que ele a colocou, em vez de ganhar a copia renomeada por
+`standardizeDocumentName`. E o comportamento correto — renomear e copiar era
+justamente o que quebrava a chave de deduplicacao e causava reimportacao a cada
+dez minutos — mas e visivel para quem esperava o nome padronizado.
+
+### Risco tecnico introduzido e registrado
+
+**R-01 — `useTheme()` lanca fora do `ThemeProvider`.** `CertDashboardPage` e
+`CertBrandChart` passaram a consumir o contexto de tema para os graficos
+responderem ao modo escuro. O `App` sempre provê e os 82 E2E passam, mas
+qualquer teste futuro que renderize essas telas precisa envolver em
+`<ThemeProvider>` e stubar `matchMedia` e `ResizeObserver`. Hoje dois arquivos
+de teste fazem isso localmente, cada um do seu jeito.
+
+RESOLVIDO na segunda rodada, depois de uma tentativa malsucedida.
+
+A primeira tentativa definiu `matchMedia` global devolvendo `matches: false`
+para qualquer query, e quebrou quatro testes de `CertificacoesLayout` e
+`ImportacaoLayout`. A causa: `AppLayout.tsx:78-80` trata a AUSENCIA de
+`matchMedia` como DESKTOP —
+
+    typeof window.matchMedia !== 'function' ? true : matchMedia(q).matches
+
+— entao um stub que responde `false` para tudo faz a aplicacao inteira se
+comportar como mobile, o menu colapsa e os itens de navegacao somem da arvore
+acessivel.
+
+O stub definitivo e CIENTE DA QUERY: responde `true` para `min-width`
+(preservando exatamente o default anterior) e `false` para
+`prefers-color-scheme: dark`. E condicional, entao um teste que precise de
+mobile continua sobrescrevendo — `AppLayout.test.tsx` faz isso de proposito.
+
+Verificado nos dois sentidos: com os stubs centralizados, 225/225 passam e o
+stub local redundante de `CertDashboardPage.test.tsx` pode sair; removendo os
+stubs do setup, esse mesmo arquivo falha com `window.matchMedia is not a
+function`. A centralizacao e load-bearing, nao decorativa.
+
+## Achados refutados — registrados para nao voltarem
+
+Auditoria ampla produz falso positivo. Estes foram investigados e NAO se
+sustentaram; nenhum virou alteracao de codigo.
+
+- **`includeRead` sempre `false` em `email-ingestion/controller.ts`.**
+  A suspeita era que `req.query.includeRead === true` nunca seria verdadeiro,
+  porque valor de query string e sempre texto. REFUTADA: o middleware
+  `shared/middleware/validate.ts` reescreve `req.query` com o resultado do Zod,
+  entao o valor chega como booleano real.
+
+- **Injecao na query do Gmail via parametro `q`.** MITIGADA e nao exploravel:
+  `email-ingestion/schema.ts` aplica a regex `^[^{}()|&;$\`]\*$`, alem de
+`adminMiddleware` e rate limit.
+
+- **`CRON_DOW_ALIASES` conviveria com outra convencao dentro da cert-api.**
+  A constante NAO existe na cert-api — esta no frontend
+  (`CertAgendamentosPage.tsx`). As duas convencoes conviviam dentro do
+  frontend, nao entre frontend e backend. O bug do dia da semana e a correcao
+  seguem validos; so a localizacao estava errada no briefing.
+
+- **`bypass` de `alg:none` no JWT.** O `jsonwebtoken` 9 ja restringe a HMAC
+  quando o segredo e string. O pin de algoritmo foi aplicado como defesa em
+  profundidade, nao como correcao de vulnerabilidade.
+
+- **Direcao do erro de fuso em `cert_stock.synced_at`.** O briefing dizia que
+  a tela mostrava 3h A MENOS; a leitura do codigo provou o contrario — mostra
+  3h ADIANTE, porque o Postgres descarta o offset do `isoformat()` UTC e o
+  navegador le o valor sem sufixo como horario local. O estoque parece mais
+  fresco do que e.
+
+- **Falha em `ai/__tests__/provider-selection.test.ts`.** Aparecia em execucoes
+  da suite completa e foi investigada como possivel regressao, inclusive com um
+  agente stashando as proprias mudancas para isolar. Rodado isolado: 8 testes,
+  2,6 s, passa. Era timeout de 5 s no import sob carga dos agentes paralelos —
+  flake de ambiente, nao defeito. A hipotese de relacao com a rede
+  `ia-local-net` foi explicitamente retirada.
+
+- **Ciclo de import ao reutilizar `spreadsheetBufferToText`.** A preocupacao era
+  que importar de `documents/service.ts` no `email-ingestion/processor.ts`
+  criaria ciclo. Nao cria: `documents/service.ts` nao importa nada de
+  `email-ingestion/`, e o processor ja importava `documentService` do mesmo
+  arquivo. A dependencia e de mao unica e ja existia.
+
+## Notas de metodo, para a proxima sessao
+
+1. **Gate verde nao e evidencia de corretude.** O baseline estava inteiramente
+   verde e continha um agendamento que disparava no dia errado, filtros que nao
+   filtravam e uma integracao que entregaria zero documentos. Onde uma correcao
+   foi aplicada nesta sessao, ela veio acompanhada de teste que a congela — e
+   varios desses testes sao guardas estaticas, nao testes de unidade, porque o
+   defeito estava na AUSENCIA de uma declaracao, nao no comportamento de uma
+   funcao.
+
+2. **Guardas estaticas valem onde o defeito e invisivel em teste.** Duas foram
+   criadas: uma que exige `supportsAllDrives` em toda chamada da API do Drive
+   (a maioria so falharia contra um Shared Drive real) e outra que exige que
+   todo tom de cor usado exista no `@theme` (o Tailwind v4 nao gera classe para
+   tom inexistente e nao emite erro).
+
+3. **Paralelismo cobra pedagio de leitura.** Sete agentes editando a mesma
+   arvore produziram quatro leituras de estado intermediario que pareciam
+   defeito e nao eram: um schema lido antes de a alteracao entrar, um helper
+   existindo por 30 segundos sem uso, um `export` conferido antes de ser
+   escrito, e um teste falhando por timeout sob carga. Nenhuma custou trabalho
+   perdido, mas todas custaram uma rodada de mensagem. Particao de arquivos
+   resolve conflito de ESCRITA; nao resolve confusao de LEITURA.
+
+4. **Dois agentes desviaram da instrucao e estavam certos.** Um recusou usar a
+   mesma query key nas duas telas de modelos porque as URLs diferem e o cache
+   colapsaria; outro recusou fazer `processWithAI` lancar sem provar que o
+   retry nao dispararia extracao de IA paga em duplicidade. Os dois desvios
+   foram aceitos. Instrucao detalhada nao substitui julgamento de quem esta
+   lendo o codigo.
+
+## Gate final — saida real dos comandos
+
+Executado com todos os agentes parados, apos `npm run format`:
+
+```text
+npm run format:check        -> exit 0  ("All matched files use Prettier code style!")
+npm run lint                -> exit 0
+npm run typecheck           -> exit 0
+npm test                    -> exit 0
+                               API 1.494 passed | 1 skipped (155 arquivos)
+                               web   225 passed             (51 arquivos)
+npm run test:e2e -w apps/api-> 63 passed (8 arquivos, PostgreSQL real + migrations)
+npm run build               -> exit 0
+npm run test:e2e:web        -> 82 passed (2.5 min), 0 falhas
+npm audit --omit=dev        -> 0 vulnerabilidades
+
+apps/cert-api:
+  ruff check .              -> All checks passed!
+  pytest                    -> 595 passed
+```
+
+### Comparacao com o baseline
+
+| Gate                             | Antes          | Depois         |
+| -------------------------------- | -------------- | -------------- |
+| Testes API                       | 1.005 + 1 skip | 1.494 + 1 skip |
+| Testes web                       | 146            | 225            |
+| Testes cert-api                  | 523            | 595            |
+| E2E API (banco real)             | 48             | 63             |
+| Playwright                       | 82             | 82             |
+| Lint / typecheck / build / audit | verdes         | verdes         |
+
+**+708 testes.** Cada correcao de comportamento veio acompanhada do teste que a
+congela. Boa parte deles foi verificada por MUTACAO: desligar a correcao e
+confirmar que o teste falha. Isso pegou pelo menos dois testes que passavam com
+a correcao desligada — um porque um `early return` anterior cortava antes de a
+asercao ser alcancada.
+
+### Uma execucao do Playwright falhou e NAO era regressao
+
+A primeira tentativa do gate final deu 68 falhas. As 14 primeiras rotas
+passaram e, a partir de `/importacao/cambios`, tudo virou
+`ERR_CONNECTION_REFUSED` na porta 4174: o servidor de dev que o proprio
+Playwright sobe tinha morrido no meio da execucao, com a maquina em load average
+28-42 por causa de varias suites concorrentes.
+
+A classificacao das 68 falhas confirma: **68 de 68 sao `ERR_CONNECTION_REFUSED`,
+zero sao falha de renderizacao ou de asercao.** Subir o servidor de dev
+separadamente e rodar o Playwright contra ele (o `reuseExistingServer` da
+config permite) devolveu 82/82 com zero falhas de conexao, duas vezes.
+
+Fica a nota operacional: o E2E web nao e confiavel com a maquina saturada. Em
+gate que importa, suba o servidor antes e rode o Playwright contra ele.
+
+## Estado de retomada
+
+- Nenhum commit, push, deploy, migration remota, envio de e-mail, replay ou
+  escrita em sistema externo foi executado. A arvore de trabalho tem 157
+  arquivos alterados ou novos, prontos para revisao.
+- Proximo passo seguro: revisao do diff e commit; depois homologacao com dados
+  representativos e, so entao, release em janela autorizada.
+- Antes de virar `DOCUMENT_SOURCE` para `drive`, exigir o smoke que baixa de
+  fato um arquivo da pasta operacional do Shared Drive e a inspecao de
+  `documents.drive_file_id` apos uma ingestao real (P-14).
+- As decisoes de negocio em aberto estao em P-01 a P-06; a mais urgente
+  operacionalmente e P-02, porque hoje o analista preenche o canal aduaneiro no
+  formulario do processo e nunca ve o resultado na tela de Desembaraco.

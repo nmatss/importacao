@@ -4,10 +4,12 @@ const mockGetOperationalRecipient = vi.hoisted(() => vi.fn());
 const mockSettingsGet = vi.hoisted(() => vi.fn());
 const mockSmtpVerify = vi.hoisted(() => vi.fn());
 const mockSmtpClose = vi.hoisted(() => vi.fn());
+const mockSmtpSendMail = vi.hoisted(() => vi.fn().mockResolvedValue({ messageId: 'x' }));
 const mockCreateTransport = vi.hoisted(() =>
   vi.fn(() => ({
     verify: (...args: any[]) => mockSmtpVerify(...args),
     close: (...args: any[]) => mockSmtpClose(...args),
+    sendMail: (...args: any[]) => mockSmtpSendMail(...args),
   })),
 );
 
@@ -30,13 +32,23 @@ vi.mock('../../../modules/settings/service.js', () => ({
   settingsService: { get: (...args: any[]) => mockSettingsGet(...args) },
 }));
 
+vi.mock('../../utils/logger.js', () => ({
+  logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
+}));
+
 const {
   buildOutgoingMail,
+  deliverMail,
+  isMailDryRun,
   resolveMailFrom,
+  resolveSmtpAuthMode,
   verifySmtpConnection,
+  getSmtpTransport,
   OPERATIONAL_MAILBOX,
   DEFAULT_MAIL_FROM,
 } = await import('../mailer.js');
+
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
 describe('mailer', () => {
   beforeEach(() => {
@@ -48,6 +60,9 @@ describe('mailer', () => {
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_PORT;
     delete process.env.SMTP_PASS;
+    delete process.env.SMTP_AUTH_MODE;
+    delete process.env.MAIL_DRY_RUN;
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
     mockSmtpVerify.mockResolvedValue(true);
   });
 
@@ -57,6 +72,9 @@ describe('mailer', () => {
     delete process.env.SMTP_HOST;
     delete process.env.SMTP_PORT;
     delete process.env.SMTP_PASS;
+    delete process.env.SMTP_AUTH_MODE;
+    delete process.env.MAIL_DRY_RUN;
+    process.env.NODE_ENV = ORIGINAL_NODE_ENV;
   });
 
   describe('resolveMailFrom()', () => {
@@ -158,6 +176,9 @@ describe('mailer', () => {
     });
 
     it('uses saved host, port and user while keeping the password in the environment', async () => {
+      // Auth is now an explicit operator decision, not an inference from
+      // SMTP_USER/SMTP_PASS being present.
+      process.env.SMTP_AUTH_MODE = 'login';
       process.env.SMTP_PASS = 'secret-not-logged';
       process.env.SMTP_HOST = 'env.invalid';
       mockSettingsGet.mockImplementation(async (key: string) => {
@@ -178,6 +199,95 @@ describe('mailer', () => {
           auth: { user: 'relay@example.com', pass: 'secret-not-logged' },
         }),
       );
+    });
+  });
+
+  describe('resolveSmtpAuthMode() / getSmtpTransport()', () => {
+    it('defaults to "none": the internal relay authorises by network, not credentials', async () => {
+      expect(resolveSmtpAuthMode()).toBe('none');
+    });
+
+    it('does not offer AUTH just because a placeholder user and a password exist', async () => {
+      // The old rule compared SMTP_USER against ONE hardcoded placeholder, so
+      // any other placeholder re-enabled AUTH and earned an EAUTH from the relay.
+      process.env.SMTP_HOST = 'relay.interno';
+      process.env.SMTP_USER = 'qualquer-outro-placeholder@grupounico.com';
+      process.env.SMTP_PASS = 'nao-usada';
+
+      await getSmtpTransport();
+
+      expect(mockCreateTransport).toHaveBeenCalledWith(
+        expect.not.objectContaining({ auth: expect.anything() }),
+      );
+    });
+
+    it('offers AUTH only when the operator asks for it explicitly', async () => {
+      process.env.SMTP_HOST = 'smtp.gmail.com';
+      process.env.SMTP_USER = 'relay@example.com';
+      process.env.SMTP_PASS = 'app-password';
+      process.env.SMTP_AUTH_MODE = 'login';
+
+      await getSmtpTransport();
+
+      expect(mockCreateTransport).toHaveBeenCalledWith(
+        expect.objectContaining({ auth: { user: 'relay@example.com', pass: 'app-password' } }),
+      );
+    });
+
+    it('falls back to "none" on an unrecognised value instead of guessing', async () => {
+      process.env.SMTP_AUTH_MODE = 'plaintext';
+      expect(resolveSmtpAuthMode()).toBe('none');
+    });
+  });
+
+  describe('isMailDryRun() / deliverMail()', () => {
+    it('is ON by default outside production', () => {
+      process.env.NODE_ENV = 'development';
+      expect(isMailDryRun()).toBe(true);
+      process.env.NODE_ENV = 'test';
+      expect(isMailDryRun()).toBe(true);
+    });
+
+    it('is OFF by default in production', () => {
+      process.env.NODE_ENV = 'production';
+      expect(isMailDryRun()).toBe(false);
+    });
+
+    it('can be forced in either direction for an authorised SMTP smoke test', () => {
+      process.env.NODE_ENV = 'test';
+      process.env.MAIL_DRY_RUN = 'false';
+      expect(isMailDryRun()).toBe(false);
+
+      process.env.NODE_ENV = 'production';
+      process.env.MAIL_DRY_RUN = 'true';
+      expect(isMailDryRun()).toBe(true);
+    });
+
+    it('does NOT call sendMail while the dry-run gate is on', async () => {
+      process.env.NODE_ENV = 'development';
+      const transport = { sendMail: mockSmtpSendMail } as any;
+
+      const result = await deliverMail(transport, {
+        to: 'operacao@parceiro.com',
+        subject: 'Assunto',
+      });
+
+      expect(result.delivered).toBe(false);
+      expect(mockSmtpSendMail).not.toHaveBeenCalled();
+    });
+
+    it('delivers once the gate is explicitly lifted', async () => {
+      process.env.NODE_ENV = 'development';
+      process.env.MAIL_DRY_RUN = 'false';
+      const transport = { sendMail: mockSmtpSendMail } as any;
+
+      const result = await deliverMail(transport, {
+        to: 'operacao@parceiro.com',
+        subject: 'Assunto',
+      });
+
+      expect(result.delivered).toBe(true);
+      expect(mockSmtpSendMail).toHaveBeenCalledOnce();
     });
   });
 });

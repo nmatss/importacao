@@ -1,10 +1,12 @@
 import nodemailer from 'nodemailer';
+import type { Transporter } from 'nodemailer';
 import { settingsService } from '../../modules/settings/service.js';
 import {
   getOperationalRecipient,
   parseEmailList,
 } from '../../modules/settings/operational-recipients.js';
 import { AppError } from '../errors/index.js';
+import { logger } from '../utils/logger.js';
 import { parseMailFrom } from './mail-address.js';
 
 /**
@@ -145,11 +147,34 @@ export async function buildOutgoingMail(recipientEmail: string): Promise<Outgoin
 }
 
 /**
+ * Auth mode of the SMTP relay.
+ *
+ * The internal relay authorises by network, not by credentials, so AUTH must be
+ * skipped there — offering it earns an `EAUTH` and the message is lost. This
+ * used to be decided by comparing `SMTP_USER` against one hardcoded placeholder
+ * address, so *any other* placeholder with `SMTP_PASS` set silently re-enabled
+ * AUTH and re-broke the relay. The decision is now an explicit operator flag.
+ *
+ * Default is `none`, which is what the production relay needs; an environment
+ * that really authenticates (e.g. Gmail SMTP with an app password) must say so
+ * with `SMTP_AUTH_MODE=login`.
+ */
+export type SmtpAuthMode = 'none' | 'login';
+
+export function resolveSmtpAuthMode(): SmtpAuthMode {
+  const raw = process.env.SMTP_AUTH_MODE?.trim().toLowerCase() ?? '';
+  if (raw === 'login') return 'login';
+  if (raw === 'none' || raw === '') return 'none';
+
+  logger.warn({ smtpAuthMode: raw }, 'SMTP_AUTH_MODE inválido — assumindo "none" (relay interno)');
+  return 'none';
+}
+
+/**
  * Builds the SMTP transport.
  *
- * Auth is skipped for the internal relay (which authorises by network, not by
- * credentials); certificate verification follows NODE_ENV unless an operator
- * explicitly opts out for a self-signed internal relay.
+ * Auth follows `SMTP_AUTH_MODE`; certificate verification follows NODE_ENV
+ * unless an operator explicitly opts out for a self-signed internal relay.
  */
 async function resolveTransportSetting(key: string, envKey: string): Promise<string> {
   const setting = await settingsService.get(key).catch(() => undefined);
@@ -169,7 +194,15 @@ export async function getSmtpTransport() {
   }
   const secure = process.env.SMTP_SECURE === 'true';
   const pass = process.env.SMTP_PASS;
-  const hasAuth = user && pass && user !== 'noreply@grupounico.com';
+  const authMode = resolveSmtpAuthMode();
+  const hasAuth = authMode === 'login' && !!user && !!pass;
+
+  if (authMode === 'login' && !hasAuth) {
+    logger.warn(
+      { hasUser: !!user, hasPass: !!pass },
+      'SMTP_AUTH_MODE=login mas SMTP_USER/SMTP_PASS incompletos — conectando sem AUTH',
+    );
+  }
 
   const rejectUnauthorized =
     process.env.SMTP_TLS_REJECT_UNAUTHORIZED === 'false'
@@ -186,6 +219,61 @@ export async function getSmtpTransport() {
     greetingTimeout: 10_000,
     socketTimeout: 30_000,
   });
+}
+
+/**
+ * Dry-run switch for the whole mail plane.
+ *
+ * The recipient allow-list is not an environment barrier: it resolves from the
+ * `settings` table first, so a development box restored from a production dump
+ * inherits the real operational recipients and would send them real mail. The
+ * environment must therefore gate delivery on its own.
+ *
+ * Default: ON everywhere except `NODE_ENV=production`. `MAIL_DRY_RUN` overrides
+ * it in both directions, so the authorised SMTP smoke test can still deliver by
+ * setting `MAIL_DRY_RUN=false` explicitly.
+ */
+export function isMailDryRun(): boolean {
+  const raw = process.env.MAIL_DRY_RUN?.trim().toLowerCase() ?? '';
+  if (raw === 'true' || raw === '1') return true;
+  if (raw === 'false' || raw === '0') return false;
+  return process.env.NODE_ENV !== 'production';
+}
+
+export interface DeliverMailResult {
+  /** false when the message was only logged because the dry-run gate is on. */
+  delivered: boolean;
+}
+
+/**
+ * Single delivery point of the system. Everything that would reach a real
+ * mailbox goes through here so the dry-run gate cannot be bypassed by a new
+ * call site.
+ *
+ * The dry-run log records only the operational shape of the message — never
+ * addresses, subject or body — so a development log is not a mailbox dump.
+ */
+export async function deliverMail(
+  transport: Pick<Transporter, 'sendMail'>,
+  message: Parameters<Transporter['sendMail']>[0],
+): Promise<DeliverMailResult> {
+  if (isMailDryRun()) {
+    logger.warn(
+      {
+        dryRun: true,
+        nodeEnv: process.env.NODE_ENV ?? null,
+        toCount: parseEmailList(String(message.to ?? '')).length,
+        ccCount: parseEmailList(String(message.cc ?? '')).length,
+        attachmentCount: Array.isArray(message.attachments) ? message.attachments.length : 0,
+        subjectLength: String(message.subject ?? '').length,
+      },
+      'MAIL_DRY_RUN ativo — e-mail NÃO enviado (defina MAIL_DRY_RUN=false para enviar de verdade)',
+    );
+    return { delivered: false };
+  }
+
+  await transport.sendMail(message);
+  return { delivered: true };
 }
 
 /** Verifies SMTP connectivity and authentication without sending a message. */

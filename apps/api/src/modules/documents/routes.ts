@@ -46,6 +46,8 @@ router.get(
 router.get('/process/:processId/comparison', documentController.comparison);
 router.post('/process/:processId/comparison/accept', documentController.acceptComparison);
 router.patch('/process/:processId/comparison/field', documentController.editComparisonField);
+// Reverte a edicao manual e devolve a celula ao valor extraido (auditado).
+router.delete('/process/:processId/comparison/field', documentController.removeComparisonField);
 router.get('/process/:processId/proformas', documentController.proformasAggregate);
 router.get('/:id', documentController.getById);
 router.get('/:id/source', documentController.getSource);

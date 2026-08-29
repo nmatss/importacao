@@ -543,12 +543,19 @@ export const openapiSpec = {
       },
       post: {
         tags: ['Alerts'],
-        summary: 'Create an alert',
+        // Admin-only e com rate limit desde 2026-08-29: este endpoint PUBLICA no
+        // espaco corporativo do Google Chat, e estava aberto a qualquer conta
+        // autenticada, sem limite de taxa.
+        summary: 'Create an alert (admin, rate-limited)',
         requestBody: {
           required: true,
           content: { 'application/json': { schema: { type: 'object' as const } } },
         },
-        responses: { '201': { description: 'Alert created' } },
+        responses: {
+          '201': { description: 'Alert created' },
+          '403': { description: 'Restrito a administradores' },
+          '429': { description: 'Muitas tentativas' },
+        },
       },
     },
     '/api/alerts/{id}/acknowledge': {

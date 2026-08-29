@@ -89,6 +89,17 @@ describe('ports-match check', () => {
     expect(result.status).toBe('passed');
   });
 
+  it('takes the BL as the declared port reference and records it', () => {
+    const result = portsMatch({
+      invoiceData: { portOfLoading: 'Ningbo', portOfDischarge: 'Itapoa' },
+      blData: { portOfLoading: 'Shanghai', portOfDischarge: 'Itapoa' },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.expectedValue).toContain('Loading: shanghai (fonte: BL)');
+    expect(result.message).toContain('Porto de embarque: BL="Shanghai"');
+  });
+
   it('should normalize country suffixes across INV, PL and BL', () => {
     const result = portsMatch({
       invoiceData: { portOfLoading: 'NINGBO', portOfDischarge: 'ITAPOA' },

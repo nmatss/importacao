@@ -20,7 +20,6 @@ import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
-import type { ProcessEvent } from '@/shared/types';
 
 type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
 type DisplayStatus = RowStatus | 'accepted';
@@ -113,6 +112,30 @@ interface ExtractionCoverageSummary {
   lowConfidenceFields: string[];
 }
 
+/**
+ * Aceite ATIVO vindo da API (`invalidated_at IS NULL`).
+ *
+ * A tela derivava o estado de aceite do TIMELINE (`process_events` com
+ * `comparison_acceptance`). O problema: `invalidateComparisonAcceptances()`
+ * invalida a tabela quando um documento e reprocessado, mas nao mexe no
+ * timeline — entao a tela continuava exibindo "Aceito por Fulano" sobre dados
+ * de extracao NOVOS, que e exatamente o que a invalidacao existe para impedir.
+ * Agora a fonte e a tabela; o timeline segue como historico.
+ */
+interface ComparisonAcceptance {
+  id: number;
+  scope: string;
+  rowKey: string;
+  fieldLabel: string | null;
+  itemCode: string | null;
+  previousStatus: string | null;
+  evidenceHash: string | null;
+  resolutionNote: string | null;
+  acceptedAt: string;
+  acceptedBy: number | null;
+  acceptedByName: string | null;
+}
+
 interface ComparisonData {
   hasInvoice: boolean;
   hasPackingList: boolean;
@@ -122,6 +145,7 @@ interface ComparisonData {
   operationalBlSource?: 'ohbl' | 'draft_bl' | null;
   hasDraftBl?: boolean;
   hasEspelho?: boolean;
+  acceptances?: ComparisonAcceptance[];
   aggregateComparison: AggregateField[];
   itemComparison: ItemComparison[];
   unmatchedPlItems: UnmatchedItem[];
@@ -511,11 +535,6 @@ function WeightCell({
   );
 }
 
-function acceptanceEventRowKey(event: ProcessEvent): string | null {
-  const rowKey = event.metadata?.rowKey;
-  return typeof rowKey === 'string' ? rowKey : null;
-}
-
 function deriveItemStatus(item: ItemComparison, hasEspelho: boolean): RowStatus {
   if (item.status) return item.status;
   if (item.isFreeOfCharge) return 'warning';
@@ -563,6 +582,14 @@ function highestStatus(...statuses: RowStatus[]): RowStatus {
   return 'empty';
 }
 
+/**
+ * Minimo de caracteres da justificativa, espelhando o Zod do backend
+ * (`documents/schema.ts`: `resolution_note` e `note` usam `.min(3)`).
+ * Duplicar o numero e feio, mas a alternativa — descobrir a regra pelo 400 —
+ * entrega ao operador a mensagem do validador em vez de uma instrucao.
+ */
+const JUSTIFICATIVA_MIN = 3;
+
 export function DocumentComparison({ processId }: { processId: string }) {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<ComparisonFilter>('all');
@@ -578,10 +605,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
     ['doc-comparison', processId],
     `/api/documents/process/${processId}/comparison`,
   );
-  const { data: processEvents } = useApiQuery<ProcessEvent[]>(
-    ['process-events', processId],
-    `/api/processes/${processId}/events?limit=200`,
-  );
+  // A consulta a `process-events` saiu daqui junto com a derivacao do aceite.
+  // Alem de virar codigo morto, ela colidia com `ProcessTimelineEvents`, que usa
+  // a MESMA query key com `limit=50`: visitar a aba de historico e voltar fazia
+  // esta tela reconstruir os aceites sobre 50 eventos, e os mais antigos sumiam.
+  // A invalidacao dessa chave depois de uma edicao continua, para o historico
+  // refletir o evento novo.
   // Absorbs the standalone "Cruzamento entre Documentos" and "Documentos vs
   // Sistema" panels (removed from FupComparisonPanel) into this consolidated
   // comparison. We read the cross_document checks and the system_vs_document
@@ -609,14 +638,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
   }, [report?.systemChecks]);
 
   const acceptedByRow = useMemo(() => {
-    const map = new Map<string, ProcessEvent>();
-    for (const event of processEvents ?? []) {
-      if (event.eventType !== 'comparison_acceptance') continue;
-      const key = acceptanceEventRowKey(event);
-      if (key && !map.has(key)) map.set(key, event);
+    const map = new Map<string, ComparisonAcceptance>();
+    for (const acceptance of data?.acceptances ?? []) {
+      if (!acceptance.rowKey || map.has(acceptance.rowKey)) continue;
+      map.set(acceptance.rowKey, acceptance);
     }
     return map;
-  }, [processEvents]);
+  }, [data?.acceptances]);
 
   const aggregateRows = useMemo(
     () =>
@@ -796,8 +824,11 @@ export function DocumentComparison({ processId }: { processId: string }) {
   const submitAcceptance = async () => {
     if (!acceptTarget) return;
     const note = acceptNote.trim();
-    if (!note) {
-      toast.error('Informe uma justificativa para o aceite.');
+    if (note.length < JUSTIFICATIVA_MIN) {
+      // O backend exige o mesmo minimo. Sem esta checagem, uma nota de 1-2
+      // caracteres so era recusada la, e o operador recebia a mensagem do
+      // validador em vez de uma instrucao.
+      toast.error(`A justificativa precisa ter ao menos ${JUSTIFICATIVA_MIN} caracteres.`);
       return;
     }
     setAcceptingKey(acceptTarget.rowKey);
@@ -826,6 +857,14 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   const submitFieldEdit = async () => {
     if (!editTarget) return;
+    const note = editNote.trim();
+    if (note.length < JUSTIFICATIVA_MIN) {
+      // Editar a celula reescreve o valor comparado e recalcula o status da
+      // linha — e a acao mais destrutiva das tres, e era a unica que nao pedia
+      // justificativa. O backend passou a exigir; a tela pede antes.
+      toast.error(`A justificativa precisa ter ao menos ${JUSTIFICATIVA_MIN} caracteres.`);
+      return;
+    }
     const key = `${editTarget.rowKey}:${editTarget.sourceColumn}`;
     setEditingKey(key);
     try {
@@ -834,7 +873,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         fieldLabel: editTarget.fieldLabel,
         sourceColumn: editTarget.sourceColumn,
         value: editValue.trim() || null,
-        note: editNote.trim() || null,
+        note,
       });
       toast.success('Valor editado no comparativo');
       setEditTarget(null);
@@ -849,9 +888,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
     }
   };
 
-  const renderAcceptanceCell = (target: AcceptTarget, accepted?: ProcessEvent) => {
+  const renderAcceptanceCell = (target: AcceptTarget, accepted?: ComparisonAcceptance) => {
     if (accepted) {
-      const note = accepted.description?.trim() || null;
+      const note = accepted.resolutionNote?.trim() || null;
       return (
         <div
           className="group relative space-y-1 text-xs text-primary-700"
@@ -862,8 +901,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
             Aceito
           </div>
           <div className="text-slate-500 dark:text-slate-400">
-            {accepted.userName ? `${accepted.userName} · ` : ''}
-            {new Date(accepted.createdAt).toLocaleString('pt-BR', {
+            {accepted.acceptedByName ? `${accepted.acceptedByName} · ` : ''}
+            {new Date(accepted.acceptedAt).toLocaleString('pt-BR', {
               day: '2-digit',
               month: '2-digit',
               year: 'numeric',

@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { toast } from 'sonner';
 import { CertValidationProgress } from '@/features/certificacoes/components/CertValidationProgress';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
-import { startCertValidation, fetchCertStats } from '@/shared/lib/cert-api-client';
+import {
+  startCertValidation,
+  fetchCertStats,
+  fetchCertValidationStatus,
+} from '@/shared/lib/cert-api-client';
 import { cn } from '@/shared/lib/utils';
 import {
   PlayCircle,
@@ -12,23 +16,50 @@ import {
   Clock,
   Zap,
   ChevronDown,
-  FileText,
   CheckCircle2,
   Sparkles,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface BrandOption {
   value: string;
   label: string;
-  count: number;
+  /** `null` = contagem indisponível (falha ao carregar), nunca 0. */
+  count: number | null;
 }
 
 const DEFAULT_BRANDS: BrandOption[] = [
-  { value: '', label: 'Todas as Marcas', count: 0 },
-  { value: 'imaginarium', label: 'Imaginarium', count: 0 },
-  { value: 'puket', label: 'Puket', count: 0 },
-  { value: 'puket_escolares', label: 'Puket Escolares', count: 0 },
+  { value: '', label: 'Todas as Marcas', count: null },
+  { value: 'imaginarium', label: 'Imaginarium', count: null },
+  { value: 'puket', label: 'Puket', count: null },
+  { value: 'puket_escolares', label: 'Puket Escolares', count: null },
 ];
+
+/**
+ * Uma validação continua rodando no servidor (~17 min) mesmo se o operador sair
+ * da página — e o `CertValidationProgress` fecha o stream no unmount. Guardar o
+ * run_id permite reabrir o acompanhamento ao voltar; o `/stream` do backend
+ * reenvia os eventos desde o início.
+ */
+const RUN_ID_STORAGE_KEY = 'cert_validation_run_id';
+
+function readStoredRunId(): string | null {
+  try {
+    return localStorage.getItem(RUN_ID_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeRunId(runId: string | null) {
+  try {
+    if (runId) localStorage.setItem(RUN_ID_STORAGE_KEY, runId);
+    else localStorage.removeItem(RUN_ID_STORAGE_KEY);
+  } catch {
+    // localStorage indisponível (modo privado): o acompanhamento simplesmente
+    // não sobrevive à navegação.
+  }
+}
 
 export default function CertValidacaoPage() {
   const [brand, setBrand] = useState('');
@@ -37,49 +68,91 @@ export default function CertValidacaoPage() {
   const [summary, setSummary] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [brands, setBrands] = useState<BrandOption[]>(DEFAULT_BRANDS);
+  const [brandsError, setBrandsError] = useState(false);
+  const [resumed, setResumed] = useState(false);
+
+  const loadBrandCounts = useCallback(async () => {
+    try {
+      const stats: any = await fetchCertStats();
+      const total = stats.total_products ?? null;
+      // by_brand is an array: [{brand, ok, inconsistent, not_found, never_validated}, ...]
+      const byBrandArr: Array<{
+        brand: string;
+        ok?: number;
+        missing?: number;
+        inconsistent?: number;
+        not_found?: number;
+        never_validated?: number;
+      }> = stats.by_brand || [];
+      const brandCounts: Record<string, number> = {};
+      for (const b of byBrandArr) {
+        const key = (b.brand || '').toLowerCase().replace(/\s+/g, '_');
+        // `never_validated` saiu de `not_found` no backend: sem somá-lo, a
+        // contagem por marca fica MENOR que o universo a validar.
+        brandCounts[key] =
+          (b.ok || 0) +
+          (b.missing || 0) +
+          (b.inconsistent || 0) +
+          (b.not_found || 0) +
+          (b.never_validated || 0);
+      }
+      setBrands([
+        { value: '', label: 'Todas as Marcas', count: total },
+        { value: 'imaginarium', label: 'Imaginarium', count: brandCounts['imaginarium'] ?? 0 },
+        { value: 'puket', label: 'Puket', count: brandCounts['puket'] ?? 0 },
+        {
+          value: 'puket_escolares',
+          label: 'Puket Escolares',
+          count: brandCounts['puket_escolares'] ?? 0,
+        },
+      ]);
+      setBrandsError(false);
+    } catch {
+      // "Falhou" não é "zero produtos": manter contagem nula e avisar.
+      setBrands(DEFAULT_BRANDS);
+      setBrandsError(true);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchCertStats()
-      .then((stats: any) => {
-        const total = stats.total_products || 0;
-        // by_brand is an array: [{brand, ok, missing, inconsistent, not_found}, ...]
-        const byBrandArr: Array<{
-          brand: string;
-          ok: number;
-          missing: number;
-          inconsistent: number;
-          not_found: number;
-        }> = stats.by_brand || [];
-        const brandCounts: Record<string, number> = {};
-        for (const b of byBrandArr) {
-          const key = (b.brand || '').toLowerCase().replace(/\s+/g, '_');
-          brandCounts[key] =
-            (b.ok || 0) + (b.missing || 0) + (b.inconsistent || 0) + (b.not_found || 0);
+    loadBrandCounts();
+  }, [loadBrandCounts]);
+
+  // Reabre o acompanhamento de uma validação que ficou rodando no servidor.
+  useEffect(() => {
+    const stored = readStoredRunId();
+    if (!stored) return;
+    let cancelled = false;
+    fetchCertValidationStatus(stored)
+      .then((status) => {
+        if (cancelled) return;
+        if (status.status === 'running') {
+          setRunId(stored);
+          setRunning(true);
+          setResumed(true);
+        } else {
+          storeRunId(null);
         }
-        setBrands([
-          { value: '', label: 'Todas as Marcas', count: total },
-          { value: 'imaginarium', label: 'Imaginarium', count: brandCounts['imaginarium'] || 0 },
-          { value: 'puket', label: 'Puket', count: brandCounts['puket'] || 0 },
-          {
-            value: 'puket_escolares',
-            label: 'Puket Escolares',
-            count: brandCounts['puket_escolares'] || 0,
-          },
-        ]);
       })
       .catch(() => {
-        // Keep defaults on error
+        // Run já expirou do store em memória do backend (ou sumiu): nada a
+        // retomar.
+        if (!cancelled) storeRunId(null);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const selectedBrand = brands.find((b) => b.value === brand);
-  const productCount = selectedBrand?.count || brands[0]?.count || 0;
-  const estimatedSeconds = Math.ceil(productCount * 1.5);
-  const estimatedMinutes = Math.ceil(estimatedSeconds / 60);
+  const productCount = selectedBrand?.count ?? brands[0]?.count ?? null;
+  const estimatedMinutes =
+    productCount !== null ? Math.ceil(Math.ceil(productCount * 1.5) / 60) : null;
 
   async function handleStart() {
     setError(null);
     setSummary(null);
+    setResumed(false);
     setRunning(true);
     try {
       const res = await startCertValidation({
@@ -87,6 +160,7 @@ export default function CertValidacaoPage() {
         source: 'sheets',
       });
       setRunId(res.run_id);
+      storeRunId(res.run_id);
     } catch (e: any) {
       setError(e.message || 'Erro ao iniciar validação');
       setRunning(false);
@@ -96,10 +170,13 @@ export default function CertValidacaoPage() {
   function handleComplete(sum: any) {
     setSummary(sum);
     setRunning(false);
+    setResumed(false);
+    storeRunId(null);
   }
 
   return (
-    <div className="p-5 md:p-7 space-y-6 animate-fade-in">
+    // Sem `p-5 md:p-7`: o <main> do AppLayout já aplica `p-4 lg:p-6`.
+    <div className="space-y-6 animate-fade-in">
       {/* Real-time Info Banner */}
       <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 overflow-hidden">
         <div className="p-5">
@@ -117,10 +194,15 @@ export default function CertValidacaoPage() {
                   Ao Vivo
                 </span>
               </div>
+              {/* O texto dizia apenas "consulta os sites em tempo real" e omitia
+                  que a ação também ressincroniza planilha e estoque
+                  (`source: 'sheets'` -> sync_sheets_to_db + sync_stock_all). */}
               <p className="text-sm text-emerald-700/80 leading-relaxed">
-                A verificação consulta os sites em TEMPO REAL via API VTEX. Cada produto é
-                verificado individualmente, comparando o texto de certificação no site com o valor
-                esperado na planilha.
+                Ao iniciar, a rotina primeiro <strong>ressincroniza a planilha</strong> (Google
+                Sheets) e o <strong>estoque completo</strong> (WMS/e-commerce) e só então consulta
+                os sites em TEMPO REAL via API VTEX, produto a produto, comparando o texto de
+                certificação no site com o valor esperado na planilha. Por isso a execução altera
+                dados do painel além do resultado da verificação.
               </p>
             </div>
           </div>
@@ -149,7 +231,8 @@ export default function CertValidacaoPage() {
                 >
                   {brands.map((b) => (
                     <option key={b.value} value={b.value}>
-                      {b.label} ({b.count})
+                      {b.label}
+                      {b.count !== null ? ` (${b.count})` : ''}
                     </option>
                   ))}
                 </select>
@@ -187,13 +270,43 @@ export default function CertValidacaoPage() {
             {/* Estimated time */}
             <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 sm:ml-auto bg-slate-50 dark:bg-slate-900 px-4 py-2.5 rounded-xl">
               <Clock className="w-4 h-4 text-slate-400" />
-              <span>
-                ~{estimatedMinutes} min
-                <span className="text-slate-400 mx-1">|</span>
-                {productCount} produtos
-              </span>
+              {productCount !== null ? (
+                <span>
+                  ~{estimatedMinutes} min
+                  <span className="text-slate-400 mx-1">|</span>
+                  {productCount} produtos
+                </span>
+              ) : (
+                <span>Estimativa indisponível</span>
+              )}
             </div>
           </div>
+
+          {brandsError && (
+            <div
+              role="alert"
+              className="mt-5 flex flex-col gap-3 rounded-xl border border-danger-200/80 bg-danger-50 p-4 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between dark:border-danger-900/50 dark:bg-danger-900/20 dark:text-danger-300"
+            >
+              <span className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                Não foi possível carregar a contagem de produtos por marca. A validação ainda pode
+                ser iniciada.
+              </span>
+              <button
+                type="button"
+                onClick={loadBrandCounts}
+                className="shrink-0 rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          )}
+
+          {resumed && (
+            <div className="mt-5 rounded-xl border border-emerald-200/80 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-900/20 dark:text-emerald-200">
+              Retomando o acompanhamento de uma validação que já estava em andamento no servidor.
+            </div>
+          )}
 
           {error && (
             <div className="mt-5 p-4 rounded-xl bg-danger-50 border border-danger-200/80 text-sm text-danger-700 flex items-start gap-3">
@@ -215,6 +328,8 @@ export default function CertValidacaoPage() {
             // Destrava o botão "Validar" — antes o erro do stream deixava
             // running=true para sempre (auditoria 2026-07-17).
             setRunning(false);
+            setResumed(false);
+            storeRunId(null);
             toast.error(message || 'A validação falhou. Tente novamente.');
           }}
         />
@@ -253,24 +368,10 @@ export default function CertValidacaoPage() {
               }}
             />
           </div>
-
-          {summary.report_file && (
-            <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/50 overflow-hidden">
-              <div className="p-5 flex items-center gap-4">
-                <div className="p-2.5 rounded-xl bg-emerald-100 flex-shrink-0">
-                  <FileText className="w-5 h-5 text-emerald-600" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-emerald-800">
-                    Relatório gerado com sucesso
-                  </p>
-                  <p className="text-xs font-mono text-emerald-600/80 mt-0.5 truncate">
-                    {summary.report_file}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* Removido o bloco "Relatório gerado com sucesso": o evento `complete`
+              do backend carrega apenas {total, ok, missing, inconsistent,
+              not_found} — nunca `report_file`. Era código morto. Os relatórios
+              ficam em /certificacoes/relatorios. */}
         </div>
       )}
     </div>

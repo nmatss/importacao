@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import { dateRangeBounds } from '../../../__tests__/helpers/sql-inspect.js';
 
 const { mockDb, queryQueue } = createMockDb();
 
@@ -198,5 +199,39 @@ describe('followUpService', () => {
       expect(result).toEqual(mockDeadlines);
       expect(result).toHaveLength(2);
     });
+  });
+});
+
+describe('followUpService.getAll() — recorte por periodo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  it('cobre o dia local inteiro, com limite superior exclusivo', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await followUpService.getAll(1, 20, '2026-08-29', '2026-08-29');
+
+    const where = mockDb.select.mock.results[0].value.where.mock.calls[0][0];
+    const { start, end } = dateRangeBounds(where);
+    // America/Sao_Paulo (UTC-3): meia-noite local = 03:00 UTC.
+    expect(start!.toISOString()).toBe('2026-08-29T03:00:00.000Z');
+    expect(end!.toISOString()).toBe('2026-08-30T03:00:00.000Z');
+
+    const ultimoInstanteLocal = new Date('2026-08-29T23:59:59.999-03:00');
+    const primeiroInstanteDoDiaSeguinte = new Date('2026-08-30T00:00:00.000-03:00');
+    expect(ultimoInstanteLocal.getTime()).toBeGreaterThanOrEqual(start!.getTime());
+    expect(ultimoInstanteLocal.getTime()).toBeLessThan(end!.getTime());
+    expect(primeiroInstanteDoDiaSeguinte.getTime()).toBeGreaterThanOrEqual(end!.getTime());
+  });
+
+  it('ignora data invalida em vez de estourar', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await expect(followUpService.getAll(1, 20, 'abc')).resolves.toBeDefined();
+    expect(mockDb.select.mock.results[0].value.where).toHaveBeenCalledWith(undefined);
   });
 });

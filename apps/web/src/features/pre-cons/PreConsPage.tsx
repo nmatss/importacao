@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useQueryClient } from '@tanstack/react-query';
-import { cn, formatDate } from '@/shared/lib/utils';
+import { cn, formatDate, formatDateOnly } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 
 interface PreConsItem {
@@ -80,24 +80,27 @@ const fieldLabels: Record<string, string> = {
   etd: 'ETD',
 };
 
+// Cada entrada leva o par `dark:`: sem ele o texto escuro caia sobre fundo
+// claro dentro de uma pagina em tema escuro. `danger-*` so vai ate 700 no
+// @theme (app/index.css), por isso o par dark usa 700/20 e 200.
 const severityConfig = {
   critical: {
-    bg: 'bg-danger-50',
-    border: 'border-danger-100',
-    text: 'text-danger-700',
-    badge: 'bg-danger-100 text-danger-700',
+    bg: 'bg-danger-50 dark:bg-danger-700/20',
+    border: 'border-danger-100 dark:border-danger-700/40',
+    text: 'text-danger-700 dark:text-danger-200',
+    badge: 'bg-danger-100 text-danger-700 dark:bg-danger-700/30 dark:text-danger-200',
   },
   warning: {
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-    text: 'text-amber-700',
-    badge: 'bg-amber-100 text-amber-700',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    border: 'border-amber-200 dark:border-amber-800',
+    text: 'text-amber-700 dark:text-amber-300',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
   },
   info: {
-    bg: 'bg-primary-50',
-    border: 'border-primary-200',
-    text: 'text-primary-700',
-    badge: 'bg-primary-100 text-primary-700',
+    bg: 'bg-primary-50 dark:bg-primary-950/40',
+    border: 'border-primary-200 dark:border-primary-800',
+    text: 'text-primary-700 dark:text-primary-300',
+    badge: 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300',
   },
 };
 
@@ -666,20 +669,50 @@ export function PreConsPage() {
                   }}
                 />
               )}
+              {/* Todo onRemove precisa voltar para a pagina 1: remover um
+                  filtro reduz o total de paginas e, estando na pagina 5, a tela
+                  exibia "Nenhum item encontrado para os filtros selecionados" —
+                  o oposto do que o usuario acabou de fazer. */}
               {supplierFilter && (
                 <FilterChip
                   label="Fornecedor"
                   value={supplierFilter}
-                  onRemove={() => setSupplierFilter('')}
+                  onRemove={() => {
+                    setSupplierFilter('');
+                    setPage(1);
+                  }}
                 />
               )}
               {sheetFilter && (
-                <FilterChip label="Aba" value={sheetFilter} onRemove={() => setSheetFilter('')} />
+                <FilterChip
+                  label="Aba"
+                  value={sheetFilter}
+                  onRemove={() => {
+                    setSheetFilter('');
+                    setPage(1);
+                  }}
+                />
               )}
               {etdFrom && (
-                <FilterChip label="ETD de" value={etdFrom} onRemove={() => setEtdFrom('')} />
+                <FilterChip
+                  label="ETD de"
+                  value={formatDateOnly(etdFrom)}
+                  onRemove={() => {
+                    setEtdFrom('');
+                    setPage(1);
+                  }}
+                />
               )}
-              {etdTo && <FilterChip label="ETD ate" value={etdTo} onRemove={() => setEtdTo('')} />}
+              {etdTo && (
+                <FilterChip
+                  label="ETD ate"
+                  value={formatDateOnly(etdTo)}
+                  onRemove={() => {
+                    setEtdTo('');
+                    setPage(1);
+                  }}
+                />
+              )}
               <button
                 type="button"
                 onClick={clearAllFilters}
@@ -900,11 +933,13 @@ export function PreConsPage() {
                       <td className="px-3 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">
                         {item.ncmCode || '--'}
                       </td>
+                      {/* formatDateOnly: valor date-only, formatar com
+                          new Date() deslocaria um dia por causa do fuso. */}
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {item.etd || '--'}
+                        {item.etd ? formatDateOnly(item.etd) : '--'}
                       </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
-                        {item.eta || '--'}
+                        {item.eta ? formatDateOnly(item.eta) : '--'}
                       </td>
                       <td className="px-3 py-2">
                         <span className="inline-flex rounded-md px-2 py-0.5 text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400">

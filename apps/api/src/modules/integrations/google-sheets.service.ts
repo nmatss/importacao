@@ -1,6 +1,8 @@
 import { sheets_v4, auth as googleAuth } from '@googleapis/sheets';
 import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
+import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
+import { integrationRetryOptions } from './retry-policy.js';
 
 const SHEETS_API_TIMEOUT_MS = 30_000;
 
@@ -9,14 +11,29 @@ function followUpRange(range: string): string {
   return `'${tab.replace(/'/g, "''")}'!${range}`;
 }
 
-function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
-  const timeout = new Promise<never>((_, reject) =>
-    setTimeout(
-      () => reject(new Error(`Google Sheets API timeout after 30s: ${label}`)),
-      SHEETS_API_TIMEOUT_MS,
-    ),
-  );
-  return Promise.race([promise, timeout]);
+/**
+ * Timeout de guarda das chamadas do Sheets, agora com cancelamento REAL.
+ *
+ * A versao anterior era um `Promise.race` com `setTimeout`: a promessa perdedora
+ * era descartada, mas a requisicao seguia em voo. `withTimeout` de
+ * `shared/utils/resilience.ts` cria um `AbortController`, e o cliente
+ * `@googleapis/sheets` aceita `signal` por requisicao (MethodOptions estende
+ * GaxiosOptions, que estende RequestInit), entao o abort chega ao fetch.
+ */
+function sheetsCall<T>(label: string, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  return withTimeout(fn, SHEETS_API_TIMEOUT_MS, `Google Sheets ${label}`);
+}
+
+/**
+ * Chamada com re-tentativa.
+ *
+ * Vale para as LEITURAS e tambem para `values.update`: escrever de novo o mesmo
+ * valor no MESMO intervalo (`'Aba'!F12`) e idempotente — sobrescreve a celula,
+ * nao acrescenta linha. Nao ha `values.append` neste servico, que e a operacao
+ * que duplicaria linha se re-tentada.
+ */
+function sheetsRetry<T>(label: string, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  return withRetry(() => sheetsCall(label, fn), integrationRetryOptions, `sheets:${label}`);
 }
 
 let sheetsClient: sheets_v4.Sheets | null = null;
@@ -64,12 +81,8 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await withTimeout(
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: followUpRange('A:A'),
-        }),
-        `findProcessRow(${processCode})`,
+      const response = await sheetsRetry(`findProcessRow(${processCode})`, (signal) =>
+        sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A:A') }, { signal }),
       );
 
       const values = response.data.values;
@@ -111,16 +124,18 @@ export const googleSheetsService = {
       const sheets = getSheetsClient();
       const formattedDate = date.toLocaleDateString('pt-BR');
 
-      await withTimeout(
-        sheets.spreadsheets.values.update({
-          spreadsheetId,
-          range: followUpRange(`${column}${row}`),
-          valueInputOption: 'USER_ENTERED',
-          requestBody: {
-            values: [[formattedDate]],
+      await sheetsRetry(`updateMilestone(${processCode}, ${field})`, (signal) =>
+        sheets.spreadsheets.values.update(
+          {
+            spreadsheetId,
+            range: followUpRange(`${column}${row}`),
+            valueInputOption: 'USER_ENTERED',
+            requestBody: {
+              values: [[formattedDate]],
+            },
           },
-        }),
-        `updateMilestone(${processCode}, ${field})`,
+          { signal },
+        ),
       );
 
       logger.info({ processCode, field, row }, 'Milestone updated in Follow-Up sheet');
@@ -148,24 +163,22 @@ export const googleSheetsService = {
       if (!row) return null;
 
       // Read the entire row (columns A through Z)
-      const response = await withTimeout(
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: followUpRange(`A${row}:Z${row}`),
-        }),
-        `readProcessRow(${processCode})`,
+      const response = await sheetsRetry(`readProcessRow(${processCode})`, (signal) =>
+        sheets.spreadsheets.values.get(
+          { spreadsheetId, range: followUpRange(`A${row}:Z${row}`) },
+          { signal },
+        ),
       );
 
       const values = response.data.values?.[0];
       if (!values) return null;
 
       // Read header row to map column names
-      const headerResponse = await withTimeout(
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: followUpRange('A1:Z1'),
-        }),
-        `readProcessRow.headers(${processCode})`,
+      const headerResponse = await sheetsRetry(`readProcessRow.headers(${processCode})`, (signal) =>
+        sheets.spreadsheets.values.get(
+          { spreadsheetId, range: followUpRange('A1:Z1') },
+          { signal },
+        ),
       );
 
       const headers = headerResponse.data.values?.[0] ?? [];
@@ -192,12 +205,8 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await withTimeout(
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: followUpRange('A:Z'),
-        }),
-        'readAllProcessRows',
+      const response = await sheetsRetry('readAllProcessRows', (signal) =>
+        sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A:Z') }, { signal }),
       );
 
       const rows = response.data.values;
@@ -233,12 +242,11 @@ export const googleSheetsService = {
     const sheets = getSheetsClient();
 
     try {
-      const response = await withTimeout(
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: followUpRange('A1:Z1'),
-        }),
-        'getSheetHeaders',
+      const response = await sheetsRetry('getSheetHeaders', (signal) =>
+        sheets.spreadsheets.values.get(
+          { spreadsheetId, range: followUpRange('A1:Z1') },
+          { signal },
+        ),
       );
 
       return (response.data.values?.[0] ?? []).map((h: string) => String(h).trim()).filter(Boolean);
@@ -269,9 +277,8 @@ export const googleSheetsService = {
     const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
     const sheets = getSheetsClient();
 
-    const response = await withTimeout(
-      sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A2:A') }),
-      'readProcessReferences',
+    const response = await sheetsRetry('readProcessReferences', (signal) =>
+      sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A2:A') }, { signal }),
     );
 
     return (response.data.values ?? [])

@@ -212,6 +212,56 @@ export function parsePreConsXLSX(buffer: Buffer): {
   return { rows: allRows, sheets: processedSheets, errors };
 }
 
+/** Percentual maximo de queda tolerado num full refresh do Pre-Cons. */
+const DEFAULT_MAX_DROP_PCT = 50;
+
+export class PreConsSnapshotRejectedError extends Error {
+  statusCode = 409;
+  constructor(message: string) {
+    super(message);
+    this.name = 'PreConsSnapshotRejectedError';
+  }
+}
+
+/**
+ * Recusa substituir a base do Pre-Cons por um snapshot suspeito.
+ *
+ * O sync e um `DELETE` de tudo seguido do `INSERT` do que veio agora, e o unico
+ * guard existente era `rows.length === 0`. Uma planilha truncada, com uma aba
+ * valida e poucas linhas, apagava todo o restante e ficava com o que sobrou —
+ * sem erro e sem aviso. E a mesma classe do incidente ja resolvido do estoque
+ * de certificacao ("snapshot vazio zerava o estoque de uma fonte inteira"), aqui
+ * ainda em aberto.
+ *
+ * Lancar DENTRO da transacao faz o rollback preservar a base anterior: dado
+ * velho e ruim, base apagada por engano e pior.
+ */
+async function assertSnapshotPlausible(
+  tx: { select: typeof db.select },
+  incoming: number,
+): Promise<void> {
+  if (process.env.PRE_CONS_SYNC_FORCE === '1') return;
+
+  const [row] = await tx.select({ n: sql<number>`COUNT(*)::int` }).from(preConsItems);
+  const previous = Number(row?.n ?? 0);
+
+  // Primeira carga: nao ha nada para proteger.
+  if (previous === 0) return;
+
+  const parsed = Number(process.env.PRE_CONS_SYNC_MAX_DROP_PCT);
+  const maxDrop =
+    Number.isFinite(parsed) && parsed > 0 && parsed <= 100 ? parsed : DEFAULT_MAX_DROP_PCT;
+
+  const dropPct = ((previous - incoming) / previous) * 100;
+  if (dropPct > maxDrop) {
+    throw new PreConsSnapshotRejectedError(
+      `Snapshot do Pre-Cons caiu ${dropPct.toFixed(1)}% (${previous} -> ${incoming}), ` +
+        `acima do limite de ${maxDrop.toFixed(0)}%; substituicao recusada. ` +
+        'Revise o arquivo ou use PRE_CONS_SYNC_FORCE=1 para forcar.',
+    );
+  }
+}
+
 export const preConsService = {
   /**
    * Sync Pre-Cons data from XLSX buffer.
@@ -249,6 +299,7 @@ export const preConsService = {
     // without repopulating it (all-or-nothing, idempotent).
     let created = 0;
     await db.transaction(async (tx) => {
+      await assertSnapshotPlausible(tx as unknown as { select: typeof db.select }, rows.length);
       await tx.delete(preConsItems);
 
       // Batch insert (chunks of 100)
@@ -376,19 +427,27 @@ export const preConsService = {
 
       if (!process) continue;
 
-      // Get Pre-Cons items for this process
+      // Get Pre-Cons items for this process.
+      // A ordenacao e obrigatoria: a comparacao de ETD abaixo usa `items[0]` e,
+      // sem ORDER BY, qual item ocupava a primeira posicao mudava entre
+      // execucoes — a mesma base gerava divergencia de ETD ora sim, ora nao.
       const items = await db
         .select()
         .from(preConsItems)
-        .where(eq(preConsItems.processCode, processCode));
+        .where(eq(preConsItems.processCode, processCode))
+        .orderBy(asc(preConsItems.etd), asc(preConsItems.id));
 
       // Compare totals
       const preConsTotalAmount = items.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
       const preConsTotalCbm = items.reduce((sum, item) => sum + (Number(item.cbm) || 0), 0);
 
       // Check FOB value divergence
-      if (process.totalFobValue && preConsTotalAmount > 0) {
-        const systemFob = Number(process.totalFobValue);
+      // `totalFobValue` e coluna `numeric` e chega como STRING. A string '0.00'
+      // e truthy, entao o guard antigo (`process.totalFobValue &&`) deixava
+      // passar FOB zero: `diff / 0` = Infinity, e TODA divergencia virava
+      // `critical`. O guard precisa ser sobre o numero, nao sobre a string.
+      const systemFob = Number(process.totalFobValue);
+      if (Number.isFinite(systemFob) && systemFob > 0 && preConsTotalAmount > 0) {
         const diff = Math.abs(systemFob - preConsTotalAmount);
         if (diff > 1) {
           divergences.push({
@@ -402,8 +461,9 @@ export const preConsService = {
       }
 
       // Check CBM divergence
-      if (process.totalCbm && preConsTotalCbm > 0) {
-        const systemCbm = Number(process.totalCbm);
+      // Mesmo caso do FOB: '0.000' e truthy e zerava o denominador.
+      const systemCbm = Number(process.totalCbm);
+      if (Number.isFinite(systemCbm) && systemCbm > 0 && preConsTotalCbm > 0) {
         const diff = Math.abs(systemCbm - preConsTotalCbm);
         if (diff > 0.5) {
           divergences.push({
@@ -416,7 +476,9 @@ export const preConsService = {
         }
       }
 
-      // Check ETD divergence
+      // Check ETD divergence. Com a ordenacao acima, `items[0]` e o item de
+      // MENOR ETD do processo — escolha deterministica e documentada, no lugar
+      // do "primeiro que o Postgres devolvesse".
       if (items[0]?.etd && process.etd) {
         const preConsEtd = items[0].etd;
         const systemEtd = String(process.etd).split('T')[0];

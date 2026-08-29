@@ -142,6 +142,9 @@ export function cronToHuman(cron: string): string {
 
   const [minute, hour, day, , dow] = parts;
 
+  // Convenção CRONTAB (0 = domingo … 6 = sábado, 7 também domingo) — a mesma que
+  // o operador digita e que o cert-api grava/devolve. Os aliases textuais valem
+  // o MESMO dia nas duas convenções, então entram na mesma tabela.
   const dayOfWeekNames: Record<string, string> = {
     '0': 'domingo',
     '1': 'segunda-feira',
@@ -151,7 +154,15 @@ export function cronToHuman(cron: string): string {
     '5': 'sexta-feira',
     '6': 'sábado',
     '7': 'domingo',
+    sun: 'domingo',
+    mon: 'segunda-feira',
+    tue: 'terça-feira',
+    wed: 'quarta-feira',
+    thu: 'quinta-feira',
+    fri: 'sexta-feira',
+    sat: 'sábado',
   };
+  const dayName = (token: string) => dayOfWeekNames[token.trim().toLowerCase()] || token;
 
   const time = `${hour.padStart(2, '0')}:${minute.padStart(2, '0')}`;
 
@@ -159,9 +170,9 @@ export function cronToHuman(cron: string): string {
   if (dow !== '*' && day === '*') {
     if (dow.includes('-')) {
       const [start, end] = dow.split('-');
-      return `${dayOfWeekNames[start] || start} a ${dayOfWeekNames[end] || end} às ${time}`;
+      return `${dayName(start)} a ${dayName(end)} às ${time}`;
     }
-    return `Toda ${dayOfWeekNames[dow] || dow} às ${time}`;
+    return `Toda ${dayName(dow)} às ${time}`;
   }
   if (day === '*' && dow === '*') return `Diariamente às ${time}`;
   return cron;

@@ -1,3 +1,11 @@
+import {
+  describeNumericFailure,
+  parseDocumentNumber,
+  parseSystemNumber,
+  type ParsedNumericFail,
+} from '../utils/number-normalize.js';
+import { compareCurrencies } from '../utils/currency-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -15,51 +23,79 @@ interface CheckResult {
   message: string;
 }
 
+const documentsCompared = 'BL vs Follow-up';
+
 export default function freightValueMatch(input: CheckInput): CheckResult {
   const checkName = 'freight-value-match';
 
-  const blFreight = input.blData?.freightValue != null ? Number(input.blData.freightValue) : null;
-  const followUpFreight =
-    input.followUpData?.freightValue != null ? Number(input.followUpData.freightValue) : null;
+  const blFreight = parseDocumentNumber(input.blData?.freightValue);
+  const followUpFreight = parseSystemNumber(input.followUpData?.freightValue);
 
-  if (followUpFreight == null) {
+  if (!followUpFreight.ok) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: 'BL vs Follow-up',
-      message: 'Ignorado: Nenhum valor de frete disponivel nos dados do follow-up.',
+      documentsCompared,
+      message:
+        followUpFreight.reason === 'absent'
+          ? 'Ignorado: Nenhum valor de frete disponivel nos dados do follow-up.'
+          : `${describeNumericFailure('Frete do follow-up', followUpFreight as ParsedNumericFail)}.`,
     };
   }
 
-  if (blFreight == null) {
+  if (!blFreight.ok) {
     return {
       checkName,
       status: 'warning',
-      expectedValue: followUpFreight.toFixed(2),
-      documentsCompared: 'BL vs Follow-up',
-      message: 'Valor do frete nao encontrado no BL.',
+      expectedValue: followUpFreight.value.toFixed(2),
+      documentsCompared,
+      message:
+        blFreight.reason === 'absent'
+          ? 'Valor do frete nao encontrado no BL.'
+          : `${describeNumericFailure('Frete do BL', blFreight as ParsedNumericFail)}.`,
     };
   }
 
-  const difference = Math.abs(blFreight - followUpFreight);
+  const currency = compareCurrencies(
+    'BL',
+    input.blData?.freightCurrency,
+    'Follow-up',
+    input.followUpData?.freightCurrency,
+  );
+
+  if (currency.state === 'different') {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: `${followUpFreight.value.toFixed(2)} ${currency.rightCode}`,
+      actualValue: `${blFreight.value.toFixed(2)} ${currency.leftCode}`,
+      documentsCompared,
+      message: `Moedas diferentes (${currency.left} vs ${currency.right}): comparacao do frete nao realizada.`,
+    };
+  }
+
+  const difference = Math.abs(blFreight.value - followUpFreight.value);
+  const currencyNote = currency.state === 'unknown' ? ` (${currency.detail})` : '';
 
   if (difference <= 0.01) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: followUpFreight.toFixed(2),
-      actualValue: blFreight.toFixed(2),
-      documentsCompared: 'BL vs Follow-up',
-      message: 'Valor do frete confere entre o BL e os dados do follow-up.',
+      expectedValue: followUpFreight.value.toFixed(2),
+      actualValue: blFreight.value.toFixed(2),
+      documentsCompared,
+      message: `Valor do frete confere entre o BL e os dados do follow-up${currencyNote}.`,
     };
   }
 
+  // Sem moeda confirmada nas duas pontas, divergencia numerica e indicio:
+  // `failed` aqui gera rascunho de e-mail de correcao para fora da empresa.
   return {
     checkName,
-    status: 'failed',
-    expectedValue: followUpFreight.toFixed(2),
-    actualValue: blFreight.toFixed(2),
-    documentsCompared: 'BL vs Follow-up',
-    message: `Divergencia no valor do frete: BL=${blFreight.toFixed(2)} vs Follow-up=${followUpFreight.toFixed(2)} (dif: ${difference.toFixed(2)}).`,
+    status: currency.state === 'equal' ? 'failed' : 'warning',
+    expectedValue: followUpFreight.value.toFixed(2),
+    actualValue: blFreight.value.toFixed(2),
+    documentsCompared,
+    message: `Divergencia no valor do frete: BL=${blFreight.value.toFixed(2)} vs Follow-up=${followUpFreight.value.toFixed(2)} (dif: ${difference.toFixed(2)})${currencyNote}.`,
   };
 }

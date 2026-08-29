@@ -1,3 +1,7 @@
+import { ASSUMED_VOLUME_UNIT, normalizeVolumeUnit } from '../utils/measure-normalize.js';
+import { caveatSuffix, collectDocumentNumbers } from '../utils/cross-document-values.js';
+import { FIELD_SOURCE_PRECEDENCE, pickPreferred } from '../utils/source-precedence.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -20,57 +24,62 @@ const TOLERANCE = 0.1;
 export default function cbmMatch(input: CheckInput): CheckResult {
   const checkName = 'cbm-match';
 
-  const invCbm = input.invoiceData?.totalCbm != null ? Number(input.invoiceData.totalCbm) : null;
-  const plCbm =
-    input.packingListData?.totalCbm != null ? Number(input.packingListData.totalCbm) : null;
-  const blRaw = input.blData?.totalCbm ?? input.blData?.totalVolume;
-  const blCbm = blRaw != null ? Number(blRaw) : null;
+  // O fallback `blData.totalVolume` foi removido: nenhum schema de extracao
+  // produz esse campo, e "volume" no vocabulario de BL/PL brasileiro significa
+  // VOLUMES (quantidade de caixas), nao cubagem. Tratar os dois como a mesma
+  // grandeza podia comparar m3 contra contagem de caixas.
+  const collected = collectDocumentNumbers(
+    [
+      { source: 'INV', value: input.invoiceData?.totalCbm },
+      { source: 'PL', value: input.packingListData?.totalCbm },
+      { source: 'BL', value: input.blData?.totalCbm },
+    ],
+    { normalizeUnit: normalizeVolumeUnit, assumedUnit: ASSUMED_VOLUME_UNIT },
+  );
 
-  const sources: string[] = [];
-  const values: number[] = [];
+  const documentsCompared = collected.values.map((entry) => entry.source).join(' vs ');
 
-  if (invCbm != null && !isNaN(invCbm)) {
-    sources.push('INV');
-    values.push(invCbm);
-  }
-  if (plCbm != null && !isNaN(plCbm)) {
-    sources.push('PL');
-    values.push(plCbm);
-  }
-  if (blCbm != null && !isNaN(blCbm)) {
-    sources.push('BL');
-    values.push(blCbm);
-  }
-
-  if (values.length < 2) {
+  if (collected.values.length < 2) {
     return {
       checkName,
       status: 'warning',
-      documentsCompared: sources.join(' vs '),
-      message: 'Documentos insuficientes para comparar CBM.',
+      documentsCompared,
+      message:
+        collected.caveats.length > 0
+          ? `CBM presente nos documentos mas nao comparavel — ${collected.caveats.join('; ')}.`
+          : 'Documentos insuficientes para comparar CBM.',
     };
   }
 
-  const maxDiff = Math.max(...values.map((v) => Math.abs(v - values[0])));
+  const reference = pickPreferred(collected.values, FIELD_SOURCE_PRECEDENCE.cbm)!;
+  const maxDiff = Math.max(
+    ...collected.values.map((entry) => Math.abs(entry.value - reference.value)),
+  );
+  const details = collected.values
+    .map((entry) => `${entry.source}=${entry.value.toFixed(3)}`)
+    .join(', ');
 
   if (maxDiff <= TOLERANCE) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: values[0].toFixed(3),
-      actualValue: values.map((v, i) => `${sources[i]}=${v.toFixed(3)}`).join(', '),
-      documentsCompared: sources.join(' vs '),
-      message: `CBM confere entre os documentos dentro da tolerancia (diff max: ${maxDiff.toFixed(3)}).`,
+      expectedValue: `${reference.value.toFixed(3)} (fonte: ${reference.source})`,
+      actualValue: details,
+      documentsCompared,
+      message:
+        `CBM confere entre os documentos dentro da tolerancia (referencia: ${reference.source}, diff max: ${maxDiff.toFixed(3)}).` +
+        caveatSuffix(collected.caveats),
     };
   }
 
-  const details = sources.map((s, i) => `${s}=${values[i].toFixed(3)}`).join(', ');
   return {
     checkName,
     status: 'failed',
-    expectedValue: values[0].toFixed(3),
+    expectedValue: `${reference.value.toFixed(3)} (fonte: ${reference.source})`,
     actualValue: details,
-    documentsCompared: sources.join(' vs '),
-    message: `Divergencia no CBM: ${details} (diff max: ${maxDiff.toFixed(3)}, tolerancia: ${TOLERANCE}).`,
+    documentsCompared,
+    message:
+      `Divergencia no CBM: ${details} (referencia: ${reference.source}, diff max: ${maxDiff.toFixed(3)}, tolerancia: ${TOLERANCE}).` +
+      caveatSuffix(collected.caveats),
   };
 }

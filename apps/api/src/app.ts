@@ -9,7 +9,7 @@ import { correlationId } from './shared/middleware/correlation-id.js';
 import { apiRouter } from './routes.js';
 import { healthRoutes } from './modules/health/routes.js';
 import { db } from './shared/database/connection.js';
-import { metricsMiddleware, register } from './shared/metrics/index.js';
+import { metricsMiddleware, register, safeTokenEquals } from './shared/metrics/index.js';
 import { openapiSpec } from './docs/openapi.js';
 
 const app = express();
@@ -82,8 +82,10 @@ app.get(
     const providedToken = req.header('x-metrics-token');
     const clientIp = req.ip || req.socket.remoteAddress || '';
 
-    // Allow if token matches
-    if (expectedToken && providedToken === expectedToken) return next();
+    // Allow if token matches. Constant-time compare: `===` on strings short
+    // circuits no primeiro byte diferente, e o tempo de resposta permite
+    // adivinhar o token byte a byte de fora.
+    if (expectedToken && safeTokenEquals(providedToken, expectedToken)) return next();
     // Allow if IP is in allow-list (defaults to localhost only). Compare by
     // normalized equality — the previous endsWith() was too loose (e.g. a
     // client IP ending in "1" would match "::1", and "10.0.0.1" would match a

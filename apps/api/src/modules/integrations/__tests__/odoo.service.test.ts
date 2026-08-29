@@ -194,4 +194,60 @@ describe('odooService', () => {
     await expect(odooService.authenticate()).resolves.toBe(11);
     expect(client.methodCall).toHaveBeenCalledTimes(2);
   });
+
+  /**
+   * Todas as chamadas deste servico sao leituras (`authenticate`, `search`,
+   * `read`), entao re-tentar nao duplica registro nenhum no Odoo. Antes disto
+   * um `ECONNRESET` no meio da validacao de produtos derrubava a apuracao
+   * inteira.
+   */
+  it('re-tenta uma falha de rede transitoria na autenticacao', async () => {
+    queueSettings({
+      odoo_url: 'https://erp.example.com',
+      odoo_db: 'prod',
+      odoo_user: 'user@example.com',
+    });
+    process.env.ODOO_PASSWORD = 'secret';
+
+    const client = createRpcClient(0);
+    client.methodCall
+      .mockImplementationOnce(
+        (_m: string, _p: unknown[], cb: (err: unknown, result?: unknown) => void) => {
+          cb(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+        },
+      )
+      .mockImplementationOnce(
+        (_m: string, _p: unknown[], cb: (err: unknown, result?: unknown) => void) => {
+          cb(null, 55);
+        },
+      );
+    xmlrpcMock.createSecureClient.mockReturnValue(client);
+
+    const odooService = await loadOdooService();
+
+    await expect(odooService.authenticate()).resolves.toBe(55);
+    expect(client.methodCall).toHaveBeenCalledTimes(2);
+  });
+
+  it('NAO re-tenta erro de aplicacao do Odoo (credencial/objeto invalido)', async () => {
+    queueSettings({
+      odoo_url: 'https://erp.example.com',
+      odoo_db: 'prod',
+      odoo_user: 'user@example.com',
+    });
+    process.env.ODOO_PASSWORD = 'secret';
+
+    const client = createRpcClient(0);
+    client.methodCall.mockImplementation(
+      (_m: string, _p: unknown[], cb: (err: unknown, result?: unknown) => void) => {
+        cb(new Error('AccessDenied: invalid credentials'));
+      },
+    );
+    xmlrpcMock.createSecureClient.mockReturnValue(client);
+
+    const odooService = await loadOdooService();
+
+    await expect(odooService.authenticate()).rejects.toThrow('AccessDenied');
+    expect(client.methodCall).toHaveBeenCalledTimes(1);
+  });
 });

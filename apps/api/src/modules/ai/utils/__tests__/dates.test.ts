@@ -58,6 +58,18 @@ describe('normalizeDate — many formats to ISO-8601', () => {
     expect(normalizeDate('13/13/2024')).toBeNull();
   });
 
+  it('rejects the 01/01/1900 legacy "empty" sentinel instead of returning a real date', () => {
+    // Linx/WMS enviam 01/01/1900 como "vazio". O lado Python já corta
+    // (`if parsed.year <= 1900: return None`); sem o mesmo corte aqui a
+    // sentinela entrava em aiParsedData e era comparada como data real.
+    expect(normalizeDate('01/01/1900')).toBeNull();
+    expect(normalizeDate('1900-01-01')).toBeNull();
+    expect(normalizeDate('31/12/1900')).toBeNull();
+    expect(normalizeDate('1899-12-31')).toBeNull();
+    // 1901 em diante continua sendo data válida.
+    expect(normalizeDate('01/01/1901')).toBe('1901-01-01');
+  });
+
   it('returns null for non-dates and empties', () => {
     expect(normalizeDate(null)).toBeNull();
     expect(normalizeDate(undefined)).toBeNull();

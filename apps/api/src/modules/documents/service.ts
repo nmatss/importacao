@@ -40,26 +40,86 @@ import {
 } from '../validation/utils/item-code-normalize.js';
 import { compareDates } from '../validation/utils/date-compare.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
-import type { AcceptComparisonInput, EditComparisonFieldInput } from './schema.js';
+import type {
+  AcceptComparisonInput,
+  EditComparisonFieldInput,
+  RemoveComparisonFieldInput,
+} from './schema.js';
 import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 import { ocrScannedPdf, rasterizePdfPages } from './ocr.js';
 import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
 
 /**
+ * Fonte ÚNICA da conversão XLSX → texto para extração por IA.
+ *
+ * `blankrows: false` + descarte de linhas so-separador + teto de caracteres:
+ * quando alguem formata uma coluna inteira, o range usado da planilha vai ate a
+ * linha 1048576 e o CSV vira centenas de milhares de linhas de virgulas. Um
+ * xlsx de 27 KB gerava prompt suficiente para estourar o teto de 180 s da
+ * extracao — foi assim que 3 dos 4 timeouts de producao nasceram (2026-08-17).
+ * A correcao vivia so em extractText(); o fallback de IA do espelho usava um
+ * segundo caminho sem nenhuma protecao.
+ */
+export function spreadsheetBufferToText(
+  buffer: Buffer,
+  opts: { sheetHeaders?: boolean; logContext?: Record<string, unknown> } = {},
+): string {
+  const maxChars = Number(process.env.DOCUMENT_SPREADSHEET_MAX_CHARS) || 200_000;
+  const workbook = XLSX.read(buffer, { type: 'buffer' });
+  const parts: string[] = [];
+  let length = 0;
+  let sheetsConverted = 0;
+  let stoppedEarly = false;
+
+  for (const sheetName of workbook.SheetNames) {
+    // Corte ANTECIPADO: o acumulado ja passou do teto, entao os primeiros
+    // maxChars caracteres do texto final ja estao decididos e tudo o que vier
+    // depois seria descartado pelo slice. Converter as abas restantes e
+    // trabalho puro — uma pasta com 50 abas pagava a conversao inteira para
+    // jogar quase tudo fora.
+    if (length > maxChars) {
+      stoppedEarly = true;
+      break;
+    }
+    sheetsConverted += 1;
+    const csv = XLSX.utils.sheet_to_csv(workbook.Sheets[sheetName], { blankrows: false });
+    const util = csv
+      .split('\n')
+      .filter((line) => line.replace(/[,;\s]/g, '').length > 0)
+      .join('\n');
+    if (!util) continue;
+    const part = opts.sheetHeaders ? `--- Sheet: ${sheetName} ---\n${util}` : util;
+    // `parts.length` antes do push = numero de separadores '\n' que o join
+    // vai inserir, entao `length` acompanha exatamente o texto final.
+    length += part.length + (parts.length > 0 ? 1 : 0);
+    parts.push(part);
+  }
+
+  const text = parts.join('\n');
+  if (text.length <= maxChars) return text;
+
+  logger.warn(
+    {
+      ...(opts.logContext ?? {}),
+      chars: text.length,
+      maxChars,
+      sheetsConverted,
+      sheetsTotal: workbook.SheetNames.length,
+      stoppedEarly,
+    },
+    'Spreadsheet text truncated before AI extraction',
+  );
+  return `${text.slice(0, maxChars)}\n[TEXTO TRUNCADO: a planilha excede o limite de ${maxChars} caracteres]`;
+}
+
+/**
  * Convert an XLSX buffer to plain CSV-style text — used as input to the
- * Espelho AI fallback when the deterministic parser fails. Mirrors the
- * same XLSX path used by extractText() but operates directly on a buffer
- * (no filesystem hop).
+ * Espelho AI fallback when the deterministic parser fails. Same protections
+ * as extractText(), applied to a buffer (no filesystem hop).
  */
 function extractTextFromXlsxBuffer(buffer: Buffer): string {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  let text = '';
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    text += `--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}\n`;
-  }
-  return text;
+  return spreadsheetBufferToText(buffer, { sheetHeaders: true });
 }
 
 function hasFailedEspelhoExtraction(aiParsedData: unknown): boolean {
@@ -283,6 +343,73 @@ function unwrapAiFieldValue(value: unknown): unknown {
 
 function sha256Text(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+/** Teto do encadeamento de reafirmacoes de um mesmo aceite (ver acceptComparison). */
+const MAX_ACCEPTANCE_REAFFIRMATIONS = 50;
+
+interface AcceptanceEvidence {
+  values: Record<string, unknown> | null;
+  status: string | null;
+  sources: Record<string, number | null> | null;
+}
+
+/**
+ * Evidencia de um aceite: os VALORES que o operador viu na linha, o status
+ * calculado sobre eles e os documentos que os originaram. O `evidence_hash`
+ * cobria apenas a identidade da celula, entao um aceite dado sobre a extracao
+ * antiga colidia com o mesmo hash depois de um reprocessamento.
+ */
+function buildAcceptanceEvidence(
+  comparison: {
+    aggregateComparison?: any[];
+    itemComparison?: any[];
+    sourceDocuments?: Record<string, number | null>;
+  } | null,
+  input: AcceptComparisonInput,
+): AcceptanceEvidence {
+  const sources = comparison?.sourceDocuments ?? null;
+
+  if (input.scope === 'aggregate') {
+    const row = (comparison?.aggregateComparison ?? []).find(
+      (candidate: any) => candidate.rowKey === input.rowKey,
+    );
+    return {
+      values: row
+        ? {
+            invoice: row.invoice ?? null,
+            packingList: row.packingList ?? null,
+            bl: row.bl ?? null,
+            espelho: row.espelho ?? null,
+          }
+        : null,
+      status: row?.status ?? null,
+      sources,
+    };
+  }
+
+  const row = (comparison?.itemComparison ?? []).find(
+    (candidate: any) => candidate.rowKey === input.rowKey,
+  );
+  return {
+    values: row
+      ? {
+          itemCode: row.itemCode ?? null,
+          invoiceQty: row.invoiceQty ?? null,
+          plQty: row.plQty ?? null,
+          espelhoQty: row.espelhoQty ?? null,
+          invoiceManufacturer: row.invoiceManufacturer ?? null,
+          plManufacturer: row.plManufacturer ?? null,
+          espelhoManufacturer: row.espelhoManufacturer ?? null,
+          invoiceNetWeight: row.invoiceNetWeight ?? null,
+          plNetWeight: row.plNetWeight ?? null,
+          invoiceGrossWeight: row.invoiceGrossWeight ?? null,
+          plGrossWeight: row.plGrossWeight ?? null,
+        }
+      : null,
+    status: row?.status ?? null,
+    sources,
+  };
 }
 
 function extractConfidence(value: unknown): number | null {
@@ -2067,9 +2194,16 @@ export const documentService = {
     const buffer = await fs.readFile(doc.storagePath);
     const parsed = tryParseEspelhoBuffer(buffer);
 
-    if (!parsed.ok) {
+    // Cabeçalho reconhecido mas ZERO linhas de item não é extração
+    // bem-sucedida: gravava confiança 0.99 — o badge mais alto do sistema —
+    // sobre uma planilha vazia e a projetava no processo. Segue o mesmo
+    // caminho de falha de parse (fallback de IA + alerta ao operador).
+    if (!parsed.ok || parsed.data.items.length === 0) {
+      const parseError = parsed.ok
+        ? 'Espelho reconhecido, mas nenhuma linha de item foi encontrada na planilha.'
+        : parsed.error;
       logger.warn(
-        { documentId: doc.id, processId: doc.processId, error: parsed.error },
+        { documentId: doc.id, processId: doc.processId, error: parseError },
         'Espelho parse failed — formato não reconhecido',
       );
 
@@ -2159,13 +2293,13 @@ export const documentService = {
         documentId: doc.id,
         processId: doc.processId,
         documentType: 'espelho',
-        data: { error: parsed.error },
+        data: { error: parseError },
         confidenceScore: 0,
         extractionStatus: 'failed',
         provider: 'deterministic',
         model: null,
         documentUpdate: {
-          aiParsedData: { error: parsed.error },
+          aiParsedData: { error: parseError },
           confidenceScore: '0',
           isProcessed: true,
           updatedAt: new Date(),
@@ -2183,7 +2317,7 @@ export const documentService = {
           processId: doc.processId,
           severity: 'warning',
           title: 'Espelho não pôde ser processado',
-          message: `O arquivo de espelho do processo ${proc?.processCode ?? doc.processId} não foi reconhecido (cabeçalho Processo/Fornecedor ausente). Revise o layout ou envie em formato compatível.`,
+          message: `O arquivo de espelho do processo ${proc?.processCode ?? doc.processId} não pôde ser processado: ${parseError} Revise o layout ou envie em formato compatível.`,
           processCode: proc?.processCode,
         })
         .catch((err) => logger.error({ err }, 'Failed to create espelho-parse alert'));
@@ -2351,33 +2485,8 @@ export const documentService = {
       ext === '.xlsx' ||
       ext === '.xls'
     ) {
-      const workbook = XLSX.read(buffer, { type: 'buffer' });
-      const parts: string[] = [];
-      for (const sheetName of workbook.SheetNames) {
-        const sheet = workbook.Sheets[sheetName];
-        // `blankrows: false` + descarte de linhas so-separador: quando alguem
-        // formata uma coluna inteira, o range usado da planilha vai ate a linha
-        // 1048576 e o CSV vira centenas de milhares de linhas de virgulas. Um
-        // xlsx de 27 KB gerava prompt suficiente para estourar o teto de 180 s
-        // da extracao — foi assim que 3 dos 4 timeouts de producao nasceram.
-        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-        const util = csv
-          .split('\n')
-          .filter((line) => line.replace(/[,;\s]/g, '').length > 0)
-          .join('\n');
-        if (util) parts.push(util);
-      }
-      let text = parts.join('\n');
-
-      const maxChars = Number(process.env.DOCUMENT_SPREADSHEET_MAX_CHARS) || 200_000;
-      if (text.length > maxChars) {
-        logger.warn(
-          { filePath, chars: text.length, maxChars },
-          'Spreadsheet text truncated before AI extraction',
-        );
-        text = `${text.slice(0, maxChars)}\n[TEXTO TRUNCADO: a planilha excede o limite de ${maxChars} caracteres]`;
-      }
-      return { text };
+      // Protecoes contra planilha com range inflado: ver spreadsheetBufferToText.
+      return { text: spreadsheetBufferToText(buffer, { logContext: { filePath } }) };
     }
 
     // ── Word (DOCX) ──
@@ -2638,6 +2747,16 @@ export const documentService = {
       return toDocumentResponse(doc);
     }
 
+    // Mesma guarda de reprocess(): reclassificar durante uma extração ativa
+    // deixa o worker que segura a lease gravar dado do tipo ANTIGO num
+    // documento já retipado — e o job da reclassificação perde a lease,
+    // retorna normalmente e o pg-boss o marca como completo sem reextração.
+    if (!doc.isProcessed && !isProcessingStale(doc.updatedAt ?? doc.createdAt)) {
+      const error = new Error('Extração já está em andamento para este documento');
+      (error as Error & { statusCode?: number }).statusCode = 409;
+      throw error;
+    }
+
     await db.transaction(async (tx) => {
       if (doc.aiParsedData != null) {
         await tx.insert(documentExtractionHistory).values({
@@ -2789,6 +2908,32 @@ export const documentService = {
     const configured = await googleDriveService.isRootConfigured();
     if (!configured) return;
 
+    // Documento que VEIO do Drive já está na pasta do processo. Re-subir cria
+    // uma CÓPIA e o update lá embaixo trocaria `drive_file_id` pelo id dessa
+    // cópia, destruindo a chave de dedupe da varredura — que procura o id
+    // ORIGINAL (drive-ingestion.service.ts). Como `listProcessFiles` é
+    // recursiva, a cópia na subpasta passaria a ser a única deduplicada e o
+    // arquivo original voltaria a cada passada: reimportação a cada 10 min,
+    // com uma cópia nova a cada reimportação.
+    //
+    // A guarda fica aqui, no ponto ÚNICO de escrita de `driveFileId`, e não
+    // nos três chamadores (upload manual, invoice/certificate de baixa
+    // confiança e invoice/certificate com nome padronizado) — assim nenhum
+    // caminho novo consegue furá-la por esquecimento.
+    const [docRow] = await db
+      .select({ ingestionSource: documents.ingestionSource })
+      .from(documents)
+      .where(eq(documents.id, documentId))
+      .limit(1);
+
+    if (docRow?.ingestionSource === 'drive') {
+      logger.info(
+        { documentId, processId, type },
+        'Skipping Drive upload: document was ingested from Drive — preserving the original driveFileId',
+      );
+      return;
+    }
+
     const [process] = await db
       .select({
         processCode: importProcesses.processCode,
@@ -2829,7 +2974,14 @@ export const documentService = {
 
     const fieldLabel = input.fieldLabel ?? input.rowKey;
     const itemSuffix = input.itemCode ? ` item ${input.itemCode}` : '';
-    const evidenceHash = sha256Text(
+
+    // O hash precisa cobrir O QUE esta sendo aceito, nao so QUAL celula. Sem os
+    // valores divergentes na evidencia, reenviar o mesmo payload depois de um
+    // reprocessamento caia no mesmo hash, e o `onConflictDoUpdate` ressuscitava
+    // (invalidatedAt: null) um aceite dado sobre a extracao ANTERIOR.
+    const comparison = await this.getComparison(processId);
+    const evidence = buildAcceptanceEvidence(comparison, input);
+    const baseHash = sha256Text(
       JSON.stringify({
         processId,
         scope: input.scope,
@@ -2838,13 +2990,118 @@ export const documentService = {
         itemCode: input.itemCode ?? null,
         previousStatus: input.previousStatus ?? null,
         resolution_note: input.resolution_note,
+        values: evidence.values,
+        status: evidence.status,
+        sources: evidence.sources,
       }),
     );
 
+    const priorRows = await db
+      .select({
+        id: comparisonAcceptances.id,
+        evidenceHash: comparisonAcceptances.evidenceHash,
+        invalidatedAt: comparisonAcceptances.invalidatedAt,
+      })
+      .from(comparisonAcceptances)
+      .where(
+        and(
+          eq(comparisonAcceptances.processId, processId),
+          eq(comparisonAcceptances.scope, input.scope),
+          eq(comparisonAcceptances.rowKey, input.rowKey),
+        ),
+      );
+
+    // O indice unico (process_id, scope, row_key, evidence_hash) cobre linhas
+    // ativas E invalidadas, entao reafirmar uma evidencia IDENTICA depois de
+    // uma invalidacao nao cabe na mesma chave. Em vez de ressuscitar a linha
+    // invalidada, a reafirmacao entra como linha NOVA sob um hash derivado.
+    const byHash = new Map((priorRows ?? []).map((row) => [row.evidenceHash, row]));
+    let evidenceHash = baseHash;
+    let activeRow: { id: number } | null = null;
+    for (let attempt = 0; attempt < MAX_ACCEPTANCE_REAFFIRMATIONS; attempt += 1) {
+      const row = byHash.get(evidenceHash);
+      if (!row) break;
+      if (!row.invalidatedAt) {
+        activeRow = row;
+        break;
+      }
+      evidenceHash = sha256Text(`${evidenceHash}:reafirmacao`);
+    }
+
+    const acceptedAt = new Date();
+
+    if (activeRow) {
+      await db
+        .update(comparisonAcceptances)
+        .set({
+          resolutionNote: input.resolution_note,
+          acceptedBy: userId ?? null,
+          acceptedAt,
+          updatedAt: acceptedAt,
+        })
+        .where(eq(comparisonAcceptances.id, activeRow.id));
+    } else {
+      await db
+        .insert(comparisonAcceptances)
+        .values({
+          processId,
+          scope: input.scope,
+          rowKey: input.rowKey,
+          fieldLabel,
+          itemCode: input.itemCode ?? null,
+          previousStatus: input.previousStatus ?? null,
+          evidenceHash,
+          resolutionNote: input.resolution_note,
+          acceptedBy: userId ?? null,
+          acceptedAt,
+        })
+        .onConflictDoUpdate({
+          target: [
+            comparisonAcceptances.processId,
+            comparisonAcceptances.scope,
+            comparisonAcceptances.rowKey,
+            comparisonAcceptances.evidenceHash,
+          ],
+          // NUNCA limpa invalidatedAt: em uma corrida, so um aceite que segue
+          // ATIVO pode ser reescrito. Um invalidado permanece invalidado.
+          setWhere: sql`${comparisonAcceptances.invalidatedAt} IS NULL`,
+          set: {
+            resolutionNote: input.resolution_note,
+            acceptedBy: userId ?? null,
+            acceptedAt,
+            updatedAt: acceptedAt,
+          },
+        });
+    }
+
+    // Aceites anteriores da MESMA celula sob outra evidencia deixam de valer —
+    // inclusive os gravados antes desta mudanca de composicao do hash, que de
+    // outro modo ficariam ativos em paralelo e duplicariam a linha na tela.
     await db
-      .insert(comparisonAcceptances)
-      .values({
-        processId,
+      .update(comparisonAcceptances)
+      .set({
+        invalidatedAt: acceptedAt,
+        invalidationReason: 'superseded_by_new_acceptance',
+        updatedAt: acceptedAt,
+      })
+      .where(
+        and(
+          eq(comparisonAcceptances.processId, processId),
+          eq(comparisonAcceptances.scope, input.scope),
+          eq(comparisonAcceptances.rowKey, input.rowKey),
+          ne(comparisonAcceptances.evidenceHash, evidenceHash),
+          sql`${comparisonAcceptances.invalidatedAt} IS NULL`,
+        ),
+      );
+
+    // Trilha central: aceitar divergencia e supressao de risco, como editar a
+    // celula (edit_comparison_field) e resolver manualmente na validacao.
+    await auditService.log(
+      userId ?? null,
+      'accept_comparison',
+      'process',
+      processId,
+      {
         scope: input.scope,
         rowKey: input.rowKey,
         fieldLabel,
@@ -2852,24 +3109,11 @@ export const documentService = {
         previousStatus: input.previousStatus ?? null,
         evidenceHash,
         resolutionNote: input.resolution_note,
-        acceptedBy: userId ?? null,
-      })
-      .onConflictDoUpdate({
-        target: [
-          comparisonAcceptances.processId,
-          comparisonAcceptances.scope,
-          comparisonAcceptances.rowKey,
-          comparisonAcceptances.evidenceHash,
-        ],
-        set: {
-          resolutionNote: input.resolution_note,
-          acceptedBy: userId ?? null,
-          acceptedAt: new Date(),
-          invalidatedAt: null,
-          invalidationReason: null,
-          updatedAt: new Date(),
-        },
-      });
+        evidenceValues: evidence.values,
+        evidenceStatus: evidence.status,
+      },
+      null,
+    );
 
     await recordProcessEvent(
       processId,
@@ -2884,7 +3128,10 @@ export const documentService = {
           itemCode: input.itemCode ?? null,
           previousStatus: input.previousStatus ?? null,
           evidenceHash,
-          acceptedAt: new Date().toISOString(),
+          evidenceValues: evidence.values,
+          evidenceStatus: evidence.status,
+          evidenceSources: evidence.sources,
+          acceptedAt: acceptedAt.toISOString(),
         },
       },
       userId ?? null,
@@ -2894,6 +3141,7 @@ export const documentService = {
       accepted: true,
       rowKey: input.rowKey,
       scope: input.scope,
+      evidenceHash,
     };
   },
 
@@ -2911,6 +3159,40 @@ export const documentService = {
     if (!processRow) {
       throw new NotFoundError('Processo', processId);
     }
+
+    // O `onConflictDoUpdate` abaixo sobrescreve valor, nota e autor da mesma
+    // celula: sem ler o estado ANTERIOR aqui, o valor consolidado que estava
+    // em vigor e quem o havia editado sumiam da base.
+    const [previousOverride] = await db
+      .select({
+        id: comparisonFieldOverrides.id,
+        fieldLabel: comparisonFieldOverrides.fieldLabel,
+        valueText: comparisonFieldOverrides.valueText,
+        note: comparisonFieldOverrides.note,
+        editedBy: comparisonFieldOverrides.editedBy,
+        editedAt: comparisonFieldOverrides.editedAt,
+      })
+      .from(comparisonFieldOverrides)
+      .where(
+        and(
+          eq(comparisonFieldOverrides.processId, processId),
+          eq(comparisonFieldOverrides.rowKey, input.rowKey),
+          eq(comparisonFieldOverrides.sourceColumn, input.sourceColumn),
+        ),
+      )
+      .limit(1);
+
+    const previousState = previousOverride
+      ? {
+          value: previousOverride.valueText ?? null,
+          note: previousOverride.note ?? null,
+          editedBy: previousOverride.editedBy ?? null,
+          editedAt:
+            previousOverride.editedAt instanceof Date
+              ? previousOverride.editedAt.toISOString()
+              : (previousOverride.editedAt ?? null),
+        }
+      : null;
 
     const editedAt = new Date();
     const [override] = await db
@@ -2951,6 +3233,13 @@ export const documentService = {
         rowKey: input.rowKey,
         fieldLabel: input.fieldLabel,
         sourceColumn: input.sourceColumn,
+        note: input.note,
+        value: input.value,
+        // Historico da celula: a tabela guarda so a ultima edicao.
+        previousValue: previousState?.value ?? null,
+        previousNote: previousState?.note ?? null,
+        previousEditedBy: previousState?.editedBy ?? null,
+        previousEditedAt: previousState?.editedAt ?? null,
       },
       null,
     );
@@ -2966,6 +3255,11 @@ export const documentService = {
           fieldLabel: input.fieldLabel,
           sourceColumn: input.sourceColumn,
           value: input.value,
+          note: input.note,
+          previousValue: previousState?.value ?? null,
+          previousNote: previousState?.note ?? null,
+          previousEditedBy: previousState?.editedBy ?? null,
+          previousEditedAt: previousState?.editedAt ?? null,
           editedAt: editedAt.toISOString(),
         },
       },
@@ -2975,8 +3269,96 @@ export const documentService = {
     return override;
   },
 
+  /**
+   * Remove a edicao manual de uma celula e devolve a linha ao valor EXTRAIDO.
+   * Sem esta rota, um `value: null` gravado por engano apagava o valor
+   * permanentemente da tela (getComparison prefere o override existente,
+   * inclusive quando `valueText` e null) e nao havia caminho de volta.
+   */
+  async removeComparisonFieldOverride(
+    processId: number,
+    input: RemoveComparisonFieldInput,
+    userId?: number | null,
+  ) {
+    const [processRow] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+
+    if (!processRow) {
+      throw new NotFoundError('Processo', processId);
+    }
+
+    const [removed] = await db
+      .delete(comparisonFieldOverrides)
+      .where(
+        and(
+          eq(comparisonFieldOverrides.processId, processId),
+          eq(comparisonFieldOverrides.rowKey, input.rowKey),
+          eq(comparisonFieldOverrides.sourceColumn, input.sourceColumn),
+        ),
+      )
+      .returning();
+
+    if (!removed) {
+      throw new NotFoundError('Edicao manual do comparativo', processId);
+    }
+
+    const removedAt = new Date();
+    const fieldLabel = removed.fieldLabel ?? input.rowKey;
+
+    await auditService.log(
+      userId ?? null,
+      'remove_comparison_field_override',
+      'process',
+      processId,
+      {
+        rowKey: input.rowKey,
+        fieldLabel,
+        sourceColumn: input.sourceColumn,
+        note: input.note,
+        previousValue: removed.valueText ?? null,
+        previousNote: removed.note ?? null,
+        previousEditedBy: removed.editedBy ?? null,
+        previousEditedAt:
+          removed.editedAt instanceof Date
+            ? removed.editedAt.toISOString()
+            : (removed.editedAt ?? null),
+      },
+      null,
+    );
+
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'comparison_field_override_removed',
+        title: `Edicao revertida no comparativo: ${fieldLabel}`,
+        description: input.note,
+        metadata: {
+          rowKey: input.rowKey,
+          fieldLabel,
+          sourceColumn: input.sourceColumn,
+          note: input.note,
+          previousValue: removed.valueText ?? null,
+          previousNote: removed.note ?? null,
+          previousEditedBy: removed.editedBy ?? null,
+          removedAt: removedAt.toISOString(),
+        },
+      },
+      userId ?? null,
+    );
+
+    return {
+      removed: true,
+      rowKey: input.rowKey,
+      sourceColumn: input.sourceColumn,
+      previousValue: removed.valueText ?? null,
+    };
+  },
+
   async getComparison(processId: number) {
-    const [docs, processRow, overrides] = await Promise.all([
+    const [docs, processRow, overrides, acceptanceRows] = await Promise.all([
       db.select().from(documents).where(eq(documents.processId, processId)),
       db.select().from(importProcesses).where(eq(importProcesses.id, processId)).limit(1),
       db
@@ -2995,7 +3377,49 @@ export const documentService = {
         .from(comparisonFieldOverrides)
         .leftJoin(users, eq(comparisonFieldOverrides.editedBy, users.id))
         .where(eq(comparisonFieldOverrides.processId, processId)),
+      // O aceite VIGENTE vem da tabela relacional, nao do timeline. Enquanto
+      // `comparison_acceptances` era write-only, `invalidateComparisonAcceptances()`
+      // marcava a linha como invalidada e a tela continuava exibindo o aceite
+      // (que vinha do evento) sobre dados de extracao NOVOS.
+      db
+        .select({
+          id: comparisonAcceptances.id,
+          scope: comparisonAcceptances.scope,
+          rowKey: comparisonAcceptances.rowKey,
+          fieldLabel: comparisonAcceptances.fieldLabel,
+          itemCode: comparisonAcceptances.itemCode,
+          previousStatus: comparisonAcceptances.previousStatus,
+          evidenceHash: comparisonAcceptances.evidenceHash,
+          resolutionNote: comparisonAcceptances.resolutionNote,
+          acceptedAt: comparisonAcceptances.acceptedAt,
+          acceptedBy: comparisonAcceptances.acceptedBy,
+          acceptedByName: users.name,
+        })
+        .from(comparisonAcceptances)
+        .leftJoin(users, eq(comparisonAcceptances.acceptedBy, users.id))
+        .where(
+          and(
+            eq(comparisonAcceptances.processId, processId),
+            sql`${comparisonAcceptances.invalidatedAt} IS NULL`,
+          ),
+        ),
     ]);
+
+    const acceptances = acceptanceRows ?? [];
+    const acceptanceByRow = new Map<string, (typeof acceptances)[number]>();
+    for (const acceptance of acceptances) {
+      const key = `${acceptance.scope}|${acceptance.rowKey}`;
+      const current = acceptanceByRow.get(key);
+      if (!current) {
+        acceptanceByRow.set(key, acceptance);
+        continue;
+      }
+      const currentTime = new Date(current.acceptedAt).getTime();
+      const candidateTime = new Date(acceptance.acceptedAt).getTime();
+      if (candidateTime > currentTime) acceptanceByRow.set(key, acceptance);
+    }
+    const acceptanceFor = (scope: 'aggregate' | 'item', rowKeyValue: string) =>
+      acceptanceByRow.get(`${scope}|${rowKeyValue}`) ?? null;
 
     const overrideByRow = new Map<string, typeof overrides>();
     for (const override of overrides) {
@@ -3365,6 +3789,7 @@ export const documentService = {
         criticality,
         message: editedMessage(key, baseMessage),
         overrides: overrideByRow.get(key) ?? [],
+        accepted: acceptanceFor('aggregate', key),
       };
     });
 
@@ -3450,8 +3875,15 @@ export const documentService = {
         weightRatioMessage: weightRatio.message,
       });
 
+      const itemRowKey = comparisonRowKey(
+        'item',
+        itemCode ?? invItem.description ?? 'sem-codigo',
+        index,
+      );
+
       return {
-        rowKey: comparisonRowKey('item', itemCode ?? invItem.description ?? 'sem-codigo', index),
+        rowKey: itemRowKey,
+        accepted: acceptanceFor('item', itemRowKey),
         itemCode,
         description: invItem.description ?? invItem.descricao,
         ncm: invItem.ncmCode ?? invItem.ncm,
@@ -3566,6 +3998,19 @@ export const documentService = {
       hasEspelho: !!espelhoSummary || espelhoItems.length > 0,
       aggregateComparison,
       itemComparison,
+      // Aceites ATIVOS (invalidated_at IS NULL) lidos da tabela relacional.
+      // O timeline (`comparison_acceptance`) permanece como historico.
+      acceptances,
+      // Documentos que originaram os valores comparados — entram na evidencia
+      // do aceite (ver acceptComparison) e permitem a tela citar a origem.
+      sourceDocuments: {
+        invoice: invoiceDoc?.id ?? null,
+        packingList: plDoc?.id ?? null,
+        bl: operationalBlDoc?.id ?? null,
+        finalBl: blDoc?.id ?? null,
+        draftBl: draftBlDoc?.id ?? null,
+        espelho: espelhoDoc?.id ?? null,
+      },
       unmatchedPlItems,
       unmatchedInvoiceItems,
       supplierFooterAliases,
