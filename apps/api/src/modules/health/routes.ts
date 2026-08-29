@@ -30,7 +30,13 @@ router.get('/live', (_req: Request, res: Response) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     aiProvider: process.env.AI_PROVIDER || 'ialocal',
-    revision: process.env.REVISION || null,
+    // `APP_VERSION` e o nome que o deploy realmente injeta: scripts/deploy.sh
+    // faz `APP_VERSION='<sha>' docker compose up` e o compose repassa em
+    // docker-compose.prod.yml. `REVISION` nunca foi definido por ninguem — o
+    // deploy grava um ARQUIVO REVISION no servidor, que nada le. Resultado: este
+    // campo respondeu `null` em toda a historia do endpoint, e a unica forma de
+    // saber qual SHA rodava era inspecionar o servidor na mao.
+    revision: process.env.APP_VERSION || process.env.REVISION || null,
   });
 });
 
