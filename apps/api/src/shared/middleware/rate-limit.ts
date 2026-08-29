@@ -69,7 +69,11 @@ export function createRateLimiter(maxAttempts: number, windowMs: number) {
 
       return next();
     } catch (err) {
-      logger.warn({ err }, 'Rate limiter cache error, using in-memory fallback');
+      // Rede de seguranca, NAO o caminho normal de degradacao: `cache.incr`
+      // trata o proprio erro e ja avisa (ver `shared/cache/redis.ts`). Este
+      // bloco so roda se algo inesperado escapar dali — e sem ele um erro
+      // solto viraria 500 numa rota que deveria apenas limitar.
+      logger.error({ err }, 'Rate limiter falhou de forma inesperada; contando em memoria');
       const { count, resetAt } = incrementMemory(`mem:${key}`, windowMs);
       const remaining = Math.max(0, maxAttempts - count);
       res.set('X-RateLimit-Limit', maxAttempts.toString());
