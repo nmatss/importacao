@@ -1573,3 +1573,53 @@ parser que estavam descobertos, mais as duas contraprovas de que o caminho
 legitimo continua chegando ao `XLSX.read`) e 4 em `archive-guard.test.ts` (os
 dois metodos de compactacao com indice adulterado, a entrada corrompida no
 comeco, e a planilha honesta que tem de continuar passando).
+
+### Deploy da quinta rodada — 2026-08-29, 20:34
+
+Autorizado explicitamente pelo usuario, em duas perguntas separadas: o deploy e,
+depois, o push — porque `scripts/deploy.sh:93` exige `HEAD == origin/master` e o
+push e operacao propria, com regra propria no `AGENTS.md`. `master` estava dois
+commits a frente.
+
+```text
+push origin master           -> 6548379..c769d57
+[1/8] backup obrigatorio     -> pgdump 2,5M, integridade verificada por
+                                pg_restore --list, + volume uploads
+      snapshot para rollback -> /home/nicolas/importacao.rollback
+[2/8] rsync                  -> ok
+[3/8] sops                   -> gate SYDLE liberado por ALLOW_SYDLE_SYNC_DEPLOY=1
+[4/8] alertmanager           -> renderizado
+[5/8] compose remoto         -> valido; rede ia-local-net existe
+[6/8] migrations             -> aplicadas ("Found 18 forward-only SQL migrations")
+[7/8] build api+web+cert-api -> containers recriados (log anterior arquivado)
+[8/8] health                 -> api, cert-api, web e proxy /api: todos OK
+exit 0, sem rollback
+```
+
+#### O que a producao provou
+
+`/health/live` responde `revision: c769d57c1c2e...` — o SHA exato do deploy.
+
+E a verificacao que importa, porque "esta no git" nao e "esta rodando": o
+artefato compilado **dentro do container** contem a correcao.
+
+```text
+dist/shared/utils/archive-guard.js       verificarTamanhoRealDescomprimido  2x
+dist/modules/espelho-parser/parser.js    assertArquivoSeguroParaAbrir       2x
+dist/modules/pre-cons/service.js         assertArquivoSeguroParaAbrir       2x
+```
+
+Duas ocorrencias em cada e o esperado: definicao mais chamada no primeiro,
+import mais chamada nos outros dois. Os dois caminhos que D-13 encontrou
+descobertos estao guardados no codigo que esta de fato em execucao.
+
+Estado apos o deploy: zero linhas de erro no log da API, scheduler iniciado,
+`Document ingestion source: email`, RSS da API em **75,5 MiB de 512 MiB**.
+
+#### O que este deploy NAO resolve
+
+Nada mudou nas pendencias que dependem de segredo ou de decisao de negocio. Em
+particular, a chave do webhook do Google Chat continua invalida e os 5.067
+alertas continuam com **zero entregues** — o job de reentrega esta vivo e o
+backoff funciona (9 tentativas consumidas, nao 5.067), entao os alertas das
+ultimas 24h saem sozinhos no momento em que a chave for rotacionada.
