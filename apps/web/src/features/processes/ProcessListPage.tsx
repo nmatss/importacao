@@ -1,5 +1,5 @@
-import { useState, useEffect, type KeyboardEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, type KeyboardEvent } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Plus, Search, ChevronLeft, ChevronRight, Package, Filter } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
@@ -30,21 +30,66 @@ interface ProcessListResponse {
   };
 }
 
+type FilterKey = 'search' | 'status' | 'brand' | 'startDate' | 'endDate' | 'page';
+
 export function ProcessListPage() {
   const navigate = useNavigate();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [status, setStatus] = useState('');
-  const [brand, setBrand] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [page, setPage] = useState(1);
+
+  // Os filtros vivem na URL, nao em useState: os cards do Meu Dia navegam para
+  // /importacao/processos?status=... e antes o parametro era ignorado (o
+  // usuario clicava em "Divergencias a resolver" e caia na lista completa).
+  // Como efeito colateral desejado, o filtro agora sobrevive a refresh, ao
+  // botao voltar e ao compartilhamento do link.
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const debouncedSearch = searchParams.get('search') ?? '';
+  const status = searchParams.get('status') ?? '';
+  const brand = searchParams.get('brand') ?? '';
+  const startDate = searchParams.get('startDate') ?? '';
+  const endDate = searchParams.get('endDate') ?? '';
+  const parsedPage = Number(searchParams.get('page'));
+  const page = Number.isInteger(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limit = 20;
 
+  /**
+   * Grava filtros na URL preservando os demais parametros. `replace: true`
+   * evita empilhar uma entrada de historico por tecla digitada.
+   */
+  const updateFilters = useCallback(
+    (patch: Partial<Record<FilterKey, string>>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const [key, value] of Object.entries(patch)) {
+            if (value) next.set(key, value);
+            else next.delete(key);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setPage = useCallback(
+    (value: number) => updateFilters({ page: value > 1 ? String(value) : '' }),
+    [updateFilters],
+  );
+
+  // Campo de busca continua local para a digitacao ser instantanea; so o valor
+  // ja debounced (300ms) chega a URL e, portanto, a query.
+  const [search, setSearch] = useState(debouncedSearch);
+
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    setSearch(debouncedSearch);
+  }, [debouncedSearch]);
+
+  useEffect(() => {
+    if (search === debouncedSearch) return;
+    const timer = setTimeout(() => updateFilters({ search, page: '' }), 300);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, debouncedSearch, updateFilters]);
 
   const params = new URLSearchParams();
   if (debouncedSearch) params.set('search', debouncedSearch);
@@ -111,10 +156,7 @@ export function ProcessListPage() {
               aria-label="Buscar processo"
               placeholder="Buscar por codigo do processo..."
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 py-2 pl-10 pr-4 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
             />
           </div>
@@ -124,10 +166,7 @@ export function ProcessListPage() {
               <select
                 aria-label="Filtrar processos por status"
                 value={status}
-                onChange={(e) => {
-                  setStatus(e.target.value);
-                  setPage(1);
-                }}
+                onChange={(e) => updateFilters({ status: e.target.value, page: '' })}
                 className="rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
               >
                 <option value="">Todos os status</option>
@@ -141,10 +180,7 @@ export function ProcessListPage() {
             <select
               aria-label="Filtrar processos por marca"
               value={brand}
-              onChange={(e) => {
-                setBrand(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => updateFilters({ brand: e.target.value, page: '' })}
               className="rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
             >
               <option value="">Todas as marcas</option>
@@ -157,14 +193,8 @@ export function ProcessListPage() {
             <DateRangeFilter
               startDate={startDate}
               endDate={endDate}
-              onStartDateChange={(v) => {
-                setStartDate(v);
-                setPage(1);
-              }}
-              onEndDateChange={(v) => {
-                setEndDate(v);
-                setPage(1);
-              }}
+              onStartDateChange={(v) => updateFilters({ startDate: v, page: '' })}
+              onEndDateChange={(v) => updateFilters({ endDate: v, page: '' })}
             />
           </div>
           {hasActiveFilters && (
@@ -172,11 +202,14 @@ export function ProcessListPage() {
               type="button"
               onClick={() => {
                 setSearch('');
-                setStatus('');
-                setBrand('');
-                setStartDate('');
-                setEndDate('');
-                setPage(1);
+                updateFilters({
+                  search: '',
+                  status: '',
+                  brand: '',
+                  startDate: '',
+                  endDate: '',
+                  page: '',
+                });
               }}
               className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors"
             >
@@ -295,7 +328,7 @@ export function ProcessListPage() {
                 <button
                   type="button"
                   disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
+                  onClick={() => setPage(page - 1)}
                   aria-label="Página anterior"
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
@@ -305,7 +338,7 @@ export function ProcessListPage() {
                 <button
                   type="button"
                   disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
+                  onClick={() => setPage(page + 1)}
                   aria-label="Próxima página"
                   className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >

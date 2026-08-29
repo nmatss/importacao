@@ -115,13 +115,10 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Page header */}
+      {/* Page header — o título é o <h1> do shell (AppLayout); aqui só o subtítulo. */}
       <div>
-        <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-          Configurações
-        </h2>
-        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Gerencie preferências, usuários e integrações
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Gerencie preferências, usuários e integrações.
         </p>
       </div>
 
@@ -366,7 +363,7 @@ function EmailSettingsTab() {
   if (recipientsError || smtpError) {
     return (
       <ErrorState
-        message="Nao foi possivel carregar as configuracoes de e-mail."
+        message="Não foi possível carregar as configurações de e-mail."
         onRetry={() => {
           if (recipientsError) refetchRecipients();
           if (smtpError) refetchSmtp();
@@ -560,13 +557,25 @@ function EmailSettingsTab() {
 
 function UsersTab() {
   const queryClient = useQueryClient();
+  const { user: currentUser } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deactivateId, setDeactivateId] = useState<number | null>(null);
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'analyst' });
   const [saving, setSaving] = useState(false);
 
-  const { data: users, isLoading } = useApiQuery<User[]>(userKeys.all, '/api/auth/users');
+  const {
+    data: users,
+    isLoading,
+    error: usersError,
+    refetch: refetchUsers,
+  } = useApiQuery<User[]>(userKeys.all, '/api/auth/users');
+
+  // Desativar a si mesmo desloga o admin na requisicao seguinte; se ele for o
+  // ultimo admin, so SQL direto recupera o acesso. A guarda equivalente existe
+  // no servidor — esta aqui e para o controle nao ficar clicavel.
+  const isSelf = (target: User) => String(target.id) === String(currentUser?.id);
+  const selfActionTitle = 'Você não pode desativar a própria conta.';
 
   const openCreate = () => {
     setEditUser(null);
@@ -627,6 +636,14 @@ function UsersTab() {
   };
 
   if (isLoading) return <PageSkeleton />;
+
+  // Sem isto, uma falha de carregamento virava "0 usuários cadastrados" com a
+  // tabela vazia — indistinguivel de uma base sem usuarios.
+  if (usersError) {
+    return (
+      <ErrorState message="Não foi possível carregar os usuários." onRetry={() => refetchUsers()} />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -724,12 +741,15 @@ function UsersTab() {
                         role="switch"
                         aria-checked={user.isActive}
                         onClick={() => toggleActive(user)}
+                        disabled={isSelf(user)}
+                        title={isSelf(user) ? selfActionTitle : undefined}
                         aria-label={
                           user.isActive ? `Desativar ${user.name}` : `Ativar ${user.name}`
                         }
                         className={cn(
-                          'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200',
+                          'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200',
                           user.isActive ? 'bg-primary-600' : 'bg-slate-200',
+                          isSelf(user) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
                         )}
                       >
                         <span
@@ -744,7 +764,7 @@ function UsersTab() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => openEdit(user)}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
                           title="Editar"
                           aria-label={`Editar usuário ${user.name}`}
                         >
@@ -752,8 +772,9 @@ function UsersTab() {
                         </button>
                         <button
                           onClick={() => setDeactivateId(user.id)}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
-                          title="Desativar"
+                          disabled={isSelf(user)}
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 transition-all duration-200 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                          title={isSelf(user) ? selfActionTitle : 'Desativar'}
                           aria-label={`Desativar usuário ${user.name}`}
                         >
                           <UserX className="h-4 w-4" />
@@ -884,6 +905,10 @@ function IntegrationsTab() {
   const [testingOdoo, setTestingOdoo] = useState(false);
   const [driveStatus, setDriveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [odooStatus, setOdooStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  // O backend devolve a causa (ex.: erro de DNS no Odoo); o catch a descartava e
+  // o indicador dizia so "Falha na conexão".
+  const [driveError, setDriveError] = useState<string | null>(null);
+  const [odooError, setOdooError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -909,10 +934,12 @@ function IntegrationsTab() {
   const testDrive = async () => {
     setTestingDrive(true);
     setDriveStatus('idle');
+    setDriveError(null);
     try {
       await api.post('/api/settings/integrations/test-drive');
       setDriveStatus('success');
-    } catch {
+    } catch (err: unknown) {
+      setDriveError(getErrorMessage(err));
       setDriveStatus('error');
     } finally {
       setTestingDrive(false);
@@ -922,10 +949,12 @@ function IntegrationsTab() {
   const testOdoo = async () => {
     setTestingOdoo(true);
     setOdooStatus('idle');
+    setOdooError(null);
     try {
       await api.post('/api/settings/integrations/test-odoo');
       setOdooStatus('success');
-    } catch {
+    } catch (err: unknown) {
+      setOdooError(getErrorMessage(err));
       setOdooStatus('error');
     } finally {
       setTestingOdoo(false);
@@ -956,7 +985,7 @@ function IntegrationsTab() {
   if (integrationsError) {
     return (
       <ErrorState
-        message="Nao foi possivel carregar as integracoes."
+        message="Não foi possível carregar as integrações."
         onRetry={() => refetchIntegrations()}
       />
     );
@@ -968,7 +997,7 @@ function IntegrationsTab() {
         icon={HardDrive}
         title="Google Drive"
         description="Armazenamento e sincronização de documentos"
-        actions={<StatusIndicator status={driveStatus} />}
+        actions={<StatusIndicator status={driveStatus} errorMessage={driveError} />}
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1007,7 +1036,7 @@ function IntegrationsTab() {
         icon={Database}
         title="Odoo ERP"
         description="Integração com sistema de gestão empresarial"
-        actions={<StatusIndicator status={odooStatus} />}
+        actions={<StatusIndicator status={odooStatus} errorMessage={odooError} />}
       >
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -1092,8 +1121,16 @@ function CommunicationTemplatesTab() {
     isActive: true,
   });
 
-  const { data: templates, isLoading } = useApiQuery<CommunicationTemplateData[]>(
-    settingsKeys.communicationTemplates(),
+  // Mesmo PREFIXO da chave usada em Atendimentos (`communicationTemplates()`),
+  // com filtro proprio porque a URL e outra (`?active=false` traz os inativos).
+  // Assim as invalidacoes abaixo alcancam as duas telas.
+  const {
+    data: templates,
+    isLoading,
+    error: templatesError,
+    refetch: refetchTemplates,
+  } = useApiQuery<CommunicationTemplateData[]>(
+    settingsKeys.communicationTemplatesList({ active: false }),
     '/api/settings/communication-templates?active=false',
   );
 
@@ -1171,6 +1208,16 @@ function CommunicationTemplatesTab() {
   };
 
   if (isLoading) return <PageSkeleton />;
+
+  // Uma falha de carregamento virava "Nenhum modelo cadastrado."
+  if (templatesError) {
+    return (
+      <ErrorState
+        message="Não foi possível carregar os modelos de atendimento."
+        onRetry={() => refetchTemplates()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1402,10 +1449,12 @@ function SignaturesTab() {
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
-  const { data: signatures, isLoading } = useApiQuery<EmailSignatureData[]>(
-    emailSignatureKeys.all,
-    '/api/settings/email-signatures',
-  );
+  const {
+    data: signatures,
+    isLoading,
+    error: signaturesError,
+    refetch: refetchSignatures,
+  } = useApiQuery<EmailSignatureData[]>(emailSignatureKeys.all, '/api/settings/email-signatures');
 
   const openCreate = () => {
     setEditSig(null);
@@ -1458,6 +1507,18 @@ function SignaturesTab() {
   };
 
   if (isLoading) return <PageSkeleton />;
+
+  // O pior dos quatro casos: em falha a tela dizia "Nenhuma assinatura
+  // cadastrada" e convidava a criar outra — o usuario acreditava ter perdido as
+  // assinaturas e criava duplicatas.
+  if (signaturesError) {
+    return (
+      <ErrorState
+        message="Não foi possível carregar as assinaturas de e-mail."
+        onRetry={() => refetchSignatures()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -1672,7 +1733,13 @@ function SignaturesTab() {
   );
 }
 
-function StatusIndicator({ status }: { status: 'idle' | 'success' | 'error' }) {
+function StatusIndicator({
+  status,
+  errorMessage,
+}: {
+  status: 'idle' | 'success' | 'error';
+  errorMessage?: string | null;
+}) {
   if (status === 'idle') return null;
   return status === 'success' ? (
     <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600">
@@ -1680,9 +1747,14 @@ function StatusIndicator({ status }: { status: 'idle' | 'success' | 'error' }) {
       Conectado
     </span>
   ) : (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600">
-      <XCircle className="h-3.5 w-3.5" />
-      Falha na conexão
-    </span>
+    <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end">
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600">
+        <XCircle className="h-3.5 w-3.5" />
+        Falha na conexão
+      </span>
+      {errorMessage && (
+        <p className="max-w-xs break-words text-xs text-danger-600 sm:text-right">{errorMessage}</p>
+      )}
+    </div>
   );
 }

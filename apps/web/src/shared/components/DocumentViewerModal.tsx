@@ -167,7 +167,6 @@ export function DocumentViewerModal({
                 </a>
               )}
               <button
-                ref={closeButtonRef}
                 type="button"
                 onClick={handleDownload}
                 disabled={downloading}
@@ -181,6 +180,7 @@ export function DocumentViewerModal({
                 Baixar
               </button>
               <button
+                ref={closeButtonRef}
                 type="button"
                 onClick={onClose}
                 aria-label="Fechar visualizador"

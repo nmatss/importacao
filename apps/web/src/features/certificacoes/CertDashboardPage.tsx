@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useTheme } from '@/shared/contexts/ThemeContext';
 import { CertStatsCards } from '@/features/certificacoes/components/CertStatsCards';
 import { CertBrandChart } from '@/features/certificacoes/components/CertBrandChart';
 import {
@@ -46,10 +47,12 @@ interface CertProblemProduct {
   brand?: string;
 }
 
-const PIE_COLORS = {
-  OK: '#10b981',
-  INCONSISTENT: '#f59e0b',
-  NOT_FOUND: '#94a3b8',
+const PIE_COLORS: Record<string, string> = {
+  Conforme: '#10b981',
+  Inconsistente: '#f59e0b',
+  'Não Encontrado': '#94a3b8',
+  // Neutro de propósito — ausência de veredito, não veredito negativo.
+  'Não validado': '#cbd5e1',
 };
 
 function Skeleton({ className }: { className?: string }) {
@@ -93,56 +96,101 @@ function DashboardSkeleton() {
   );
 }
 
+/**
+ * Falhas por seção. "Vazio" e "indisponível" são coisas diferentes: com a
+ * `/api/stats` propagando 500 (em vez de devolver zeros), a UI precisa dizer
+ * "não foi possível carregar" em vez de "0 produtos, todos conformes".
+ */
+interface DashboardErrors {
+  stats: boolean;
+  reports: boolean;
+  problems: boolean;
+  expired: boolean;
+}
+
+const NO_ERRORS: DashboardErrors = {
+  stats: false,
+  reports: false,
+  problems: false,
+  expired: false,
+};
+
 export default function CertDashboardPage() {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === 'dark';
+
   const [stats, setStats] = useState<CertStats | null>(null);
   const [reports, setReports] = useState<CertReportFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
   const [problemProducts, setProblemProducts] = useState<CertProblemProduct[]>([]);
   const [expiredProducts, setExpiredProducts] = useState<CertExpiredProduct[]>([]);
+  const [errors, setErrors] = useState<DashboardErrors>(NO_ERRORS);
 
-  useEffect(() => {
-    Promise.all([
-      fetchCertStats().catch(() => null),
-      fetchCertReports().catch(() => []),
-      checkCertApiHealth(),
-      // Load problem products directly from DB (URL_NOT_FOUND + INCONSISTENT)
-      fetchCertProducts({ per_page: 10, status: 'URL_NOT_FOUND,INCONSISTENT' }).catch(() => ({
-        products: [],
-      })),
-      // Load expired products
-      fetchCertExpired({ per_page: 10 }).catch(() => ({ products: [] })),
-    ]).then(([s, r, health, problemData, expiredData]) => {
-      setStats(s);
-      setApiOnline(health.connected);
-      const reportList: CertReportFile[] = Array.isArray(r) ? r : [];
+  const loadDashboard = useCallback(async () => {
+    setLoading(true);
+    // `allSettled` + `finally`: com `Promise.all().then()` uma exceção dentro do
+    // `.then` deixava `loading` preso em true e o skeleton eterno.
+    try {
+      const [statsRes, reportsRes, healthRes, problemsRes, expiredRes] = await Promise.allSettled([
+        fetchCertStats(),
+        fetchCertReports(),
+        checkCertApiHealth(),
+        // Load problem products directly from DB (URL_NOT_FOUND + INCONSISTENT)
+        fetchCertProducts({ per_page: 10, status: 'URL_NOT_FOUND,INCONSISTENT' }),
+        fetchCertExpired({ per_page: 10 }),
+      ]);
+
+      setStats(statsRes.status === 'fulfilled' ? statsRes.value : null);
+      setApiOnline(healthRes.status === 'fulfilled' && healthRes.value.connected);
+
+      const reportList: CertReportFile[] =
+        reportsRes.status === 'fulfilled' && Array.isArray(reportsRes.value)
+          ? (reportsRes.value as CertReportFile[])
+          : [];
       setReports(reportList.filter((f) => f.filename?.endsWith('.json')).slice(0, 5));
 
-      // Problem products from DB
-      const allProblems = (problemData?.products || [])
-        .map((p: any) => ({
-          sku: p.sku,
-          name: p.name,
-          status: p.last_validation_status || 'URL_NOT_FOUND',
-          brand: p.brand,
-        }))
-        .slice(0, 10);
-      setProblemProducts(allProblems);
-
-      // Expired products
-      setExpiredProducts(
-        (expiredData?.products || []).map((p: any) => ({
-          sku: p.sku,
-          name: p.name,
-          brand: p.brand,
-          sale_deadline: p.sale_deadline,
-          sale_deadline_date: p.sale_deadline_date,
-        })),
+      setProblemProducts(
+        problemsRes.status === 'fulfilled'
+          ? (problemsRes.value.products || [])
+              .map((p: any) => ({
+                sku: p.sku,
+                name: p.name,
+                status: p.last_validation_status || 'URL_NOT_FOUND',
+                brand: p.brand,
+              }))
+              .slice(0, 10)
+          : [],
       );
 
+      setExpiredProducts(
+        expiredRes.status === 'fulfilled'
+          ? (expiredRes.value.products || []).map((p: any) => ({
+              sku: p.sku,
+              name: p.name,
+              brand: p.brand,
+              sale_deadline: p.sale_deadline,
+              sale_deadline_date: p.sale_deadline_date,
+            }))
+          : [],
+      );
+
+      setErrors({
+        stats: statsRes.status === 'rejected',
+        reports: reportsRes.status === 'rejected',
+        problems: problemsRes.status === 'rejected',
+        expired: expiredRes.status === 'rejected',
+      });
+    } finally {
       setLoading(false);
-    });
+    }
   }, []);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const hasAnyError = errors.stats || errors.reports || errors.problems || errors.expired;
 
   // Calculate totals from by_brand (always up-to-date from DB) instead of last_run (may be stale)
   const byBrand = stats?.by_brand || [];
@@ -151,10 +199,13 @@ export default function CertDashboardPage() {
       ok: acc.ok + (b.ok || 0),
       inconsistent: acc.inconsistent + (b.inconsistent || 0),
       not_found: acc.not_found + (b.not_found || 0) + (b.missing || 0),
+      // Bucket próprio: sem ele a soma das marcas ficava MENOR que total_products.
+      never_validated: acc.never_validated + (b.never_validated || 0),
     }),
-    { ok: 0, inconsistent: 0, not_found: 0 },
+    { ok: 0, inconsistent: 0, not_found: 0, never_validated: 0 },
   );
-  const brandTotal = brandTotals.ok + brandTotals.inconsistent + brandTotals.not_found;
+  const brandTotal =
+    brandTotals.ok + brandTotals.inconsistent + brandTotals.not_found + brandTotals.never_validated;
   const hasBrandData = brandTotal > 0;
 
   const lastRun = stats?.last_run;
@@ -166,12 +217,19 @@ export default function CertDashboardPage() {
           ok: lastRun.ok,
           inconsistent: lastRun.inconsistent,
           not_found: (lastRun.not_found || 0) + (lastRun.missing || 0),
+          // `cert_validation_runs` não registra este bucket.
+          never_validated: undefined,
         }
       : null;
 
+  // A taxa de conformidade só é comparável contra o universo JÁ validado — somar
+  // os nunca-validados no denominador afundaria o percentual sem veredito algum.
+  const validatedTotal = effectiveData
+    ? effectiveData.total - (effectiveData.never_validated ?? 0)
+    : 0;
   const okRate =
-    effectiveData && effectiveData.total > 0
-      ? ((effectiveData.ok / effectiveData.total) * 100).toFixed(1)
+    effectiveData && validatedTotal > 0
+      ? ((effectiveData.ok / validatedTotal) * 100).toFixed(1)
       : null;
   const okRateNum = okRate ? parseFloat(okRate) : 0;
 
@@ -180,6 +238,7 @@ export default function CertDashboardPage() {
         { name: 'Conforme', value: effectiveData.ok || 0 },
         { name: 'Inconsistente', value: effectiveData.inconsistent || 0 },
         { name: 'Não Encontrado', value: effectiveData.not_found || 0 },
+        { name: 'Não validado', value: effectiveData.never_validated || 0 },
       ].filter((d) => d.value > 0)
     : [];
 
@@ -189,6 +248,26 @@ export default function CertDashboardPage() {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {hasAnyError && (
+        <div
+          role="alert"
+          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between dark:border-danger-900/50 dark:bg-danger-900/20 dark:text-danger-300"
+        >
+          <span>
+            Não foi possível carregar{' '}
+            {errors.stats ? 'as estatísticas de certificação' : 'parte dos dados desta tela'}. Os
+            números exibidos podem estar incompletos.
+          </span>
+          <button
+            type="button"
+            onClick={loadDashboard}
+            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -229,7 +308,10 @@ export default function CertDashboardPage() {
 
           {/* Conformance Rate Badge */}
           {okRate && (
-            <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/60 dark:border-slate-700/60 shadow-sm">
+            <div
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shadow-sm"
+              title="Percentual calculado apenas sobre os produtos já validados"
+            >
               <TrendingUp className="w-4 h-4 text-emerald-500" />
               <span className="text-sm font-bold text-emerald-600">{okRate}%</span>
               <span className="text-xs text-slate-500 dark:text-slate-400">conformidade</span>
@@ -238,7 +320,7 @@ export default function CertDashboardPage() {
 
           {/* Last run */}
           {lastRun?.date && (
-            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200/60 dark:border-slate-700/60 shadow-sm text-xs text-slate-500 dark:text-slate-400">
+            <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shadow-sm text-xs text-slate-500 dark:text-slate-400">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               <span>{formatDateTime(lastRun.date)}</span>
               <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-medium text-[10px]">
@@ -252,6 +334,8 @@ export default function CertDashboardPage() {
       {/* Stats Cards */}
       <CertStatsCards
         loading={loading}
+        error={errors.stats}
+        showNeverValidated
         data={
           effectiveData
             ? {
@@ -259,8 +343,17 @@ export default function CertDashboardPage() {
                 ok: effectiveData.ok || 0,
                 inconsistent: effectiveData.inconsistent || 0,
                 not_found: effectiveData.not_found || 0,
+                never_validated: effectiveData.never_validated,
               }
-            : { total: stats?.total_products || 0, ok: 0, inconsistent: 0, not_found: 0 }
+            : {
+                // Sem nenhuma validação registrada: o total é real, mas os
+                // vereditos ainda não existem — "—", nunca "0".
+                total: stats?.total_products,
+                ok: undefined,
+                inconsistent: undefined,
+                not_found: undefined,
+                never_validated: stats?.total_products,
+              }
         }
       />
 
@@ -292,23 +385,14 @@ export default function CertDashboardPage() {
                       stroke="none"
                     >
                       {pieData.map((entry, i) => (
-                        <Cell
-                          key={i}
-                          fill={
-                            entry.name === 'Conforme'
-                              ? PIE_COLORS.OK
-                              : entry.name === 'Inconsistente'
-                                ? PIE_COLORS.INCONSISTENT
-                                : PIE_COLORS.NOT_FOUND
-                          }
-                        />
+                        <Cell key={i} fill={PIE_COLORS[entry.name] ?? PIE_COLORS['Não validado']} />
                       ))}
                     </Pie>
                     <Tooltip
                       contentStyle={{
-                        backgroundColor: '#ffffff',
-                        color: '#1e293b',
-                        border: '1px solid #e2e8f0',
+                        backgroundColor: isDark ? '#1e293b' : '#ffffff',
+                        color: isDark ? '#e2e8f0' : '#1e293b',
+                        border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
                         borderRadius: '12px',
                         boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
                         fontSize: '12px',
@@ -337,12 +421,7 @@ export default function CertDashboardPage() {
               </div>
               <div className="flex-1 space-y-3">
                 {pieData.map((d) => {
-                  const color =
-                    d.name === 'Conforme'
-                      ? PIE_COLORS.OK
-                      : d.name === 'Inconsistente'
-                        ? PIE_COLORS.INCONSISTENT
-                        : PIE_COLORS.NOT_FOUND;
+                  const color = PIE_COLORS[d.name] ?? PIE_COLORS['Não validado'];
                   const total = pieData.reduce((acc, v) => acc + v.value, 0);
                   const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : '0';
                   return (
@@ -369,6 +448,22 @@ export default function CertDashboardPage() {
                 })}
               </div>
             </div>
+          ) : errors.stats ? (
+            <div className="flex flex-col items-center justify-center h-48 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-50 dark:bg-danger-900/20 mb-3">
+                <AlertTriangle className="h-5 w-5 text-danger-400" />
+              </div>
+              <p className="text-sm font-medium text-danger-600 dark:text-danger-400">
+                Não foi possível carregar
+              </p>
+              <button
+                type="button"
+                onClick={loadDashboard}
+                className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+              >
+                Tentar novamente
+              </button>
+            </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-48 text-center">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
@@ -392,7 +487,7 @@ export default function CertDashboardPage() {
               Resultados por Marca
             </h3>
           </div>
-          <CertBrandChart data={stats?.by_brand} />
+          <CertBrandChart data={stats?.by_brand} error={errors.stats} />
         </div>
       </div>
 
@@ -425,30 +520,39 @@ export default function CertDashboardPage() {
             </Link>
           </div>
           <div className="px-5 sm:px-7 py-5">
-            <div className="space-y-1">
-              {expiredProducts.slice(0, 5).map((p, i) => (
-                <div
-                  key={i}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-3 rounded-xl hover:bg-pink-100/50 transition-all duration-200 group gap-2"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pink-100 text-pink-600">
-                      <CalendarX2 className="w-3.5 h-3.5" />
+            {/* A contagem vem de /api/stats, a amostra de /api/expired: quando só
+                a segunda falha, uma lista vazia sob "N produtos vencidos" leria
+                como "nenhum" — que é o oposto do que o cartão diz. */}
+            {errors.expired ? (
+              <p className="text-sm text-danger-600 dark:text-danger-400">
+                Não foi possível carregar a lista de produtos vencidos.
+              </p>
+            ) : (
+              <div className="space-y-1">
+                {expiredProducts.slice(0, 5).map((p, i) => (
+                  <div
+                    key={i}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-3 rounded-xl hover:bg-pink-100/50 transition-all duration-200 group gap-2"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pink-100 text-pink-600">
+                        <CalendarX2 className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
+                      <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 dark:text-slate-100 transition-colors">
+                        {p.name}
+                      </span>
                     </div>
-                    <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
-                    <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 dark:text-slate-100 transition-colors">
-                      {p.name}
-                    </span>
+                    <div className="flex items-center gap-2 shrink-0 sm:ml-4 ml-10">
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{p.brand}</span>
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-pink-100 text-pink-700">
+                        Vencido {p.sale_deadline}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 sm:ml-4 ml-10">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{p.brand}</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-pink-100 text-pink-700">
-                      Vencido {p.sale_deadline}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -476,7 +580,23 @@ export default function CertDashboardPage() {
             )}
           </div>
           <div className="px-7 py-5">
-            {problemProducts.length === 0 ? (
+            {errors.problems ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-50 dark:bg-danger-900/20 mb-3">
+                  <AlertTriangle className="h-5 w-5 text-danger-400" />
+                </div>
+                <p className="text-sm font-medium text-danger-600 dark:text-danger-400">
+                  Não foi possível carregar
+                </p>
+                <button
+                  type="button"
+                  onClick={loadDashboard}
+                  className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+                >
+                  Tentar novamente
+                </button>
+              </div>
+            ) : problemProducts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <AlertTriangle className="h-5 w-5 text-slate-300" />
@@ -586,7 +706,23 @@ export default function CertDashboardPage() {
               </h3>
             </div>
             <div className="px-7 py-5">
-              {reports.length === 0 ? (
+              {errors.reports ? (
+                <div className="flex flex-col items-center justify-center py-10 text-center">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-danger-50 dark:bg-danger-900/20 mb-3">
+                    <AlertTriangle className="h-5 w-5 text-danger-400" />
+                  </div>
+                  <p className="text-sm font-medium text-danger-600 dark:text-danger-400">
+                    Não foi possível carregar
+                  </p>
+                  <button
+                    type="button"
+                    onClick={loadDashboard}
+                    className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+                  >
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : reports.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                     <Clock className="h-5 w-5 text-slate-300" />

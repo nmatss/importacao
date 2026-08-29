@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn, formatDate } from '@/shared/lib/utils';
+import { useAuth } from '@/shared/hooks/useAuth';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { api } from '@/shared/lib/api-client';
@@ -139,6 +140,10 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
   const etd = process.etd ?? readEspelhoSummaryDate(process, 'etd');
   const eta = process.eta ?? readEspelhoSummaryDate(process, 'eta');
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  // `/unlock` e admin-only no backend; o botao era exibido para todos e so
+  // falhava com 403 depois do clique e da confirmacao.
+  const canUnlock = user?.role === 'admin';
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [urgentNote, setUrgentNote] = useState(process.urgentNote ?? '');
   const [savingUrgentNote, setSavingUrgentNote] = useState(false);
@@ -149,18 +154,15 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
 
   const handleUnlock = async () => {
     setShowUnlockConfirm(false);
-    const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '';
     try {
-      const res = await fetch(`${baseUrl}/api/processes/${processId}/unlock`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (!res.ok) throw new Error(`Falha ao destravar (${res.status})`);
+      // Via api-client: o `fetch` cru contornava o redirecionamento de sessao
+      // expirada (401) e trocava a mensagem real do backend por "Falha ao
+      // destravar (403)".
+      await api.post(`/api/processes/${processId}/unlock`);
       toast.success('Processo destravado');
       queryClient.invalidateQueries({ queryKey: ['process', processId] });
-    } catch (err: any) {
-      toast.error(err.message || 'Erro ao destravar');
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -310,7 +312,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
             <Edit className="h-4 w-4" />
             Editar
           </button>
-          {process.lockedAt && (
+          {process.lockedAt && canUnlock && (
             <button
               onClick={() => setShowUnlockConfirm(true)}
               className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm"

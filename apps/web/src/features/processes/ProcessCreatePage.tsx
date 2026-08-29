@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { useApiMutation } from '@/shared/hooks/useApi';
 
@@ -68,6 +69,7 @@ type ProcessFormData = z.infer<typeof processSchema>;
 
 export function ProcessCreatePage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const {
     register,
@@ -82,6 +84,9 @@ export function ProcessCreatePage() {
 
   const mutation = useApiMutation<{ id: string }, ProcessFormData>('/api/processes', 'post', {
     onSuccess: (data) => {
+      // Sem invalidar, voltar para a lista dentro dos 30s de staleTime mostra
+      // o resultado sem o processo recem-criado.
+      void queryClient.invalidateQueries({ queryKey: ['processes'] });
       toast.success('Processo criado com sucesso');
       navigate(`/importacao/processos/${data.id}`);
     },

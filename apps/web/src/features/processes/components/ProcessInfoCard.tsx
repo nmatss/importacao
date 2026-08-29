@@ -98,6 +98,33 @@ function formatFreight(value: number | string, currency?: string): string {
   return formatCurrency(value, normalizedCurrency);
 }
 
+/**
+ * Resumo legivel dos termos de pagamento. Sem `description`, a tela caia num
+ * `JSON.stringify` e o usuario final lia `{"days":30,"type":"net"}`; agora as
+ * partes conhecidas (extraidas pela IA da invoice/proforma) viram texto e o
+ * resto vira um traco.
+ */
+function summarizePaymentTerms(terms: Record<string, unknown> | null | undefined): string {
+  if (!terms) return '--';
+
+  const description = terms.description;
+  if (typeof description === 'string' && description.trim() !== '') return description.trim();
+
+  const parts: string[] = [];
+  const asPercent = (value: unknown) => (typeof value === 'number' && value > 0 ? value : null);
+
+  const deposit = asPercent(terms.depositPercent);
+  if (deposit !== null) parts.push(`${deposit}% de entrada`);
+
+  const balance = asPercent(terms.balancePercent);
+  if (balance !== null) parts.push(`${balance}% de saldo`);
+
+  const days = terms.paymentDays;
+  if (typeof days === 'number' && days > 0) parts.push(`prazo de ${days} dias`);
+
+  return parts.length > 0 ? parts.join(' · ') : '--';
+}
+
 function readPath(source: Record<string, unknown> | null | undefined, ...path: string[]) {
   let current: unknown = source;
   for (const key of path) {
@@ -565,8 +592,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
               </p>
             </div>
             <p className="text-sm text-slate-700 dark:text-slate-300">
-              {((process.paymentTerms as Record<string, unknown>).description as string) ||
-                JSON.stringify(process.paymentTerms)}
+              {summarizePaymentTerms(process.paymentTerms)}
             </p>
           </div>
         )}

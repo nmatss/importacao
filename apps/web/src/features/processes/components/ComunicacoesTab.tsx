@@ -18,6 +18,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { ErrorState } from '@/shared/components/ErrorState';
 import type { Communication } from '@/shared/types';
 import { getErrorMessage } from '@/shared/utils/errors';
 
@@ -57,7 +58,12 @@ export interface ComunicacoesTabProps {
 export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
   const queryClient = useQueryClient();
 
-  const { data: response, isLoading } = useApiQuery<{ data: Communication[]; pagination: unknown }>(
+  const {
+    data: response,
+    isLoading,
+    error,
+    refetch,
+  } = useApiQuery<{ data: Communication[]; pagination: unknown }>(
     ['communications', processId],
     `/api/communications/process/${processId}`,
   );
@@ -75,7 +81,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
   const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<number[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState<number | null>(null);
 
-  const { data: emailSignatures } = useApiQuery<EmailSignatureOption[]>(
+  const { data: emailSignatures, error: signaturesError } = useApiQuery<EmailSignatureOption[]>(
     ['email-signatures'],
     '/api/settings/email-signatures',
   );
@@ -84,7 +90,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
     '/api/settings/communication-templates',
   );
 
-  const { data: processDocuments } = useApiQuery<ProcessDocument[]>(
+  const { data: processDocuments, error: processDocumentsError } = useApiQuery<ProcessDocument[]>(
     ['documents', 'process', processId],
     `/api/documents/process/${processId}`,
     { enabled: Boolean(processId) },
@@ -177,16 +183,31 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
 
   if (isLoading) return <LoadingSpinner className="py-8" />;
 
+  // Antes o erro era engolido: `response?.data ?? []` caia no estado vazio e a
+  // tela dizia "Nenhum atendimento registrado.". O operador concluia que nao ha
+  // e-mail pendente para o fornecedor quando na verdade a chamada falhou.
+  if (error && !response) {
+    return (
+      <ErrorState
+        message="Erro ao carregar os atendimentos deste processo."
+        onRetry={() => refetch()}
+      />
+    );
+  }
+
   const comms = response?.data ?? [];
+  const staleComms = Boolean(error && response);
 
   const statusColor = (s: string) => {
     switch (s) {
       case 'sent':
-        return 'bg-emerald-100 text-emerald-700';
+        return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300';
       case 'draft':
         return 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400';
       case 'failed':
-        return 'bg-danger-100 text-danger-700';
+        // `danger` so tem as escalas 50/100/200/500/600/700 no @theme
+        // (app/index.css) — usar 900/950 aqui nao geraria classe alguma.
+        return 'bg-danger-100 text-danger-700 dark:bg-danger-700/30 dark:text-danger-200';
       default:
         return 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400';
     }
@@ -210,6 +231,20 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Atendimentos</h3>
+
+      {staleComms && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          Falha ao atualizar os atendimentos. Exibindo a ultima leitura disponivel.
+        </div>
+      )}
+
+      {/* Degrada as consultas secundarias com aviso em vez de estado vazio: sem
+          isso, uma falha aqui esconde a assinatura ou os anexos sem dizer nada. */}
+      {signaturesError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          Nao foi possivel carregar as assinaturas de e-mail. O envio seguira sem assinatura.
+        </div>
+      )}
 
       {/* Signature selector - show when there are drafts and signatures available */}
       {hasDrafts && emailSignatures && emailSignatures.length > 0 && (
@@ -376,7 +411,12 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                             <Paperclip className="h-3.5 w-3.5" />
                             Anexos
                           </p>
-                          {!processDocuments?.length ? (
+                          {processDocumentsError ? (
+                            <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                              Falha ao carregar os documentos do processo — a lista de anexos pode
+                              estar incompleta.
+                            </p>
+                          ) : !processDocuments?.length ? (
                             <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-900">
                               Nenhum documento disponivel para anexar.
                             </p>

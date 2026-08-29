@@ -31,6 +31,13 @@ export const settingsKeys = {
   recipients: () => [...settingsKeys.all, 'recipients'] as const,
   integrations: () => [...settingsKeys.all, 'integrations'] as const,
   communicationTemplates: () => [...settingsKeys.all, 'communication-templates'] as const,
+  // Atendimentos le so os modelos ativos; Configuracoes le todos (?active=false).
+  // URLs diferentes exigem entradas de cache diferentes, mas com o MESMO prefixo:
+  // assim invalidateQueries(communicationTemplates()) atinge as duas telas. Antes
+  // Atendimentos usava a chave solta ['communication-templates'] e nenhuma
+  // invalidacao de Configuracoes chegava nela.
+  communicationTemplatesList: (filters?: Record<string, unknown>) =>
+    [...settingsKeys.communicationTemplates(), filters ?? {}] as const,
   // Chave real da configuracao lida por alerts/validation/event handlers.
   // A tela usava 'google_chat_webhook' (sem _url) e por isso lia 404 e gravava
   // em uma chave que nenhum consumidor le.

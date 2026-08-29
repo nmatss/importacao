@@ -147,10 +147,13 @@ export function PortalPage() {
   const [importHealth, setImportHealth] = useState<HealthStatus | null>(null);
   const [certHealth, setCertHealth] = useState<HealthStatus | null>(null);
 
-  const { data: overview, isLoading: importLoading } = useApiQuery<DashboardOverview>(
-    ['portal', 'overview'],
-    '/api/dashboard/overview',
-  );
+  const {
+    data: overview,
+    isLoading: importLoading,
+    isFetching: fetchingOverview,
+    error: overviewError,
+    refetch: refetchOverview,
+  } = useApiQuery<DashboardOverview>(['portal', 'overview'], '/api/dashboard/overview');
 
   useEffect(() => {
     async function checkImportHealth() {
@@ -300,24 +303,42 @@ export function PortalPage() {
 
               {/* Stats grid */}
               <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-5">
-                <StatCard
-                  value={overview?.activeProcesses ?? 0}
-                  label="Ativos"
-                  color="primary"
-                  loading={importLoading}
-                />
-                <StatCard
-                  value={overview?.overdueProcesses ?? 0}
-                  label="Atrasados"
-                  color="danger"
-                  loading={importLoading}
-                />
-                <StatCard
-                  value={overview?.completedThisMonth ?? 0}
-                  label="Concluídos"
-                  color="emerald"
-                  loading={importLoading}
-                />
+                {/* Em falha os cards mostravam `0` — indistinguivel de "nenhum
+                    processo ativo". Mesmo fallback que o card de Certificacoes. */}
+                {!importLoading && overviewError ? (
+                  <div className="col-span-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 py-5 text-center text-xs text-slate-400 font-medium">
+                    <p>Não foi possível carregar os indicadores.</p>
+                    <button
+                      type="button"
+                      onClick={() => refetchOverview()}
+                      disabled={fetchingOverview}
+                      className="mt-1.5 font-semibold text-primary-600 hover:underline disabled:opacity-60 disabled:hover:no-underline"
+                    >
+                      {fetchingOverview ? 'Tentando...' : 'Tentar novamente'}
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <StatCard
+                      value={overview?.activeProcesses ?? 0}
+                      label="Ativos"
+                      color="primary"
+                      loading={importLoading}
+                    />
+                    <StatCard
+                      value={overview?.overdueProcesses ?? 0}
+                      label="Atrasados"
+                      color="danger"
+                      loading={importLoading}
+                    />
+                    <StatCard
+                      value={overview?.completedThisMonth ?? 0}
+                      label="Concluídos"
+                      color="emerald"
+                      loading={importLoading}
+                    />
+                  </>
+                )}
               </div>
 
               <Link

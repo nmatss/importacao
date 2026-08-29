@@ -50,21 +50,6 @@ interface SlaData {
     processCode: string;
     brand: string;
   }>;
-  pendingCambio: Array<{
-    id: number;
-    processCode: string;
-    brand: string;
-  }>;
-  pendingNumerario: Array<{
-    id: number;
-    processCode: string;
-    brand: string;
-  }>;
-  pendingDesembaraco: Array<{
-    id: number;
-    processCode: string;
-    brand: string;
-  }>;
 }
 
 interface OverviewData {
@@ -192,38 +177,10 @@ export function MeuDiaPage() {
       });
     }
 
-    if (slaData.pendingCambio?.length > 0) {
-      tasks.push({
-        id: 'pending-cambio',
-        title: 'Cambio Pendente',
-        description: 'Processos aguardando operacao cambial',
-        priority: 'medium',
-        link: '/importacao/cambios',
-        count: slaData.pendingCambio.length,
-      });
-    }
-
-    if (slaData.pendingNumerario?.length > 0) {
-      tasks.push({
-        id: 'pending-numerario',
-        title: 'Numerario Pendente',
-        description: 'Processos aguardando numerario',
-        priority: 'medium',
-        link: '/importacao/numerario',
-        count: slaData.pendingNumerario.length,
-      });
-    }
-
-    if (slaData.pendingDesembaraco?.length > 0) {
-      tasks.push({
-        id: 'pending-desembaraco',
-        title: 'Desembaraco Pendente',
-        description: 'Processos aguardando desembaraco',
-        priority: 'medium',
-        link: '/importacao/desembaraco',
-        count: slaData.pendingDesembaraco.length,
-      });
-    }
+    // Cambio / Numerario / Desembaraco pendentes ficaram de fora: GET
+    // /api/dashboard/sla nunca devolveu esses tres campos (ver getSla em
+    // apps/api/src/modules/dashboard/service.ts), entao os cards eram codigo
+    // morto — `undefined?.length > 0` e sempre false.
 
     return tasks.sort((a, b) => {
       const priorityOrder = { critical: 0, high: 1, medium: 2 };
@@ -285,7 +242,7 @@ export function MeuDiaPage() {
           icon={<AlertTriangle className="h-5 w-5 text-danger-600" />}
           label="Atrasados"
           value={overview?.overdueProcesses ?? 0}
-          bgColor="bg-danger-50 dark:bg-danger-950/40"
+          bgColor="bg-danger-50 dark:bg-danger-700/20"
         />
         <SummaryCard
           icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
@@ -331,7 +288,7 @@ export function MeuDiaPage() {
                   className={cn(
                     'block rounded-2xl border p-4 transition-all hover:shadow-md',
                     task.priority === 'critical'
-                      ? 'border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/40 hover:border-danger-300'
+                      ? 'border-danger-200 dark:border-danger-700/40 bg-danger-50 dark:bg-danger-700/20 hover:border-danger-500'
                       : task.priority === 'high'
                         ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:border-amber-300'
                         : 'border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-primary-300',
@@ -343,7 +300,7 @@ export function MeuDiaPage() {
                         className={cn(
                           'flex items-center justify-center h-10 w-10 rounded-lg text-sm font-bold',
                           task.priority === 'critical'
-                            ? 'bg-danger-100 dark:bg-danger-900/50 text-danger-700 dark:text-danger-400'
+                            ? 'bg-danger-100 dark:bg-danger-700/30 text-danger-700 dark:text-danger-200'
                             : task.priority === 'high'
                               ? 'bg-amber-100 dark:bg-amber-900/50 text-amber-700 dark:text-amber-400'
                               : 'bg-primary-100 dark:bg-primary-900/50 text-primary-700 dark:text-primary-400',

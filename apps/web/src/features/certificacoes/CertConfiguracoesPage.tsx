@@ -5,6 +5,7 @@ import { Database, Globe, Cpu, Zap, Loader2, Radio, Clock, Info, ArrowRight } fr
 
 export default function CertConfiguracoesPage() {
   const [stats, setStats] = useState<any>(null);
+  const [statsError, setStatsError] = useState(false);
   const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
@@ -12,17 +13,24 @@ export default function CertConfiguracoesPage() {
     null,
   );
 
+  async function loadStats() {
+    try {
+      setStats(await fetchCertStats());
+      setStatsError(false);
+    } catch {
+      setStats(null);
+      setStatsError(true);
+    }
+  }
+
   useEffect(() => {
     async function load() {
       const health = await checkCertApiHealth();
       setApiHealthy(health.connected);
       if (health.connected) {
-        try {
-          const data = await fetchCertStats();
-          setStats(data);
-        } catch {
-          setStats(null);
-        }
+        await loadStats();
+      } else {
+        setStatsError(true);
       }
       setLoading(false);
     }
@@ -36,12 +44,9 @@ export default function CertConfiguracoesPage() {
     setTestResult(result);
     setApiHealthy(result.connected);
     if (result.connected) {
-      try {
-        const data = await fetchCertStats();
-        setStats(data);
-      } catch {
-        // stats fetch failed but API is up
-      }
+      await loadStats();
+    } else {
+      setStatsError(true);
     }
     setTesting(false);
   }
@@ -220,10 +225,17 @@ export default function CertConfiguracoesPage() {
 
           <div className="space-y-6 text-sm text-slate-600 dark:text-slate-400">
             <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-4">
+              {/* O texto anterior ("Nenhum dado de produto é armazenado
+                  localmente") era factualmente FALSO: `cert_products` e
+                  `cert_stock` são exatamente isso. */}
               <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 O sistema consulta os e-commerces Puket e Imaginarium em{' '}
                 <span className="font-semibold text-emerald-700">tempo real</span> usando a API
-                pública VTEX. Nenhum dado de produto é armazenado localmente.
+                pública VTEX. Os produtos da planilha, o resultado de cada verificação e o estoque
+                sincronizado <strong>são armazenados no banco do cert-api</strong> (tabelas{' '}
+                <code className="font-mono text-xs">cert_products</code> e{' '}
+                <code className="font-mono text-xs">cert_stock</code>) para alimentar as telas sem
+                reconsultar as fontes a cada acesso.
               </p>
             </div>
 
@@ -300,9 +312,21 @@ export default function CertConfiguracoesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Total de Produtos</p>
-              <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                {stats?.total_products || '-'}
-              </p>
+              {/* `stats?.total_products || '-'` transformava um total REAL de
+                  zero em "-" — a inversão exata da regra "vazio não é
+                  indisponível". Zero é zero; só a falha vira "Indisponível". */}
+              {statsError || stats?.total_products == null ? (
+                <p
+                  className="text-lg font-bold text-slate-400"
+                  title="Falha ao consultar as estatísticas de certificação"
+                >
+                  Indisponível
+                </p>
+              ) : (
+                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {stats.total_products}
+                </p>
+              )}
             </div>
             <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Planilha</p>

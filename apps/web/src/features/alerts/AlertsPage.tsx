@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
   Bell,
+  BellOff,
   AlertTriangle,
   Info,
   CheckCircle2,
@@ -218,10 +219,8 @@ export function AlertsPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            Central de Alertas
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {/* O título da tela é o <h1> do shell (AppLayout). Aqui fica só o subtítulo. */}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Acompanhe riscos, prazos e automações que exigem ação.
           </p>
         </div>
@@ -405,6 +404,18 @@ export function AlertsPage() {
                             Tratado
                           </span>
                         )}
+                        {/* Entrega no Google Chat: os 6.349 alertas da base tinham
+                            sent_to_chat = false (KNOWN_ISSUES.md, item CRITICO), e a
+                            tela nao distinguia entregue de nao entregue. */}
+                        {!alert.sentToChat && (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                            title="Este alerta não foi entregue no Google Chat: existe apenas aqui."
+                          >
+                            <BellOff className="h-3 w-3" />
+                            Não notificado
+                          </span>
+                        )}
                       </div>
 
                       <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
@@ -426,6 +437,9 @@ export function AlertsPage() {
                           <Clock className="h-3 w-3" />
                           {formatDate(alert.createdAt)}
                         </span>
+                        {alert.sentToChat && alert.sentAt && (
+                          <span>Notificado em {formatDate(alert.sentAt)}</span>
+                        )}
                         {alert.acknowledgedAt && (
                           <span>
                             Tratado em {formatDate(alert.acknowledgedAt)}
@@ -441,7 +455,7 @@ export function AlertsPage() {
                         type="button"
                         aria-label={`Marcar alerta como tratado: ${alert.title}`}
                         onClick={() => handleAcknowledge(alert.id)}
-                        className="shrink-0 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
+                        className="shrink-0 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
                       >
                         <CheckCircle2 className="h-4 w-4" />
                         <span className="hidden sm:inline">Marcar tratado</span>

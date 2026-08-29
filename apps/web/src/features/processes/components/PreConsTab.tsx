@@ -1,7 +1,8 @@
-import { Package, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { Package, AlertTriangle, CheckCircle2, XCircle, ShieldAlert } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn } from '@/shared/lib/utils';
 import { TableSkeleton } from '@/shared/components/Skeleton';
+import { getErrorMessage } from '@/shared/utils/errors';
 
 interface PreConsItem {
   id: number;
@@ -46,6 +47,15 @@ function formatCurrency(value: string | null): string {
   return num.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+/**
+ * `/api/pre-cons/divergences` e admin-only. O api-client propaga a mensagem do
+ * backend ("Acesso restrito a administradores" no 403), entao da para separar
+ * falta de permissao de falha real de carga.
+ */
+function isAuthorizationError(err: unknown): boolean {
+  return /administrador|permiss|forbidden|403|unauthorized|401/i.test(getErrorMessage(err));
+}
+
 export function PreConsTab({ processCode }: { processId: string; processCode: string }) {
   const {
     data: items,
@@ -56,13 +66,17 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
     `/api/pre-cons/process/${encodeURIComponent(processCode)}`,
   );
 
-  const { data: allDivergences } = useApiQuery<Divergence[]>(
+  const { data: allDivergences, error: divergencesError } = useApiQuery<Divergence[]>(
     ['pre-cons-divergences'],
     '/api/pre-cons/divergences',
     { staleTime: 60_000 },
   );
 
   const divergences = allDivergences?.filter((d) => d.processCode === processCode) ?? [];
+  // Sem isso, um 403 (endpoint admin-only) deixava `divergences` vazio e a tela
+  // exibia o badge VERDE "Sem divergencias": ausencia de autorizacao virava
+  // ausencia de problema num painel de conferencia.
+  const divergencesUnknown = Boolean(divergencesError);
 
   if (isLoading) return <TableSkeleton />;
 
@@ -103,13 +117,22 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
           Pre-Conferencia (KIOM)
         </h3>
-        {divergences.length === 0 ? (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 border border-emerald-200">
+        {divergencesUnknown ? (
+          <span
+            title={getErrorMessage(divergencesError)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+          >
+            <ShieldAlert className="h-3.5 w-3.5" />
+            Divergencias nao verificadas
+            {isAuthorizationError(divergencesError) ? ' (sem permissao)' : ''}
+          </span>
+        ) : divergences.length === 0 ? (
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 px-3 py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
             <CheckCircle2 className="h-3.5 w-3.5" />
             Sem divergencias
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 border border-amber-200">
+          <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-semibold text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
             <AlertTriangle className="h-3.5 w-3.5" />
             {divergences.length} divergencia{divergences.length > 1 ? 's' : ''}
           </span>

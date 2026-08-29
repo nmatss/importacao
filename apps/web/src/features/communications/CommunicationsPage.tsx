@@ -24,12 +24,14 @@ import {
   Upload,
 } from 'lucide-react';
 import { useApiQuery, useApiMutation } from '@/shared/hooks/useApi';
+import { settingsKeys } from '@/shared/api/query-keys';
 import { api } from '@/shared/lib/api-client';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { downloadCsv } from '@/shared/lib/csv';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
+import { Button } from '@/shared/components/Button';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
@@ -137,8 +139,19 @@ export function CommunicationsPage() {
   const [debouncedProcessSearch, setDebouncedProcessSearch] = useState('');
   const [selectedAttachmentIds, setSelectedAttachmentIds] = useState<number[]>([]);
   const [editingCommunicationId, setEditingCommunicationId] = useState<number | null>(null);
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDateRaw] = useState('');
+  const [endDate, setEndDateRaw] = useState('');
+  // Auditoria: o historico pedia limit=100 sem `page` e sem controles — a partir
+  // do atendimento 101 nada mais era acessivel pela tela.
+  const [commPage, setCommPage] = useState(1);
+  const setStartDate = (value: string) => {
+    setStartDateRaw(value);
+    setCommPage(1);
+  };
+  const setEndDate = (value: string) => {
+    setEndDateRaw(value);
+    setCommPage(1);
+  };
   const [exportingCsv, setExportingCsv] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -155,7 +168,7 @@ export function CommunicationsPage() {
     '/api/settings/email-signatures',
   );
   const { data: communicationTemplates } = useApiQuery<CommunicationTemplateOption[]>(
-    ['communication-templates'],
+    settingsKeys.communicationTemplatesList(),
     '/api/settings/communication-templates',
   );
 
@@ -194,7 +207,8 @@ export function CommunicationsPage() {
   );
 
   const commParams = new URLSearchParams();
-  commParams.set('limit', '100');
+  commParams.set('limit', '50');
+  commParams.set('page', String(commPage));
   if (startDate) commParams.set('startDate', startDate);
   if (endDate) commParams.set('endDate', endDate);
   const commQs = commParams.toString();
@@ -204,11 +218,16 @@ export function CommunicationsPage() {
     isLoading: loadingComms,
     error: commsError,
     refetch: refetchComms,
-  } = useApiQuery<{ data: Communication[]; pagination: unknown }>(
-    ['communications', startDate, endDate],
+  } = useApiQuery<{
+    data: Communication[];
+    pagination?: { total?: number; pages?: number; page?: number };
+  }>(
+    ['communications', startDate, endDate, commPage],
     `/api/communications${commQs ? `?${commQs}` : ''}`,
   );
   const communications = commsResponse?.data;
+  const totalCommunications = commsResponse?.pagination?.total ?? communications?.length ?? 0;
+  const totalCommPages = commsResponse?.pagination?.pages ?? 1;
 
   const saveDraftMutation = useApiMutation<
     Communication,
@@ -220,6 +239,13 @@ export function CommunicationsPage() {
       setProcessSearch('');
       setSelectedAttachmentIds([]);
       setEditingCommunicationId(null);
+      toast.success('Rascunho salvo');
+    },
+    // Sem onError o POST falhava em silencio total: o botao saia do estado
+    // pendente, nada acontecia na tela e o texto continuava no formulario.
+    // O caminho de EDICAO ja tratava — a assimetria era acidental.
+    onError: (err: unknown) => {
+      toast.error(getErrorMessage(err));
     },
   });
 
@@ -540,10 +566,8 @@ export function CommunicationsPage() {
       {/* Page Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-            Atendimentos e E-mails
-          </h2>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          {/* O título da tela é o <h1> do shell (AppLayout); aqui só o subtítulo. */}
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Crie, envie e acompanhe interações vinculadas aos processos de importação.
           </p>
         </div>
@@ -965,7 +989,7 @@ export function CommunicationsPage() {
                 </h3>
                 {communications?.length ? (
                   <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
-                    {communications.length}
+                    {totalCommunications}
                   </span>
                 ) : null}
               </div>
@@ -1110,6 +1134,33 @@ export function CommunicationsPage() {
                 </div>
               )}
             </div>
+
+            {totalCommPages > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 dark:border-slate-700 sm:px-6">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
+                  Página {commPage} de {totalCommPages} · {totalCommunications} atendimento
+                  {totalCommunications !== 1 ? 's' : ''}
+                </span>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCommPage((p) => Math.max(1, p - 1))}
+                    disabled={commPage <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setCommPage((p) => Math.min(totalCommPages, p + 1))}
+                    disabled={commPage >= totalCommPages}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

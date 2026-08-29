@@ -64,7 +64,9 @@ const navSections: AppNavSection[] = [
   {
     label: 'Sistema',
     items: [
-      { to: '/importacao/auditoria', label: 'Auditoria', icon: Shield },
+      // A rota exige admin no servidor: sem a flag o item aparecia para o
+      // analista e a tela abria so para devolver 403.
+      { to: '/importacao/auditoria', label: 'Auditoria', icon: Shield, adminOnly: true },
       { to: '/importacao/configuracoes', label: 'Configurações', icon: Settings },
     ],
   },

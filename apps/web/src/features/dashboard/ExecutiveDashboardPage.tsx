@@ -30,6 +30,7 @@ import {
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { cn, formatCurrency } from '@/shared/lib/utils';
+import { useChartTheme } from './chartTheme';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,9 @@ function ChangeBadge({ value }: { value: number }) {
 // ── Main Page ────────────────────────────────────────────────────────────
 
 export function ExecutiveDashboardPage() {
+  // Recharts recebe cor por prop/inline style: as classes `dark:` do Tailwind
+  // nao alcancam grade, eixos e tooltip, que estavam fixos em claro.
+  const chartTheme = useChartTheme();
   const {
     data: kpis,
     isLoading: loadingKpis,
@@ -456,38 +460,30 @@ export function ExecutiveDashboardPage() {
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
                   <XAxis
                     dataKey="month"
                     fontSize={11}
-                    tick={{ fill: '#64748b' }}
-                    axisLine={{ stroke: '#e2e8f0' }}
+                    tick={{ fill: chartTheme.axis }}
+                    axisLine={{ stroke: chartTheme.grid }}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="left"
                     allowDecimals={false}
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: chartTheme.axis, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <YAxis
                     yAxisId="right"
                     orientation="right"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    tick={{ fill: chartTheme.axis, fontSize: 11 }}
                     axisLine={false}
                     tickLine={false}
                   />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '14px',
-                    }}
-                  />
-                  <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', color: '#64748b' }} />
+                  <Tooltip contentStyle={chartTheme.tooltip} />
+                  <Legend iconType="circle" wrapperStyle={chartTheme.legend} />
                   <Area
                     yAxisId="left"
                     type="monotone"
@@ -546,7 +542,7 @@ export function ExecutiveDashboardPage() {
                     outerRadius={80}
                     innerRadius={40}
                     strokeWidth={2}
-                    stroke="#fff"
+                    stroke={chartTheme.surface}
                     label={({ brand, percent }: { brand: string; percent: number }) =>
                       `${brand} (${(percent * 100).toFixed(0)}%)`
                     }
@@ -556,13 +552,7 @@ export function ExecutiveDashboardPage() {
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '12px',
-                      boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                      fontSize: '14px',
-                    }}
+                    contentStyle={chartTheme.tooltip}
                     formatter={(value: number) => formatCurrency(value)}
                   />
                 </PieChart>
@@ -595,20 +585,20 @@ export function ExecutiveDashboardPage() {
           ) : timelineBarData.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={timelineBarData} margin={{ bottom: 60 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} vertical={false} />
                 <XAxis
                   dataKey="name"
                   angle={-35}
                   textAnchor="end"
                   fontSize={11}
                   interval={0}
-                  tick={{ fill: '#64748b' }}
-                  axisLine={{ stroke: '#e2e8f0' }}
+                  tick={{ fill: chartTheme.axis }}
+                  axisLine={{ stroke: chartTheme.grid }}
                   tickLine={false}
                 />
                 <YAxis
                   allowDecimals={false}
-                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  tick={{ fill: chartTheme.axis, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                   label={{
@@ -619,13 +609,7 @@ export function ExecutiveDashboardPage() {
                   }}
                 />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                    fontSize: '14px',
-                  }}
+                  contentStyle={chartTheme.tooltip}
                   formatter={(value: number) => [`${value} dias`, 'Tempo Medio']}
                 />
                 <Bar dataKey="dias" radius={[6, 6, 0, 0]} name="Dias">

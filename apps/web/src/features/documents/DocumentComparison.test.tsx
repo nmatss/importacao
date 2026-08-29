@@ -400,6 +400,52 @@ describe('DocumentComparison', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('nao exibe "Aceito" so porque existe evento no timeline', async () => {
+    // O defeito: a tela derivava o aceite de `process_events`, e
+    // `invalidateComparisonAcceptances()` — chamada em reprocessamento e
+    // reclassificacao de documento — invalida a TABELA, nao o timeline. O
+    // resultado era "Aceito por Fulano" exibido sobre dados de extracao NOVOS,
+    // exatamente o que a invalidacao existe para impedir.
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        aggregateComparison: [
+          {
+            rowKey: 'aggregate:ports-match',
+            label: 'Verificação de Portos',
+            invoice: 'Santos',
+            packingList: null,
+            bl: 'Itajai',
+            espelho: null,
+            status: 'divergent',
+          },
+        ],
+        // O aceite FOI invalidado: a lista de ativos volta vazia.
+        acceptances: [],
+      },
+      // ...mas o evento continua no timeline, porque ele e append-only.
+      events: [
+        {
+          id: 1,
+          processId: 1,
+          eventType: 'comparison_acceptance',
+          title: 'Aceite',
+          description: 'Divergencia validada com o despachante',
+          metadata: { rowKey: 'aggregate:ports-match' },
+          createdBy: 1,
+          createdAt: '2026-06-19T12:00:00.000Z',
+          userName: 'Eduarda',
+        },
+      ],
+    });
+
+    renderComparison();
+
+    expect(await screen.findByText('Verificação de Portos')).toBeInTheDocument();
+    expect(screen.queryByText('Aceito')).not.toBeInTheDocument();
+    expect(screen.queryByText('Divergencia validada com o despachante')).not.toBeInTheDocument();
+  });
+
   it('exposes the acceptance resolution note via a hover tooltip', () => {
     mockQueries({
       comparison: {
@@ -415,20 +461,27 @@ describe('DocumentComparison', () => {
             status: 'divergent',
           },
         ],
+        acceptances: [
+          {
+            id: 1,
+            scope: 'aggregate',
+            rowKey: 'aggregate:ports-match',
+            fieldLabel: 'Verificação de Portos',
+            itemCode: null,
+            previousStatus: 'divergent',
+            evidenceHash: 'abc',
+            resolutionNote: 'Divergencia validada com o despachante',
+            acceptedAt: '2026-06-19T12:00:00.000Z',
+            acceptedBy: 1,
+            acceptedByName: 'Eduarda',
+          },
+        ],
       },
-      events: [
-        {
-          id: 1,
-          processId: 1,
-          eventType: 'comparison_acceptance',
-          title: 'Aceite',
-          description: 'Divergencia validada com o despachante',
-          metadata: { rowKey: 'aggregate:ports-match' },
-          createdBy: 1,
-          createdAt: '2026-06-19T12:00:00.000Z',
-          userName: 'Eduarda',
-        },
-      ],
+      // O aceite vem do PAYLOAD da comparacao, nao mais do timeline. A tela
+      // derivava de `process_events`, que a invalidacao por reprocessamento nao
+      // toca — entao exibia "Aceito" sobre extracao nova. A fonte agora e
+      // `comparison_acceptances`, que a invalidacao de fato limpa.
+      events: [],
       report: { systemDataAvailable: false, crossDocumentChecks: [], systemChecks: [] },
     });
 

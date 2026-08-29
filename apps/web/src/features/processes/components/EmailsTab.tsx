@@ -45,15 +45,35 @@ export interface EmailsTabProps {
   initialResponse?: { data: EmailLog[]; pagination: unknown };
 }
 
+// As escalas `danger-*` definidas em app/index.css param em 700, por isso o par
+// dark usa 700/30 e 200 — 900/300 nao geram classe.
 const STATUS_CONFIG: Record<string, { color: string; label: string }> = {
-  completed: { color: 'bg-emerald-100 text-emerald-700', label: 'Concluído' },
-  processing: { color: 'bg-primary-100 text-primary-700', label: 'Processando' },
+  completed: {
+    color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
+    label: 'Concluído',
+  },
+  processing: {
+    color: 'bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-300',
+    label: 'Processando',
+  },
   pending: {
     color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
     label: 'Pendente',
   },
-  failed: { color: 'bg-danger-100 text-danger-700', label: 'Falhou' },
-  ignored: { color: 'bg-slate-100 dark:bg-slate-700 text-slate-400', label: 'Ignorado' },
+  // Sem esta entrada o fallback rotulava um e-mail REPROCESSADO como "Pendente"
+  // (o status existe em shared/types).
+  reprocessed: {
+    color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+    label: 'Reprocessado',
+  },
+  failed: {
+    color: 'bg-danger-100 text-danger-700 dark:bg-danger-700/30 dark:text-danger-200',
+    label: 'Falhou',
+  },
+  ignored: {
+    color: 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500',
+    label: 'Ignorado',
+  },
 };
 
 export function EmailsTab({ processId, processCode, initialResponse }: EmailsTabProps) {
@@ -146,13 +166,6 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                     {log.subject}
                   </p>
                 </button>
-
-                {/* Subject preview (first 100 chars) */}
-                {log.subject && log.subject.length > 60 && (
-                  <p className="mt-0.5 text-xs text-slate-400 truncate">
-                    {log.subject.slice(0, 100)}
-                  </p>
-                )}
 
                 {/* Sender */}
                 <div className="mt-2 flex items-center gap-2 text-xs">
