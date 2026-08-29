@@ -34,7 +34,28 @@ const REDACOES: Array<[RegExp, string]> = [
   // IPv4 com porta opcional: "ECONNREFUSED 172.19.0.4:5432".
   [/\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?\b/g, '[endereco interno]'],
   // Identificador de esquema entre aspas que o Postgres devolve.
-  [/\b(column|relation|constraint|table|index|type)\s+"[^"]{1,200}"/gi, '$1 [interno]'],
+  //
+  // O `\s+` original exigia as aspas IMEDIATAMENTE depois da palavra-chave, e
+  // por isso deixava passar `invalid input syntax for type integer: "NaN"`, que
+  // e o que sai quando um `Number(req.params.id)` vira NaN e chega ao driver.
+  // Idem para `role "importacao_app" does not exist`.
+  [
+    /\b(column|relation|constraint|table|index|type|role|function|schema|sequence)\b[^"]{0,40}"[^"]{1,200}"/gi,
+    '$1 [interno]',
+  ],
+  // Host interno por NOME. O `DATABASE_URL` conecta pelo nome do servico do
+  // compose, nao por IP: quando o banco cai, a mensagem e
+  // `getaddrinfo ENOTFOUND postgres`, e nao `ECONNREFUSED 172.19.0.4`. O padrao
+  // de IPv4 acima nao pega isso — ou seja, o proprio incidente citado no topo
+  // deste bloco continuava entregando a topologia interna, so que por nome.
+  // Vale tambem para `ia-local:11434` e `cert-api:8000`.
+  //
+  // Ancorado no errno, e nao numa lista de servicos: servico novo do compose ja
+  // nasce coberto, e nenhuma mensagem escrita para operador comeca por errno.
+  [
+    /\b(ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ECONNRESET|ETIMEDOUT|EHOSTUNREACH|EPIPE)\s+[\w.-]+(?::\d{1,5})?/gi,
+    '$1 [host interno]',
+  ],
   // Texto cru do driver sobre tipo/limite de coluna.
   // O tipo do Postgres tem espaco e parenteses ("character varying(500)"),
   // entao parar no primeiro espaco deixava "varying(500)" vazando.

@@ -53,12 +53,49 @@ describe('redactInternalDetail()', () => {
     );
   });
 
+  /**
+   * Estas tres saidas foram MEDIDAS pelo revisor de seguranca passando pelos
+   * controllers de verdade, DEPOIS da primeira versao desta redacao — ou seja,
+   * sao lacunas que a primeira correcao deixou abertas.
+   *
+   * A primeira e a mais constrangedora: o incidente citado no comentario da
+   * propria funcao (`ECONNREFUSED 172.19.0.4:5432`) continuava vazando, porque
+   * o `DATABASE_URL` conecta pelo NOME do servico do compose. Quando o banco
+   * cai de verdade, a mensagem e `getaddrinfo ENOTFOUND postgres`, e o padrao
+   * de IPv4 nao ve nome nenhum.
+   */
+  it('esconde host interno por NOME, nao so por endereco', () => {
+    expect(redactInternalDetail('getaddrinfo ENOTFOUND postgres')).toBe(
+      'getaddrinfo ENOTFOUND [host interno]',
+    );
+    expect(
+      redactInternalDetail('IA_LOCAL request failed: connect ECONNREFUSED ia-local:11434'),
+    ).toBe('IA_LOCAL request failed: connect ECONNREFUSED [host interno]');
+    expect(redactInternalDetail('connect ETIMEDOUT cert-api:8000')).toBe(
+      'connect ETIMEDOUT [host interno]',
+    );
+  });
+
+  it('esconde identificador de esquema mesmo com texto entre a palavra e as aspas', () => {
+    // Sai quando um `Number(req.params.id)` vira NaN e chega ao driver.
+    expect(redactInternalDetail('invalid input syntax for type integer: "NaN"')).toBe(
+      'invalid input syntax for type [interno]',
+    );
+    expect(redactInternalDetail('role "importacao_app" does not exist')).toBe(
+      'role [interno] does not exist',
+    );
+  });
+
   it('PRESERVA a mensagem escrita para o operador', () => {
     const humanas = [
       'Processo não encontrado',
       'Documento já existe para este processo (409)',
       'A justificativa precisa ter pelo menos 3 caracteres',
       'MAIL_DRY_RUN está ativo: nada foi enviado.',
+      // Nenhuma mensagem de operador comeca por errno, entao a regra nova nao
+      // as alcanca — nem quando falam de rede.
+      'Falha de conexão com o SYDLE. Tente novamente em alguns minutos.',
+      'O tipo de documento "invoice" já existe neste processo',
       'Invoice PK2052602TJ sem item correspondente no Packing List',
     ];
     for (const msg of humanas) expect(redactInternalDetail(msg)).toBe(msg);

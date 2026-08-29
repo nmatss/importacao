@@ -73,7 +73,17 @@ export const documentController = {
 
   async getById(req: Request, res: Response) {
     try {
-      const doc = await documentService.getById(Number(req.params.id));
+      // Sem esta guarda, `GET /api/documents/abc` faz `Number('abc')` = NaN
+      // chegar ao driver, que serializa para o literal `"NaN"` e devolve
+      // `invalid input syntax for type integer: "NaN"`. A redacao em
+      // `sendError` impede o vazamento, mas o cliente ainda recebia um erro de
+      // banco no lugar de "id invalido". `getExtractionHistory`, logo abaixo
+      // neste mesmo arquivo, ja fazia isso certo.
+      const documentId = Number(req.params.id);
+      if (!Number.isInteger(documentId) || documentId <= 0) {
+        return sendError(res, 'ID do documento invalido', 400);
+      }
+      const doc = await documentService.getById(documentId);
       sendSuccess(res, doc);
     } catch (error: any) {
       const status = error.statusCode || 404;
