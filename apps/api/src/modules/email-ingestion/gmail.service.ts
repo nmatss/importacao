@@ -1,9 +1,32 @@
 import { gmail_v1, auth as googleAuth } from '@googleapis/gmail';
+import { AppError } from '../../shared/errors/index.js';
 import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key.js';
 import { logger } from '../../shared/utils/logger.js';
 
 const GMAIL_API_TIMEOUT_MS = 30_000;
 export const DEFAULT_GMAIL_SHARED_MAILBOX = 'global@grupounico.com';
+
+/** Sender allow-list, shared by the search builder and by `getStatus()`. */
+export function resolveAllowedSenders(): string[] {
+  return (
+    process.env.EMAIL_ALLOWED_SENDERS?.split(',')
+      .map((s) => s.trim())
+      .filter(Boolean) || []
+  );
+}
+
+/**
+ * Reads a per-run ceiling from the environment.
+ *
+ * The mailbox is shared and corporate: an unbounded `do/while(pageToken)` plus
+ * an unbounded attachment budget means one poll can list every message in the
+ * box and hold every attachment in memory at once. Whatever these ceilings cut
+ * is simply left unread, so the next run picks it up — nothing is lost.
+ */
+function positiveEnvNumber(name: string, fallback: number): number {
+  const parsed = Number(process.env[name]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
   const timeout = new Promise<never>((_, reject) =>
@@ -175,14 +198,25 @@ export const gmailService = {
     if (queryOverride) {
       searchQuery = queryOverride;
     } else {
-      // Build search query from EMAIL_ALLOWED_SENDERS
-      const allowedSenders =
-        process.env.EMAIL_ALLOWED_SENDERS?.split(',')
-          .map((s) => s.trim())
-          .filter(Boolean) || [];
-      senderFilterConfigured = allowedSenders.length > 0;
-      const fromFilter =
-        allowedSenders.length > 0 ? `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}` : '';
+      // Build search query from EMAIL_ALLOWED_SENDERS.
+      //
+      // FAIL CLOSED: without an allow-list the query collapses to
+      // "is:unread has:attachment", which lists every unrelated message of a
+      // shared corporate mailbox, downloads all of its attachments and — once
+      // the processor rejects the sender — marks them as READ. That is
+      // destructive and the system cannot undo it. `doubleCheckEmails`,
+      // `triggerCheck` and `historyScan` already abort in this situation; the
+      // 5-minute cron was the only path that did not.
+      const allowedSenders = resolveAllowedSenders();
+      if (allowedSenders.length === 0) {
+        throw new AppError(
+          'EMAIL_ALLOWED_SENDERS deve estar configurado para ler a caixa compartilhada',
+          503,
+          'EMAIL_ALLOWED_SENDERS_NOT_CONFIGURED',
+        );
+      }
+      senderFilterConfigured = true;
+      const fromFilter = `{${allowedSenders.map((s) => `from:${s}`).join(' ')}}`;
       const unreadFilter = includeRead ? '' : 'is:unread';
       // Default date limit: fetch emails from last 180 days (6 months) for complete history
       const dateLimit = includeRead ? 'newer_than:180d' : '';
@@ -202,10 +236,16 @@ export const gmailService = {
       'Gmail search prepared',
     );
 
+    const maxPages = positiveEnvNumber('GMAIL_MAX_PAGES_PER_RUN', 10);
+    const maxMessages = positiveEnvNumber('GMAIL_MAX_MESSAGES_PER_RUN', 500);
+    const maxTotalBytes = positiveEnvNumber('EMAIL_ATTACHMENT_TOTAL_MAX_BYTES', 200 * 1024 * 1024);
+
     try {
-      // List unread messages with pagination to fetch ALL
+      // List messages with bounded pagination. Whatever the ceiling leaves out
+      // stays unread and is picked up by the next run.
       const allMessageIds: gmail_v1.Schema$Message[] = [];
       let pageToken: string | undefined;
+      let pages = 0;
 
       do {
         const listResponse = await withTimeout(
@@ -221,9 +261,26 @@ export const gmailService = {
         const messages = listResponse.data.messages || [];
         allMessageIds.push(...messages);
         pageToken = listResponse.data.nextPageToken ?? undefined;
+        pages += 1;
+
+        if (pageToken && pages >= maxPages) {
+          logger.warn(
+            { pages, maxPages, listed: allMessageIds.length },
+            'Gmail pagination ceiling reached — remaining pages stay unread for the next run',
+          );
+          break;
+        }
       } while (pageToken);
 
-      const messageIds = allMessageIds;
+      let messageIds = allMessageIds;
+
+      if (messageIds.length > maxMessages) {
+        logger.warn(
+          { listed: messageIds.length, maxMessages },
+          'Gmail message ceiling reached — surplus messages stay unread for the next run',
+        );
+        messageIds = messageIds.slice(0, maxMessages);
+      }
 
       if (messageIds.length === 0) {
         logger.debug('No unread emails with attachments found');
@@ -232,7 +289,20 @@ export const gmailService = {
 
       logger.info({ count: messageIds.length }, 'Found unread emails with attachments');
 
+      let totalAttachmentBytes = 0;
+
       for (const msg of messageIds) {
+        // Aggregate memory budget. Checked BETWEEN messages so a message is
+        // never fetched with only part of its attachments: a truncated message
+        // would be logged, acknowledged and marked read with data missing.
+        if (totalAttachmentBytes >= maxTotalBytes) {
+          logger.warn(
+            { totalAttachmentBytes, maxTotalBytes, fetched: emails.length },
+            'Aggregate attachment budget reached — remaining messages stay unread for the next run',
+          );
+          break;
+        }
+
         try {
           // Get full message
           const fullMessage = await withTimeout(
@@ -271,10 +341,12 @@ export const gmailService = {
               );
 
               if (attachmentData.data.data) {
+                const content = decodeBase64Url(attachmentData.data.data);
+                totalAttachmentBytes += content.length;
                 attachments.push({
                   filename: att.filename,
                   contentType: att.mimeType,
-                  content: decodeBase64Url(attachmentData.data.data),
+                  content,
                   size: attachmentData.data.size || att.size,
                 });
               }

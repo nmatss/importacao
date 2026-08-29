@@ -34,6 +34,7 @@ const originalMailEnv = {
   SMTP_PASS: process.env.SMTP_PASS,
   SMTP_FROM: process.env.SMTP_FROM,
   SMTP_TLS_REJECT_UNAUTHORIZED: process.env.SMTP_TLS_REJECT_UNAUTHORIZED,
+  MAIL_DRY_RUN: process.env.MAIL_DRY_RUN,
   COMMUNICATION_ALLOWED_RECIPIENTS: process.env.COMMUNICATION_ALLOWED_RECIPIENTS,
   COMMUNICATION_DEFAULT_CC: process.env.COMMUNICATION_DEFAULT_CC,
   EMAIL_ALLOWED_SENDERS: process.env.EMAIL_ALLOWED_SENDERS,
@@ -81,6 +82,9 @@ beforeAll(async () => {
     process.env.SMTP_PASS = '';
     process.env.SMTP_FROM = '"Uni.co E2E" <sender@example.com>';
     process.env.SMTP_TLS_REJECT_UNAUTHORIZED = 'false';
+    // Authorised SMTP smoke: MAIL_DRY_RUN defaults to ON outside production, so
+    // this suite must opt in explicitly to actually deliver into GreenMail.
+    process.env.MAIL_DRY_RUN = 'false';
     process.env.COMMUNICATION_ALLOWED_RECIPIENTS = TEST_MAILBOX;
     process.env.COMMUNICATION_DEFAULT_CC = 'archive@example.com';
     process.env.EMAIL_ALLOWED_SENDERS = 'example.com';

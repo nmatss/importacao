@@ -11,6 +11,10 @@ import {
 } from './schema.js';
 
 const triggerPollLimiter = createRateLimiter(5, 60_000);
+// A history scan sweeps up to 12 months with includeRead=true, downloading every
+// attachment inside the HTTP cycle, and the cron's `isRunning` latch does not
+// cover this path. Keep it to one sweep per window.
+const historyScanLimiter = createRateLimiter(1, 10 * 60_000);
 
 const router = Router();
 router.use(authMiddleware);
@@ -26,6 +30,7 @@ router.post(
 );
 router.post(
   '/history-scan',
+  historyScanLimiter,
   adminMiddleware,
   validate(historyScanSchema, 'query'),
   emailIngestionController.historyScan,
