@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import { dateRangeBounds } from '../../../__tests__/helpers/sql-inspect.js';
+import { desc } from 'drizzle-orm';
+import { importProcesses } from '../../../shared/database/schema.js';
 
 const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 
@@ -428,5 +431,144 @@ describe('processService', () => {
       expect(result).toEqual(cancelledProcess);
       expect(auditService.log).toHaveBeenCalledWith(2, 'delete', 'process', 1, null, null);
     });
+  });
+});
+
+describe('processService.list()', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  const filtroBase = { page: 1, limit: 20 } as any;
+
+  it('cobre o dia local inteiro, com limite superior exclusivo', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await processService.list({ ...filtroBase, startDate: '2026-08-29', endDate: '2026-08-29' });
+
+    const where = mockDb.select.mock.results[0].value.where.mock.calls[0][0];
+    const { start, end } = dateRangeBounds(where);
+    // America/Sao_Paulo (UTC-3): meia-noite local = 03:00 UTC. Tratar a data
+    // como meia-noite UTC deixava as tres ultimas horas do dia de fora.
+    expect(start!.toISOString()).toBe('2026-08-29T03:00:00.000Z');
+    expect(end!.toISOString()).toBe('2026-08-30T03:00:00.000Z');
+
+    const ultimoInstanteLocal = new Date('2026-08-29T23:59:59.999-03:00');
+    const primeiroInstanteDoDiaSeguinte = new Date('2026-08-30T00:00:00.000-03:00');
+    expect(ultimoInstanteLocal.getTime()).toBeGreaterThanOrEqual(start!.getTime());
+    expect(ultimoInstanteLocal.getTime()).toBeLessThan(end!.getTime());
+    expect(primeiroInstanteDoDiaSeguinte.getTime()).toBeGreaterThanOrEqual(end!.getTime());
+  });
+
+  it('mantem o filtro de busca intacto ao lado do recorte por periodo', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await processService.list({
+      ...filtroBase,
+      search: 'PK2052602TJ',
+      startDate: '2026-08-29',
+      endDate: '2026-08-29',
+    });
+
+    const where = mockDb.select.mock.results[0].value.where.mock.calls[0][0];
+    const { start, end } = dateRangeBounds(where);
+    expect(start!.toISOString()).toBe('2026-08-29T03:00:00.000Z');
+    expect(end!.toISOString()).toBe('2026-08-30T03:00:00.000Z');
+  });
+
+  it('ignora data invalida em vez de estourar "Invalid time value"', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await expect(processService.list({ ...filtroBase, endDate: 'abc' })).resolves.toBeDefined();
+    expect(mockDb.select.mock.results[0].value.where).toHaveBeenCalledWith(undefined);
+  });
+
+  it('pagina com desempate estavel por id', async () => {
+    queryQueue.push(createResolvedChain([]));
+    queryQueue.push(createResolvedChain([{ total: 0 }]));
+
+    await processService.list({ ...filtroBase, page: 2 });
+
+    // Os 117 processos importados da planilha tem createdAt praticamente
+    // identico: sem desempate, linhas repetem ou somem entre paginas.
+    expect(mockDb.select.mock.results[0].value.orderBy).toHaveBeenCalledWith(
+      desc(importProcesses.createdAt),
+      desc(importProcesses.id),
+    );
+  });
+});
+
+describe('processService.update() — limpar campo com null', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  // Contrato: chave com `null` apaga o valor; chave ausente nao mexe. O
+  // `mapUpdateSet` do Drizzle filtra `undefined` do SET e mantem `null`, entao
+  // o que importa e o que chega em `.set()`.
+
+  it('leva o null ate o SET e a leitura seguinte devolve null', async () => {
+    // assertNotLocked
+    queryQueue.push(createResolvedChain([{ lockedAt: null, lockedReason: null }]));
+    // update ... returning
+    queryQueue.push(createResolvedChain([{ id: 1, etd: null, notes: null }]));
+    // advanceLogisticStatus (etd e campo logistico): getById do processo
+    queryQueue.push(createResolvedChain([]));
+
+    const result = await processService.update(1, { etd: null, notes: null } as any, 7);
+
+    const setArg = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+    expect(setArg.etd).toBeNull();
+    expect(setArg.notes).toBeNull();
+
+    // O que o banco devolve depois do UPDATE e o que o GET seguinte le.
+    expect(result).toMatchObject({ id: 1, etd: null, notes: null });
+  });
+
+  it('nao toca no campo cuja chave nao foi enviada', async () => {
+    queryQueue.push(createResolvedChain([{ lockedAt: null, lockedReason: null }]));
+    queryQueue.push(createResolvedChain([{ id: 1, etd: '2026-05-01' }]));
+
+    await processService.update(1, { notes: 'so a nota' } as any, 7);
+
+    const setArg = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+    expect(setArg).not.toHaveProperty('etd');
+    expect(setArg.notes).toBe('so a nota');
+  });
+
+  it('nao filtra o null do patch antes do SET', async () => {
+    // Se `update()` passasse a descartar null, o Zod aceitar nao bastaria: a
+    // instrucao de apagar morreria no service e a tela voltaria a mentir 200.
+    queryQueue.push(createResolvedChain([{ lockedAt: null, lockedReason: null }]));
+    queryQueue.push(createResolvedChain([{ id: 1 }]));
+    queryQueue.push(createResolvedChain([]));
+
+    await processService.update(
+      1,
+      {
+        totalFobValue: null,
+        totalBoxes: null,
+        registeredAt: null,
+        customsClearanceAt: null,
+        exporterName: null,
+      } as any,
+      7,
+    );
+
+    const setArg = mockDb.update.mock.results[0].value.set.mock.calls[0][0];
+    for (const campo of [
+      'totalFobValue',
+      'totalBoxes',
+      'registeredAt',
+      'customsClearanceAt',
+      'exporterName',
+    ]) {
+      expect(setArg).toHaveProperty(campo, null);
+    }
   });
 });

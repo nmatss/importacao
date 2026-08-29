@@ -1,4 +1,4 @@
-import { eq, desc, and, sql, count, gte } from 'drizzle-orm';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import {
   importProcesses,
@@ -20,14 +20,15 @@ import type {
   UpdateOperationalRecordInput,
   UpdateDraftBlChecklistInput,
 } from './schema.js';
-import { DRAFT_BL_CHECK_KEYS } from './schema.js';
+import { DRAFT_BL_CHECK_KEYS, REOPEN_REASON_MIN_LENGTH, reopenReasonSchema } from './schema.js';
 import { auditService } from '../audit/service.js';
-import { assertTransition } from '../../shared/state-machine/process-states.js';
+import { assertTransition, isReopenTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
-import { NotFoundError, ValidationError } from '../../shared/errors/index.js';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { logger } from '../../shared/utils/logger.js';
 import { deriveLogisticStatus, isForwardTransition } from './logistic-auto-advance.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 // Colunas timestamp() (modo Date) recebem strings dos schemas: converte com
 // validação — '' limpa o campo; valor não parseável vira erro 400 claro.
@@ -68,13 +69,15 @@ export const processService = {
              OR ${importProcesses.previousCodes}::text ILIKE ${`%${filter.search}%`})`,
       );
     }
-    if (filter.startDate) {
-      conditions.push(gte(importProcesses.createdAt, new Date(filter.startDate)));
+    // A data vem de um calendario local; a coluna guarda UTC. Converter o dia
+    // local no intervalo UTC equivalente evita perder as 3 horas finais do dia.
+    const startAt = filter.startDate ? localDayStartUtc(filter.startDate) : null;
+    if (startAt) {
+      conditions.push(sql`${importProcesses.createdAt} >= ${startAt.toISOString()}`);
     }
-    if (filter.endDate) {
-      const endDate = new Date(filter.endDate);
-      endDate.setDate(endDate.getDate() + 1);
-      conditions.push(sql`${importProcesses.createdAt} < ${endDate.toISOString()}`);
+    const endAt = filter.endDate ? localDayEndExclusiveUtc(filter.endDate) : null;
+    if (endAt) {
+      conditions.push(sql`${importProcesses.createdAt} < ${endAt.toISOString()}`);
     }
 
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -85,7 +88,10 @@ export const processService = {
         .select()
         .from(importProcesses)
         .where(where)
-        .orderBy(desc(importProcesses.createdAt))
+        // createdAt nao e unico (os 117 processos da planilha foram importados
+        // no mesmo instante); sem desempate estavel a paginacao repete e perde
+        // linhas entre paginas.
+        .orderBy(desc(importProcesses.createdAt), desc(importProcesses.id))
         .limit(filter.limit)
         .offset(offset),
       db.select({ total: count() }).from(importProcesses).where(where),
@@ -890,7 +896,41 @@ export const processService = {
     return updated;
   },
 
-  async updateStatus(id: number, status: string, userId: number | null = null) {
+  /**
+   * Guarda das transicoes de REABERTURA (`sent_to_fenicia`/`completed` ->
+   * `validating`, `completed` -> `cancelled`): exige papel admin e motivo
+   * escrito. Devolve o motivo ja normalizado (trim) ou `null` quando a
+   * transicao e um avanco normal, que nao pede nada disso.
+   */
+  assertReopenAllowed(
+    from: ProcessStatus,
+    to: ProcessStatus,
+    opts: { reason?: string | null; actorRole?: string | null },
+  ): string | null {
+    if (!isReopenTransition(from, to)) return null;
+
+    if (opts.actorRole !== 'admin') {
+      throw new ForbiddenError(
+        `Reabrir um processo em ${from} (-> ${to}) e restrito a administradores.`,
+      );
+    }
+
+    const parsed = reopenReasonSchema.safeParse(opts.reason);
+    if (!parsed.success) {
+      throw new ValidationError(
+        `Motivo obrigatorio (minimo ${REOPEN_REASON_MIN_LENGTH} caracteres) para reabrir um processo em ${from}.`,
+        [{ field: 'reason', message: parsed.error.errors[0]?.message ?? 'Motivo invalido' }],
+      );
+    }
+    return parsed.data;
+  },
+
+  async updateStatus(
+    id: number,
+    status: string,
+    userId: number | null = null,
+    opts: { reason?: string | null; actorRole?: string | null } = {},
+  ) {
     await this.assertNotLocked(id);
     const [current] = await db
       .select()
@@ -900,7 +940,9 @@ export const processService = {
 
     if (!current) throw new NotFoundError('Processo', id);
 
-    assertTransition(current.status as ProcessStatus, status as ProcessStatus);
+    const from = current.status as ProcessStatus;
+    assertTransition(from, status as ProcessStatus);
+    const reopenReason = this.assertReopenAllowed(from, status as ProcessStatus, opts);
 
     const [process] = await db
       .update(importProcesses)
@@ -911,14 +953,31 @@ export const processService = {
       .where(eq(importProcesses.id, id))
       .returning();
 
-    auditService.log(userId, 'status_update', 'process', id, { status }, null);
+    auditService.log(
+      userId,
+      reopenReason ? 'status_reopen' : 'status_update',
+      'process',
+      id,
+      reopenReason ? { status, previousStatus: from, reason: reopenReason } : { status },
+      null,
+    );
 
-    recordProcessEvent(
+    // AWAIT proposital (os demais `recordProcessEvent` sao fire-and-forget): a
+    // resposta 200 nao pode sair antes de a trilha da mudanca de status existir.
+    // Numa reabertura o motivo registrado E a justificativa da operacao.
+    await recordProcessEvent(
       id,
       {
         eventType: 'status_changed',
-        title: `Status alterado para ${status}`,
-        metadata: { previousStatus: current.status, newStatus: status },
+        title: reopenReason
+          ? `Processo reaberto: ${from} → ${status}`
+          : `Status alterado para ${status}`,
+        description: reopenReason ?? undefined,
+        metadata: {
+          previousStatus: from,
+          newStatus: status,
+          ...(reopenReason ? { reopen: true, reason: reopenReason } : {}),
+        },
       },
       userId,
     );
@@ -926,7 +985,11 @@ export const processService = {
     return process;
   },
 
-  async delete(id: number, userId: number | null = null) {
+  async delete(
+    id: number,
+    userId: number | null = null,
+    opts: { reason?: string | null; actorRole?: string | null } = {},
+  ) {
     await this.assertNotLocked(id);
     const [current] = await db
       .select()
@@ -936,14 +999,46 @@ export const processService = {
 
     if (!current) throw new NotFoundError('Processo', id);
 
-    assertTransition(current.status as ProcessStatus, 'cancelled');
+    const from = current.status as ProcessStatus;
+    assertTransition(from, 'cancelled');
+    // Cancelar um processo ja CONCLUIDO e reabertura: pede motivo e admin.
+    // Cancelar um processo em andamento segue como antes (rota ja e admin-only).
+    const reopenReason = this.assertReopenAllowed(from, 'cancelled', opts);
 
     const [process] = await db
       .update(importProcesses)
       .set({ status: 'cancelled', updatedAt: new Date() })
       .where(eq(importProcesses.id, id))
       .returning({ id: importProcesses.id });
-    auditService.log(userId, 'delete', 'process', id, null, null);
+    auditService.log(
+      userId,
+      'delete',
+      'process',
+      id,
+      reopenReason ? { previousStatus: from, reason: reopenReason } : null,
+      null,
+    );
+
+    // A trilha `status_changed` faltava no cancelamento: o processo saia de
+    // qualquer estado para `cancelled` sem uma linha na timeline. Awaited pelo
+    // mesmo motivo do updateStatus.
+    await recordProcessEvent(
+      id,
+      {
+        eventType: 'status_changed',
+        title: reopenReason
+          ? `Processo concluido cancelado: ${from} → cancelled`
+          : 'Status alterado para cancelled',
+        description: reopenReason ?? undefined,
+        metadata: {
+          previousStatus: from,
+          newStatus: 'cancelled',
+          ...(reopenReason ? { reopen: true, reason: reopenReason } : {}),
+        },
+      },
+      userId,
+    );
+
     return process;
   },
 
