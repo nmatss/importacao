@@ -1,3 +1,9 @@
+import {
+  FIELD_SOURCE_PRECEDENCE,
+  pickPreferred,
+  type SourcedValue,
+} from '../utils/source-precedence.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -36,21 +42,16 @@ export default function processReference(input: CheckInput): CheckResult {
   const plRef = normalize(plRaw);
   const blRef = normalize(blRaw);
 
-  const sources: string[] = [];
-  const values: string[] = [];
+  const entries: Array<SourcedValue<string>> = [];
+  if (invRef) entries.push({ source: 'INV', value: invRef });
+  if (plRef) entries.push({ source: 'PL', value: plRef });
+  if (blRef) entries.push({ source: 'BL', value: blRef });
 
-  if (invRef) {
-    sources.push('INV');
-    values.push(invRef);
-  }
-  if (plRef) {
-    sources.push('PL');
-    values.push(plRef);
-  }
-  if (blRef) {
-    sources.push('BL');
-    values.push(blRef);
-  }
+  const sources = entries.map((entry) => entry.source);
+  const values = entries.map((entry) => entry.value);
+  // Referencia explicita (Invoice manda na referencia do processo) em vez de
+  // "o primeiro documento que por acaso foi extraido".
+  const reference = pickPreferred(entries, FIELD_SOURCE_PRECEDENCE.processReference);
 
   // BL has only blNumber but no customerReference/orderNumber — flag so operator is aware.
   const blHasOnlyBlNumber =
@@ -74,14 +75,16 @@ export default function processReference(input: CheckInput): CheckResult {
     };
   }
 
-  const allEqual = values.every((v) => v === values[0]);
+  const referenceValue = reference!.value;
+  const referenceLabel = `${referenceValue} (fonte: ${reference!.source})`;
+  const allEqual = values.every((v) => v === referenceValue);
   if (allEqual) {
     if (blHasOnlyBlNumber) {
       return {
         checkName,
         status: 'warning',
-        expectedValue: values[0],
-        actualValue: values[0],
+        expectedValue: referenceLabel,
+        actualValue: referenceValue,
         documentsCompared: sources.join(' vs '),
         message:
           'Referência do BL ausente — confirme ORDER NO./PO CUSTOMER REF no documento original.',
@@ -90,19 +93,20 @@ export default function processReference(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'passed',
-      expectedValue: values[0],
-      actualValue: values[0],
+      expectedValue: referenceLabel,
+      actualValue: referenceValue,
       documentsCompared: sources.join(' vs '),
       message: 'Referência do processo consistente em todos os documentos.',
     };
   }
 
+  const divergent = entries.filter((entry) => entry.value !== referenceValue);
   return {
     checkName,
     status: 'failed',
-    expectedValue: values[0],
-    actualValue: values.find((v) => v !== values[0]) ?? values[1],
+    expectedValue: referenceLabel,
+    actualValue: divergent.map((entry) => `${entry.source}=${entry.value}`).join(', '),
     documentsCompared: sources.join(' vs '),
-    message: 'Referência do processo inconsistente entre os documentos.',
+    message: `Referência do processo inconsistente entre os documentos (referência: ${reference!.source}=${referenceValue}).`,
   };
 }

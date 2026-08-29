@@ -1,3 +1,6 @@
+import { caveatSuffix, collectDocumentNumbers } from '../utils/cross-document-values.js';
+import { FIELD_SOURCE_PRECEDENCE, pickPreferred } from '../utils/source-precedence.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -15,96 +18,74 @@ interface CheckResult {
   message: string;
 }
 
+const SOURCE_LABELS: Record<string, string> = {
+  INV: 'na Invoice',
+  PL: 'no Packing List',
+  BL: 'no BL',
+};
+
 export default function boxQuantityMatch(input: CheckInput): CheckResult {
   const checkName = 'box-quantity-match';
 
-  const invBoxes =
-    input.invoiceData?.totalBoxes != null ? Number(input.invoiceData.totalBoxes) : null;
-  const plBoxes =
-    input.packingListData?.totalBoxes != null ? Number(input.packingListData.totalBoxes) : null;
-  const blRaw = input.blData?.totalBoxes ?? input.blData?.totalPackages;
-  const blBoxes = blRaw != null ? Number(blRaw) : null;
+  const collected = collectDocumentNumbers([
+    { source: 'INV', value: input.invoiceData?.totalBoxes },
+    { source: 'PL', value: input.packingListData?.totalBoxes },
+    { source: 'BL', value: input.blData?.totalBoxes ?? input.blData?.totalPackages },
+  ]);
+
+  const documentsCompared = collected.values.map((entry) => entry.source).join(' vs ');
 
   // Sanity: box counts must be integers. Decimals usually mean the extractor confused
   // carton count with CBM (cubagem). Flag as warning before doing the cross-doc compare.
-  if (plBoxes != null && !isNaN(plBoxes) && !Number.isInteger(plBoxes)) {
+  const decimal = FIELD_SOURCE_PRECEDENCE.boxes
+    .map((source) => collected.values.find((entry) => entry.source === source))
+    .find((entry) => entry && !Number.isInteger(entry.value));
+  if (decimal) {
     return {
       checkName,
       status: 'warning',
-      expectedValue: String(input.packingListData?.totalBoxes),
-      actualValue: String(input.packingListData?.totalBoxes),
-      documentsCompared: 'PL',
+      expectedValue: String(decimal.value),
+      actualValue: String(decimal.value),
+      documentsCompared: decimal.source,
+      message: `Quantidade de caixas ${SOURCE_LABELS[decimal.source]} veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.`,
+    };
+  }
+
+  if (collected.values.length < 2) {
+    return {
+      checkName,
+      status: 'warning',
+      documentsCompared,
       message:
-        'Quantidade de caixas no Packing List veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
-    };
-  }
-  if (invBoxes != null && !isNaN(invBoxes) && !Number.isInteger(invBoxes)) {
-    return {
-      checkName,
-      status: 'warning',
-      expectedValue: String(input.invoiceData?.totalBoxes),
-      actualValue: String(input.invoiceData?.totalBoxes),
-      documentsCompared: 'INV',
-      message:
-        'Quantidade de caixas na Invoice veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
-    };
-  }
-  if (blBoxes != null && !isNaN(blBoxes) && !Number.isInteger(blBoxes)) {
-    return {
-      checkName,
-      status: 'warning',
-      expectedValue: String(blRaw),
-      actualValue: String(blRaw),
-      documentsCompared: 'BL',
-      message:
-        'Quantidade de caixas no BL veio com decimal — possível confusão com cubagem (CBM). Verifique o documento original.',
+        collected.caveats.length > 0
+          ? `Quantidade de caixas presente nos documentos mas nao comparavel — ${collected.caveats.join('; ')}.`
+          : 'Documentos insuficientes para comparar quantidade de caixas.',
     };
   }
 
-  const sources: string[] = [];
-  const values: number[] = [];
+  const reference = pickPreferred(collected.values, FIELD_SOURCE_PRECEDENCE.boxes)!;
+  const divergent = collected.values.filter((entry) => entry.value !== reference.value);
 
-  if (invBoxes != null && !isNaN(invBoxes)) {
-    sources.push('INV');
-    values.push(invBoxes);
-  }
-  if (plBoxes != null && !isNaN(plBoxes)) {
-    sources.push('PL');
-    values.push(plBoxes);
-  }
-  if (blBoxes != null && !isNaN(blBoxes)) {
-    sources.push('BL');
-    values.push(blBoxes);
-  }
-
-  if (values.length < 2) {
-    return {
-      checkName,
-      status: 'warning',
-      documentsCompared: sources.join(' vs '),
-      message: 'Documentos insuficientes para comparar quantidade de caixas.',
-    };
-  }
-
-  const allEqual = values.every((v) => v === values[0]);
-  if (allEqual) {
+  if (divergent.length === 0) {
     return {
       checkName,
       status: 'passed',
-      expectedValue: String(values[0]),
-      actualValue: String(values[0]),
-      documentsCompared: sources.join(' vs '),
-      message: 'Total de caixas confere em todos os documentos.',
+      expectedValue: `${reference.value} (fonte: ${reference.source})`,
+      actualValue: String(reference.value),
+      documentsCompared,
+      message: 'Total de caixas confere em todos os documentos.' + caveatSuffix(collected.caveats),
     };
   }
 
-  const details = sources.map((s, i) => `${s}=${values[i]}`).join(', ');
+  const details = collected.values.map((entry) => `${entry.source}=${entry.value}`).join(', ');
   return {
     checkName,
     status: 'failed',
-    expectedValue: String(values[0]),
-    actualValue: values.find((v) => v !== values[0])?.toString() ?? String(values[1]),
-    documentsCompared: sources.join(' vs '),
-    message: `Divergencia na quantidade de caixas: ${details}.`,
+    expectedValue: `${reference.value} (fonte: ${reference.source})`,
+    actualValue: String(divergent[0].value),
+    documentsCompared,
+    message:
+      `Divergencia na quantidade de caixas: ${details} (referencia: ${reference.source}).` +
+      caveatSuffix(collected.caveats),
   };
 }

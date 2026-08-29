@@ -42,12 +42,15 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
 
   const mismatches: string[] = [];
   let checkedCount = 0;
+  let comparableCount = 0;
+  const unavailable: string[] = [];
 
   for (const item of items) {
     const code = String(item.itemCode || item.item_code || '').trim();
     const description = String(item.description || '').trim();
 
     if (!code || !description) continue;
+    comparableCount++;
 
     try {
       const result = await odooService.validateDescription(code, description);
@@ -59,11 +62,19 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
         );
       }
     } catch {
-      // Skip individual item errors
+      // Falha de consulta ao Odoo NAO pode sumir: o item nao foi verificado, e
+      // dizer "todas as N descrições correspondem" sobre um N reduzido e falso.
+      unavailable.push(code);
     }
   }
 
-  if (checkedCount === 0) {
+  const coverage = `${checkedCount} de ${comparableCount} verificadas${
+    unavailable.length > 0
+      ? `, ${unavailable.length} indisponíveis (${unavailable.join(', ')})`
+      : ''
+  }`;
+
+  if (comparableCount === 0) {
     return {
       checkName,
       status: 'warning',
@@ -72,23 +83,37 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
     };
   }
 
+  if (checkedCount === 0) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: `${comparableCount} itens a verificar`,
+      actualValue: coverage,
+      documentsCompared: 'INV vs Odoo',
+      message: `Nenhuma descrição pôde ser verificada: o Odoo não respondeu para os ${unavailable.length} item(ns) consultados.`,
+    };
+  }
+
   if (mismatches.length === 0) {
     return {
       checkName,
-      status: 'passed',
-      expectedValue: `${checkedCount} itens verificados`,
-      actualValue: `${checkedCount} correspondências`,
+      status: unavailable.length > 0 ? 'warning' : 'passed',
+      expectedValue: `${comparableCount} itens a verificar`,
+      actualValue: coverage,
       documentsCompared: 'INV vs Odoo',
-      message: `Todas as ${checkedCount} descrições correspondem ao catálogo Odoo.`,
+      message:
+        unavailable.length > 0
+          ? `${coverage}: as verificadas correspondem ao catálogo Odoo, as indisponíveis não foram conferidas.`
+          : `Todas as ${checkedCount} descrições correspondem ao catálogo Odoo.`,
     };
   }
 
   return {
     checkName,
     status: 'failed',
-    expectedValue: `${checkedCount} correspondências`,
+    expectedValue: coverage,
     actualValue: `${mismatches.length} divergências`,
     documentsCompared: 'INV vs Odoo',
-    message: `Divergências encontradas: ${mismatches.join('; ')}`,
+    message: `Divergências encontradas (${coverage}): ${mismatches.join('; ')}`,
   };
 }

@@ -1,3 +1,5 @@
+import { parseDocumentNumber } from '../utils/number-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -39,24 +41,47 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
   }
 
   const issues: string[] = [];
+  const incomplete: string[] = [];
 
-  // Check deposit% + balance% = 100%
-  const depositPercent = Number(invPaymentTerms.depositPercent ?? invPaymentTerms.deposit ?? 0);
-  const balancePercent = Number(invPaymentTerms.balancePercent ?? invPaymentTerms.balance ?? 0);
+  // `Number(x ?? 0)` transformava percentual NAO EXTRAIDO em 0: uma invoice com
+  // depositPercent=30 e balancePercent ausente somava 30 e o check devolvia
+  // `failed` "esperado 100%". Vazio virava zero e zero virava divergencia.
+  const depositParsed = parseDocumentNumber(
+    invPaymentTerms.depositPercent ?? invPaymentTerms.deposit,
+  );
+  const balanceParsed = parseDocumentNumber(
+    invPaymentTerms.balancePercent ?? invPaymentTerms.balance,
+  );
+  const depositPercent = depositParsed.ok ? depositParsed.value : null;
+  const balancePercent = balanceParsed.ok ? balanceParsed.value : null;
 
-  if (depositPercent > 0 || balancePercent > 0) {
+  if (depositPercent != null && balancePercent != null) {
     const total = depositPercent + balancePercent;
     if (Math.abs(total - 100) > 0.01) {
       issues.push(
         `Deposito (${depositPercent}%) + Saldo (${balancePercent}%) = ${total}%, esperado 100%`,
       );
     }
+  } else if (depositPercent != null || balancePercent != null) {
+    incomplete.push(
+      `Condicao de pagamento incompleta: deposito=${depositPercent ?? 'nao extraido'}, saldo=${balancePercent ?? 'nao extraido'} — soma nao avaliada`,
+    );
   }
 
   // Check paymentDays > 0
-  const paymentDays = Number(invPaymentTerms.paymentDays ?? invPaymentTerms.days ?? 0);
-  if (paymentDays <= 0 && (invPaymentTerms.paymentDays != null || invPaymentTerms.days != null)) {
+  const paymentDaysParsed = parseDocumentNumber(
+    invPaymentTerms.paymentDays ?? invPaymentTerms.days,
+  );
+  const paymentDays = paymentDaysParsed.ok ? paymentDaysParsed.value : null;
+  if (paymentDays != null && paymentDays <= 0) {
     issues.push(`Dias de pagamento e ${paymentDays}, esperado > 0`);
+  } else if (
+    paymentDays == null &&
+    (invPaymentTerms.paymentDays != null || invPaymentTerms.days != null)
+  ) {
+    incomplete.push(
+      `Dias de pagamento presentes mas nao interpretaveis: "${paymentDaysParsed.raw}"`,
+    );
   }
 
   // Compare with process DB payment terms if available
@@ -64,29 +89,67 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
   const termsWarnings: string[] = [];
 
   if (dbPaymentTerms) {
-    const dbDeposit = Number(dbPaymentTerms.depositPercent ?? dbPaymentTerms.deposit ?? 0);
-    const dbBalance = Number(dbPaymentTerms.balancePercent ?? dbPaymentTerms.balance ?? 0);
-    const dbDays = Number(dbPaymentTerms.paymentDays ?? dbPaymentTerms.days ?? 0);
+    const dbDepositParsed = parseDocumentNumber(
+      dbPaymentTerms.depositPercent ?? dbPaymentTerms.deposit,
+    );
+    const dbBalanceParsed = parseDocumentNumber(
+      dbPaymentTerms.balancePercent ?? dbPaymentTerms.balance,
+    );
+    const dbDaysParsed = parseDocumentNumber(dbPaymentTerms.paymentDays ?? dbPaymentTerms.days);
+    const dbDeposit = dbDepositParsed.ok ? dbDepositParsed.value : null;
+    const dbBalance = dbBalanceParsed.ok ? dbBalanceParsed.value : null;
+    const dbDays = dbDaysParsed.ok ? dbDaysParsed.value : null;
 
-    if (dbDeposit > 0 && depositPercent > 0 && Math.abs(dbDeposit - depositPercent) > 0.01) {
+    if (
+      dbDeposit != null &&
+      dbDeposit > 0 &&
+      depositPercent != null &&
+      depositPercent > 0 &&
+      Math.abs(dbDeposit - depositPercent) > 0.01
+    ) {
       termsWarnings.push(`Deposit: INV=${depositPercent}%, DB=${dbDeposit}%`);
     }
-    if (dbBalance > 0 && balancePercent > 0 && Math.abs(dbBalance - balancePercent) > 0.01) {
+    if (
+      dbBalance != null &&
+      dbBalance > 0 &&
+      balancePercent != null &&
+      balancePercent > 0 &&
+      Math.abs(dbBalance - balancePercent) > 0.01
+    ) {
       termsWarnings.push(`Balance: INV=${balancePercent}%, DB=${dbBalance}%`);
     }
-    if (dbDays > 0 && paymentDays > 0 && dbDays !== paymentDays) {
+    if (
+      dbDays != null &&
+      dbDays > 0 &&
+      paymentDays != null &&
+      paymentDays > 0 &&
+      dbDays !== paymentDays
+    ) {
       termsWarnings.push(`Payment days: INV=${paymentDays}, DB=${dbDays}`);
     }
   }
+
+  const summary = `Deposit=${depositPercent ?? 'nao extraido'}%, Balance=${balancePercent ?? 'nao extraido'}%, Days=${paymentDays ?? 'nao extraido'}`;
 
   if (issues.length > 0) {
     return {
       checkName,
       status: 'failed',
       expectedValue: 'Deposito + Saldo = 100%, dias > 0',
-      actualValue: `Deposit=${depositPercent}%, Balance=${balancePercent}%, Days=${paymentDays}`,
+      actualValue: summary,
       documentsCompared: dbPaymentTerms ? 'INV vs Sistema' : 'INV',
       message: issues.join('. ') + '.',
+    };
+  }
+
+  if (incomplete.length > 0) {
+    return {
+      checkName,
+      status: 'warning',
+      expectedValue: 'Deposito + Saldo = 100%, dias > 0',
+      actualValue: summary,
+      documentsCompared: dbPaymentTerms ? 'INV vs Sistema' : 'INV',
+      message: incomplete.join('. ') + '.',
     };
   }
 
@@ -105,7 +168,7 @@ export default function paymentTermsCheck(input: CheckInput): CheckResult {
     checkName,
     status: 'passed',
     expectedValue: '100%',
-    actualValue: `Deposit=${depositPercent}%, Balance=${balancePercent}%, Days=${paymentDays}`,
+    actualValue: summary,
     documentsCompared: dbPaymentTerms ? 'INV vs Sistema' : 'INV',
     message: 'Condicoes de pagamento validas.',
   };

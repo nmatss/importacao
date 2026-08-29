@@ -1,4 +1,5 @@
 import { normalizePort, portsMatch as portsEqual } from '../utils/port-normalize.js';
+import { FIELD_SOURCE_PRECEDENCE, type DocumentSource } from '../utils/source-precedence.js';
 
 interface CheckInput {
   invoiceData?: Record<string, any>;
@@ -63,18 +64,27 @@ export default function portsMatch(input: CheckInput): CheckResult {
 
   const issues: string[] = [];
   const loadingEntries = [
-    { label: 'INV', raw: invPolRaw, normalized: invPortOfLoading },
-    { label: 'PL', raw: plPolRaw, normalized: plPortOfLoading },
-    { label: 'BL', raw: blPolRaw, normalized: blPortOfLoading },
+    { label: 'INV' as DocumentSource, raw: invPolRaw, normalized: invPortOfLoading },
+    { label: 'PL' as DocumentSource, raw: plPolRaw, normalized: plPortOfLoading },
+    { label: 'BL' as DocumentSource, raw: blPolRaw, normalized: blPortOfLoading },
   ].filter((entry) => entry.normalized);
   const dischargeEntries = [
-    { label: 'INV', raw: invPodRaw, normalized: invPortOfDischarge },
-    { label: 'PL', raw: plPodRaw, normalized: plPortOfDischarge },
-    { label: 'BL', raw: blPodRaw, normalized: blPortOfDischarge },
+    { label: 'INV' as DocumentSource, raw: invPodRaw, normalized: invPortOfDischarge },
+    { label: 'PL' as DocumentSource, raw: plPodRaw, normalized: plPortOfDischarge },
+    { label: 'BL' as DocumentSource, raw: blPodRaw, normalized: blPortOfDischarge },
   ].filter((entry) => entry.normalized);
 
-  const baseLoading = loadingEntries[0];
-  for (const entry of loadingEntries.slice(1)) {
+  // A referencia era simplesmente a primeira fonte presente na ordem do array.
+  // Agora segue a precedencia declarada (BL manda em porto: e o contrato de
+  // transporte) e o resultado registra de onde veio o "esperado".
+  type PortEntry = (typeof loadingEntries)[number];
+  const byPrecedence = (entries: PortEntry[]): PortEntry =>
+    FIELD_SOURCE_PRECEDENCE.ports
+      .map((source) => entries.find((entry) => entry.label === source))
+      .find((entry): entry is PortEntry => entry != null) ?? entries[0];
+
+  const baseLoading = byPrecedence(loadingEntries);
+  for (const entry of loadingEntries.filter((candidate) => candidate !== baseLoading)) {
     if (!portsEqual(baseLoading.raw, entry.raw)) {
       issues.push(
         `Porto de embarque: ${baseLoading.label}="${baseLoading.raw}" vs ${entry.label}="${entry.raw}"`,
@@ -82,8 +92,8 @@ export default function portsMatch(input: CheckInput): CheckResult {
     }
   }
 
-  const baseDischarge = dischargeEntries[0];
-  for (const entry of dischargeEntries.slice(1)) {
+  const baseDischarge = byPrecedence(dischargeEntries);
+  for (const entry of dischargeEntries.filter((candidate) => candidate !== baseDischarge)) {
     if (!portsEqual(baseDischarge.raw, entry.raw)) {
       issues.push(
         `Porto de descarga: ${baseDischarge.label}="${baseDischarge.raw}" vs ${entry.label}="${entry.raw}"`,
@@ -95,7 +105,7 @@ export default function portsMatch(input: CheckInput): CheckResult {
     return {
       checkName,
       status: 'failed',
-      expectedValue: `Loading: ${invPortOfLoading || plPortOfLoading || blPortOfLoading}, Discharge: ${invPortOfDischarge || plPortOfDischarge || blPortOfDischarge}`,
+      expectedValue: `Loading: ${baseLoading.normalized} (fonte: ${baseLoading.label}), Discharge: ${baseDischarge.normalized} (fonte: ${baseDischarge.label})`,
       actualValue: issues.join('; '),
       documentsCompared: 'INV vs PL vs BL',
       message: `Divergencia nos portos: ${issues.join('; ')}`,

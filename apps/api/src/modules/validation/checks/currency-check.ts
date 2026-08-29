@@ -1,3 +1,8 @@
+// Normalizacao compartilhada com os checks monetarios (invoice-value-vs-fup,
+// freight-vs-fup, freight-value-match), que precisam da MESMA leitura de moeda
+// para decidir se podem comparar valores.
+import { normalizeCurrency } from '../utils/currency-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -13,42 +18,6 @@ interface CheckResult {
   actualValue?: string;
   documentsCompared: string;
   message: string;
-}
-
-const CURRENCY_CODE_RE = /\b(USD|EUR|BRL|CNY|RMB|HKD)\b/;
-
-function normalizeCurrency(value: unknown): { raw: string; code: string } {
-  const raw = String(value ?? '')
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, ' ');
-  const compact = raw.replace(/[\s.]/g, '');
-
-  if (
-    compact === 'USD' ||
-    compact === 'US$' ||
-    compact === 'U$S' ||
-    compact === 'USDS' ||
-    raw === 'US DOLLAR' ||
-    raw === 'US DOLLARS' ||
-    raw === 'UNITED STATES DOLLAR' ||
-    raw === 'UNITED STATES DOLLARS' ||
-    raw === 'DOLLAR' ||
-    raw === 'DOLLARS' ||
-    raw === 'DOLAR' ||
-    raw === 'DOLARES'
-  ) {
-    return { raw, code: 'USD' };
-  }
-
-  const codeMatch = raw.match(CURRENCY_CODE_RE);
-  if (codeMatch) return { raw, code: codeMatch[1] };
-
-  if (raw.includes('US$') || raw.includes('U.S.D')) {
-    return { raw, code: 'USD' };
-  }
-
-  return { raw, code: raw };
 }
 
 export default function currencyCheck(input: CheckInput): CheckResult {

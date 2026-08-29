@@ -1,3 +1,5 @@
+import { parseDocumentNumber } from '../utils/number-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -28,24 +30,45 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
     | Array<Record<string, any>>
     | undefined;
 
-  const totalGross = Number(
-    input.packingListData?.totalGrossWeight ?? input.invoiceData?.totalGrossWeight ?? 0,
+  // `Number(x ?? 0)` transformava peso ausente OU ilegivel em 0 e o fluxo
+  // seguia como se o documento nao tivesse peso. Aqui 0 continua sendo 0 e
+  // ausente/ilegivel continua sendo ausente/ilegivel.
+  const totalGrossParsed = parseDocumentNumber(
+    input.packingListData?.totalGrossWeight ?? input.invoiceData?.totalGrossWeight,
   );
-  const totalNet = Number(
-    input.packingListData?.totalNetWeight ?? input.invoiceData?.totalNetWeight ?? 0,
+  const totalNetParsed = parseDocumentNumber(
+    input.packingListData?.totalNetWeight ?? input.invoiceData?.totalNetWeight,
   );
+  const totalGross = totalGrossParsed.ok ? totalGrossParsed.value : 0;
+  const totalNet = totalNetParsed.ok ? totalNetParsed.value : 0;
+  const unreadableTotals = [
+    { label: 'peso bruto total', parsed: totalGrossParsed },
+    { label: 'peso liquido total', parsed: totalNetParsed },
+  ].filter((entry) => !entry.parsed.ok && entry.parsed.reason !== 'absent');
 
   if ((!items || items.length === 0) && (!totalGross || !totalNet)) {
     return {
       checkName,
       status: 'warning',
       documentsCompared: 'INV / PL',
-      message: 'Nenhum dado de peso encontrado para validar as proporcoes.',
+      message:
+        unreadableTotals.length > 0
+          ? `Peso presente no documento mas nao interpretavel (${unreadableTotals
+              .map((entry) => `${entry.label}="${entry.parsed.raw}"`)
+              .join(', ')}) — confira o documento original.`
+          : 'Nenhum dado de peso encontrado para validar as proporcoes.',
     };
   }
 
   const issues: string[] = [];
   const warnings: string[] = [];
+  if (unreadableTotals.length > 0) {
+    warnings.push(
+      `Peso total nao interpretavel: ${unreadableTotals
+        .map((entry) => `${entry.label}="${entry.parsed.raw}"`)
+        .join(', ')}`,
+    );
+  }
   let itemPairsValidated = 0;
   let totalPairValidated = false;
 
@@ -55,10 +78,23 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
     let impossibleCount = 0;
     let suspiciousCount = 0;
 
+    let unreadableItems = 0;
+
     for (const item of items) {
-      const gross = Number(item.grossWeight ?? 0);
-      const net = Number(item.netWeight ?? 0);
+      const grossParsed = parseDocumentNumber(item.grossWeight);
+      const netParsed = parseDocumentNumber(item.netWeight);
       const code = String(item.itemCode ?? item.code ?? 'unknown');
+
+      if (
+        (!grossParsed.ok && grossParsed.reason !== 'absent') ||
+        (!netParsed.ok && netParsed.reason !== 'absent')
+      ) {
+        unreadableItems++;
+        continue;
+      }
+
+      const gross = grossParsed.ok ? grossParsed.value : 0;
+      const net = netParsed.ok ? netParsed.value : 0;
 
       if (gross <= 0 || net <= 0) continue;
       itemPairsValidated++;
@@ -89,6 +125,10 @@ export default function weightRatioCheck(input: CheckInput): CheckResult {
       warnings.push(
         `${suspiciousCount} item(ns) com proporcao bruto/liquido incomum (fora de ${MIN_ITEM_RATIO}-${MAX_ITEM_RATIO})`,
       );
+    }
+
+    if (unreadableItems > 0) {
+      warnings.push(`${unreadableItems} item(ns) com peso presente mas nao interpretavel`);
     }
   }
 

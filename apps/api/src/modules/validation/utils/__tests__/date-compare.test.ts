@@ -18,6 +18,48 @@ describe('parseDate', () => {
     expect(parseDate('')).toBeNull();
     expect(parseDate(null)).toBeNull();
     expect(parseDate('not a date')).toBeNull();
+    // `new Date('0')` devolveria 2000-01-01 — 0/false não são datas.
+    expect(parseDate(0)).toBeNull();
+    expect(parseDate(false)).toBeNull();
+  });
+
+  // Regressão: `new Date(Date.UTC(y, m-1, d))` rolava componentes fora de
+  // faixa em silêncio — '03/15/2026' virava 2027-03-03 e '32/01/2026' virava
+  // 2026-02-01. Uma invoice americana ou um OCR ruim viravam data plausível e
+  // errada; agora são rejeitados.
+  it.each([
+    ['03/15/2026', 'mês 15 (formato americano) não rola para o ano seguinte'],
+    ['32/01/2026', 'dia 32 não rola para o mês seguinte'],
+    ['31/02/2026', '31 de fevereiro não existe'],
+    ['00/01/2026', 'dia zero'],
+    ['01/00/2026', 'mês zero'],
+    ['2026-13-01', 'mês 13 em ISO'],
+    ['2026-02-30', '30 de fevereiro em ISO'],
+  ])('rejeita %s (%s)', (input) => {
+    expect(parseDate(input)).toBeNull();
+  });
+
+  // Sentinela de sistema legado: 01/01/1900 significa "vazio", nunca uma data.
+  it.each(['01/01/1900', '1900-01-01', '31/12/1900', '1899-12-31'])(
+    'rejeita a sentinela legada %s',
+    (input) => {
+      expect(parseDate(input)).toBeNull();
+    },
+  );
+
+  it('mantém 1901 em diante como data real', () => {
+    expect(parseDate('01/01/1901')?.toISOString().slice(0, 10)).toBe('1901-01-01');
+  });
+
+  it('rejeita um objeto Date com a sentinela legada', () => {
+    expect(parseDate(new Date('1900-01-01T00:00:00Z'))).toBeNull();
+    expect(parseDate(new Date('2026-03-14T00:00:00Z'))?.toISOString().slice(0, 10)).toBe(
+      '2026-03-14',
+    );
+  });
+
+  it('lê ambíguos como DMY e nunca cai no MM/DD do new Date()', () => {
+    expect(parseDate('03/04/2026')?.toISOString().slice(0, 10)).toBe('2026-04-03');
   });
 });
 
