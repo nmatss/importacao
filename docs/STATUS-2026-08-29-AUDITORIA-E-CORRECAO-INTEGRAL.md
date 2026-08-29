@@ -980,3 +980,145 @@ motivo.
   definida no ambiente, entao o health nao diz qual SHA esta rodando.
 - As confirmacoes empiricas de P-14 (download real do Shared Drive) e o aval
   do admin do Workspace para reduzir escopos OAuth continuam abertos.
+
+---
+
+## Revisao pos-deploy — 2026-08-29, uma hora depois de 956f7d3
+
+Esta secao registra o que a revisao da propria entrega encontrou DEPOIS que ela
+ja estava rodando em producao. O gate continuava 100% verde o tempo todo:
+`format:check`, `lint`, `typecheck`, `build`, 1.494 testes de API, 226 de web,
+63 E2E de API, 595 pytest da cert-api, `ruff check` limpo.
+
+O metodo que produziu os achados nao foi reler o codigo — foi **medir o sistema
+rodando**. Todos os tres defeitos abaixo sao invisiveis em teste e visiveis em
+producao.
+
+### D-01 (ALTA) — a recusa do canal apagava o diagnostico do operador
+
+`apps/api/src/modules/alerts/delivery.service.ts`
+
+O caminho de recusa do canal (cooldown do breaker, webhook ausente) escrevia
+duas colunas sem ter tentado nada:
+
+- `last_delivery_error`, que e o unico texto que o operador le na Central de
+  Alertas para saber POR QUE um alerta nao chegou;
+- `last_delivery_attempt_at`, que e a chave do `ORDER BY` da fila de reentrega.
+
+Medicao em producao, 21h00 de 2026-08-29:
+
+```
+tentativas_reais | erro_gravado                          | qtd
+0                | Canal em cooldown apos falhas...      |  23
+1                | Canal em cooldown apos falhas...      |   3   <-- apagado
+1                | Falha ao entregar no Google Chat...   |   1
+```
+
+Tres dos quatro alertas que tiveram falha REAL de transporte estavam exibindo
+"canal em cooldown". O operador concluiria que o canal esta apenas pausado,
+quando o webhook respondeu erro — a mesma familia de defeito ja registrada
+neste projeto: o sistema apresenta ausencia de sinal como ausencia de problema.
+
+Correcao: so tentativa real carimba `last_delivery_attempt_at`; o motivo de
+recusa do canal usa `coalesce` e nunca sobrescreve causa ja conhecida.
+
+### D-02 (MEDIA) — o job de reentrega escrevia sem entregar
+
+`apps/api/src/jobs/alert-redelivery.ts`
+
+Com o breaker aberto nada pode ser entregue, mas a passada varria 25 linhas e
+gravava 25 UPDATEs mesmo assim. Medido: **11 ciclos em 55 minutos, ~275
+escritas, zero entregas.** Pior que desperdicio, porque cada no-op mexia na
+coluna que ordena a fila (D-01).
+
+Havia um efeito de segunda ordem: como a recusa do canal nao consome tentativa
+(decisao correta e deliberada), `delivery_attempts` ficava em 0, e o backoff e
+calculado a partir dele — `backoffMinutes(0) = 5 min`, exatamente o periodo do
+cron. O backoff exponencial 5-10-20-40-80 era **inerte justamente quando o canal
+estava com problema**, que e quando ele existe para agir.
+
+Correcao: saida cedo quando `isChatCooldownActive()`. Estado do canal e do
+canal, nao de cada alerta.
+
+**Nota de metodo — por que os testes nao pegaram.** Havia teste para cada peca,
+e todos corretos: cooldown nao consome tentativa; o backoff cresce com as
+tentativas; o teto interrompe. Nenhum compunha as tres. O defeito morava na
+composicao. Um dos testes, alem disso, **trancava o comportamento errado**
+(`expect(patch.lastDeliveryAttemptAt).toBeInstanceOf(Date)`) e teve de ser
+reescrito. Teste que congela defeito e pior que ausencia de teste, porque
+transmite confianca.
+
+### D-03 (MEDIA) — mensagem crua do driver chegando ao cliente
+
+`apps/api/src/shared/utils/response.ts`
+
+Sonda de seguranca provou tres saidas chegando intactas a um usuario
+autenticado, pelos controllers de documentos:
+
+```
+connect ECONNREFUSED 172.19.0.4:5432            -> topologia da rede interna
+column "comparison_field_overrides.field_key"   -> esquema do banco
+value too long for type character varying(500)  -> tipo e limite da coluna
+```
+
+O idioma do repositorio e `catch (error) { sendError(res, error.message) }`, em
+107 pontos de chamada. A redacao foi para o `sendError`, unico ponto de saida:
+vale por padrao e rota nova nasce protegida.
+
+Alternativa descartada, com o motivo: "so `AppError` passa, o resto vira
+mensagem generica" apagaria 80 mensagens escritas para o operador ler, porque a
+hierarquia so esta meio adotada — 82 lancamentos de `AppError` contra 80
+`throw new Error` cru. A redacao tira o identificador de maquina e preserva o
+texto humano.
+
+**A propria correcao tinha um defeito**, achado na revisao dela uma hora depois:
+a alternancia de raizes de caminho estava da mais curta para a mais longa e sem
+fronteira de palavra, entao `/apps/web/src/main.tsx` casava so `/app` e devolvia
+`[caminho interno]s/web/src/main.tsx` — o vazamento continuava, agora com
+aparencia de tratado. Corrigido e coberto.
+
+### D-04 (BAIXA) — artefatos de build rastreados
+
+`*.tsbuildinfo` ja estava no `.gitignore`, mas gitignore nao vale para arquivo
+ja rastreado: os tres saiam no diff a cada build, e o merge 956f7d3 levou dois
+deles junto com codigo. `git rm --cached` resolve sem tirar do disco.
+
+### E-01 — `/health/live` nunca soube dizer qual SHA rodava
+
+`apps/api/src/modules/health/routes.ts`
+
+Lia `process.env.REVISION`, variavel que **nada no repositorio define**. O deploy
+injeta o SHA como `APP_VERSION` e ainda grava um ARQUIVO `REVISION` no servidor
+que nenhum processo le. As duas pontas nunca se encontraram, e o campo respondeu
+`null` durante toda a vida do endpoint.
+
+Custo concreto: nesta propria revisao, confirmar qual SHA estava em producao
+exigiu inspecionar o servidor na mao.
+
+A guarda estatica que acompanha nao confere um nome fixo — confere que o nome
+LIDO pelo endpoint e um nome que o compose de producao ENTREGA.
+
+### O que foi verificado e estava correto
+
+Registrado porque hipotese refutada vale tanto quanto achado confirmado:
+
+- **Rate limiter atomico com `INCR`**: a hipotese era que chaves `rl:*` antigas,
+  gravadas como JSON pela versao anterior, fariam o `INCR` estourar e derrubar o
+  limitador para memoria. Medicao: zero erros de cache e nenhuma chave `rl:*` no
+  Redis. Refutada.
+- **Starvation da fila de reentrega**: a hipotese era que um alerta cujo envio
+  LANCASSE excecao ficaria com `last_delivery_attempt_at` nulo para sempre e,
+  com `NULLS FIRST` + `LIMIT`, travaria a fila. Refutada na leitura:
+  `sendToGoogleChat` tem try/catch total e devolve `false`, nunca lanca.
+- **Migracao TIMESTAMPTZ da cert-api**: nao logou nada no boot, o que levantou a
+  suspeita de que nao rodou. `information_schema` confirma
+  `cert_stock.synced_at` como `timestamp with time zone`. Aplicada.
+- **Jobs supostamente parados**: `email-check`, `sydle-sync` e `drive-ingestion`
+  apareciam com zero linhas de log. Era artefato do padrao de busca, nao
+  ausencia de execucao — `SYDLE sync completed` aparece 7 vezes em 90 min,
+  buscando 3 registros com zero erros, e `email-check` so loga em nivel `debug`
+  no caminho normal. Nenhum job parado.
+- **`ruff format`**: 28 arquivos divergem, mas 26 ja divergiam antes do merge e o
+  CI roda apenas `ruff check` (que passa). O projeto nunca adotou `ruff format`;
+  reformatar agora seria um diff de 28 arquivos sem relacao com a tarefa. Fica
+  como divida registrada, nao como correcao.
