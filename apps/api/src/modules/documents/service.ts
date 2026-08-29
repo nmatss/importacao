@@ -24,6 +24,7 @@ import { alertService } from '../alerts/service.js';
 import { tryParseEspelhoBuffer } from '../espelho-parser/parser.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
+import { assertArquivoSeguroParaAbrir } from '../../shared/utils/archive-guard.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
@@ -66,6 +67,11 @@ export function spreadsheetBufferToText(
   opts: { sheetHeaders?: boolean; logContext?: Record<string, unknown> } = {},
 ): string {
   const maxChars = Number(process.env.DOCUMENT_SPREADSHEET_MAX_CHARS) || 200_000;
+  // ANTES do parse: `maxChars` protege o tamanho do prompt, e so age depois que
+  // o `XLSX.read` ja alocou tudo. Um xlsx de 4,7 MB com 400 mil linhas leva o
+  // RSS a 770 MB num container de 512 M — e como os workers rodam dentro do
+  // processo da API, isso derruba a API, nao um job.
+  assertArquivoSeguroParaAbrir(buffer);
   const workbook = XLSX.read(buffer, { type: 'buffer' });
   const parts: string[] = [];
   let length = 0;
@@ -2494,6 +2500,10 @@ export const documentService = {
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       ext === '.docx'
     ) {
+      // docx e ZIP como o xlsx, entao a mesma guarda vale. Nao medi o consumo
+      // do mammoth como medi o do SheetJS — a protecao aqui e por simetria de
+      // formato, nao por medicao.
+      assertArquivoSeguroParaAbrir(buffer);
       const result = await mammoth.extractRawText({ buffer });
       return { text: result.value };
     }
