@@ -10,7 +10,7 @@ import {
 } from '../../shared/database/schema.js';
 import { cache } from '../../shared/cache/redis.js';
 import { logger } from '../../shared/utils/logger.js';
-import { localMonthStartUtc } from '../../shared/utils/dates.js';
+import { localMonthStartUtc, SQL_HOJE_LOCAL, sqlLocalDeUtc } from '../../shared/utils/dates.js';
 import {
   statusEnteredAt,
   withUpdatedAtFallback,
@@ -99,7 +99,7 @@ export const dashboardService = {
             eq(importProcesses.hasLiItems, true),
             ne(importProcesses.status, 'completed'),
             ne(importProcesses.status, 'cancelled'),
-            sql`${importProcesses.shipmentDate}::date + interval '13 days' < now()`,
+            sql`${importProcesses.shipmentDate}::date + 13 < ${sql.raw(SQL_HOJE_LOCAL)}`,
           ),
         ),
       db.select().from(alerts).orderBy(desc(alerts.createdAt)).limit(5),
@@ -153,14 +153,18 @@ export const dashboardService = {
   async getByMonth() {
     return db
       .select({
-        month: sql<string>`TO_CHAR(${importProcesses.createdAt}, 'YYYY-MM')`,
+        month: sql<string>`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
         count: count(),
         fobValue: sql<string>`COALESCE(SUM(${importProcesses.totalFobValue}), 0)`,
       })
       .from(importProcesses)
       .where(gte(importProcesses.createdAt, sql`NOW() - INTERVAL '6 months'`))
-      .groupBy(sql`TO_CHAR(${importProcesses.createdAt}, 'YYYY-MM')`)
-      .orderBy(sql`TO_CHAR(${importProcesses.createdAt}, 'YYYY-MM')`);
+      .groupBy(
+        sql`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
+      )
+      .orderBy(
+        sql`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
+      );
   },
 
   async getFobByBrand() {
@@ -218,7 +222,7 @@ export const dashboardService = {
           and(
             eq(importProcesses.status, 'draft'),
             sql`${importProcesses.shipmentDate} IS NOT NULL`,
-            sql`${importProcesses.shipmentDate}::date + interval '10 days' < now()`,
+            sql`${importProcesses.shipmentDate}::date + 10 < ${sql.raw(SQL_HOJE_LOCAL)}`,
           ),
         )
         .orderBy(sql`${importProcesses.shipmentDate} ASC`),
@@ -235,7 +239,7 @@ export const dashboardService = {
           processCode: importProcesses.processCode,
           brand: importProcesses.brand,
           liDeadline: followUpTracking.liDeadline,
-          daysRemaining: sql<number>`EXTRACT(DAY FROM ${followUpTracking.liDeadline}::timestamp - now())::int`,
+          daysRemaining: sql<number>`(${followUpTracking.liDeadline}::date - ${sql.raw(SQL_HOJE_LOCAL)})::int`,
           status: importProcesses.status,
         })
         .from(importProcesses)
@@ -352,15 +356,15 @@ export const dashboardService = {
           processCode: importProcesses.processCode,
           amountUsd: currencyExchanges.amountUsd,
           paymentDeadline: currencyExchanges.paymentDeadline,
-          daysUntilDue: sql<number>`EXTRACT(DAY FROM ${currencyExchanges.paymentDeadline}::timestamp - now())::int`,
+          daysUntilDue: sql<number>`(${currencyExchanges.paymentDeadline}::date - ${sql.raw(SQL_HOJE_LOCAL)})::int`,
         })
         .from(currencyExchanges)
         .innerJoin(importProcesses, eq(currencyExchanges.processId, importProcesses.id))
         .where(
           and(
             sql`${currencyExchanges.paymentDeadline} IS NOT NULL`,
-            sql`${currencyExchanges.paymentDeadline}::date <= (now()::date + interval '7 days')`,
-            sql`${currencyExchanges.paymentDeadline}::date >= now()::date - interval '1 day'`,
+            sql`${currencyExchanges.paymentDeadline}::date <= (${sql.raw(SQL_HOJE_LOCAL)} + 7)`,
+            sql`${currencyExchanges.paymentDeadline}::date >= (${sql.raw(SQL_HOJE_LOCAL)} - 1)`,
           ),
         )
         .orderBy(sql`${currencyExchanges.paymentDeadline} ASC`),

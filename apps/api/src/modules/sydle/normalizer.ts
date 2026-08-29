@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 export type SydlePaymentType =
   | 'deposit'
@@ -436,7 +437,12 @@ function normalizePaymentStatus(
   if (/(open|aberto|pendente|aguardando|emaberto)/.test(raw)) return 'open';
 
   if (purchaseAmount !== null && paidAmount !== null && paidAmount >= purchaseAmount) return 'paid';
-  if (dueDate && new Date(`${dueDate}T23:59:59Z`).getTime() < Date.now()) return 'overdue';
+  // `T23:59:59Z` e o fim do dia em UTC, que no Brasil e 20:59:59 — ou seja, um
+  // pagamento com vencimento HOJE era gravado como `overdue` a partir das 21h,
+  // tres horas antes de o dia acabar para quem paga. O fim do dia LOCAL, em
+  // UTC, e o inicio do dia local seguinte.
+  const fimDoDiaLocal = dueDate ? localDayEndExclusiveUtc(dueDate) : null;
+  if (fimDoDiaLocal && fimDoDiaLocal.getTime() <= Date.now()) return 'overdue';
   return raw ? 'unknown' : 'open';
 }
 

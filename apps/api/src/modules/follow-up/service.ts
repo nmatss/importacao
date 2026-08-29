@@ -12,7 +12,11 @@ import { logger } from '../../shared/utils/logger.js';
 import { NotFoundError } from '../../shared/errors/index.js';
 import { processService } from '../processes/service.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
-import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
+import {
+  localDayStartUtc,
+  localDayEndExclusiveUtc,
+  SQL_HOJE_LOCAL,
+} from '../../shared/utils/dates.js';
 
 const TRACKING_STEPS = [
   'documentsReceivedAt',
@@ -546,7 +550,10 @@ export const followUpService = {
         status: importProcesses.status,
         shipmentDate: importProcesses.shipmentDate,
         liDeadline: sql<string>`${importProcesses.shipmentDate}::date + 13`,
-        daysRemaining: sql<number>`${importProcesses.shipmentDate}::date + 13 - CURRENT_DATE`,
+        // `CURRENT_DATE` e o dia em UTC; das 21h a meia-noite no Brasil ele ja
+        // virou, e o "dias restantes" da tela de prazos de LI mostrava um dia a
+        // menos.
+        daysRemaining: sql<number>`${importProcesses.shipmentDate}::date + 13 - ${sql.raw(SQL_HOJE_LOCAL)}`,
         liSubmittedAt: followUpTracking.liSubmittedAt,
         liApprovedAt: followUpTracking.liApprovedAt,
       })

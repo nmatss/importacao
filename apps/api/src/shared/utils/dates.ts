@@ -132,3 +132,27 @@ export function localMonthStartUtc(monthOffset = 0, now: Date = new Date()): Dat
   // A data e sempre valida por construcao, entao o `??` so satisfaz o tipo.
   return localDayStartUtc(iso) ?? shifted;
 }
+
+/**
+ * "Hoje" no calendario do operador, em SQL.
+ *
+ * `now()::date` da o dia em UTC, e os containers rodam em UTC: entre 21:00 e
+ * 23:59 no Brasil o banco ja virou o dia. Toda decisao de calendario feita
+ * assim erra um dia nessas tres horas.
+ *
+ * `now()` e `timestamptz`, entao `AT TIME ZONE` CONVERTE para a hora local —
+ * que e o que se quer aqui.
+ */
+export const SQL_HOJE_LOCAL = `(now() AT TIME ZONE '${OPERATIONAL_TIME_ZONE}')::date`;
+
+/**
+ * Converte para a hora local uma coluna `timestamp` SEM fuso que guarda UTC.
+ *
+ * Precisa das DUAS conversoes, e a ordem importa. Em `timestamp` sem fuso,
+ * `AT TIME ZONE 'America/Sao_Paulo'` INTERPRETA o valor como se ja fosse local
+ * — o oposto do desejado. O primeiro `AT TIME ZONE 'UTC'` diz ao Postgres o que
+ * o valor realmente e; o segundo e que converte.
+ */
+export function sqlLocalDeUtc(expressao: string): string {
+  return `((${expressao}) AT TIME ZONE 'UTC') AT TIME ZONE '${OPERATIONAL_TIME_ZONE}'`;
+}

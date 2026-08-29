@@ -2,6 +2,9 @@ import type { Request, Response } from 'express';
 import { sendError, sendPaginated, sendSuccess } from '../../shared/utils/response.js';
 import { sydleService } from './service.js';
 import { sydleReportQuerySchema, syncRunsQuerySchema } from './schema.js';
+// O nome do arquivo exportado carrega a data do operador, nao a do container:
+// `toISOString()` e UTC e, das 21h a meia-noite, nomeava o arquivo com o dia seguinte.
+import { localTodayIso } from '../../shared/utils/dates.js';
 
 function booleanParam(value: unknown): boolean {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -81,7 +84,7 @@ export const sydleController = {
     try {
       const filters = sydleReportQuerySchema.parse({ ...req.query, page: 1, limit: 200 });
       const csv = await sydleService.exportCsv(filters);
-      const filename = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.csv`;
+      const filename = `sydle-compras-pagamentos-${localTodayIso()}.csv`;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -96,7 +99,7 @@ export const sydleController = {
     try {
       const filters = sydleReportQuerySchema.parse({ ...req.query, page: 1, limit: 200 });
       const workbook = await sydleService.exportXlsx(filters);
-      const filename = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const filename = `sydle-compras-pagamentos-${localTodayIso()}.xlsx`;
       res.setHeader(
         'Content-Type',
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -114,7 +117,7 @@ export const sydleController = {
     try {
       const filters = sydleReportQuerySchema.parse({ ...req.query, page: 1, limit: 200 });
       const pdf = await sydleService.exportPdf(filters);
-      const filename = `sydle-compras-pagamentos-${new Date().toISOString().slice(0, 10)}.pdf`;
+      const filename = `sydle-compras-pagamentos-${localTodayIso()}.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
       res.setHeader('X-Content-Type-Options', 'nosniff');
