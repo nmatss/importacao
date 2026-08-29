@@ -152,3 +152,97 @@ describe('assertArquivoSeguroParaAbrir()', () => {
     ).not.toThrow();
   });
 });
+
+/**
+ * O indice do ZIP e um dado do ATACANTE. Estes casos existem porque a primeira
+ * versao da guarda acreditava nele: adulterando os campos de tamanho de um xlsx
+ * legitimo, a checagem por indice passava com teto de 64 KB e o `XLSX.read`
+ * inflava dezenas de MB assim mesmo.
+ *
+ * O SheetJS, com zlib nativo (o caso no Node), ignora o tamanho declarado e
+ * infla o stream inteiro; a comparacao que produz "Bad uncompressed size" so
+ * roda DEPOIS de a memoria ja ter sido alocada.
+ *
+ * Os DOIS metodos precisam de caso proprio: o `XLSX.write` do proprio SheetJS
+ * grava ARMAZENADO por padrao, e a primeira tentativa de correcao cobriu so o
+ * deflate — o bypass continuou aberto ate o caso armazenado existir aqui.
+ */
+describe('assertArquivoSeguroParaAbrir() contra indice adulterado', () => {
+  function planilhaGorda(comprimir: boolean): Buffer {
+    const wb = XLSX.utils.book_new();
+    const linhas = Array.from({ length: 8000 }, (_, i) => ({
+      a: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+      b: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+      c: i,
+    }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(linhas), 'Plan1');
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx', compression: comprimir }) as Buffer;
+  }
+
+  /**
+   * Mente no tamanho DESCOMPRIMIDO, no indice e nos cabecalhos locais.
+   *
+   * So nesse campo, e por uma razao verificada: mentir tambem no tamanho
+   * COMPRIMIDO nao produz ataque nenhum. Para entrada armazenada o SheetJS le
+   * exatamente `_csz` bytes, entao encolher esse campo encolhe o que ele
+   * carrega — o arquivo quebra por formato em vez de estourar memoria. Para
+   * deflate o campo e ignorado, porque o zlib nativo consome o stream ate o
+   * fim. O campo que engana e o descomprimido, e e ele que a guarda deixava
+   * passar.
+   */
+  function mentirNosTamanhos(entrada: Buffer): Buffer {
+    const b = Buffer.from(entrada);
+    for (let i = 0; i + 30 <= b.length; i += 1) {
+      const sig = b.readUInt32LE(i);
+      if (sig === 0x02014b50) b.writeUInt32LE(1000, i + 24);
+      else if (sig === 0x04034b50) b.writeUInt32LE(1000, i + 22);
+    }
+    return b;
+  }
+
+  it.each([
+    ['ARMAZENADO', false],
+    ['DEFLATE', true],
+  ])('recusa ZIP %s cujo indice declara tamanho pequeno e mente', (_metodo, comprimir) => {
+    const forjado = mentirNosTamanhos(planilhaGorda(comprimir as boolean));
+
+    // A checagem por declaracao ACEITA: e esse justamente o ponto.
+    const declarado = inspecionarArquivoCompactado(forjado)!;
+    expect(declarado.bytesDescomprimidos).toBeLessThan(64 * 1024);
+
+    process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES = String(64 * 1024);
+    delete process.env.DOCUMENT_ARCHIVE_MAX_RATIO;
+    expect(() => assertArquivoSeguroParaAbrir(forjado)).toThrowError(/de verdade passa do limite/);
+  });
+
+  /**
+   * A primeira versao desta verificacao ABANDONAVA o arquivo inteiro ao topar
+   * com um stream corrompido — `return`, nao `continue`. Bastava por uma
+   * entrada quebrada ANTES da bomba para desligar a checagem do resto.
+   * Encontrado revisando a propria correcao, depois de ela ja estar verde.
+   */
+  it('entrada corrompida no comeco nao desliga a checagem do resto', () => {
+    // Precisa das DUAS coisas: o indice adulterado (senao a checagem por
+    // declaracao recusa antes e o teste nao exercita a verificacao real) e a
+    // entrada quebrada logo no inicio.
+    const b = mentirNosTamanhos(planilhaGorda(true));
+    // Corrompe os bytes de dados da PRIMEIRA entrada local, preservando o
+    // cabecalho — o indice segue intacto e as entradas seguintes tambem.
+    const primeira = b.indexOf(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    const nome = b.readUInt16LE(primeira + 26);
+    const extra = b.readUInt16LE(primeira + 28);
+    const dados = primeira + 30 + nome + extra;
+    b.fill(0xff, dados, dados + 64);
+
+    process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES = String(64 * 1024);
+    delete process.env.DOCUMENT_ARCHIVE_MAX_RATIO;
+    expect(() => assertArquivoSeguroParaAbrir(b)).toThrowError(/de verdade passa do limite/);
+  });
+
+  it('planilha honesta do mesmo tamanho continua passando', () => {
+    process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES = String(64 * MB);
+    delete process.env.DOCUMENT_ARCHIVE_MAX_RATIO;
+    expect(() => assertArquivoSeguroParaAbrir(planilhaGorda(true))).not.toThrow();
+    expect(() => assertArquivoSeguroParaAbrir(planilhaGorda(false))).not.toThrow();
+  });
+});

@@ -1246,12 +1246,12 @@ queryKey → query string → uso real no schema/controller da API). As outras
 quatro nao quebravam no filtro, e sim no CONJUNTO sobre o qual ele opera. Com a
 base em ~117 processos:
 
-| tela | defeito | efeito |
-|---|---|---|
-| `currency-exchange` | `/api/processes` **sem `limit`**, default 20 | seletor MORTO do 21o processo em diante |
-| `desembaraco` | `limit=100`, sem paginacao | filtro cego alem de 100 e **cartoes somando a fatia como total** |
-| `numerario` | idem | idem, no `totalNumerario` |
-| `follow-up` | pedia `limit=200`, controller corta em 100 | no maximo 100 linhas, em silencio |
+| tela                | defeito                                      | efeito                                                           |
+| ------------------- | -------------------------------------------- | ---------------------------------------------------------------- |
+| `currency-exchange` | `/api/processes` **sem `limit`**, default 20 | seletor MORTO do 21o processo em diante                          |
+| `desembaraco`       | `limit=100`, sem paginacao                   | filtro cego alem de 100 e **cartoes somando a fatia como total** |
+| `numerario`         | idem                                         | idem, no `totalNumerario`                                        |
+| `follow-up`         | pedia `limit=200`, controller corta em 100   | no maximo 100 linhas, em silencio                                |
 
 As quatro rotas ja devolviam `sendPaginated`, entao um unico hook
 (`useAllPagesQuery`) resolve as quatro percorrendo a paginacao ate o fim. Sem UI
@@ -1323,12 +1323,12 @@ Levantamento do revisor de dados, **reproduzido por mim** contra um Postgres 16
 em UTC. Quatro classes, todas de um dia, todas nas tres horas entre 21:00 e
 meia-noite no Brasil — todos os dias:
 
-| onde | efeito |
-|---|---|
-| "dias restantes" da LI | prazo de **amanha** reportado como `0`, indistinguivel de "vence hoje" |
-| janela de proximos pagamentos | o vencido de ontem some, e entra um dia a mais na outra ponta |
-| "processo atrasado" | dispara **27h** antes da hora |
-| grafico por mes | processo criado as 22h do dia 31 conta no mes seguinte |
+| onde                          | efeito                                                                 |
+| ----------------------------- | ---------------------------------------------------------------------- |
+| "dias restantes" da LI        | prazo de **amanha** reportado como `0`, indistinguivel de "vence hoje" |
+| janela de proximos pagamentos | o vencido de ontem some, e entra um dia a mais na outra ponta          |
+| "processo atrasado"           | dispara **27h** antes da hora                                          |
+| grafico por mes               | processo criado as 22h do dia 31 conta no mes seguinte                 |
 
 ```
  prazo LI  | antigo | novo      vencimento | antigo | novo
@@ -1364,7 +1364,7 @@ modo que servico novo do compose ja nasce coberto.
 - **79 outros `Number(req.params.X)` sem guarda, em 12 controllers.** O vazamento
   esta fechado para todos pela redacao; o que falta e devolver `400 id invalido`
   em vez de erro de banco. O repositorio ja tem o idioma — `validate(schema,
-  'params')`, usado em 14 rotas. 79 pontos e desproporcional a um turno, e o
+'params')`, usado em 14 rotas. 79 pontos e desproporcional a um turno, e o
   risco de seguranca ja esta contido.
 - **`mammoth.extractRawText`** recebeu a mesma guarda de arquivo por simetria de
   formato (docx tambem e ZIP), mas o consumo dele **nao foi medido** como o do
@@ -1373,3 +1373,203 @@ modo que servico novo do compose ja nasce coberto.
   espacados sobrevivem ao saneamento. Falta o veredito de exploracao real — se o
   modelo de fato obedece a um delimitador forjado. **Nao tratar como resolvido
   nem como refutado.**
+
+### Quinta rodada — revisao da quarta rodada, ja em producao
+
+A quarta rodada foi implantada como `6548379` as 19:38 e nunca passou por
+revisao independente: as tres correcoes (`70a4e5d`, `1c4ab36`, `50e48e5`) foram
+escritas em resposta aos relatorios dos revisores, e ninguem revisou a resposta.
+Esta secao e essa revisao. Ela achou dois defeitos na propria correcao de D-10,
+o achado mais grave da sessao anterior.
+
+Estado de partida verificado antes de tocar em qualquer coisa: producao saudavel
+em `/health/live` com `revision: 6548379ae893...` — o SHA do HEAD, o que tambem
+fecha E-01 na pratica (o health passou a dizer o que roda). Gate local em
+`6548379`: `format:check`, `lint`, `typecheck` e `npm test` todos exit 0.
+
+#### D-13 (CRITICA) — a guarda de bomba cobria UM dos tres caminhos ate o parser
+
+`apps/api/src/modules/espelho-parser/parser.ts`, `apps/api/src/modules/pre-cons/service.ts`
+
+A correcao de D-10 instalou `assertArquivoSeguroParaAbrir` em
+`spreadsheetBufferToText` e no ramo docx. A pergunta que ficou sem resposta e a
+que importa: **`spreadsheetBufferToText` e o unico caminho ate `XLSX.read`?**
+
+Nao e. Um `grep` por `XLSX.read` devolve tres. Os outros dois:
+
+| caminho              | como se chega                                                                                                                          | quem dispara                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `parseEspelhoBuffer` | `processWithAIClaimed` desvia para o parser deterministico quando `type === 'espelho'` e **nunca** passa por `spreadsheetBufferToText` | worker do pg-boss, automatico                                          |
+| `parsePreConsXLSX`   | `POST /api/pre-cons/sync` (upload de ate 20 MB) e `POST /api/pre-cons/sync-from-drive`                                                 | admin; no caminho do Drive o CONTEUDO vem de quem tem escrita na pasta |
+
+O primeiro e o mais grave, e por um motivo quase comico: espelho **e**, por
+definicao, um xlsx. O caminho mais provavel de uma planilha entrar no sistema foi
+exatamente o que ficou de fora — e ele roda sozinho, dentro do processo da API.
+
+Provado por execucao antes de corrigir, com teste que afirma o comportamento de
+hoje: `bomba-planilha-caminhos.test.ts` alimentou os dois com o indice do arquivo
+de 4,7 MB / 127 MB medido em D-10 e falhou com
+`Bad compressed size: 4928307 != 858980352` — mensagem de dentro do SheetJS, ou
+seja, o parser foi **alcancado**. Depois da correcao, 4/4 passam e `XLSX.read`
+nao e chamado.
+
+A guarda ficou dentro das duas funcoes de parse, e nao nos chamadores, pelo
+mesmo argumento que valeu em D-05: no ponto de decisao ela cobre tambem o
+chamador que ninguem inspecionou.
+
+#### D-14 (ALTA) — a guarda acreditava no indice, e o indice e dado do atacante
+
+`apps/api/src/shared/utils/archive-guard.ts`
+
+A guarda decidia lendo os tamanhos **declarados** no central directory. Declaracao
+nao e medicao.
+
+Provado por execucao: peguei um xlsx legitimo, reescrevi para `1000` os campos de
+tamanho descomprimido do indice e dos cabecalhos locais, e chamei a guarda com
+teto de **64 KB** e razao maxima de **2x**. Ela passou. `XLSX.read` inflou
+**77,8 MB** logo em seguida.
+
+A causa esta visivel no SheetJS: com zlib nativo — o caso no Node —
+`_inflateRawSync` ignora o tamanho declarado e infla o stream inteiro. A
+comparacao `_usz != usz`, que produz `Bad uncompressed size`, roda **depois** da
+alocacao. O arquivo diz o que quiser; o parser aloca o que existe.
+
+Correcao: depois das checagens por declaracao (baratas, e que recusam o arquivo
+grande honesto sem alocar nada), a guarda agora **mede**. Percorre os cabecalhos
+locais e infla com `maxOutputLength` igual ao orcamento restante, de modo que o
+pior caso alocado e o proprio orcamento — nunca o tamanho do ataque.
+`Z_SYNC_FLUSH` porque cada entrada e seguida das demais no mesmo buffer.
+
+A primeira tentativa de correcao cobriu so o deflate e **o bypass continuou
+aberto**, porque o `XLSX.write` do proprio SheetJS grava ARMAZENADO: para metodo
+0 o que vale e o `_csz` do cabecalho local, nao o tamanho descomprimido do
+indice. Os dois metodos tem caso proprio no teste por causa disso.
+
+Uma distincao que o teste ensinou e que vale registrar: **mentir no tamanho
+COMPRIMIDO nao e ataque.** Em entrada armazenada o SheetJS le exatamente `_csz`
+bytes, entao encolher o campo encolhe o que ele carrega — o arquivo quebra por
+formato, nao por memoria. Em deflate o campo e ignorado. O unico campo que
+engana e o descomprimido.
+
+Custo medido no pior caso honesto que existe na empresa — a planilha
+`1_Follow Up Processos de Importação.xlsx`, 23 MB, 22 abas, 387 entradas:
+
+```
+forjado, teto de 8 MB   -> recusado em    21 ms  (zlib aborta ao estourar)
+honesto, teto de 512 MB -> aceito   em   296 ms  (verificou 234,5 MB de verdade)
+```
+
+#### D-15 — a correcao de D-14 nasceu com um furo, achado revisando a propria correcao
+
+Depois de D-14 ficar verde, reli o codigo que eu tinha acabado de escrever. O
+tratamento de erro da verificacao usava `return`, e nao `continue`: um stream
+corrompido em qualquer entrada **abandonava o arquivo inteiro**. Bastava por uma
+entrada quebrada ANTES da bomba para desligar a checagem de todas as seguintes.
+
+Provado invertendo a correcao: com `return`, o teste falha com
+`expected [Function] to throw an error` — a bomba passa. Com `continue`, passa.
+O teste pega o defeito que foi escrito para pegar, o que e a unica evidencia que
+vale para uma guarda.
+
+Era defensavel argumentar que o SheetJS tambem quebraria na entrada corrompida
+antes de chegar a bomba, por percorrer o indice na mesma ordem. Mas isso e um
+argumento sobre ordem de iteracao de uma biblioteca de terceiros, e a versao
+segura nao custa nada: seguir para a proxima entrada.
+
+Terceira vez nesta sessao em que revisar a propria entrega **depois de verde**
+achou defeito real.
+
+#### O teto de 64 MB: minha hipotese estava errada, e a medicao derrubou
+
+Entrei nesta rodada convencido de que 64 MB era generoso demais. Extrapolando o
+numero de D-10 (127 MB -> 770 MB de RSS) contra um container de 512M com 85 MB
+de linha de base, 64 MB dariam ~390 MB de RSS — apertado. Ia baixar o padrao.
+
+A medicao disse outra coisa. Os dados reais de producao:
+
+| o que                                     | valor                    |
+| ----------------------------------------- | ------------------------ |
+| maior planilha na tabela `documents`      | **218 KB** (um espelho)  |
+| media dos espelhos                        | 103 KB                   |
+| maiores xlsx do Pre-Cons ja sincronizados | ~11 KB de linhas, 5 abas |
+| RSS da API em producao, em repouso        | **84,6 MiB de 512 MiB**  |
+
+E o unico arquivo grande de verdade, o Follow Up de 23 MB, declara 234,5 MB
+descomprimidos e custa **+776 MB de RSS** e 7,1 s no `XLSX.read`. Ou seja: o teto
+de 64 MB **ja recusa** esse arquivo, e recusa certo — ele nao cabe no container.
+Baixar o teto so passaria a recusar mais coisa sem beneficio, e subir causaria o
+OOM que a guarda existe para evitar. **O numero fica como esta.**
+
+Registro isso porque a conclusao contraria a hipotese com que comecei, e porque o
+caminho que a corrigiu foi medir producao em vez de extrapolar de um unico ponto.
+
+#### Confirmado por execucao e por isso NAO alterado
+
+- **O fuso de D-11 esta correto contra o banco de producao.** Verificado no
+  proprio Postgres de producao, e nao so em container de teste: `TimeZone = UTC`,
+  `America/Sao_Paulo` existe no tzdata (sem ele toda consulta corrigida teria
+  virado erro), e a diferenca aparece exatamente onde deveria — as 00:30 e as
+  02:59 UTC o container ja diz 30/08 enquanto o calendario do operador ainda diz
+  29/08; as 03:01 UTC os dois concordam.
+- **`sqlLocalDeUtc` esta certo para a coluna em que e usado.**
+  `import_processes.created_at` e `timestamp` SEM fuso (`schema.ts:152`), que e a
+  premissa da dupla conversao. Se a coluna fosse `timestamptz` a mesma expressao
+  deslocaria o valor no sentido errado — e o schema tem 26 colunas `withTimezone`.
+  A funcao esta correta hoje; o que ela nao tem e uma guarda contra ser aplicada
+  a uma coluna do outro tipo.
+- **Nenhum erro de SQL em producao desde o deploy.** Em 90 minutos de log ha 8
+  linhas de erro, todas a mesma: a chave do webhook do Google Chat invalida. As
+  consultas com `sql.raw` do fuso respondem sem erro.
+
+#### Estado do canal de alerta, medido agora
+
+| metrica                  | 19:38 (deploy) | 20:05 |
+| ------------------------ | -------------- | ----- |
+| total                    | 5.067          | 5.067 |
+| entregues                | 0              | **0** |
+| com tentativa registrada | 3              | 9     |
+| criados nas ultimas 24h  | 28             | 28    |
+
+O job de reentrega esta vivo e o backoff funciona — 9 tentativas consumidas em
+horas, e nao 5.067. Continua faltando **rotacionar a chave do webhook**, que e
+segredo e depende do usuario. Nada disso e novo; e a confirmacao de que o
+desenho implantado se comporta como projetado enquanto a pendencia nao e
+resolvida.
+
+#### Divida registrada nesta rodada, nao corrigida
+
+- **A verificacao real nao e consciente de concorrencia.** O orcamento e por
+  arquivo. Ha tres filas com `batchSize: 1` (`drive-sync`, `sheets-sync`,
+  `ai-extraction`) mais os caminhos HTTP sincronos, e todas rodam **dentro** do
+  processo da API. Dois parses simultaneos no teto pagam o teto duas vezes. Na
+  pratica o risco e baixo porque a maior planilha real tem 218 KB, mas o limite e
+  por arquivo e nao global — registrar para nao ser redescoberto.
+- **`mammoth.extractRawText` continua sem medicao.** A guarda vale para ele por
+  simetria de formato (docx tambem e ZIP), e agora tambem a verificacao real, mas
+  o consumo do mammoth nunca foi medido como o do SheetJS foi.
+- **`sqlLocalDeUtc` recebe o nome da coluna como string crua.** Funciona hoje e
+  esta verificado, mas um alias na consulta quebraria em runtime, nao em
+  compilacao.
+
+#### Gate final da quinta rodada — saida real
+
+```text
+npm run format      -> exit 0
+npm run lint        -> exit 0
+npm run typecheck   -> exit 0
+npm test            -> API 1543 passed | 1 skipped   web 231 passed   exit 0
+npm run build       -> exit 0
+npm run test:e2e -w apps/api -> 8 arquivos, 63/63 passed
+npm run test:e2e:web         -> 82/82 passed (2,6 min)
+```
+
+O E2E da API passou 63/63 **incluindo** `dashboard-event-dates.e2e.test.ts`, o
+caso que falhou uma vez na rodada anterior. Uma passagem nao refuta um flake:
+continua registrado como observado e nao diagnosticado.
+
+Comparado com o baseline da quarta rodada (API 1.494 testes), esta rodada
+adicionou 8: 4 em `bomba-planilha-caminhos.test.ts` (os dois caminhos ate o
+parser que estavam descobertos, mais as duas contraprovas de que o caminho
+legitimo continua chegando ao `XLSX.read`) e 4 em `archive-guard.test.ts` (os
+dois metodos de compactacao com indice adulterado, a entrada corrompida no
+comeco, e a planilha honesta que tem de continuar passando).

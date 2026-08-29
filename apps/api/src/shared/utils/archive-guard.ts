@@ -1,3 +1,4 @@
+import zlib from 'node:zlib';
 import { AppError } from '../errors/index.js';
 
 /**
@@ -27,6 +28,12 @@ const MARCADOR_ZIP64 = 0xffffffff;
 /** O comentario final do ZIP tem no maximo 65535 bytes. */
 const MAX_COMENTARIO = 0xffff;
 
+interface EntradaDoIndice {
+  /** Offset do local file header desta entrada dentro do buffer. */
+  offsetLocal: number;
+  descomprimido: number;
+}
+
 export interface RelatorioDeArquivo {
   entradas: number;
   bytesComprimidos: number;
@@ -35,6 +42,8 @@ export interface RelatorioDeArquivo {
   razao: number;
   /** Algum campo saturou em 0xFFFFFFFF (ZIP64): tamanho real desconhecido aqui. */
   zip64: boolean;
+  /** Offsets dos cabecalhos locais, para a verificacao que nao acredita no indice. */
+  locais: EntradaDoIndice[];
 }
 
 /** Onde comeca o End of Central Directory, ou -1. */
@@ -66,6 +75,7 @@ export function inspecionarArquivoCompactado(buffer: Buffer): RelatorioDeArquivo
   let bytesDescomprimidos = 0;
   let zip64 = false;
   let lidas = 0;
+  const locais: EntradaDoIndice[] = [];
 
   while (lidas < entradas && cursor + 46 <= buffer.length) {
     if (buffer.readUInt32LE(cursor) !== ASSINATURA_ENTRADA_CD) break;
@@ -80,6 +90,7 @@ export function inspecionarArquivoCompactado(buffer: Buffer): RelatorioDeArquivo
     const nome = buffer.readUInt16LE(cursor + 28);
     const extra = buffer.readUInt16LE(cursor + 30);
     const comentario = buffer.readUInt16LE(cursor + 32);
+    locais.push({ offsetLocal: buffer.readUInt32LE(cursor + 42), descomprimido });
     cursor += 46 + nome + extra + comentario;
     lidas += 1;
   }
@@ -92,6 +103,7 @@ export function inspecionarArquivoCompactado(buffer: Buffer): RelatorioDeArquivo
     bytesDescomprimidos,
     razao: bytesComprimidos > 0 ? bytesDescomprimidos / bytesComprimidos : Infinity,
     zip64,
+    locais,
   };
 }
 
@@ -117,6 +129,93 @@ function numeroPositivoDoAmbiente(nome: string, padrao: number): number {
   if (bruto === undefined || bruto.trim() === '') return padrao;
   const valor = Number(bruto);
   return Number.isFinite(valor) && valor > 0 ? valor : padrao;
+}
+
+const ASSINATURA_LOCAL = 0x04034b50;
+const METODO_ARMAZENADO = 0;
+const METODO_DEFLATE = 8;
+
+/**
+ * Confere o tamanho descomprimido REAL, sem acreditar no que o indice declara.
+ *
+ * Medido em 2026-08-29, e este e o motivo de a funcao existir: adulterando os
+ * campos de tamanho descomprimido do central directory E dos cabecalhos locais
+ * de um xlsx legitimo para `1000`, a checagem por indice **passou com teto de
+ * 64 KB e razao de 2x**, e `XLSX.read` inflou 77,8 MB assim mesmo. O tamanho
+ * declarado e um dado do atacante.
+ *
+ * A causa e visivel no SheetJS: com zlib nativo disponivel (o caso no Node),
+ * `_inflateRawSync` ignora o tamanho declarado e infla o stream inteiro; a
+ * comparacao `_usz != usz` que dispara "Bad uncompressed size" so acontece
+ * DEPOIS, quando a memoria ja foi alocada.
+ *
+ * Aqui a inflacao roda com `maxOutputLength`, entao zlib aborta no instante em
+ * que o orcamento estoura — o pior caso alocado e o proprio orcamento, nunca o
+ * tamanho do ataque. `Z_SYNC_FLUSH` porque cada entrada e seguida das demais no
+ * mesmo buffer, e o padrao `Z_FINISH` trataria isso como stream truncado.
+ *
+ * Para entrada ARMAZENADA (metodo 0) nao ha o que inflar: o conteudo esta no
+ * arquivo, entao o tamanho e limitado pelo proprio arquivo e conta direto.
+ */
+function verificarTamanhoRealDescomprimido(
+  buffer: Buffer,
+  locais: EntradaDoIndice[],
+  orcamento: number,
+): void {
+  let restante = orcamento;
+
+  for (const { offsetLocal } of locais) {
+    if (offsetLocal + 30 > buffer.length) continue;
+    if (buffer.readUInt32LE(offsetLocal) !== ASSINATURA_LOCAL) continue;
+
+    const metodo = buffer.readUInt16LE(offsetLocal + 8);
+    const nome = buffer.readUInt16LE(offsetLocal + 26);
+    const extra = buffer.readUInt16LE(offsetLocal + 28);
+    const inicioDados = offsetLocal + 30 + nome + extra;
+    if (inicioDados >= buffer.length) continue;
+
+    if (metodo === METODO_ARMAZENADO) {
+      // Sem compressao, o que o SheetJS le e o span de `_csz` bytes do
+      // cabecalho LOCAL — nao o tamanho descomprimido do indice. Foi
+      // exatamente essa distincao que deixou o primeiro bypass passar: o
+      // `XLSX.write` do proprio SheetJS grava ARMAZENADO, entao adulterar so os
+      // campos de tamanho descomprimido bastava. Limitado pelo buffer, porque
+      // um `_csz` mentiroso nao cria bytes que nao existem no arquivo.
+      const comprimidoLocal = buffer.readUInt32LE(offsetLocal + 18);
+      restante -= Math.min(comprimidoLocal, buffer.length - inicioDados);
+    } else if (metodo === METODO_DEFLATE) {
+      try {
+        const saida = zlib.inflateRawSync(buffer.subarray(inicioDados), {
+          maxOutputLength: Math.max(restante, 1),
+          finishFlush: zlib.constants.Z_SYNC_FLUSH,
+        });
+        restante -= saida.length;
+      } catch (err) {
+        // Estourou o orcamento: e exatamente o caso que esta funcao procura.
+        if ((err as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
+          throw new ArquivoCompactadoPerigosoError(
+            `descomprimido de verdade passa do limite de ${(orcamento / 1024 / 1024).toFixed(1)} MB, ` +
+              'independentemente do que o indice do arquivo declara',
+          );
+        }
+        // Stream corrompido nao e problema de TAMANHO: o parser vai recusar por
+        // formato, que e a mensagem certa para o operador. Mas seguir para a
+        // proxima entrada, e nao abandonar o arquivo — com `return` bastava por
+        // uma entrada quebrada ANTES da bomba para desligar a checagem do resto.
+        continue;
+      }
+    } else {
+      // Metodo que o SheetJS nao abre; ele mesmo recusa por formato.
+      continue;
+    }
+
+    if (restante < 0) {
+      throw new ArquivoCompactadoPerigosoError(
+        `descomprimido de verdade passa do limite de ${(orcamento / 1024 / 1024).toFixed(1)} MB, ` +
+          'independentemente do que o indice do arquivo declara',
+      );
+    }
+  }
 }
 
 export function assertArquivoSeguroParaAbrir(
@@ -157,4 +256,11 @@ export function assertArquivoSeguroParaAbrir(
       `expande ${relatorio.razao.toFixed(0)}x ao descomprimir, acima do limite de ${maxRazao}x`,
     );
   }
+
+  // As checagens acima leem o que o arquivo DECLARA, e declaracao e dado do
+  // atacante. Esta ultima mede. Fica por ultimo de proposito: o arquivo grande
+  // honesto ja foi recusado sem alocar nada, e so o que passou por todas as
+  // declaracoes paga o custo de inflar — que, para as planilhas reais deste
+  // sistema (a maior tem 218 KB), e desprezivel.
+  verificarTamanhoRealDescomprimido(buffer, relatorio.locais, maxDescomprimido);
 }

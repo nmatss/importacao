@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { assertArquivoSeguroParaAbrir } from '../../shared/utils/archive-guard.js';
 
 export interface EspelhoItem {
   processo: string | null;
@@ -606,6 +607,14 @@ function tryParseSheet(rows: Row[], sheetName: string): ParsedEspelho | null {
 }
 
 export function parseEspelhoBuffer(buffer: Buffer): ParsedEspelho {
+  // O ramo `espelho` de `processWithAIClaimed` desvia para este parser e nunca
+  // passa por `spreadsheetBufferToText`, onde a guarda de bomba de
+  // descompressao foi instalada. Como o worker do pg-boss roda DENTRO do
+  // processo da API, um espelho de 4,7 MB que expande para 127 MB derruba a API
+  // — e espelho e, por definicao, um xlsx: era o caminho mais provavel de todos.
+  // A guarda fica aqui, no ponto de decisao, e nao no chamador, para valer
+  // tambem para chamador que ninguem inspecionou.
+  assertArquivoSeguroParaAbrir(buffer);
   const wb = XLSX.read(buffer, { type: 'buffer', cellDates: true, cellNF: false });
   for (const sheetName of wb.SheetNames) {
     const sheet = wb.Sheets[sheetName];

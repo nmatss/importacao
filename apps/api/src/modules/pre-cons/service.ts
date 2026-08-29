@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { assertArquivoSeguroParaAbrir } from '../../shared/utils/archive-guard.js';
 import { eq, and, sql, ilike, gte, lte, or, asc, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { preConsItems, preConsSyncLog, importProcesses } from '../../shared/database/schema.js';
@@ -123,6 +124,12 @@ export function parsePreConsXLSX(buffer: Buffer): {
   sheets: string[];
   errors: string[];
 } {
+  // `POST /api/pre-cons/sync` aceita upload de ate 20 MB e `sync-from-drive`
+  // baixa da pasta do Shared Drive. As duas rotas exigem admin, mas o CONTEUDO
+  // do caminho do Drive vem de quem tem escrita na pasta, que nao e a mesma
+  // pessoa. 20 MB na taxa de expansao medida passam de 500 MB — o container
+  // tem 512 M.
+  assertArquivoSeguroParaAbrir(buffer);
   const wb = XLSX.read(buffer, { type: 'buffer' });
   const allRows: Array<Record<string, any>> = [];
   const errors: string[] = [];
