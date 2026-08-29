@@ -297,8 +297,13 @@ describe('communicationService', () => {
       expect(mockTransportClose).toHaveBeenCalledOnce();
     });
 
-    it('does not deliver anything while MAIL_DRY_RUN is on', async () => {
-      delete process.env.MAIL_DRY_RUN; // NODE_ENV=test => dry-run ON by default
+    it('em dry-run nao entrega E NAO registra como enviado', async () => {
+      // O gate impedia a entrega, mas o retorno `delivered: false` era ignorado:
+      // o registro virava `status: 'sent'` com `sentAt`, a timeline dizia
+      // "E-mail enviado para X" e a tela mostrava Enviado — enquanto o
+      // destinatario nunca recebia. E o mesmo padrao do incidente ja registrado
+      // no projeto, de o banco afirmar um envio que nao aconteceu.
+      delete process.env.MAIL_DRY_RUN; // NODE_ENV=test => dry-run ligado por default
       const mockComm = {
         id: 1,
         status: 'draft',
@@ -310,15 +315,16 @@ describe('communicationService', () => {
       queryQueue.push(createResolvedChain([mockComm]));
       queryQueue.push(createResolvedChain([{ ...mockComm, status: 'sent' }]));
 
-      await communicationService.send(1);
+      await expect(communicationService.send(1)).rejects.toThrow(/MAIL_DRY_RUN/i);
 
       expect(mockSendMail).not.toHaveBeenCalled();
-      expect(auditService.log).toHaveBeenCalledWith(
+      // E, sobretudo, nada de trilha afirmando envio.
+      expect(auditService.log).not.toHaveBeenCalledWith(
         null,
         'email.sent',
         'communication',
         expect.any(Number),
-        expect.objectContaining({ dryRun: true }),
+        expect.anything(),
         null,
       );
     });

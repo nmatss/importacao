@@ -377,6 +377,23 @@ export const communicationService = {
         attachments: mailAttachments,
       });
 
+      // Dry-run NAO pode virar "enviado". O `deliverMail` devolve
+      // `delivered: false` quando o gate esta ativo, e ignorar esse retorno
+      // gravava `status: 'sent'` + `sentAt` e uma linha de timeline dizendo
+      // "E-mail enviado para X" — a tela mostrava Enviado, o destinatario nunca
+      // recebia, e so um mergulho no log revelava. E o mesmo padrao do incidente
+      // ja registrado no projeto: o banco afirmando um envio que nao aconteceu.
+      //
+      // Falhar aqui deixa o `catch` abaixo gravar `failed` com o motivo, que e a
+      // unica versao verdadeira do que aconteceu.
+      if (!delivery.delivered) {
+        throw new AppError(
+          'MAIL_DRY_RUN está ativo: nada foi enviado. Defina MAIL_DRY_RUN=false no ambiente para enviar de verdade.',
+          503,
+          'MAIL_DRY_RUN_ACTIVE',
+        );
+      }
+
       const sentAt = new Date();
       const [updated] = await db
         .update(communications)
