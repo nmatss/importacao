@@ -1923,3 +1923,91 @@ Evidências:
 - Contrato e handoff:
   `docs/operations/document-intake-contract-2026-08-28.md` e
   `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.
+
+## 2026-08-29 — Auditoria integral e correcao de filtros, dados, seguranca e UX
+
+- Baseline medido ANTES de tocar em qualquer coisa (commit `4f7a991`): typecheck
+  0, lint 0, API 1005 + 1 skip, web 146, build 0, Playwright 82/82, npm audit 0.
+  **Todos os gates verdes** — e nenhum dos defeitos abaixo aparecia neles.
+- Metodo: oito agentes de auditoria somente leitura particionados por area,
+  depois sete agentes de correcao em conjuntos de arquivos DISJUNTOS, mais os
+  arquivos que o orquestrador assumiu.
+- Sete defeitos foram provados por EXECUCAO, nao por leitura: o dia da semana do
+  APScheduler (`day_of_week='1'` dispara na terca), os filtros do LI descartados
+  pelo Zod antes do controller, o intervalo de duracao zero da Auditoria, o
+  deslocamento de tres horas de toda janela de data, o `supportsAllDrives`
+  ausente no download do Drive, o `liUrgent` sem condicao de urgencia e o
+  `RangeError` que virava HTTP 400 com mensagem interna em ingles.
+- O achado mais consequente nao estava em nenhum documento: com a pasta
+  operacional em Shared Drive, a virada de `DOCUMENT_SOURCE` para `drive` faria
+  o sweep listar os arquivos e falhar 100% dos downloads, com o modo Drive-only
+  desligando simultaneamente e-mail e upload manual. Corrigido e coberto por
+  guarda estatica.
+- Duas guardas estaticas novas, porque o defeito estava na AUSENCIA de uma
+  declaracao e nao no comportamento de uma funcao: uma exige `supportsAllDrives`
+  em toda chamada da API do Drive, outra exige que todo tom de cor usado exista
+  no `@theme` (67 classes `danger-*` nao pintavam nada no tema escuro, incluindo
+  ErrorBoundary, ErrorState, ConfirmDialog e AppLayout).
+- `PUT /api/processes/:id` deixou de mudar status, fechando um desvio que
+  levava um processo de `draft` a `completed` sem `assertTransition` e sem
+  gravar o evento. Em contrapartida, a lacuna de `completed -> validating` na
+  state machine ficou VISIVEL — antes era contornada sem trilha (P-06).
+- `updateProcessSchema` passou a aceitar `null` em 25 campos, com o contrato
+  "chave ausente = nao mexe; chave null = apaga". String vazia continua sendo
+  descarte, de proposito.
+- Fila `email-send` removida: caminho morto, sem enfileirador em todo o
+  repositorio, que enviava e-mail sem allow-list de destinatario e sem
+  sanitizacao de HTML.
+- A exigencia do claim `hd` no login Google foi deliberadamente SUAVIZADA (so
+  vale quando o claim esta presente). Exigencia dura teria modo de falha
+  catastrofico e binario: sem `hd`, ninguem entra, e a recuperacao exige mudar
+  o SOPS e redeployar durante o incidente.
+- 26 pendencias registradas (P-01 a P-26), separadas entre bloqueadas por
+  decisao de negocio, escopo declarado fora, bloqueadas por acesso, e debito.
+  A mais grave e P-15: o canal de alerta continua morto POR CONSTRUCAO, nao por
+  credencial — a deduplicacao devolve o duplicado antes de tentar entregar, e
+  `sent_to_chat = false` nao e lido por nenhum job em todo o repositorio.
+- Sete achados foram REFUTADOS e registrados como tal, para nao voltarem.
+- Nenhum commit, push, deploy, migration remota, envio de e-mail ou escrita em
+  sistema externo. Fechamento completo em
+  `docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`.
+
+## 2026-08-29 (segunda rodada) — fechamento do backlog
+
+- ANTES de despachar a segunda onda, ao preparar as migrations, apareceu o
+  defeito mais grave da sessao: `shared/database/migrate.ts` enumerava as
+  migrations forward-only numa lista ESCRITA A MAO que parava na `0024`. A
+  `0025` e a `0026` existiam no disco e NUNCA eram aplicadas em producao — e a
+  `0026` cria `documents.ingestion_source`, de que depende todo o contrato de
+  entrada Drive-only. Invisivel para a suite porque `test/e2e/setup.ts` usa
+  `readdirSync`: o E2E aplicava as duas e passava verde. Corrigido com fonte
+  unica (`shared/database/pending-migrations.ts`) e sete testes que comparam a
+  descoberta com o conteudo do disco.
+- Sete agentes na segunda onda. Fecharam: canal de alerta (reentrega, backoff,
+  teto, regra Prometheus, health honesto), ingestao de e-mail (fail-closed sem
+  allow-list, falha transitoria nao consome mais a mensagem), `Number()` cru nos
+  checks monetarios, aceites do comparativo (tabela deixou de ser write-only),
+  retry nas integracoes Google, reabertura de processo concluido, `updatedAt`
+  como data de evento, `proxy_pass` do Nginx, `cert_stock.synced_at`, e os
+  122 KB de `main.py` morto.
+- O orquestrador assumiu o que ficou sem dono: rate limiter atomico (era
+  get/set com corrida), defesa de injecao de prompt no assistente, deteccao de
+  sucesso vazio do SYDLE, allow-list de chaves em Configuracoes, validacao do
+  `x-correlation-id`, politica de retry das filas, unificacao da resolucao do
+  webhook, e a absorcao no frontend da quebra de contrato que o backend
+  introduziu (nota obrigatoria na edicao de celula, e aceites lidos da tabela em
+  vez do timeline).
+- ERRO MEU que travou o build por um tempo: um teste que escrevi usava
+  `vi.spyOn(... as never)` e nao compilava. Tres agentes reportaram; o build so
+  fechou depois que eu corrigi. Filtrar a saida do `tsc` por modulo escondeu o
+  erro de mim.
+- Dois agentes foram interrompidos pelo limite de sessao no meio do trabalho.
+  Ao retomar, VERIFIQUEI o que tinha landado em vez de assumir: os dois
+  deixaram o trabalho completo e verde.
+- Verificacao por MUTACAO virou o padrao da rodada: desligar a correcao e
+  confirmar que o teste falha. Pegou pelo menos dois testes que passavam com a
+  correcao desligada — um porque um `early return` anterior cortava antes da
+  asercao.
+- Gate final: format/lint/typecheck/build 0; API 1.494 + 1 skip; web 226; E2E
+  API 63/63 com Postgres real; cert-api 595 + ruff limpo; Playwright 82/82;
+  npm audit 0. Nenhum commit, push, deploy, migration remota ou chamada externa.

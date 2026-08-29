@@ -1,6 +1,7 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-28 (ver
+Ultima atualizacao: 2026-08-29 (ver
+`docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`,
 `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`,
 `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`,
 `docs/STATUS-2026-08-26-CERTIFICADOS-LINX.md`,
@@ -13,6 +14,38 @@ Ultima atualizacao: 2026-08-28 (ver
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## 2026-08-29 — Auditoria integral: o que mudou neste documento
+
+A sessao de 2026-08-29 auditou as 34 paginas, os 23 modulos da API e a
+cert-api com oito agentes em modo somente leitura, e corrigiu o que era
+corrigivel sem decisao de negocio. O relatorio completo, com o baseline
+medido, os defeitos provados por execucao, as correcoes aplicadas, as 26
+pendencias em aberto (P-01 a P-26) e os achados refutados, esta em
+`docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`.
+
+Tres pendencias daquele relatorio sao mais graves do que qualquer item ja
+registrado aqui e nao existiam neste documento:
+
+- **P-14/D1** — `supportsAllDrives` faltava no download de conteudo e em sete
+  escritas do Drive. Como a pasta operacional esta em Shared Drive, a virada
+  de `DOCUMENT_SOURCE` para `drive` faria o sweep LISTAR os arquivos e falhar
+  100% dos downloads com 404. Corrigido no codigo e coberto por guarda
+  estatica; falta a confirmacao empirica com um download real.
+- **P-14/D2** — o re-upload do documento sobrescrevia `driveFileId` com o id da
+  copia, quebrando a chave de deduplicacao da ingestao e causando reimportacao
+  a cada dez minutos. Corrigido no ponto unico de escrita da coluna; falta a
+  confirmacao empirica apos uma ingestao real.
+- **P-15** — o canal de alerta continua morto POR CONSTRUCAO, e nao por
+  credencial: a deduplicacao devolve o alerta duplicado antes de tentar
+  entregar, `sent_to_chat = false` nao e lido por nenhum job ou rota em todo o
+  repositorio, e o cooldown do circuit breaker descarta em silencio. A
+  interface passou a mostrar quais alertas nao foram entregues; a reentrega em
+  si nao foi implementada.
+
+O item CRITICO deste documento sobre o canal de alerta deve ser lido junto com
+P-15: a causa raiz identificada la e de codigo, e sobrevive a qualquer rotacao
+de chave ou webhook.
 
 ## MEDIO - Workflow GitHub De Deploy Continua Sem Secrets
 

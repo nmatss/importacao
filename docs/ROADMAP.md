@@ -2,7 +2,7 @@
 
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
-Ultima atualizacao: 2026-08-28
+Ultima atualizacao: 2026-08-29
 
 ## P0 - Operacao E Confiabilidade
 
@@ -10,6 +10,26 @@ Ultima atualizacao: 2026-08-28
   compartilhar a pasta operacional de 2026 com a conta de serviço, cadastrar a
   raiz no SOPS e exigir `health/integrations` + smoke sem avisos antes de trocar
   o override temporário `DOCUMENT_SOURCE=email` para `drive`.
+  **ATENCAO — dois bloqueadores de codigo descobertos em 2026-08-29 que nao
+  estavam registrados** (detalhe em
+  `docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`, P-14):
+  1. `supportsAllDrives` faltava no download de conteudo e em sete escritas do
+     Drive. Como a pasta esta em Shared Drive, a virada faria o sweep LISTAR os
+     arquivos e falhar 100% dos downloads com 404 — e como o modo Drive-only
+     tambem desliga a ingestao por e-mail e bloqueia o upload manual, o
+     resultado seria nenhuma via de entrada documental funcional, com o sweep
+     aparentemente saudavel. CORRIGIDO no codigo e coberto por guarda estatica;
+     falta comprovar com um download real da pasta operacional.
+  2. O re-upload do documento sobrescrevia `driveFileId` com o id da copia,
+     quebrando a chave de deduplicacao da ingestao — o mesmo arquivo seria
+     reimportado a cada dez minutos, com uma copia nova a cada passada.
+     CORRIGIDO: `uploadToDrive` recusa re-subir documento cuja
+     `ingestionSource` e `drive`, com a guarda no ponto unico de escrita da
+     coluna. Falta comprovar inspecionando `documents.drive_file_id` apos uma
+     ingestao real.
+     O gate de virada deve exigir, alem do que ja esta escrito acima, um smoke que
+     baixe de fato um arquivo da pasta operacional e uma inspecao de
+     `documents.drive_file_id` apos uma ingestao real.
 - Homologar Invoice, Packing List, BL e XLSX de Espelho vindos exclusivamente da
   pasta de um processo listado no Follow Up; provar também os negativos de
   código de item, referência incompleta e upload manual 409.
