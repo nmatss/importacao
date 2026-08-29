@@ -34,6 +34,23 @@ Levantada na auditoria integral. O relatorio completo, com evidencia
   `TIMESTAMPTZ` forca reescrita da tabela sob `ACCESS EXCLUSIVE` no startup.
   Medido: 2,5 s para 500 mil linhas. O registro do projeto indica ~33 mil, o que
   torna o custo desprezivel — mas isso nao foi confirmado contra o banco real.
+- **A guarda de arquivo compactado nao e consciente de concorrencia.** O
+  orcamento de bytes descomprimidos e por ARQUIVO. Ha tres filas com
+  `batchSize: 1` (`drive-sync`, `sheets-sync`, `ai-extraction`) mais os caminhos
+  HTTP sincronos, e todas rodam DENTRO do processo da API — nao ha container de
+  worker. Dois parses simultaneos no teto pagam o teto duas vezes. Na pratica o
+  risco e baixo (a maior planilha real tem 218 KB contra um teto de 64 MB), mas
+  o limite e por arquivo e nao global. A saida estrutural e isolar o parse em
+  processo com teto proprio de memoria, o que e mudanca de arquitetura.
+- **`mammoth.extractRawText` continua sem medicao de consumo.** Recebe a mesma
+  guarda que o SheetJS por simetria de formato (docx tambem e ZIP), inclusive a
+  verificacao de tamanho real, mas o custo de memoria dele nunca foi medido como
+  o do SheetJS foi. O teto aplicado a ele e, portanto, herdado e nao calibrado.
+- **`sqlLocalDeUtc` recebe o nome da coluna como string crua.** Correto hoje e
+  verificado (`import_processes.created_at` e `timestamp` SEM fuso), mas o
+  schema tem 26 colunas `withTimezone` e a mesma expressao aplicada a uma delas
+  deslocaria o valor no sentido errado. Alem disso, um alias na consulta
+  quebraria em runtime e nao em compilacao. Falta a guarda de tipo.
 - **Centralizar stubs de jsdom em `apps/web/src/test/setup.ts`: FEITO**, com
   stub ciente da query. Registrado aqui porque a primeira tentativa quebrou
   quatro testes de layout: `AppLayout` trata a AUSENCIA de `matchMedia` como
