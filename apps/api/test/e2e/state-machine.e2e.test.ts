@@ -106,9 +106,17 @@ describe('State Machine — getAllowedTransitions', () => {
     expect(allowed).toContain('cancelled');
   });
 
-  it('completed has no allowed transitions', () => {
+  // Antes: "completed has no allowed transitions". O teste congelava o bug —
+  // com 'completed' terminal nao havia caminho de volta para revalidar um OHBL
+  // corrigido nem para cancelar um processo concluido. As duas saidas abertas
+  // sao transicoes de REABERTURA (motivo obrigatorio + admin + trilha).
+  it('completed only exits through the reopen transitions', () => {
     const allowed = getAllowedTransitions('completed');
-    expect(allowed).toHaveLength(0);
+    expect([...allowed].sort()).toEqual(['cancelled', 'validating']);
+  });
+
+  it('cancelled has no allowed transitions', () => {
+    expect(getAllowedTransitions('cancelled')).toHaveLength(0);
   });
 });
 
