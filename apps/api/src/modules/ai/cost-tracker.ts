@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { aiUsageLog } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
+import { localDayStartUtc, localMonthStartUtc, localTodayIso } from '../../shared/utils/dates.js';
 import { alertService } from '../alerts/service.js';
 import { AIBudgetExceededError, estimateCostUSD } from './cost-pricing.js';
 
@@ -17,13 +18,49 @@ export { AIBudgetExceededError, estimateCostUSD };
  * Strategy:
  *  - Track every successful chat call in ai_usage_log (input/output tokens,
  *    computed USD cost).
- *  - Before each call, sum spend for the current calendar month (UTC) and
+ *  - Before each call, sum spend for the current local calendar month and
  *    refuse if we're over budget. Refusal throws AIBudgetExceededError which
  *    the caller can catch + fall back gracefully (currently surfaces as a
  *    503-style failure that the extraction pipeline already handles via the
  *    confidence-score < 0.4 alert path).
  *  - Send a single warning alert when crossing 80% of the budget in a month.
  */
+
+/**
+ * Janela de orçamento: UMA única referência de fuso.
+ *
+ * `ai_usage_log.created_at` é `timestamp` SEM time zone e o Postgres roda em
+ * UTC (nenhum `TZ` em docker-compose.yml, docker-compose.prod.yml ou
+ * apps/api/Dockerfile), logo a coluna guarda UTC. O lado direito da comparação
+ * era `date_trunc(..., NOW() AT TIME ZONE 'America/Sao_Paulo')`, que produz
+ * wall-clock de São Paulo — comparar os dois fazia a janela começar na
+ * meia-noite local INTERPRETADA COMO UTC, ou seja 21:00 do dia anterior no
+ * horário local: o teto diário resetava três horas cedo e ainda contava as
+ * três últimas horas do dia anterior. Idem para o mês.
+ *
+ * Correção: calcular em JS o instante UTC correspondente ao início do dia/mês
+ * LOCAL (helpers de shared/utils/dates.ts) e comparar UTC com UTC. A coluna
+ * fica sem função em volta, então o índice ai_usage_log_created_at_idx
+ * continua utilizável.
+ */
+export function monthlyWindowStartUtc(now: Date = new Date()): Date {
+  return localMonthStartUtc(0, now);
+}
+
+export function dailyWindowStartUtc(now: Date = new Date()): Date {
+  // localTodayIso sempre devolve uma data de calendário válida; o `??` só
+  // satisfaz o tipo de retorno nullable de localDayStartUtc.
+  return localDayStartUtc(localTodayIso(now)) ?? now;
+}
+
+/**
+ * Instante UTC no formato do literal `timestamp` sem fuso — exatamente o que a
+ * coluna guarda. Comparar contra este literal não depende do TimeZone da
+ * sessão do Postgres.
+ */
+function asUtcTimestampLiteral(instant: Date): string {
+  return instant.toISOString().replace('T', ' ').replace('Z', '');
+}
 
 /**
  * Sum of cost_usd in the current Brazil-time month (America/Sao_Paulo).
@@ -40,7 +77,7 @@ export async function getMonthlySpendUSD(): Promise<number> {
       })
       .from(aiUsageLog)
       .where(
-        sql`${aiUsageLog.createdAt} >= date_trunc('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        sql`${aiUsageLog.createdAt} >= ${asUtcTimestampLiteral(monthlyWindowStartUtc())}::timestamp`,
       );
     const value = Number(rows[0]?.total ?? 0);
     return Number.isFinite(value) ? value : 0;
@@ -62,7 +99,7 @@ export async function getDailySpendUSD(): Promise<number> {
       })
       .from(aiUsageLog)
       .where(
-        sql`${aiUsageLog.createdAt} >= date_trunc('day', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+        sql`${aiUsageLog.createdAt} >= ${asUtcTimestampLiteral(dailyWindowStartUtc())}::timestamp`,
       );
     const value = Number(rows[0]?.total ?? 0);
     return Number.isFinite(value) ? value : 0;
@@ -91,7 +128,10 @@ export async function assertBudgetAvailable(
       throw new AIBudgetExceededError(projected, monthlyBudgetUSD, 'mensal');
     }
     if (spent >= monthlyBudgetUSD * 0.8) {
-      const today = new Date().toISOString().slice(0, 10);
+      // Data LOCAL, coerente com a janela que o alerta reporta (e com o
+      // fingerprint de dedup, que e o titulo): as 22:00 de Brasilia o
+      // toISOString() ja marcava o dia seguinte.
+      const today = localTodayIso();
       alertService
         .create({
           severity: 'warning',
@@ -122,7 +162,10 @@ export async function assertBudgetAvailable(
       throw new AIBudgetExceededError(projectedTodayUSD, dailyBudgetUSD, 'diário');
     }
     if (spentTodayUSD >= dailyBudgetUSD * 0.8) {
-      const today = new Date().toISOString().slice(0, 10);
+      // Data LOCAL, coerente com a janela que o alerta reporta (e com o
+      // fingerprint de dedup, que e o titulo): as 22:00 de Brasilia o
+      // toISOString() ja marcava o dia seguinte.
+      const today = localTodayIso();
       const spentBRL = spentTodayUSD * brlPerUsd;
       alertService
         .create({
@@ -216,7 +259,7 @@ export async function getUsageSummary(): Promise<{
     })
     .from(aiUsageLog)
     .where(
-      sql`${aiUsageLog.createdAt} >= date_trunc('month', NOW() AT TIME ZONE 'America/Sao_Paulo')`,
+      sql`${aiUsageLog.createdAt} >= ${asUtcTimestampLiteral(monthlyWindowStartUtc())}::timestamp`,
     )
     .groupBy(aiUsageLog.model);
 

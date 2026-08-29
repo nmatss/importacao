@@ -33,7 +33,17 @@ router.put(
 );
 router.delete('/email-signatures/:id', settingsController.deleteSignature);
 
+// Leitura dos modelos de comunicacao fica aberta a qualquer autenticado: o
+// analista precisa deles para escrever. A ESCRITA e administrativa e esta
+// registrada depois do adminMiddleware — a tabela e global e o servico nao
+// verifica dono, entao um analista podia reescrever ou desativar o modelo que
+// outra pessoa usa para falar com KIOM/Fenicia/ISA. (As assinaturas de e-mail
+// acima sao por usuario e o servico confere posse; a assimetria era acidental.)
 router.get('/communication-templates', settingsController.getCommunicationTemplates);
+
+// Admin-only routes below
+router.use(adminMiddleware);
+
 router.post(
   '/communication-templates',
   validate(createCommunicationTemplateSchema),
@@ -45,9 +55,6 @@ router.put(
   settingsController.updateCommunicationTemplate,
 );
 router.delete('/communication-templates/:id', settingsController.deleteCommunicationTemplate);
-
-// Admin-only routes below
-router.use(adminMiddleware);
 
 router.get('/smtp', settingsController.getSmtp);
 router.put('/smtp', validate(smtpSettingsSchema), settingsController.saveSmtp);

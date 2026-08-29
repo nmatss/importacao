@@ -1,7 +1,8 @@
-import { eq, sql, count, and, ilike, gte, type SQL } from 'drizzle-orm';
+import { eq, sql, count, and, ilike, asc, type SQL } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
 import { liTracking, importProcesses } from '../../shared/database/schema.js';
 import type { CreateLiTrackingInput, UpdateLiTrackingInput } from './schema.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 export const liTrackingService = {
   async getAll(
@@ -29,12 +30,14 @@ export const liTrackingService = {
     if (filters.orgao) {
       conditions.push(ilike(liTracking.orgao, `%${filters.orgao}%`));
     }
-    if (filters.startDate) {
-      conditions.push(gte(liTracking.createdAt, new Date(filters.startDate)));
+    // O dia escolhido no calendario local vira o intervalo UTC equivalente.
+    const start = filters.startDate ? localDayStartUtc(filters.startDate) : null;
+    if (start) {
+      conditions.push(sql`${liTracking.createdAt} >= ${start.toISOString()}`);
     }
-    if (filters.endDate) {
-      const end = new Date(filters.endDate);
-      end.setDate(end.getDate() + 1);
+    // Limite superior EXCLUSIVO: inicio do dia local seguinte, em UTC.
+    const end = filters.endDate ? localDayEndExclusiveUtc(filters.endDate) : null;
+    if (end) {
       conditions.push(sql`${liTracking.createdAt} < ${end.toISOString()}`);
     }
 
@@ -70,7 +73,9 @@ export const liTrackingService = {
         .from(liTracking)
         .leftJoin(importProcesses, eq(liTracking.processId, importProcesses.id))
         .where(whereClause)
-        .orderBy(liTracking.createdAt)
+        // createdAt nao e unico entre linhas importadas em lote; sem desempate
+        // estavel a paginacao repete e perde registros entre paginas.
+        .orderBy(asc(liTracking.createdAt), asc(liTracking.id))
         .limit(limit)
         .offset(offset),
       db.select({ total: count() }).from(liTracking).where(whereClause),

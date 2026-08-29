@@ -8,12 +8,15 @@ import {
   ilike,
   inArray,
   isNotNull,
+  lt,
+  ne,
   lte,
   or,
   sql,
 } from 'drizzle-orm';
 import * as XLSX from 'xlsx';
 import { db } from '../../shared/database/connection.js';
+import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 import {
   importProcesses,
   sydlePurchasePayments,
@@ -221,30 +224,38 @@ function buildWhere(filters: SydleReportQuery, includeSearch = true) {
     conditions.push(eq(sydlePurchasePayments.paymentType, filters.paymentType));
   if (filters.matchStatus)
     conditions.push(eq(sydlePurchasePayments.matchStatus, filters.matchStatus));
+  // `current_date` resolve na timezone da SESSAO do Postgres, que roda em UTC:
+  // a partir das 21:00 de Brasilia ele ja e o dia seguinte, e as faixas de
+  // vencimento andavam um dia antes da hora para o operador. As faixas seguem o
+  // calendario da operacao, nao o do container.
   if (filters.dueBucket === 'overdue') {
     conditions.push(
-      sql`${sydlePurchasePayments.dueDate} < current_date and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled', 'overdue')`,
+      sql`${sydlePurchasePayments.dueDate} < (now() AT TIME ZONE 'America/Sao_Paulo')::date and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled', 'overdue')`,
     );
   } else if (filters.dueBucket === 'due7') {
     conditions.push(
-      sql`${sydlePurchasePayments.dueDate} between current_date and current_date + interval '7 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
+      sql`${sydlePurchasePayments.dueDate} between (now() AT TIME ZONE 'America/Sao_Paulo')::date and (now() AT TIME ZONE 'America/Sao_Paulo')::date + interval '7 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
     );
   } else if (filters.dueBucket === 'due30') {
     conditions.push(
-      sql`${sydlePurchasePayments.dueDate} between current_date and current_date + interval '30 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
+      sql`${sydlePurchasePayments.dueDate} between (now() AT TIME ZONE 'America/Sao_Paulo')::date and (now() AT TIME ZONE 'America/Sao_Paulo')::date + interval '30 days' and ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled')`,
     );
   }
   if (filters.dueFrom) conditions.push(gte(sydlePurchasePayments.dueDate, filters.dueFrom));
   if (filters.dueTo) conditions.push(lte(sydlePurchasePayments.dueDate, filters.dueTo));
+  // `source_updated_at` e timestamptz, mas os limites eram a meia-noite e o
+  // ultimo segundo em UTC. O operador escolhe a data no calendario brasileiro,
+  // entao o intervalo tem que ser o DIA LOCAL — senao o filtro perde as tres
+  // ultimas horas do dia final e inclui a noite do dia anterior. O limite
+  // superior tambem passa a ser exclusivo, o que nao perde os milissegundos
+  // finais que o `23:59:59` descartava.
   if (filters.updatedFrom) {
-    conditions.push(
-      gte(sydlePurchasePayments.sourceUpdatedAt, new Date(`${filters.updatedFrom}T00:00:00Z`)),
-    );
+    const from = localDayStartUtc(filters.updatedFrom);
+    if (from) conditions.push(gte(sydlePurchasePayments.sourceUpdatedAt, from));
   }
   if (filters.updatedTo) {
-    conditions.push(
-      lte(sydlePurchasePayments.sourceUpdatedAt, new Date(`${filters.updatedTo}T23:59:59Z`)),
-    );
+    const to = localDayEndExclusiveUtc(filters.updatedTo);
+    if (to) conditions.push(lt(sydlePurchasePayments.sourceUpdatedAt, to));
   }
   if (filters.search && includeSearch) {
     const pattern = `%${filters.search}%`;
@@ -679,6 +690,12 @@ export const sydleService = {
         );
         const result = await this.upsertPayments(normalized);
 
+        // Registro que chegou mas nao produziu identidade utilizavel e sinal de
+        // que o contrato do SYDLE mudou — campo renomeado, envelope diferente.
+        // Sem contar isso, a mudanca aparece como "sucesso" com menos linhas.
+        const contractViolations = normalized.filter((row) => !row.externalId).length;
+        const previousFetched = await this.lastFetchedCount(run.id);
+
         const completed = await this.completeRun(run.id, started, {
           status: result.errors > 0 ? 'partial' : 'success',
           cursorFrom,
@@ -692,7 +709,15 @@ export const sydleService = {
             previousCursor: previousCursor?.toISOString() ?? null,
             cursorOverlapMs: SYDLE_CURSOR_OVERLAP_MS,
             cursorSource: cursorTo ? 'source_updated_at' : 'none',
+            contractViolations: contractViolations || undefined,
+            previousFetched,
           },
+        });
+
+        await this.warnOnSuspiciousRun({
+          fetched: normalized.length,
+          previousFetched,
+          contractViolations,
         });
 
         await auditService.log(userId, 'sydle_sync', 'sydle', run.id, completed, null);
@@ -740,6 +765,73 @@ export const sydleService = {
       const acquired = Boolean(rows[0]?.acquired);
       return callback(acquired);
     });
+  },
+
+  /**
+   * Quantos registros o run ANTERIOR trouxe. `null` quando nao ha anterior.
+   *
+   * E o unico jeito de distinguir "o SYDLE nao tinha nada novo" de "o SYDLE
+   * parou de responder o que a gente sabe ler". As duas coisas produzem
+   * `fetched: 0` e `status: 'success'`.
+   */
+  async lastFetchedCount(currentRunId: number): Promise<number | null> {
+    const [previous] = await db
+      .select({ fetched: sydleSyncRuns.fetched })
+      .from(sydleSyncRuns)
+      .where(and(ne(sydleSyncRuns.id, currentRunId), ne(sydleSyncRuns.status, 'skipped')))
+      .orderBy(desc(sydleSyncRuns.id))
+      .limit(1);
+
+    return previous?.fetched ?? null;
+  },
+
+  /**
+   * Alerta o sucesso SUSPEITO.
+   *
+   * Falha dura ja e coberta: `handleCronError` do scheduler cria alerta
+   * `critical` para qualquer excecao de cron. A lacuna era o sucesso vazio —
+   * uma mudanca de nome de campo ou de envelope de paginacao do lado do SYDLE
+   * produzia `status: 'success'`, `fetched: 0`, sem alerta e sem erro. A tela
+   * financeira congelava nos dados antigos e nada indicava isso.
+   *
+   * Dispara em dois casos, e nao a cada passada: a deduplicacao do alertService
+   * agrupa por titulo dentro de 24h, entao um SYDLE quebrado gera um alerta por
+   * dia, nao um a cada dez minutos.
+   */
+  async warnOnSuspiciousRun(input: {
+    fetched: number;
+    previousFetched: number | null;
+    contractViolations: number;
+  }): Promise<void> {
+    const { fetched, previousFetched, contractViolations } = input;
+
+    if (contractViolations > 0) {
+      await alertService
+        .create({
+          severity: 'warning',
+          title: 'SYDLE: registros sem identificador',
+          message:
+            `${contractViolations} de ${fetched} registros vieram sem identificador utilizavel ` +
+            'e nao puderam ser conciliados. Isso costuma indicar mudanca de contrato do SYDLE ' +
+            '(campo renomeado ou envelope diferente). Conferir antes de confiar na tela financeira.',
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create SYDLE contract alert'));
+    }
+
+    // Zero registros logo depois de um run que trouxe registros: e a transicao
+    // que importa. Zeros consecutivos depois disso nao repetem o alerta.
+    if (fetched === 0 && previousFetched !== null && previousFetched > 0) {
+      await alertService
+        .create({
+          severity: 'warning',
+          title: 'SYDLE: sincronizacao vazia apos run com registros',
+          message:
+            `A sincronizacao terminou com sucesso e ZERO registros, logo apos um run que trouxe ` +
+            `${previousFetched}. Pode ser periodo sem movimento, mas tambem e o sintoma de ` +
+            'contrato alterado do lado do SYDLE. A tela financeira segue exibindo os dados anteriores.',
+        })
+        .catch((err) => logger.error({ err }, 'Failed to create SYDLE empty-sync alert'));
+    }
   },
 
   async resolveLastCursor(): Promise<Date | null> {
@@ -1184,8 +1276,8 @@ export const sydleService = {
         records: sql<number>`count(*)::int`,
         matched: sql<number>`count(*) filter (where ${sydlePurchasePayments.matchStatus} = 'matched')::int`,
         unmatched: sql<number>`count(*) filter (where ${sydlePurchasePayments.matchStatus} <> 'matched')::int`,
-        overdue: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} = 'overdue' or (${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled') and ${sydlePurchasePayments.dueDate} < current_date))::int`,
-        dueSoon: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled') and ${sydlePurchasePayments.dueDate} between current_date and current_date + interval '7 days')::int`,
+        overdue: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} = 'overdue' or (${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled') and ${sydlePurchasePayments.dueDate} < (now() AT TIME ZONE 'America/Sao_Paulo')::date))::int`,
+        dueSoon: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} in ('open', 'scheduled') and ${sydlePurchasePayments.dueDate} between (now() AT TIME ZONE 'America/Sao_Paulo')::date and (now() AT TIME ZONE 'America/Sao_Paulo')::date + interval '7 days')::int`,
         paid: sql<number>`count(*) filter (where ${sydlePurchasePayments.paymentStatus} = 'paid')::int`,
       })
       .from(sydlePurchasePayments)

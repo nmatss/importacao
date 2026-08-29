@@ -1,5 +1,6 @@
 import { eq, sql, desc } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
+import { alertService } from '../alerts/service.js';
 import { currencyExchanges, importProcesses } from '../../shared/database/schema.js';
 import { logger } from '../../shared/utils/logger.js';
 import type { CreateCurrencyExchangeInput, UpdateCurrencyExchangeInput } from './schema.js';
@@ -118,6 +119,30 @@ export const currencyExchangeService = {
         notes: `Auto: ${balancePercent}% balance${paymentTerms?.description ? ` - ${paymentTerms.description}` : ''}`,
       });
       created.push(balance);
+    }
+
+    // Cronograma incompleto NAO pode ficar silencioso.
+    // Com deposit 30% e balance nao extraido, o codigo criava um unico registro
+    // de 30% e os outros 70% do valor simplesmente nao existiam — sem log, sem
+    // alerta, e a tela de cambios exibia o cronograma como se estivesse
+    // completo. Os registros extraidos continuam sendo criados (sao dado real),
+    // mas a lacuna passa a ser anunciada.
+    const declaredPercent = depositPercent + balancePercent;
+    if (declaredPercent > 0 && Math.abs(declaredPercent - 100) > 0.01) {
+      logger.warn(
+        { processId, depositPercent, balancePercent, declaredPercent },
+        'Termos de pagamento incompletos: cronograma de cambio parcial',
+      );
+      await alertService.create({
+        processId,
+        severity: 'warning',
+        title: 'Cronograma de câmbio incompleto',
+        message:
+          `Os termos de pagamento extraídos somam ${declaredPercent}%, não 100%. ` +
+          `Foram gerados apenas os lançamentos identificados (adiantamento ${depositPercent}%, ` +
+          `saldo ${balancePercent}%). Complete o cronograma manualmente antes de usá-lo ` +
+          'para conferência financeira.',
+      });
     }
 
     // If no payment terms found, create a single balance for full amount
