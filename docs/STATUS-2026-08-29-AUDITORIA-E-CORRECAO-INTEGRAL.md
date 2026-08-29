@@ -881,3 +881,102 @@ gate que importa, suba o servidor antes e rode o Playwright contra ele.
 - As decisoes de negocio em aberto estao em P-01 a P-06; a mais urgente
   operacionalmente e P-02, porque hoje o analista preenche o canal aduaneiro no
   formulario do processo e nunca ve o resultado na tela de Desembaraco.
+
+## Deploy de producao — 2026-08-29
+
+Autorizado explicitamente pelo usuario. Executado por `scripts/deploy.sh` no
+alvo padrao `192.168.168.124` (host `n8n`), com SHA `956f7d3`.
+
+### Preflight que mudou a decisao
+
+A rede corporativa, inacessivel na sessao de 2026-08-26, **voltou a responder**
+(portas 22 e 443 abertas). Antes de qualquer escrita, o reconhecimento
+somente-leitura do host encontrou `NODE_ENV=development` no `.env` remoto, o
+que — com a mudanca de `MAIL_DRY_RUN` desta sessao — teria silenciado todo o
+e-mail operacional.
+
+**Esse alarme NAO se sustentou**, e vale registrar por que: o
+`docker-compose.prod.yml` fixa `NODE_ENV: production` na linha 64, entao o
+valor do `.env` nunca chega ao container da API. O `NODE_ENV=development`
+remoto e inerte para a API.
+
+A verificacao, porem, expos um defeito real e independente da configuracao:
+`deliverMail` devolve `delivered: false` em dry-run e o chamador IGNORAVA o
+retorno, gravando `status: 'sent'` com `sentAt` e uma linha de timeline
+dizendo "E-mail enviado para X". Corrigido antes do deploy — o mesmo padrao do
+incidente ja registrado, do banco afirmando um envio que nao aconteceu.
+
+Tambem foi corrigido que `MAIL_DRY_RUN` e `SMTP_AUTH_MODE` nao constavam do
+compose de producao: um operador podia defini-las no `.env` e nao ver efeito
+nenhum, porque o compose so repassa o que lista.
+
+Conferido antes do deploy, sem imprimir valor de segredo: `SMTP_USER` e a
+sentinela do relay interno, entao a auth SMTP continuava desligada com o
+default novo (`none`) — sem mudanca de comportamento.
+
+### Execucao
+
+```text
+[1/8] backup obrigatorio      -> pgdump 2,5M + volume uploads, integridade verificada
+[2/8] snapshot para rollback  -> /home/nicolas/importacao.rollback
+[3/8] rsync + sops            -> .env preservado (excluido do rsync)
+      gate SYDLE              -> SYDLE_SYNC_ENABLED=true, liberado por
+                                 ALLOW_SYDLE_SYNC_DEPLOY=1
+[4/8] alertmanager            -> ALERTMANAGER_WEBHOOK_URL vazio, mantido noop
+[5/8] compose remoto          -> valido
+[6/8] migrations              -> "Found 18 forward-only SQL migrations (>= 11)"
+[7/8] build api+web+cert-api  -> containers recriados
+[8/8] health                  -> api ready, cert-api ready, web, e proxy /api
+                                 (browser -> nginx -> api): todos OK
+```
+
+Sem rollback. As unicas ocorrencias de "error" no log sao caminho de arquivo,
+a mensagem do snapshot e um `NOTICE` de idempotencia da 0025.
+
+### O que a producao provou
+
+**A correcao das migrations funcionou.** O boot logou `Found 18 forward-only
+SQL migrations (>= 11)`. A lista escrita a mao cobria 14 (0011..0024); agora
+sao 18 (0011..0028). Confirmado no banco: `alerts.delivery_attempts`,
+`process_items.source_document_id` e `documents.ingestion_source` existem.
+
+**O job de reentrega esta vivo.** O scheduler registrou
+`alert-redelivery (*/5 min)`.
+
+**E a primeira coisa que ele fez foi expor um problema que estava invisivel.**
+Os tres unicos erros nos logs pos-deploy sao o webhook do Google Chat
+falhando, com a mensagem `Google Chat webhook falhando (verifique
+GOOGLE_CHAT_WEBHOOK_URL/key) — pausando notificacoes pelo cooldown`.
+
+Estado da tabela `alerts` logo apos o deploy:
+
+| metrica                           | valor |
+| --------------------------------- | ----- |
+| total                             | 5.067 |
+| entregues (`sent_to_chat = true`) | **0** |
+| com tentativa registrada          | 3     |
+| com motivo da falha gravado       | 27    |
+| pendentes nas ultimas 24h         | 28    |
+
+E exatamente o comportamento desenhado: o job pegou a janela de 24h, tentou,
+o breaker abriu depois de 3 falhas reais, e as demais registraram o MOTIVO sem
+consumir tentativa (27 com motivo contra 3 com tentativa). `sent_to_chat`
+segue `false`, entao continuam elegiveis — no momento em que a chave do
+webhook for rotacionada, os alertas das ultimas 24h saem de verdade.
+
+Antes deste deploy essa falha era muda: o alerta morria no banco e ninguem
+lia. Agora ela esta no log em nivel de erro, com instrucao, e no banco com
+motivo.
+
+### Pendencias que o deploy nao resolve
+
+- **Rotacionar a chave/webhook do Google Chat.** E a unica coisa que separa
+  5.067 alertas detectados de alertas efetivamente entregues. Exige segredo,
+  entao depende do usuario.
+- **`ALERTMANAGER_WEBHOOK_URL` esta vazio**, entao o Alertmanager segue com
+  receiver `noop`. A regra `AlertDeliveryFailing` foi implantada e vai
+  disparar — para lugar nenhum, ate essa URL existir.
+- **`revision` do `/health/live` volta `null`**: a variavel de revisao nao esta
+  definida no ambiente, entao o health nao diz qual SHA esta rodando.
+- As confirmacoes empiricas de P-14 (download real do Shared Drive) e o aval
+  do admin do Workspace para reduzir escopos OAuth continuam abertos.
