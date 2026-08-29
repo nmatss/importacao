@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../shared/database/connection.js';
 import { alerts } from '../shared/database/schema.js';
 import { attemptDelivery, MAX_DELIVERY_ATTEMPTS } from '../modules/alerts/delivery.service.js';
+import { isChatCooldownActive } from '../modules/alerts/google-chat.service.js';
 import { logger } from '../shared/utils/logger.js';
 
 /**
@@ -47,6 +48,18 @@ export function isDueForRetry(
 }
 
 export async function runAlertRedelivery() {
+  // Com o breaker aberto NADA pode ser entregue, entao a passada inteira e
+  // trabalho perdido. Sem esta saida cada ciclo varria 25 linhas e gravava 25
+  // UPDATEs de no-op: medido em producao, 11 ciclos em 55 min, ~275 escritas,
+  // zero entregas. O estado do canal e do canal, nao de cada alerta.
+  if (isChatCooldownActive()) {
+    logger.info(
+      { scanned: 0, delivered: 0, failed: 0, aguardando: 0, motivo: 'cooldown' },
+      'alert-redelivery skipped: canal em cooldown',
+    );
+    return { scanned: 0, delivered: 0, failed: 0, aguardando: 0, skipped: 'cooldown' as const };
+  }
+
   const rows = await db
     .select({
       id: alerts.id,

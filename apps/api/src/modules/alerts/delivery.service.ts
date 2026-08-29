@@ -118,6 +118,18 @@ export async function getChatDeliverySummary(): Promise<{
  * `consumed` distingue tentativa real de transporte (conta para o teto) de
  * recusa do proprio canal — cooldown e webhook ausente nao sao culpa do alerta
  * e nao podem gastar o orcamento de reentrega dele.
+ *
+ * A recusa do canal tambem nao pode ESCREVER como se fosse tentativa. Medido em
+ * producao em 2026-08-29, uma hora depois do deploy: de 4 alertas que tiveram
+ * falha real de transporte, 3 estavam com `last_delivery_error` sobrescrito por
+ * "Canal em cooldown" — o operador abria a Central de Alertas e lia que o canal
+ * estava apenas pausado, quando o webhook havia respondido erro. Por isso:
+ *
+ * - `last_delivery_attempt_at` so e carimbado por tentativa real. Essa coluna e
+ *   a chave do ORDER BY da fila de reentrega; carimba-la a cada passada de
+ *   cooldown embaralha a prioridade sem que nada tenha sido tentado.
+ * - `last_delivery_error` de recusa do canal so preenche o campo VAZIO
+ *   (`coalesce`), nunca apaga um motivo real ja conhecido.
  */
 async function recordFailedAttempt(
   alert: DeliverableAlert,
@@ -125,11 +137,17 @@ async function recordFailedAttempt(
 ): Promise<void> {
   await db
     .update(alerts)
-    .set({
-      ...(options.consumed ? { deliveryAttempts: sql`${alerts.deliveryAttempts} + 1` } : {}),
-      lastDeliveryAttemptAt: new Date(),
-      lastDeliveryError: options.error,
-    })
+    .set(
+      options.consumed
+        ? {
+            deliveryAttempts: sql`${alerts.deliveryAttempts} + 1`,
+            lastDeliveryAttemptAt: new Date(),
+            lastDeliveryError: options.error,
+          }
+        : {
+            lastDeliveryError: sql`coalesce(${alerts.lastDeliveryError}, ${options.error})`,
+          },
+    )
     .where(eq(alerts.id, alert.id));
 }
 

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import { inspectSql } from '../../../__tests__/helpers/sql-inspect.js';
 
 const { mockDb, queryQueue } = createMockDb();
 
@@ -136,8 +137,16 @@ describe('attemptDelivery()', () => {
     const patch = update.set.mock.calls[0][0];
     expect(patch.sentToChat).toBeUndefined();
     expect(patch.deliveryAttempts).toBeUndefined();
-    expect(patch.lastDeliveryError).toMatch(/cooldown/i);
-    expect(patch.lastDeliveryAttemptAt).toBeInstanceOf(Date);
+
+    // Recusa do canal NAO carimba a chave de ordenacao da fila. Carimbar aqui
+    // reembaralhava a prioridade a cada passada sem nada ter sido tentado.
+    expect(patch.lastDeliveryAttemptAt).toBeUndefined();
+
+    // E so preenche o motivo quando ainda nao ha um: `coalesce` protege a falha
+    // real de transporte de ser apagada pelo estado do canal.
+    const motivo = inspectSql(patch.lastDeliveryError);
+    expect(motivo.text.toLowerCase()).toContain('coalesce');
+    expect(motivo.params.some((p) => String(p).match(/cooldown/i))).toBe(true);
     expect(metrics.alertDeliveryTotal.inc).toHaveBeenCalledWith({
       channel: 'google_chat',
       outcome: 'cooldown',
@@ -155,7 +164,31 @@ describe('attemptDelivery()', () => {
     const patch = update.set.mock.calls[0][0];
     expect(patch.sentToChat).toBeUndefined();
     expect(patch.deliveryAttempts).toBeUndefined();
-    expect(patch.lastDeliveryError).toMatch(/nao configurado/i);
+    expect(patch.lastDeliveryAttemptAt).toBeUndefined();
+    const motivo = inspectSql(patch.lastDeliveryError);
+    expect(motivo.text.toLowerCase()).toContain('coalesce');
+    expect(motivo.params.some((p) => String(p).match(/nao configurado/i))).toBe(true);
+  });
+
+  /**
+   * O defeito que este teste tranca foi MEDIDO em producao em 2026-08-29, uma
+   * hora depois do deploy: 3 dos 4 alertas que tinham falha real de transporte
+   * estavam com `last_delivery_error` sobrescrito por "Canal em cooldown".
+   * A unica pista do webhook quebrado era apagada pela passada seguinte do job.
+   */
+  it('cooldown NAO apaga a falha real de transporte ja registrada', async () => {
+    chat.isChatCooldownActive.mockReturnValue(true);
+    const update = createResolvedChain([]);
+    queryQueue.push(update);
+
+    await attemptDelivery({ ...baseAlert, deliveryAttempts: 1 });
+
+    const patch = update.set.mock.calls[0][0];
+    // Nao e uma string crua: e um coalesce que preserva o que ja estava la.
+    expect(typeof patch.lastDeliveryError).not.toBe('string');
+    const { text } = inspectSql(patch.lastDeliveryError);
+    expect(text.toLowerCase()).toContain('coalesce');
+    expect(text).toContain('last_delivery_error');
   });
 
   it('falha de transporte consome tentativa e deixa o motivo gravado', async () => {

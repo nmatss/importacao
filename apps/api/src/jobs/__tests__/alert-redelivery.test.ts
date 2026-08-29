@@ -12,6 +12,9 @@ const delivery = vi.hoisted(() => ({
 }));
 vi.mock('../../modules/alerts/delivery.service.js', () => delivery);
 
+const chat = vi.hoisted(() => ({ isChatCooldownActive: vi.fn(() => false) }));
+vi.mock('../../modules/alerts/google-chat.service.js', () => chat);
+
 vi.mock('../../shared/utils/logger.js', () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
 }));
@@ -38,6 +41,7 @@ function pendente(over: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   queryQueue.length = 0;
+  chat.isChatCooldownActive.mockReturnValue(false);
 });
 
 describe('isDueForRetry()', () => {
@@ -148,6 +152,28 @@ describe('runAlertRedelivery()', () => {
 
     expect(delivery.attemptDelivery).not.toHaveBeenCalled();
     expect(res.aguardando).toBe(1);
+  });
+
+  /**
+   * Medido em producao em 2026-08-29: 11 ciclos em 55 min, ~275 UPDATEs de
+   * no-op, zero entregas. Com o breaker aberto nada pode ser entregue, entao a
+   * passada inteira e trabalho perdido — e pior que perdido, porque cada no-op
+   * mexia na coluna que ordena a fila.
+   */
+  it('COOLDOWN: nao varre nem escreve nada enquanto o canal esta pausado', async () => {
+    chat.isChatCooldownActive.mockReturnValue(true);
+
+    const res = await runAlertRedelivery();
+
+    expect(mockDb.select).not.toHaveBeenCalled();
+    expect(delivery.attemptDelivery).not.toHaveBeenCalled();
+    expect(res).toEqual({
+      scanned: 0,
+      delivered: 0,
+      failed: 0,
+      aguardando: 0,
+      skipped: 'cooldown',
+    });
   });
 
   it('contabiliza a falha sem interromper o lote', async () => {
