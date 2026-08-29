@@ -1,7 +1,8 @@
 """Pydantic request/response models."""
 
-from apscheduler.triggers.cron import CronTrigger
 from pydantic import BaseModel
+
+from app.utils.cron import build_cron_trigger
 
 CRON_VALIDATION_ERROR = (
     "Expressao cron invalida. Use 5 campos: minuto hora dia mes dia_semana "
@@ -10,15 +11,21 @@ CRON_VALIDATION_ERROR = (
 
 
 def normalize_cron_expression(cron: str) -> str:
-    """Validate and normalize a five-field cron expression for APScheduler."""
+    """Validate and normalize a five-field cron expression.
+
+    A expressao e guardada e devolvida na convencao CRONTAB (0 = domingo), que e
+    a que a interface exibe. A validacao usa `build_cron_trigger`, o mesmo
+    caminho que monta o job — assim o que passa na criacao e exatamente o que o
+    scheduler consegue disparar, inclusive `7` como domingo.
+    """
     normalized = " ".join(cron.strip().split())
     if not normalized:
         raise ValueError("Expressao cron e obrigatoria")
     if len(normalized.split()) != 5:
         raise ValueError(CRON_VALIDATION_ERROR)
     try:
-        CronTrigger.from_crontab(normalized, timezone="America/Sao_Paulo")
-    except ValueError as exc:
+        build_cron_trigger(normalized)
+    except (ValueError, TypeError) as exc:
         raise ValueError(CRON_VALIDATION_ERROR) from exc
     return normalized
 

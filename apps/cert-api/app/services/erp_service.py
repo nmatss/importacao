@@ -9,7 +9,7 @@ from google.oauth2.service_account import Credentials
 
 from app.config import SHEETS_CLIENT_EMAIL, SHEETS_PRIVATE_KEY, SHEETS_SPREADSHEET_ID
 from app.db.postgres import db
-from app.services.derivation import derive_venda_encerramento
+from app.services.derivation import _today_sp, derive_venda_encerramento
 from app.utils.logging import log
 
 # ---------------------------------------------------------------------------
@@ -389,7 +389,12 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[di
         log.warning("Aba 'Encerramentos' sem coluna de SKU; ignorada")
         return []
 
-    today = datetime.now().date()
+    # Fuso de negocio explicito, nao o do processo: `datetime.now().date()` num
+    # container UTC vira o dia SEGUINTE as 21:00 de Brasilia, e o `prazo_date <
+    # today` abaixo marcava como vencido um prazo que ainda valia por 3 horas.
+    # Mesmo defeito de derivation.py:82. Nao depender do `TZ` do container e
+    # deliberado: o TZ conserta o caso, mas some se alguem remover a variavel.
+    today = _today_sp()
     out: list[dict] = []
     for row in rows[1:]:
         raw_sku = _cell(row, i_sku)

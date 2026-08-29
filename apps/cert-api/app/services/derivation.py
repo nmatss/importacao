@@ -50,6 +50,7 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 # Palavras-chave que indicam "produto regulado por órgão de certificação".
 # Vem do scraper.py + cert_service.py (que já detecta inmetro/anatel/abnt/anvisa).
@@ -77,7 +78,20 @@ VENDA_ENCERRAMENTO_VALUES = {"PERMITIDA", "BLOQUEADA", "FIM_LOTE"}
 SITE_REASON_PENDING = "Verificacao a confirmar - revisar"
 
 
+# Fuso de referência do negócio. O container do cert-api roda em UTC, então
+# `date.today()` vira o dia SEGUINTE às 21:00 de Brasília: um prazo de venda que
+# vence "hoje" era avaliado como vencido três horas antes, virando ENCERRADO na
+# tela ainda dentro do dia útil. Todo cálculo de "hoje" nas derivações passa por
+# `_today_sp()`, e todas as funções aceitam `today` explícito para teste.
+BUSINESS_TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
+
 # ---------- Helpers ----------
+
+def _today_sp() -> date:
+    """Data de hoje no fuso America/Sao_Paulo (não no fuso do processo)."""
+    return datetime.now(BUSINESS_TIMEZONE).date()
+
 
 def _is_regulated(cert_type: str | None) -> bool:
     """True se o tipo de certificação menciona órgão regulado conhecido."""
@@ -271,7 +285,7 @@ def derive_within_sale_deadline(
     deadline = _parse_deadline_date(sale_deadline_date) or _parse_deadline_date(sale_deadline_raw)
     if deadline is None:
         return False
-    return deadline >= (today or date.today())
+    return deadline >= (today or _today_sp())
 
 
 def derive_cert_status(
@@ -396,7 +410,7 @@ def _fallback_from_expiration(
         return "ENCERRADO"
     prazo = _parse_deadline_date(sale_deadline_date) or _parse_deadline_date(sale_deadline_raw)
     if prazo is not None:
-        return "ATIVO" if prazo >= (today or date.today()) else "ENCERRADO"
+        return "ATIVO" if prazo >= (today or _today_sp()) else "ENCERRADO"
     # Prazo ausente, ou preenchido com texto que não é data nem janela conhecida:
     # sem evidência de que a venda esteja liberada, o veredito é ENCERRADO.
     return "ENCERRADO"
@@ -579,7 +593,8 @@ def compute_status_dimensions(
         license_map: dict opcional {PROCESS_CODE/SKU(upper) -> {status, valid_until}}
             vindo de `erp_service.read_licenciamentos_vencidos()`. Quando None ou
             sem match, license_status defaulta para NAO_APLICAVEL.
-        today: data de referência do prazo de venda. Default `date.today()`;
+        today: data de referência do prazo de venda. Default: hoje em
+            America/Sao_Paulo (`_today_sp()`);
             explicitável para deixar o cálculo determinístico em teste.
     """
     sheet_status = row.get("sheet_status")
@@ -590,7 +605,19 @@ def compute_status_dimensions(
     last_vs = row.get("last_validation_status")
     encerramento_status = row.get("encerramento_status")
 
-    cs = derive_cert_status(sheet_status, is_expired, sale_deadline_raw, encerramento_status)
+    # `sale_deadline_date` e `today` precisam chegar aos DOIS eixos. Sem eles o
+    # fallback de `derive_cert_status` só olhava o prazo TEXTUAL: para um produto
+    # com texto não-parseável mas `sale_deadline_date` futuro, cert_status dava
+    # ENCERRADO enquanto within_sale_deadline dava True — os dois eixos se
+    # contradiziam na mesma linha da tabela.
+    cs = derive_cert_status(
+        sheet_status,
+        is_expired,
+        sale_deadline_raw,
+        encerramento_status,
+        row.get("sale_deadline_date"),
+        today,
+    )
     within_deadline = derive_within_sale_deadline(
         sheet_status,
         sale_deadline_raw,

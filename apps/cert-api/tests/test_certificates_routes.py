@@ -534,3 +534,108 @@ async def test_products_no_derived_filter_uses_sql_count(
     # COUNT(*) path executed when no derived filter is present.
     executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "COUNT(*)" in executed
+
+
+# ---------------------------------------------------------------------------
+# MEDIO 9 — comercializacao_status era parametro fantasma
+# ---------------------------------------------------------------------------
+
+
+def _rows_por_comercializacao() -> list[dict]:
+    """3 LIBERADA + 2 DENTRO_PRAZO + 1 ENCERRADA."""
+    rows = [_make_product_row(f"LIB{i}") for i in range(3)]
+    rows += [
+        _make_product_row(
+            f"PRZ{i}",
+            sheet_status="Encerrado",
+            is_expired=True,
+            sale_deadline="Venda ate o fim do lote",
+        )
+        for i in range(2)
+    ]
+    rows.append(
+        _make_product_row("ENC0", sheet_status="Encerrado", is_expired=True, sale_deadline="Vencido")
+    )
+    return rows
+
+
+@pytest.mark.asyncio
+async def test_products_comercializacao_status_filter_is_applied(
+    test_client, api_key_headers, mocker
+):
+    """O parametro era montado pelo cliente e DESCARTADO pelo FastAPI (nao declarado)."""
+    _mock_products_db(mocker, _rows_por_comercializacao())
+    resp = await test_client.get(
+        "/api/products?comercializacao_status=DENTRO_PRAZO", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
+    assert {p["sku"] for p in data["products"]} == {"PRZ0", "PRZ1"}
+    assert all(p["comercializacao_status"] == "DENTRO_PRAZO" for p in data["products"])
+
+
+@pytest.mark.asyncio
+async def test_products_comercializacao_status_filter_is_case_insensitive(
+    test_client, api_key_headers, mocker
+):
+    _mock_products_db(mocker, _rows_por_comercializacao())
+    resp = await test_client.get(
+        "/api/products?comercializacao_status=encerrada", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert [p["sku"] for p in resp.json()["products"]] == ["ENC0"]
+
+
+@pytest.mark.asyncio
+async def test_products_comercializacao_status_combines_with_other_axes(
+    test_client, api_key_headers, mocker
+):
+    """AND entre eixos: ATIVO + LIBERADA exclui os DENTRO_PRAZO (que tambem sao ATIVO)."""
+    _mock_products_db(mocker, _rows_por_comercializacao())
+    resp = await test_client.get(
+        "/api/products?cert_status=ATIVO&comercializacao_status=LIBERADA", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 3
+
+
+@pytest.mark.asyncio
+async def test_products_empty_comercializacao_status_imposes_no_constraint(
+    test_client, api_key_headers, mocker
+):
+    _mock_products_db(mocker, _rows_por_comercializacao())
+    resp = await test_client.get(
+        "/api/products?comercializacao_status=", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 6
+
+
+# ---------------------------------------------------------------------------
+# MEDIO 10 — filtro de marca do cadastro tem de usar a mesma normalizacao
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_certificates_brand_filter_uses_shared_normalization(
+    test_client, api_key_headers, mocker
+):
+    """O slug `puket_escolares` da UI tem de casar com 'Puket Escolares' no banco."""
+    cur, _ = _mock_certificates_env(mocker)
+    cur.fetchone.return_value = {"cnt": 1}
+
+    resp = await test_client.get(
+        "/api/certificates?brand=puket_escolares", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+
+    executed = [
+        (" ".join(str(c.args[0]).split()), c.args[1] if len(c.args) > 1 else None)
+        for c in cur.execute.call_args_list
+    ]
+    counts = [e for e in executed if "COUNT(*)" in e[0]]
+    assert counts, "a rota precisa contar antes de paginar"
+    assert "LOWER(REPLACE(brand, '_', ' ')) = %s" in counts[0][0]
+    assert "LOWER(brand) = LOWER(%s)" not in counts[0][0]
+    assert counts[0][1] == ["puket escolares"]

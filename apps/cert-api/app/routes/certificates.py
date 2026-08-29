@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 
 from app.config import CERTS_DIR, DATABASE_URL
 from app.db.postgres import db
+from app.services.erp_service import normalize_brand_filter
 from app.services.linx_service import (
     is_brand_supported,
     read_certificate_from_linx,
@@ -224,8 +225,12 @@ def list_certificates(
         conditions.append("sku ILIKE %s")
         params.append(f"%{sku}%")
     if brand:
-        conditions.append("LOWER(brand) = LOWER(%s)")
-        params.append(brand)
+        # Mesma normalizacao de /api/products, /api/expired e do relatorio: a UI
+        # manda o slug `puket_escolares`. `LOWER(brand) = LOWER(%s)` so funcionava
+        # porque o formulario grava o valor cru — quebraria no primeiro
+        # "Puket Escolares" gravado.
+        conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
+        params.append(normalize_brand_filter(brand))
     if linx_status:
         conditions.append("linx_status = %s")
         params.append(linx_status)

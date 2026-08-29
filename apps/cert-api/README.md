@@ -42,8 +42,12 @@ tests/
   test_routes.py
   test_certificates_routes.py # Certificate routes: auth, input validation, forged PDF, happy path, retry
   test_linx_service.py # Linx write logic: date formatting, fail-closed, brand resolution, SQL ident guard
-main.py.legacy      # Original 2938-line monolith kept for reference
 ```
+
+> O monolito original (`main.py` e `main.py.legacy` na raiz do servico) foi
+> removido em 2026-08-29. O entrypoint sempre foi `app.main:app` (Dockerfile) e
+> nada importava aqueles modulos; eles so carregavam copias desatualizadas de
+> defeitos ja corrigidos em `app/`. Para o historico, use o git.
 
 ## Development Setup
 
