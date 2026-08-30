@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(git rev-list *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(echo \"PUSH_EXIT=$?\")",
+      "Bash(npx prettier *)",
+      "Bash(break)",
+      "Bash(DATABASE_URL=\"postgresql://audit:audit@127.0.0.1:5451/audit\" NODE_ENV=test npx tsx src/shared/database/migrate.ts)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(python3 -)",
+      "Bash(REDIS_URL=\"redis://127.0.0.1:6399\" npx tsx src/zz-probe-ratelimit.ts)",
+      "Bash(git -c user.name=Nicolas commit -q -m 'docs: registrar o deploy de 75f9147 e o que ele provou *)",
+      "Bash(git -c user.name=Nicolas commit -q -m 'docs: registrar o incidente da queda e o gate depois da correcao *)"
+    ]
+  }
+}

@@ -2035,3 +2035,125 @@ outra sessao pesada rodava na mesma maquina. Reexecutada isolada, 1604/1604 em
 56 s. Registrado para nao virar "flake" no futuro: 143 nao e assert quebrado.
 
 Desde a sexta rodada: API 1555 -> 1604 (+49), web 231 -> 237 (+6).
+
+---
+
+## INCIDENTE — a API caiu no deploy de `de75898`, 2026-08-29 22:20
+
+Registro honesto de uma queda que EU causei, com a causa raiz e o erro de metodo
+que a produziu.
+
+### Linha do tempo
+
+```text
+22:19:12  deploy de de75898 inicia (backup + snapshot ok)
+22:20:0x  containers recriados; importacao-api entra em crash-loop
+22:20:5x  deploy ABORTA na etapa 8/8: "dependency failed to start:
+          container importacao-api is unhealthy"  -> exit 1
+          importacao-web fica em "Created", nao sobe. Aplicacao FORA DO AR.
+22:22     diagnostico: 8 reinicios, ExitCode=0, OOMKilled=false
+22:23     causa encontrada no log: getEnv() lancando
+22:25     correcao escrita e congelada por teste que reproduz o incidente
+22:28:12  deploy de 7340dbb
+22:29:37  health passou — servico restabelecido
+```
+
+**Janela de indisponibilidade: cerca de 9 minutos.** O deploy nao fez rollback
+automatico porque a etapa 7/8 falhou antes do ponto em que ele reverteria; o
+snapshot da release anterior ficou preservado e nao precisou ser usado.
+
+### Causa raiz
+
+O commit `de75898` passou a repassar ao container 34 variaveis que antes nao
+chegavam la. O compose usa `${VAR:-}`, que entrega **string VAZIA** quando a
+variavel nao existe no `.env`.
+
+Existe um validador Zod central (`shared/config/env.ts`) executado no boot. Para
+o Zod, **vazio nao e ausente**:
+
+- `z.coerce.number().int().positive().optional()` sobre `''` -> `Number('')` e
+  `0`, que falha em `.positive()`;
+- `z.enum(['0','1']).optional()` recusa `''` em vez de cair no opcional.
+
+Doze variaveis cairam nessa situacao e `getEnv()` passou a lancar logo apos as
+migrations, em loop:
+
+```text
+EMAIL_BODY_MAX_CHARS, AI_DEFAULT_MAX_OUTPUT_TOKENS, AI_SELF_REPAIR,
+AI_UPGRADE_ON_LOW_CONFIDENCE, AI_UPGRADE_ON_CONTRACT_ERROR,
+ASSISTANT_MAX_OUTPUT_TOKENS, IA_LOCAL_NUM_PREDICT, IA_LOCAL_NUM_CTX,
+AI_CHAT_TIMEOUT_MS, DOCUMENT_AI_EXTRACTION_TIMEOUT_MS,
+DOCUMENT_SPREADSHEET_MAX_CHARS, DOCUMENT_PDF_RASTERIZE_ENABLED
+```
+
+### O erro de metodo, que e o mais importante aqui
+
+Antes de repassar as variaveis eu **verifiquei os leitores**: troquei 23 leituras
+`?? 'padrao'` por `envTexto`, confirmei que `||` e comparacao com string tratam
+vazio corretamente, e escrevi teste para isso. O que nao fiz foi a pergunta que
+eu mesmo venho fazendo a sessao inteira, e que rendeu D-13 e a rodada da injecao
+de prompt: **"este e o UNICO lugar que le isso?"**
+
+Nao era. Havia um leitor a mais — o validador central, que eu nunca abri.
+
+E o detalhe que torna o erro pior: a guarda estatica que escrevi nesta mesma
+rodada (`env-repassado-ao-container.test.ts`) compara codigo com compose numa
+direcao so — se toda variavel LIDA chega ao container. Ela nao tinha como pegar
+isto, porque o problema nao era ausencia: era o valor que passou a chegar.
+
+### Correcao
+
+Descartar valores em branco antes do `safeParse`. A regra "vazio = ausente" ja
+valia em `shared/utils/env.ts` e em `archive-guard.ts`; faltava o validador
+central concordar — senao ele discorda do resto do sistema.
+
+Congelada por `env-vazio.test.ts`, que reproduz o incidente com as **doze
+variaveis exatas** do log do container. Verificada invertendo a correcao: sem
+ela, dois casos falham.
+
+### Confirmado em producao depois da correcao
+
+```text
+revision ................ 7340dbb9d7be...   (o SHA exato)
+restarts da api ......... 0
+containers .............. api, web, cert-api, postgres: healthy
+AI_DAILY_BUDGET_BRL ..... chega "100"  -> efetivo 100   (nao 0: o teto esta ATIVO)
+AI_BRL_PER_USD .......... chega "5"    -> efetivo 5
+AI_SELF_REPAIR .......... chega ""     -> tratado como ausente, sem quebrar
+LI_URGENT_WINDOW_DAYS ... chega ""     -> default 15 do codigo
+```
+
+Os unicos erros no log pos-deploy sao os 3 do webhook do Google Chat, ja
+conhecidos e sem relacao com esta mudanca.
+
+### O que fica registrado como licao
+
+Uma mudanca de INFRAESTRUTURA que altera o que chega ao processo tem a mesma
+exigencia de uma mudanca de codigo: mapear TODOS os consumidores antes. Verificar
+"os leitores que eu conhecia" nao e verificar os leitores.
+
+### Gate depois da correcao do incidente
+
+```text
+npm run format               -> exit 0
+npm run lint                 -> exit 0
+npm run typecheck            -> exit 0
+npm test                     -> API 1608 passed | 1 skipped   web 237 passed
+npm run build                -> exit 0
+npm run test:e2e -w apps/api -> 9 arquivos, 73/73 passed
+```
+
+Duas execucoes desta sessao falharam por CARGA DA MAQUINA, e nao por regressao —
+outra sessao pesada rodava em paralelo. Registrado com a assinatura de cada uma
+para nao virarem "flake" no futuro:
+
+- `exit 143` na suite de API: **SIGTERM**, o processo foi morto. Reexecutada
+  isolada: 1604/1604 em 56 s.
+- `Hook timed out in 60000ms` em `validation.e2e.test.ts`: o `beforeAll` que
+  sobe o Postgres descartavel estourou. Reexecutado isolado: 4/4 em 8 s; a suite
+  inteira depois: 73/73.
+
+Nenhuma das duas e assert quebrado. O E2E de web (82/82) foi medido em `de75898`
+e nao foi reexecutado depois da correcao do validador de ambiente, que e
+exclusiva de `apps/api` — o Playwright sobe apenas o dev server de `apps/web` e
+nao toca a API.
