@@ -224,10 +224,36 @@ let _env: Env | null = null;
  * Throws on first call if required vars are missing.
  * Subsequent calls return cached result.
  */
+/**
+ * Variavel definida como string VAZIA e tratada como AUSENTE.
+ *
+ * O `docker-compose` do servico `api` usa lista explicita de `environment:` e
+ * escreve `${VAR:-}`, que passa string vazia ao container quando a variavel nao
+ * existe no `.env`. Para o Zod, vazio nao e ausente: `z.coerce.number()` sobre
+ * `''` da **0**, que falha em `.positive()`, e um `z.enum(['0','1'])` recusa
+ * `''` em vez de cair no `.optional()`.
+ *
+ * Isso derrubou a API em producao em 2026-08-29, no deploy que passou a repassar
+ * 34 variaveis que antes nao chegavam ao container: doze delas ficaram vazias e
+ * o boot passou a lancar em `getEnv()`, em loop, logo apos as migrations.
+ *
+ * A regra "vazio = ausente" e a mesma ja adotada em `shared/utils/env.ts` e em
+ * `archive-guard.ts`. Aqui ela precisa valer ANTES do schema, senao o validador
+ * central discorda do resto do sistema.
+ */
+function semValoresEmBranco(origem: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const limpo: NodeJS.ProcessEnv = {};
+  for (const [chave, valor] of Object.entries(origem)) {
+    if (valor === undefined || valor.trim() === '') continue;
+    limpo[chave] = valor;
+  }
+  return limpo;
+}
+
 export function getEnv(): Env {
   if (_env) return _env;
 
-  const result = envSchema.safeParse(process.env);
+  const result = envSchema.safeParse(semValoresEmBranco(process.env));
 
   if (!result.success) {
     const errors = result.error.errors.map((e) => `  ${e.path.join('.')}: ${e.message}`).join('\n');
