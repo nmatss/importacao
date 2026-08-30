@@ -28,6 +28,7 @@ import {
   assertArquivoSeguroParaAbrir,
   tetoDescomprimidoDocx,
 } from '../../shared/utils/archive-guard.js';
+import { parseSerializado } from '../../shared/utils/parse-serializado.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
@@ -2509,7 +2510,14 @@ export const documentService = {
       // 563 MB de RSS num container de 512M, e passava folgado no teto de
       // 64 MB herdado do xlsx.
       assertArquivoSeguroParaAbrir(buffer, { maxDescomprimido: tetoDescomprimidoDocx() });
-      const result = await mammoth.extractRawText({ buffer });
+      // Serializado porque `mammoth` e ASSINCRONO: dois docx podem intercalar e
+      // o pico vira a SOMA dos orcamentos, enquanto a guarda so garante um por
+      // arquivo. O `XLSX.read`, sendo sincrono, ja serializa sozinho no event
+      // loop — por isso a fila cobre este caminho e nao aquele.
+      const result = await parseSerializado(
+        () => mammoth.extractRawText({ buffer }),
+        'docx:mammoth',
+      );
       return { text: result.value };
     }
 

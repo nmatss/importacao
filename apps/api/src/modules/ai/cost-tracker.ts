@@ -5,6 +5,7 @@ import { logger } from '../../shared/utils/logger.js';
 import { localDayStartUtc, localMonthStartUtc, localTodayIso } from '../../shared/utils/dates.js';
 import { alertService } from '../alerts/service.js';
 import { AIBudgetExceededError, estimateCostUSD } from './cost-pricing.js';
+import { envTexto } from '../../shared/utils/env.js';
 
 export { AIBudgetExceededError, estimateCostUSD };
 
@@ -120,7 +121,7 @@ export async function assertBudgetAvailable(
   const estimatedCostUSD = Math.max(0, Number(options.estimatedCostUSD ?? 0) || 0);
 
   // ── Teto MENSAL (USD) — AI_MONTHLY_BUDGET_USD (0 desativa). ──
-  const monthlyBudgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
+  const monthlyBudgetUSD = Number(envTexto('AI_MONTHLY_BUDGET_USD', '200'));
   if (Number.isFinite(monthlyBudgetUSD) && monthlyBudgetUSD > 0) {
     const spent = await getMonthlySpendUSD();
     const projected = spent + estimatedCostUSD;
@@ -147,8 +148,8 @@ export async function assertBudgetAvailable(
   // (default 5, a mesma taxa conservadora do teto mensal). AI_DAILY_BUDGET_BRL=0
   // desativa. A IA local é grátis (custo 0), então este teto só morde providers
   // pagos (Vertex/OpenRouter) — é a trava de custo antes de ligar o Vertex.
-  const dailyBudgetBRL = Number(process.env.AI_DAILY_BUDGET_BRL ?? '100');
-  const brlPerUsd = Number(process.env.AI_BRL_PER_USD ?? '5');
+  const dailyBudgetBRL = Number(envTexto('AI_DAILY_BUDGET_BRL', '100'));
+  const brlPerUsd = Number(envTexto('AI_BRL_PER_USD', '5'));
   if (
     Number.isFinite(dailyBudgetBRL) &&
     dailyBudgetBRL > 0 &&
@@ -239,11 +240,11 @@ export async function getUsageSummary(): Promise<{
     errorCalls: number;
   }>;
 }> {
-  const budgetUSD = Number(process.env.AI_MONTHLY_BUDGET_USD ?? '200');
+  const budgetUSD = Number(envTexto('AI_MONTHLY_BUDGET_USD', '200'));
   const monthlySpendUSD = await getMonthlySpendUSD();
 
-  const dailyBudgetBRL = Number(process.env.AI_DAILY_BUDGET_BRL ?? '100');
-  const brlPerUsd = Number(process.env.AI_BRL_PER_USD ?? '5');
+  const dailyBudgetBRL = Number(envTexto('AI_DAILY_BUDGET_BRL', '100'));
+  const brlPerUsd = Number(envTexto('AI_BRL_PER_USD', '5'));
   const dailyBudgetUSD = brlPerUsd > 0 ? dailyBudgetBRL / brlPerUsd : 0;
   const dailySpendUSD = await getDailySpendUSD();
 

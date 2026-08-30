@@ -1831,3 +1831,207 @@ Zero erros no log desde o deploy. RSS da API: 75,9 MiB de 512 MiB.
 - **Guarda de arquivo nao consciente de concorrencia** — o orcamento e por
   arquivo, e tres filas mais os caminhos HTTP rodam no mesmo processo.
 - As decisoes de negocio (P-01 a P-06) e o reprocessamento documental.
+
+---
+
+## Setima rodada — fechar as pendencias declaradas em aberto
+
+Cinco frentes que as rodadas anteriores registraram como nao resolvidas. Tres
+foram fechadas por engenharia, uma foi fechada por MEDICAO (a pendencia estava
+obsoleta) e uma virou uma lista de decisao concreta em vez de um bloco vago.
+
+### 1. Injecao de prompt — fechada por construcao, sem veredito de provider
+
+A pendencia pedia "o veredito de exploracao real: se o modelo de fato obedece a
+um delimitador forjado". Essa pergunta ficou sem resposta e **continua sem** —
+responde-la exigiria chamada paga ao provider e ainda assim daria um veredito
+probabilistico, valido para um modelo e uma versao.
+
+Foi respondida outra pergunta, que nao precisa de provider e e mais forte:
+**o delimitador pode ser forjado?**
+
+Primeiro, o levantamento que faltava. Aplicando a licao de D-13 — procurar TODOS
+os caminhos antes de declarar cobertura — havia **dois**, nao um:
+
+| caminho                                          | cerca                         | defesa anterior          |
+| ------------------------------------------------ | ----------------------------- | ------------------------ | -------------- |
+| assistente operacional (`ai/service.ts`)         | `<<<FONTE N INICIO>>>`        | `replace(/<{2,}          | >{2,}/g, ' ')` |
+| extracao por especialista (`skills/assemble.ts`) | `=== INICIO DO DOCUMENTO ===` | `replace(/={2,}/g, '=')` |
+
+Os dois tinham a MESMA fraqueza, e a pendencia so mencionava o primeiro. O
+segundo e a superficie mais exposta: qualquer pessoa com escrita numa pasta do
+Shared Drive coloca um arquivo que sera extraido por IA.
+
+Correcao em tres camadas, num modulo compartilhado
+(`shared/utils/texto-nao-confiavel.ts`):
+
+1. **NFKC.** Converte `＜＜＜` e `＝＝＝` de largura total para ASCII **antes** da
+   checagem. Era assim que o homoglifo passava: nao era o caractere procurado.
+2. **Remocao de invisiveis.** Zero-width, joiners e sobrescritas de direcao (a
+   familia do Trojan Source) — nenhuma das duas versoes anteriores os via, porque
+   a faixa de controle usada parava em U+001F e U+007F.
+3. **Repeticao com espaco.** `< < <` e `= = =` nao formam run; os padroes novos
+   aceitam espaco e tabulacao entre as repeticoes.
+
+E a camada que fecha o caso mesmo para um disfarce que ninguem previu:
+**nonce por requisicao**. A cerca passou a ser
+`<<<FONTE 1 INICIO a7f3c91e2b40>>>` — 12 digitos hexadecimais sorteados na
+montagem do prompt, repetidos no system prompt com a instrucao de que um
+marcador SEM esse codigo e texto da fonte tentando se passar por delimitador.
+Quem escreve o e-mail ou o documento nao tem como adivinha-lo.
+
+A neutralizacao e por caractere, e nao "qualquer angulo", de proposito: um padrao
+que aceitasse `<` e `>` juntos destruiria `a > b > c` num e-mail legitimo. Ha
+teste para isso.
+
+Congelado por 36 casos: 6 disfarces x 2 caminhos, mais a rotacao do nonce, mais
+as contraprovas de que o conteudo do ataque continua LEGIVEL para o operador
+(neutralizar a cerca nao pode virar censura do que chegou) e de que comparacao
+legitima nao e estragada.
+
+**O que continua aberto e agora esta dito com precisao:** se o modelo obedece a
+uma instrucao que esta, honestamente, DENTRO do bloco de dados. Isso e mitigado
+pelo system prompt e nao e demonstravel por teste deterministico.
+
+### 2. As 36 variaveis que nao chegavam ao container — fechadas, com guarda
+
+Fechadas as 36, mais uma que apareceu no caminho. O que a rodada anterior
+registrou como "nao corrigir em lote porque repassar as-is pode ligar um valor
+obsoleto do `.env` sobre um default melhor do codigo" tinha uma saida que eu nao
+tinha visto: **remover a duplicacao de default em vez de escolher entre os dois.**
+
+A raiz e `process.env.X ?? 'padrao'`: `??` so dispara em `null`/`undefined`,
+entao string VAZIA vence o padrao — e o compose escreve `${VAR:-}`, que passa
+exatamente string vazia. Havia **23 leituras** assim, em 3 arquivos. Trocadas por
+`envTexto`/`envNumeroPositivo`, que tratam vazio como ausente.
+
+Com isso `${VAR:-}` virou seguro em todo lugar, o padrao do CODIGO voltou a ser
+fonte unica e as 36 entraram sem duplicar numero nenhum.
+
+Duas excecoes, com motivo escrito: `SEED_ADMIN_EMAIL` e `SEED_ADMIN_PASSWORD`,
+lidas so pelo `seed.ts`, que nao roda no container de producao — e a segunda e
+segredo, que nao deve constar do compose. E `REVISION` foi **removida do
+codigo**: era fallback morto (nada a define; o deploy injeta `APP_VERSION`), e
+mante-la obrigaria a abrir uma excecao para uma variavel que ninguem le.
+
+A guarda estatica (`env-repassado-ao-container.test.ts`) compara as leituras do
+codigo com o bloco `api` do compose. Ela enxerga tambem as leituras indiretas
+via helper — e foi por isso que pegou tres variaveis que o meu proprio script de
+fiacao nao viu, porque ele so procurava `process.env.X` literal.
+
+**E ela pegou o defeito de novo, na mesma sessao:** ao introduzir
+`DOCUMENT_PARSE_TIMEOUT_MS` e `LI_URGENT_WINDOW_DAYS`, a guarda falhou na hora,
+antes de qualquer deploy. Seria a quarta e a quinta ocorrencia do mesmo defeito.
+
+### 3. Concorrencia da guarda de arquivo — o risco era menor do que o registro dizia, e agora esta limitado
+
+O registro dizia "o orcamento e por arquivo; dois parses simultaneos pagam o teto
+duas vezes". Metade disso nao se sustenta, e vale registrar por que:
+
+**Para xlsx nao ha concorrencia possivel.** `XLSX.read` e `zlib.inflateRawSync`
+sao SINCRONOS: enquanto rodam, o event loop esta preso e nenhum outro parse
+comeca. O orcamento por arquivo ja E o pico.
+
+**Para docx ha.** `mammoth.extractRawText` e assincrono, dois docx intercalam e o
+pico vira a soma — com o teto de 12 MB a ~20x, sao ~250 MB cada, e dois estouram
+o container. E ha dois disparadores independentes: o worker `ai-extraction` e a
+rota HTTP sincrona de extracao, que roda fora da fila.
+
+Fechado com uma fila serial no parse de docx (`parseSerializado`): enfileira em
+vez de recusar, porque recusar transformaria concorrencia normal em erro para o
+operador, enquanto esperar so adia — o parse de um docx real leva ~150 ms.
+
+**Limite honesto, registrado e nao resolvido:** o teto de 60 s limita quanto a
+fila espera e o `finally` garante que o proximo entre, mas ele NAO cancela o
+parse em andamento (nem `mammoth` nem `SheetJS` aceitam sinal). Um parse travado
+segue segurando a memoria depois de a fila andar. Cancelar de verdade exige
+isolar o parse em outro processo.
+
+### 4. P-01 a P-06 — o estado real, verificado no codigo
+
+|                       | estado                             | evidencia                                                                                                                                              |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| P-01 ADR 0006         | **aberta**                         | migration + refatoracao ampla; nao cabe em turno de fechamento de pendencia                                                                            |
+| P-02 fonte canonica   | **fechada no dano nomeado**        | ver abaixo                                                                                                                                             |
+| P-03 janela da LI     | **destravada**                     | virou `LI_URGENT_WINDOW_DAYS`, configuravel                                                                                                            |
+| P-04 `numerarioPct`   | **fechada a metade de engenharia** | ver abaixo                                                                                                                                             |
+| P-05 cards do Meu Dia | **nao e pendencia**                | codigo morto removido; refazer e escopo novo                                                                                                           |
+| P-06 reabertura       | **JA ESTAVA FECHADA**              | `TRANSITIONS.completed = ['validating','cancelled']` e `REOPEN_TRANSITIONS` existem no codigo, com admin, motivo e trilha. O registro estava obsoleto. |
+
+**P-02.** O dano nomeado era: "o analista preenche o canal aduaneiro no
+formulario do processo e nunca ve o resultado na tela de Desembaraco". A tela lia
+EXCLUSIVAMENTE `aiExtractedData`, cujo unico produtor e um script manual.
+
+E era pior do que filtro errado: a propria INCLUSAO na lista dependia do blob,
+entao um processo cujo canal veio so do formulario **nao aparecia de jeito
+nenhum**.
+
+Havia coluna tipada para cinco campos da tela, e a lista ja as devolvia (o
+`select()` do backend e sem projecao). A precedencia adotada — e esta e a
+decisao de engenharia que a operacao pode querer revisar — e **a coluna vence**:
+ela e escrita por uma pessoa, com autoria, no presente; o blob vem de planilha
+importada por script. Onde a coluna esta vazia, o blob preenche, entao nada de
+historico se perde.
+
+E quando as duas discordam, a tela **mostra as duas** (anel ambar no canal e
+tooltip com o valor da planilha). A regra da casa e nao ter terceiro estado
+silencioso: escolher sem avisar seria decidir pelo operador.
+
+O outro lado de P-02, o numerario, **continua aberto** e agora com o motivo
+exato: a tela le `valorNumerario` do blob, enquanto o valor calculado mora em
+outra tabela, exposta so por `/api/processes/:id/financials`. Mostra-lo na lista
+exige endpoint agregado novo — e escopo novo, nao correcao.
+
+**P-04.** `numerarioPct` era `numerarioValue / customsValueBrl` onde
+`numerarioValue = customsValueBrl * 0,6`: a divisao devolvia o fator de volta,
+sempre. Uma constante com aparencia de indicador. Agora a expressao e o proprio
+fator, com o porque escrito. Contrato e valor no banco inalterados. Remover a
+coluna e migration destrutiva e depende da operacao fornecer o "aduaneiro de
+referencia" real — **essa metade continua aberta**.
+
+### 5. Reprocessamento documental — a pendencia estava obsoleta
+
+Medido em producao:
+
+```text
+total ............... 51
+processados ......... 51
+NAO processados ..... 0
+sem ai_parsed_data .. 0
+```
+
+Nao ha nada para reprocessar. O registro falava em "17 documentos em falha" e
+"19 documentos tipo other"; hoje sao **zero pendentes e 13 do tipo `other`**.
+
+E os 13 nao sao um lote de reclassificacao. Inventariados um a um:
+
+| documentos                                                                         | veredito                                                                                                                           |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 9 — boleto (x2), CT-e (x2), TELA DE IMPOSTOS, PLMI, CMA DELAY NOTICE, PAGE1, PAGE2 | **`other` esta CERTO**: nao existe tipo nem extrator para nenhum deles                                                             |
+| 2 — `ESPELHO PUK012-26` e `ESPELHO PUK006-26`, ambos **PDF**                       | **reclassificar QUEBRARIA**: o ramo `espelho` desvia para o parser deterministico, que chama `XLSX.read`; um PDF falha por formato |
+| 1 — `RASCUNHO DUIMP PUK015-26`                                                     | `draft_duimp`, reclassificacao segura e util                                                                                       |
+| 1 — `DI PUK006-26`                                                                 | **ambiguo**: o enum tem `duimp`, nao tem `di`; DI e o documento anterior a DUIMP                                                   |
+
+Ou seja: dos 13, **nove ja estao corretos**, um e seguro, dois quebrariam e um
+depende de decisao de nomenclatura. Nao executei nenhuma reclassificacao — e
+mutacao de dado de producao baseada na minha leitura de nome de arquivo, e o
+proprio historico do projeto tem o caso do documento 44 (um OHBL cadastrado como
+invoice) para lembrar que o nome nem sempre diz o tipo.
+
+### Gate final da setima rodada — saida real
+
+```text
+npm run format               -> exit 0
+npm run lint                 -> exit 0
+npm run typecheck            -> exit 0
+npm test                     -> API 1604 passed | 1 skipped   web 237 passed
+npm run build                -> exit 0
+npm run test:e2e -w apps/api -> 9 arquivos, 73/73 passed
+npm run test:e2e:web         -> 82/82 passed (2,9 min)
+```
+
+Uma execucao da suite de API voltou `exit 143` — SIGTERM, nao falha de teste:
+outra sessao pesada rodava na mesma maquina. Reexecutada isolada, 1604/1604 em
+56 s. Registrado para nao virar "flake" no futuro: 143 nao e assert quebrado.
+
+Desde a sexta rodada: API 1555 -> 1604 (+49), web 231 -> 237 (+6).

@@ -135,6 +135,56 @@ services:
       # nenhum no container — o mesmo defeito ja registrado com MAIL_DRY_RUN.
       # Sao a valvula de escape do operador quando a guarda recusar um arquivo
       # grande legitimo, entao precisam funcionar de verdade.
+      # ── Repassadas em bloco (2026-08-29) ────────────────────────────────
+      # O servico usa lista EXPLICITA de environment: o que nao esta aqui nao
+      # chega ao container, e uma variavel definida no .env nao faz nada. Ja
+      # mordeu tres vezes (MAIL_DRY_RUN, os tetos da guarda de arquivo, e o
+      # AI_DAILY_BUDGET_BRL, que estava definido no .env de producao enquanto o
+      # proprio alerta mandava o operador ajusta-lo).
+      #
+      # Sem default duplicado de proposito: `${VAR:-}` passa string VAZIA, e os
+      # leitores tratam vazio como ausente (`envTexto`/`envNumeroPositivo`, ou
+      # `||`, ou comparacao com string). Assim o padrao do CODIGO e a fonte
+      # unica e nao ha dois numeros para divergir.
+      #
+      # `env-repassado-ao-container.test.ts` falha quando uma leitura nova nasce
+      # sem entrada aqui.
+      AI_ANALYSIS_MODEL: ${AI_ANALYSIS_MODEL:-}
+      AI_CHAT_TIMEOUT_MS: ${AI_CHAT_TIMEOUT_MS:-}
+      AI_DEFAULT_MAX_OUTPUT_TOKENS: ${AI_DEFAULT_MAX_OUTPUT_TOKENS:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_SELF_REPAIR: ${AI_SELF_REPAIR:-}
+      AI_STRUCTURED_OUTPUT: ${AI_STRUCTURED_OUTPUT:-}
+      AI_UPGRADE_ON_CONTRACT_ERROR: ${AI_UPGRADE_ON_CONTRACT_ERROR:-}
+      AI_UPGRADE_ON_LOW_CONFIDENCE: ${AI_UPGRADE_ON_LOW_CONFIDENCE:-}
+      API_BASE_URL: ${API_BASE_URL:-}
+      API_DOCS_ENABLED: ${API_DOCS_ENABLED:-}
+      ASSISTANT_MAX_OUTPUT_TOKENS: ${ASSISTANT_MAX_OUTPUT_TOKENS:-}
+      AUTO_CLEAN_ITEM_CODES: ${AUTO_CLEAN_ITEM_CODES:-}
+      AUTO_GENERATE_ESPELHO: ${AUTO_GENERATE_ESPELHO:-}
+      DOCUMENT_AI_EXTRACTION_TIMEOUT_MS: ${DOCUMENT_AI_EXTRACTION_TIMEOUT_MS:-}
+      DOCUMENT_PDF_RASTERIZE_ENABLED: ${DOCUMENT_PDF_RASTERIZE_ENABLED:-}
+      DOCUMENT_SPREADSHEET_MAX_CHARS: ${DOCUMENT_SPREADSHEET_MAX_CHARS:-}
+      DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS: ${DOCUMENT_TEXT_EXTRACTION_TIMEOUT_MS:-}
+      EMAIL_ATTACHMENT_MAX_BYTES: ${EMAIL_ATTACHMENT_MAX_BYTES:-}
+      EMAIL_BODY_MAX_CHARS: ${EMAIL_BODY_MAX_CHARS:-}
+      EMAIL_TRANSIENT_MAX_ATTEMPTS: ${EMAIL_TRANSIENT_MAX_ATTEMPTS:-}
+      ESPELHO_AI_FALLBACK: ${ESPELHO_AI_FALLBACK:-}
+      IA_LOCAL_NUM_CTX: ${IA_LOCAL_NUM_CTX:-}
+      IA_LOCAL_NUM_PREDICT: ${IA_LOCAL_NUM_PREDICT:-}
+      METRICS_ALLOWED_IPS: ${METRICS_ALLOWED_IPS:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+      PRE_CONS_SYNC_FORCE: ${PRE_CONS_SYNC_FORCE:-}
+      PRE_CONS_SYNC_MAX_DROP_PCT: ${PRE_CONS_SYNC_MAX_DROP_PCT:-}
+      STALLED_PROCESS_MILESTONE_DAYS: ${STALLED_PROCESS_MILESTONE_DAYS:-}
+      VIMBAR_AUTO_LOCK: ${VIMBAR_AUTO_LOCK:-}
+      VIMBAR_SENDER_DOMAINS: ${VIMBAR_SENDER_DOMAINS:-}
+      X: ${X:-}
+      LI_URGENT_WINDOW_DAYS: ${LI_URGENT_WINDOW_DAYS:-}
+      DOCUMENT_PARSE_TIMEOUT_MS: ${DOCUMENT_PARSE_TIMEOUT_MS:-}
+      AI_SELF_REPAIR_THRESHOLD: ${AI_SELF_REPAIR_THRESHOLD:-}
+      AI_UPGRADE_CONFIDENCE_THRESHOLD: ${AI_UPGRADE_CONFIDENCE_THRESHOLD:-}
+      AI_UPGRADE_MIN_DELTA: ${AI_UPGRADE_MIN_DELTA:-}
       # Teto de custo de IA. Estavam LIDAS pelo codigo e ausentes daqui, entao o
       # valor do .env de producao nunca chegava ao container — e o proprio alerta
       # de 80% instrui o operador a "ajustar AI_DAILY_BUDGET_BRL", que nao fazia

@@ -12,7 +12,32 @@ interface ProcessItem {
   processCode: string;
   status: string;
   aiExtractedData: Record<string, unknown> | null;
+  // Colunas TIPADAS, gravadas pelo formulario de edicao de processo. Ate
+  // 2026-08-29 esta tela lia exclusivamente `aiExtractedData`, cujo unico
+  // produtor e um script manual de importacao: quem preenchia o canal aduaneiro
+  // no formulario nunca via o resultado aqui, e o processo sequer aparecia na
+  // lista se nao tivesse o blob.
+  customsChannel: string | null;
+  customsClearanceAt: string | null;
+  diNumber: string | null;
+  registeredAt: string | null;
+  cdArrivalAt: string | null;
 }
+
+/**
+ * Chave do blob -> coluna tipada equivalente.
+ *
+ * Precedencia: a COLUNA vence. Ela e escrita por uma pessoa no formulario, com
+ * autoria e no presente; o blob vem de uma planilha importada por script. Onde a
+ * coluna esta vazia, o blob preenche — e o historico continua visivel.
+ */
+const COLUNA_EQUIVALENTE: Record<string, keyof ProcessItem> = {
+  canal: 'customsChannel',
+  desembaraco: 'customsClearanceAt',
+  numeroDI: 'diNumber',
+  dataRegistroDI: 'registeredAt',
+  chegadaCD: 'cdArrivalAt',
+};
 
 type ClearanceFilter = 'all' | 'pending' | 'cleared' | 'delivered';
 
@@ -39,10 +64,33 @@ function getField(data: Record<string, unknown> | null | undefined, key: string)
   return String(val);
 }
 
-function matchesFilter(data: Record<string, unknown> | null, filter: ClearanceFilter): boolean {
+/** Valor efetivo de um campo: coluna tipada primeiro, blob como historico. */
+function campo(proc: ProcessItem, chave: string): string | null {
+  const coluna = COLUNA_EQUIVALENTE[chave];
+  if (coluna) {
+    const tipado = proc[coluna];
+    if (tipado != null && String(tipado) !== '') return String(tipado);
+  }
+  return getField(proc.aiExtractedData, chave);
+}
+
+/**
+ * Coluna e blob discordam. Nao escolher em silencio: o operador precisa VER que
+ * ha duas versoes do mesmo dado, senao o sistema decide por ele sem avisar.
+ */
+function divergente(proc: ProcessItem, chave: string): string | null {
+  const coluna = COLUNA_EQUIVALENTE[chave];
+  if (!coluna) return null;
+  const tipado = proc[coluna];
+  const doBlob = getField(proc.aiExtractedData, chave);
+  if (tipado == null || String(tipado) === '' || doBlob == null) return null;
+  return String(tipado) === doBlob ? null : doBlob;
+}
+
+function matchesFilter(proc: ProcessItem, filter: ClearanceFilter): boolean {
   if (filter === 'all') return true;
-  const desembaraco = getField(data, 'desembaraco');
-  const chegadaCD = getField(data, 'chegadaCD');
+  const desembaraco = campo(proc, 'desembaraco');
+  const chegadaCD = campo(proc, 'chegadaCD');
   if (filter === 'delivered') return !!chegadaCD;
   if (filter === 'cleared') return !!desembaraco && !chegadaCD;
   // pending
@@ -70,24 +118,25 @@ export function DesembaracoPage() {
   const customsProcesses = useMemo(() => {
     if (!allProcesses) return [];
     return allProcesses.filter((p) => {
-      const data = p.aiExtractedData;
-      if (!data) return false;
-      // Has at least one customs field
+      // A inclusao tambem passou a considerar as colunas tipadas. Sem isto, um
+      // processo cujo canal foi preenchido SO no formulario nao aparecia nesta
+      // tela de jeito nenhum — nao era filtro errado, era ausencia da linha.
+      const data = p.aiExtractedData ?? {};
       return (
-        data.numeroDI != null ||
-        data.dataRegistroDI != null ||
-        data.canal != null ||
-        data.desembaraco != null ||
+        campo(p, 'numeroDI') != null ||
+        campo(p, 'dataRegistroDI') != null ||
+        campo(p, 'canal') != null ||
+        campo(p, 'desembaraco') != null ||
+        campo(p, 'chegadaCD') != null ||
         data.recinto != null ||
         data.freeTime != null ||
-        data.alertaDemurrage != null ||
-        data.chegadaCD != null
+        data.alertaDemurrage != null
       );
     });
   }, [allProcesses]);
 
   const filtered = useMemo(() => {
-    let result = customsProcesses.filter((p) => matchesFilter(p.aiExtractedData, filter));
+    let result = customsProcesses.filter((p) => matchesFilter(p, filter));
     if (search) {
       const q = search.toLowerCase();
       result = result.filter((p) => p.processCode.toLowerCase().includes(q));
@@ -96,14 +145,12 @@ export function DesembaracoPage() {
   }, [customsProcesses, filter, search]);
 
   // Stats
-  const totalInClearance = customsProcesses.filter(
-    (p) => !getField(p.aiExtractedData, 'desembaraco'),
-  ).length;
+  const totalInClearance = customsProcesses.filter((p) => !campo(p, 'desembaraco')).length;
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
   const clearedThisMonth = customsProcesses.filter((p) => {
-    const d = getField(p.aiExtractedData, 'desembaraco');
+    const d = campo(p, 'desembaraco');
     if (!d) return false;
     const date = new Date(d);
     return date.getMonth() === currentMonth && date.getFullYear() === currentYear;
@@ -308,7 +355,11 @@ export function DesembaracoPage() {
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                 {filtered.map((proc) => {
                   const data = proc.aiExtractedData;
-                  const canal = getField(data, 'canal');
+                  const canal = campo(proc, 'canal');
+                  // Quando as duas fontes discordam, o operador ve as duas — a
+                  // tela nao escolhe em silencio.
+                  const canalAntigo = divergente(proc, 'canal');
+                  const desembaracoAntigo = divergente(proc, 'desembaraco');
                   const canalStyle = canal
                     ? (canalColors[canal] ?? {
                         bg: 'bg-slate-100 dark:bg-slate-700',
@@ -336,11 +387,11 @@ export function DesembaracoPage() {
                         {proc.processCode}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700 dark:text-slate-300">
-                        {getField(data, 'numeroDI') || <span className="text-slate-300">--</span>}
+                        {campo(proc, 'numeroDI') || <span className="text-slate-300">--</span>}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                        {getField(data, 'dataRegistroDI') ? (
-                          formatDate(getField(data, 'dataRegistroDI')!)
+                        {campo(proc, 'dataRegistroDI') ? (
+                          formatDate(campo(proc, 'dataRegistroDI')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
@@ -348,10 +399,16 @@ export function DesembaracoPage() {
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                         {canal && canalStyle ? (
                           <span
+                            title={
+                              canalAntigo
+                                ? `Planilha importada registra "${canalAntigo}"`
+                                : undefined
+                            }
                             className={cn(
                               'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
                               canalStyle.bg,
                               canalStyle.text,
+                              canalAntigo && 'ring-1 ring-inset ring-amber-400',
                             )}
                           >
                             {canal}
@@ -361,8 +418,19 @@ export function DesembaracoPage() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                        {getField(data, 'desembaraco') ? (
-                          formatDate(getField(data, 'desembaraco')!)
+                        {campo(proc, 'desembaraco') ? (
+                          <span
+                            title={
+                              desembaracoAntigo
+                                ? `Planilha importada registra ${formatDate(desembaracoAntigo)}`
+                                : undefined
+                            }
+                            className={
+                              desembaracoAntigo ? 'underline decoration-dotted' : undefined
+                            }
+                          >
+                            {formatDate(campo(proc, 'desembaraco')!)}
+                          </span>
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}
@@ -399,8 +467,8 @@ export function DesembaracoPage() {
                         )}
                       </td>
                       <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                        {getField(data, 'chegadaCD') ? (
-                          formatDate(getField(data, 'chegadaCD')!)
+                        {campo(proc, 'chegadaCD') ? (
+                          formatDate(campo(proc, 'chegadaCD')!)
                         ) : (
                           <span className="text-slate-300">--</span>
                         )}

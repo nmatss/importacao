@@ -11,6 +11,7 @@ import {
 import { cache } from '../../shared/cache/redis.js';
 import { logger } from '../../shared/utils/logger.js';
 import { localMonthStartUtc, SQL_HOJE_LOCAL, sqlLocalDeUtc } from '../../shared/utils/dates.js';
+import { envNumeroPositivo } from '../../shared/utils/env.js';
 import {
   statusEnteredAt,
   withUpdatedAtFallback,
@@ -41,7 +42,16 @@ function parseCachedOrNull<T>(raw: string, key: string): T | null {
  * confirmado com o time fiscal. `calculateLiDeadline` usa embarque + 13 dias,
  * entao 15 dias cobre o prazo inteiro mais uma folga curta.
  */
-const LI_URGENT_WINDOW_DAYS = 15;
+/**
+ * Janela em que uma LI em aberto conta como "urgente".
+ *
+ * 15 dias foi um default escolhido por engenharia, coerente com
+ * `calculateLiDeadline` (embarque + 13 dias), e estava registrado como
+ * pendencia aguardando confirmacao do time fiscal. Passou a ser configuravel:
+ * a confirmacao deixa de ser um bloqueio de CODIGO — mudar o numero e mudar uma
+ * variavel de ambiente, sem deploy de aplicacao.
+ */
+const LI_URGENT_WINDOW_DAYS = envNumeroPositivo('LI_URGENT_WINDOW_DAYS', 15);
 
 export const dashboardService = {
   async getOverview() {

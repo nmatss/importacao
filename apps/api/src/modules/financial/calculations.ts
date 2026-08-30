@@ -40,9 +40,22 @@ export interface DemurrageInfo {
 }
 
 export interface NumerarioResult {
-  /** Numerário em BRL = Valor Aduaneiro × 0,6 */
+  /** Numerário em BRL = Valor Aduaneiro × NUMERARIO_FACTOR */
   numerarioValue: number;
-  /** Fração numerário / valor aduaneiro de referência (0.6 por construção) */
+  /**
+   * O FATOR de política aplicado — não uma razão medida.
+   *
+   * Até 2026-08-29 este campo era `numerarioValue / customsValueBrl`. Como
+   * `numerarioValue` É `customsValueBrl * NUMERARIO_FACTOR`, a divisão devolvia
+   * o fator de volta, sempre: uma constante com aparência de indicador. Quem
+   * lesse `numerario_pct` esperando "quanto o numerário representa do aduaneiro
+   * de referência" estava lendo 0,6 por construção, nunca uma medição.
+   *
+   * O nome e o valor no banco continuam os mesmos — o contrato não muda. O que
+   * mudou é a expressão deixar de simular um cálculo. Persistir o fator ou
+   * fornecer o aduaneiro de referência real é decisão da operação, e trocar a
+   * coluna é migration destrutiva: registrado, não decidido aqui.
+   */
   numerarioPct: number;
 }
 
@@ -100,7 +113,9 @@ export function computeNumerario(customsValueBrl: number): NumerarioResult | nul
   const numerarioValue = round2(customsValueBrl * NUMERARIO_FACTOR);
   return {
     numerarioValue,
-    numerarioPct: round4(numerarioValue / customsValueBrl),
+    // O fator, direto. A divisão anterior devolvia exatamente isto, com a
+    // aparência de ter medido alguma coisa.
+    numerarioPct: round4(NUMERARIO_FACTOR),
   };
 }
 

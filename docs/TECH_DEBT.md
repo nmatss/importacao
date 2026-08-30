@@ -34,32 +34,29 @@ Levantada na auditoria integral. O relatorio completo, com evidencia
   `TIMESTAMPTZ` forca reescrita da tabela sob `ACCESS EXCLUSIVE` no startup.
   Medido: 2,5 s para 500 mil linhas. O registro do projeto indica ~33 mil, o que
   torna o custo desprezivel — mas isso nao foi confirmado contra o banco real.
-- **36 variaveis lidas pelo codigo nao sao repassadas ao container.** O servico
-  `api` do `docker-compose.prod.yml` usa lista explicita de `environment:`, entao
-  so chega ao container o que estiver listado. Reproduzir: comparar
-  `process.env.X` em `apps/api/src` com as chaves declaradas no bloco `api`.
-  Efeito: botao definido no `.env` sem efeito nenhum — o mesmo defeito ja
-  registrado com `MAIL_DRY_RUN`, agora sistemico. Duas ressalvas medidas, para
-  nao inflar o numero: `REVISION` e fallback morto e documentado (o codigo usa
-  `APP_VERSION`), e `METRICS_TOKEN`/`METRICS_ALLOWED_IPS` so AFROUXAM o acesso a
-  `/metrics`, entao a ausencia falha fechado e nao e brecha. Fechar exige
-  decidir variavel por variavel, porque repassar as-is pode ligar um valor
-  obsoleto do `.env` sobre um default melhor do codigo.
-- **Leitura de variavel com `??` trata string vazia como valor.**
-  `Number(process.env.X ?? '100')` devolve **0** quando a variavel existe vazia,
-  e `0` desativa o teto diario de custo de IA. Como o compose passa `${VAR:-}`
-  como string VAZIA, repassar uma variavel dessas sem default explicito
-  DESLIGARIA o controle em vez de aplica-lo. O repositorio ja tem o idioma certo
-  — `numeroPositivoDoAmbiente` em `archive-guard.ts`, que trata `''` como
-  ausente. Falta aplicar em `cost-tracker.ts` e nos demais leitores.
-- **A guarda de arquivo compactado nao e consciente de concorrencia.** O
-  orcamento de bytes descomprimidos e por ARQUIVO. Ha tres filas com
-  `batchSize: 1` (`drive-sync`, `sheets-sync`, `ai-extraction`) mais os caminhos
-  HTTP sincronos, e todas rodam DENTRO do processo da API — nao ha container de
-  worker. Dois parses simultaneos no teto pagam o teto duas vezes. Na pratica o
-  risco e baixo (a maior planilha real tem 218 KB contra um teto de 64 MB), mas
-  o limite e por arquivo e nao global. A saida estrutural e isolar o parse em
-  processo com teto proprio de memoria, o que e mudanca de arquitetura.
+- **A fila de parse nao CANCELA o parse travado.** `parseSerializado` impede que
+  dois parses de docx se sobreponham (o de xlsx ja e serializado pelo event loop,
+  por ser sincrono) e o teto de 60 s garante que a fila ande. Mas nem `mammoth`
+  nem `SheetJS` aceitam sinal de cancelamento: um parse travado continua
+  segurando a memoria dele depois de a fila seguir. Cancelar de verdade exige
+  isolar o parse em outro processo, com teto proprio de memoria — mudanca de
+  arquitetura, nao correcao pontual.
+- **Injecao de prompt: falta o veredito de obediencia do modelo.** A cerca deixou
+  de ser forjavel (NFKC + remocao de invisiveis + repeticao com espaco + nonce
+  por requisicao, com 36 casos de teste nos dois caminhos). O que continua sem
+  resposta e se o modelo obedece a uma instrucao que esta, honestamente, DENTRO
+  do bloco de dados. Isso e mitigado pelo system prompt e nao e demonstravel por
+  teste deterministico — exigiria campanha contra o provider real, com custo, e o
+  veredito valeria para um modelo e uma versao.
+- **P-02, metade do numerario.** A tela de Numerario le `valorNumerario` do blob
+  de `ai_extracted_data`, enquanto o valor calculado mora em outra tabela,
+  exposta so por `/api/processes/:id/financials`. Mostra-lo na lista exige
+  endpoint agregado novo — escopo novo, nao correcao. (A metade do Desembaraco
+  foi fechada: colunas tipadas com precedencia e divergencia visivel.)
+- **P-04, metade da operacao.** `numerarioPct` deixou de simular um calculo e
+  passou a expor o fator de politica diretamente. Remover a persistencia exige
+  migration destrutiva, e manter exige que a operacao forneca o "aduaneiro de
+  referencia" real. Decisao de negocio, nao de engenharia.
 - **Centralizar stubs de jsdom em `apps/web/src/test/setup.ts`: FEITO**, com
   stub ciente da query. Registrado aqui porque a primeira tentativa quebrou
   quatro testes de layout: `AppLayout` trata a AUSENCIA de `matchMedia` como

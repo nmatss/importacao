@@ -36,7 +36,11 @@ router.get('/live', (_req: Request, res: Response) => {
     // deploy grava um ARQUIVO REVISION no servidor, que nada le. Resultado: este
     // campo respondeu `null` em toda a historia do endpoint, e a unica forma de
     // saber qual SHA rodava era inspecionar o servidor na mao.
-    revision: process.env.APP_VERSION || process.env.REVISION || null,
+    //
+    // O fallback `|| process.env.REVISION` foi REMOVIDO em 2026-08-29: ele era
+    // codigo morto — nada define essa variavel, e mante-lo obrigava a abrir uma
+    // excecao na guarda que confere se toda variavel lida chega ao container.
+    revision: process.env.APP_VERSION || null,
   });
 });
 

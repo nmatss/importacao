@@ -1,3 +1,4 @@
+import { envTexto } from '../../shared/utils/env.js';
 import {
   extractSydleRecords,
   findSydleField,
@@ -49,22 +50,22 @@ export function getSydleClientConfig(): SydleClientConfig {
     sourceType,
     baseUrl: process.env.SYDLE_BASE_URL ?? '',
     apiToken: process.env.SYDLE_API_TOKEN ?? '',
-    paymentsPath: process.env.SYDLE_PAYMENTS_PATH ?? '/api/purchase-payments',
-    authHeader: process.env.SYDLE_AUTH_HEADER ?? 'Authorization',
-    authScheme: process.env.SYDLE_AUTH_SCHEME ?? 'Bearer',
-    updatedAfterParam: process.env.SYDLE_UPDATED_AFTER_PARAM ?? 'updatedAfter',
-    pageParam: process.env.SYDLE_PAGE_PARAM ?? 'page',
-    pageSizeParam: process.env.SYDLE_PAGE_SIZE_PARAM ?? 'pageSize',
+    paymentsPath: envTexto('SYDLE_PAYMENTS_PATH', '/api/purchase-payments'),
+    authHeader: envTexto('SYDLE_AUTH_HEADER', 'Authorization'),
+    authScheme: envTexto('SYDLE_AUTH_SCHEME', 'Bearer'),
+    updatedAfterParam: envTexto('SYDLE_UPDATED_AFTER_PARAM', 'updatedAfter'),
+    pageParam: envTexto('SYDLE_PAGE_PARAM', 'page'),
+    pageSizeParam: envTexto('SYDLE_PAGE_SIZE_PARAM', 'pageSize'),
     pageSize: Number.isFinite(pageSize) && pageSize > 0 ? Math.min(pageSize, 1000) : 200,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000,
-    app: process.env.SYDLE_APP ?? 'main',
+    app: envTexto('SYDLE_APP', 'main'),
     user: process.env.SYDLE_USER ?? '',
     password: process.env.SYDLE_PASSWORD ?? '',
     classId: process.env.SYDLE_CLASS_ID ?? '',
-    dateField: process.env.SYDLE_DATE_FIELD ?? '_lastUpdateDate',
-    ticketClassId: process.env.SYDLE_TICKET_CLASS_ID ?? '5d446dfc62d9656275a47d69',
-    ticketStatusClassId: process.env.SYDLE_TICKET_STATUS_CLASS_ID ?? '5cacdc04a50bfe4c0d3e5c74',
-    currencyClassId: process.env.SYDLE_CURRENCY_CLASS_ID ?? '000000000000000000000059',
+    dateField: envTexto('SYDLE_DATE_FIELD', '_lastUpdateDate'),
+    ticketClassId: envTexto('SYDLE_TICKET_CLASS_ID', '5d446dfc62d9656275a47d69'),
+    ticketStatusClassId: envTexto('SYDLE_TICKET_STATUS_CLASS_ID', '5cacdc04a50bfe4c0d3e5c74'),
+    currencyClassId: envTexto('SYDLE_CURRENCY_CLASS_ID', '000000000000000000000059'),
     // Default OFF: integração financeira, deploy-gated. Liga em staging só depois
     // que o probe (scripts/sydle-class-discovery.mjs) confirmar que os campos
     // complementares realmente vêm no payload do request/ticket. Ver
@@ -790,7 +791,7 @@ interface EnrichmentResolved {
 export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [
   {
     label: 'brand',
-    classId: process.env.SYDLE_BRAND_CLASS_ID ?? '685179c16732f5038aaed372',
+    classId: envTexto('SYDLE_BRAND_CLASS_ID', '685179c16732f5038aaed372'),
     source: 'request',
     refPath: ['requestData', 'brand'],
     includes: ['name'],
@@ -798,12 +799,12 @@ export const SYDLE_ENRICHMENT_CLASSES: SydleEnrichmentClassSpec[] = [
   },
   {
     label: 'supplier',
-    classId: process.env.SYDLE_RECIPIENT_CLASS_ID ?? '689cd3bd27624d322604be16',
+    classId: envTexto('SYDLE_RECIPIENT_CLASS_ID', '689cd3bd27624d322604be16'),
     source: 'request',
     refPath: ['requestData', 'recipient'],
     via: [
       {
-        classId: process.env.SYDLE_ENTERPRISE_CLASS_ID ?? '591365fef5ca53284cd8d159',
+        classId: envTexto('SYDLE_ENTERPRISE_CLASS_ID', '591365fef5ca53284cd8d159'),
         refField: 'enterprise',
       },
     ],
