@@ -51,3 +51,6 @@ apps/cert-api/.venv/
 # o diff a cada rodada.
 test-results/
 playwright-report/
+# Arquivos temporarios que o CLI escreve ao salvar settings locais; um deles
+# chegou a ser versionado por acidente.
+.claude/settings.local.json.tmp.*
