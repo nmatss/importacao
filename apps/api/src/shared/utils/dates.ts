@@ -1,3 +1,5 @@
+import { getTableName } from 'drizzle-orm';
+import type { PgColumn } from 'drizzle-orm/pg-core';
 export function formatDate(date: Date | string): string {
   const d = typeof date === 'string' ? new Date(date) : date;
   const year = d.getFullYear();
@@ -152,7 +154,30 @@ export const SQL_HOJE_LOCAL = `(now() AT TIME ZONE '${OPERATIONAL_TIME_ZONE}')::
  * `AT TIME ZONE 'America/Sao_Paulo'` INTERPRETA o valor como se ja fosse local
  * — o oposto do desejado. O primeiro `AT TIME ZONE 'UTC'` diz ao Postgres o que
  * o valor realmente e; o segundo e que converte.
+ *
+ * **Recebe a COLUNA, e nao o nome dela.** A primeira versao recebia a string
+ * `'"import_processes"."created_at"'` escrita a mao, e isso carregava dois
+ * riscos que nenhum teste pegava: um alias na consulta quebraria em runtime, e
+ * — pior — aplicar a mesma expressao a uma coluna `timestamptz` deslocaria o
+ * valor no sentido ERRADO, em silencio. O schema tem 26 colunas com fuso, entao
+ * essa nao e uma hipotese remota. Com a coluna em maos da para conferir o tipo
+ * e montar a referencia sozinho.
  */
-export function sqlLocalDeUtc(expressao: string): string {
-  return `((${expressao}) AT TIME ZONE 'UTC') AT TIME ZONE '${OPERATIONAL_TIME_ZONE}'`;
+export function sqlLocalDeUtc(coluna: PgColumn): string {
+  const referencia = `"${getTableName(coluna.table)}"."${coluna.name}"`;
+
+  if (coluna.columnType !== 'PgTimestamp') {
+    throw new Error(
+      `sqlLocalDeUtc espera uma coluna timestamp sem fuso; ${referencia} e ${coluna.columnType}.`,
+    );
+  }
+  if ((coluna as PgColumn & { withTimezone?: boolean }).withTimezone) {
+    throw new Error(
+      `sqlLocalDeUtc nao pode ser aplicada a ${referencia}, que ja tem fuso: ` +
+        "em timestamptz, `AT TIME ZONE 'UTC'` CONVERTE em vez de interpretar, e o " +
+        'resultado sai deslocado no sentido oposto ao pretendido.',
+    );
+  }
+
+  return `((${referencia}) AT TIME ZONE 'UTC') AT TIME ZONE '${OPERATIONAL_TIME_ZONE}'`;
 }

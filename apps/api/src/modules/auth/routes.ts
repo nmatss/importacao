@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { paramsNumericos } from '../../shared/schemas/params.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { loginSchema, googleLoginSchema, createUserSchema, updateUserSchema } from './schema.js';
 import { canAccessCertApi, requiredCertApiScope } from './cert-api-access.js';
@@ -60,9 +61,16 @@ router.put(
   '/users/:id',
   authMiddleware,
   adminMiddleware,
+  validate(paramsNumericos('id'), 'params'),
   validate(updateUserSchema),
   authController.updateUser,
 );
-router.delete('/users/:id', authMiddleware, adminMiddleware, authController.deleteUser);
+router.delete(
+  '/users/:id',
+  authMiddleware,
+  adminMiddleware,
+  validate(paramsNumericos('id'), 'params'),
+  authController.deleteUser,
+);
 
 export { router as authRoutes };

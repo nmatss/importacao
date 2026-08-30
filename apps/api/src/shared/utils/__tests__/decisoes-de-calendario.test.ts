@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { sqlLocalDeUtc } from '../dates.js';
+import { importProcesses, comparisonAcceptances } from '../../database/schema.js';
 
 const RAIZ = path.resolve(process.cwd(), 'src');
 
@@ -89,5 +91,32 @@ describe('decisoes de calendario usam o fuso do operador', () => {
     }
 
     expect(achados, `Decisoes de calendario em UTC:\n${achados.join('\n')}`).toEqual([]);
+  });
+});
+
+/**
+ * A dupla conversao `AT TIME ZONE 'UTC' AT TIME ZONE 'America/Sao_Paulo'` so
+ * esta certa para `timestamp` SEM fuso. Em `timestamptz` o primeiro
+ * `AT TIME ZONE` CONVERTE em vez de interpretar, e o resultado sai deslocado no
+ * sentido oposto ao pretendido — em silencio, produzindo numero errado na tela
+ * sem erro nenhum. O schema tem 26 colunas com fuso, entao aplicar a expressao
+ * na coluna errada nao e hipotese remota; e questao de tempo.
+ */
+describe('sqlLocalDeUtc() recusa a coluna do tipo errado', () => {
+  it('monta a referencia sozinha, a partir da coluna', () => {
+    expect(sqlLocalDeUtc(importProcesses.createdAt)).toBe(
+      `(("import_processes"."created_at") AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo'`,
+    );
+  });
+
+  it('recusa coluna que JA tem fuso', () => {
+    expect(() => sqlLocalDeUtc(comparisonAcceptances.createdAt)).toThrowError(
+      /ja tem fuso|nao pode ser aplicada/i,
+    );
+  });
+
+  it('recusa coluna que nao e timestamp', () => {
+    // `shipment_date` e `date`, nao `timestamp`: a conversao nao faz sentido.
+    expect(() => sqlLocalDeUtc(importProcesses.shipmentDate)).toThrowError(/espera uma coluna/i);
   });
 });

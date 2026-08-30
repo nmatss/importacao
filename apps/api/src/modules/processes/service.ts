@@ -953,7 +953,21 @@ export const processService = {
       .where(eq(importProcesses.id, id))
       .returning();
 
-    auditService.log(
+    // AWAIT proposital, pelo MESMO motivo do evento logo abaixo — e por um
+    // defeito medido: sem ele, a resposta 200 podia sair antes de a linha de
+    // `audit_logs` existir. Foi essa a causa do flake registrado do E2E de
+    // reabertura, que falhava so com a maquina sob carga: o teste consultava
+    // `audit_logs` antes de o INSERT nao aguardado chegar la.
+    //
+    // Nao e so um problema de teste. Numa REABERTURA — operacao restrita a
+    // admin, cuja razao de existir e a justificativa registrada — devolver 200
+    // afirmando que a operacao foi auditada enquanto a auditoria ainda nao caiu
+    // no banco e a mesma classe de defeito ja registrada nesta base: o sistema
+    // afirmando um registro que pode nao ter acontecido.
+    //
+    // `auditService.log` trata o proprio erro internamente, entao aguardar aqui
+    // nao introduz caminho novo de falha na requisicao.
+    await auditService.log(
       userId,
       reopenReason ? 'status_reopen' : 'status_update',
       'process',

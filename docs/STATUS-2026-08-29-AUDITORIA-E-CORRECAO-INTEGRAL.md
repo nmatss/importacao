@@ -1623,3 +1623,160 @@ particular, a chave do webhook do Google Chat continua invalida e os 5.067
 alertas continuam com **zero entregues** — o job de reentrega esta vivo e o
 backoff funciona (9 tentativas consumidas, nao 5.067), entao os alertas das
 ultimas 24h saem sozinhos no momento em que a chave for rotacionada.
+
+---
+
+## Sexta rodada — fechar a divida registrada, e o que ela escondia
+
+Esta rodada nao procurou defeito novo: foi atras das pendencias que as rodadas
+anteriores registraram e adiaram. Tres foram fechadas, e duas delas revelaram
+problemas maiores do que o registro dizia.
+
+### P-A — 81 conversoes `Number(req.params.X)` sem guarda
+
+Registrada como "desproporcional a um turno". Era, do jeito como estava sendo
+contada. Reformulada, virou pequena.
+
+O levantamento anterior contou CONVERSOES no controller (81, em 12 arquivos). Mas
+`auth/controller.ts` faz a mesma coisa escrita de outro jeito —
+`const { id } = req.params` e `Number(id)` depois — e por isso **escapou do
+levantamento**. Prova de que a invariante nao pode depender de como o controller
+escreve a conversao.
+
+A invariante certa e o NOME do parametro na rota: `id` e `<coisa>Id` sao
+numericos; `processCode` e `key` nao sao. Contadas assim, sao **66 rotas** em 10
+modulos — e a correcao e declarativa, no idioma que o repositorio ja tinha
+(`validate(schema, 'params')`, ja usado em 14 rotas).
+
+O que foi entregue:
+
+- `shared/schemas/params.ts` com `paramsNumericos(...)`, um helper unico em vez
+  de dez schemas duplicados;
+- `params-de-rota.test.ts`, **guarda estatica** que varre os arquivos de rota e
+  falha quando uma rota com parametro numerico nasce sem validacao — o defeito e
+  a AUSENCIA de uma declaracao, e nenhum teste de requisicao cobre uma rota que
+  ninguem lembrou de escrever. Inclui contraprova: se o parser quebrar, o teste
+  falha em vez de passar por vacuidade;
+- `params-invalidos.e2e.test.ts`, contra Postgres real, provando o 400 e que
+  nenhuma resposta carrega vocabulario de driver.
+
+**Duas armadilhas encontradas ao escrever, ambas provadas por execucao:**
+
+1. **`z.object` APAGARIA os parametros nao declarados.** `validate` faz
+   `req.params = result.data`, e o `strip` padrao do Zod remove o que nao esta no
+   schema. Numa rota como `/:id/custom-stages/:stageId`, declarar so um deles
+   removeria o outro — trocando um erro de validacao por um bug MUDO, que e o
+   oposto do objetivo. Resolvido com `passthrough()`, com teste dedicado.
+2. **A mensagem de erro saia em ingles.** Escrita so no `.positive()`, ela nunca
+   aparecia: `abc` falha antes, na checagem de tipo, e o operador recebia
+   `Expected number, received nan`. Foi o meu proprio teste E2E que pegou —
+   e e exatamente o defeito ja corrigido nesta base (entrada invalida
+   respondendo com mensagem interna em ingles). A mensagem passou a estar nos
+   tres niveis.
+
+### P-B — `mammoth` sem medicao: o teto herdado estava errado por ~5x
+
+Registrada como "a protecao aqui e por simetria de formato, nao por medicao".
+Medida agora, a simetria se mostrou **insegura**.
+
+`mammoth.extractRawText`, contra docx sinteticos:
+
+| descomprimido | RSS      | razao |
+| ------------- | -------- | ----- |
+| 7,9 MB        | 266 MB   | 33,7x |
+| 31,6 MB       | 563 MB   | 17,8x |
+| 94,9 MB       | 1.400 MB | 14,8x |
+
+Contra ~3,3x do SheetJS. A consequencia e concreta: **um docx de 580 KB que
+expande para 31,6 MB consome 563 MB — mais do que o container inteiro tem — e
+passava FOLGADO no teto de 64 MB herdado do xlsx.**
+
+Teto proprio de 12 MB (`MAX_DESCOMPRIMIDO_DOCX_PADRAO`), que a ~20x deixa o pior
+caso em ~250 MB sobre uma linha de base medida de 84,6 MiB. Nao aperta nada real:
+o maior docx do repositorio expande para 3,7 MB e a tabela `documents` de
+producao **nao tem nenhum docx**.
+
+### P-C — `sqlLocalDeUtc` recebia o nome da coluna como string
+
+Registrada como "falta a guarda de tipo". Deu para fazer melhor que uma guarda
+estatica: o Drizzle expoe `columnType`, `withTimezone` e o nome da tabela em
+runtime, entao a funcao passou a receber a COLUNA e montar a referencia sozinha
+— e a recusar coluna `timestamptz`, onde a dupla conversao deslocaria o valor no
+sentido oposto, em silencio. O schema tem 26 colunas com fuso.
+
+### O flake do E2E tinha causa, e nao era carga
+
+Registrado como "nao reproduzido e nao diagnosticado". A carga era o gatilho, nao
+a causa.
+
+Em `processService`, o `recordProcessEvent` da mudanca de status e aguardado, com
+comentario explicando por que — "a resposta 200 nao pode sair antes de a trilha
+existir". O `auditService.log` logo acima **nao era**. E o teste que falhava
+consultava `audit_logs` — a escrita nao aguardada.
+
+Nao e so problema de teste. Numa REABERTURA — restrita a admin, cuja razao de
+existir e a justificativa registrada — devolver 200 afirmando que a operacao foi
+auditada enquanto a linha ainda nao caiu no banco e a mesma classe de defeito ja
+registrada aqui: o sistema afirmando um registro que pode nao ter acontecido.
+
+Corrigido com `await`, e congelado por teste DETERMINISTICO (o dublê so conclui
+depois de um tick). Verificado invertendo a correcao: sem o `await` o teste falha
+sempre, com `expected false to be true`. **O flake virou regressao detectavel.**
+
+### O achado que nao estava em nenhuma lista
+
+Ao ligar os botoes da nova guarda no compose, descobri que os botoes da guarda
+ANTERIOR tambem nao estavam la. O servico `api` do `docker-compose.prod.yml` usa
+lista explicita de `environment:`: so chega ao container o que estiver listado.
+
+Comparando `process.env.X` do codigo com o bloco `api`: **38 variaveis lidas e
+nao repassadas.** E uma delas esta **definida no `.env` de producao**:
+`AI_DAILY_BUDGET_BRL`, o teto diario de custo de IA — cujo proprio alerta de 80%
+instrui o operador a "ajustar AI_DAILY_BUDGET_BRL", coisa que nao fazia nada.
+
+E ai a armadilha, que quase levei ao compose: **repassar com `${VAR:-}` teria
+DESLIGADO o teto.** O compose passa string VAZIA, e a leitura usa
+`Number(process.env.X ?? '100')` — `??` nao trata string vazia, entao
+`Number('')` e `0`, e `0` desativa a verificacao. Confirmado por execucao:
+`''` -> teto inativo; `undefined` -> teto de R$ 100 ativo.
+
+Por isso as duas variaveis de IA foram ligadas com os **defaults do proprio
+codigo** (`:-100`, `:-5`). Conferido antes, sem imprimir valor: o valor no `.env`
+de producao **e igual ao default**, entao ligar isto nao muda o comportamento de
+hoje — so faz o botao passar a existir de verdade.
+
+A guarda de arquivo, ao contrario, e imune: `numeroPositivoDoAmbiente` trata
+`''` como ausente, e ja havia teste para isso.
+
+As outras 36 ficaram registradas em `TECH_DEBT.md` com a reproducao, e nao
+corrigidas em lote: repassar as-is pode ligar um valor obsoleto do `.env` sobre
+um default melhor do codigo. Duas ressalvas medidas para nao inflar o numero —
+`REVISION` e fallback morto e documentado, e `METRICS_TOKEN`/`METRICS_ALLOWED_IPS`
+so afrouxam o acesso a `/metrics`, entao a ausencia falha fechado.
+
+### Gate final da sexta rodada — saida real
+
+```text
+npm run format               -> exit 0
+npm run lint                 -> exit 0
+npm run typecheck            -> exit 0
+npm test                     -> API 1555 passed | 1 skipped   web 231 passed
+npm run build                -> exit 0
+npm run test:e2e -w apps/api -> 9 arquivos, 73/73 passed
+npm run test:e2e:web         -> 82/82 passed (2,7 min)
+```
+
+`docker compose -f docker-compose.prod.yml config` falha LOCALMENTE por falta dos
+segredos (`GRAFANA_ADMIN_PASSWORD`, `CERT_API_KEY`), e falha igual no HEAD sem as
+minhas alteracoes — e ambiental, nao regressao. A validacao real do compose
+acontece no host remoto, na etapa 5/8 do deploy. Aqui o YAML foi conferido por
+parser, com as chaves novas no servico `api` e os defaults corretos.
+
+Verificacao de risco antes de publicar: `z.coerce` troca `req.params` por
+NUMERO em runtime. Varridos os usos dos parametros numericos que nao passam por
+`Number(...)`, sobrou um so — uma interpolacao em template literal
+(`documento-${req.params.id}`), que funciona igual. `processCode` e `key`
+continuam string, preservados pelo `passthrough`.
+
+Contagem de testes desde a quinta rodada: API 1543 -> 1555 (+12), E2E da API
+63 -> 73 (+10).

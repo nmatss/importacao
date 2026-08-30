@@ -130,6 +130,26 @@ services:
       DOCUMENT_PROCESSING_STALE_MINUTES: ${DOCUMENT_PROCESSING_STALE_MINUTES:-30}
       DOCUMENT_EXTRACTION_LEASE_MS: ${DOCUMENT_EXTRACTION_LEASE_MS:-1500000}
       DOCUMENT_REPLAY_DEFER_DERIVED: ${DOCUMENT_REPLAY_DEFER_DERIVED:-0}
+      # Guarda de bomba de descompressao (xlsx/docx). Ficam AQUI porque o
+      # compose so repassa o que lista: definidas so no .env, nao teriam efeito
+      # nenhum no container — o mesmo defeito ja registrado com MAIL_DRY_RUN.
+      # Sao a valvula de escape do operador quando a guarda recusar um arquivo
+      # grande legitimo, entao precisam funcionar de verdade.
+      # Teto de custo de IA. Estavam LIDAS pelo codigo e ausentes daqui, entao o
+      # valor do .env de producao nunca chegava ao container — e o proprio alerta
+      # de 80% instrui o operador a "ajustar AI_DAILY_BUDGET_BRL", que nao fazia
+      # nada. Os defaults abaixo sao os MESMOS do codigo, entao ligar isto nao
+      # muda o comportamento de hoje.
+      #
+      # O default explicito nao e enfeite: com `${VAR:-}` o compose passa STRING
+      # VAZIA, e `Number('' ?? '100')` e 0 — o que DESLIGA o teto em vez de
+      # aplica-lo. Aqui, ao contrario da guarda de arquivo, a leitura usa `??`,
+      # que nao trata string vazia.
+      AI_DAILY_BUDGET_BRL: ${AI_DAILY_BUDGET_BRL:-100}
+      AI_BRL_PER_USD: ${AI_BRL_PER_USD:-5}
+      DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES: ${DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES:-}
+      DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES: ${DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES:-}
+      DOCUMENT_ARCHIVE_MAX_RATIO: ${DOCUMENT_ARCHIVE_MAX_RATIO:-}
       DOCUMENT_OCR_ENABLED: ${DOCUMENT_OCR_ENABLED:-1}
       DOCUMENT_OCR_COMMAND: ${DOCUMENT_OCR_COMMAND:-tesseract}
       DOCUMENT_OCR_PDF_RENDERER: ${DOCUMENT_OCR_PDF_RENDERER:-pdftoppm}

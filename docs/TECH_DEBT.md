@@ -34,6 +34,24 @@ Levantada na auditoria integral. O relatorio completo, com evidencia
   `TIMESTAMPTZ` forca reescrita da tabela sob `ACCESS EXCLUSIVE` no startup.
   Medido: 2,5 s para 500 mil linhas. O registro do projeto indica ~33 mil, o que
   torna o custo desprezivel — mas isso nao foi confirmado contra o banco real.
+- **36 variaveis lidas pelo codigo nao sao repassadas ao container.** O servico
+  `api` do `docker-compose.prod.yml` usa lista explicita de `environment:`, entao
+  so chega ao container o que estiver listado. Reproduzir: comparar
+  `process.env.X` em `apps/api/src` com as chaves declaradas no bloco `api`.
+  Efeito: botao definido no `.env` sem efeito nenhum — o mesmo defeito ja
+  registrado com `MAIL_DRY_RUN`, agora sistemico. Duas ressalvas medidas, para
+  nao inflar o numero: `REVISION` e fallback morto e documentado (o codigo usa
+  `APP_VERSION`), e `METRICS_TOKEN`/`METRICS_ALLOWED_IPS` so AFROUXAM o acesso a
+  `/metrics`, entao a ausencia falha fechado e nao e brecha. Fechar exige
+  decidir variavel por variavel, porque repassar as-is pode ligar um valor
+  obsoleto do `.env` sobre um default melhor do codigo.
+- **Leitura de variavel com `??` trata string vazia como valor.**
+  `Number(process.env.X ?? '100')` devolve **0** quando a variavel existe vazia,
+  e `0` desativa o teto diario de custo de IA. Como o compose passa `${VAR:-}`
+  como string VAZIA, repassar uma variavel dessas sem default explicito
+  DESLIGARIA o controle em vez de aplica-lo. O repositorio ja tem o idioma certo
+  — `numeroPositivoDoAmbiente` em `archive-guard.ts`, que trata `''` como
+  ausente. Falta aplicar em `cost-tracker.ts` e nos demais leitores.
 - **A guarda de arquivo compactado nao e consciente de concorrencia.** O
   orcamento de bytes descomprimidos e por ARQUIVO. Ha tres filas com
   `batchSize: 1` (`drive-sync`, `sheets-sync`, `ai-extraction`) mais os caminhos
@@ -42,15 +60,6 @@ Levantada na auditoria integral. O relatorio completo, com evidencia
   risco e baixo (a maior planilha real tem 218 KB contra um teto de 64 MB), mas
   o limite e por arquivo e nao global. A saida estrutural e isolar o parse em
   processo com teto proprio de memoria, o que e mudanca de arquitetura.
-- **`mammoth.extractRawText` continua sem medicao de consumo.** Recebe a mesma
-  guarda que o SheetJS por simetria de formato (docx tambem e ZIP), inclusive a
-  verificacao de tamanho real, mas o custo de memoria dele nunca foi medido como
-  o do SheetJS foi. O teto aplicado a ele e, portanto, herdado e nao calibrado.
-- **`sqlLocalDeUtc` recebe o nome da coluna como string crua.** Correto hoje e
-  verificado (`import_processes.created_at` e `timestamp` SEM fuso), mas o
-  schema tem 26 colunas `withTimezone` e a mesma expressao aplicada a uma delas
-  deslocaria o valor no sentido errado. Alem disso, um alias na consulta
-  quebraria em runtime e nao em compilacao. Falta a guarda de tipo.
 - **Centralizar stubs de jsdom em `apps/web/src/test/setup.ts`: FEITO**, com
   stub ciente da query. Registrado aqui porque a primeira tentativa quebrou
   quatro testes de layout: `AppLayout` trata a AUSENCIA de `matchMedia` como

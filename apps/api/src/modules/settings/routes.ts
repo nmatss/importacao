@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { settingsController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { paramsNumericos } from '../../shared/schemas/params.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import {
   updateSettingSchema,
@@ -28,10 +29,15 @@ router.post(
 );
 router.put(
   '/email-signatures/:id',
+  validate(paramsNumericos('id'), 'params'),
   validate(updateEmailSignatureSchema),
   settingsController.updateSignature,
 );
-router.delete('/email-signatures/:id', settingsController.deleteSignature);
+router.delete(
+  '/email-signatures/:id',
+  validate(paramsNumericos('id'), 'params'),
+  settingsController.deleteSignature,
+);
 
 // Leitura dos modelos de comunicacao fica aberta a qualquer autenticado: o
 // analista precisa deles para escrever. A ESCRITA e administrativa e esta
@@ -51,10 +57,15 @@ router.post(
 );
 router.put(
   '/communication-templates/:id',
+  validate(paramsNumericos('id'), 'params'),
   validate(updateCommunicationTemplateSchema),
   settingsController.updateCommunicationTemplate,
 );
-router.delete('/communication-templates/:id', settingsController.deleteCommunicationTemplate);
+router.delete(
+  '/communication-templates/:id',
+  validate(paramsNumericos('id'), 'params'),
+  settingsController.deleteCommunicationTemplate,
+);
 
 router.get('/smtp', settingsController.getSmtp);
 router.put('/smtp', validate(smtpSettingsSchema), settingsController.saveSmtp);

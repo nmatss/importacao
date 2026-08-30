@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { alertController } from './controller.js';
 import { adminMiddleware, authMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { paramsNumericos } from '../../shared/schemas/params.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { alertsQuerySchema, createAlertSchema } from './schema.js';
 
@@ -22,6 +23,10 @@ router.post(
   validate(createAlertSchema),
   alertController.create,
 );
-router.patch('/:id/acknowledge', alertController.acknowledge);
+router.patch(
+  '/:id/acknowledge',
+  validate(paramsNumericos('id'), 'params'),
+  alertController.acknowledge,
+);
 
 export { router as alertRoutes };

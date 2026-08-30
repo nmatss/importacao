@@ -107,8 +107,31 @@ export function inspecionarArquivoCompactado(buffer: Buffer): RelatorioDeArquivo
   };
 }
 
-/** 64 MB. Acima disso o RSS do parser passa do limite de 512M do container. */
+/** 64 MB. Acima disso o RSS do SheetJS passa do limite de 512M do container. */
 export const MAX_DESCOMPRIMIDO_PADRAO = 64 * 1024 * 1024;
+
+/**
+ * 12 MB para docx. **Nao e o mesmo teto do xlsx, e o motivo e medicao.**
+ *
+ * Medido em 2026-08-29, `mammoth.extractRawText` contra docx sinteticos:
+ *
+ * | descomprimido | RSS   | razao |
+ * | ------------- | ----- | ----- |
+ * |     7,9 MB    | 266 MB| 33,7x |
+ * |    31,6 MB    | 563 MB| 17,8x |
+ * |    94,9 MB    |1400 MB| 14,8x |
+ *
+ * Contra ~3,3x do SheetJS. Ou seja: um docx de **580 KB** que expande para
+ * 31,6 MB ja custa mais RSS do que o container inteiro tem — e passava folgado
+ * no teto de 64 MB, herdado da calibragem do xlsx. Herdar o numero era o
+ * defeito.
+ *
+ * 12 MB a ~20x deixa o pior caso em ~250 MB, com folga sobre a linha de base
+ * medida da API em producao (84,6 MiB de 512 MiB). Nao aperta nada real: o
+ * maior docx do repositorio expande para 3,7 MB, e a tabela `documents` de
+ * producao nao tem NENHUM docx.
+ */
+export const MAX_DESCOMPRIMIDO_DOCX_PADRAO = 12 * 1024 * 1024;
 /** Planilha real de dados raramente passa de ~20:1. Bomba classica passa de 1000:1. */
 export const MAX_RAZAO_PADRAO = 200;
 
@@ -216,6 +239,14 @@ function verificarTamanhoRealDescomprimido(
       );
     }
   }
+}
+
+/** Teto de bytes descomprimidos para docx, que custa muito mais que xlsx. */
+export function tetoDescomprimidoDocx(): number {
+  return numeroPositivoDoAmbiente(
+    'DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES',
+    MAX_DESCOMPRIMIDO_DOCX_PADRAO,
+  );
 }
 
 export function assertArquivoSeguroParaAbrir(

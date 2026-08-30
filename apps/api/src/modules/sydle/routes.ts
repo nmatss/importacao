@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { sydleController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { validate } from '../../shared/middleware/validate.js';
+import { paramsNumericos } from '../../shared/schemas/params.js';
 import { createRateLimiter } from '../../shared/middleware/rate-limit.js';
 import { sydleReportQuerySchema, syncRunsQuerySchema } from './schema.js';
 
@@ -38,7 +39,11 @@ router.get(
 );
 // Single-payment detail. Registered AFTER the literal /summary and /export.*
 // routes so the ":id" param cannot capture them.
-router.get('/payments-report/:id', sydleController.getById);
+router.get(
+  '/payments-report/:id',
+  validate(paramsNumericos('id'), 'params'),
+  sydleController.getById,
+);
 router.get(
   '/sync-runs',
   adminMiddleware,

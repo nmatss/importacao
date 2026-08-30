@@ -4,6 +4,8 @@ import {
   assertArquivoSeguroParaAbrir,
   inspecionarArquivoCompactado,
   MAX_DESCOMPRIMIDO_PADRAO,
+  MAX_DESCOMPRIMIDO_DOCX_PADRAO,
+  tetoDescomprimidoDocx,
 } from '../archive-guard.js';
 
 /**
@@ -244,5 +246,53 @@ describe('assertArquivoSeguroParaAbrir() contra indice adulterado', () => {
     delete process.env.DOCUMENT_ARCHIVE_MAX_RATIO;
     expect(() => assertArquivoSeguroParaAbrir(planilhaGorda(true))).not.toThrow();
     expect(() => assertArquivoSeguroParaAbrir(planilhaGorda(false))).not.toThrow();
+  });
+});
+
+/**
+ * O teto do docx e MENOR que o do xlsx, e isso e resultado de medicao, nao de
+ * simetria. Medido em 2026-08-29 com `mammoth.extractRawText`: 7,9 MB
+ * descomprimidos custam 266 MB de RSS (33,7x), 31,6 MB custam 563 MB (17,8x) e
+ * 94,9 MB custam 1400 MB (14,8x) — contra ~3,3x do SheetJS.
+ *
+ * A consequencia pratica: um docx de 580 KB estourava o container de 512M
+ * passando FOLGADO no teto de 64 MB herdado do xlsx.
+ */
+describe('teto de docx', () => {
+  const envAntesDocx = process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES;
+  afterEach(() => {
+    if (envAntesDocx === undefined) delete process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES;
+    else process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES = envAntesDocx;
+  });
+
+  it('e estritamente menor que o do xlsx', () => {
+    expect(MAX_DESCOMPRIMIDO_DOCX_PADRAO).toBeLessThan(MAX_DESCOMPRIMIDO_PADRAO);
+  });
+
+  it('recusa o caso medido de 31,6 MB, que o teto do xlsx aceitava', () => {
+    const trintaEUmMeio = zipComIndice([{ comprimido: 600 * 1024, descomprimido: 31.6 * MB }]);
+
+    // Com o teto do xlsx isso PASSA — e era esse o defeito.
+    expect(() =>
+      assertArquivoSeguroParaAbrir(trintaEUmMeio, {
+        maxDescomprimido: MAX_DESCOMPRIMIDO_PADRAO,
+        maxRazao: 1000,
+      }),
+    ).not.toThrow();
+
+    expect(() =>
+      assertArquivoSeguroParaAbrir(trintaEUmMeio, {
+        maxDescomprimido: tetoDescomprimidoDocx(),
+        maxRazao: 1000,
+      }),
+    ).toThrowError(/acima do limite/);
+  });
+
+  it('o teto do docx tambem tem valvula de escape pelo ambiente', () => {
+    process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES = String(100 * MB);
+    expect(tetoDescomprimidoDocx()).toBe(100 * MB);
+
+    process.env.DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES = '';
+    expect(tetoDescomprimidoDocx()).toBe(MAX_DESCOMPRIMIDO_DOCX_PADRAO);
   });
 });

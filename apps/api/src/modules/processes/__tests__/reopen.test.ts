@@ -216,3 +216,46 @@ describe('reabertura de processo (transicoes de volta)', () => {
     });
   });
 });
+
+/**
+ * Causa raiz do flake registrado do E2E de reabertura
+ * (`dashboard-event-dates.e2e.test.ts`), que falhava so com a maquina sob carga:
+ * `auditService.log` NAO era aguardado, entao a resposta 200 podia sair antes de
+ * a linha de `audit_logs` existir, e o teste consultava a tabela cedo demais.
+ *
+ * O caso abaixo e deterministico — nao depende de carga: o dublê so marca
+ * `concluido` depois de um tick, entao sem o `await` a asserção falha sempre.
+ * O flake vira regressao detectavel.
+ */
+describe('a auditoria da reabertura e aguardada antes de responder', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  it('nao devolve antes de a auditoria ter sido gravada', async () => {
+    let concluido = false;
+    vi.mocked(auditService.log).mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      concluido = true;
+    });
+
+    queueCurrent('sent_to_fenicia');
+    queryQueue.push(createResolvedChain([{ id: 1, status: 'validating' }]));
+
+    await processService.updateStatus(1, 'validating', 7, {
+      reason: MOTIVO,
+      actorRole: 'admin',
+    });
+
+    expect(concluido).toBe(true);
+    expect(auditService.log).toHaveBeenCalledWith(
+      7,
+      'status_reopen',
+      'process',
+      1,
+      expect.objectContaining({ reason: MOTIVO }),
+      null,
+    );
+  });
+});

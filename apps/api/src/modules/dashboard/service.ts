@@ -153,18 +153,14 @@ export const dashboardService = {
   async getByMonth() {
     return db
       .select({
-        month: sql<string>`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
+        month: sql<string>`TO_CHAR(${sql.raw(sqlLocalDeUtc(importProcesses.createdAt))}, 'YYYY-MM')`,
         count: count(),
         fobValue: sql<string>`COALESCE(SUM(${importProcesses.totalFobValue}), 0)`,
       })
       .from(importProcesses)
       .where(gte(importProcesses.createdAt, sql`NOW() - INTERVAL '6 months'`))
-      .groupBy(
-        sql`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
-      )
-      .orderBy(
-        sql`TO_CHAR(${sql.raw(sqlLocalDeUtc('"import_processes"."created_at"'))}, 'YYYY-MM')`,
-      );
+      .groupBy(sql`TO_CHAR(${sql.raw(sqlLocalDeUtc(importProcesses.createdAt))}, 'YYYY-MM')`)
+      .orderBy(sql`TO_CHAR(${sql.raw(sqlLocalDeUtc(importProcesses.createdAt))}, 'YYYY-MM')`);
   },
 
   async getFobByBrand() {

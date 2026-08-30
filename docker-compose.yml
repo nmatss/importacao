@@ -68,6 +68,14 @@ services:
       PROCESS_REFERENCE_SOURCE: ${PROCESS_REFERENCE_SOURCE:-follow_up}
       FOLLOW_UP_REFERENCE_TTL_MS: ${FOLLOW_UP_REFERENCE_TTL_MS:-600000}
       FOLLOW_UP_AUTO_CREATE: ${FOLLOW_UP_AUTO_CREATE:-1}
+      # Guarda de bomba de descompressao (xlsx/docx). Ficam AQUI porque o
+      # compose so repassa o que lista: definidas so no .env, nao teriam efeito
+      # nenhum no container — o mesmo defeito ja registrado com MAIL_DRY_RUN.
+      # Sao a valvula de escape do operador quando a guarda recusar um arquivo
+      # grande legitimo, entao precisam funcionar de verdade.
+      DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES: ${DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES:-}
+      DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES: ${DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES:-}
+      DOCUMENT_ARCHIVE_MAX_RATIO: ${DOCUMENT_ARCHIVE_MAX_RATIO:-}
       DOCUMENT_SOURCE: ${DOCUMENT_SOURCE:-drive}
       DRIVE_INGESTION_MAX_FILE_BYTES: ${DRIVE_INGESTION_MAX_FILE_BYTES:-26214400}
       GOOGLE_CHAT_WEBHOOK_URL: ${GOOGLE_CHAT_WEBHOOK_URL:-}

@@ -24,7 +24,10 @@ import { alertService } from '../alerts/service.js';
 import { tryParseEspelhoBuffer } from '../espelho-parser/parser.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
-import { assertArquivoSeguroParaAbrir } from '../../shared/utils/archive-guard.js';
+import {
+  assertArquivoSeguroParaAbrir,
+  tetoDescomprimidoDocx,
+} from '../../shared/utils/archive-guard.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition } from '../../shared/state-machine/process-states.js';
 import type { ProcessStatus } from '../../shared/state-machine/process-states.js';
@@ -2500,10 +2503,12 @@ export const documentService = {
       mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
       ext === '.docx'
     ) {
-      // docx e ZIP como o xlsx, entao a mesma guarda vale. Nao medi o consumo
-      // do mammoth como medi o do SheetJS — a protecao aqui e por simetria de
-      // formato, nao por medicao.
-      assertArquivoSeguroParaAbrir(buffer);
+      // docx e ZIP como o xlsx, mas o teto NAO e o mesmo — medido em
+      // 2026-08-29: o `mammoth` custa 15x a 34x o tamanho descomprimido, contra
+      // ~3x do SheetJS. Um docx de 580 KB que expande para 31,6 MB consome
+      // 563 MB de RSS num container de 512M, e passava folgado no teto de
+      // 64 MB herdado do xlsx.
+      assertArquivoSeguroParaAbrir(buffer, { maxDescomprimido: tetoDescomprimidoDocx() });
       const result = await mammoth.extractRawText({ buffer });
       return { text: result.value };
     }
