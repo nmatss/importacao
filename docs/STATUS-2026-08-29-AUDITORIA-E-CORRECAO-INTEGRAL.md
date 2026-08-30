@@ -1780,3 +1780,54 @@ continuam string, preservados pelo `passthrough`.
 
 Contagem de testes desde a quinta rodada: API 1543 -> 1555 (+12), E2E da API
 63 -> 73 (+10).
+
+### Deploy da sexta rodada — 2026-08-29, 21:26
+
+`scripts/deploy.sh`, 8/8, exit 0, sem rollback. SHA `75f91474bb34`.
+
+A etapa 5/8 — `Remote compose config valid` — validou o compose **no host
+remoto, com os segredos reais**, o que fecha a lacuna da validacao local (que
+falha por falta de `GRAFANA_ADMIN_PASSWORD` e `CERT_API_KEY`, no HEAD tambem).
+
+#### O que a producao provou
+
+`/health/live` responde `revision: 75f91474bb34...`, o SHA exato.
+
+Os botoes agora CHEGAM ao container — que era o ponto do achado:
+
+```text
+AI_DAILY_BUDGET_BRL=100          <- valor efetivo, igual ao default do codigo
+AI_BRL_PER_USD=5                 <- idem: ligar isto nao mudou comportamento
+DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_BYTES=        (vazio -> default do codigo)
+DOCUMENT_ARCHIVE_MAX_UNCOMPRESSED_DOCX_BYTES=   (vazio -> default do codigo)
+DOCUMENT_ARCHIVE_MAX_RATIO=                     (vazio -> default do codigo)
+```
+
+O vazio e seguro **so porque** `numeroPositivoDoAmbiente` trata `''` como
+ausente. Fosse a leitura com `??`, como a do teto de custo, o vazio viraria `0` e
+desligaria a guarda — que e exatamente por que as duas variaveis de IA foram
+ligadas com default explicito.
+
+E o codigo novo esta no artefato que roda, nao so no git:
+
+```text
+dist/modules/*/routes.js          paramsNumericos em 10 arquivos (os 10 modulos)
+dist/shared/utils/archive-guard.js  MAX_DESCOMPRIMIDO_DOCX_PADRAO  2x
+dist/modules/processes/service.js   await auditService.log         8x (era 7)
+```
+
+Zero erros no log desde o deploy. RSS da API: 75,9 MiB de 512 MiB.
+
+#### Continua aberto, sem mudanca
+
+- **Chave do webhook do Google Chat.** 5.067 alertas, zero entregues. Depende de
+  segredo.
+- **Injecao de prompt**: homoglifo fullwidth e angulos espacados sobrevivem ao
+  saneamento; falta o veredito de exploracao real (se o modelo obedece a um
+  delimitador forjado). Exigiria chamada paga ao provider — nao executado.
+  **Nao tratar como resolvido nem como refutado.**
+- **36 variaveis lidas e nao repassadas** pelo compose, e a leitura com `??` que
+  trata string vazia como valor. Ambas em `TECH_DEBT.md`, com reproducao.
+- **Guarda de arquivo nao consciente de concorrencia** — o orcamento e por
+  arquivo, e tres filas mais os caminhos HTTP rodam no mesmo processo.
+- As decisoes de negocio (P-01 a P-06) e o reprocessamento documental.
