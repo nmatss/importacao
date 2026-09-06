@@ -15,22 +15,47 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
-## 2026-09-06 — Totais de Câmbios exibem NaN (fora do escopo visual)
+## 2026-09-06 — Reconciliacao das pendencias apos autorizacao de correcao
 
-- **ALTO — integridade da informacao exibida:** `CurrencyExchangePage.tsx:142`
-  soma `amountUsd`/`amountBrl` como numeros, mas a listagem da API retorna os
-  decimais textuais do banco. Com varios lancamentos, `+` concatena as strings;
-  `formatCurrency` recebe um valor nao numerico e exibe `NaN`.
-- Reproduzido no Chromium com fixtures alinhadas ao contrato existente:
-  `33775.00` + `3850.00` no tipo balance; as capturas `imp-cambios` em
-  `output/playwright/responsive-verified/` mostram o problema.
-- Confirmacao estatica: `apps/api/src/modules/currency-exchange/service.ts:14`
-  devolve os registros sem conversao; controller/routes encaminham essa lista.
-  O calculo do frontend ja existe em `HEAD` e nao foi alterado nesta auditoria.
-- Estado: **ABERTO**. Corrigir exige alterar calculo/normalizacao e adicionar
-  regressao com multiplos lancamentos e BRL nulo. Nao foi mascarado nas fixtures
-  nem corrigido porque a sessao autoriza exclusivamente layout/UX/UI.
-- Evidencia e contexto: `docs/STATUS-2026-09-06-RESPONSIVIDADE.md`.
+Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permanecem
+como historico. Plano, execucoes e resultados de deploy ficam na sessao dotcontext
+`142282d9-7495-4a36-a16f-12ffe22fdbaa`.
+
+- **Cambios — corrigido no codigo:** adotado o tipo compartilhado da API,
+  conversao explicita dos decimais para os totais, ausencia representada por traco
+  e observacao opcional enviada como string. Tres testes cobrem multiplos
+  lancamentos, BRL/datas nulos e envio sem observacao. A autorizacao atual ampliou
+  o escopo visual anterior; a API permaneceu inalterada.
+- **Workflow — corrigido no codigo / automacao bloqueada:** confirmacao e secrets
+  passam por variaveis de ambiente, sem interpolacao como codigo shell. GitHub
+  confirmou zero runners e zero secrets no repositorio e no environment production.
+  Falta definir host com acesso a LAN e provisionar credencial tecnica de deploy.
+  O deploy local oficial continua disponivel.
+- **Reentrega de alertas — implementada, entrega nao comprovada:** o job
+  `alert-redelivery` e o backoff existem e possuem testes. Portanto, a afirmacao
+  antiga P-15 de que nao foram implementados esta superada. A leitura em producao
+  encontrou 5.104 alertas, zero entregues e tentativas reais registradas, inclusive
+  6 alertas no teto de 5 tentativas. Ha 1 pendente nas ultimas 24h. Webhook
+  configurado nao comprova validade. Falta canal valido e teste autorizado.
+- **Alertmanager — bloqueado por destino:** o bridge compartilhado existe em outra
+  rede, mas seu handler responde 200 mesmo quando o envio ao Chat falha. Nao foi
+  conectado automaticamente: isso esconderia falhas e ativaria mensagens sem
+  destino aprovado. Definir canal e exigir propagacao de falha antes da ativacao.
+- **Drive — bloqueado por configuracao/acesso:** a consulta aos servicos reais
+  confirmou raiz nao configurada. Follow Up configurado e acessivel. Produção
+  permanece em `DOCUMENT_SOURCE=email`, com ingestao ligada. Fornecer a raiz
+  operacional e compartilhar com a conta de servico antes do smoke/virada.
+- **Documentos — depende da area:** 51/51 processados, em 12 processos, 13 `other`.
+  Nao houve reclassificacao nem escrita em dados de producao. Fontes ausentes,
+  divergencias e aceite humano continuam necessarios; confianca nao e acuracia.
+- **Linx — ALTO confirmado:** ambas as bases respondem, mas as duas conexoes
+  possuem `sysadmin` e `ALTER ANY LOGIN`. Preparacao de menor privilegio em
+  [CERT-LINX-WRITE.md](CERT-LINX-WRITE.md). Criar identidades dedicadas, validar
+  dependencias dos triggers, trocar secrets via SOPS e testar antes de retirar o
+  acesso do aplicativo aos logins pessoais. Nao revogar logins compartilhados.
+- **Edge HTTPS — resolvido na entrega anterior:** a rede Traefik esta declarada
+  no Compose desde `e81a6dd`; o antigo bloqueio de go-live por 502 esta superado
+  pela validacao publica e recriacao registradas na sessao de responsividade.
 
 ## 2026-08-29 — Auditoria integral: o que mudou neste documento
 

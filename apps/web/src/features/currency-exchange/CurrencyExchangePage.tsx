@@ -20,24 +20,12 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
+import type { CurrencyExchange } from '@/shared/types';
 
 interface Process {
   id: number;
   processCode: string;
   brand: string;
-}
-
-interface CurrencyExchange {
-  id: number;
-  processId: string;
-  type: 'balance' | 'deposit';
-  amountUsd: number;
-  exchangeRate: number;
-  amountBrl: number;
-  paymentDeadline: string;
-  expirationDate: string;
-  notes: string | null;
-  createdAt: string;
 }
 
 interface ExchangeForm {
@@ -83,7 +71,7 @@ export function CurrencyExchangePage() {
 
   const createMutation = useApiMutation<
     CurrencyExchange,
-    Omit<CurrencyExchange, 'id' | 'createdAt'>
+    ExchangeForm & { processId: number; amountBrl: string }
   >('/api/currency-exchange', 'post', {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
@@ -128,26 +116,30 @@ export function CurrencyExchangePage() {
     }
     setFormError(null);
     createMutation.mutate({
-      processId: selectedProcessId,
+      processId: Number(selectedProcessId),
       type: form.type,
-      amountUsd: usd,
-      exchangeRate: rate,
-      amountBrl: calculatedBrl,
+      amountUsd: form.amountUsd.trim(),
+      exchangeRate: form.exchangeRate.trim(),
+      amountBrl: calculatedBrl.toFixed(2),
       paymentDeadline: form.paymentDeadline,
       expirationDate: form.expirationDate,
-      notes: form.notes || null,
+      notes: form.notes.trim(),
     });
   };
 
   const totalBalanceUsd =
-    exchanges?.filter((e) => e.type === 'balance').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+    exchanges
+      ?.filter((e) => e.type === 'balance')
+      .reduce((sum, e) => sum + Number(e.amountUsd), 0) ?? 0;
 
   const totalDepositUsd =
-    exchanges?.filter((e) => e.type === 'deposit').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+    exchanges
+      ?.filter((e) => e.type === 'deposit')
+      .reduce((sum, e) => sum + Number(e.amountUsd), 0) ?? 0;
 
   const saldoUsd = totalBalanceUsd - totalDepositUsd;
 
-  const totalBrl = exchanges?.reduce((sum, e) => sum + e.amountBrl, 0) ?? 0;
+  const totalBrl = exchanges?.reduce((sum, e) => sum + Number(e.amountBrl ?? 0), 0) ?? 0;
 
   const kpiCards = [
     {
@@ -337,7 +329,7 @@ export function CurrencyExchangePage() {
                 <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
                   Valor BRL (calculado)
                 </label>
-                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 px-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900 px-3 text-sm font-medium text-slate-600 dark:text-slate-300">
                   {calculatedBrl ? (
                     formatCurrency(calculatedBrl, 'BRL')
                   ) : (
@@ -526,16 +518,16 @@ export function CurrencyExchangePage() {
                           {formatCurrency(ex.amountUsd)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700 dark:text-slate-300">
-                          {Number(ex.exchangeRate).toFixed(4)}
+                          {ex.exchangeRate != null ? Number(ex.exchangeRate).toFixed(4) : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {formatCurrency(ex.amountBrl, 'BRL')}
+                          {ex.amountBrl != null ? formatCurrency(ex.amountBrl, 'BRL') : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                          {formatDate(ex.paymentDeadline)}
+                          {ex.paymentDeadline ? formatDate(ex.paymentDeadline) : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                          {formatDate(ex.expirationDate)}
+                          {ex.expirationDate ? formatDate(ex.expirationDate) : '—'}
                         </td>
                         <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                           {ex.notes || <span className="text-slate-300">--</span>}

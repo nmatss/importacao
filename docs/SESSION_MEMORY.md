@@ -1,5 +1,12 @@
 # Session Memory
 
+## 2026-09-06 — Correcao das pendencias autorizada
+
+- O pedido posterior ampliou o escopo para resolver pendencias funcionais e operacionais.
+- Estado atualizado e bloqueios em [KNOWN_ISSUES.md](KNOWN_ISSUES.md); nao usar
+  os itens historicos abaixo como estado corrente de Cambios ou reentrega.
+- Fonte operacional: sessao dotcontext `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
+
 ## 2026-09-06 — Retomada da auditoria responsiva
 
 - Preservadas as alteracoes da sessao Claude e concluida a revisao de layout nos

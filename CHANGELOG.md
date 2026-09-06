@@ -9,6 +9,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Totais de Cambios normalizam os decimais textuais retornados pela API; campos
+  ausentes nao aparecem como zero/data de epoch, e observacao vazia respeita schema.
+- Workflow de deploy trata confirmacao e secrets como dados em variaveis de
+  ambiente, evitando sua interpolacao direta no codigo shell.
+
 - Rede externa do frontend declarada no Compose de producao, preservando o acesso
   HTTPS pelo Traefik apos recriar o container.
 - Corrigidos overflows, colunas inacessiveis e textos comprimidos em dashboards,
