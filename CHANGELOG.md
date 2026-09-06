@@ -9,6 +9,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Excecao Trivy restrita ao template Google sem credenciais embutidas, com
+  regressao obrigatoria que continua detectando valores literais e objetos adjacentes.
+
 - Atualizadas dependencias transitivas vulneraveis, incluindo Browserslist e
   `qs` 6.16.0; preservadas as versoes de Express e body-parser.
 - Fixture documental isola a persistencia de configuracoes Odoo, mantendo os

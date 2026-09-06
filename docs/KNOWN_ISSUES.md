@@ -21,6 +21,14 @@ Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permane
 como historico. Plano, execucoes e resultados de deploy ficam na sessao dotcontext
 `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
 
+- **Trivy — falso positivo confirmado:** a regra `gcp-service-account` da versao
+  0.74 procura apenas o marcador publico de tipo, sinalizando o dicionario Python
+  que referencia variaveis de ambiente em `erp_service.py`. A excecao em
+  `trivy-secret.yaml` corresponde exclusivamente ao dicionario completo com essas
+  referencias, sem ignorar arquivo ou desativar regra. O teste
+  `scripts/test-trivy-secret-config.py` reproduz o baseline e prova que valores
+  literais e objetos adjacentes continuam detectados; ele roda no CI antes do
+  scan da imagem Cert-API. Nenhuma credencial real foi usada ou exposta.
 - **CI — causas corrigidas no codigo:** auditoria Node apontava Browserslist
   vulneravel e a fixture documental acessava `system_settings` no banco vazio do
   runner. Lockfile atualizado sem downgrade de Express/body-parser; `qs` fixado
