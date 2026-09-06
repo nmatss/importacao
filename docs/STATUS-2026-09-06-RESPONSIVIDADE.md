@@ -161,3 +161,17 @@ do escopo autorizado. A experiencia completa dessa tela nao esta aprovada.
   nao foram revalidados integralmente nesta auditoria de interface.
 - Backlog tecnico anterior: filas sem dead-letter observavel, lease/replay,
   linhagem de itens e cache de Certificacoes; detalhes em `TECH_DEBT.md`.
+
+## Incidente identificado durante o deploy
+
+O primeiro runner publicou o frontend, mas reprovou o gate HTTPS com 502, apesar
+de API, cert-api, web e proxy interno saudaveis. O Traefik usa
+`http://importacao-web:80` na rede `n8n_enterprise_web` desde 04/09; essa conexao
+existia somente no container e nao no Compose deste projeto. A recriacao a removeu.
+A reconexao restaurou HTTPS e `/api/health` para 200, confirmando a causa.
+
+A correcao operacional necessaria ao deploy declara essa rede externa no servico
+web e preserva a rede default como gateway preferencial, seguindo o padrao da API.
+`docker compose -f docker-compose.prod.yml config --no-interpolate --quiet` passou.
+A confirmacao por novo deploy/recriacao fica registrada no dotcontext, junto ao
+SHA final. Nenhuma regra de negocio, credencial ou configuracao do Traefik foi alterada.

@@ -398,6 +398,11 @@ services:
           cpus: '0.25'
     security_opt:
       - no-new-privileges:true
+    networks:
+      default:
+        gw_priority: 100
+      n8n_enterprise_web:
+        gw_priority: 0
 
   certbot:
     image: certbot/certbot
@@ -491,4 +496,8 @@ volumes:
 
 networks:
   ia-local-net:
+    external: true
+  # Traefik resolves importacao-web on this existing edge network.
+  # Declare it so container recreation preserves public HTTPS connectivity.
+  n8n_enterprise_web:
     external: true

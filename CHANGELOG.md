@@ -9,6 +9,8 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Rede externa do frontend declarada no Compose de producao, preservando o acesso
+  HTTPS pelo Traefik apos recriar o container.
 - Corrigidos overflows, colunas inacessiveis e textos comprimidos em dashboards,
   processos, e-mails, alertas, auditoria e Certificacoes.
 - Ajustados contraste do tema escuro, controles nativos, KPIs, filtros, formularios
