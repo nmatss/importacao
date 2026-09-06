@@ -9,6 +9,11 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Atualizadas dependencias transitivas vulneraveis, incluindo Browserslist e
+  `qs` 6.16.0; preservadas as versoes de Express e body-parser.
+- Fixture documental isola a persistencia de configuracoes Odoo, mantendo os
+  checks reais e o aviso de integracao nao configurada mesmo com DATABASE_URL.
+
 - Totais de Cambios normalizam os decimais textuais retornados pela API; campos
   ausentes nao aparecem como zero/data de epoch, e observacao vazia respeita schema.
 - Workflow de deploy trata confirmacao e secrets como dados em variaveis de

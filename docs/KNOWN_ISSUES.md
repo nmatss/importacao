@@ -21,6 +21,12 @@ Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permane
 como historico. Plano, execucoes e resultados de deploy ficam na sessao dotcontext
 `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
 
+- **CI — causas corrigidas no codigo:** auditoria Node apontava Browserslist
+  vulneravel e a fixture documental acessava `system_settings` no banco vazio do
+  runner. Lockfile atualizado sem downgrade de Express/body-parser; `qs` fixado
+  em 6.16.0 porque esses consumidores restringem a serie 6.15. A fixture agora
+  isola a persistencia e exige o aviso Odoo nao configurado. `npm audit` retornou
+  zero vulnerabilidades; gates finais e execucao GitHub registrados no dotcontext.
 - **Cambios — corrigido no codigo:** adotado o tipo compartilhado da API,
   conversao explicita dos decimais para os totais, ausencia representada por traco
   e observacao opcional enviada como string. Tres testes cobrem multiplos
