@@ -9,6 +9,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Deploy de producao separado em controle privado, com runner limitado no host
+  compartilhado; workflow publico indica o novo destino sem expor credenciais.
+
 - Geracao SOPS do `.env` agora preserva o arquivo anterior se a descriptografia
   falhar, inclusive apos saida parcial; publicacao atomica e regressao no CI.
 

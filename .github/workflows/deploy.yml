@@ -1,106 +1,23 @@
-name: Deploy (manual)
+name: Acesso ao deploy de producao
 
 on:
   workflow_dispatch:
-    inputs:
-      dry_run:
-        description: 'Dry run (simulate only - no actual deploy)'
-        required: false
-        default: 'true'
-        type: boolean
-      confirm:
-        description: 'Type DEPLOY to confirm production deployment'
-        required: true
-        default: ''
+
+permissions:
+  contents: read
 
 jobs:
-  deploy:
-    name: Deploy to Production
+  instructions:
+    name: Abrir controle privado de deploy
     runs-on: ubuntu-latest
-    environment: production
-    if: ${{ github.ref == 'refs/heads/master' }}
-
     steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: master
-          fetch-depth: 0
-
-      - name: Validate confirmation
-        if: ${{ !inputs.dry_run }}
-        env:
-          DEPLOY_CONFIRM: ${{ inputs.confirm }}
+      - name: Mostrar destino do deploy
         run: |
-          if [ "$DEPLOY_CONFIRM" != "DEPLOY" ]; then
-            echo "ERROR: You must type DEPLOY in the confirm field to proceed."
-            exit 1
-          fi
-
-      - name: Validate deploy secrets
-        if: ${{ !inputs.dry_run }}
-        env:
-          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
-          DEPLOY_USER_SECRET: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          missing=()
-          [[ -n "${DEPLOY_SERVER}" ]] || missing+=(DEPLOY_SERVER)
-          [[ -n "${DEPLOY_USER_SECRET}" ]] || missing+=(DEPLOY_USER)
-          [[ -n "${DEPLOY_SSH_KEY}" ]] || missing+=(DEPLOY_SSH_KEY)
-          if (( ${#missing[@]} > 0 )); then
-            echo "::error::Missing required production secret(s): ${missing[*]}"
-            exit 1
-          fi
-
-      - name: Dry-run - show what would be deployed
-        if: ${{ inputs.dry_run }}
-        run: |
-          echo "=== DRY RUN MODE ==="
-          echo "Branch: ${{ github.ref_name }}"
-          echo "Commit: ${{ github.sha }}"
-          echo "Triggered by: ${{ github.actor }}"
-          echo ""
-          echo "Would run: bash scripts/deploy.sh <configured production server>"
-          echo "Deploy model: local script + rsync + remote docker compose"
-          echo "Remote dir: configured user home/importacao (unless DEPLOY_DIR overrides it)"
-          echo ""
-          echo "Docker compose file: docker-compose.prod.yml"
-          echo "Services that would restart: api web cert-api"
-          echo ""
-          echo "Health check endpoint: http://localhost:3050/health/ready"
-          echo ""
-          echo "=== END DRY RUN ==="
-
-      - name: Install deploy prerequisites
-        if: ${{ !inputs.dry_run }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y rsync
-
-      - name: Configure SSH
-        if: ${{ !inputs.dry_run }}
-        env:
-          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          set -euo pipefail
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$DEPLOY_SERVER" >> ~/.ssh/known_hosts
-          cat > ~/.ssh/config <<'EOF'
-          Host *
-            IdentityFile ~/.ssh/deploy_key
-            IdentitiesOnly yes
-            StrictHostKeyChecking yes
-          EOF
-
-      - name: Deploy with official rsync script
-        if: ${{ !inputs.dry_run }}
-        env:
-          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
-          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
-        run: |
-          set -euo pipefail
-          printf 'y\n' | bash scripts/deploy.sh "$DEPLOY_SERVER"
+          echo "Deploys de producao foram movidos para o controle privado."
+          echo "https://github.com/nmatss/importacao-deploy/actions/workflows/deploy.yml"
+          {
+            echo "### Deploy de producao"
+            echo "Abra [Deploy Importacao](https://github.com/nmatss/importacao-deploy/actions/workflows/deploy.yml)."
+            echo "Este workflow apenas mostra o acesso; nao executa deploy."
+            echo "O controle privado usa master deste repositorio e scripts/deploy.sh."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -45,17 +45,23 @@ como historico. Plano, execucoes e resultados de deploy ficam na sessao dotconte
   e observacao opcional enviada como string. Tres testes cobrem multiplos
   lancamentos, BRL/datas nulos e envio sem observacao. A autorizacao atual ampliou
   o escopo visual anterior; a API permaneceu inalterada.
-- **Workflow — corrigido no codigo / automacao bloqueada:** confirmacao e secrets
-  passam por variaveis de ambiente, sem interpolacao como codigo shell. GitHub
-  confirmou zero runners e zero secrets no repositorio e no environment production.
-  Falta definir host com acesso a LAN e provisionar credencial tecnica de deploy.
-  O deploy local oficial continua disponivel.
+- **Workflow — automacao provisionada em controle privado:** o repositorio da
+  aplicacao e publico, por isso o runner nao foi associado a ele. O workflow de
+  producao fica em `nmatss/importacao-deploy` (privado), usa `master` desta
+  aplicacao e `scripts/deploy.sh`. Container limitado a 1 CPU/1536 MiB, sem socket
+  Docker nem mounts de outros sistemas; chave SSH propria e secrets no environment
+  `production`, restrito a `main`. O workflow publico apenas aponta o destino.
+  Diagnostico e deploy completos devem ser comprovados nas execucoes registradas
+  no dotcontext. O HTTPS e conferido via SSH no host, pois a rede isolada do runner
+  nao alcanca a porta 443; a validacao externa permanece uma verificacao separada.
 - **Reentrega de alertas — implementada, entrega nao comprovada:** o job
   `alert-redelivery` e o backoff existem e possuem testes. Portanto, a afirmacao
   antiga P-15 de que nao foram implementados esta superada. A leitura em producao
   encontrou 5.104 alertas, zero entregues e tentativas reais registradas, inclusive
   6 alertas no teto de 5 tentativas. Ha 1 pendente nas ultimas 24h. Webhook
-  configurado nao comprova validade. Falta canal valido e teste autorizado.
+  configurado nao comprova validade. Teste unico autorizado em 06/09 retornou
+  HTTP 400 / API_KEY_INVALID, sem criar mensagem; falta substituir a credencial
+  do webhook pelo cofre e repetir o smoke apos a troca.
 - **Alertmanager — bloqueado por destino:** o bridge compartilhado existe em outra
   rede, mas seu handler responde 200 mesmo quando o envio ao Chat falha. Nao foi
   conectado automaticamente: isso esconderia falhas e ativaria mensagens sem
@@ -64,8 +70,11 @@ como historico. Plano, execucoes e resultados de deploy ficam na sessao dotconte
   confirmou raiz nao configurada. Follow Up configurado e acessivel. Produção
   permanece em `DOCUMENT_SOURCE=email`, com ingestao ligada. Fornecer a raiz
   operacional e compartilhar com a conta de servico antes do smoke/virada.
-  Nova listagem autenticada retornou zero Shared Drives e nenhuma pasta candidata
-  de importacao visivel; nao basta preencher uma variavel sem conceder acesso.
+  A raiz operacional de 2026 foi localizada pelo conector da sessao e corresponde
+  ao layout documentado por marca/Importado/processo. O probe dessa raiz com a
+  conta de servico retorna 404. O conector de compartilhamento disponivel nao
+  aceita pastas; o link e a identidade necessaria ficam no dotcontext, aguardando
+  compartilhamento. O modo email foi preservado.
 - **Documentos — depende da area:** 51/51 processados, em 12 processos, 13 `other`.
   Nao houve reclassificacao nem escrita em dados de producao. Fontes ausentes,
   divergencias e aceite humano continuam necessarios; confianca nao e acuracia.
