@@ -96,7 +96,7 @@ export function CustomStagesTab({ processId }: { processId: string }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Etapas Especificas</h3>
-        <span className="text-xs font-semibold text-slate-400">
+        <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
           {(stages ?? []).length} etapa(s)
         </span>
       </div>
@@ -155,7 +155,9 @@ export function CustomStagesTab({ processId }: { processId: string }) {
               disabled={updatingId === stage.id}
               className={cn(
                 'flex h-9 w-9 items-center justify-center rounded-lg',
-                stage.completedAt ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400',
+                stage.completedAt
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-100 text-slate-400 dark:bg-slate-700/60 dark:text-slate-200',
               )}
             >
               {updatingId === stage.id ? (
@@ -166,14 +168,16 @@ export function CustomStagesTab({ processId }: { processId: string }) {
             </button>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs font-bold text-slate-400">#{stage.position}</span>
+                <span className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                  #{stage.position}
+                </span>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                   {stage.label}
                 </p>
               </div>
               {stage.notes && <p className="mt-0.5 text-xs text-slate-500">{stage.notes}</p>}
               {stage.completedAt && (
-                <p className="mt-0.5 text-xs font-medium text-emerald-700">
+                <p className="mt-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
                   Concluida em {formatDateTime(stage.completedAt)}
                 </p>
               )}
@@ -182,7 +186,7 @@ export function CustomStagesTab({ processId }: { processId: string }) {
               type="button"
               onClick={() => deleteStage(stage.id)}
               disabled={updatingId === stage.id}
-              className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600"
+              className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
               aria-label={`Remover etapa ${stage.label}`}
             >
               <Trash2 className="h-4 w-4" />

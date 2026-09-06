@@ -62,9 +62,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
           : 'A validacao terminou com pendencias de correcao. Revise os documentos antes de seguir.',
       actionLabel: 'Ver Divergencias',
       link: `/importacao/processos/${processId}`,
-      color: 'text-danger-700',
-      bgColor: 'bg-danger-50',
-      borderColor: 'border-danger-200',
+      color: 'text-danger-700 dark:text-danger-300',
+      bgColor: 'bg-danger-50 dark:bg-danger-950/30',
+      borderColor: 'border-danger-200 dark:border-danger-700/50',
     };
   }
 
@@ -90,9 +90,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
           'Os documentos foram recebidos. Execute a validação automática para verificar consistência.',
         actionLabel: 'Iniciar validação',
         link: `/importacao/processos/${processId}`,
-        color: 'text-primary-700',
-        bgColor: 'bg-primary-50',
-        borderColor: 'border-primary-200',
+        color: 'text-primary-700 dark:text-primary-300',
+        bgColor: 'bg-primary-50 dark:bg-primary-950/30',
+        borderColor: 'border-primary-200 dark:border-primary-700/50',
       };
 
     case 'validating':
@@ -103,9 +103,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
           'A validação está sendo processada. Aguarde o resultado ou revise manualmente.',
         actionLabel: 'Acompanhar',
         link: `/importacao/processos/${processId}`,
-        color: 'text-primary-700',
-        bgColor: 'bg-primary-50',
-        borderColor: 'border-primary-200',
+        color: 'text-primary-700 dark:text-primary-300',
+        bgColor: 'bg-primary-50 dark:bg-primary-950/30',
+        borderColor: 'border-primary-200 dark:border-primary-700/50',
       };
 
     case 'validated':
@@ -115,9 +115,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Processo validado com sucesso. Gere o espelho para envio à Fenícia.',
         actionLabel: 'Gerar espelho',
         link: `/importacao/processos/${processId}`,
-        color: 'text-primary-700',
-        bgColor: 'bg-primary-50',
-        borderColor: 'border-primary-200',
+        color: 'text-primary-700 dark:text-primary-300',
+        bgColor: 'bg-primary-50 dark:bg-primary-950/30',
+        borderColor: 'border-primary-200 dark:border-primary-700/50',
       };
 
     case 'espelho_generated':
@@ -127,9 +127,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'O espelho está pronto. Envie para a Fenícia para registro da DI.',
         actionLabel: 'Enviar',
         link: `/importacao/processos/${processId}`,
-        color: 'text-violet-700',
-        bgColor: 'bg-violet-50',
-        borderColor: 'border-violet-200',
+        color: 'text-violet-700 dark:text-violet-300',
+        bgColor: 'bg-violet-50 dark:bg-violet-950/30',
+        borderColor: 'border-violet-200 dark:border-violet-700/50',
       };
 
     case 'sent_to_fenicia':
@@ -141,9 +141,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
             'Processo enviado para Fenícia com itens que requerem licença de importação. Acompanhe o status.',
           actionLabel: 'Ver LIs',
           link: '/importacao/lis',
-          color: 'text-amber-700',
-          bgColor: 'bg-amber-50',
-          borderColor: 'border-amber-200',
+          color: 'text-amber-700 dark:text-amber-300',
+          bgColor: 'bg-amber-50 dark:bg-amber-950/30',
+          borderColor: 'border-amber-200 dark:border-amber-700/50',
         };
       }
       return {
@@ -152,9 +152,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Processo enviado para Fenicia. Aguarde o registro da DI e conclusao.',
         actionLabel: 'Acompanhar',
         link: `/importacao/processos/${processId}`,
-        color: 'text-orange-700',
-        bgColor: 'bg-orange-50',
-        borderColor: 'border-orange-200',
+        color: 'text-orange-700 dark:text-orange-300',
+        bgColor: 'bg-orange-50 dark:bg-orange-950/30',
+        borderColor: 'border-orange-200 dark:border-orange-700/50',
       };
 
     case 'li_pending':
@@ -164,9 +164,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Licencas de importacao pendentes de deferimento. Monitore os prazos.',
         actionLabel: 'Ver LIs',
         link: '/importacao/lis',
-        color: 'text-amber-700',
-        bgColor: 'bg-amber-50',
-        borderColor: 'border-amber-200',
+        color: 'text-amber-700 dark:text-amber-300',
+        bgColor: 'bg-amber-50 dark:bg-amber-950/30',
+        borderColor: 'border-amber-200 dark:border-amber-700/50',
       };
 
     case 'completed':
@@ -176,9 +176,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Este processo foi finalizado com sucesso.',
         actionLabel: 'Ver Detalhes',
         link: `/importacao/processos/${processId}`,
-        color: 'text-emerald-700',
-        bgColor: 'bg-emerald-50',
-        borderColor: 'border-emerald-200',
+        color: 'text-emerald-700 dark:text-emerald-300',
+        bgColor: 'bg-emerald-50 dark:bg-emerald-950/30',
+        borderColor: 'border-emerald-200 dark:border-emerald-700/50',
       };
 
     case 'cancelled':
@@ -188,9 +188,9 @@ function getNextAction(props: NextBestActionProps): ActionSuggestion {
         description: 'Este processo foi cancelado.',
         actionLabel: 'Ver Detalhes',
         link: `/importacao/processos/${processId}`,
-        color: 'text-danger-700',
-        bgColor: 'bg-danger-50',
-        borderColor: 'border-danger-200',
+        color: 'text-danger-700 dark:text-danger-300',
+        bgColor: 'bg-danger-50 dark:bg-danger-950/30',
+        borderColor: 'border-danger-200 dark:border-danger-700/50',
       };
 
     default:

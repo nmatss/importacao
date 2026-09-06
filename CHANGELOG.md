@@ -5,6 +5,22 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] - 2026-09-06 - Responsividade e temas
+
+### Fixed
+
+- Corrigidos overflows, colunas inacessiveis e textos comprimidos em dashboards,
+  processos, e-mails, alertas, auditoria e Certificacoes.
+- Ajustados contraste do tema escuro, controles nativos, KPIs, filtros, formularios
+  e posicionamento do assistente em telas pequenas.
+
+### Added
+
+- Auditoria responsiva com fixtures preenchidas, capturas da viewport e da pagina,
+  deteccao de overflow e verificacao de carregamento real.
+- Escopo, evidencias e limites documentados em
+  `docs/STATUS-2026-09-06-RESPONSIVIDADE.md`.
+
 ## [Unreleased] - 2026-08-28 - Auditoria completa de UX/UI
 
 ### Added

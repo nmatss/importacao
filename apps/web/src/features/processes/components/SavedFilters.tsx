@@ -110,7 +110,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
           className={cn(
             'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
             presets.length > 0
-              ? 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100'
+              ? 'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30'
               : 'border-slate-200 dark:border-slate-600 bg-white text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
           )}
         >
@@ -129,7 +129,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
           <button
             type="button"
             onClick={() => setShowSaveForm(!showSaveForm)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
           >
             <Plus className="h-4 w-4" />
             Salvar Filtro Atual
@@ -184,8 +184,8 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
           {presets.length === 0 ? (
             <div className="p-6 text-center">
               <Bookmark className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-400">Nenhum filtro salvo</p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum filtro salvo</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                 Aplique filtros e clique em "Salvar Filtro Atual"
               </p>
             </div>
@@ -204,7 +204,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
                     <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">
                       {preset.name}
                     </p>
-                    <p className="text-xs text-slate-400 truncate">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
                       {formatFilterSummary(preset.filters)}
                     </p>
                   </button>
@@ -214,7 +214,7 @@ export function SavedFilters({ currentFilters, onApplyFilter, className }: Saved
                       e.stopPropagation();
                       handleDelete(preset.id);
                     }}
-                    className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-colors"
+                    className="flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 transition-colors dark:hover:text-danger-300 dark:hover:bg-danger-950/30"
                     aria-label={`Excluir filtro ${preset.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />

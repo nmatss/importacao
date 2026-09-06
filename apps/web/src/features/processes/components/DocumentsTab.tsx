@@ -178,17 +178,17 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
       {/* Email sync header — primary action */}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary-100 dark:border-primary-800 bg-gradient-to-r from-primary-50 to-primary-50 dark:from-primary-950/30 dark:to-primary-950/30 px-3 py-3 sm:px-4">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-100 dark:bg-primary-900/50">
-          <Inbox className="h-5 w-5 text-primary-600" />
+          <Inbox className="h-5 w-5 text-primary-600 dark:text-primary-300" />
         </div>
 
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[14rem] flex-1">
           <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Documentos chegam automaticamente via e-mail
           </p>
           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             {emailStatus?.enabled ? (
               <>
-                <span className="inline-flex items-center gap-1 text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
                   <CheckCircle className="h-3 w-3" />
                   {emailStatus.method === 'gmail_api'
                     ? 'Gmail API'
@@ -208,7 +208,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
                 )}
               </>
             ) : (
-              <span className="inline-flex items-center gap-1 text-amber-600">
+              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-300">
                 <AlertCircle className="h-3 w-3" />
                 E-mail não configurado — use upload manual
               </span>
@@ -224,7 +224,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
             className={cn(
               'inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all',
               syncing
-                ? 'bg-primary-100 text-primary-400 cursor-wait'
+                ? 'bg-primary-100 text-primary-400 cursor-wait dark:bg-primary-950/30'
                 : 'bg-primary-600 text-white hover:bg-primary-700 shadow-sm',
             )}
           >
@@ -240,7 +240,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
             Busca manual restrita a administradores
           </span>
         )}
-        <span className="text-xs text-slate-400 font-mono tabular-nums">
+        <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
           Próxima busca em {Math.floor(countdown / 60)}m {String(countdown % 60).padStart(2, '0')}s
         </span>
       </div>
@@ -253,7 +253,7 @@ export function DocumentsTab({ processId, aiExtractedData }: DocumentsTabProps) 
         <div className="rounded-2xl border border-cyan-200/60 dark:border-cyan-800/60 bg-gradient-to-r from-cyan-50/50 to-white dark:from-cyan-950/20 dark:to-slate-800 shadow-sm overflow-hidden">
           <div className="flex items-center gap-3 px-5 py-3 border-b border-cyan-100 dark:border-cyan-800/40">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100 dark:bg-cyan-900/50">
-              <FileSpreadsheet className="h-4 w-4 text-cyan-600" />
+              <FileSpreadsheet className="h-4 w-4 text-cyan-600 dark:text-cyan-300" />
             </div>
             <div>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">

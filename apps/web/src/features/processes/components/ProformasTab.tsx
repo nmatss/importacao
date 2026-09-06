@@ -96,14 +96,14 @@ export function ProformasTab({ processId }: { processId: string }) {
   return (
     <div className="space-y-5">
       {(isError || error) && data && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
           Falha ao atualizar as proformas. Exibindo a ultima leitura disponivel.
         </div>
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
             Proformas
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
@@ -111,7 +111,7 @@ export function ProformasTab({ processId }: { processId: string }) {
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
             Itens (soma)
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
@@ -119,7 +119,7 @@ export function ProformasTab({ processId }: { processId: string }) {
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold">
+          <p className="text-[10px] uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">
             FOB Total (PIs)
           </p>
           <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 mt-0.5">
@@ -135,31 +135,33 @@ export function ProformasTab({ processId }: { processId: string }) {
         >
           <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2.5">
-              <Package className="h-4 w-4 text-violet-600" />
+              <Package className="h-4 w-4 text-violet-600 dark:text-violet-300" />
               <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                 {pi.piNumber ?? 'PI sem número'}
               </span>
               {pi.preConsLinked ? (
                 <span
-                  className="inline-flex items-center gap-1 rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                  className="inline-flex items-center gap-1 rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase dark:bg-emerald-950/30 dark:text-emerald-300"
                   title="PI bate com linha do Pre-Cons"
                 >
                   <LinkIcon className="h-3 w-3" /> Pre-Cons ok
                 </span>
               ) : (
                 <span
-                  className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase"
+                  className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-semibold uppercase dark:bg-amber-950/30 dark:text-amber-300"
                   title="PI não encontrada no Pre-Cons"
                 >
                   <AlertTriangle className="h-3 w-3" /> sem match
                 </span>
               )}
-              <span className="text-xs text-slate-500 dark:text-slate-400">{pi.filename}</span>
+              <span className="min-w-0 break-all text-xs text-slate-500 dark:text-slate-400">
+                {pi.filename}
+              </span>
             </div>
-            <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-              {pi.invoiceDate && <span>Data: {pi.invoiceDate}</span>}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
+              {pi.invoiceDate && <span className="whitespace-nowrap">Data: {pi.invoiceDate}</span>}
               {pi.totalFobValue != null && (
-                <span className="font-mono font-medium text-slate-700 dark:text-slate-300">
+                <span className="whitespace-nowrap font-mono font-medium text-slate-700 dark:text-slate-300">
                   FOB {pi.currency ?? '$'} {Number(pi.totalFobValue).toFixed(2)}
                 </span>
               )}
@@ -168,10 +170,10 @@ export function ProformasTab({ processId }: { processId: string }) {
                   className={cn(
                     'rounded px-1.5 py-0.5 font-mono',
                     pi.confidence >= 0.8
-                      ? 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                       : pi.confidence >= 0.5
-                        ? 'bg-amber-100 text-amber-700'
-                        : 'bg-danger-100 text-danger-700',
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                        : 'bg-danger-100 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
                   )}
                 >
                   {(pi.confidence * 100).toFixed(0)}%

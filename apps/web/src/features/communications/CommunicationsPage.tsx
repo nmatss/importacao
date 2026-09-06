@@ -123,8 +123,18 @@ const statusConfig: Record<string, { label: string; dot: string; bg: string; tex
     bg: 'bg-slate-50 dark:bg-slate-900',
     text: 'text-slate-600 dark:text-slate-400',
   },
-  sent: { label: 'Enviado', dot: 'bg-emerald-500', bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  failed: { label: 'Falhou', dot: 'bg-danger-500', bg: 'bg-danger-50', text: 'text-danger-700' },
+  sent: {
+    label: 'Enviado',
+    dot: 'bg-emerald-500',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+  },
+  failed: {
+    label: 'Falhou',
+    dot: 'bg-danger-500',
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
+  },
 };
 
 export function CommunicationsPage() {
@@ -646,7 +656,7 @@ export function CommunicationsPage() {
                     <button
                       type="button"
                       onClick={() => refetchProcessOptions()}
-                      className="font-medium text-danger-600 hover:underline"
+                      className="font-medium text-danger-600 hover:underline dark:text-danger-300"
                     >
                       Não foi possível buscar processos. Tentar novamente.
                     </button>
@@ -735,7 +745,7 @@ export function CommunicationsPage() {
 
               {/* Modelos e IA */}
               <div>
-                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Modelos e IA
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
@@ -745,7 +755,7 @@ export function CommunicationsPage() {
                       aria-label="Destinatário do modelo gerado por IA"
                       value={aiRecipientType}
                       onChange={(e) => setAiRecipientType(e.target.value as 'fenicia' | 'isa')}
-                      className="bg-transparent border-none text-xs font-medium text-violet-600 pl-3 pr-1 py-2 focus:ring-0"
+                      className="bg-transparent border-none text-xs font-medium text-violet-600 pl-3 pr-1 py-2 focus:ring-0 dark:text-violet-300"
                     >
                       <option value="fenicia">Fenícia</option>
                       <option value="isa">Isa</option>
@@ -754,7 +764,7 @@ export function CommunicationsPage() {
                       type="button"
                       onClick={handleGenerateAi}
                       disabled={!composer.processId || generatingAi}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100/50 disabled:opacity-50 transition-all"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold text-violet-700 hover:bg-violet-100/50 disabled:opacity-50 transition-all dark:text-violet-300 dark:hover:bg-violet-950/30"
                     >
                       <Sparkles className="h-4 w-4" />
                       {generatingAi ? 'Gerando...' : 'Gerar com IA'}
@@ -766,7 +776,7 @@ export function CommunicationsPage() {
                         key={template.id}
                         type="button"
                         onClick={() => applySavedTemplate(template)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-all"
                       >
                         <FileText className="h-4 w-4 text-slate-400" />
                         {template.name}
@@ -777,7 +787,7 @@ export function CommunicationsPage() {
                       <button
                         type="button"
                         onClick={() => applyTemplate('fenicia')}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-all"
                       >
                         <FileText className="h-4 w-4 text-slate-400" />
                         Modelo Fenícia
@@ -785,7 +795,7 @@ export function CommunicationsPage() {
                       <button
                         type="button"
                         onClick={() => applyTemplate('isa')}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-all"
                       >
                         <FileText className="h-4 w-4 text-slate-400" />
                         Modelo Isa
@@ -798,7 +808,7 @@ export function CommunicationsPage() {
               {/* Signature selector */}
               {signatures && signatures.length > 0 && (
                 <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Assinatura
                   </p>
                   <div className="flex flex-wrap gap-2">
@@ -810,7 +820,7 @@ export function CommunicationsPage() {
                         className={cn(
                           'inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-all',
                           selectedSignatureId === sig.id
-                            ? 'border-primary-300 bg-primary-50 text-primary-700'
+                            ? 'border-primary-300 bg-primary-50 text-primary-700 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300'
                             : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800',
                         )}
                       >
@@ -824,7 +834,7 @@ export function CommunicationsPage() {
                   </div>
                   {selectedSignatureId && (
                     <div className="mt-2 rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2">
-                      <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
+                      <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
                         Preview
                       </p>
                       <div
@@ -844,7 +854,7 @@ export function CommunicationsPage() {
               {composer.processId && (
                 <div>
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-400">
+                    <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       <Paperclip className="h-3.5 w-3.5" />
                       Anexos do processo
                     </p>
@@ -883,7 +893,7 @@ export function CommunicationsPage() {
                     </div>
                   </div>
                   {!processDocuments?.length ? (
-                    <p className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-400">
+                    <p className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-500 dark:text-slate-400">
                       Nenhum documento disponível para anexar. Use os botões acima para anexar do
                       computador ou do Google Drive — o arquivo fica salvo no processo.
                     </p>
@@ -907,7 +917,7 @@ export function CommunicationsPage() {
                                       : prev.filter((id) => id !== doc.id),
                                   );
                                 }}
-                                className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary-600"
+                                className="h-3.5 w-3.5 shrink-0 rounded border-slate-300 text-primary-600 dark:text-primary-300"
                               />
                               <span className="shrink-0 rounded bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-slate-500">
                                 {doc.documentType}
@@ -919,7 +929,7 @@ export function CommunicationsPage() {
                               onClick={() => setPreviewDocument(doc)}
                               title="Visualizar no sistema"
                               aria-label={`Visualizar ${doc.fileName}`}
-                              className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-slate-700"
+                              className="shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-slate-700 dark:hover:text-primary-300"
                             >
                               <Eye className="h-3.5 w-3.5" />
                             </button>
@@ -946,7 +956,7 @@ export function CommunicationsPage() {
                   type="button"
                   onClick={handleSaveDraft}
                   disabled={!isFormValid || saveDraftMutation.isPending}
-                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-all"
                 >
                   <Save className="h-4 w-4" />
                   {editingCommunicationId ? 'Atualizar rascunho' : 'Salvar rascunho'}
@@ -980,8 +990,8 @@ export function CommunicationsPage() {
           <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
             {/* Header */}
             <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
-              <div className="flex items-center justify-between">
-                <h3 className="flex items-center gap-2.5 text-base font-semibold text-slate-900 dark:text-slate-100">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="min-w-0 flex items-center gap-2.5 text-base font-semibold text-slate-900 dark:text-slate-100">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                     <Clock className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                   </div>
@@ -1049,7 +1059,7 @@ export function CommunicationsPage() {
                               <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">
                                 {comm.subject}
                               </p>
-                              <p className="mt-1.5 text-xs text-slate-400">
+                              <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
                                 {formatDate(comm.sentAt || comm.createdAt)}
                               </p>
                             </div>
@@ -1079,7 +1089,7 @@ export function CommunicationsPage() {
                             </p>
                             {comm.attachments && comm.attachments.length > 0 && (
                               <div className="mt-3 space-y-1">
-                                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                                <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                                   <Paperclip className="h-3 w-3" />
                                   Anexos
                                 </p>
@@ -1098,7 +1108,7 @@ export function CommunicationsPage() {
                                         documentType: 'other',
                                       })
                                     }
-                                    className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:border-primary-200 hover:bg-primary-50/50 disabled:cursor-default disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:disabled:hover:bg-slate-800"
+                                    className="flex w-full items-center gap-2 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs text-slate-600 transition-colors hover:border-primary-200 hover:bg-primary-50/50 disabled:cursor-default disabled:opacity-60 disabled:hover:border-slate-200 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:disabled:hover:bg-slate-800 dark:hover:border-primary-700/50"
                                   >
                                     <FileText className="h-3.5 w-3.5 shrink-0 text-slate-400" />
                                     <span className="truncate">
@@ -1117,7 +1127,7 @@ export function CommunicationsPage() {
                                 <button
                                   type="button"
                                   onClick={() => startEditingDraft(comm)}
-                                  className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100"
+                                  className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30"
                                 >
                                   <PenTool className="h-3.5 w-3.5" />
                                   {comm.status === 'failed'
@@ -1221,7 +1231,7 @@ export function CommunicationsPage() {
                           <p className="truncate text-sm text-slate-700 dark:text-slate-200">
                             {file.name}
                           </p>
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
                             {file.size != null
                               ? `${(file.size / 1024 / 1024).toFixed(2)} MB`
                               : 'tamanho desconhecido'}
@@ -1246,7 +1256,7 @@ export function CommunicationsPage() {
                 )}
               </div>
 
-              <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-400 dark:border-slate-700 sm:px-6">
+              <p className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500 dark:text-slate-400 dark:border-slate-700 sm:px-6">
                 O arquivo escolhido é salvo como documento deste processo antes de virar anexo.
               </p>
             </div>

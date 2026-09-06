@@ -38,7 +38,10 @@ export function DateRangeFilter({
           className="w-full sm:w-auto rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all"
         />
       </label>
-      <span aria-hidden="true" className="hidden text-xs text-slate-400 sm:inline">
+      <span
+        aria-hidden="true"
+        className="hidden text-xs text-slate-500 dark:text-slate-400 sm:inline"
+      >
         até
       </span>
       <label className="grid min-w-0 gap-1 sm:block">

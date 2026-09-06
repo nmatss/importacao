@@ -9,6 +9,7 @@ coverage/
 certifications.db
 .playwright-cli/
 output/playwright/
+output/responsive-audit/
 
 # Local dotcontext runtime/session traces are registered by the harness provider,
 # not shipped with application releases.

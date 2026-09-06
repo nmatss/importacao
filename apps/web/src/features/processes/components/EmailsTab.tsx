@@ -116,10 +116,12 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               Nenhum e-mail vinculado a este processo
             </p>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
               E-mails recebidos com referência ao processo aparecem aqui automaticamente.
             </p>
-            <p className="mt-1 text-[11px] text-slate-400">Filtro: {processCode}</p>
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              Filtro: {processCode}
+            </p>
           </div>
         </div>
       ) : (
@@ -168,12 +170,14 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                 </button>
 
                 {/* Sender */}
-                <div className="mt-2 flex items-center gap-2 text-xs">
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <User className="h-3 w-3 text-slate-400" />
-                    <span className="font-medium">{extractSenderName(log.fromAddress)}</span>
+                <div className="mt-2 grid gap-1 text-xs">
+                  <div className="flex min-w-0 items-start gap-1.5 text-slate-600 dark:text-slate-400">
+                    <User className="h-3 w-3 shrink-0 text-slate-400" />
+                    <span className="min-w-0 break-words font-medium">
+                      {extractSenderName(log.fromAddress)}
+                    </span>
                   </div>
-                  <span className="text-slate-300 dark:text-slate-600">
+                  <span className="break-all text-slate-500 dark:text-slate-400">
                     &lt;{log.fromAddress}&gt;
                   </span>
                 </div>
@@ -182,20 +186,20 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                 {log.attachmentsCount > 0 && (
                   <div className="mt-2 flex items-start gap-2">
                     <Paperclip className="h-3 w-3 text-slate-400 mt-0.5 shrink-0" />
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                       {log.processedAttachmentDetails &&
                       log.processedAttachmentDetails.length > 0 ? (
                         log.processedAttachmentDetails.map((att, i) => (
                           <span
                             key={i}
-                            className="inline-flex items-center gap-1 rounded-md bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600/50"
+                            className="inline-flex max-w-full items-start gap-1 rounded-md bg-slate-100 dark:bg-slate-700 px-2 py-0.5 text-xs text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600/50"
                           >
-                            <FileText className="h-3 w-3" />
-                            {att.filename}
+                            <FileText className="h-3 w-3 shrink-0" />
+                            <span className="min-w-0 break-all">{att.filename}</span>
                           </span>
                         ))
                       ) : (
-                        <span className="text-xs text-slate-400">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           {log.attachmentsCount} anexo{log.attachmentsCount !== 1 ? 's' : ''}
                         </span>
                       )}
@@ -204,9 +208,9 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                 )}
 
                 {log.errorMessage && (
-                  <div className="mt-2 text-xs text-danger-500 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" />
-                    {log.errorMessage}
+                  <div className="mt-2 flex items-start gap-1 text-xs text-danger-600 dark:text-danger-300">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span className="min-w-0 break-words">{log.errorMessage}</span>
                   </div>
                 )}
 
@@ -220,7 +224,7 @@ export function EmailsTab({ processId, processCode, initialResponse }: EmailsTab
                       Corpo do e-mail
                     </div>
                     {log.bodyText ? (
-                      <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-slate-100 bg-slate-50 px-3 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                      <p className="max-h-[420px] overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-slate-100 bg-slate-50 px-3 py-3 text-sm leading-relaxed text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
                         {log.bodyText}
                       </p>
                     ) : (

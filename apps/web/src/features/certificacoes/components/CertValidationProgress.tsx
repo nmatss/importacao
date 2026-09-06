@@ -73,9 +73,11 @@ export function CertValidationProgress({
   };
 
   const statusIcon = {
-    running: <Loader2 className="w-[18px] h-[18px] text-emerald-600 animate-spin" />,
-    complete: <CheckCircle2 className="w-[18px] h-[18px] text-emerald-600" />,
-    error: <AlertCircle className="w-[18px] h-[18px] text-danger-600" />,
+    running: (
+      <Loader2 className="w-[18px] h-[18px] text-emerald-600 animate-spin dark:text-emerald-300" />
+    ),
+    complete: <CheckCircle2 className="w-[18px] h-[18px] text-emerald-600 dark:text-emerald-300" />,
+    error: <AlertCircle className="w-[18px] h-[18px] text-danger-600 dark:text-danger-300" />,
   };
 
   const statusLabel = {
@@ -104,9 +106,9 @@ export function CertValidationProgress({
             className={cn(
               'text-xs font-bold px-2.5 py-1 rounded-lg',
               status === 'complete'
-                ? 'bg-emerald-50 text-emerald-700'
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                 : status === 'error'
-                  ? 'bg-danger-50 text-danger-700'
+                  ? 'bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300'
                   : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
             )}
           >
@@ -147,7 +149,7 @@ export function CertValidationProgress({
                 i % 2 === 0 ? 'bg-white dark:bg-slate-800' : 'bg-slate-50/60 dark:bg-slate-900/40',
               )}
             >
-              <span className="text-slate-400 w-8 text-right tabular-nums font-medium">
+              <span className="text-slate-500 dark:text-slate-400 w-8 text-right tabular-nums font-medium">
                 {e.current}
               </span>
               <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusDotColor)} />
@@ -162,7 +164,7 @@ export function CertValidationProgress({
               <span className="text-slate-700 dark:text-slate-300 font-medium shrink-0">
                 {e.product?.sku}
               </span>
-              <span className="text-slate-400 truncate">{e.product?.name}</span>
+              <span className="text-slate-500 dark:text-slate-400 truncate">{e.product?.name}</span>
             </div>
           );
         })}

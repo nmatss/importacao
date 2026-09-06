@@ -1,5 +1,21 @@
 # Session Memory
 
+## 2026-09-06 — Retomada da auditoria responsiva
+
+- Preservadas as alteracoes da sessao Claude e concluida a revisao de layout nos
+  dois modulos, sem alterar calculos, APIs ou contratos de negocio.
+- Matriz: 59 cenarios/582 combinacoes; mais 20 de paisagem, 6 de breakpoint e
+  30 de resize. Smoke/e-mail: 82 testes; web: 237; API inalterada: 1608 + 1 skip.
+- Typecheck, lint, formatacao e build passaram. Evidencias, limites e galeria:
+  `docs/STATUS-2026-09-06-RESPONSIVIDADE.md`.
+- Encontrado NaN preexistente nos totais de Cambios; registrado em KNOWN_ISSUES,
+  sem mudar calculos fora do escopo. Nao ha aceite irrestrito de UX dessa tela.
+- Usuario solicitou deploy e revisao posterior. Plano/checkpoints/resultados de
+  publicacao: sessao dotcontext `6400d175-8657-49db-a7ee-2d953cd9c28f`.
+- ai-memory usado no escopo explicito `unico/04-importacao`; aprendizado verificado
+  em `gotchas/responsive-audit-evidence.md`. A resolucao padrao compartilhada
+  apontava para outros projetos e nao foi usada como contexto deste repositorio.
+
 ## 2026-08-28 — Auditoria completa de UX/UI
 
 Objetivo:

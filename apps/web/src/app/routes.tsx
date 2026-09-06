@@ -95,10 +95,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-50">
+      <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-slate-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
-          <span className="text-sm text-slate-500">Carregando...</span>
+          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600 dark:border-slate-700 dark:border-t-primary-400" />
+          <span className="text-sm text-slate-500 dark:text-slate-400">Carregando...</span>
         </div>
       </div>
     );
@@ -129,10 +129,10 @@ function GuestRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   if (loading)
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-50">
+      <div className="flex items-center justify-center h-screen bg-slate-50 dark:bg-slate-900">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
-          <span className="text-sm text-slate-500">Carregando...</span>
+          <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600 dark:border-slate-700 dark:border-t-primary-400" />
+          <span className="text-sm text-slate-500 dark:text-slate-400">Carregando...</span>
         </div>
       </div>
     );
@@ -143,7 +143,7 @@ function GuestRoute({ children }: { children: React.ReactNode }) {
 function LazyFallback() {
   return (
     <div className="flex flex-col items-center justify-center h-64 gap-3 animate-fade-in">
-      <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600" />
+      <div className="h-8 w-8 animate-spin rounded-full border-[2.5px] border-slate-200 border-t-primary-600 dark:border-slate-700 dark:border-t-primary-400" />
       <span className="text-xs text-slate-400 font-medium">Carregando...</span>
     </div>
   );

@@ -121,7 +121,7 @@ export default function CertProdutoDetailPage() {
       {/* Back link */}
       <Link
         to="/certificacoes/produtos"
-        className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors font-medium group"
+        className="inline-flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400 hover:text-emerald-600 transition-colors font-medium group dark:hover:text-emerald-300"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
         Voltar para Produtos
@@ -133,8 +133,8 @@ export default function CertProdutoDetailPage() {
             <div className="flex items-start gap-5">
               <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-700 animate-pulse" />
               <div className="flex-1 space-y-3">
-                <div className="h-5 w-64 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
-                <div className="h-4 w-40 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
+                <div className="h-5 w-full max-w-64 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
+                <div className="h-4 w-full max-w-40 bg-slate-100 dark:bg-slate-700 rounded-lg animate-pulse" />
               </div>
             </div>
           </div>
@@ -144,16 +144,16 @@ export default function CertProdutoDetailPage() {
           </div>
         </div>
       ) : error ? (
-        <div className="rounded-2xl border border-danger-200/60 bg-white dark:bg-slate-800 p-10 text-center">
-          <div className="inline-flex p-4 rounded-2xl bg-danger-50 mb-4">
+        <div className="rounded-2xl border border-danger-200/60 bg-white dark:bg-slate-800 p-10 text-center dark:border-danger-700/50">
+          <div className="inline-flex p-4 rounded-2xl bg-danger-50 mb-4 dark:bg-danger-950/30">
             <AlertCircle className="w-8 h-8 text-danger-400" />
           </div>
-          <p className="text-sm font-medium text-danger-600">{error}</p>
+          <p className="text-sm font-medium text-danger-600 dark:text-danger-300">{error}</p>
           <p className="text-xs text-danger-400 mt-1">Tente novamente ou verifique o SKU</p>
           <button
             type="button"
             onClick={loadProduct}
-            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-danger-200 px-4 py-2 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg border border-danger-200 px-4 py-2 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Tentar novamente
@@ -181,7 +181,7 @@ export default function CertProdutoDetailPage() {
                     'flex items-center gap-2.5 px-6 py-2.5 rounded-xl text-sm font-semibold transition-all flex-shrink-0',
                     verifying
                       ? 'bg-white/20 text-white/60 cursor-not-allowed'
-                      : 'bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[0.98] shadow-sm',
+                      : 'bg-white text-emerald-700 hover:bg-emerald-50 active:scale-[0.98] shadow-sm dark:bg-slate-900 dark:text-emerald-300 dark:hover:bg-emerald-950/30',
                   )}
                 >
                   {verifying ? (
@@ -265,10 +265,10 @@ export default function CertProdutoDetailPage() {
                       className={cn(
                         'text-xs font-mono font-semibold px-2.5 py-1 rounded-lg',
                         validation.score >= 0.9
-                          ? 'text-emerald-700 bg-emerald-50'
+                          ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/30'
                           : validation.score >= 0.6
-                            ? 'text-amber-700 bg-amber-50'
-                            : 'text-danger-700 bg-danger-50',
+                            ? 'text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/30'
+                            : 'text-danger-700 bg-danger-50 dark:text-danger-300 dark:bg-danger-950/30',
                       )}
                     >
                       {(validation.score * 100).toFixed(0)}%
@@ -305,7 +305,7 @@ export default function CertProdutoDetailPage() {
                           {formatDateTime(validation.verified_at || validation.date)}
                         </p>
                         {liveResult && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-bold uppercase tracking-wider dark:bg-emerald-950/30 dark:text-emerald-300">
                             <CheckCircle2 className="w-2.5 h-2.5" />
                             Ao Vivo
                           </span>
@@ -320,7 +320,7 @@ export default function CertProdutoDetailPage() {
                     href={validation.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-all"
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-all dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/30"
                   >
                     <ExternalLink className="w-3.5 h-3.5" />
                     Ver no site
@@ -329,7 +329,7 @@ export default function CertProdutoDetailPage() {
               </div>
 
               {validation.error && !validation.status && (
-                <div className="mt-4 p-4 rounded-xl bg-danger-50 border border-danger-200/60 text-sm text-danger-700 flex items-start gap-3">
+                <div className="mt-4 p-4 rounded-xl bg-danger-50 border border-danger-200/60 text-sm text-danger-700 flex items-start gap-3 dark:bg-danger-950/30 dark:border-danger-700/50 dark:text-danger-300">
                   <AlertCircle className="w-4 h-4 text-danger-500 flex-shrink-0 mt-0.5" />
                   <span>{validation.error}</span>
                 </div>
@@ -364,7 +364,7 @@ export default function CertProdutoDetailPage() {
             </div>
             <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Nº do certificado · Planilha
                 </p>
                 <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -372,7 +372,7 @@ export default function CertProdutoDetailPage() {
                 </p>
               </div>
               <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   Tipo · Planilha
                 </p>
                 <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -419,10 +419,10 @@ export default function CertProdutoDetailPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Expected Text */}
             <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-emerald-100">
-                    <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                  <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/30">
+                    <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />
                   </div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Texto Esperado (Planilha)
@@ -435,7 +435,7 @@ export default function CertProdutoDetailPage() {
                     <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500 mb-1.5">
                       Descrição E-commerce
                     </p>
-                    <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-100/60">
+                    <div className="p-4 rounded-xl bg-emerald-50/50 border border-emerald-100/60 dark:bg-emerald-950/30 dark:border-emerald-700/50">
                       <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap break-words leading-relaxed">
                         {product.ecommerce_description}
                       </p>
@@ -444,7 +444,7 @@ export default function CertProdutoDetailPage() {
                 )}
                 <div>
                   {product.ecommerce_description && product.certification_type && (
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
                       Tipo de Certificação
                     </p>
                   )}
@@ -452,7 +452,7 @@ export default function CertProdutoDetailPage() {
                     className={cn(
                       'p-4 rounded-xl min-h-[100px]',
                       product.expected_cert_text || product.certification_type
-                        ? 'bg-emerald-50/50 border border-emerald-100/60'
+                        ? 'bg-emerald-50/50 border border-emerald-100/60 dark:bg-emerald-950/30 dark:border-emerald-700/50'
                         : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700',
                     )}
                   >
@@ -463,7 +463,7 @@ export default function CertProdutoDetailPage() {
                           : product.expected_cert_text}
                       </p>
                     ) : (
-                      <p className="text-sm text-slate-400 italic">
+                      <p className="text-sm text-slate-500 dark:text-slate-400 italic">
                         Sem texto de certificação esperado
                       </p>
                     )}
@@ -474,10 +474,10 @@ export default function CertProdutoDetailPage() {
 
             {/* Actual Text */}
             <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/60">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-emerald-100">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                  <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/30">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />
                   </div>
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                     Texto Encontrado (E-commerce)
@@ -490,10 +490,10 @@ export default function CertProdutoDetailPage() {
                     'p-4 rounded-xl min-h-[100px]',
                     validation?.actual_cert_text
                       ? validation?.status === 'OK'
-                        ? 'bg-emerald-50/50 border border-emerald-100/60'
+                        ? 'bg-emerald-50/50 border border-emerald-100/60 dark:bg-emerald-950/30 dark:border-emerald-700/50'
                         : validation?.status === 'INCONSISTENT'
-                          ? 'bg-amber-50/50 border border-amber-100/60'
-                          : 'bg-danger-50/50 border border-danger-100/60'
+                          ? 'bg-amber-50/50 border border-amber-100/60 dark:bg-amber-950/30 dark:border-amber-700/50'
+                          : 'bg-danger-50/50 border border-danger-100/60 dark:bg-danger-950/30 dark:border-danger-700/50'
                       : 'bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700',
                   )}
                 >
@@ -502,7 +502,7 @@ export default function CertProdutoDetailPage() {
                       {validation.actual_cert_text}
                     </p>
                   ) : (
-                    <p className="text-sm text-slate-400 italic">
+                    <p className="text-sm text-slate-500 dark:text-slate-400 italic">
                       {validation
                         ? 'Nenhum texto de certificação encontrado no site'
                         : 'Execute uma verificação para ver o texto'}
@@ -518,13 +518,13 @@ export default function CertProdutoDetailPage() {
 
           {/* Error details */}
           {validation?.error && validation.status && (
-            <div className="rounded-2xl border border-amber-200/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
-              <div className="px-6 py-4 border-b border-amber-100 bg-amber-50/60">
+            <div className="rounded-2xl border border-amber-200/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden dark:border-amber-700/50">
+              <div className="px-6 py-4 border-b border-amber-100 bg-amber-50/60 dark:border-amber-700/50 dark:bg-amber-950/30">
                 <div className="flex items-center gap-2.5">
-                  <div className="p-1.5 rounded-lg bg-amber-100">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                  <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-950/30">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-300" />
                   </div>
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
                     Detalhes do Erro
                   </h4>
                 </div>

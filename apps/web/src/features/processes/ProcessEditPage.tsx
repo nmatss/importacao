@@ -283,7 +283,7 @@ export function ProcessEditPage() {
         <button
           type="button"
           onClick={() => navigate('/importacao/processos')}
-          className="mt-4 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
+          className="mt-4 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           Voltar para lista
         </button>
@@ -294,7 +294,7 @@ export function ProcessEditPage() {
   const inputClass =
     'w-full rounded-lg border border-slate-200 dark:border-slate-600 dark:bg-slate-900 px-3 py-2 text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
   const labelClass = 'block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5';
-  const errorClass = 'mt-1.5 text-[11px] text-danger-600';
+  const errorClass = 'mt-1.5 text-[11px] text-danger-600 dark:text-danger-300';
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
@@ -333,7 +333,7 @@ export function ProcessEditPage() {
           {/* Main Fields */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-950/30 dark:text-primary-300">
                 <Ship className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -429,7 +429,7 @@ export function ProcessEditPage() {
           {/* Exporter */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
                 <Building2 className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -466,7 +466,7 @@ export function ProcessEditPage() {
           {/* Importer */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-300">
                 <Warehouse className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -503,7 +503,7 @@ export function ProcessEditPage() {
           {/* Financial & Cargo */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
                 <DollarSign className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -649,7 +649,7 @@ export function ProcessEditPage() {
           {/* Customs Registration */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-red-50 text-red-600 dark:bg-danger-950/30 dark:text-danger-300">
                 <FileText className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -762,7 +762,7 @@ export function ProcessEditPage() {
           {/* Notes */}
           <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-5 shadow-sm space-y-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-300">
                 <FileText className="h-5 w-5" />
               </div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -784,7 +784,7 @@ export function ProcessEditPage() {
         {mutation.error && (
           <div
             role="alert"
-            className="rounded-lg bg-danger-50 border border-danger-200 px-5 py-4 text-sm text-danger-700"
+            className="rounded-lg bg-danger-50 border border-danger-200 px-5 py-4 text-sm text-danger-700 dark:bg-danger-950/30 dark:border-danger-700/50 dark:text-danger-300"
           >
             {mutation.error.message}
           </div>

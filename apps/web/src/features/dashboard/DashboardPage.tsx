@@ -29,6 +29,7 @@ import {
   Legend,
 } from 'recharts';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
 import { cn, formatCurrency, formatDate } from '@/shared/lib/utils';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { SLADashboard } from './SLADashboard';
@@ -97,8 +98,8 @@ interface EmailLogsResponse {
 const PIE_COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#10b981', '#f59e0b', '#f43f5e'];
 
 // Cada entrada leva o par `dark:`: sem ele o texto escuro caia sobre fundo
-// claro dentro de uma pagina em tema escuro. `danger-*` so vai ate 700 no
-// @theme (app/index.css), por isso o par dark usa 700/20 e 200.
+// claro dentro de uma pagina em tema escuro. Os tons usados devem existir
+// no @theme de app/index.css.
 const severityConfig: Record<string, { dot: string; bg: string; text: string; label: string }> = {
   critical: {
     dot: 'bg-danger-500',
@@ -194,7 +195,7 @@ const kpiConfig = [
     label: 'Processos Ativos',
     icon: FileBox,
     gradient: 'from-primary-500 to-primary-600',
-    valueColor: 'text-primary-700',
+    valueColor: 'text-primary-700 dark:text-primary-300',
     borderColor: 'border-l-primary-500',
   },
   {
@@ -202,7 +203,7 @@ const kpiConfig = [
     label: 'Atrasados',
     icon: AlertTriangle,
     gradient: 'from-danger-500 to-danger-600',
-    valueColor: 'text-danger-600',
+    valueColor: 'text-danger-600 dark:text-danger-300',
     borderColor: 'border-l-danger-500',
   },
   {
@@ -210,7 +211,7 @@ const kpiConfig = [
     label: 'Concluidos no Mes',
     icon: CheckCircle,
     gradient: 'from-emerald-500 to-emerald-600',
-    valueColor: 'text-emerald-600',
+    valueColor: 'text-emerald-600 dark:text-emerald-300',
     borderColor: 'border-l-emerald-500',
   },
   {
@@ -218,7 +219,7 @@ const kpiConfig = [
     label: 'Valor FOB Total',
     icon: DollarSign,
     gradient: 'from-violet-500 to-violet-600',
-    valueColor: 'text-violet-700',
+    valueColor: 'text-violet-700 dark:text-violet-300',
     borderColor: 'border-l-violet-500',
   },
 ];
@@ -228,6 +229,8 @@ export function DashboardPage() {
   // Recharts recebe cor por prop/inline style: as classes `dark:` do Tailwind
   // nao alcancam grade, eixos e tooltip, que estavam fixos em claro.
   const chartTheme = useChartTheme();
+  // A legenda fica dentro do cartao; o raio diminui nas telas menores.
+  const compactCharts = useMediaQuery('(max-width: 639px)');
   const {
     data: overview,
     isLoading: loadingOverview,
@@ -283,15 +286,15 @@ export function DashboardPage() {
         </div>
 
         {/* KPI skeletons */}
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <KpiSkeleton key={i} />
           ))}
         </div>
 
         {/* Chart skeletons */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div>
             <ChartSkeleton />
           </div>
           <ChartSkeleton />
@@ -334,7 +337,7 @@ export function DashboardPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4 stagger-children">
         {kpiConfig.map((card) => {
           const Icon = card.icon;
           const value = kpiValues[card.key];
@@ -350,15 +353,15 @@ export function DashboardPage() {
                 card.borderColor,
               )}
             >
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
+                <div className="contents">
                   <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     {card.label}
                   </p>
                   <p
                     className={cn(
-                      'mt-2 text-lg sm:text-2xl font-bold tabular-nums tracking-tight',
-                      isZero ? 'text-slate-300 dark:text-slate-600' : card.valueColor,
+                      'col-span-2 row-start-2 mt-3 break-words text-lg font-bold tabular-nums tracking-tight 2xl:text-xl',
+                      isZero ? 'text-slate-500 dark:text-slate-400' : card.valueColor,
                     )}
                   >
                     {value}
@@ -366,7 +369,7 @@ export function DashboardPage() {
                 </div>
                 <div
                   className={cn(
-                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
+                    'col-start-2 row-start-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
                     'bg-gradient-to-br text-white shadow-sm transition-shadow',
                     card.gradient,
                     'group-hover:shadow-md',
@@ -381,9 +384,9 @@ export function DashboardPage() {
       </div>
 
       {/* Charts Row 1: Status + Alerts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Status Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 text-white shadow-sm">
               <BarChart3 className="h-4.5 w-4.5" />
@@ -429,7 +432,12 @@ export function DashboardPage() {
               Alertas Recentes
             </h3>
           </div>
-          <div className="space-y-3">
+          <div
+            className="space-y-3 lg:max-h-72 lg:overflow-y-auto lg:pr-2"
+            role="region"
+            aria-label="Alertas recentes"
+            tabIndex={0}
+          >
             {(overview?.recentAlerts ?? []).length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-800 mb-3">
@@ -481,9 +489,9 @@ export function DashboardPage() {
       </div>
 
       {/* Charts Row 2: Monthly Trend + FOB by Brand */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Monthly Trend */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm">
               <TrendingUp className="h-4.5 w-4.5" />
@@ -524,7 +532,13 @@ export function DashboardPage() {
                     tickLine={false}
                   />
                   <Tooltip contentStyle={chartTheme.tooltip} />
-                  <Legend iconType="circle" wrapperStyle={chartTheme.legend} />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={chartTheme.legend}
+                    formatter={(value: string) => (
+                      <span style={{ color: chartTheme.axis }}>{value}</span>
+                    )}
+                  />
                   <Line
                     yAxisId="left"
                     type="monotone"
@@ -585,11 +599,12 @@ export function DashboardPage() {
                     nameKey="brand"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
-                    innerRadius={40}
+                    outerRadius={compactCharts ? 64 : 80}
+                    innerRadius={compactCharts ? 32 : 40}
                     strokeWidth={2}
                     stroke={chartTheme.surface}
-                    label={({ brand, percent }) => `${brand} (${(percent * 100).toFixed(0)}%)`}
+                    labelLine={false}
+                    label={false}
                   >
                     {fobByBrand.map((_entry, index) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -598,6 +613,18 @@ export function DashboardPage() {
                   <Tooltip
                     contentStyle={chartTheme.tooltip}
                     formatter={(value: number) => formatCurrency(value)}
+                  />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={chartTheme.legend}
+                    formatter={(value: string, entry) => {
+                      const percent = (entry?.payload as { percent?: number } | undefined)?.percent;
+                      return (
+                        <span style={{ color: chartTheme.axis }}>
+                          {percent != null ? `${value} (${(percent * 100).toFixed(0)}%)` : value}
+                        </span>
+                      );
+                    }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -661,8 +688,8 @@ export function DashboardPage() {
                   key={log.id}
                   className={cn(
                     'flex items-center gap-3 sm:gap-4 px-3 py-3 sm:px-5 sm:py-3.5 transition-colors',
-                    isFailed && 'bg-danger-50/40',
-                    isReprocessed && 'bg-violet-50/40',
+                    isFailed && 'bg-danger-50/40 dark:bg-danger-950/30',
+                    isReprocessed && 'bg-violet-50/40 dark:bg-violet-950/30',
                   )}
                 >
                   <div className="shrink-0">
@@ -688,7 +715,7 @@ export function DashboardPage() {
                     </div>
                   </div>
                   {log.processCode && (
-                    <span className="hidden sm:inline-flex shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700 ring-1 ring-primary-200/60">
+                    <span className="hidden sm:inline-flex shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-semibold text-primary-700 ring-1 ring-primary-200/60 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50">
                       {log.processCode}
                     </span>
                   )}
@@ -715,7 +742,7 @@ export function DashboardPage() {
           </div>
           <Link
             to="/importacao/processos"
-            className="flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+            className="flex items-center gap-1.5 text-sm font-semibold text-primary-600 hover:text-primary-700 transition-colors dark:text-primary-300 dark:hover:text-primary-300"
           >
             Ver todos <ArrowRight className="h-4 w-4" />
           </Link>
@@ -775,7 +802,7 @@ export function DashboardPage() {
                     <td className="px-3 py-2.5 sm:px-5 sm:py-3 text-sm">
                       <Link
                         to={`/importacao/processos/${proc.id}`}
-                        className="font-semibold text-primary-600 hover:text-primary-700 transition-colors"
+                        className="font-semibold text-primary-600 hover:text-primary-700 transition-colors dark:text-primary-300 dark:hover:text-primary-300"
                       >
                         {proc.processCode}
                       </Link>

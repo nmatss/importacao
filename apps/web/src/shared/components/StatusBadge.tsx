@@ -7,7 +7,9 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
   const label = statusLabels[status] || status;
-  const colors = statusColors[status] || 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
+  const colors =
+    statusColors[status] ||
+    'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
 
   return (
     <span

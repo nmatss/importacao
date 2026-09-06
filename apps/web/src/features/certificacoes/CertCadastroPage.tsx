@@ -305,7 +305,7 @@ export default function CertCadastroPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
           <FilePlus2 className="h-5 w-5" />
         </div>
         <div>
@@ -333,9 +333,9 @@ export default function CertCadastroPage() {
         >
           <div className="flex items-start gap-2">
             {result.linx_status === 'applied' ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
             ) : (
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
             )}
             <div className="space-y-1">
               <p className="font-medium text-slate-800 dark:text-slate-100">
@@ -546,9 +546,9 @@ export default function CertCadastroPage() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between border-t border-slate-100 pt-4 dark:border-slate-800">
           <div className="space-y-1">
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
               * campos obrigatórios. Informe ao menos uma data.
             </p>
             {hasPastDate && (
@@ -569,13 +569,15 @@ export default function CertCadastroPage() {
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
             Certificados cadastrados
             {!listError && !listLoading && (
-              <span className="ml-2 text-xs font-normal text-slate-400">{total} no total</span>
+              <span className="ml-2 text-xs font-normal text-slate-500 dark:text-slate-400">
+                {total} no total
+              </span>
             )}
           </h3>
           <button
             type="button"
             onClick={loadRecent}
-            className="text-slate-400 hover:text-emerald-600"
+            className="text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-300"
             title="Atualizar"
             aria-label="Atualizar lista de certificados"
           >
@@ -653,7 +655,7 @@ export default function CertCadastroPage() {
             <button
               type="button"
               onClick={clearListFilters}
-              className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-500 transition-colors hover:text-danger-600 dark:border-slate-700"
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-200 px-3 text-xs font-medium text-slate-500 transition-colors hover:text-danger-600 dark:border-slate-700 dark:hover:text-danger-300"
             >
               Limpar
             </button>
@@ -669,15 +671,17 @@ export default function CertCadastroPage() {
             <button
               type="button"
               onClick={loadRecent}
-              className="rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+              className="rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
             >
               Tentar novamente
             </button>
           </div>
         ) : listLoading ? (
-          <p className="px-5 py-6 text-center text-sm text-slate-400">Carregando…</p>
+          <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
+            Carregando…
+          </p>
         ) : recent.length === 0 ? (
-          <p className="px-5 py-6 text-center text-sm text-slate-400">
+          <p className="px-5 py-6 text-center text-sm text-slate-500 dark:text-slate-400">
             {filterSku || filterBrand || filterStatus
               ? 'Nenhum certificado corresponde aos filtros.'
               : 'Nenhum certificado cadastrado ainda.'}
@@ -687,7 +691,7 @@ export default function CertCadastroPage() {
             {recent.map((c) => (
               <div key={c.id} className="flex flex-wrap items-center gap-3 px-5 py-3 text-sm">
                 <span className="font-medium text-slate-800 dark:text-slate-100">{c.sku}</span>
-                <span className="text-xs text-slate-400">{c.brand}</span>
+                <span className="text-xs text-slate-500 dark:text-slate-400">{c.brand}</span>
                 {/* `formatDateOnly` já estava importado — as datas saíam em ISO cru. */}
                 {c.validade_certificado && (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -706,7 +710,7 @@ export default function CertCadastroPage() {
                       type="button"
                       onClick={() => handleDownloadPdf(c.id)}
                       disabled={downloadingPdf === c.id}
-                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-300"
                     >
                       {downloadingPdf === c.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -725,7 +729,7 @@ export default function CertCadastroPage() {
                       type="button"
                       onClick={() => handleRetry(c.id)}
                       disabled={retrying === c.id}
-                      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 disabled:opacity-50"
+                      className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600 disabled:opacity-50 dark:hover:text-emerald-300"
                     >
                       {retrying === c.id ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />

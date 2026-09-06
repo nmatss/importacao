@@ -90,15 +90,21 @@ function hasOperationalConfidence(value: number | null | undefined): boolean {
 }
 
 const TYPE_COLORS: Record<string, string> = {
-  invoice: 'bg-primary-50 text-primary-700 border-primary-200',
+  invoice:
+    'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-950/30 dark:text-primary-300 dark:border-primary-700/50',
   proforma_invoice: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
-  packing_list: 'bg-amber-50 text-amber-700 border-amber-200',
-  ohbl: 'bg-violet-50 text-violet-700 border-violet-200',
-  draft_bl: 'bg-violet-50 text-violet-700 border-violet-200',
-  draft_duimp: 'bg-red-50 text-red-700 border-red-200',
-  duimp: 'bg-red-50 text-red-700 border-red-200',
-  espelho: 'bg-cyan-50 text-cyan-700 border-cyan-200',
-  li: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  packing_list:
+    'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700/50',
+  ohbl: 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-700/50',
+  draft_bl:
+    'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950/30 dark:text-violet-300 dark:border-violet-700/50',
+  draft_duimp:
+    'bg-red-50 text-red-700 border-red-200 dark:bg-danger-950/30 dark:text-danger-300 dark:border-danger-700/50',
+  duimp:
+    'bg-red-50 text-red-700 border-red-200 dark:bg-danger-950/30 dark:text-danger-300 dark:border-danger-700/50',
+  espelho:
+    'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/30 dark:text-cyan-300 dark:border-cyan-700/50',
+  li: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700/50',
   certificate: 'bg-pink-50 text-pink-700 border-pink-200',
   other:
     'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600',
@@ -112,12 +118,12 @@ function ConfidenceBadge({ value, data }: { value: number; data?: Record<string,
   // Compara sobre o pct ARREDONDADO (o número que o operador vê): 0.795
   // exibe "80%" e precisa ser verde, não âmbar.
   const color = !usable
-    ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200'
+    ? 'text-danger-700 bg-danger-50 ring-1 ring-danger-200 dark:text-danger-300 dark:bg-danger-950/30 dark:ring-danger-700/50'
     : pct >= CONFIDENCE_HIGH * 100
-      ? 'text-emerald-700 bg-emerald-50'
+      ? 'text-emerald-700 bg-emerald-50 dark:text-emerald-300 dark:bg-emerald-950/30'
       : pct >= CONFIDENCE_MEDIUM * 100
-        ? 'text-amber-700 bg-amber-50'
-        : 'text-danger-700 bg-danger-50';
+        ? 'text-amber-700 bg-amber-50 dark:text-amber-300 dark:bg-amber-950/30'
+        : 'text-danger-700 bg-danger-50 dark:text-danger-300 dark:bg-danger-950/30';
 
   // "Por quê está baixo": a fórmula nova derruba números de propósito —
   // o tooltip explica a causa em linguagem de operador.
@@ -170,7 +176,7 @@ function AiStatus({
       );
     case 'completed':
       return (
-        <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+        <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-300">
           <CheckCircle className="h-3 w-3" />
           Extraído
         </span>
@@ -450,7 +456,7 @@ export function DocumentList({ processId }: DocumentListProps) {
   return (
     <>
       {/* Summary bar */}
-      <div className="flex items-center gap-3 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-2">
         <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
           {totalDocs} documento{totalDocs !== 1 ? 's' : ''}
         </span>
@@ -461,7 +467,7 @@ export function DocumentList({ processId }: DocumentListProps) {
         {failedDocs > 0 && (
           <>
             <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600 dark:text-danger-300">
               <AlertTriangle className="h-3 w-3" />
               {failedDocs} com erro
             </span>
@@ -470,7 +476,7 @@ export function DocumentList({ processId }: DocumentListProps) {
         {lowConfidenceDocs > 0 && (
           <>
             <span className="text-slate-300 dark:text-slate-600">|</span>
-            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600">
+            <span className="inline-flex items-center gap-1 text-xs font-medium text-danger-600 dark:text-danger-300">
               <AlertTriangle className="h-3 w-3" />
               {lowConfidenceDocs} não utilizável{lowConfidenceDocs !== 1 ? 's' : ''}
             </span>
@@ -482,7 +488,9 @@ export function DocumentList({ processId }: DocumentListProps) {
             <span
               className={cn(
                 'inline-flex items-center gap-1 text-xs font-medium',
-                hasAllCoreExtracted ? 'text-emerald-600' : 'text-amber-600',
+                hasAllCoreExtracted
+                  ? 'text-emerald-600 dark:text-emerald-300'
+                  : 'text-amber-600 dark:text-amber-300',
               )}
             >
               {hasAllCoreExtracted ? (
@@ -503,7 +511,7 @@ export function DocumentList({ processId }: DocumentListProps) {
         {sortedGroups.map(([type, docs]) => (
           <div key={type}>
             {sortedGroups.length > 1 && (
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 {typeLabel(type)}
               </p>
             )}
@@ -522,11 +530,11 @@ export function DocumentList({ processId }: DocumentListProps) {
                     key={doc.id}
                     className="group rounded-lg border border-slate-150 dark:border-slate-700 bg-white dark:bg-slate-800 transition-shadow hover:shadow-sm"
                   >
-                    <div className="flex items-center gap-3 px-3 py-2.5">
+                    <div className="flex flex-wrap items-start gap-x-3 gap-y-2 px-3 py-2.5">
                       {/* Type badge */}
                       <span
                         className={cn(
-                          'inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase',
+                          'mt-0.5 inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase',
                           TYPE_COLORS[doc.documentType] || TYPE_COLORS.other,
                         )}
                       >
@@ -550,12 +558,12 @@ export function DocumentList({ processId }: DocumentListProps) {
                       </span>
 
                       {/* File info */}
-                      <div className="min-w-0 flex-1">
+                      <div className="min-w-[10rem] flex-1">
                         <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
                           {doc.fileName}
                         </p>
                         <div className="mt-0.5 flex items-center gap-2">
-                          <span className="text-[11px] text-slate-400">
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             {formatDate(doc.uploadedAt)}
                           </span>
                           <AiStatus status={doc.aiProcessingStatus} confidence={doc.aiConfidence} />
@@ -570,14 +578,16 @@ export function DocumentList({ processId }: DocumentListProps) {
                           </div>
                         )}
                         {failureMessage && (
-                          <p className="mt-1 text-[11px] leading-4 text-danger-600">
+                          <p className="mt-1 text-[11px] leading-4 text-danger-600 dark:text-danger-300">
                             {failureMessage}
                           </p>
                         )}
                       </div>
 
-                      {/* Actions - appear on hover */}
-                      <div className="flex items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                      {/* Acoes: em ponteiro fino aparecem no hover; em toque
+                          ficam sempre visiveis, e ganham a linha inteira quando
+                          nao cabem ao lado do nome do arquivo. */}
+                      <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-1 transition-opacity sm:w-auto sm:justify-start [@media(hover:hover)]:opacity-60 [@media(hover:hover)]:group-hover:opacity-100">
                         {/* Source */}
                         <button
                           onClick={(e) => {
@@ -593,7 +603,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           }
                         >
                           {source ? (
-                            <span className="inline-flex items-center gap-1 text-[10px] text-primary-600">
+                            <span className="inline-flex items-center gap-1 text-[10px] text-primary-600 dark:text-primary-300">
                               <SourceIcon source={source} className="h-3 w-3" />
                             </span>
                           ) : (
@@ -608,7 +618,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             openOrDownload(doc, 'open');
                           }}
                           disabled={!!activeFileAction}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           title="Abrir documento"
                           aria-label={`Abrir documento ${doc.fileName}`}
                         >
@@ -626,7 +636,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             openOrDownload(doc, 'download');
                           }}
                           disabled={!!activeFileAction}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           title="Baixar documento"
                           aria-label={`Baixar documento ${doc.fileName}`}
                         >
@@ -644,7 +654,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={(e) => e.stopPropagation()}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300"
                             title="Abrir no Drive"
                             aria-label={`Abrir ${doc.fileName} no Drive`}
                           >
@@ -682,7 +692,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                             handleReprocess(doc.id);
                           }}
                           disabled={!!reprocessingId || reclassifyingId !== null}
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           title="Reprocessar IA"
                           aria-label={`Reprocessar IA de ${doc.fileName}`}
                         >
@@ -702,7 +712,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                           disabled={
                             !!reprocessingId || (reclassifyingId !== null && !reclassifying)
                           }
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-primary-50 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           title="Corrigir classificação"
                           aria-label={`Corrigir classificação de ${doc.fileName}`}
                         >
@@ -720,7 +730,7 @@ export function DocumentList({ processId }: DocumentListProps) {
                               e.stopPropagation();
                               setDeleteTarget(doc);
                             }}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                             title="Excluir"
                             aria-label={`Excluir documento ${doc.fileName}`}
                           >

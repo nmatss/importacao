@@ -187,7 +187,7 @@ export function NumerarioPage() {
           {search && (
             <button
               onClick={() => setSearch('')}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors dark:text-primary-300"
             >
               Limpar filtros
             </button>
@@ -276,10 +276,10 @@ export function NumerarioPage() {
                             className={cn(
                               'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold',
                               percentual >= 100
-                                ? 'bg-emerald-50 text-emerald-700'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                                 : percentual >= 50
-                                  ? 'bg-primary-50 text-primary-700'
-                                  : 'bg-amber-50 text-amber-700',
+                                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300'
+                                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
                             )}
                           >
                             {percentual.toFixed(1)}%

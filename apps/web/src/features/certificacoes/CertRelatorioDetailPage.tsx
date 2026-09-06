@@ -41,7 +41,7 @@ export default function CertRelatorioDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <Loader2 className="w-7 h-7 animate-spin text-emerald-500" />
-        <p className="text-sm text-slate-400">Carregando relatório...</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando relatório...</p>
       </div>
     );
   }
@@ -50,10 +50,12 @@ export default function CertRelatorioDetailPage() {
     return (
       <div
         role="alert"
-        className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-danger-200 bg-danger-50 px-6 py-10 text-center"
+        className="mx-auto flex max-w-lg flex-col items-center justify-center rounded-2xl border border-danger-200 bg-danger-50 px-6 py-10 text-center dark:border-danger-700/50 dark:bg-danger-950/30"
       >
-        <p className="text-base font-semibold text-danger-700 mb-1">Erro ao carregar relatório</p>
-        <p className="text-sm text-danger-600 mb-4">{loadError}</p>
+        <p className="text-base font-semibold text-danger-700 mb-1 dark:text-danger-300">
+          Erro ao carregar relatório
+        </p>
+        <p className="text-sm text-danger-600 mb-4 dark:text-danger-300">{loadError}</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
@@ -76,7 +78,7 @@ export default function CertRelatorioDetailPage() {
           </button>
           <Link
             to="/certificacoes/relatorios"
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-danger-700 transition-colors hover:bg-danger-100"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:bg-danger-950/40 dark:text-danger-300 dark:hover:bg-danger-900/50"
           >
             <ArrowLeft className="w-4 h-4" />
             Voltar aos relatórios
@@ -95,12 +97,12 @@ export default function CertRelatorioDetailPage() {
         <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
           Relatório não encontrado
         </p>
-        <p className="text-sm text-slate-400 mb-4">
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
           O arquivo solicitado não existe ou foi removido
         </p>
         <Link
           to="/certificacoes/relatorios"
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/30"
         >
           <ArrowLeft className="w-4 h-4" />
           Voltar aos relatórios
@@ -159,7 +161,9 @@ export default function CertRelatorioDetailPage() {
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
               {filename}
             </h1>
-            <p className="text-sm text-slate-400 mt-0.5">Detalhes do relatório de validação</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+              Detalhes do relatório de validação
+            </p>
           </div>
         </div>
         <button
@@ -204,7 +208,7 @@ export default function CertRelatorioDetailPage() {
                 setStatusFilter('');
                 setBrandFilter('');
               }}
-              className="ml-auto text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors"
+              className="ml-auto text-xs text-emerald-600 hover:text-emerald-700 font-medium transition-colors dark:text-emerald-300 dark:hover:text-emerald-300"
             >
               Limpar filtros
             </button>
@@ -284,7 +288,7 @@ export default function CertRelatorioDetailPage() {
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-5 py-12 text-center">
-                    <p className="text-sm text-slate-400">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
                       Nenhum resultado encontrado com os filtros aplicados
                     </p>
                   </td>
@@ -295,7 +299,7 @@ export default function CertRelatorioDetailPage() {
                     key={i}
                     className="hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
                   >
-                    <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
+                    <td className="min-w-[200px] px-3 py-2.5 sm:px-6 sm:py-3.5 font-mono text-sm font-medium text-slate-900 dark:text-slate-100">
                       {r.sku}
                     </td>
                     <td className="px-3 py-2.5 sm:px-6 sm:py-3.5 text-slate-700 dark:text-slate-300 max-w-[220px] truncate">
@@ -312,10 +316,10 @@ export default function CertRelatorioDetailPage() {
                         <span
                           className={`text-sm font-semibold ${
                             r.score >= 0.8
-                              ? 'text-emerald-600'
+                              ? 'text-emerald-600 dark:text-emerald-300'
                               : r.score >= 0.5
-                                ? 'text-amber-600'
-                                : 'text-danger-600'
+                                ? 'text-amber-600 dark:text-amber-300'
+                                : 'text-danger-600 dark:text-danger-300'
                           }`}
                         >
                           {(r.score * 100).toFixed(0)}%
@@ -330,7 +334,7 @@ export default function CertRelatorioDetailPage() {
                           href={r.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 text-xs font-medium transition-colors"
+                          className="inline-flex items-center gap-1 text-emerald-600 hover:text-emerald-700 text-xs font-medium transition-colors dark:text-emerald-300 dark:hover:text-emerald-300"
                         >
                           <ExternalLink className="w-3.5 h-3.5" />
                           Abrir
@@ -350,7 +354,7 @@ export default function CertRelatorioDetailPage() {
             {filtered.length} de {results.length} resultados
           </span>
           {hasActiveFilters && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
               {results.length - filtered.length} ocultos pelos filtros
             </span>
           )}

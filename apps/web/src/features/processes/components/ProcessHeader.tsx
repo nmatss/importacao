@@ -186,7 +186,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
         <div className="flex items-center gap-4">
           <button
             onClick={onBack}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:text-slate-700 dark:text-slate-300 hover:border-slate-300 transition-all shadow-sm"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-300 hover:border-slate-300 transition-all shadow-sm"
             aria-label="Voltar para lista de processos"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -261,13 +261,13 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
                 onChange={(event) => setUrgentNote(event.target.value)}
                 rows={1}
                 placeholder="Observacao urgente"
-                className="min-h-[42px] flex-1 resize-y rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 placeholder:text-red-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200 dark:placeholder:text-red-500"
+                className="min-h-[42px] flex-1 resize-y rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 placeholder:text-red-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-200 dark:placeholder:text-red-500"
               />
               <button
                 type="button"
                 onClick={saveUrgentNote}
                 disabled={savingUrgentNote || urgentNote === (process.urgentNote ?? '')}
-                className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-600 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700"
+                className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-600 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-danger-700"
               >
                 <Save className="h-3.5 w-3.5" />
                 Salvar
@@ -281,7 +281,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               href={`https://drive.google.com/drive/folders/${process.driveFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 hover:border-emerald-300 transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 hover:border-emerald-300 transition-all shadow-sm dark:hover:border-emerald-700/50"
             >
               <ExternalLink className="h-4 w-4" />
               Abrir no Drive
@@ -292,7 +292,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               href={`https://drive.google.com/drive/folders/${process.sistemaDriveFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 hover:border-primary-300 transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 hover:border-primary-300 transition-all shadow-sm dark:hover:border-primary-700/50"
             >
               <ExternalLink className="h-4 w-4" />
               Sistema Automatico
@@ -315,7 +315,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
           {process.lockedAt && canUnlock && (
             <button
               onClick={() => setShowUnlockConfirm(true)}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm"
+              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm dark:hover:border-amber-700/50"
             >
               <Unlock className="h-4 w-4" />
               Destravar

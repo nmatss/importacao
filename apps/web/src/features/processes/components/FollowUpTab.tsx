@@ -65,7 +65,7 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <CalendarDays className="h-6 w-6 text-slate-300" />
         </div>
-        <p className="text-sm text-slate-400 font-medium">
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
           Nenhum acompanhamento encontrado para este processo.
         </p>
       </div>
@@ -79,7 +79,10 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
           Acompanhamento (Follow-Up)
         </h3>
         <span className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-          Progresso: <span className="text-primary-700">{tracking.overallProgress}%</span>
+          Progresso:{' '}
+          <span className="text-primary-700 dark:text-primary-300">
+            {tracking.overallProgress}%
+          </span>
         </span>
       </div>
 
@@ -125,13 +128,15 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
                 <p
                   className={cn(
                     'text-sm font-semibold',
-                    isCompleted ? 'text-emerald-800' : 'text-slate-500 dark:text-slate-400',
+                    isCompleted
+                      ? 'text-emerald-800 dark:text-emerald-300'
+                      : 'text-slate-500 dark:text-slate-400',
                   )}
                 >
                   {label}
                 </p>
                 {isCompleted && (
-                  <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                  <p className="text-xs text-emerald-600 font-medium mt-0.5 dark:text-emerald-300">
                     {formatDateTime(dateValue!)}
                   </p>
                 )}
@@ -145,12 +150,12 @@ export function FollowUpTab({ processId }: FollowUpTabProps) {
       {tracking.liDeadline && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-4">
           <div className="flex items-center gap-3">
-            <Timer className="h-5 w-5 text-amber-600" />
+            <Timer className="h-5 w-5 text-amber-600 dark:text-amber-300" />
             <div>
-              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider">
+              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider dark:text-amber-300">
                 Prazo LI
               </p>
-              <p className="text-sm font-bold text-amber-800 mt-0.5">
+              <p className="text-sm font-bold text-amber-800 mt-0.5 dark:text-amber-300">
                 {formatDate(tracking.liDeadline)}
               </p>
             </div>

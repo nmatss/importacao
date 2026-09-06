@@ -27,39 +27,39 @@ const EVENT_CONFIG: Record<
 > = {
   document_uploaded: {
     icon: FileUp,
-    color: 'text-primary-600',
-    bgColor: 'bg-primary-50',
-    borderColor: 'border-primary-200',
+    color: 'text-primary-600 dark:text-primary-300',
+    bgColor: 'bg-primary-50 dark:bg-primary-950/30',
+    borderColor: 'border-primary-200 dark:border-primary-700/50',
   },
   validation_run: {
     icon: ClipboardCheck,
-    color: 'text-emerald-600',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-200',
+    color: 'text-emerald-600 dark:text-emerald-300',
+    bgColor: 'bg-emerald-50 dark:bg-emerald-950/30',
+    borderColor: 'border-emerald-200 dark:border-emerald-700/50',
   },
   correction_needed: {
     icon: AlertTriangle,
-    color: 'text-danger-600',
-    bgColor: 'bg-danger-50',
-    borderColor: 'border-danger-200',
+    color: 'text-danger-600 dark:text-danger-300',
+    bgColor: 'bg-danger-50 dark:bg-danger-950/30',
+    borderColor: 'border-danger-200 dark:border-danger-700/50',
   },
   email_sent: {
     icon: Mail,
-    color: 'text-violet-600',
-    bgColor: 'bg-violet-50',
-    borderColor: 'border-violet-200',
+    color: 'text-violet-600 dark:text-violet-300',
+    bgColor: 'bg-violet-50 dark:bg-violet-950/30',
+    borderColor: 'border-violet-200 dark:border-violet-700/50',
   },
   status_changed: {
     icon: ArrowRight,
-    color: 'text-amber-600',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-200',
+    color: 'text-amber-600 dark:text-amber-300',
+    bgColor: 'bg-amber-50 dark:bg-amber-950/30',
+    borderColor: 'border-amber-200 dark:border-amber-700/50',
   },
   logistic_status_changed: {
     icon: Ship,
-    color: 'text-cyan-600',
-    bgColor: 'bg-cyan-50',
-    borderColor: 'border-cyan-200',
+    color: 'text-cyan-600 dark:text-cyan-300',
+    bgColor: 'bg-cyan-50 dark:bg-cyan-950/30',
+    borderColor: 'border-cyan-200 dark:border-cyan-700/50',
   },
 };
 
@@ -131,7 +131,9 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <History className="h-6 w-6 text-slate-300" />
         </div>
-        <p className="text-sm text-slate-400 font-medium">Nenhum evento registrado ainda.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+          Nenhum evento registrado ainda.
+        </p>
       </div>
     );
   }
@@ -143,7 +145,7 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
           Histórico de eventos
         </h3>
-        <span className="text-xs font-medium text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 rounded-full px-2 py-0.5">
           {events.length}
         </span>
       </div>
@@ -172,25 +174,25 @@ export function ProcessTimelineEvents({ processId }: ProcessTimelineEventsProps)
 
                 {/* Content */}
                 <div className="flex-1 min-w-0 pb-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 leading-snug">
+                  <div className="flex flex-col items-start gap-1 sm:flex-row sm:justify-between sm:gap-2">
+                    <p className="min-w-0 break-words text-sm font-semibold text-slate-700 dark:text-slate-300 leading-snug">
                       {event.title}
                     </p>
-                    <span className="shrink-0 text-xs text-slate-400 font-medium whitespace-nowrap">
+                    <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400 font-medium whitespace-nowrap">
                       {relativeTime(event.createdAt)}
                     </span>
                   </div>
 
                   {event.description && (
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
+                    <p className="break-words text-xs text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
                       {event.description}
                     </p>
                   )}
 
                   {event.userName && (
-                    <div className="flex items-center gap-1 mt-1 text-xs text-slate-400">
+                    <div className="flex items-start gap-1 mt-1 text-xs text-slate-500 dark:text-slate-400">
                       <User className="h-3 w-3" />
-                      <span>{event.userName}</span>
+                      <span className="min-w-0 break-words">{event.userName}</span>
                     </div>
                   )}
 

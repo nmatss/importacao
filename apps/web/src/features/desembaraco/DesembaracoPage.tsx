@@ -49,12 +49,24 @@ const filterOptions: { value: ClearanceFilter; label: string }[] = [
 ];
 
 const canalColors: Record<string, { bg: string; text: string }> = {
-  Verde: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  verde: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
-  Amarelo: { bg: 'bg-amber-50', text: 'text-amber-700' },
-  amarelo: { bg: 'bg-amber-50', text: 'text-amber-700' },
-  Vermelho: { bg: 'bg-danger-50', text: 'text-danger-700' },
-  vermelho: { bg: 'bg-danger-50', text: 'text-danger-700' },
+  Verde: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+  },
+  verde: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+  },
+  Amarelo: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-300' },
+  amarelo: { bg: 'bg-amber-50 dark:bg-amber-950/30', text: 'text-amber-700 dark:text-amber-300' },
+  Vermelho: {
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
+  },
+  vermelho: {
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
+  },
 };
 
 function getField(data: Record<string, unknown> | null | undefined, key: string): string | null {
@@ -302,7 +314,7 @@ export function DesembaracoPage() {
                 setFilter('all');
                 setSearch('');
               }}
-              className="rounded-lg px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+              className="rounded-lg px-3 py-1.5 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors dark:text-primary-300"
             >
               Limpar filtros
             </button>
@@ -452,8 +464,8 @@ export function DesembaracoPage() {
                               'inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold',
                               demurrage.toLowerCase().includes('sim') ||
                                 demurrage.toLowerCase().includes('yes')
-                                ? 'bg-danger-50 text-danger-700'
-                                : 'bg-emerald-50 text-emerald-700',
+                                ? 'bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
                             )}
                           >
                             {demurrage.toLowerCase().includes('sim') ||

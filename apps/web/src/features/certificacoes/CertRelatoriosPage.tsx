@@ -194,7 +194,7 @@ export default function CertRelatoriosPage() {
             <button
               onClick={handleSyncStock}
               disabled={syncing}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 transition-all disabled:opacity-50 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
             >
               {syncing ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -210,13 +210,13 @@ export default function CertRelatoriosPage() {
       {loadError && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300"
         >
           <span>{loadError}</span>
           <button
             type="button"
             onClick={loadReports}
-            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100"
+            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-danger-950/40 dark:text-danger-300 dark:hover:bg-danger-900/50"
           >
             Tentar novamente
           </button>
@@ -225,7 +225,7 @@ export default function CertRelatoriosPage() {
 
       {/* Export Cards */}
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div className="flex items-center gap-2">
             <Filter className="w-4 h-4 text-slate-400" />
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -277,13 +277,13 @@ export default function CertRelatoriosPage() {
                 </div>
                 <div>
                   <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{et.label}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 leading-tight">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-tight">
                     {et.description}
                   </p>
                 </div>
                 <div className="flex items-center gap-1 mt-1">
                   <FileSpreadsheet className="w-3 h-3 text-slate-400" />
-                  <span className="text-[10px] font-semibold text-slate-400 uppercase">
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase">
                     {isExporting ? 'Gerando...' : 'Excel (.xlsx)'}
                   </span>
                   {brandFilter && (
@@ -300,11 +300,13 @@ export default function CertRelatoriosPage() {
 
       {/* Reports History */}
       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
-        <div className="px-6 py-3.5 bg-slate-50/80 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+        <div className="px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
           <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             Relatorios Gerados
             {reports.length > 0 && (
-              <span className="ml-2 text-slate-400 font-normal">({reports.length})</span>
+              <span className="ml-2 text-slate-500 dark:text-slate-400 font-normal">
+                ({reports.length})
+              </span>
             )}
           </span>
           <button
@@ -329,7 +331,9 @@ export default function CertRelatoriosPage() {
             <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
               Nenhum relatorio gerado
             </p>
-            <p className="text-xs text-slate-400 mt-1">Execute uma validacao ou exporte acima</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+              Execute uma validacao ou exporte acima
+            </p>
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -339,10 +343,10 @@ export default function CertRelatoriosPage() {
               return (
                 <div
                   key={i}
-                  className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
+                  className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 group-hover:bg-emerald-100 transition-colors">
+                    <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0 group-hover:bg-emerald-100 transition-colors dark:bg-emerald-950/30 dark:text-emerald-300 dark:group-hover:bg-emerald-950/30">
                       <FileSpreadsheet className="w-4 h-4" />
                     </div>
                     <div className="min-w-0">
@@ -365,7 +369,7 @@ export default function CertRelatoriosPage() {
                     {isJson && (
                       <Link
                         to={`/certificacoes/relatorios/${encodeURIComponent(report.filename)}`}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/30"
                       >
                         <Eye className="w-3 h-3" />
                         Ver
@@ -374,7 +378,7 @@ export default function CertRelatoriosPage() {
                     <button
                       type="button"
                       onClick={() => handleDownloadExcel(report.filename)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors dark:text-emerald-300 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/30"
                     >
                       <Table className="w-3 h-3" />
                       Excel

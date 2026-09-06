@@ -63,19 +63,71 @@ const actionLabels: Record<string, string> = {
 };
 
 const actionColors: Record<string, { bg: string; text: string; dot: string }> = {
-  login: { bg: 'bg-primary-50', text: 'text-primary-700', dot: 'bg-primary-500' },
-  create: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  update: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-  delete: { bg: 'bg-danger-50', text: 'text-danger-700', dot: 'bg-danger-500' },
-  upload: { bg: 'bg-primary-50', text: 'text-primary-700', dot: 'bg-primary-500' },
-  reprocess: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' },
-  email_processed: { bg: 'bg-teal-50', text: 'text-teal-700', dot: 'bg-teal-500' },
-  validation_run: { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-  manual_resolution: { bg: 'bg-amber-50', text: 'text-amber-700', dot: 'bg-amber-500' },
-  alert_created: { bg: 'bg-rose-50', text: 'text-rose-700', dot: 'bg-rose-500' },
-  acknowledge: { bg: 'bg-emerald-50', text: 'text-emerald-700', dot: 'bg-emerald-500' },
-  generate: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-500' },
-  sent_to_fenicia: { bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },
+  login: {
+    bg: 'bg-primary-50 dark:bg-primary-950/30',
+    text: 'text-primary-700 dark:text-primary-300',
+    dot: 'bg-primary-500',
+  },
+  create: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+  },
+  update: {
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    text: 'text-amber-700 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+  delete: {
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
+    dot: 'bg-danger-500',
+  },
+  upload: {
+    bg: 'bg-primary-50 dark:bg-primary-950/30',
+    text: 'text-primary-700 dark:text-primary-300',
+    dot: 'bg-primary-500',
+  },
+  reprocess: {
+    bg: 'bg-violet-50 dark:bg-violet-950/30',
+    text: 'text-violet-700 dark:text-violet-300',
+    dot: 'bg-violet-500',
+  },
+  email_processed: {
+    bg: 'bg-teal-50 dark:bg-teal-950/30',
+    text: 'text-teal-700 dark:text-teal-300',
+    dot: 'bg-teal-500',
+  },
+  validation_run: {
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    text: 'text-orange-700 dark:text-orange-300',
+    dot: 'bg-orange-500',
+  },
+  manual_resolution: {
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    text: 'text-amber-700 dark:text-amber-300',
+    dot: 'bg-amber-500',
+  },
+  alert_created: {
+    bg: 'bg-rose-50 dark:bg-rose-950/30',
+    text: 'text-rose-700 dark:text-rose-300',
+    dot: 'bg-rose-500',
+  },
+  acknowledge: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+    dot: 'bg-emerald-500',
+  },
+  generate: {
+    bg: 'bg-violet-50 dark:bg-violet-950/30',
+    text: 'text-violet-700 dark:text-violet-300',
+    dot: 'bg-violet-500',
+  },
+  sent_to_fenicia: {
+    bg: 'bg-cyan-50 dark:bg-cyan-950/30',
+    text: 'text-cyan-700 dark:text-cyan-300',
+    dot: 'bg-cyan-500',
+  },
 };
 
 const defaultActionColor = {
@@ -141,7 +193,7 @@ function DetailsExpander({ details }: { details: Record<string, unknown> | null 
       {open && (
         <div className="mt-2 rounded-xl border border-slate-200 dark:border-slate-600/80 bg-slate-50 dark:bg-slate-900 overflow-hidden">
           <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-700/60 px-3 py-1.5">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               JSON
             </span>
             <span className="text-[10px] text-slate-300">{Object.keys(details).length} campos</span>
@@ -204,7 +256,7 @@ export function AuditLogPage() {
   };
 
   const selectClasses =
-    'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all appearance-none cursor-pointer';
+    'w-full min-w-0 max-w-full rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all cursor-pointer';
   const inputClasses =
     'rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 focus:outline-none transition-all';
 
@@ -239,7 +291,7 @@ export function AuditLogPage() {
           )}
         </div>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full sm:w-auto sm:min-w-[160px]">
+          <div className="w-full max-w-full sm:w-auto sm:min-w-[160px]">
             <label
               htmlFor="audit-action"
               className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
@@ -264,7 +316,7 @@ export function AuditLogPage() {
             </select>
           </div>
 
-          <div className="w-full sm:w-auto sm:min-w-[140px]">
+          <div className="w-full max-w-full sm:w-auto sm:min-w-[140px]">
             <label
               htmlFor="audit-entity-type"
               className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
@@ -289,7 +341,7 @@ export function AuditLogPage() {
             </select>
           </div>
 
-          <div className="w-full sm:w-auto sm:min-w-[180px]">
+          <div className="w-full max-w-full sm:w-auto sm:min-w-[180px]">
             <label
               htmlFor="audit-user"
               className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1.5"
@@ -358,8 +410,8 @@ export function AuditLogPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         {/* Card header */}
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
@@ -478,7 +530,7 @@ export function AuditLogPage() {
                           log.entityType === 'process' ? (
                             <Link
                               to={`/importacao/processos/${log.entityId}`}
-                              className="inline-flex items-center rounded-lg bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-600 hover:bg-primary-100 transition-colors"
+                              className="inline-flex items-center rounded-lg bg-primary-50 px-2 py-0.5 text-xs font-semibold text-primary-600 hover:bg-primary-100 transition-colors dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30"
                             >
                               #{log.entityId}
                             </Link>
@@ -519,7 +571,7 @@ export function AuditLogPage() {
               <button
                 disabled={page <= 1}
                 onClick={() => setPage(page - 1)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 <ChevronLeft className="h-4 w-4" />
                 Anterior
@@ -527,7 +579,7 @@ export function AuditLogPage() {
               <button
                 disabled={page >= pagination.pages}
                 onClick={() => setPage(page + 1)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3.5 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
               >
                 Próximo
                 <ChevronRight className="h-4 w-4" />

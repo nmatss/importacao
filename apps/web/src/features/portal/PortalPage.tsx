@@ -92,9 +92,9 @@ function StatCard({
   if (loading) return <Skeleton className="h-[68px]" />;
 
   const colorMap = {
-    primary: 'text-primary-600',
+    primary: 'text-primary-600 dark:text-primary-300',
     danger: 'text-danger-500',
-    emerald: 'text-emerald-600',
+    emerald: 'text-emerald-600 dark:text-emerald-300',
     slate: 'text-slate-700 dark:text-slate-300',
   };
 
@@ -119,7 +119,7 @@ function QuickLink({
   to,
   icon: Icon,
   label,
-  hoverColor = 'hover:text-primary-600 hover:bg-primary-50',
+  hoverColor = 'hover:text-primary-600 hover:bg-primary-50 dark:hover:text-primary-300 dark:hover:bg-primary-950/30',
 }: {
   to: string;
   icon: typeof Plus;
@@ -201,7 +201,9 @@ export function PortalPage() {
               <p className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-none tracking-tight">
                 Uni.co
               </p>
-              <p className="text-[10px] text-slate-400 mt-0.5 font-medium">Sistema Integrado</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                Sistema Integrado
+              </p>
             </div>
           </div>
 
@@ -213,7 +215,7 @@ export function PortalPage() {
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
                     {user.name}
                   </p>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     {user.role === 'admin' ? 'Administrador' : 'Analista'}
                   </p>
                 </div>
@@ -222,7 +224,7 @@ export function PortalPage() {
                 <button
                   type="button"
                   onClick={logout}
-                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                   aria-label="Sair do sistema"
                 >
                   <LogOut className="h-3.5 w-3.5" />
@@ -250,18 +252,18 @@ export function PortalPage() {
               <Skeleton className="h-7 w-44 rounded-full" />
             ) : overview ? (
               <>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 border border-primary-100 px-3 py-1 text-xs font-medium text-primary-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary-50 border border-primary-100 px-3 py-1 text-xs font-medium text-primary-700 dark:bg-primary-500/10 dark:border-primary-500/30 dark:text-primary-300">
                   <Activity className="h-3 w-3" />
                   {overview.activeProcesses} processo{overview.activeProcesses !== 1 ? 's' : ''}{' '}
                   ativo{overview.activeProcesses !== 1 ? 's' : ''}
                 </span>
                 {overview.overdueProcesses > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 border border-danger-100 px-3 py-1 text-xs font-medium text-danger-600">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 border border-danger-100 px-3 py-1 text-xs font-medium text-danger-600 dark:bg-danger-500/10 dark:border-danger-500/30 dark:text-danger-300">
                     <AlertTriangle className="h-3 w-3" />
                     {overview.overdueProcesses} atrasado{overview.overdueProcesses !== 1 ? 's' : ''}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-300">
                   <TrendingUp className="h-3 w-3" />
                   {overview.completedThisMonth} concluído
                   {overview.completedThisMonth !== 1 ? 's' : ''} no mês
@@ -283,12 +285,12 @@ export function PortalPage() {
         {/* Module Cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 stagger-children">
           {/* Importacao */}
-          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-primary-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md dark:hover:border-primary-700/50">
             <div className="h-1 bg-gradient-to-r from-primary-500 to-primary-600" />
 
             <div className="p-6">
               <div className="flex items-start gap-4 mb-5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600 dark:bg-primary-950/30 dark:text-primary-300">
                   <Ship className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -312,7 +314,7 @@ export function PortalPage() {
                       type="button"
                       onClick={() => refetchOverview()}
                       disabled={fetchingOverview}
-                      className="mt-1.5 font-semibold text-primary-600 hover:underline disabled:opacity-60 disabled:hover:no-underline"
+                      className="mt-1.5 font-semibold text-primary-600 hover:underline disabled:opacity-60 disabled:hover:no-underline dark:text-primary-300"
                     >
                       {fetchingOverview ? 'Tentando...' : 'Tentar novamente'}
                     </button>
@@ -365,12 +367,12 @@ export function PortalPage() {
           </div>
 
           {/* Certificacoes */}
-          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md">
+          <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-200/60 transition-all duration-300 overflow-hidden shadow-sm hover:shadow-md dark:hover:border-emerald-700/50">
             <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
 
             <div className="p-6">
               <div className="flex items-start gap-4 mb-5">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
                   <ShieldCheck className="h-5 w-5" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -420,19 +422,19 @@ export function PortalPage() {
                 to="/certificacoes/validacao"
                 icon={Play}
                 label="Validar"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/30"
               />
               <QuickLink
                 to="/certificacoes/produtos"
                 icon={Package}
                 label="Produtos"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/30"
               />
               <QuickLink
                 to="/certificacoes/relatorios"
                 icon={FileBarChart}
                 label="Relatórios"
-                hoverColor="hover:text-emerald-600 hover:bg-emerald-50"
+                hoverColor="hover:text-emerald-600 hover:bg-emerald-50 dark:hover:text-emerald-300 dark:hover:bg-emerald-950/30"
               />
             </div>
           </div>
@@ -455,7 +457,9 @@ export function PortalPage() {
               <span className="font-medium">Importação</span>
               {importHealth &&
                 (importHealth.connected ? (
-                  <span className="text-emerald-600">{importHealth.latencyMs}ms</span>
+                  <span className="text-emerald-600 dark:text-emerald-300">
+                    {importHealth.latencyMs}ms
+                  </span>
                 ) : (
                   <span className="text-danger-500">offline</span>
                 ))}
@@ -474,13 +478,15 @@ export function PortalPage() {
               <span className="font-medium">Certificações</span>
               {certHealth &&
                 (certHealth.connected ? (
-                  <span className="text-emerald-600">{certHealth.latencyMs}ms</span>
+                  <span className="text-emerald-600 dark:text-emerald-300">
+                    {certHealth.latencyMs}ms
+                  </span>
                 ) : (
                   <span className="text-danger-500">offline</span>
                 ))}
             </div>
           </div>
-          <p className="text-[11px] text-slate-400 font-medium">v1.0.0</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">v1.0.0</p>
         </footer>
       </main>
     </div>

@@ -28,6 +28,7 @@ import {
   Area,
 } from 'recharts';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useMediaQuery } from '@/shared/hooks/useMediaQuery';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { cn, formatCurrency } from '@/shared/lib/utils';
 import { useChartTheme } from './chartTheme';
@@ -144,8 +145,8 @@ function ChangeBadge({ value }: { value: number }) {
       className={cn(
         'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1',
         isPositive
-          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60'
-          : 'bg-danger-50 text-danger-700 ring-danger-200/60',
+          ? 'bg-emerald-50 text-emerald-700 ring-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50'
+          : 'bg-danger-50 text-danger-700 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50',
       )}
     >
       <Icon className="h-3 w-3" />
@@ -161,6 +162,8 @@ export function ExecutiveDashboardPage() {
   // Recharts recebe cor por prop/inline style: as classes `dark:` do Tailwind
   // nao alcancam grade, eixos e tooltip, que estavam fixos em claro.
   const chartTheme = useChartTheme();
+  // A legenda fica dentro do cartao; o raio diminui nas telas menores.
+  const compactCharts = useMediaQuery('(max-width: 639px)');
   const {
     data: kpis,
     isLoading: loadingKpis,
@@ -202,8 +205,8 @@ export function ExecutiveDashboardPage() {
             <KpiSkeleton key={i} />
           ))}
         </div>
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div>
             <ChartSkeleton />
           </div>
           <ChartSkeleton />
@@ -244,7 +247,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.activeProcesses ?? 0,
       icon: Activity,
       gradient: 'from-primary-500 to-primary-600',
-      valueColor: 'text-primary-700',
+      valueColor: 'text-primary-700 dark:text-primary-300',
       borderColor: 'border-l-primary-500',
     },
     {
@@ -252,7 +255,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.completedThisMonth ?? 0,
       icon: CheckCircle,
       gradient: 'from-emerald-500 to-emerald-600',
-      valueColor: 'text-emerald-600',
+      valueColor: 'text-emerald-600 dark:text-emerald-300',
       borderColor: 'border-l-emerald-500',
       change: kpis?.completedChange,
     },
@@ -261,7 +264,7 @@ export function ExecutiveDashboardPage() {
       value: formatCurrency(Number(kpis?.totalFobThisMonth ?? 0)),
       icon: DollarSign,
       gradient: 'from-violet-500 to-violet-600',
-      valueColor: 'text-violet-700',
+      valueColor: 'text-violet-700 dark:text-violet-300',
       borderColor: 'border-l-violet-500',
       change: kpis?.fobChange,
     },
@@ -270,7 +273,7 @@ export function ExecutiveDashboardPage() {
       value: `${kpis?.validationPassRate ?? 0}%`,
       icon: ShieldCheck,
       gradient: 'from-teal-500 to-teal-600',
-      valueColor: 'text-teal-700',
+      valueColor: 'text-teal-700 dark:text-teal-300',
       borderColor: 'border-l-teal-500',
     },
     {
@@ -279,7 +282,7 @@ export function ExecutiveDashboardPage() {
       subtitle: formatCurrency(Number(kpis?.pendingPayments?.totalUsd ?? 0)),
       icon: CreditCard,
       gradient: 'from-amber-500 to-amber-600',
-      valueColor: 'text-amber-700',
+      valueColor: 'text-amber-700 dark:text-amber-300',
       borderColor: 'border-l-amber-500',
     },
     {
@@ -295,7 +298,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.emailsSent ?? 0,
       icon: Mail,
       gradient: 'from-primary-500 to-primary-600',
-      valueColor: 'text-primary-700',
+      valueColor: 'text-primary-700 dark:text-primary-300',
       borderColor: 'border-l-primary-500',
     },
   ];
@@ -344,31 +347,33 @@ export function ExecutiveDashboardPage() {
                 card.borderColor,
               )}
             >
-              <div className="flex items-start justify-between">
-                <div>
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
+                <div className="contents">
                   <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                     {card.label}
                   </p>
                   <p
                     className={cn(
-                      'mt-2 text-lg sm:text-2xl font-bold tabular-nums tracking-tight',
-                      isZero ? 'text-slate-300' : card.valueColor,
+                      'col-span-2 row-start-2 mt-3 break-words text-lg font-bold tabular-nums tracking-tight 2xl:text-xl',
+                      isZero ? 'text-slate-500 dark:text-slate-400' : card.valueColor,
                     )}
                   >
                     {card.value}
                   </p>
                   {'subtitle' in card && card.subtitle && (
-                    <p className="mt-1 text-xs font-medium text-slate-400">{card.subtitle}</p>
+                    <p className="col-span-2 mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {card.subtitle}
+                    </p>
                   )}
                   {'change' in card && card.change !== undefined && (
-                    <div className="mt-2">
+                    <div className="col-span-2 mt-2">
                       <ChangeBadge value={card.change} />
                     </div>
                   )}
                 </div>
                 <div
                   className={cn(
-                    'flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl',
+                    'col-start-2 row-start-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',
                     'bg-gradient-to-br text-white shadow-sm transition-shadow',
                     card.gradient,
                     'group-hover:shadow-md',
@@ -417,7 +422,7 @@ export function ExecutiveDashboardPage() {
                     className="w-full h-1 rounded-b-sm"
                     style={{ backgroundColor: stage.fill, opacity: 0.3 }}
                   />
-                  <p className="mt-2 text-[11px] text-slate-400 text-center leading-tight">
+                  <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 text-center leading-tight">
                     {stage.name}
                   </p>
                 </div>
@@ -429,15 +434,17 @@ export function ExecutiveDashboardPage() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
               <BarChart3 className="h-5 w-5 text-slate-300" />
             </div>
-            <p className="text-sm text-slate-400">Nenhum processo ativo no pipeline</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Nenhum processo ativo no pipeline
+            </p>
           </div>
         )}
       </div>
 
       {/* Charts Row: Monthly Trend + FOB by Brand */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Monthly Trend - Area Chart */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
+        <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-6">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm">
               <TrendingUp className="h-4.5 w-4.5" />
@@ -483,7 +490,13 @@ export function ExecutiveDashboardPage() {
                     tickLine={false}
                   />
                   <Tooltip contentStyle={chartTheme.tooltip} />
-                  <Legend iconType="circle" wrapperStyle={chartTheme.legend} />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={chartTheme.legend}
+                    formatter={(value: string) => (
+                      <span style={{ color: chartTheme.axis }}>{value}</span>
+                    )}
+                  />
                   <Area
                     yAxisId="left"
                     type="monotone"
@@ -513,7 +526,9 @@ export function ExecutiveDashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <TrendingUp className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm text-slate-400">Sem dados mensais disponiveis</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Sem dados mensais disponiveis
+                </p>
               </div>
             )}
           </div>
@@ -539,13 +554,12 @@ export function ExecutiveDashboardPage() {
                     nameKey="brand"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
-                    innerRadius={40}
+                    outerRadius={compactCharts ? 64 : 80}
+                    innerRadius={compactCharts ? 32 : 40}
                     strokeWidth={2}
                     stroke={chartTheme.surface}
-                    label={({ brand, percent }: { brand: string; percent: number }) =>
-                      `${brand} (${(percent * 100).toFixed(0)}%)`
-                    }
+                    labelLine={false}
+                    label={false}
                   >
                     {fobByBrand.map((_entry, index) => (
                       <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
@@ -555,6 +569,18 @@ export function ExecutiveDashboardPage() {
                     contentStyle={chartTheme.tooltip}
                     formatter={(value: number) => formatCurrency(value)}
                   />
+                  <Legend
+                    iconType="circle"
+                    wrapperStyle={chartTheme.legend}
+                    formatter={(value: string, entry) => {
+                      const percent = (entry?.payload as { percent?: number } | undefined)?.percent;
+                      return (
+                        <span style={{ color: chartTheme.axis }}>
+                          {percent != null ? `${value} (${(percent * 100).toFixed(0)}%)` : value}
+                        </span>
+                      );
+                    }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -562,7 +588,9 @@ export function ExecutiveDashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <DollarSign className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm text-slate-400">Sem dados de FOB por marca</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Sem dados de FOB por marca
+                </p>
               </div>
             )}
           </div>
@@ -624,7 +652,9 @@ export function ExecutiveDashboardPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                 <Clock className="h-5 w-5 text-slate-300" />
               </div>
-              <p className="text-sm text-slate-400">Sem dados de tempo por etapa</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Sem dados de tempo por etapa
+              </p>
             </div>
           )}
         </div>

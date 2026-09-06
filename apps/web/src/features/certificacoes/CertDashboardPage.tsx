@@ -261,7 +261,7 @@ export default function CertDashboardPage() {
           <button
             type="button"
             onClick={loadDashboard}
-            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300"
+            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
           >
             Tentar novamente
           </button>
@@ -285,8 +285,8 @@ export default function CertDashboardPage() {
             className={cn(
               'flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-semibold border transition-colors',
               apiOnline
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80'
-                : 'bg-danger-50 text-danger-700 border-danger-200/80',
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200/80 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700/50'
+                : 'bg-danger-50 text-danger-700 border-danger-200/80 dark:bg-danger-950/30 dark:text-danger-300 dark:border-danger-700/50',
             )}
           >
             <span className="relative flex h-2 w-2">
@@ -313,7 +313,9 @@ export default function CertDashboardPage() {
               title="Percentual calculado apenas sobre os produtos já validados"
             >
               <TrendingUp className="w-4 h-4 text-emerald-500" />
-              <span className="text-sm font-bold text-emerald-600">{okRate}%</span>
+              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-300">
+                {okRate}%
+              </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">conformidade</span>
             </div>
           )}
@@ -323,7 +325,7 @@ export default function CertDashboardPage() {
             <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shadow-sm text-xs text-slate-500 dark:text-slate-400">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               <span>{formatDateTime(lastRun.date)}</span>
-              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-medium text-[10px]">
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 min-w-0 break-words text-slate-600 dark:text-slate-400 font-medium text-[10px]">
                 {relativeTime(lastRun.date)}
               </span>
             </div>
@@ -407,15 +409,17 @@ export default function CertDashboardPage() {
                       className={cn(
                         'text-xl font-bold',
                         okRateNum >= 80
-                          ? 'text-emerald-600'
+                          ? 'text-emerald-600 dark:text-emerald-300'
                           : okRateNum >= 50
-                            ? 'text-amber-600'
-                            : 'text-danger-600',
+                            ? 'text-amber-600 dark:text-amber-300'
+                            : 'text-danger-600 dark:text-danger-300',
                       )}
                     >
                       {okRate}%
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">conforme</span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                      conforme
+                    </span>
                   </div>
                 )}
               </div>
@@ -425,13 +429,16 @@ export default function CertDashboardPage() {
                   const total = pieData.reduce((acc, v) => acc + v.value, 0);
                   const pct = total > 0 ? ((d.value / total) * 100).toFixed(0) : '0';
                   return (
-                    <div key={d.name} className="flex items-center justify-between text-sm">
-                      <div className="flex items-center gap-2.5">
+                    <div
+                      key={d.name}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-sm"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5">
                         <span
                           className="w-3 h-3 rounded-md shrink-0"
                           style={{ backgroundColor: color }}
                         />
-                        <span className="text-slate-600 dark:text-slate-400 font-medium">
+                        <span className="min-w-0 break-words text-slate-600 dark:text-slate-400 font-medium">
                           {d.name}
                         </span>
                       </div>
@@ -439,7 +446,7 @@ export default function CertDashboardPage() {
                         <span className="font-bold text-slate-900 dark:text-slate-100 tabular-nums">
                           {d.value}
                         </span>
-                        <span className="text-[11px] text-slate-400 font-medium tabular-nums w-10 text-right">
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium tabular-nums w-10 text-right">
                           {pct}%
                         </span>
                       </div>
@@ -459,7 +466,7 @@ export default function CertDashboardPage() {
               <button
                 type="button"
                 onClick={loadDashboard}
-                className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+                className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
               >
                 Tentar novamente
               </button>
@@ -469,7 +476,9 @@ export default function CertDashboardPage() {
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                 <BarChart3 className="h-5 w-5 text-slate-300" />
               </div>
-              <p className="text-sm font-medium text-slate-400">Nenhum dado disponível</p>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                Nenhum dado disponível
+              </p>
               <p className="text-xs text-slate-300 mt-1">
                 Execute uma validação para ver os resultados
               </p>
@@ -493,8 +502,8 @@ export default function CertDashboardPage() {
 
       {/* Expired Products Alert */}
       {(stats?.total_expired ?? 0) > 0 && (
-        <div className="rounded-2xl border border-pink-200/80 bg-gradient-to-r from-pink-50 to-rose-50 shadow-sm overflow-hidden">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 sm:px-7 py-5 border-b border-pink-100">
+        <div className="rounded-2xl border border-pink-200/80 bg-gradient-to-r from-pink-50 to-rose-50 dark:from-pink-950/40 dark:to-rose-950/40 dark:border-pink-800/60 shadow-sm overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 sm:px-7 py-5 border-b border-pink-100 dark:border-pink-800/60">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-pink-500 to-rose-600 text-white shadow-sm">
                 <CalendarX2 className="h-4 w-4" />
@@ -503,7 +512,7 @@ export default function CertDashboardPage() {
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                   Certificações Vencidas
                 </h3>
-                <p className="text-xs text-pink-600 font-medium mt-0.5">
+                <p className="text-xs text-pink-600 dark:text-pink-300 font-medium mt-0.5">
                   {stats?.total_expired} produto{(stats?.total_expired ?? 0) > 1 ? 's' : ''} com
                   certificação expirada — não podem ser comercializados
                 </p>
@@ -514,7 +523,7 @@ export default function CertDashboardPage() {
               // o antigo ?status=EXPIRED (vocabulário legado) era ignorado e o
               // "Ver todos" abria a lista completa (auditoria 2026-07-17).
               to="/certificacoes/produtos?cert_status=ENCERRADO"
-              className="flex items-center gap-1.5 text-sm font-semibold text-pink-600 hover:text-pink-700 transition-colors shrink-0"
+              className="flex items-center gap-1.5 text-sm font-semibold text-pink-600 dark:text-pink-300 hover:text-pink-700 transition-colors shrink-0"
             >
               Ver todos <ArrowRight className="h-4 w-4" />
             </Link>
@@ -532,20 +541,22 @@ export default function CertDashboardPage() {
                 {expiredProducts.slice(0, 5).map((p, i) => (
                   <div
                     key={i}
-                    className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-3 rounded-xl hover:bg-pink-100/50 transition-all duration-200 group gap-2"
+                    className="flex flex-col sm:flex-row sm:items-center justify-between py-2.5 px-3 rounded-xl hover:bg-pink-100/50 dark:hover:bg-pink-900/30 transition-all duration-200 group gap-2"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pink-100 text-pink-600">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-pink-100 dark:bg-pink-950/50 text-pink-600 dark:text-pink-300">
                         <CalendarX2 className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
+                      <span className="text-xs font-mono text-slate-500 dark:text-slate-400 shrink-0">
+                        {p.sku}
+                      </span>
                       <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 dark:text-slate-100 transition-colors">
                         {p.name}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0 sm:ml-4 ml-10">
                       <span className="text-xs text-slate-500 dark:text-slate-400">{p.brand}</span>
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-pink-100 text-pink-700">
+                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-lg bg-pink-100 text-pink-700 dark:bg-pink-950/50 dark:text-pink-300">
                         Vencido {p.sale_deadline}
                       </span>
                     </div>
@@ -573,7 +584,7 @@ export default function CertDashboardPage() {
             {problemProducts.length > 0 && (
               <Link
                 to="/certificacoes/produtos?site_status=NAO_CONFORME"
-                className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors"
+                className="flex items-center gap-1.5 text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors dark:text-emerald-300 dark:hover:text-emerald-300"
               >
                 Ver todos <ArrowRight className="h-4 w-4" />
               </Link>
@@ -591,7 +602,7 @@ export default function CertDashboardPage() {
                 <button
                   type="button"
                   onClick={loadDashboard}
-                  className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+                  className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
                 >
                   Tentar novamente
                 </button>
@@ -601,7 +612,7 @@ export default function CertDashboardPage() {
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                   <AlertTriangle className="h-5 w-5 text-slate-300" />
                 </div>
-                <p className="text-sm font-medium text-slate-400">
+                <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
                   {loading ? 'Carregando...' : 'Nenhum problema encontrado'}
                 </p>
                 <p className="text-xs text-slate-300 mt-1">
@@ -621,12 +632,14 @@ export default function CertDashboardPage() {
                           'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg',
                           p.status === 'URL_NOT_FOUND'
                             ? 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
-                            : 'bg-amber-50 text-amber-500',
+                            : 'bg-amber-50 text-amber-500 dark:bg-amber-950/30',
                         )}
                       >
                         <AlertTriangle className="w-3.5 h-3.5" />
                       </div>
-                      <span className="text-xs font-mono text-slate-400 shrink-0">{p.sku}</span>
+                      <span className="text-xs font-mono text-slate-500 dark:text-slate-400 shrink-0">
+                        {p.sku}
+                      </span>
                       <span className="text-sm text-slate-700 truncate font-medium group-hover:text-slate-900 dark:text-slate-100 transition-colors">
                         {p.name}
                       </span>
@@ -662,7 +675,7 @@ export default function CertDashboardPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Link
                 to="/certificacoes/validacao"
-                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
+                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300 dark:hover:border-emerald-700/50 dark:hover:bg-emerald-950/30"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm group-hover:shadow-md transition-shadow">
                   <PlayCircle className="w-5 h-5" />
@@ -678,7 +691,7 @@ export default function CertDashboardPage() {
               </Link>
               <Link
                 to="/certificacoes/relatorios"
-                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300"
+                className="group flex items-center gap-4 p-5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-md transition-all duration-300 dark:hover:border-emerald-700/50 dark:hover:bg-emerald-950/30"
               >
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-600 to-slate-800 text-white shadow-sm group-hover:shadow-md transition-shadow">
                   <FileBarChart className="w-5 h-5" />
@@ -717,7 +730,7 @@ export default function CertDashboardPage() {
                   <button
                     type="button"
                     onClick={loadDashboard}
-                    className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300"
+                    className="mt-2 rounded-lg border border-danger-200 px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-50 dark:border-danger-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
                   >
                     Tentar novamente
                   </button>
@@ -727,7 +740,9 @@ export default function CertDashboardPage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-50 dark:bg-slate-900 mb-3">
                     <Clock className="h-5 w-5 text-slate-300" />
                   </div>
-                  <p className="text-sm font-medium text-slate-400">Nenhuma validação realizada</p>
+                  <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                    Nenhuma validação realizada
+                  </p>
                   <p className="text-xs text-slate-300 mt-1">Resultados aparecerão aqui</p>
                 </div>
               ) : (
@@ -745,7 +760,7 @@ export default function CertDashboardPage() {
                           {r.filename}
                         </span>
                       </div>
-                      <span className="text-xs text-slate-400 font-medium tabular-nums">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium tabular-nums">
                         {r.date ? formatDateTime(r.date) : ''}
                       </span>
                     </div>

@@ -96,9 +96,17 @@ const POLL_MAX_FAILURES = 3;
 
 /** Rótulos e cores dos três estados reais de `cert_schedule_history.status`. */
 const HISTORY_STATUS: Record<string, { label: string; dot: string; text: string }> = {
-  completed: { label: 'Concluído', dot: 'bg-emerald-500', text: 'text-emerald-700' },
-  running: { label: 'Em execução', dot: 'bg-amber-500', text: 'text-amber-700' },
-  failed: { label: 'Falhou', dot: 'bg-danger-500', text: 'text-danger-700' },
+  completed: {
+    label: 'Concluído',
+    dot: 'bg-emerald-500',
+    text: 'text-emerald-700 dark:text-emerald-300',
+  },
+  running: {
+    label: 'Em execução',
+    dot: 'bg-amber-500',
+    text: 'text-amber-700 dark:text-amber-300',
+  },
+  failed: { label: 'Falhou', dot: 'bg-danger-500', text: 'text-danger-700 dark:text-danger-300' },
 };
 
 function buildCron(preset: string, hour: string, minute: string): string {
@@ -504,13 +512,13 @@ export default function CertAgendamentosPage() {
       {loadError && (
         <div
           role="alert"
-          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between"
+          className="flex flex-col gap-3 rounded-2xl border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 sm:flex-row sm:items-center sm:justify-between dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300"
         >
           <span>{loadError}</span>
           <button
             type="button"
             onClick={loadSchedules}
-            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100"
+            className="rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-danger-950/40 dark:text-danger-300 dark:hover:bg-danger-900/50"
           >
             Tentar novamente
           </button>
@@ -521,7 +529,9 @@ export default function CertAgendamentosPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20">
           <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
-          <p className="text-sm text-slate-400 mt-3">Carregando agendamentos...</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">
+            Carregando agendamentos...
+          </p>
         </div>
       ) : schedules.length === 0 ? (
         <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 flex flex-col items-center justify-center py-20 px-6">
@@ -534,7 +544,7 @@ export default function CertAgendamentosPage() {
               <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
                 Nenhum agendamento no período
               </p>
-              <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-sm mb-5">
                 Nenhuma execução entre as datas selecionadas. Agendamentos podem existir fora desse
                 intervalo.
               </p>
@@ -552,7 +562,7 @@ export default function CertAgendamentosPage() {
               <p className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
                 Nenhum agendamento configurado
               </p>
-              <p className="text-sm text-slate-400 text-center max-w-sm mb-5">
+              <p className="text-sm text-slate-500 dark:text-slate-400 text-center max-w-sm mb-5">
                 Crie um agendamento para executar validações de certificações automaticamente
               </p>
               <button
@@ -574,7 +584,7 @@ export default function CertAgendamentosPage() {
               className={`rounded-2xl border shadow-sm bg-white dark:bg-slate-800 overflow-hidden transition-colors ${
                 schedule.enabled
                   ? 'border-slate-200/60 dark:border-slate-700/60'
-                  : 'border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50'
+                  : 'border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/50'
               }`}
             >
               {/* Status accent bar */}
@@ -594,7 +604,7 @@ export default function CertAgendamentosPage() {
                       <span
                         className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
                           schedule.enabled
-                            ? 'bg-emerald-50 text-emerald-700'
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                             : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
                         }`}
                       >
@@ -609,7 +619,7 @@ export default function CertAgendamentosPage() {
                         {cronToHuman(schedule.cron_expression)}
                       </span>
                       {schedule.brand_filter && (
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-medium dark:bg-emerald-950/30 dark:text-emerald-300">
                           <Tag className="w-3 h-3" />
                           {BRAND_OPTIONS.find((b) => b.value === schedule.brand_filter)?.label ||
                             schedule.brand_filter}
@@ -643,9 +653,9 @@ export default function CertAgendamentosPage() {
                     {triggerResult &&
                       triggerResult.scheduleId === schedule.id &&
                       triggerResult.status === 'running' && (
-                        <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                          <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-                          <span className="text-xs font-medium text-emerald-700">
+                        <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-700/50">
+                          <Loader2 className="w-3.5 h-3.5 text-emerald-600 animate-spin dark:text-emerald-300" />
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
                             Validando... {triggerResult.processed ?? 0}
                             {triggerResult.total ? `/${triggerResult.total}` : ''} produtos
                           </span>
@@ -654,9 +664,11 @@ export default function CertAgendamentosPage() {
                     {triggerResult &&
                       triggerResult.scheduleId === schedule.id &&
                       triggerResult.status === 'completed' && (
-                        <div className="flex items-center gap-3 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100">
-                          <Zap className="w-3.5 h-3.5 text-emerald-600" />
-                          <span className="text-xs font-medium text-emerald-700">Concluido!</span>
+                        <div className="flex items-center gap-3 mt-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-100 dark:bg-emerald-950/30 dark:border-emerald-700/50">
+                          <Zap className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-300" />
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            Concluido!
+                          </span>
                           {triggerResult.total != null && (
                             <span className="text-xs text-slate-500 dark:text-slate-400">
                               {triggerResult.total} produtos validados
@@ -696,7 +708,7 @@ export default function CertAgendamentosPage() {
                       type="button"
                       onClick={() => handleTrigger(schedule.id)}
                       disabled={triggeringId === schedule.id}
-                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors"
+                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-emerald-50 hover:text-emerald-600 transition-colors dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300"
                       title="Executar agora"
                       aria-label={`Executar agendamento ${schedule.name} agora`}
                     >
@@ -720,7 +732,7 @@ export default function CertAgendamentosPage() {
                     <button
                       type="button"
                       onClick={() => setDeleteConfirm(schedule.id)}
-                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors"
+                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-colors dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                       title="Excluir"
                       aria-label="Excluir agendamento"
                     >
@@ -734,7 +746,7 @@ export default function CertAgendamentosPage() {
                       aria-label={`${expandedHistory === schedule.id ? 'Ocultar' : 'Mostrar'} historico do agendamento ${schedule.name}`}
                       className={`flex items-center justify-center w-9 h-9 rounded-xl transition-colors ${
                         expandedHistory === schedule.id
-                          ? 'bg-emerald-50 text-emerald-600'
+                          ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
                           : 'text-slate-400 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-700 dark:text-slate-300'
                       }`}
                       title="Histórico"
@@ -751,7 +763,7 @@ export default function CertAgendamentosPage() {
 
               {/* History section */}
               {expandedHistory === schedule.id && (
-                <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/80 px-5 py-4 md:px-6">
+                <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/80 px-5 py-4 md:px-6">
                   <div className="flex items-center gap-2 mb-3">
                     <History className="w-3.5 h-3.5 text-slate-400" />
                     <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -764,7 +776,9 @@ export default function CertAgendamentosPage() {
                     </div>
                   ) : !historyData[schedule.id] || historyData[schedule.id].length === 0 ? (
                     <div className="flex flex-col items-center py-6">
-                      <p className="text-sm text-slate-400">Nenhuma execução registrada</p>
+                      <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Nenhuma execução registrada
+                      </p>
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -800,19 +814,19 @@ export default function CertAgendamentosPage() {
                                   {entry.summary.total ?? 0} produtos
                                 </span>
                                 {(entry.summary.ok ?? 0) > 0 && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 font-semibold dark:bg-emerald-950/30 dark:text-emerald-300">
                                     {entry.summary.ok} Conforme
                                   </span>
                                 )}
                                 {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0) >
                                   0 && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-danger-50 text-danger-700 font-semibold">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-danger-50 text-danger-700 font-semibold dark:bg-danger-950/30 dark:text-danger-300">
                                     {(entry.summary.missing ?? 0) + (entry.summary.not_found ?? 0)}{' '}
                                     nao encontrados
                                   </span>
                                 )}
                                 {(entry.summary.inconsistent ?? 0) > 0 && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold">
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 font-semibold dark:bg-amber-950/30 dark:text-amber-300">
                                     {entry.summary.inconsistent} inconsist.
                                   </span>
                                 )}
@@ -828,17 +842,17 @@ export default function CertAgendamentosPage() {
 
               {/* Delete confirmation */}
               {deleteConfirm === schedule.id && (
-                <div className="border-t border-danger-100 bg-danger-50/80 px-5 py-4 md:px-6">
+                <div className="border-t border-danger-100 bg-danger-50/80 px-5 py-4 md:px-6 dark:border-danger-700/50 dark:bg-danger-950/30">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-danger-100">
-                        <Trash2 className="w-4 h-4 text-danger-600" />
+                      <div className="flex items-center justify-center w-8 h-8 rounded-xl bg-danger-100 dark:bg-danger-950/30">
+                        <Trash2 className="w-4 h-4 text-danger-600 dark:text-danger-300" />
                       </div>
                       <div>
-                        <p className="text-sm font-semibold text-danger-800">
+                        <p className="text-sm font-semibold text-danger-800 dark:text-danger-300">
                           Excluir agendamento?
                         </p>
-                        <p className="text-xs text-danger-600/70">
+                        <p className="text-xs text-danger-600/70 dark:text-danger-300">
                           Esta ação não pode ser desfeita
                         </p>
                       </div>
@@ -1036,7 +1050,7 @@ export default function CertAgendamentosPage() {
                       placeholder="0 8 * * 1-5"
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-mono"
                     />
-                    <p className="text-xs text-slate-400 mt-1.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
                       Formato: minuto hora dia mês dia_semana -- Ex: 0 8 * * 1-5 = dias úteis às
                       08:00
                     </p>
@@ -1049,7 +1063,7 @@ export default function CertAgendamentosPage() {
                     <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">
                       Status
                     </span>
-                    <p className="text-xs text-slate-400 mt-0.5">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                       {formEnabled
                         ? 'O agendamento será executado automaticamente'
                         : 'O agendamento está pausado'}
@@ -1077,8 +1091,10 @@ export default function CertAgendamentosPage() {
 
                 {/* Error */}
                 {formError && (
-                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-danger-50 border border-danger-100">
-                    <p className="text-sm text-danger-700 font-medium">{formError}</p>
+                  <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-danger-50 border border-danger-100 dark:bg-danger-950/30 dark:border-danger-700/50">
+                    <p className="text-sm text-danger-700 font-medium dark:text-danger-300">
+                      {formError}
+                    </p>
                   </div>
                 )}
 

@@ -121,7 +121,7 @@ const tabConfig: {
     icon: FileWarning,
     gradient: 'from-danger-500 to-danger-600',
     borderColor: 'border-l-danger-500',
-    valueColor: 'text-danger-600',
+    valueColor: 'text-danger-600 dark:text-danger-300',
   },
   {
     key: 'liUrgent',
@@ -129,7 +129,7 @@ const tabConfig: {
     icon: ShieldAlert,
     gradient: 'from-amber-500 to-amber-600',
     borderColor: 'border-l-amber-500',
-    valueColor: 'text-amber-600',
+    valueColor: 'text-amber-600 dark:text-amber-300',
   },
   {
     key: 'withDivergences',
@@ -137,7 +137,7 @@ const tabConfig: {
     icon: AlertOctagon,
     gradient: 'from-orange-500 to-orange-600',
     borderColor: 'border-l-orange-500',
-    valueColor: 'text-orange-600',
+    valueColor: 'text-orange-600 dark:text-orange-300',
   },
   {
     key: 'pendingFenicia',
@@ -145,7 +145,7 @@ const tabConfig: {
     icon: Send,
     gradient: 'from-violet-500 to-violet-600',
     borderColor: 'border-l-violet-500',
-    valueColor: 'text-violet-600',
+    valueColor: 'text-violet-600 dark:text-violet-300',
   },
   {
     key: 'noEspelho',
@@ -153,7 +153,7 @@ const tabConfig: {
     icon: FileX,
     gradient: 'from-rose-500 to-rose-600',
     borderColor: 'border-l-rose-500',
-    valueColor: 'text-rose-600',
+    valueColor: 'text-rose-600 dark:text-rose-300',
   },
   {
     key: 'noFollowUpUpdate',
@@ -169,7 +169,7 @@ const tabConfig: {
     icon: Users,
     gradient: 'from-primary-500 to-primary-600',
     borderColor: 'border-l-primary-500',
-    valueColor: 'text-primary-600',
+    valueColor: 'text-primary-600 dark:text-primary-300',
   },
   {
     key: 'upcomingPayments',
@@ -177,7 +177,7 @@ const tabConfig: {
     icon: Banknote,
     gradient: 'from-emerald-500 to-emerald-600',
     borderColor: 'border-l-emerald-500',
-    valueColor: 'text-emerald-600',
+    valueColor: 'text-emerald-600 dark:text-emerald-300',
   },
 ];
 
@@ -365,7 +365,9 @@ export function SLADashboard() {
               {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
@@ -373,7 +375,7 @@ export function SLADashboard() {
                 {row.shipmentDate ? formatDate(row.shipmentDate) : '--'}
               </td>
               <td className="px-5 py-3 text-sm">
-                <span className="inline-flex items-center rounded-full bg-danger-50 px-2.5 py-0.5 text-xs font-bold text-danger-700 ring-1 ring-danger-200/60">
+                <span className="inline-flex items-center rounded-full bg-danger-50 px-2.5 py-0.5 text-xs font-bold text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50">
                   {row.daysSinceShipment}d
                 </span>
               </td>
@@ -413,7 +415,9 @@ export function SLADashboard() {
                 urgencyBg(row.daysRemaining),
               )}
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
@@ -426,9 +430,9 @@ export function SLADashboard() {
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     urgencyText(row.daysRemaining),
                     row.daysRemaining <= 0
-                      ? 'bg-danger-50 ring-1 ring-danger-200/60'
+                      ? 'bg-danger-50 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:ring-danger-700/50'
                       : row.daysRemaining <= 3
-                        ? 'bg-amber-50 ring-1 ring-amber-200/60'
+                        ? 'bg-amber-50 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:ring-amber-700/50'
                         : 'bg-slate-100 dark:bg-slate-700 ring-1 ring-slate-200/60',
                   )}
                 >
@@ -467,12 +471,14 @@ export function SLADashboard() {
               {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
               <td className="px-5 py-3 text-sm">
-                <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-orange-700 ring-1 ring-orange-200/60">
+                <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-bold text-orange-700 ring-1 ring-orange-200/60 dark:bg-orange-950/30 dark:text-orange-300 dark:ring-orange-700/50">
                   {row.failedCheckCount}
                 </span>
               </td>
@@ -506,7 +512,9 @@ export function SLADashboard() {
               {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
@@ -518,8 +526,8 @@ export function SLADashboard() {
                   className={cn(
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     row.daysPending > 3
-                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
-                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50'
+                      : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50',
                   )}
                 >
                   {row.daysPending}d
@@ -552,7 +560,9 @@ export function SLADashboard() {
               {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
@@ -564,7 +574,7 @@ export function SLADashboard() {
                   className={cn(
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     row.daysPending > 3
-                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60'
+                      ? 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-700/50'
                       : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 ring-1 ring-slate-200/60',
                   )}
                 >
@@ -598,7 +608,9 @@ export function SLADashboard() {
               {...processRowProps(row.id, row.processCode)}
               className="hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer transition-colors"
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm text-slate-600 dark:text-slate-400 capitalize">
                 {row.brand}
               </td>
@@ -610,7 +622,7 @@ export function SLADashboard() {
                   className={cn(
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     row.daysSinceUpdate > 10
-                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50'
                       : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 ring-1 ring-slate-200/60',
                   )}
                 >
@@ -643,7 +655,7 @@ export function SLADashboard() {
                 {row.userName}
               </td>
               <td className="px-5 py-3 text-sm">
-                <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-primary-200/60">
+                <span className="inline-flex items-center rounded-full bg-primary-50 px-2.5 py-0.5 text-xs font-bold text-primary-700 ring-1 ring-primary-200/60 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50">
                   {row.pendingCount}
                 </span>
               </td>
@@ -652,9 +664,9 @@ export function SLADashboard() {
                   className={cn(
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     row.oldestPendingDays > 30
-                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60'
+                      ? 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50'
                       : row.oldestPendingDays > 14
-                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60'
+                        ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50'
                         : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 ring-1 ring-slate-200/60',
                   )}
                 >
@@ -691,7 +703,9 @@ export function SLADashboard() {
                 urgencyBg(row.daysUntilDue),
               )}
             >
-              <td className="px-5 py-3 text-sm font-medium text-primary-600">{row.processCode}</td>
+              <td className="px-5 py-3 text-sm font-medium text-primary-600 dark:text-primary-300">
+                {row.processCode}
+              </td>
               <td className="px-5 py-3 text-sm font-medium text-slate-700 dark:text-slate-300">
                 {formatCurrency(Number(row.amountUsd))}
               </td>
@@ -704,10 +718,10 @@ export function SLADashboard() {
                     'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold',
                     urgencyText(row.daysUntilDue),
                     row.daysUntilDue <= 0
-                      ? 'bg-danger-50 ring-1 ring-danger-200/60'
+                      ? 'bg-danger-50 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:ring-danger-700/50'
                       : row.daysUntilDue <= 3
-                        ? 'bg-amber-50 ring-1 ring-amber-200/60'
-                        : 'bg-emerald-50 ring-1 ring-emerald-200/60',
+                        ? 'bg-amber-50 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:ring-amber-700/50'
+                        : 'bg-emerald-50 ring-1 ring-emerald-200/60 dark:bg-emerald-950/30 dark:ring-emerald-700/50',
                   )}
                 >
                   {row.daysUntilDue <= 0
@@ -731,7 +745,7 @@ export function SLADashboard() {
         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
           Nenhuma pendência nesta categoria
         </p>
-        <p className="text-xs text-slate-400 mt-1">Tudo em dia por aqui</p>
+        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Tudo em dia por aqui</p>
       </div>
     );
   }
@@ -781,7 +795,9 @@ export function SLADashboard() {
                 'hover:shadow-md',
                 'border-l-4',
                 card.borderColor,
-                isActive ? 'ring-2 ring-primary-500/20 shadow-md border-primary-300' : 'shadow-sm',
+                isActive
+                  ? 'ring-2 ring-primary-500/20 shadow-md border-primary-300 dark:border-primary-700/50'
+                  : 'shadow-sm',
               )}
             >
               <div className="flex items-center justify-between mb-2">
@@ -813,7 +829,9 @@ export function SLADashboard() {
               >
                 {value}
               </p>
-              <p className="text-[11px] font-medium text-slate-400 mt-0.5 truncate">{card.label}</p>
+              <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                {card.label}
+              </p>
             </button>
           );
         })}
@@ -847,7 +865,7 @@ export function SLADashboard() {
                 className={cn(
                   'inline-flex items-center gap-1.5 px-3 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-all border-b-2',
                   isActive
-                    ? 'bg-slate-50 dark:bg-slate-900 text-primary-700 border-primary-500'
+                    ? 'bg-slate-50 dark:bg-slate-900 text-primary-700 border-primary-500 dark:text-primary-300'
                     : 'text-slate-500 hover:text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 border-transparent',
                 )}
               >
@@ -857,7 +875,7 @@ export function SLADashboard() {
                     className={cn(
                       'inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-bold',
                       isActive
-                        ? 'bg-primary-100 text-primary-700'
+                        ? 'bg-primary-100 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300'
                         : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400',
                     )}
                   >

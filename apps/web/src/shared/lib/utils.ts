@@ -51,56 +51,65 @@ export const statusLabels: Record<string, string> = {
 };
 
 export const statusColors: Record<string, string> = {
-  draft: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60',
-  documents_received: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
-  validating: 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60',
-  validated: 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60',
-  espelho_generated: 'bg-violet-50 text-violet-700 ring-1 ring-violet-200/60',
-  sent_to_fenicia: 'bg-orange-50 text-orange-700 ring-1 ring-orange-200/60',
-  li_pending: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60',
-  completed: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60',
-  cancelled: 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60',
+  draft:
+    'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600',
+  documents_received:
+    'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50',
+  validating:
+    'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50',
+  validated:
+    'bg-primary-50 text-primary-700 ring-1 ring-primary-200/60 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50',
+  espelho_generated:
+    'bg-violet-50 text-violet-700 ring-1 ring-violet-200/60 dark:bg-violet-950/30 dark:text-violet-300 dark:ring-violet-700/50',
+  sent_to_fenicia:
+    'bg-orange-50 text-orange-700 ring-1 ring-orange-200/60 dark:bg-orange-950/30 dark:text-orange-300 dark:ring-orange-700/50',
+  li_pending:
+    'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50',
+  completed:
+    'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50',
+  cancelled:
+    'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50',
 };
 
 export function certStatusColor(status: string): string {
   switch (status) {
     // Status técnico legacy
     case 'OK':
-      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50';
     case 'INCONSISTENT':
-      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60';
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50';
     case 'URL_NOT_FOUND':
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
     case 'API_ERROR':
-      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60';
+      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50';
     case 'NO_EXPECTED':
-      return 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60';
+      return 'bg-slate-100 text-slate-500 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
     case 'EXPIRED':
     case 'EXPIRING':
-      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
+      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-700/50';
     // Status derivados (port Verificao_status):
     case 'ATIVO':
     case 'VALIDO':
     case 'CONFORME':
     case 'LIBERADA':
-      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60';
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50';
     case 'ENCERRADO':
     case 'ENCERRADA':
     case 'NAO_CONFORME':
     case 'VENCIDO':
-      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60';
+      return 'bg-rose-50 text-rose-700 ring-1 ring-rose-200/60 dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-700/50';
     case 'DENTRO_PRAZO':
     case 'PENDENTE':
-      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60';
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/60 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50';
     case 'EM_ANDAMENTO':
-      return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200/60';
+      return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200/60 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50';
     case 'SKU_EXCLUIDO':
     case 'NAO_APLICAVEL':
     case 'NAO_APLICA':
     case 'DESCONHECIDO':
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
     default:
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/60 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
   }
 }
 

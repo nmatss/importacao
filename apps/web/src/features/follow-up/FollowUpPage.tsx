@@ -97,31 +97,35 @@ const STAGES = [
 
 const statusConfig = {
   on_track: {
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-200',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    border: 'border-emerald-200 dark:border-emerald-700/50',
     accent: 'bg-emerald-500',
-    text: 'text-emerald-700',
+    text: 'text-emerald-700 dark:text-emerald-300',
     label: 'No prazo',
   },
   approaching: {
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    border: 'border-amber-200 dark:border-amber-700/50',
     accent: 'bg-amber-500',
-    text: 'text-amber-700',
+    text: 'text-amber-700 dark:text-amber-300',
     label: 'Proximo ao prazo',
   },
   overdue: {
-    bg: 'bg-danger-50',
-    border: 'border-danger-200',
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    border: 'border-danger-200 dark:border-danger-700/50',
     accent: 'bg-danger-500',
-    text: 'text-danger-700',
+    text: 'text-danger-700 dark:text-danger-300',
     label: 'Atrasado',
   },
 };
 
 const brandColors: Record<string, { bg: string; text: string; dot: string }> = {
   puket: { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-400' },
-  imaginarium: { bg: 'bg-violet-50', text: 'text-violet-700', dot: 'bg-violet-400' },
+  imaginarium: {
+    bg: 'bg-violet-50 dark:bg-violet-950/30',
+    text: 'text-violet-700 dark:text-violet-300',
+    dot: 'bg-violet-400',
+  },
 };
 
 const defaultBrandColor = {
@@ -220,7 +224,7 @@ export function FollowUpPage() {
         </div>
         <button
           onClick={() => setShowDeadlines(!showDeadlines)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:shadow lg:hidden"
+          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-700 dark:text-slate-300 shadow-sm transition-all hover:bg-slate-50 dark:hover:bg-slate-800 hover:shadow lg:hidden"
         >
           <Calendar className="h-4 w-4 text-slate-400" />
           Prazos LI
@@ -278,13 +282,15 @@ export function FollowUpPage() {
                   </div>
 
                   {/* Column Body */}
-                  <div className="space-y-2.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 p-2.5 min-h-[220px]">
+                  <div className="space-y-2.5 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/50 p-2.5 min-h-[220px]">
                     {processes.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-12 text-center">
                         <div className="mb-2 h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
                           <ClipboardList className="h-4 w-4 text-slate-300" />
                         </div>
-                        <p className="text-xs text-slate-400">Nenhum processo</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Nenhum processo
+                        </p>
                       </div>
                     ) : (
                       processes.map((proc) => {
@@ -366,7 +372,9 @@ export function FollowUpPage() {
                                       key={s.key}
                                       className="flex items-center justify-between text-[11px]"
                                     >
-                                      <span className="text-slate-400">{s.label}</span>
+                                      <span className="text-slate-500 dark:text-slate-400">
+                                        {s.label}
+                                      </span>
                                       <span
                                         className={
                                           val
@@ -404,7 +412,7 @@ export function FollowUpPage() {
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                     Prazos LI
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     {liDeadlines?.length ?? 0} prazo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}{' '}
                     ativo{(liDeadlines?.length ?? 0) !== 1 ? 's' : ''}
                   </p>
@@ -419,7 +427,9 @@ export function FollowUpPage() {
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-50 dark:bg-slate-900">
                     <CheckCircle className="h-6 w-6 text-slate-300" />
                   </div>
-                  <p className="text-sm text-slate-400">Nenhum prazo de LI ativo</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Nenhum prazo de LI ativo
+                  </p>
                 </div>
               ) : (
                 <ul className="divide-y divide-slate-100 dark:divide-slate-700">
@@ -428,14 +438,14 @@ export function FollowUpPage() {
                     const isWarning = item.daysRemaining <= 7 && item.daysRemaining > 3;
                     const brand = brandColors[item.brand] ?? defaultBrandColor;
 
-                    let urgencyBg = 'bg-emerald-50';
-                    let urgencyText = 'text-emerald-700';
+                    let urgencyBg = 'bg-emerald-50 dark:bg-emerald-950/30';
+                    let urgencyText = 'text-emerald-700 dark:text-emerald-300';
                     if (isUrgent) {
-                      urgencyBg = 'bg-danger-50';
-                      urgencyText = 'text-danger-700';
+                      urgencyBg = 'bg-danger-50 dark:bg-danger-950/30';
+                      urgencyText = 'text-danger-700 dark:text-danger-300';
                     } else if (isWarning) {
-                      urgencyBg = 'bg-amber-50';
-                      urgencyText = 'text-amber-700';
+                      urgencyBg = 'bg-amber-50 dark:bg-amber-950/30';
+                      urgencyText = 'text-amber-700 dark:text-amber-300';
                     }
 
                     return (
@@ -458,7 +468,9 @@ export function FollowUpPage() {
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-slate-400">{formatDate(item.liDeadline)}</p>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                              {formatDate(item.liDeadline)}
+                            </p>
                             <span
                               className={`mt-1 inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${urgencyBg} ${urgencyText}`}
                             >

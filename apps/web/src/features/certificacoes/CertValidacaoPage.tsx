@@ -178,15 +178,15 @@ export default function CertValidacaoPage() {
     // Sem `p-5 md:p-7`: o <main> do AppLayout já aplica `p-4 lg:p-6`.
     <div className="space-y-6 animate-fade-in">
       {/* Real-time Info Banner */}
-      <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 overflow-hidden">
+      <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/80 to-teal-50/60 dark:from-emerald-950/40 dark:to-teal-950/40 overflow-hidden dark:border-emerald-700/50">
         <div className="p-5">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col items-start gap-4 sm:flex-row">
             <div className="p-3 rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm flex-shrink-0">
               <Zap className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2.5 mb-1.5">
-                <h3 className="text-sm font-semibold text-emerald-900">
+              <div className="flex flex-wrap items-center gap-2.5 mb-1.5">
+                <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-300">
                   Verificação em Tempo Real
                 </h3>
                 <span className="inline-flex items-center gap-1 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-[10px] px-2 py-0.5 rounded-lg font-semibold shadow-sm">
@@ -197,7 +197,7 @@ export default function CertValidacaoPage() {
               {/* O texto dizia apenas "consulta os sites em tempo real" e omitia
                   que a ação também ressincroniza planilha e estoque
                   (`source: 'sheets'` -> sync_sheets_to_db + sync_stock_all). */}
-              <p className="text-sm text-emerald-700/80 leading-relaxed">
+              <p className="text-sm text-emerald-700/80 leading-relaxed dark:text-emerald-300">
                 Ao iniciar, a rotina primeiro <strong>ressincroniza a planilha</strong> (Google
                 Sheets) e o <strong>estoque completo</strong> (WMS/e-commerce) e só então consulta
                 os sites em TEMPO REAL via API VTEX, produto a produto, comparando o texto de
@@ -227,7 +227,7 @@ export default function CertValidacaoPage() {
                   value={brand}
                   onChange={(e) => setBrand(e.target.value)}
                   disabled={running}
-                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 dark:bg-slate-900 disabled:text-slate-400 cursor-pointer min-w-[200px]"
+                  className="appearance-none pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-300 font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none transition-all disabled:bg-slate-50 disabled:text-slate-400 cursor-pointer min-w-[200px]"
                 >
                   {brands.map((b) => (
                     <option key={b.value} value={b.value}>
@@ -273,7 +273,7 @@ export default function CertValidacaoPage() {
               {productCount !== null ? (
                 <span>
                   ~{estimatedMinutes} min
-                  <span className="text-slate-400 mx-1">|</span>
+                  <span className="text-slate-500 dark:text-slate-400 mx-1">|</span>
                   {productCount} produtos
                 </span>
               ) : (
@@ -295,7 +295,7 @@ export default function CertValidacaoPage() {
               <button
                 type="button"
                 onClick={loadBrandCounts}
-                className="shrink-0 rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300"
+                className="shrink-0 rounded-lg border border-danger-200 bg-white px-3 py-1.5 text-xs font-semibold text-danger-700 transition-colors hover:bg-danger-100 dark:border-danger-800 dark:bg-slate-800 dark:text-danger-300 dark:hover:bg-danger-950/30"
               >
                 Tentar novamente
               </button>
@@ -309,8 +309,8 @@ export default function CertValidacaoPage() {
           )}
 
           {error && (
-            <div className="mt-5 p-4 rounded-xl bg-danger-50 border border-danger-200/80 text-sm text-danger-700 flex items-start gap-3">
-              <div className="p-1 rounded-lg bg-danger-100 flex-shrink-0 mt-0.5">
+            <div className="mt-5 p-4 rounded-xl bg-danger-50 border border-danger-200/80 text-sm text-danger-700 flex items-start gap-3 dark:bg-danger-950/30 dark:border-danger-700/50 dark:text-danger-300">
+              <div className="p-1 rounded-lg bg-danger-100 flex-shrink-0 mt-0.5 dark:bg-danger-950/30">
                 <Sparkles className="w-3.5 h-3.5 text-danger-500" />
               </div>
               <span>{error}</span>
@@ -338,7 +338,7 @@ export default function CertValidacaoPage() {
       {/* Summary */}
       {summary && (
         <div className="space-y-6">
-          <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/50 to-white p-6">
+          <div className="rounded-2xl border border-emerald-200/60 bg-gradient-to-r from-emerald-50/50 to-white dark:from-emerald-950/40 dark:to-slate-800 p-6 dark:border-emerald-700/50">
             <div className="flex items-center gap-3 mb-6">
               <div className="p-2.5 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-sm">
                 <ShieldCheck className="w-5 h-5" />
@@ -352,7 +352,7 @@ export default function CertValidacaoPage() {
                 </p>
               </div>
               <div className="ml-auto">
-                <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-semibold">
+                <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-lg text-xs font-semibold dark:text-emerald-300 dark:bg-emerald-950/30">
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   Completo
                 </div>

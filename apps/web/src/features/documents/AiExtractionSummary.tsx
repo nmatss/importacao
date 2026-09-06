@@ -250,7 +250,9 @@ function CargoDescriptionBlock({ text }: { text: string }) {
 
   return (
     <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-3 py-2">
-      <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">Descrição da Carga</p>
+      <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
+        Descrição da Carga
+      </p>
       <p
         className={cn(
           'text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap',
@@ -263,7 +265,7 @@ function CargoDescriptionBlock({ text }: { text: string }) {
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 text-[11px] font-medium text-violet-600 hover:text-violet-700"
+          className="mt-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-300"
         >
           {expanded ? 'Ver menos' : 'Ver mais'}
         </button>
@@ -319,10 +321,10 @@ function CoverageHeader({
 
   const tone =
     displayedReadPercent >= 90
-      ? 'border-emerald-100 bg-emerald-50/60 text-emerald-700'
+      ? 'border-emerald-100 bg-emerald-50/60 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300'
       : displayedReadPercent >= 60
-        ? 'border-amber-100 bg-amber-50/60 text-amber-700'
-        : 'border-amber-200 bg-amber-50 text-amber-800';
+        ? 'border-amber-100 bg-amber-50/60 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300'
+        : 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300';
 
   const readLabel = coverage.effectiveReadPercent == null ? 'Leu' : 'Leu (ponderado)';
 
@@ -407,7 +409,9 @@ function renderSecondaryFields(
         if (value === null || value === undefined || value === '') return null;
         return (
           <div key={key} className="min-w-0">
-            <span className="text-[10px] text-slate-400">{labels[key] || key}</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+              {labels[key] || key}
+            </span>
             <p className="text-xs text-slate-600 dark:text-slate-400 truncate">
               {formatValue(value, key)}
               <FieldConfidence confidence={fieldConf} />
@@ -459,7 +463,7 @@ export function AiExtractionSummary({
 
   if (hasNoData) {
     return (
-      <div className="rounded-lg border border-danger-100 bg-danger-50/50 px-3 py-2.5 text-xs text-danger-600">
+      <div className="rounded-lg border border-danger-100 bg-danger-50/50 px-3 py-2.5 text-xs text-danger-600 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300">
         <strong>Documento não reconhecido</strong> — A IA não conseguiu extrair dados deste
         documento. Verifique se é o tipo correto ou reprocesse.
       </div>
@@ -471,7 +475,7 @@ export function AiExtractionSummary({
       <CoverageHeader coverage={effectiveCoverage} labels={labels} />
 
       {lowDocumentConfidence && (
-        <div className="rounded-lg border border-danger-100 bg-danger-50/70 px-3 py-2 text-xs text-danger-700">
+        <div className="rounded-lg border border-danger-100 bg-danger-50/70 px-3 py-2 text-xs text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300">
           <strong>Baixa confiança</strong> — extração com {Math.round(confidence * 100)}%, abaixo do
           piso operacional. Use estes dados apenas para revisão manual.
         </div>
@@ -483,7 +487,7 @@ export function AiExtractionSummary({
           const { value, confidence: fieldConf } = extractValue(val);
           return (
             <div key={key} className="min-w-0">
-              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
+              <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                 {labels[key] || key}
               </span>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100 truncate">
@@ -501,7 +505,7 @@ export function AiExtractionSummary({
       {/* Items summary */}
       {items && items.length > 0 ? (
         <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase text-slate-400 mb-1">
+          <p className="text-[10px] font-semibold uppercase text-slate-500 dark:text-slate-400 mb-1">
             Itens ({items.length})
           </p>
           <div className="max-h-32 overflow-y-auto space-y-0.5">
@@ -537,7 +541,9 @@ export function AiExtractionSummary({
               return (
                 <div key={idx} className="text-xs text-slate-600 dark:text-slate-400">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-400 w-5 text-right">{idx + 1}.</span>
+                    <span className="font-mono text-slate-500 dark:text-slate-400 w-5 text-right">
+                      {idx + 1}.
+                    </span>
                     {code ? (
                       <span className="font-medium text-slate-700 dark:text-slate-300">
                         {String(code)}
@@ -567,7 +573,9 @@ export function AiExtractionSummary({
               );
             })}
             {items.length > 10 ? (
-              <p className="text-[10px] text-slate-400 pt-1">+{items.length - 10} itens...</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 pt-1">
+                +{items.length - 10} itens...
+              </p>
             ) : null}
           </div>
         </div>

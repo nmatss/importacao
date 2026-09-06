@@ -81,15 +81,20 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
   {
     completed: {
       dot: 'bg-emerald-500',
-      bg: 'bg-emerald-50',
-      text: 'text-emerald-700',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+      text: 'text-emerald-700 dark:text-emerald-300',
       label: 'Concluído',
     },
-    failed: { dot: 'bg-danger-500', bg: 'bg-danger-50', text: 'text-danger-700', label: 'Falha' },
+    failed: {
+      dot: 'bg-danger-500',
+      bg: 'bg-danger-50 dark:bg-danger-950/30',
+      text: 'text-danger-700 dark:text-danger-300',
+      label: 'Falha',
+    },
     processing: {
       dot: 'bg-primary-500',
-      bg: 'bg-primary-50',
-      text: 'text-primary-700',
+      bg: 'bg-primary-50 dark:bg-primary-950/30',
+      text: 'text-primary-700 dark:text-primary-300',
       label: 'Processando',
     },
     ignored: {
@@ -98,11 +103,16 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
       text: 'text-slate-600 dark:text-slate-400',
       label: 'Ignorado',
     },
-    pending: { dot: 'bg-amber-500', bg: 'bg-amber-50', text: 'text-amber-700', label: 'Pendente' },
+    pending: {
+      dot: 'bg-amber-500',
+      bg: 'bg-amber-50 dark:bg-amber-950/30',
+      text: 'text-amber-700 dark:text-amber-300',
+      label: 'Pendente',
+    },
     reprocessed: {
       dot: 'bg-violet-500',
-      bg: 'bg-violet-50',
-      text: 'text-violet-700',
+      bg: 'bg-violet-50 dark:bg-violet-950/30',
+      text: 'text-violet-700 dark:text-violet-300',
       label: 'Reprocessado',
     },
   };
@@ -266,8 +276,8 @@ export function EmailIngestionPage() {
                   className={cn(
                     'flex items-center gap-2.5 rounded-xl px-4 py-2',
                     status?.enabled
-                      ? 'bg-emerald-50 border border-emerald-200'
-                      : 'bg-danger-50 border border-danger-200',
+                      ? 'bg-emerald-50 border border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-700/50'
+                      : 'bg-danger-50 border border-danger-200 dark:bg-danger-950/30 dark:border-danger-700/50',
                   )}
                 >
                   {status?.enabled ? (
@@ -276,40 +286,52 @@ export function EmailIngestionPage() {
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                         <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
                       </span>
-                      <Wifi className="h-4 w-4 text-emerald-600" />
-                      <span className="text-sm font-semibold text-emerald-700">Ativo</span>
+                      <Wifi className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                        Ativo
+                      </span>
                     </>
                   ) : (
                     <>
                       <span className="h-2.5 w-2.5 rounded-full bg-danger-500" />
-                      <WifiOff className="h-4 w-4 text-danger-600" />
-                      <span className="text-sm font-semibold text-danger-700">Inativo</span>
+                      <WifiOff className="h-4 w-4 text-danger-600 dark:text-danger-300" />
+                      <span className="text-sm font-semibold text-danger-700 dark:text-danger-300">
+                        Inativo
+                      </span>
                     </>
                   )}
                 </div>
 
                 {/* Details */}
                 <div className="flex flex-wrap items-center gap-4 text-sm">
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <span className="font-medium text-slate-400">Método:</span>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">Método:</span>
                     {status?.method === 'gmail_api' ? (
-                      <span className="font-medium text-emerald-600">
+                      <span className="min-w-0 break-all font-medium text-emerald-600 dark:text-emerald-300">
                         Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}
                       </span>
                     ) : status?.method === 'imap' ? (
-                      <span className="font-medium text-emerald-600">IMAP</span>
+                      <span className="min-w-0 break-all font-medium text-emerald-600 dark:text-emerald-300">
+                        IMAP
+                      </span>
                     ) : (
-                      <span className="font-medium text-danger-600">Não configurado</span>
+                      <span className="font-medium text-danger-600 dark:text-danger-300">
+                        Não configurado
+                      </span>
                     )}
                   </div>
                   <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <span className="font-medium text-slate-400">Remetentes:</span>
-                    <span>{status?.allowedSenders}</span>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">
+                      Remetentes:
+                    </span>
+                    <span className="min-w-0 break-words">{status?.allowedSenders}</span>
                   </div>
                   <div className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
-                  <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
-                    <span className="font-medium text-slate-400">Última verificação:</span>
+                  <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                    <span className="font-medium text-slate-500 dark:text-slate-400">
+                      Última verificação:
+                    </span>
                     <span>{status?.lastRun ? formatDateTime(status.lastRun) : 'Nunca'}</span>
                   </div>
                 </div>
@@ -329,7 +351,7 @@ export function EmailIngestionPage() {
                   <button
                     onClick={() => handleTrigger(true)}
                     disabled={triggering}
-                    className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 disabled:opacity-50 transition-all"
+                    className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2.5 text-sm font-semibold text-primary-700 hover:bg-primary-100 hover:border-primary-300 disabled:opacity-50 transition-all dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30 dark:hover:border-primary-700/50"
                   >
                     <Inbox className={cn('h-4 w-4', triggering && 'animate-spin')} />
                     Buscar Todos
@@ -350,16 +372,18 @@ export function EmailIngestionPage() {
               key={card.label}
               className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-5 shadow-sm"
             >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2">
+                <div className="contents">
+                  <p className="min-w-0 break-words text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
                     {card.value}
                   </p>
-                  <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{card.label}</p>
+                  <p className="col-span-2 row-start-2 mt-2 text-sm text-slate-500 dark:text-slate-400">
+                    {card.label}
+                  </p>
                 </div>
                 <div
                   className={cn(
-                    'flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br',
+                    'col-start-2 row-start-1 flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br',
                     card.gradient,
                   )}
                 >
@@ -393,7 +417,7 @@ export function EmailIngestionPage() {
                 setEndDate('');
                 setPage(1);
               }}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors dark:text-primary-300 dark:hover:bg-primary-950/30"
             >
               Limpar datas
             </button>
@@ -404,8 +428,8 @@ export function EmailIngestionPage() {
       {/* Logs Table */}
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Inbox className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
@@ -503,17 +527,19 @@ export function EmailIngestionPage() {
                             {log.processId ? (
                               <Link
                                 to={`/importacao/processos/${log.processId}`}
-                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-700 font-medium transition-colors"
+                                className="inline-flex items-center gap-1 text-primary-600 hover:text-primary-700 font-medium transition-colors dark:text-primary-300 dark:hover:text-primary-300"
                               >
                                 {log.processCode ?? log.processId}
                                 <ExternalLink className="h-3 w-3" />
                               </Link>
                             ) : (
-                              <span className="text-slate-400">{log.processCode ?? '-'}</span>
+                              <span className="text-slate-500 dark:text-slate-400">
+                                {log.processCode ?? '-'}
+                              </span>
                             )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
-                            <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400">
+                            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-400">
                               <Paperclip className="h-3.5 w-3.5 text-slate-400" />
                               {log.processedAttachments}/{log.attachmentsCount}
                             </div>
@@ -535,7 +561,7 @@ export function EmailIngestionPage() {
                               <button
                                 onClick={() => handleReprocess(log.id)}
                                 disabled={reprocessingId === log.id}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 disabled:opacity-50 transition-all"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 disabled:opacity-50 transition-all"
                               >
                                 <RotateCcw
                                   className={cn(
@@ -557,23 +583,23 @@ export function EmailIngestionPage() {
                             >
                               <div className="py-3 pl-4 border-l-2 border-slate-200 dark:border-slate-600">
                                 {log.status === 'failed' && log.errorMessage && (
-                                  <div className="flex items-start gap-2 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3 text-sm text-danger-700">
+                                  <div className="flex items-start gap-2 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3 text-sm text-danger-700 dark:bg-danger-950/30 dark:border-danger-700/50 dark:text-danger-300">
                                     <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-danger-500" />
                                     <span>{log.errorMessage}</span>
                                   </div>
                                 )}
                                 {log.status === 'completed' && log.processedAttachmentDetails && (
                                   <div className="space-y-1.5">
-                                    <p className="text-xs font-medium uppercase tracking-wider text-slate-400 mb-2">
+                                    <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-2">
                                       Anexos processados
                                     </p>
                                     {log.processedAttachmentDetails.map((att, i) => (
                                       <div
                                         key={i}
-                                        className="flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm"
+                                        className="flex items-center gap-2.5 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm dark:bg-emerald-950/30 dark:border-emerald-700/50"
                                       >
                                         <Paperclip className="h-3.5 w-3.5 text-emerald-500" />
-                                        <span className="font-medium text-emerald-800">
+                                        <span className="font-medium text-emerald-800 dark:text-emerald-300">
                                           {att.filename}
                                         </span>
                                         <span className="text-emerald-500">({att.type})</span>
@@ -602,7 +628,7 @@ export function EmailIngestionPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={page <= 1}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-all"
                   >
                     <ChevronLeft className="h-4 w-4" />
                     Anterior
@@ -610,7 +636,7 @@ export function EmailIngestionPage() {
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={page >= totalPages}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 disabled:opacity-50 transition-all"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 transition-all"
                   >
                     Próximo
                     <ChevronRight className="h-4 w-4" />

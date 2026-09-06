@@ -15,6 +15,23 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## 2026-09-06 — Totais de Câmbios exibem NaN (fora do escopo visual)
+
+- **ALTO — integridade da informacao exibida:** `CurrencyExchangePage.tsx:142`
+  soma `amountUsd`/`amountBrl` como numeros, mas a listagem da API retorna os
+  decimais textuais do banco. Com varios lancamentos, `+` concatena as strings;
+  `formatCurrency` recebe um valor nao numerico e exibe `NaN`.
+- Reproduzido no Chromium com fixtures alinhadas ao contrato existente:
+  `33775.00` + `3850.00` no tipo balance; as capturas `imp-cambios` em
+  `output/playwright/responsive-verified/` mostram o problema.
+- Confirmacao estatica: `apps/api/src/modules/currency-exchange/service.ts:14`
+  devolve os registros sem conversao; controller/routes encaminham essa lista.
+  O calculo do frontend ja existe em `HEAD` e nao foi alterado nesta auditoria.
+- Estado: **ABERTO**. Corrigir exige alterar calculo/normalizacao e adicionar
+  regressao com multiplos lancamentos e BRL nulo. Nao foi mascarado nas fixtures
+  nem corrigido porque a sessao autoriza exclusivamente layout/UX/UI.
+- Evidencia e contexto: `docs/STATUS-2026-09-06-RESPONSIVIDADE.md`.
+
 ## 2026-08-29 — Auditoria integral: o que mudou neste documento
 
 A sessao de 2026-08-29 auditou as 34 paginas, os 23 modulos da API e a

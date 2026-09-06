@@ -41,9 +41,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
   return (
     <div>
       {isCancelled && (
-        <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-danger-50 border border-danger-200/60 px-4 py-3 text-sm font-semibold text-danger-700">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-danger-100">
-            <XCircle className="h-4 w-4 text-danger-600" />
+        <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-danger-50 border border-danger-200/60 px-4 py-3 text-sm font-semibold text-danger-700 dark:bg-danger-950/30 dark:border-danger-700/50 dark:text-danger-300">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-danger-100 dark:bg-danger-950/30">
+            <XCircle className="h-4 w-4 text-danger-600 dark:text-danger-300" />
           </div>
           Processo Cancelado
         </div>
@@ -67,7 +67,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       : isCompleted
                         ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-sm'
                         : isCurrent
-                          ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm ring-2 ring-primary-100'
+                          ? 'bg-gradient-to-br from-primary-500 to-primary-700 text-white shadow-sm ring-2 ring-primary-100 dark:ring-primary-700/50'
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
                   )}
                 >
@@ -83,9 +83,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                     isCancelled
                       ? 'text-slate-400'
                       : isCompleted
-                        ? 'text-emerald-700'
+                        ? 'text-emerald-700 dark:text-emerald-300'
                         : isCurrent
-                          ? 'font-bold text-primary-700'
+                          ? 'font-bold text-primary-700 dark:text-primary-300'
                           : 'text-slate-400',
                   )}
                 >
@@ -138,7 +138,8 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                       : idx === currentIndex
                         ? 'bg-primary-500'
                         : 'bg-slate-200 dark:bg-slate-700',
-                  idx === mobileIndex && 'ring-2 ring-offset-1 ring-primary-300',
+                  idx === mobileIndex &&
+                    'ring-2 ring-offset-1 ring-primary-300 dark:ring-primary-700/50',
                 )}
               />
             ))}
@@ -158,7 +159,7 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                     isCancelled
                       ? 'bg-slate-100 dark:bg-slate-700 text-slate-400'
                       : isCompleted
-                        ? 'bg-emerald-100 text-emerald-600'
+                        ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
                         : isCurrent
                           ? 'bg-primary-600 text-white shadow-sm'
                           : 'bg-slate-100 dark:bg-slate-700 text-slate-400',
@@ -176,9 +177,9 @@ function Stepper({ currentStatus }: { currentStatus: string }) {
                     isCancelled
                       ? 'text-slate-400'
                       : isCompleted
-                        ? 'text-emerald-700'
+                        ? 'text-emerald-700 dark:text-emerald-300'
                         : isCurrent
-                          ? 'text-primary-700'
+                          ? 'text-primary-700 dark:text-primary-300'
                           : 'text-slate-400',
                   )}
                 >
@@ -208,7 +209,7 @@ function FollowUpProgress({ followUp }: { followUp: FollowUpTracking }) {
     <div className="mt-4 flex items-center gap-3">
       <BarChart3 className="h-4 w-4 text-slate-400" />
       <div className="flex-1">
-        <div className="flex items-center justify-between mb-1">
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             Progresso Geral
           </span>

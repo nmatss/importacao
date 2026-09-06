@@ -155,28 +155,28 @@ export function CurrencyExchangePage() {
       value: formatCurrency(totalBalanceUsd),
       icon: Wallet,
       gradient: 'from-primary-500 to-primary-600',
-      bg: 'bg-primary-50',
+      bg: 'bg-primary-50 dark:bg-primary-950/30',
     },
     {
       label: 'Total Deposit USD',
       value: formatCurrency(totalDepositUsd),
       icon: TrendingUp,
       gradient: 'from-emerald-500 to-emerald-600',
-      bg: 'bg-emerald-50',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
     },
     {
       label: 'Saldo USD',
       value: formatCurrency(saldoUsd),
       icon: ArrowDownUp,
       gradient: 'from-violet-500 to-violet-600',
-      bg: 'bg-violet-50',
+      bg: 'bg-violet-50 dark:bg-violet-950/30',
     },
     {
       label: 'Total BRL',
       value: formatCurrency(totalBrl, 'BRL'),
       icon: Calculator,
       gradient: 'from-amber-500 to-amber-600',
-      bg: 'bg-amber-50',
+      bg: 'bg-amber-50 dark:bg-amber-950/30',
     },
   ];
 
@@ -341,7 +341,7 @@ export function CurrencyExchangePage() {
                   {calculatedBrl ? (
                     formatCurrency(calculatedBrl, 'BRL')
                   ) : (
-                    <span className="text-slate-400">--</span>
+                    <span className="text-slate-500 dark:text-slate-400">--</span>
                   )}
                 </div>
               </div>
@@ -407,7 +407,7 @@ export function CurrencyExchangePage() {
               <div
                 id="exchange-form-error"
                 role="alert"
-                className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700"
+                className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300"
               >
                 {formError}
               </div>
@@ -515,8 +515,8 @@ export function CurrencyExchangePage() {
                           <span
                             className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${
                               ex.type === 'balance'
-                                ? 'bg-primary-50 text-primary-700'
-                                : 'bg-emerald-50 text-emerald-700'
+                                ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                             }`}
                           >
                             {ex.type === 'balance' ? 'Balance' : 'Deposit'}
@@ -543,7 +543,7 @@ export function CurrencyExchangePage() {
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <button
                             onClick={() => setDeleteId(ex.id)}
-                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                             title="Excluir"
                             aria-label="Excluir cambio"
                           >

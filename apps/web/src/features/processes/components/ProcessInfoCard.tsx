@@ -199,7 +199,9 @@ function InfoField({
       )}
       <div className="min-w-0">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">{label}</p>
+          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+            {label}
+          </p>
           {showSource && sourceStyle && (
             <span
               className={cn(
@@ -318,10 +320,10 @@ function RegistroAduaneiroSection({ process }: { process: ImportProcess }) {
   if (populated.length === 0) return null;
 
   return (
-    <div className="mt-6 rounded-xl border border-red-100 bg-red-50/30 p-5 dark:border-red-900/60 dark:bg-red-950/20">
+    <div className="mt-6 rounded-xl border border-red-100 bg-red-50/30 p-5 dark:border-danger-900/60 dark:bg-danger-950/20">
       <div className="mb-4 flex items-center gap-2">
         <Stamp className="h-4 w-4 text-red-500" />
-        <p className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-red-300">
+        <p className="text-xs font-bold uppercase tracking-wider text-red-700 dark:text-danger-300">
           Registro Aduaneiro
         </p>
       </div>

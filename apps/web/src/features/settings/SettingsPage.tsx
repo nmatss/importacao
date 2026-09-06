@@ -76,8 +76,11 @@ const tabs: { key: TabKey; label: string; icon: typeof Settings }[] = [
 ];
 
 const roleBadge: Record<string, { bg: string; text: string }> = {
-  admin: { bg: 'bg-danger-50', text: 'text-danger-700' },
-  analyst: { bg: 'bg-emerald-50', text: 'text-emerald-700' },
+  admin: { bg: 'bg-danger-50 dark:bg-danger-950/30', text: 'text-danger-700 dark:text-danger-300' },
+  analyst: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
+  },
 };
 
 const defaultRoleBadge = {
@@ -177,7 +180,9 @@ function SectionCard({
             </div>
             <div>
               <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
-              {description && <p className="text-xs text-slate-400 mt-0.5">{description}</p>}
+              {description && (
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{description}</p>
+              )}
             </div>
           </div>
           {actions}
@@ -210,7 +215,7 @@ function SaveButton({
         {label}
       </button>
       {saved && (
-        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 animate-in fade-in">
+        <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 animate-in fade-in dark:bg-emerald-950/30 dark:text-emerald-300">
           <CheckCircle className="h-3.5 w-3.5" />
           Salvo com sucesso
         </span>
@@ -392,7 +397,7 @@ function EmailSettingsTab() {
                 placeholder="contact@kiomglobal.com"
                 className={textareaClasses}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {parseEmailList(kiomEmail).length} destinatário(s)
               </p>
             </div>
@@ -407,7 +412,7 @@ function EmailSettingsTab() {
                 placeholder="bruna@feniciacomex.com.br, fenicia.fin@feniciacomex.com.br"
                 className={textareaClasses}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {parseEmailList(feniciaEmail).length} destinatário(s)
               </p>
             </div>
@@ -422,7 +427,7 @@ function EmailSettingsTab() {
                 placeholder="email@dominio.com"
                 className={textareaClasses}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {parseEmailList(isaEmail).length} destinatário(s)
               </p>
             </div>
@@ -437,7 +442,7 @@ function EmailSettingsTab() {
                 placeholder="global@grupounico.com"
                 className={textareaClasses}
               />
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {parseEmailList(defaultCcEmail).length} e-mail(s) em cópia
               </p>
             </div>
@@ -694,7 +699,7 @@ function UsersTab() {
                   <tr
                     key={user.id}
                     className={cn(
-                      'group transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80',
+                      'group transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/80 dark:bg-slate-700/60 dark:text-slate-200',
                       idx !== (users?.length ?? 0) - 1 &&
                         'border-b border-slate-100 dark:border-slate-700/80',
                     )}
@@ -764,7 +769,7 @@ function UsersTab() {
                       <div className="flex gap-1">
                         <button
                           onClick={() => openEdit(user)}
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200 dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           title="Editar"
                           aria-label={`Editar usuário ${user.name}`}
                         >
@@ -773,7 +778,7 @@ function UsersTab() {
                         <button
                           onClick={() => setDeactivateId(user.id)}
                           disabled={isSelf(user)}
-                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 transition-all duration-200 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+                          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg text-slate-400 transition-all duration-200 hover:bg-danger-50 hover:text-danger-600 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-slate-400 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                           title={isSelf(user) ? selfActionTitle : 'Desativar'}
                           aria-label={`Desativar usuário ${user.name}`}
                         >
@@ -1094,7 +1099,7 @@ function TestConnectionButton({ testing, onClick }: { testing: boolean; onClick:
     <button
       onClick={onClick}
       disabled={testing}
-      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
+      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 disabled:opacity-50 transition-all duration-200 shadow-sm"
     >
       {testing ? (
         <Loader2 className="h-4 w-4 animate-spin" />
@@ -1237,7 +1242,9 @@ function CommunicationTemplatesTab() {
       >
         {!templates || templates.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="text-sm font-medium text-slate-400">Nenhum modelo cadastrado.</p>
+            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">
+              Nenhum modelo cadastrado.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1270,7 +1277,7 @@ function CommunicationTemplatesTab() {
                     <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {template.name}
                     </td>
-                    <td className="px-4 py-3 text-sm text-slate-500">
+                    <td className="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">
                       {template.recipientEmail || template.recipient || '--'}
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
@@ -1281,8 +1288,8 @@ function CommunicationTemplatesTab() {
                         className={cn(
                           'rounded-lg px-2.5 py-1 text-xs font-semibold',
                           template.isActive
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-slate-100 text-slate-500',
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                            : 'bg-slate-100 text-slate-500 dark:bg-slate-700/60 dark:text-slate-200',
                         )}
                       >
                         {template.isActive ? 'Ativo' : 'Inativo'}
@@ -1293,7 +1300,7 @@ function CommunicationTemplatesTab() {
                         <button
                           type="button"
                           onClick={() => openEdit(template)}
-                          className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600"
+                          className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                           aria-label={`Editar modelo ${template.name}`}
                         >
                           <Pencil className="h-4 w-4" />
@@ -1302,7 +1309,7 @@ function CommunicationTemplatesTab() {
                           <button
                             type="button"
                             onClick={() => setDeletingId(template.id)}
-                            className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600"
+                            className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                             aria-label={`Desativar modelo ${template.name}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -1401,7 +1408,7 @@ function CommunicationTemplatesTab() {
                     type="checkbox"
                     checked={form.isActive}
                     onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-                    className="h-4 w-4 rounded border-slate-300 text-primary-600"
+                    className="h-4 w-4 rounded border-slate-300 text-primary-600 dark:text-primary-300"
                   />
                   Ativo para uso nos atendimentos
                 </label>
@@ -1543,7 +1550,9 @@ function SignaturesTab() {
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
               <FileSignature className="h-6 w-6 text-slate-300" />
             </div>
-            <p className="text-sm text-slate-400 font-medium">Nenhuma assinatura cadastrada.</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+              Nenhuma assinatura cadastrada.
+            </p>
             <button
               onClick={openCreate}
               className="inline-flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 transition-colors"
@@ -1560,27 +1569,27 @@ function SignaturesTab() {
                 className={cn(
                   'rounded-xl border p-4 transition-colors',
                   sig.isDefault
-                    ? 'border-primary-200 bg-primary-50/50'
+                    ? 'border-primary-200 bg-primary-50/50 dark:border-primary-700/50 dark:bg-primary-950/30'
                     : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800',
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="min-w-0 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {sig.name}
                     </span>
                     {sig.isDefault && (
-                      <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700">
+                      <span className="inline-flex items-center gap-1 rounded-lg bg-primary-100 px-2 py-0.5 text-xs font-semibold text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
                         <Star className="h-3 w-3" />
                         Padrão
                       </span>
                     )}
                   </div>
-                  <div className="flex items-center gap-1">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">
                     {!sig.isDefault && (
                       <button
                         onClick={() => handleSetDefault(sig)}
-                        className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
+                        className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200 dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                         title="Definir como padrão"
                         aria-label={`Definir ${sig.name} como padrão`}
                       >
@@ -1597,7 +1606,7 @@ function SignaturesTab() {
                     </button>
                     <button
                       onClick={() => openEdit(sig)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-primary-50 hover:text-primary-600 transition-all duration-200 dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
                       title="Editar"
                       aria-label={`Editar assinatura ${sig.name}`}
                     >
@@ -1605,7 +1614,7 @@ function SignaturesTab() {
                     </button>
                     <button
                       onClick={() => setDeletingId(sig.id)}
-                      className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200"
+                      className="rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 transition-all duration-200 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                       title="Excluir"
                       aria-label={`Excluir assinatura ${sig.name}`}
                     >
@@ -1691,7 +1700,7 @@ function SignaturesTab() {
                       type="checkbox"
                       checked={form.isDefault}
                       onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-                      className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+                      className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500 dark:text-primary-300"
                     />
                     <span className="text-sm text-slate-600 dark:text-slate-400">
                       Definir como assinatura padrão
@@ -1742,18 +1751,20 @@ function StatusIndicator({
 }) {
   if (status === 'idle') return null;
   return status === 'success' ? (
-    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600">
+    <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
       <CheckCircle className="h-3.5 w-3.5" />
       Conectado
     </span>
   ) : (
     <div className="flex min-w-0 flex-col items-start gap-1 sm:items-end">
-      <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600">
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-danger-50 px-3 py-1.5 text-xs font-semibold text-danger-600 dark:bg-danger-950/30 dark:text-danger-300">
         <XCircle className="h-3.5 w-3.5" />
         Falha na conexão
       </span>
       {errorMessage && (
-        <p className="max-w-xs break-words text-xs text-danger-600 sm:text-right">{errorMessage}</p>
+        <p className="max-w-xs break-words text-xs text-danger-600 sm:text-right dark:text-danger-300">
+          {errorMessage}
+        </p>
       )}
     </div>
   );

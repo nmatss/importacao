@@ -235,12 +235,12 @@ function ExtractionCoveragePanel({ coverage }: { coverage: ComparisonData['extra
   if (rows.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
       <div className="flex items-start gap-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">Diagnostico da extracao documental</p>
-          <p className="mt-0.5 text-xs leading-5 text-amber-800">
+          <p className="mt-0.5 text-xs leading-5 text-amber-800 dark:text-amber-300">
             Revise campos nao lidos ou de baixa confianca antes de aceitar divergencias, gerar
             espelho ou sincronizar Follow-Up.
           </p>
@@ -249,17 +249,17 @@ function ExtractionCoveragePanel({ coverage }: { coverage: ComparisonData['extra
               <div key={row.key} className="rounded-md bg-white/70 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold">{row.label}</span>
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold">
+                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold dark:bg-amber-950/30">
                     {row.percent}%
                   </span>
                 </div>
-                <p className="mt-1 text-[11px] text-amber-800">
+                <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
                   {row.missing.length > 0
                     ? `Nao lidos: ${row.missing.slice(0, 5).join(', ')}${row.missing.length > 5 ? '...' : ''}`
                     : 'Campos obrigatorios lidos.'}
                 </p>
                 {row.lowConfidence.length > 0 ? (
-                  <p className="mt-0.5 text-[11px] text-amber-800">
+                  <p className="mt-0.5 text-[11px] text-amber-800 dark:text-amber-300">
                     Baixa confianca: {row.lowConfidence.slice(0, 5).join(', ')}
                     {row.lowConfidence.length > 5 ? '...' : ''}
                   </p>
@@ -356,17 +356,17 @@ function statusLabel(status: DisplayStatus) {
 function statusClasses(status: DisplayStatus) {
   switch (status) {
     case 'accepted':
-      return 'bg-primary-50 text-primary-700 border-primary-200';
+      return 'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-950/30 dark:text-primary-300 dark:border-primary-700/50';
     case 'divergent':
-      return 'bg-danger-50 text-danger-700 border-danger-200';
+      return 'bg-danger-50 text-danger-700 border-danger-200 dark:bg-danger-950/30 dark:text-danger-300 dark:border-danger-700/50';
     case 'warning':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
+      return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700/50';
     case 'match':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700/50';
     case 'single_source':
       return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800';
     default:
-      return 'bg-slate-50 text-slate-500 border-slate-200';
+      return 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-700/60 dark:text-slate-200 dark:border-slate-600';
   }
 }
 
@@ -410,7 +410,7 @@ function DocBadge({
       className={cn(
         'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium border',
         available
-          ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700/50 dark:text-emerald-300'
           : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-600 text-slate-400',
       )}
     >
@@ -423,10 +423,10 @@ function DocBadge({
             // Limiares unificados (shared/lib/confidence.ts) — este badge usava
             // 0.6 enquanto o resto usava 0.5.
             confidence >= CONFIDENCE_HIGH
-              ? 'bg-emerald-100 text-emerald-700'
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
               : confidence >= CONFIDENCE_MEDIUM
-                ? 'bg-amber-100 text-amber-700'
-                : 'bg-danger-100 text-danger-700',
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                : 'bg-danger-100 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
           )}
         >
           {(confidence * 100).toFixed(0)}%
@@ -475,7 +475,7 @@ function StatusCell({
                 </span>
               )}
               {edited && (
-                <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-700">
+                <span className="rounded bg-primary-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
                   editado
                 </span>
               )}
@@ -486,7 +486,7 @@ function StatusCell({
           <button
             type="button"
             onClick={onEdit}
-            className="rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-primary-600"
+            className="rounded-md p-1 text-slate-300 hover:bg-slate-100 hover:text-primary-600 dark:hover:text-primary-300"
             aria-label="Editar valor do comparativo"
           >
             <Pencil className="h-3.5 w-3.5" />
@@ -526,7 +526,9 @@ function WeightCell({
       <div className="flex flex-col items-end gap-0.5">
         {visible.map((p) => (
           <span key={p.key}>
-            <span className="text-[9px] uppercase text-slate-400 mr-1">{p.label}</span>
+            <span className="text-[9px] uppercase text-slate-500 dark:text-slate-400 mr-1">
+              {p.label}
+            </span>
             {formatNumber(p.value, digits)}
           </span>
         ))}
@@ -893,10 +895,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
       const note = accepted.resolutionNote?.trim() || null;
       return (
         <div
-          className="group relative space-y-1 text-xs text-primary-700"
+          className="group relative space-y-1 text-xs text-primary-700 dark:text-primary-300"
           title={note ?? undefined}
         >
-          <div className="inline-flex items-center gap-1 rounded bg-primary-50 px-2 py-1 font-medium">
+          <div className="inline-flex items-center gap-1 rounded bg-primary-50 px-2 py-1 font-medium dark:bg-primary-950/30">
             <Wrench className="h-3 w-3" />
             Aceito
           </div>
@@ -939,7 +941,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
             rows={2}
             autoFocus
             placeholder="Justificativa do aceite"
-            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none"
+            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none dark:focus:ring-primary-700/50"
           />
           <div className="flex items-center gap-2">
             <button
@@ -974,7 +976,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           setAcceptTarget(target);
           setAcceptNote('');
         }}
-        className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 hover:bg-primary-100"
+        className="inline-flex items-center gap-1 rounded-md border border-primary-200 bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700 hover:bg-primary-100 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30"
       >
         <Wrench className="h-3 w-3" />
         Aceitar
@@ -994,7 +996,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
     return (
       <div className="flex flex-col items-center justify-center py-10 text-center">
         <Package className="h-8 w-8 text-slate-300 mb-2" />
-        <p className="text-sm text-slate-400">Nenhum dado disponivel para comparacao.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">
+          Nenhum dado disponivel para comparacao.
+        </p>
       </div>
     );
   }
@@ -1047,7 +1051,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       <ExtractionCoveragePanel coverage={data.extractionCoverage} />
 
       {missingComparisonDocs.length > 0 && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Comparativo parcial</p>
@@ -1060,7 +1064,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       )}
 
       {hasBackgroundError && (
-        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>Falha ao atualizar o comparativo. Exibindo a ultima leitura disponivel.</p>
         </div>
@@ -1100,16 +1104,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
       </div>
 
       <div className="flex items-center gap-4 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
           <CheckCircle className="h-3.5 w-3.5" /> {counts.match} conformes
         </span>
         {counts.warning > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
             <AlertTriangle className="h-3.5 w-3.5" /> {counts.warning} atencoes
           </span>
         )}
         {counts.divergent > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
             <XCircle className="h-3.5 w-3.5" /> {counts.divergent} falhas
           </span>
         )}
@@ -1118,7 +1122,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
       <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
         <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600 flex items-center justify-between gap-2">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-            <FileText className="h-4 w-4 text-primary-600" />
+            <FileText className="h-4 w-4 text-primary-600 dark:text-primary-300" />
             Comparativo Geral - Invoice vs Packing List vs BL vs Espelho vs Sistema
           </h4>
           {!systemDataAvailable && (
@@ -1130,7 +1134,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+              <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Campo
@@ -1355,7 +1359,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   <td className="px-3 py-2.5" colSpan={5}>
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           Esperado
                         </span>
                         <span className="font-mono text-slate-700 dark:text-slate-300">
@@ -1363,7 +1367,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                         </span>
                       </span>
                       <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                           Encontrado
                         </span>
                         <span
@@ -1418,7 +1422,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <Package className="h-4 w-4 text-violet-600" />
+              <Package className="h-4 w-4 text-violet-600 dark:text-violet-300" />
               Comparativo por Item - Invoice vs Packing List vs Espelho
             </h4>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
@@ -1432,7 +1436,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white dark:bg-slate-800 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+                <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     SKU/Codigo
@@ -1517,7 +1521,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       <div className="flex items-center gap-1.5">
                         {item.itemCode || '-'}
                         {item.isFreeOfCharge && (
-                          <span className="inline-flex items-center rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700">
+                          <span className="inline-flex items-center rounded bg-violet-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
                             FOC
                           </span>
                         )}
@@ -1529,20 +1533,20 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
                       {item.ncm || '-'}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-primary-700">
+                    <td className="px-3 py-2 text-right font-mono text-primary-700 dark:text-primary-300">
                       {formatNumber(item.invoiceQty, 0)}
                     </td>
                     <td
                       className={cn(
                         'px-3 py-2 text-right font-mono',
                         item.status === 'divergent'
-                          ? 'text-danger-700 font-semibold'
-                          : 'text-violet-700',
+                          ? 'text-danger-700 font-semibold dark:text-danger-300'
+                          : 'text-violet-700 dark:text-violet-300',
                       )}
                     >
                       {formatNumber(item.plQty, 0)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-cyan-700">
+                    <td className="px-3 py-2 text-right font-mono text-cyan-700 dark:text-cyan-300">
                       {formatNumber(item.espelhoQty, 0)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
@@ -1568,7 +1572,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                           ) : null,
                         )}
                         {item.manufacturerMatch === false && (
-                          <span className="inline-flex rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700">
+                          <span className="inline-flex rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
                             revisar
                           </span>
                         )}
@@ -1599,8 +1603,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
                           className={cn(
                             'rounded px-1.5 py-0.5 font-semibold',
                             item.weightRatioStatus === 'divergent'
-                              ? 'bg-danger-50 text-danger-700'
-                              : 'bg-amber-50 text-amber-700',
+                              ? 'bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300'
+                              : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
                           )}
                         >
                           {item.weightRatioMessage}
@@ -1651,7 +1655,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-emerald-600" />
+                  <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
                   Rodape da Invoice x Espelho
                 </h4>
                 <p className="mt-0.5 text-xs text-slate-500">
@@ -1664,7 +1668,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           </div>
           <div className="grid gap-4 p-4 md:grid-cols-2">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Apelidos no rodape da Invoice
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1672,18 +1676,18 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   supplierAliasSummary.aliases.map((alias) => (
                     <span
                       key={alias}
-                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700"
+                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300"
                     >
                       {alias}
                     </span>
                   ))
                 ) : (
-                  <span className="text-sm text-slate-400">Nao extraido</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Nao extraido</span>
                 )}
               </div>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Fornecedores no Espelho
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -1691,20 +1695,20 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   supplierAliasSummary.espelhoSuppliers.map((supplier) => (
                     <span
                       key={supplier}
-                      className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700"
+                      className="rounded-full border border-cyan-200 bg-cyan-50 px-2 py-1 text-xs font-medium text-cyan-700 dark:border-cyan-700/50 dark:bg-cyan-950/30 dark:text-cyan-300"
                     >
                       {supplier}
                     </span>
                   ))
                 ) : (
-                  <span className="text-sm text-slate-400">Nao extraido</span>
+                  <span className="text-sm text-slate-500 dark:text-slate-400">Nao extraido</span>
                 )}
               </div>
             </div>
           </div>
           {(supplierAliasSummary.aliasesMissingInEspelho.length > 0 ||
             supplierAliasSummary.espelhoMissingInAliases.length > 0) && (
-            <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30">
+            <div className="border-t border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
               {supplierAliasSummary.aliasesMissingInEspelho.length > 0 && (
                 <p>
                   No rodape e nao no Espelho:{' '}
@@ -1726,7 +1730,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
           <div className="bg-slate-50 dark:bg-slate-900 px-4 py-3 border-b border-slate-200 dark:border-slate-600">
             <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-              <FileText className="h-4 w-4 text-emerald-600" />
+              <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
               Conferencia de Fabricantes
             </h4>
             <p className="mt-0.5 text-xs text-slate-500">
@@ -1761,7 +1765,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       <p className="font-mono text-xs text-slate-700 dark:text-slate-300">
                         {row.itemCode || '--'}
                       </p>
-                      <p className="mt-0.5 max-w-[240px] truncate text-xs text-slate-400">
+                      <p className="mt-0.5 max-w-[240px] truncate text-xs text-slate-500 dark:text-slate-400">
                         {row.description || '--'}
                       </p>
                     </td>
@@ -1795,7 +1799,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
         (data.unmatchedInvoiceItems?.length ?? 0) > 0) && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 overflow-hidden">
           <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
-            <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2 dark:text-amber-300">
               <AlertTriangle className="h-4 w-4" />
               Itens sem correspondencia entre Invoice e Packing List
             </h4>
@@ -1822,7 +1826,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <div className="fixed inset-0" onClick={() => setEditTarget(null)} />
           <div className="relative z-10 w-full max-w-lg rounded-xl border border-slate-200 bg-white p-5 shadow-xl dark:border-slate-700 dark:bg-slate-800">
             <div className="mb-4">
-              <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Editar comparativo
               </p>
               <h4 className="mt-1 text-base font-bold text-slate-900 dark:text-slate-100">
@@ -1833,7 +1837,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
               <div>
                 <label
                   htmlFor="comparison-edit-value"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                 >
                   Valor
                 </label>
@@ -1848,7 +1852,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
               <div>
                 <label
                   htmlFor="comparison-edit-note"
-                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-400"
+                  className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                 >
                   Observacao
                 </label>
@@ -1897,19 +1901,21 @@ function UnmatchedItemsTable({ title, items }: { title: string; items: Unmatched
   return (
     <div>
       <div className="px-4 py-2 bg-amber-50/60 dark:bg-amber-950/20">
-        <h5 className="text-xs font-semibold uppercase tracking-wider text-amber-700">{title}</h5>
+        <h5 className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+          {title}
+        </h5>
       </div>
       <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
         <table className="min-w-full text-sm">
           <thead>
-            <tr className="bg-amber-50/50 dark:bg-amber-950/30 sticky top-0 z-10 bg-amber-50 dark:bg-amber-950/30 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+            <tr className="bg-amber-50/50 dark:bg-amber-950/30 sticky top-0 z-10 bg-amber-50 shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-300">
                 Codigo
               </th>
-              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+              <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-300">
                 Descricao
               </th>
-              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600">
+              <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-300">
                 Quantidade
               </th>
             </tr>
@@ -1917,9 +1923,15 @@ function UnmatchedItemsTable({ title, items }: { title: string; items: Unmatched
           <tbody>
             {items.map((item, i) => (
               <tr key={i} className="border-b last:border-b-0">
-                <td className="px-3 py-2 font-mono text-amber-800">{item.itemCode || '-'}</td>
-                <td className="px-3 py-2 text-amber-800">{item.description || '-'}</td>
-                <td className="px-3 py-2 text-right font-mono text-amber-800">{item.quantity}</td>
+                <td className="px-3 py-2 font-mono text-amber-800 dark:text-amber-300">
+                  {item.itemCode || '-'}
+                </td>
+                <td className="px-3 py-2 text-amber-800 dark:text-amber-300">
+                  {item.description || '-'}
+                </td>
+                <td className="px-3 py-2 text-right font-mono text-amber-800 dark:text-amber-300">
+                  {item.quantity}
+                </td>
               </tr>
             ))}
           </tbody>

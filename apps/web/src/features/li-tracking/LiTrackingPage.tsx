@@ -49,8 +49,8 @@ interface LiStats {
 
 const statusConfig: Record<string, { bg: string; text: string; dot: string; label: string }> = {
   deferred: {
-    bg: 'bg-emerald-50',
-    text: 'text-emerald-700',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
+    text: 'text-emerald-700 dark:text-emerald-300',
     dot: 'bg-emerald-500',
     label: 'Deferida',
   },
@@ -61,15 +61,20 @@ const statusConfig: Record<string, { bg: string; text: string; dot: string; labe
     label: 'Pendente',
   },
   submitted: {
-    bg: 'bg-primary-50',
-    text: 'text-primary-700',
+    bg: 'bg-primary-50 dark:bg-primary-950/30',
+    text: 'text-primary-700 dark:text-primary-300',
     dot: 'bg-primary-500',
     label: 'Submetida',
   },
-  expired: { bg: 'bg-danger-50', text: 'text-danger-700', dot: 'bg-danger-500', label: 'Vencida' },
+  expired: {
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
+    dot: 'bg-danger-500',
+    label: 'Vencida',
+  },
   cancelled: {
-    bg: 'bg-danger-50',
-    text: 'text-danger-700',
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
+    text: 'text-danger-700 dark:text-danger-300',
     dot: 'bg-danger-500',
     label: 'Cancelada',
   },
@@ -343,7 +348,7 @@ export function LiTrackingPage() {
                 setEndDate('');
                 setPage(1);
               }}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 focus-visible:ring-2 focus-visible:ring-primary-500 focus:outline-none transition-colors dark:text-primary-300"
             >
               Limpar filtros
             </button>
@@ -435,7 +440,7 @@ export function LiTrackingPage() {
                       {li.deferredAt ? (
                         formatDate(li.deferredAt)
                       ) : li.expectedDeferralAt ? (
-                        <span className="text-amber-600">
+                        <span className="text-amber-600 dark:text-amber-300">
                           Prev. {formatDate(li.expectedDeferralAt)}
                         </span>
                       ) : (

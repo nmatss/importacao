@@ -97,10 +97,10 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
           <Package className="h-6 w-6 text-slate-300" />
         </div>
-        <p className="text-sm text-slate-400 font-medium">
+        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
           Nenhum dado de Pre-Conferencia para este processo.
         </p>
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
           Os dados aparecem apos o sync da planilha Pre_Cons (KIOM).
         </p>
       </div>
@@ -178,7 +178,7 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
       {/* Divergences for this process */}
       {divergences.length > 0 && (
         <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-3 space-y-2">
-          <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+          <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider dark:text-amber-300">
             Divergencias
           </h4>
           {divergences.map((d, i) => (
@@ -187,10 +187,10 @@ export function PreConsTab({ processCode }: { processId: string; processCode: st
                 className={cn(
                   'inline-flex rounded-md px-2 py-0.5 text-xs font-semibold',
                   d.severity === 'critical'
-                    ? 'bg-danger-100 text-danger-700'
+                    ? 'bg-danger-100 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300'
                     : d.severity === 'warning'
-                      ? 'bg-amber-100 text-amber-700'
-                      : 'bg-primary-100 text-primary-700',
+                      ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                      : 'bg-primary-100 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300',
                 )}
               >
                 {d.severity}

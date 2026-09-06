@@ -93,8 +93,8 @@ export default function CertConfiguracoesPage() {
                   className={cn(
                     'text-[11px] font-semibold px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5',
                     testResult.connected
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60'
-                      : 'bg-danger-50 text-danger-700 border border-danger-200/60',
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200/60 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700/50'
+                      : 'bg-danger-50 text-danger-700 border border-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:border-danger-700/50',
                   )}
                 >
                   <span
@@ -134,12 +134,12 @@ export default function CertConfiguracoesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {apiHealthy ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-lg">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-lg dark:text-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-700/50">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Online
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg dark:text-danger-300 dark:bg-danger-950/30 dark:border-danger-700/50">
                       <span className="w-1.5 h-1.5 rounded-full bg-danger-500" />
                       Offline
                     </span>
@@ -164,12 +164,12 @@ export default function CertConfiguracoesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   {apiHealthy && stats ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-lg">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-lg dark:text-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-700/50">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                       Conectado
                     </span>
                   ) : apiHealthy && !stats ? (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg">
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg dark:text-danger-300 dark:bg-danger-950/30 dark:border-danger-700/50">
                       <span className="w-1.5 h-1.5 rounded-full bg-danger-500" />
                       Erro ao ler dados
                     </span>
@@ -224,23 +224,25 @@ export default function CertConfiguracoesPage() {
           </div>
 
           <div className="space-y-6 text-sm text-slate-600 dark:text-slate-400">
-            <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-4">
+            <div className="rounded-xl bg-emerald-50/50 border border-emerald-100 p-4 dark:bg-emerald-950/30 dark:border-emerald-700/50">
               {/* O texto anterior ("Nenhum dado de produto é armazenado
                   localmente") era factualmente FALSO: `cert_products` e
                   `cert_stock` são exatamente isso. */}
               <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
                 O sistema consulta os e-commerces Puket e Imaginarium em{' '}
-                <span className="font-semibold text-emerald-700">tempo real</span> usando a API
-                pública VTEX. Os produtos da planilha, o resultado de cada verificação e o estoque
-                sincronizado <strong>são armazenados no banco do cert-api</strong> (tabelas{' '}
-                <code className="font-mono text-xs">cert_products</code> e{' '}
+                <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                  tempo real
+                </span>{' '}
+                usando a API pública VTEX. Os produtos da planilha, o resultado de cada verificação
+                e o estoque sincronizado <strong>são armazenados no banco do cert-api</strong>{' '}
+                (tabelas <code className="font-mono text-xs">cert_products</code> e{' '}
                 <code className="font-mono text-xs">cert_stock</code>) para alimentar as telas sem
                 reconsultar as fontes a cada acesso.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 p-4">
+              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     1
@@ -255,7 +257,7 @@ export default function CertConfiguracoesPage() {
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
-              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 p-4">
+              <div className="relative flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     2
@@ -270,7 +272,7 @@ export default function CertConfiguracoesPage() {
                 <ArrowRight className="hidden sm:block absolute -right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 z-10" />
               </div>
 
-              <div className="flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 p-4">
+              <div className="flex flex-col gap-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60 bg-slate-50/50 dark:bg-slate-900/50 p-4">
                 <div className="flex items-center gap-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white text-xs font-bold shadow-sm">
                     3
@@ -310,14 +312,14 @@ export default function CertConfiguracoesPage() {
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
+            <div className="rounded-xl bg-slate-50/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Total de Produtos</p>
               {/* `stats?.total_products || '-'` transformava um total REAL de
                   zero em "-" — a inversão exata da regra "vazio não é
                   indisponível". Zero é zero; só a falha vira "Indisponível". */}
               {statsError || stats?.total_products == null ? (
                 <p
-                  className="text-lg font-bold text-slate-400"
+                  className="text-lg font-bold text-slate-500 dark:text-slate-400"
                   title="Falha ao consultar as estatísticas de certificação"
                 >
                   Indisponível
@@ -328,19 +330,19 @@ export default function CertConfiguracoesPage() {
                 </p>
               )}
             </div>
-            <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
+            <div className="rounded-xl bg-slate-50/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Planilha</p>
               <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 STATUS CERTIFICAÇÃO
               </p>
             </div>
-            <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
+            <div className="rounded-xl bg-slate-50/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Marcas</p>
               <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
                 Imaginarium, Puket, Puket Escolares
               </p>
             </div>
-            <div className="rounded-xl bg-slate-50/80 border border-slate-100 dark:border-slate-700 p-4">
+            <div className="rounded-xl bg-slate-50/80 dark:bg-slate-900/80 border border-slate-100 dark:border-slate-700 p-4">
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">
                 Intervalo entre Requisições
               </p>
