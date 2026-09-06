@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-06 — Revisao de certificacao
+
+- Corrigidas respostas fora de ordem na lista de produtos e dupla decodificacao de parametros nos detalhes.
+- Corrigidos indicador da fonte de dados, agrupamento de status mobile, contraste escuro e nome acessivel do retorno.
+- Adicionadas regressoes e verificacao de teclado no formulario de agendamento. Detalhes em [revisao de certificacao](docs/STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+
 ## 2026-09-06 — Destino documental e Google Chat
 
 - Fonte documental Invoices Lancadas confirmada pelo usuario; acesso da conta de servico ainda pendente.

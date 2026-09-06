@@ -245,7 +245,21 @@ const scenarios: Scenario[] = [
     prepare: clickText('Abrir menu'),
   },
   { id: 'cert-validacao', path: '/certificacoes/validacao' },
-  { id: 'cert-produtos', path: '/certificacoes/produtos' },
+  {
+    id: 'cert-produtos',
+    path: '/certificacoes/produtos',
+    prepare: async (page: Page) => {
+      const input = page.getByRole('textbox', { name: 'Buscar produto por SKU ou nome' });
+      await input.scrollIntoViewIfNeeded();
+      const box = await input.boundingBox();
+      const submit = await page.getByRole('button', { name: 'Buscar', exact: true }).boundingBox();
+      expect(box?.width, 'Busca deve manter largura utilizavel').toBeGreaterThanOrEqual(120);
+      expect(box && submit && box.x + box.width <= submit.x).toBe(true);
+      await page.locator('main#main').evaluate((main) => {
+        main.scrollTop = 0;
+      });
+    },
+  },
   { id: 'cert-produto-detalhe', path: '/certificacoes/produtos/SKU-E2E-0001' },
   { id: 'cert-cadastro', path: '/certificacoes/cadastro' },
   { id: 'cert-relatorios', path: '/certificacoes/relatorios' },
@@ -255,7 +269,22 @@ const scenarios: Scenario[] = [
     id: 'cert-agendamentos-form',
     viewportOnly: true,
     path: '/certificacoes/agendamentos',
-    prepare: clickText(/Novo Agendamento/),
+    prepare: async (page: Page) => {
+      const trigger = page.getByRole('button', { name: /Novo Agendamento/ });
+      await trigger.click();
+      const dialog = page.getByRole('dialog', { name: 'Novo Agendamento' });
+      await expect(dialog.getByRole('button', { name: 'Fechar modal' })).toBeFocused();
+      await page.keyboard.press('Shift+Tab');
+      const submit = dialog.getByRole('button', { name: 'Criar Agendamento' });
+      await expect(submit).toBeFocused();
+      await expect(submit).toBeInViewport({ ratio: 1 });
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeHidden();
+      await expect(trigger).toBeFocused();
+      await trigger.click();
+      await submit.scrollIntoViewIfNeeded();
+      await expect(submit).toBeInViewport({ ratio: 1 });
+    },
   },
   { id: 'cert-configuracoes', path: '/certificacoes/configuracoes' },
   { id: 'cert-rota-inexistente', path: '/certificacoes/rota-inexistente' },

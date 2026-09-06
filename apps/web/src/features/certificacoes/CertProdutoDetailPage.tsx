@@ -49,7 +49,7 @@ function linxDateLabel(
 
 export default function CertProdutoDetailPage() {
   const { sku: rawSku } = useParams();
-  const sku = decodeURIComponent(rawSku || '');
+  const sku = rawSku || '';
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -200,14 +200,17 @@ export default function CertProdutoDetailPage() {
             </div>
 
             <div className="px-7 py-5">
-              <div className="flex flex-wrap items-center gap-4">
+              <div className="flex flex-col items-start gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
                 <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <Hash className="w-4 h-4 text-slate-400" />
                   <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">
                     {product.sku}
                   </span>
                 </div>
-                <div className="w-px h-4 bg-slate-200" />
+                <div
+                  aria-hidden="true"
+                  className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                />
                 <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <Tag className="w-4 h-4 text-slate-400" />
                   <span>{product.brand}</span>
@@ -216,51 +219,85 @@ export default function CertProdutoDetailPage() {
                     existe em lugar nenhum do cert-api — nunca renderizava. */}
                 {validation?.status && (
                   <>
-                    <div className="w-px h-4 bg-slate-200" />
+                    <div
+                      aria-hidden="true"
+                      className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                    />
                     <CertStatusBadge status={validation.status} />
                   </>
                 )}
                 {product.cert_status && (
                   <>
-                    <div className="w-px h-4 bg-slate-200" />
-                    <span className="text-xs text-slate-500 font-medium">Cert.:</span>
-                    <CertStatusBadge status={product.cert_status} />
+                    <div
+                      aria-hidden="true"
+                      className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                    />
+                    <div className="flex max-w-full items-center gap-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Cert.:
+                      </span>
+                      <CertStatusBadge status={product.cert_status} />
+                    </div>
                   </>
                 )}
                 {product.site_status && (
                   <>
-                    <div className="w-px h-4 bg-slate-200" />
-                    <span className="text-xs text-slate-500 font-medium">Site:</span>
-                    {/* `site_status_reason` aparecia na LISTA mas não aqui — que é
+                    <div
+                      aria-hidden="true"
+                      className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                    />
+                    <div className="flex max-w-full items-start gap-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Site:
+                      </span>
+                      {/* `site_status_reason` aparecia na LISTA mas não aqui — que é
                         a tela onde o operador vai entender o porquê. */}
-                    <div className="flex flex-col gap-0.5">
-                      <CertStatusBadge status={product.site_status} />
-                      {product.site_status === 'NAO_CONFORME' && product.site_status_reason && (
-                        <span className="max-w-[280px] text-[11px] leading-tight text-slate-500 dark:text-slate-400">
-                          {product.site_status_reason}
-                        </span>
-                      )}
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <CertStatusBadge status={product.site_status} />
+                        {product.site_status === 'NAO_CONFORME' && product.site_status_reason && (
+                          <span className="max-w-[280px] text-[11px] leading-tight text-slate-500 dark:text-slate-400">
+                            {product.site_status_reason}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
                 {product.license_status && product.license_status !== 'NAO_APLICAVEL' && (
                   <>
-                    <div className="w-px h-4 bg-slate-200" />
-                    <span className="text-xs text-slate-500 font-medium">Lic.:</span>
-                    <CertStatusBadge status={product.license_status} />
+                    <div
+                      aria-hidden="true"
+                      className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                    />
+                    <div className="flex max-w-full items-center gap-2">
+                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Lic.:
+                      </span>
+                      <CertStatusBadge status={product.license_status} />
+                    </div>
                   </>
                 )}
                 {product.comercializacao_status &&
                   product.comercializacao_status !== 'NAO_APLICA' && (
                     <>
-                      <div className="w-px h-4 bg-slate-200" />
-                      <span className="text-xs text-slate-500 font-medium">Comerc.:</span>
-                      <CertStatusBadge status={product.comercializacao_status} />
+                      <div
+                        aria-hidden="true"
+                        className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                      />
+                      <div className="flex max-w-full items-center gap-2">
+                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                          Comerc.:
+                        </span>
+                        <CertStatusBadge status={product.comercializacao_status} />
+                      </div>
                     </>
                   )}
                 {validation?.score != null && (
                   <>
-                    <div className="w-px h-4 bg-slate-200" />
+                    <div
+                      aria-hidden="true"
+                      className="hidden h-4 w-px bg-slate-200 dark:bg-slate-600 sm:block"
+                    />
                     <span
                       className={cn(
                         'text-xs font-mono font-semibold px-2.5 py-1 rounded-lg',

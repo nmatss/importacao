@@ -15,6 +15,13 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## 2026-09-06 — Revisao de certificacao
+
+Corrigidos defeitos de estado, parametros de rota, semantica de fonte e apresentacao
+responsiva. Evidencias e limites em [revisao de certificacao](STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+Essa revisao nao encerra as pendencias de identidade/permissoes Linx nem substitui
+a validacao fiscal dos certificados.
+
 ## 2026-09-06 — Reconciliacao das pendencias apos autorizacao de correcao
 
 Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permanecem

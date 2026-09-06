@@ -147,7 +147,7 @@ export default function CertConfiguracoesPage() {
                 </div>
               </div>
 
-              {/* Google Sheets */}
+              {/* Stats reads the synchronized database, not a live Sheets connection. */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/80 transition-colors">
                 <div className="flex items-center gap-4">
                   <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400">
@@ -155,10 +155,10 @@ export default function CertConfiguracoesPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 dark:text-slate-100">
-                      Google Sheets
+                      Base de produtos
                     </p>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Fonte de dados dos produtos
+                      Dados sincronizados da planilha
                     </p>
                   </div>
                 </div>
@@ -166,7 +166,7 @@ export default function CertConfiguracoesPage() {
                   {apiHealthy && stats ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-3 py-1.5 rounded-lg dark:text-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-700/50">
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      Conectado
+                      Dados disponíveis
                     </span>
                   ) : apiHealthy && !stats ? (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-danger-700 bg-danger-50 border border-danger-200/60 px-3 py-1.5 rounded-lg dark:text-danger-300 dark:bg-danger-950/30 dark:border-danger-700/50">

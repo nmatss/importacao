@@ -17,7 +17,7 @@ import {
 
 export default function CertRelatorioDetailPage() {
   const { id } = useParams();
-  const filename = decodeURIComponent(id || '');
+  const filename = id || '';
   const [data, setData] = useState<CertReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -153,6 +153,7 @@ export default function CertRelatorioDetailPage() {
         <div className="flex items-center gap-4 min-w-0">
           <Link
             to="/certificacoes/relatorios"
+            aria-label="Voltar aos relatórios"
             className="flex items-center justify-center w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 hover:bg-slate-200 hover:text-slate-700 dark:text-slate-300 transition-colors flex-shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -349,7 +350,7 @@ export default function CertRelatorioDetailPage() {
         </div>
 
         {/* Footer */}
-        <div className="px-3 py-2.5 sm:px-6 sm:py-3.5 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 flex flex-wrap items-center justify-between gap-2">
+        <div className="px-3 py-2.5 sm:px-6 sm:py-3.5 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/50 flex flex-wrap items-center justify-between gap-2">
           <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
             {filtered.length} de {results.length} resultados
           </span>

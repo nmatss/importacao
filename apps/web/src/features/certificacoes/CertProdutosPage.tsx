@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@/shared/utils/errors';
@@ -215,7 +215,10 @@ export default function CertProdutosPage() {
   /** SKU cujo tooltip de estoque do CD está aberto por clique/foco (item 5). */
   const [openStockSku, setOpenStockSku] = useState<string | null>(null);
 
+  const latestRequest = useRef(0);
+
   const loadProducts = useCallback(async () => {
+    const requestId = ++latestRequest.current;
     setLoading(true);
     try {
       const data = await fetchCertProducts({
@@ -229,15 +232,17 @@ export default function CertProdutosPage() {
         start_date: startDate || undefined,
         end_date: endDate || undefined,
       });
+      if (requestId !== latestRequest.current) return;
       setProducts(data.products || []);
       setTotalPages(data.total_pages || 1);
       setTotal(data.total || 0);
       setLastDate(data.last_validation_date || null);
       setLoadError(null);
     } catch {
+      if (requestId !== latestRequest.current) return;
       setLoadError('Nao foi possivel carregar os produtos. Tente novamente.');
     } finally {
-      setLoading(false);
+      if (requestId === latestRequest.current) setLoading(false);
     }
   }, [
     page,
@@ -253,6 +258,9 @@ export default function CertProdutosPage() {
 
   useEffect(() => {
     loadProducts();
+    return () => {
+      latestRequest.current += 1;
+    };
   }, [loadProducts]);
 
   function handleStatusFilterChange(field: FilterField, value: string) {
@@ -460,10 +468,13 @@ export default function CertProdutosPage() {
 
       {/* ── Search + Brand Filters ── */}
       <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 p-4">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {/* Search */}
-          <form onSubmit={handleSearch} className="flex items-center gap-2.5 flex-1 min-w-0">
-            <div className="relative flex-1 max-w-md">
+          <form
+            onSubmit={handleSearch}
+            className="flex w-full min-w-0 items-center gap-2.5 sm:w-auto sm:flex-[1_1_320px]"
+          >
+            <div className="relative min-w-0 flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 id="cert-products-search"
@@ -477,7 +488,7 @@ export default function CertProdutosPage() {
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm"
+              className="shrink-0 px-5 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-emerald-600 to-emerald-700 text-white hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all shadow-sm"
             >
               Buscar
             </button>
@@ -631,7 +642,7 @@ export default function CertProdutosPage() {
                       className={cn(
                         'group transition-colors',
                         p.is_expired
-                          ? 'bg-pink-50/40 hover:bg-pink-50/70'
+                          ? 'bg-pink-50/40 hover:bg-pink-50/70 dark:bg-pink-950/30 dark:hover:bg-pink-950/50'
                           : 'hover:bg-slate-50 dark:hover:bg-slate-800/60',
                       )}
                     >
@@ -673,7 +684,7 @@ export default function CertProdutosPage() {
                             className={cn(
                               'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
                               p.is_expired
-                                ? 'text-pink-700 bg-pink-50'
+                                ? 'text-pink-700 bg-pink-50 dark:text-pink-300 dark:bg-pink-950/40'
                                 : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900',
                             )}
                             title={p.encerramento_status || undefined}
@@ -715,7 +726,7 @@ export default function CertProdutosPage() {
                             className={cn(
                               'text-xs font-medium whitespace-nowrap px-2 py-1 rounded-lg',
                               p.license_status === 'VENCIDO'
-                                ? 'text-pink-700 bg-pink-50'
+                                ? 'text-pink-700 bg-pink-50 dark:text-pink-300 dark:bg-pink-950/40'
                                 : 'text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900',
                             )}
                           >
