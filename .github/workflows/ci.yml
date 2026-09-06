@@ -49,6 +49,8 @@ jobs:
         run: pip install ruff
       - name: Run ruff
         run: ruff check apps/cert-api/
+      - name: Verify atomic environment generation
+        run: python3 scripts/test-generate-env.py
 
   test-api:
     name: Test API

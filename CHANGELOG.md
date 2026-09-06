@@ -9,6 +9,9 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- Geracao SOPS do `.env` agora preserva o arquivo anterior se a descriptografia
+  falhar, inclusive apos saida parcial; publicacao atomica e regressao no CI.
+
 - Excecao Trivy restrita ao template Google sem credenciais embutidas, com
   regressao obrigatoria que continua detectando valores literais e objetos adjacentes.
 

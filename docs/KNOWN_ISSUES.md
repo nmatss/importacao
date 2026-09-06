@@ -21,6 +21,11 @@ Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permane
 como historico. Plano, execucoes e resultados de deploy ficam na sessao dotcontext
 `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
 
+- **Geracao de ambiente — corrigida:** falha do SOPS em process substitution
+  nao era propagada e o redirecionamento truncava `.env`. Pipeline com `pipefail`
+  e arquivo temporario privado agora preservam o ambiente anterior, rejeitam
+  configuracao vazia e publicam somente apos sucesso. Regressao no CI cobre
+  falha sem saida, saida parcial, primeira execucao e permissoes do arquivo.
 - **Trivy — falso positivo confirmado:** a regra `gcp-service-account` da versao
   0.74 procura apenas o marcador publico de tipo, sinalizando o dicionario Python
   que referencia variaveis de ambiente em `erp_service.py`. A excecao em
@@ -59,6 +64,8 @@ como historico. Plano, execucoes e resultados de deploy ficam na sessao dotconte
   confirmou raiz nao configurada. Follow Up configurado e acessivel. Produção
   permanece em `DOCUMENT_SOURCE=email`, com ingestao ligada. Fornecer a raiz
   operacional e compartilhar com a conta de servico antes do smoke/virada.
+  Nova listagem autenticada retornou zero Shared Drives e nenhuma pasta candidata
+  de importacao visivel; nao basta preencher uma variavel sem conceder acesso.
 - **Documentos — depende da area:** 51/51 processados, em 12 processos, 13 `other`.
   Nao houve reclassificacao nem escrita em dados de producao. Fontes ausentes,
   divergencias e aceite humano continuam necessarios; confianca nao e acuracia.
