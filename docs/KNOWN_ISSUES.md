@@ -54,22 +54,28 @@ como historico. Plano, execucoes e resultados de deploy ficam na sessao dotconte
   Diagnostico e deploy completos devem ser comprovados nas execucoes registradas
   no dotcontext. O HTTPS e conferido via SSH no host, pois a rede isolada do runner
   nao alcanca a porta 443; a validacao externa permanece uma verificacao separada.
-- **Reentrega de alertas — implementada, entrega nao comprovada:** o job
+- **Reentrega de alertas — implementada, webhook validado em teste:** o job
   `alert-redelivery` e o backoff existem e possuem testes. Portanto, a afirmacao
   antiga P-15 de que nao foram implementados esta superada. A leitura em producao
   encontrou 5.104 alertas, zero entregues e tentativas reais registradas, inclusive
   6 alertas no teto de 5 tentativas. Ha 1 pendente nas ultimas 24h. Webhook
   configurado nao comprova validade. Teste unico autorizado em 06/09 retornou
-  HTTP 400 / API_KEY_INVALID, sem criar mensagem; falta substituir a credencial
-  do webhook pelo cofre e repetir o smoke apos a troca.
-- **Alertmanager — bloqueado por destino:** o bridge compartilhado existe em outra
+  HTTP 400 / API_KEY_INVALID, sem criar mensagem. O usuario forneceu outro
+  webhook; novo teste unico autorizado retornou HTTP 200 e confirmou criacao
+  da mensagem. Credencial atualizada no SOPS, sem valores em logs ou documentos.
+  Esse smoke comprova o destino; nao equivale a reentrega de todo o backlog.
+- **Alertmanager — pendente de integracao confiavel:** o bridge compartilhado existe em outra
   rede, mas seu handler responde 200 mesmo quando o envio ao Chat falha. Nao foi
   conectado automaticamente: isso esconderia falhas e ativaria mensagens sem
-  destino aprovado. Definir canal e exigir propagacao de falha antes da ativacao.
-- **Drive — bloqueado por configuracao/acesso:** a consulta aos servicos reais
-  confirmou raiz nao configurada. Follow Up configurado e acessivel. Produção
-  permanece em `DOCUMENT_SOURCE=email`, com ingestao ligada. Fornecer a raiz
-  operacional e compartilhar com a conta de servico antes do smoke/virada.
+  destino aprovado. O destino do Chat agora foi fornecido e testado; permanece
+  necessario exigir propagacao de falha antes da ativacao do Alertmanager.
+- **Drive — fonte oficial confirmada, acesso bloqueado:** o usuario confirmou
+  `Invoices Lancadas`, em `Controle de Cambios`, como origem oficial. A pasta
+  e o piloto IM0712602NB continuam retornando HTTP 404 para a conta de servico
+  em nova consulta apos a confirmacao. Falta compartilhar a fonte com a conta
+  de servico antes do smoke/piloto e reconciliacao. Follow Up acessivel;
+  `DOCUMENT_SOURCE=email` e ingestao atual preservados. IDs e decisao estao
+  registrados no dotcontext, artefato `confirmacao-usuario-fonte-drive`.
   **Retificacao da descoberta anterior:** a pasta 2026 que corresponde ao layout
   citado na documentacao fica sob `Inspecao Por Marca`. Um PDF do piloto
   PK2052602TJ foi lido e e um Relatorio de Inspecao Puket. Portanto, essa

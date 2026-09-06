@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-06 — Destino documental e Google Chat
+
+- Fonte documental Invoices Lancadas confirmada pelo usuario; acesso da conta de servico ainda pendente.
+- Webhook Google Chat substituido via SOPS apos teste autorizado com HTTP 200 e mensagem criada.
+
 All notable changes to this project are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
