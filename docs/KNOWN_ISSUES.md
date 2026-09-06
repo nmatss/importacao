@@ -70,11 +70,15 @@ como historico. Plano, execucoes e resultados de deploy ficam na sessao dotconte
   confirmou raiz nao configurada. Follow Up configurado e acessivel. Produção
   permanece em `DOCUMENT_SOURCE=email`, com ingestao ligada. Fornecer a raiz
   operacional e compartilhar com a conta de servico antes do smoke/virada.
-  A raiz operacional de 2026 foi localizada pelo conector da sessao e corresponde
-  ao layout documentado por marca/Importado/processo. O probe dessa raiz com a
-  conta de servico retorna 404. O conector de compartilhamento disponivel nao
-  aceita pastas; o link e a identidade necessaria ficam no dotcontext, aguardando
-  compartilhamento. O modo email foi preservado.
+  **Retificacao da descoberta anterior:** a pasta 2026 que corresponde ao layout
+  citado na documentacao fica sob `Inspecao Por Marca`. Um PDF do piloto
+  PK2052602TJ foi lido e e um Relatorio de Inspecao Puket. Portanto, essa
+  correspondencia de nomes nao comprova a origem operacional de Invoice/PL/BL.
+  A conta de servico recebe 404 nessa candidata, mas conceder acesso a ela nao
+  resolve por si so a origem documental. Nao apontar a ingestao para essa pasta
+  sem verificar os documentos esperados. A planilha Follow Up nao trouxe links
+  de pastas no intervalo consultado. Evidencias e IDs ficam no dotcontext;
+  `DOCUMENT_SOURCE=email` permanece preservado.
 - **Documentos — depende da area:** 51/51 processados, em 12 processos, 13 `other`.
   Nao houve reclassificacao nem escrita em dados de producao. Fontes ausentes,
   divergencias e aceite humano continuam necessarios; confianca nao e acuracia.
