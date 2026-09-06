@@ -288,3 +288,15 @@ Nenhuma conta foi criada, nenhum grant alterado e nenhum registro Linx foi
 escrito nesta verificacao. A execucao depende da identidade/ownership aprovados
 e do caso de teste de negocio; o plano operacional e as evidencias ficam na
 sessao dotcontext `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
+
+## 10. Decisao posterior do usuario — 2026-09-06
+
+O usuario determinou manter suas credenciais atuais e tratar a migracao de
+identidade posteriormente. O procedimento da secao 9 permanece como referencia
+futura; nao executar criacao de contas, rotacao ou alteracao de grants nesta
+entrega. O risco de privilegios amplos continua conhecido, sem bloquear o deploy
+por uma migracao que foi explicitamente adiada.
+
+Consultas autenticadas reais ao endpoint de lookup retornaram HTTP 200 e
+`status=found` para Puket e Imaginarium. Nenhuma propriedade foi escrita. O smoke
+de cadastro continua dependendo de SKU, marca e datas aprovados pela area fiscal.

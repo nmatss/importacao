@@ -73,3 +73,26 @@ as capturas anteriores desses mesmos cenarios.
 - O aceite fiscal dos certificados/datas e um caso aprovado para validar a
   escrita no ERP continuam necessarios. Ver [procedimento Linx](CERT-LINX-WRITE.md),
   [pendencias](KNOWN_ISSUES.md) e [divida tecnica](TECH_DEBT.md).
+
+## Verificacao complementar e decisao operacional
+
+Na revisao `c64e706`, o smoke de rotas existente passou em 40 casos: dez rotas
+em Chromium desktop, Chromium mobile, Firefox desktop (1280x900) e WebKit mobile
+(375x812). Execucao: `npx playwright test apps/web/e2e/route-smoke.spec.ts
+--config=playwright.cert-review.local.ts --grep 'renders /certificacoes'`.
+A configuracao temporaria estendeu a configuracao oficial com os projetos Firefox
+e WebKit; a suite e as fixtures permaneceram inalteradas. Log local:
+`/tmp/importacao-cert-crossbrowser.log`. Essa verificacao cobre renderizacao,
+erros de navegador e overflow com os estados simulados do smoke; nao equivale
+à auditoria visual completa com dados preenchidos nem a dispositivos fisicos.
+
+Consultas reais autenticadas da Cert-API passaram para estatisticas, produtos,
+certificados, relatorios e agendamentos. O lookup Linx retornou registros nas
+duas marcas. Requisicao sem chave recebeu HTTP 403. A leitura de A1 nas 16 abas
+Sheets confirmou acesso real, sem sincronizar ou alterar dados.
+
+O usuario adiou explicitamente a revisao de credenciais: manter as atuais nesta
+entrega. A aprovacao fiscal e o caso de escrita continuam externos. A pasta oficial
+e o piloto Drive voltaram a retornar HTTP 404 para a conta de servico; o bloqueio
+de compartilhamento permanece. Estado detalhado em [pendencias](KNOWN_ISSUES.md)
+e na sessao dotcontext indicada no inicio deste documento.

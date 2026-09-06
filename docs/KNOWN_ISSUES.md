@@ -15,6 +15,30 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## 2026-09-06 — Atualizacao apos verificacao autenticada
+
+Esta atualizacao prevalece sobre os estados historicos abaixo:
+
+- **Credenciais Linx: adiadas por decisao explicita do usuario.** Manter as
+  credenciais atuais; nao criar contas, trocar senhas ou alterar permissoes
+  nesta entrega. O risco de privilegios amplos permanece registrado, mas a
+  migracao nao e requisito de deploy desta rodada.
+- **Consultas de certificacao: verificadas em producao.** Readiness, estatisticas,
+  produtos, certificados, relatorios e agendamentos retornaram HTTP 200. Lookup
+  Linx encontrou registros em Puket e Imaginarium. Sem chave, a Cert-API recusou
+  produtos com HTTP 403. Isso nao substitui o fluxo completo de login no navegador.
+- **Sheets: acesso real confirmado.** Leitura de A1 nas 16 abas passou com as
+  credenciais existentes. Essa evidencia supera a limitacao de apenas verificar
+  `sheets_configured`; nao comprova completude ou corretude fiscal.
+- **Deploy GitHub: resolvido.** O workflow privado executou o deploy de `c64e706`
+  com sucesso. A secao historica sobre ausencia de runner/secrets esta superada.
+- **Escrita fiscal: pendente externa.** Falta caso aprovado com SKU, marca e datas;
+  nao selecionar valores arbitrarios que alterem a trava de faturamento.
+
+Evidencias operacionais e revisao publicada: sessao dotcontext
+`142282d9-7495-4a36-a16f-12ffe22fdbaa` e
+[revisao de certificacao](STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+
 ## 2026-09-06 — Revisao de certificacao
 
 Corrigidos defeitos de estado, parametros de rota, semantica de fonte e apresentacao
