@@ -55,7 +55,7 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
             <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo USD
             </p>
-            <p className="mt-1 text-lg font-bold text-primary-800">
+            <p className="mt-1 text-lg font-bold text-primary-800 dark:text-primary-300">
               {formatCurrency(totals.totalBalanceUsd)}
             </p>
           </div>
@@ -63,7 +63,7 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
             <p className="text-xs font-semibold text-primary-500 uppercase tracking-wider">
               Saldo BRL
             </p>
-            <p className="mt-1 text-lg font-bold text-primary-800">
+            <p className="mt-1 text-lg font-bold text-primary-800 dark:text-primary-300">
               {formatCurrency(totals.totalBalanceBrl, 'BRL')}
             </p>
           </div>
@@ -71,7 +71,7 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
               Depósito USD
             </p>
-            <p className="mt-1 text-lg font-bold text-amber-800">
+            <p className="mt-1 text-lg font-bold text-amber-800 dark:text-amber-300">
               {formatCurrency(totals.totalDepositUsd)}
             </p>
           </div>
@@ -79,7 +79,7 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
             <p className="text-xs font-semibold text-amber-500 uppercase tracking-wider">
               Depósito BRL
             </p>
-            <p className="mt-1 text-lg font-bold text-amber-800">
+            <p className="mt-1 text-lg font-bold text-amber-800 dark:text-amber-300">
               {formatCurrency(totals.totalDepositBrl, 'BRL')}
             </p>
           </div>
@@ -91,7 +91,7 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
             <DollarSign className="h-6 w-6 text-slate-300" />
           </div>
-          <p className="text-sm text-slate-400 font-medium">
+          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
             Nenhum câmbio registrado para este processo.
           </p>
         </div>

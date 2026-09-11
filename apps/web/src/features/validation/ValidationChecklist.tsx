@@ -185,20 +185,20 @@ const draftModalFocusableSelector = [
 const statusConfig = {
   passed: {
     icon: CheckCircle,
-    border: 'border-emerald-200',
-    bg: 'bg-emerald-50',
+    border: 'border-emerald-200 dark:border-emerald-700/50',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/30',
     iconColor: 'text-emerald-500',
   },
   failed: {
     icon: XCircle,
-    border: 'border-danger-200',
-    bg: 'bg-danger-50',
+    border: 'border-danger-200 dark:border-danger-700/50',
+    bg: 'bg-danger-50 dark:bg-danger-950/30',
     iconColor: 'text-danger-500',
   },
   warning: {
     icon: AlertTriangle,
-    border: 'border-amber-200',
-    bg: 'bg-amber-50',
+    border: 'border-amber-200 dark:border-amber-700/50',
+    bg: 'bg-amber-50 dark:bg-amber-950/30',
     iconColor: 'text-amber-500',
   },
   skipped: {
@@ -549,7 +549,9 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   {skippedCount} bloqueada{skippedCount !== 1 ? 's' : ''}
                 </span>
               )}
-              <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                {Math.round(progressPct)}%
+              </span>
             </span>
           </div>
           <div className="h-2.5 w-full rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
@@ -612,7 +614,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         <button
           onClick={detectAnomalies}
           disabled={detectingAnomalies}
-          className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors dark:border-violet-700/50 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-950/30"
         >
           {detectingAnomalies ? <LoadingSpinner size="sm" /> : <Brain className="h-4 w-4" />}
           Analisar divergências
@@ -624,7 +626,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <button
               onClick={() => generateCorrectionDraft(false)}
               disabled={generatingDraft}
-              className="inline-flex items-center gap-2 rounded-lg border border-danger-300 bg-danger-50 px-4 py-2 text-sm font-medium text-danger-700 hover:bg-danger-100 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-danger-300 bg-danger-50 px-4 py-2 text-sm font-medium text-danger-700 hover:bg-danger-100 disabled:opacity-50 transition-colors dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300 dark:hover:bg-danger-950/30"
             >
               {generatingDraft ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
               Gerar e-mail correcao
@@ -632,7 +634,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <button
               onClick={() => generateCorrectionDraft(true)}
               disabled={generatingDraft}
-              className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 disabled:opacity-50 transition-colors dark:border-orange-700/50 dark:bg-orange-950/30 dark:text-orange-300 dark:hover:bg-orange-950/30"
               title="Gerar e-mail detalhado"
             >
               {generatingDraft ? <LoadingSpinner size="sm" /> : <Sparkles className="h-4 w-4" />}
@@ -644,16 +646,16 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
         {/* Summary badges */}
         {checks && checks.length > 0 && (
           <div className="flex items-center gap-2 ml-auto text-xs">
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
               <CheckCircle className="h-3 w-3" /> {passedCount}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-2.5 py-1 font-medium text-primary-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary-100 px-2.5 py-1 font-medium text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
               <Wrench className="h-3 w-3" /> {acceptedCount}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2.5 py-1 font-medium text-danger-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger-100 px-2.5 py-1 font-medium text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
               <XCircle className="h-3 w-3" /> {openFailedCount}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
               <AlertTriangle className="h-3 w-3" /> {openWarningCount}
             </span>
           </div>
@@ -667,8 +669,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             const config = check.resolvedManually
               ? {
                   icon: Wrench,
-                  border: 'border-primary-200',
-                  bg: 'bg-primary-50',
+                  border: 'border-primary-200 dark:border-primary-700/50',
+                  bg: 'bg-primary-50 dark:bg-primary-950/30',
                   iconColor: 'text-primary-500',
                 }
               : (statusConfig[check.status] ?? statusConfig.warning);
@@ -708,7 +710,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                                 'font-medium',
                                 check.resolvedManually
                                   ? 'text-slate-800 dark:text-slate-100'
-                                  : 'text-danger-700',
+                                  : 'text-danger-700 dark:text-danger-300',
                               )}
                             >
                               {check.actualValue}
@@ -719,7 +721,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     )}
                     {check.resolvedManually && (check.resolvedByName || check.resolvedBy) && (
                       <div
-                        className="group relative mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700"
+                        className="group relative mt-2 inline-flex items-center gap-1.5 rounded bg-primary-50 px-2 py-1 text-xs text-primary-700 dark:bg-primary-950/30 dark:text-primary-300"
                         title={
                           check.resolutionNote
                             ? `Justificativa: ${check.resolutionNote}`
@@ -759,7 +761,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                             Justificativa do aceite manual
                             <span className="text-danger-500">*</span>
                             <span
-                              className="cursor-help text-slate-400"
+                              className="cursor-help text-slate-500 dark:text-slate-400"
                               title="Aceite manual da divergencia — registra um override auditado. NAO revalida nem corrige os dados; apenas suprime o alerta com justificativa."
                             >
                               (?)
@@ -772,7 +774,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                             rows={2}
                             autoFocus
                             placeholder="Ex.: divergencia aceita; peso confere com PL fisico conferido em 28/05."
-                            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                            className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-2.5 py-1.5 text-xs text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all dark:focus:ring-primary-700/50"
                           />
                           <div className="flex items-center gap-2">
                             <button
@@ -805,7 +807,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                             setResolveNote('');
                           }}
                           title="Aceite manual da divergencia — nao revalida"
-                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-300"
                         >
                           <Wrench className="h-3 w-3" />
                           Aceitar
@@ -832,7 +834,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <span className="rounded-full bg-slate-200 dark:bg-slate-700 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:text-slate-400">
               {skippedCount}
             </span>
-            <span className="ml-auto text-[11px] font-normal text-slate-400">
+            <span className="ml-auto text-[11px] font-normal text-slate-500 dark:text-slate-400">
               Nao contam como erro
             </span>
           </summary>
@@ -906,14 +908,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                       {anomaly.description}
                     </p>
                     {isReconciledItemMatch && (
-                      <p className="mt-1 text-[11px] text-slate-400">
+                      <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                         Ver a lista completa em "Itens no Packing List sem correspondencia na
                         Invoice" no Comparativo Geral.
                       </p>
                     )}
                   </div>
                   {!isReconciledItemMatch && Number.isFinite(anomaly.confidence) && (
-                    <span className="text-xs text-slate-400">
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
                       {((anomaly.confidence ?? 0) * 100).toFixed(0)}%
                     </span>
                   )}
@@ -947,8 +949,8 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-6 py-4 rounded-t-2xl">
               <div className="flex items-center gap-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger-100">
-                  <Mail className="h-4.5 w-4.5 text-danger-600" />
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-danger-100 dark:bg-danger-950/30">
+                  <Mail className="h-4.5 w-4.5 text-danger-600 dark:text-danger-300" />
                 </div>
                 <div>
                   <h3
@@ -957,7 +959,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   >
                     E-mail de Correcao
                   </h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
                     Rascunho para {draft.recipient} - Revise antes de enviar
                   </p>
                 </div>
@@ -990,7 +992,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   }
                   rows={2}
                   placeholder="email@exemplo.com, outro@exemplo.com"
-                  className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                  className="w-full resize-y rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all dark:focus:ring-primary-700/50"
                 />
               </div>
 
@@ -1007,7 +1009,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                   type="text"
                   value={editSubject}
                   onChange={(e) => dispatch({ type: 'SET_EDIT_SUBJECT', payload: e.target.value })}
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                  className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all dark:focus:ring-primary-700/50"
                 />
               </div>
 
@@ -1058,7 +1060,7 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
                     onChange={(e) =>
                       setSelectedSignatureId(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all"
+                    className="w-full rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:border-primary-400 focus:ring-2 focus:ring-primary-100 outline-none transition-all dark:focus:ring-primary-700/50"
                   >
                     <option value="">Sem assinatura</option>
                     {emailSignatures.map((sig) => (
@@ -1089,14 +1091,14 @@ export function ValidationChecklist({ processId }: ValidationChecklistProps) {
             <div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-6 py-4 rounded-b-2xl">
               <button
                 onClick={closeDraftModal}
-                className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 transition-colors"
+                className="rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={saveDraft}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-lg border border-primary-200 bg-primary-50 px-4 py-2 text-sm font-medium text-primary-700 hover:bg-primary-100 disabled:opacity-50 transition-colors dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30"
               >
                 {saving ? <LoadingSpinner size="sm" /> : <Mail className="h-4 w-4" />}
                 Salvar Rascunho

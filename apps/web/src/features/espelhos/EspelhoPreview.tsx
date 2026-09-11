@@ -261,9 +261,9 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
   }
 
   const rowBg = (item: EspelhoItem) => {
-    if (item.isFoc) return 'bg-amber-50';
-    if (item.requiresLi) return 'bg-violet-50';
-    if (item.requiresCert) return 'bg-orange-50';
+    if (item.isFoc) return 'bg-amber-50 dark:bg-amber-950/30';
+    if (item.requiresLi) return 'bg-violet-50 dark:bg-violet-950/30';
+    if (item.requiresCert) return 'bg-orange-50 dark:bg-orange-950/30';
     return '';
   };
 
@@ -310,7 +310,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
             </button>
             <button
               onClick={generatePartialLi}
-              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors"
+              className="inline-flex items-center gap-2 rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 hover:bg-violet-100 transition-colors dark:border-violet-700/50 dark:bg-violet-950/30 dark:text-violet-300 dark:hover:bg-violet-950/30"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Gerar Parcial (LI)
@@ -338,11 +338,11 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       {espelho && (espelho.driveFileId || espelho.sentToFenicia) && (
         <div className="flex flex-wrap gap-3">
           {espelho.driveFileId && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300">
               <CheckCircle className="h-4 w-4" />
               Enviado ao Drive
               {espelho.driveSentAt && (
-                <span className="text-xs text-emerald-600">
+                <span className="text-xs text-emerald-600 dark:text-emerald-300">
                   em{' '}
                   {new Date(espelho.driveSentAt).toLocaleDateString('pt-BR', {
                     day: '2-digit',
@@ -356,11 +356,11 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
             </div>
           )}
           {espelho.sentToFenicia && (
-            <div className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-700 dark:border-orange-700/50 dark:bg-orange-950/30 dark:text-orange-300">
               <CheckCircle className="h-4 w-4" />
               Enviado à Fenícia
               {espelho.sentToFeniciaAt && (
-                <span className="text-xs text-orange-600">
+                <span className="text-xs text-orange-600 dark:text-orange-300">
                   em{' '}
                   {new Date(espelho.sentToFeniciaAt).toLocaleDateString('pt-BR', {
                     day: '2-digit',
@@ -431,7 +431,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
               {items.map((item) => (
                 <tr key={item.id} className={cn('transition-colors', rowBg(item))}>
                   <td className="px-3 py-2">{renderCell(item, 'itemCode', item.itemCode)}</td>
-                  <td className="px-3 py-2 max-w-[200px]">
+                  <td className="min-w-[240px] max-w-[320px] break-words px-3 py-2">
                     {renderCell(item, 'description', item.description)}
                   </td>
                   <td className="px-3 py-2">{renderCell(item, 'color', item.color)}</td>
@@ -492,7 +492,7 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
       {espelho && (
         <button
           onClick={addItem}
-          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700"
+          className="inline-flex items-center gap-2 text-sm font-medium text-primary-600 hover:text-primary-700 dark:text-primary-300 dark:hover:text-primary-300"
         >
           <Plus className="h-4 w-4" />
           Adicionar item

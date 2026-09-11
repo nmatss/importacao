@@ -84,6 +84,7 @@ export function CertBrandChart({ data, error }: { data?: BrandData[]; error?: bo
             cursor={{ fill: 'rgba(148, 163, 184, 0.08)' }}
           />
           <Legend
+            formatter={(value: string) => <span style={{ color: axisColor }}>{value}</span>}
             wrapperStyle={{
               fontSize: '12px',
               fontWeight: 500,

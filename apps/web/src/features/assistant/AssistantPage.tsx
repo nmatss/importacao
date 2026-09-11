@@ -57,16 +57,56 @@ const sourceConfig: Record<
   AssistantSource['type'],
   { label: string; icon: typeof FileText; tone: string }
 > = {
-  process: { label: 'Processo', icon: FileText, tone: 'bg-slate-100 text-slate-700' },
-  alert: { label: 'Alerta', icon: AlertTriangle, tone: 'bg-amber-50 text-amber-700' },
-  communication: { label: 'Atendimento', icon: Mail, tone: 'bg-primary-50 text-primary-700' },
-  email_ingestion: { label: 'E-mail recebido', icon: Mail, tone: 'bg-cyan-50 text-cyan-700' },
-  validation: { label: 'Validação', icon: ShieldCheck, tone: 'bg-rose-50 text-rose-700' },
-  document: { label: 'Documento', icon: FileText, tone: 'bg-emerald-50 text-emerald-700' },
-  follow_up: { label: 'Follow-up', icon: ShieldCheck, tone: 'bg-violet-50 text-violet-700' },
-  event: { label: 'Histórico', icon: ShieldCheck, tone: 'bg-slate-100 text-slate-700' },
-  audit: { label: 'Auditoria', icon: ShieldCheck, tone: 'bg-orange-50 text-orange-700' },
-  knowledge: { label: 'Base RAG', icon: Sparkles, tone: 'bg-primary-50 text-primary-700' },
+  process: {
+    label: 'Processo',
+    icon: FileText,
+    tone: 'bg-slate-100 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200',
+  },
+  alert: {
+    label: 'Alerta',
+    icon: AlertTriangle,
+    tone: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
+  },
+  communication: {
+    label: 'Atendimento',
+    icon: Mail,
+    tone: 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300',
+  },
+  email_ingestion: {
+    label: 'E-mail recebido',
+    icon: Mail,
+    tone: 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/30 dark:text-cyan-300',
+  },
+  validation: {
+    label: 'Validação',
+    icon: ShieldCheck,
+    tone: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300',
+  },
+  document: {
+    label: 'Documento',
+    icon: FileText,
+    tone: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
+  },
+  follow_up: {
+    label: 'Follow-up',
+    icon: ShieldCheck,
+    tone: 'bg-violet-50 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300',
+  },
+  event: {
+    label: 'Histórico',
+    icon: ShieldCheck,
+    tone: 'bg-slate-100 text-slate-700 dark:bg-slate-700/60 dark:text-slate-200',
+  },
+  audit: {
+    label: 'Auditoria',
+    icon: ShieldCheck,
+    tone: 'bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-300',
+  },
+  knowledge: {
+    label: 'Base RAG',
+    icon: Sparkles,
+    tone: 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300',
+  },
 };
 
 function confidenceLabel(value: number): string {
@@ -121,7 +161,7 @@ export function AssistantPage() {
             <span className="font-semibold text-slate-900 dark:text-slate-100">
               {confidenceLabel(answer.confidence)}
             </span>
-            <span className="ml-2 text-xs text-slate-400">
+            <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">
               {answer.mode === 'ai' ? 'IA com RAG' : 'Resumo por evidências'}
             </span>
           </div>
@@ -132,7 +172,7 @@ export function AssistantPage() {
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-slate-700/80 dark:bg-slate-800 sm:p-6">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300">
                 <Bot className="h-5 w-5" />
               </div>
               <div>
@@ -229,14 +269,16 @@ export function AssistantPage() {
               <div>
                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-700">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       Resposta
                     </p>
                     <h3 className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
                       {answer.question}
                     </h3>
                   </div>
-                  <span className="text-xs text-slate-400">{formatDate(answer.generatedAt)}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {formatDate(answer.generatedAt)}
+                  </span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
                   {answer.answer}
@@ -269,7 +311,9 @@ export function AssistantPage() {
                     <div
                       className={cn(
                         'rounded-xl border border-slate-200 p-3 transition-colors dark:border-slate-700',
-                        source.url ? 'hover:bg-slate-50 dark:hover:bg-slate-900' : '',
+                        source.url
+                          ? 'hover:bg-slate-50 dark:hover:bg-slate-900 dark:bg-slate-700/60 dark:text-slate-200'
+                          : '',
                       )}
                     >
                       <div className="flex items-start justify-between gap-3">

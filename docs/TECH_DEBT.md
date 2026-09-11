@@ -25,7 +25,9 @@ Levantada na auditoria integral. O relatorio completo, com evidencia
 - **Certificacoes nao usa TanStack Query.** As nove telas usam
   `useState` + `useEffect` + `fetch` manual: nenhuma mutation invalida cache e o
   health da cert-api e consultado tres vezes ao abrir o dashboard. E a causa raiz
-  de inconsistencia de cache no modulo. Migracao ampla, adiada deliberadamente.
+  de inconsistencia de cache no modulo. Migracao ampla, adiada deliberadamente. Em 06/09 a corrida de respostas
+  na lista de produtos foi corrigida pontualmente, com regressao; isso nao
+  representa migracao do modulo nem resolve os demais caches.
 - **Cancelamento de requisicao nos clientes Google.** O vazamento de timer foi
   corrigido, mas o `withTimeout` local ainda nao cancela a requisicao em voo — o
   cliente segue esperando a resposta depois do timeout, mantendo custo e efeito

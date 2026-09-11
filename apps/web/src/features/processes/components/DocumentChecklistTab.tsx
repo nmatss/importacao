@@ -141,7 +141,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
   return (
     <div className="space-y-4">
       {hasBackgroundError && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
           Falha ao atualizar o checklist. Exibindo a ultima leitura disponivel.
         </div>
       )}
@@ -149,7 +149,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
       {/* Progress header */}
       <div className="flex items-center gap-4 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-3">
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-1">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
             <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
               Conferencia Documental
             </span>
@@ -189,7 +189,10 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               onClick={() => toggleStep(step.key)}
               disabled={isToggling}
               className={cn(
-                'group flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left transition-all',
+                // `flex-wrap`: o carimbo "Concluido por ... em ..." e longo e
+                // era `shrink-0`; em telas estreitas ele invadia o rotulo da
+                // etapa (auditoria responsiva 2026-09-06).
+                'group flex w-full flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border px-4 py-3 text-left transition-all',
                 isCompleted
                   ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/50'
                   : 'border-slate-150 dark:border-slate-600 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-200',
@@ -217,26 +220,30 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
               />
 
               {/* Content */}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-[9rem] flex-1">
                 <p
                   className={cn(
                     'text-sm font-medium',
-                    isCompleted ? 'text-emerald-700' : 'text-slate-700 dark:text-slate-300',
+                    isCompleted
+                      ? 'text-emerald-700 dark:text-emerald-300'
+                      : 'text-slate-700 dark:text-slate-300',
                   )}
                 >
                   {step.label}
                 </p>
-                <p className="text-xs text-slate-400 truncate">{step.description}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {step.description}
+                </p>
               </div>
 
               {/* Timestamp or status */}
-              <div className="shrink-0 text-right">
+              <div className="ml-auto min-w-0 text-right sm:shrink-0">
                 {isToggling ? (
                   <LoadingSpinner size="sm" />
                 ) : isCompleted && timestamp ? (
-                  <span className="inline-flex flex-col items-end gap-0.5 text-[11px] text-emerald-600">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock className="h-3 w-3" />
+                  <span className="inline-flex flex-col items-end gap-0.5 text-[11px] text-emerald-600 dark:text-emerald-300">
+                    <span className="inline-flex items-start gap-1 text-left">
+                      <Clock className="mt-0.5 h-3 w-3 shrink-0" />
                       {completedByName
                         ? `Concluido por ${completedByName} em ${timestamp}`
                         : timestamp}

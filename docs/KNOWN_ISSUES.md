@@ -15,6 +15,119 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
 
+## 2026-09-06 — Atualizacao apos verificacao autenticada
+
+Esta atualizacao prevalece sobre os estados historicos abaixo:
+
+- **Credenciais Linx: adiadas por decisao explicita do usuario.** Manter as
+  credenciais atuais; nao criar contas, trocar senhas ou alterar permissoes
+  nesta entrega. O risco de privilegios amplos permanece registrado, mas a
+  migracao nao e requisito de deploy desta rodada.
+- **Consultas de certificacao: verificadas em producao.** Readiness, estatisticas,
+  produtos, certificados, relatorios e agendamentos retornaram HTTP 200. Lookup
+  Linx encontrou registros em Puket e Imaginarium. Sem chave, a Cert-API recusou
+  produtos com HTTP 403. Isso nao substitui o fluxo completo de login no navegador.
+- **Sheets: acesso real confirmado.** Leitura de A1 nas 16 abas passou com as
+  credenciais existentes. Essa evidencia supera a limitacao de apenas verificar
+  `sheets_configured`; nao comprova completude ou corretude fiscal.
+- **Deploy GitHub: resolvido.** O workflow privado executou o deploy de `c64e706`
+  com sucesso. A secao historica sobre ausencia de runner/secrets esta superada.
+- **Escrita fiscal: pendente externa.** Falta caso aprovado com SKU, marca e datas;
+  nao selecionar valores arbitrarios que alterem a trava de faturamento.
+
+Evidencias operacionais e revisao publicada: sessao dotcontext
+`142282d9-7495-4a36-a16f-12ffe22fdbaa` e
+[revisao de certificacao](STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+
+## 2026-09-06 — Revisao de certificacao
+
+Corrigidos defeitos de estado, parametros de rota, semantica de fonte e apresentacao
+responsiva. Evidencias e limites em [revisao de certificacao](STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+Essa revisao nao encerra as pendencias de identidade/permissoes Linx nem substitui
+a validacao fiscal dos certificados.
+
+## 2026-09-06 — Reconciliacao das pendencias apos autorizacao de correcao
+
+Esta verificacao substitui o estado dos itens abaixo; os relatos antigos permanecem
+como historico. Plano, execucoes e resultados de deploy ficam na sessao dotcontext
+`142282d9-7495-4a36-a16f-12ffe22fdbaa`.
+
+- **Geracao de ambiente — corrigida:** falha do SOPS em process substitution
+  nao era propagada e o redirecionamento truncava `.env`. Pipeline com `pipefail`
+  e arquivo temporario privado agora preservam o ambiente anterior, rejeitam
+  configuracao vazia e publicam somente apos sucesso. Regressao no CI cobre
+  falha sem saida, saida parcial, primeira execucao e permissoes do arquivo.
+- **Trivy — falso positivo confirmado:** a regra `gcp-service-account` da versao
+  0.74 procura apenas o marcador publico de tipo, sinalizando o dicionario Python
+  que referencia variaveis de ambiente em `erp_service.py`. A excecao em
+  `trivy-secret.yaml` corresponde exclusivamente ao dicionario completo com essas
+  referencias, sem ignorar arquivo ou desativar regra. O teste
+  `scripts/test-trivy-secret-config.py` reproduz o baseline e prova que valores
+  literais e objetos adjacentes continuam detectados; ele roda no CI antes do
+  scan da imagem Cert-API. Nenhuma credencial real foi usada ou exposta.
+- **CI — causas corrigidas no codigo:** auditoria Node apontava Browserslist
+  vulneravel e a fixture documental acessava `system_settings` no banco vazio do
+  runner. Lockfile atualizado sem downgrade de Express/body-parser; `qs` fixado
+  em 6.16.0 porque esses consumidores restringem a serie 6.15. A fixture agora
+  isola a persistencia e exige o aviso Odoo nao configurado. `npm audit` retornou
+  zero vulnerabilidades; gates finais e execucao GitHub registrados no dotcontext.
+- **Cambios — corrigido no codigo:** adotado o tipo compartilhado da API,
+  conversao explicita dos decimais para os totais, ausencia representada por traco
+  e observacao opcional enviada como string. Tres testes cobrem multiplos
+  lancamentos, BRL/datas nulos e envio sem observacao. A autorizacao atual ampliou
+  o escopo visual anterior; a API permaneceu inalterada.
+- **Workflow — automacao provisionada em controle privado:** o repositorio da
+  aplicacao e publico, por isso o runner nao foi associado a ele. O workflow de
+  producao fica em `nmatss/importacao-deploy` (privado), usa `master` desta
+  aplicacao e `scripts/deploy.sh`. Container limitado a 1 CPU/1536 MiB, sem socket
+  Docker nem mounts de outros sistemas; chave SSH propria e secrets no environment
+  `production`, restrito a `main`. O workflow publico apenas aponta o destino.
+  Diagnostico e deploy completos devem ser comprovados nas execucoes registradas
+  no dotcontext. O HTTPS e conferido via SSH no host, pois a rede isolada do runner
+  nao alcanca a porta 443; a validacao externa permanece uma verificacao separada.
+- **Reentrega de alertas — implementada, webhook validado em teste:** o job
+  `alert-redelivery` e o backoff existem e possuem testes. Portanto, a afirmacao
+  antiga P-15 de que nao foram implementados esta superada. A leitura em producao
+  encontrou 5.104 alertas, zero entregues e tentativas reais registradas, inclusive
+  6 alertas no teto de 5 tentativas. Ha 1 pendente nas ultimas 24h. Webhook
+  configurado nao comprova validade. Teste unico autorizado em 06/09 retornou
+  HTTP 400 / API_KEY_INVALID, sem criar mensagem. O usuario forneceu outro
+  webhook; novo teste unico autorizado retornou HTTP 200 e confirmou criacao
+  da mensagem. Credencial atualizada no SOPS, sem valores em logs ou documentos.
+  Esse smoke comprova o destino; nao equivale a reentrega de todo o backlog.
+- **Alertmanager — pendente de integracao confiavel:** o bridge compartilhado existe em outra
+  rede, mas seu handler responde 200 mesmo quando o envio ao Chat falha. Nao foi
+  conectado automaticamente: isso esconderia falhas e ativaria mensagens sem
+  destino aprovado. O destino do Chat agora foi fornecido e testado; permanece
+  necessario exigir propagacao de falha antes da ativacao do Alertmanager.
+- **Drive — fonte oficial confirmada, acesso bloqueado:** o usuario confirmou
+  `Invoices Lancadas`, em `Controle de Cambios`, como origem oficial. A pasta
+  e o piloto IM0712602NB continuam retornando HTTP 404 para a conta de servico
+  em nova consulta apos a confirmacao. Falta compartilhar a fonte com a conta
+  de servico antes do smoke/piloto e reconciliacao. Follow Up acessivel;
+  `DOCUMENT_SOURCE=email` e ingestao atual preservados. IDs e decisao estao
+  registrados no dotcontext, artefato `confirmacao-usuario-fonte-drive`.
+  **Retificacao da descoberta anterior:** a pasta 2026 que corresponde ao layout
+  citado na documentacao fica sob `Inspecao Por Marca`. Um PDF do piloto
+  PK2052602TJ foi lido e e um Relatorio de Inspecao Puket. Portanto, essa
+  correspondencia de nomes nao comprova a origem operacional de Invoice/PL/BL.
+  A conta de servico recebe 404 nessa candidata, mas conceder acesso a ela nao
+  resolve por si so a origem documental. Nao apontar a ingestao para essa pasta
+  sem verificar os documentos esperados. A planilha Follow Up nao trouxe links
+  de pastas no intervalo consultado. Evidencias e IDs ficam no dotcontext;
+  `DOCUMENT_SOURCE=email` permanece preservado.
+- **Documentos — depende da area:** 51/51 processados, em 12 processos, 13 `other`.
+  Nao houve reclassificacao nem escrita em dados de producao. Fontes ausentes,
+  divergencias e aceite humano continuam necessarios; confianca nao e acuracia.
+- **Linx — ALTO confirmado:** ambas as bases respondem, mas as duas conexoes
+  possuem `sysadmin` e `ALTER ANY LOGIN`. Preparacao de menor privilegio em
+  [CERT-LINX-WRITE.md](CERT-LINX-WRITE.md). Criar identidades dedicadas, validar
+  dependencias dos triggers, trocar secrets via SOPS e testar antes de retirar o
+  acesso do aplicativo aos logins pessoais. Nao revogar logins compartilhados.
+- **Edge HTTPS — resolvido na entrega anterior:** a rede Traefik esta declarada
+  no Compose desde `e81a6dd`; o antigo bloqueio de go-live por 502 esta superado
+  pela validacao publica e recriacao registradas na sessao de responsividade.
+
 ## 2026-08-29 — Auditoria integral: o que mudou neste documento
 
 A sessao de 2026-08-29 auditou as 34 paginas, os 23 modulos da API e a

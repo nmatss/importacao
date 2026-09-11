@@ -1,9 +1,57 @@
 # Changelog
 
+## 2026-09-06 — Revisao de certificacao
+
+- Corrigidas respostas fora de ordem na lista de produtos e dupla decodificacao de parametros nos detalhes.
+- Corrigidos indicador da fonte de dados, agrupamento de status mobile, contraste escuro e nome acessivel do retorno.
+- Adicionadas regressoes e verificacao de teclado no formulario de agendamento. Detalhes em [revisao de certificacao](docs/STATUS-2026-09-06-REVISAO-CERTIFICACAO.md).
+
+## 2026-09-06 — Destino documental e Google Chat
+
+- Fonte documental Invoices Lancadas confirmada pelo usuario; acesso da conta de servico ainda pendente.
+- Webhook Google Chat substituido via SOPS apos teste autorizado com HTTP 200 e mensagem criada.
+
 All notable changes to this project are documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
+
+## [Unreleased] - 2026-09-06 - Responsividade e temas
+
+### Fixed
+
+- Deploy de producao separado em controle privado, com runner limitado no host
+  compartilhado; workflow publico indica o novo destino sem expor credenciais.
+
+- Geracao SOPS do `.env` agora preserva o arquivo anterior se a descriptografia
+  falhar, inclusive apos saida parcial; publicacao atomica e regressao no CI.
+
+- Excecao Trivy restrita ao template Google sem credenciais embutidas, com
+  regressao obrigatoria que continua detectando valores literais e objetos adjacentes.
+
+- Atualizadas dependencias transitivas vulneraveis, incluindo Browserslist e
+  `qs` 6.16.0; preservadas as versoes de Express e body-parser.
+- Fixture documental isola a persistencia de configuracoes Odoo, mantendo os
+  checks reais e o aviso de integracao nao configurada mesmo com DATABASE_URL.
+
+- Totais de Cambios normalizam os decimais textuais retornados pela API; campos
+  ausentes nao aparecem como zero/data de epoch, e observacao vazia respeita schema.
+- Workflow de deploy trata confirmacao e secrets como dados em variaveis de
+  ambiente, evitando sua interpolacao direta no codigo shell.
+
+- Rede externa do frontend declarada no Compose de producao, preservando o acesso
+  HTTPS pelo Traefik apos recriar o container.
+- Corrigidos overflows, colunas inacessiveis e textos comprimidos em dashboards,
+  processos, e-mails, alertas, auditoria e Certificacoes.
+- Ajustados contraste do tema escuro, controles nativos, KPIs, filtros, formularios
+  e posicionamento do assistente em telas pequenas.
+
+### Added
+
+- Auditoria responsiva com fixtures preenchidas, capturas da viewport e da pagina,
+  deteccao de overflow e verificacao de carregamento real.
+- Escopo, evidencias e limites documentados em
+  `docs/STATUS-2026-09-06-RESPONSIVIDADE.md`.
 
 ## [Unreleased] - 2026-08-28 - Auditoria completa de UX/UI
 

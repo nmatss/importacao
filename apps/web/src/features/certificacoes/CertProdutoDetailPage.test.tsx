@@ -70,4 +70,15 @@ describe('CertProdutoDetailPage certificate sources', () => {
     expect(screen.getByText('24/07/2027')).toBeInTheDocument();
     expect(screen.queryByText(/^Linha$/)).not.toBeInTheDocument();
   });
+
+  it('preserves a percent sign in the SKU decoded by the router', async () => {
+    render(
+      <MemoryRouter initialEntries={['/certificacoes/produtos/SKU%2525']}>
+        <Routes>
+          <Route path="/certificacoes/produtos/:sku" element={<CertProdutoDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(mockedProduct).toHaveBeenCalledWith('SKU%25'));
+  });
 });

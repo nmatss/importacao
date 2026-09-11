@@ -279,7 +279,9 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700">
             <MessageSquare className="h-6 w-6 text-slate-300" />
           </div>
-          <p className="text-sm text-slate-400 font-medium">Nenhum atendimento registrado.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400 font-medium">
+            Nenhum atendimento registrado.
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -319,7 +321,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                       </span>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
-                      <span className="text-xs font-medium text-slate-400">
+                      <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                         {formatDateTime(comm.sentAt || comm.createdAt)}
                       </span>
                       {isExpanded ? (
@@ -331,11 +333,10 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                   </div>
                 </button>
 
-                <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
-                  <User className="h-3.5 w-3.5" />
-                  <span className="font-medium">{comm.recipient}</span>
-                  <span className="text-slate-300 dark:text-slate-600">|</span>
-                  <span>{comm.recipientEmail}</span>
+                <div className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                  <User className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 break-words font-medium">{comm.recipient}</span>
+                  <span className="col-start-2 min-w-0 break-all">{comm.recipientEmail}</span>
                 </div>
 
                 {isExpanded && (
@@ -407,7 +408,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                         />
 
                         <div>
-                          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                          <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                             <Paperclip className="h-3.5 w-3.5" />
                             Anexos
                           </p>
@@ -417,7 +418,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                               estar incompleta.
                             </p>
                           ) : !processDocuments?.length ? (
-                            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-400 dark:border-slate-700 dark:bg-slate-900">
+                            <p className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:text-slate-400 dark:border-slate-700 dark:bg-slate-900">
                               Nenhum documento disponivel para anexar.
                             </p>
                           ) : (
@@ -439,7 +440,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                                             : prev.filter((id) => id !== doc.id),
                                         )
                                       }
-                                      className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600"
+                                      className="h-3.5 w-3.5 rounded border-slate-300 text-primary-600 dark:text-primary-300"
                                     />
                                     <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] uppercase text-slate-500 dark:bg-slate-800">
                                       {doc.documentType}
@@ -496,7 +497,7 @@ export function ComunicacoesTab({ processId }: ComunicacoesTabProps) {
                               type="button"
                               onClick={() => updateDraft(comm.id)}
                               disabled={!canSubmitDraft || saving === comm.id}
-                              className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-50"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 hover:bg-primary-100 disabled:opacity-50 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300 dark:hover:bg-primary-950/30"
                             >
                               {saving === comm.id ? (
                                 <LoadingSpinner size="sm" />

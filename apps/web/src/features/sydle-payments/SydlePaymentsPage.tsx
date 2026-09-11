@@ -329,7 +329,7 @@ function DocumentKindBadge({ kind }: { kind: 'PI' | 'INV' | null }) {
         'inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-bold leading-none',
         kind === 'PI'
           ? 'border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700'
-          : 'border-primary-200 bg-primary-50 text-primary-700',
+          : 'border-primary-200 bg-primary-50 text-primary-700 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300',
       )}
     >
       {kind}
@@ -436,28 +436,28 @@ function dateTimeLabel(value: string | Date | null | undefined): string {
 function statusClass(status: PaymentStatus): string {
   switch (status) {
     case 'paid':
-      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70';
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50';
     case 'overdue':
-      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/70';
+      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/70 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50';
     case 'scheduled':
-      return 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/70';
+      return 'bg-primary-50 text-primary-700 ring-1 ring-primary-200/70 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50';
     case 'cancelled':
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/70';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
     case 'open':
-      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70';
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50';
     default:
-      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/70';
+      return 'bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600';
   }
 }
 
 function matchClass(status: MatchStatus): string {
   switch (status) {
     case 'matched':
-      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70';
+      return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50';
     case 'ambiguous':
-      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70';
+      return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200/70 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50';
     default:
-      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/70';
+      return 'bg-danger-50 text-danger-700 ring-1 ring-danger-200/70 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50';
   }
 }
 
@@ -488,29 +488,32 @@ function KpiCard({
   title?: string;
 }) {
   const toneClass = {
-    blue: 'bg-primary-50 text-primary-700 ring-primary-200/70',
-    green: 'bg-emerald-50 text-emerald-700 ring-emerald-200/70',
-    amber: 'bg-amber-50 text-amber-700 ring-amber-200/70',
-    red: 'bg-danger-50 text-danger-700 ring-danger-200/70',
-    slate: 'bg-slate-100 text-slate-700 ring-slate-200/70',
+    blue: 'bg-primary-50 text-primary-700 ring-primary-200/70 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50',
+    green:
+      'bg-emerald-50 text-emerald-700 ring-emerald-200/70 dark:bg-emerald-950/30 dark:text-emerald-300 dark:ring-emerald-700/50',
+    amber:
+      'bg-amber-50 text-amber-700 ring-amber-200/70 dark:bg-amber-950/30 dark:text-amber-300 dark:ring-amber-700/50',
+    red: 'bg-danger-50 text-danger-700 ring-danger-200/70 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50',
+    slate:
+      'bg-slate-100 text-slate-700 ring-slate-200/70 dark:bg-slate-700/60 dark:text-slate-200 dark:ring-slate-600',
   }[tone];
 
   return (
     <div className="rounded-lg border border-slate-200/70 bg-white p-4 shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
-      <div className="flex items-center gap-3 min-w-0">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <span
           className={cn(
-            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1',
+            'col-start-2 row-start-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ring-1',
             toneClass,
           )}
         >
           <Icon className="h-5 w-5" />
         </span>
-        <div className="min-w-0">
+        <div className="contents">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</p>
           <p
             title={title}
-            className="text-base font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-100"
+            className="col-span-2 row-start-2 mt-3 break-words text-base font-bold leading-tight tabular-nums text-slate-900 dark:text-slate-100"
           >
             {value}
           </p>
@@ -526,7 +529,7 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
     <div className="flex justify-between gap-4 border-b border-slate-100 py-1.5 text-sm last:border-0 dark:border-slate-700/50">
       <span className="shrink-0 text-slate-500 dark:text-slate-400">{label}</span>
       <span className="break-words text-right font-medium text-slate-800 dark:text-slate-100">
-        {empty ? <span className="text-slate-400">--</span> : value}
+        {empty ? <span className="text-slate-500 dark:text-slate-400">--</span> : value}
       </span>
     </div>
   );
@@ -765,7 +768,16 @@ export function SydlePaymentsPage() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [syncing, setSyncing] = useState(false);
   const [exporting, setExporting] = useState<'csv' | 'xlsx' | 'pdf' | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  // A tabela tem 15 colunas (`min-w-[1800px]`): em telas estreitas ela so
+  // existe atras de scroll horizontal. Abre em cartoes ate lg; a troca manual
+  // continua valendo (auditoria responsiva 2026-09-06).
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 1023px)').matches
+        ? 'cards'
+        : 'table'
+      : 'table',
+  );
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const limit = 50;
 
@@ -969,7 +981,7 @@ export function SydlePaymentsPage() {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-700 ring-1 ring-primary-200/70">
+            <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary-50 text-primary-700 ring-1 ring-primary-200/70 dark:bg-primary-950/30 dark:text-primary-300 dark:ring-primary-700/50">
               <Banknote className="h-5 w-5" />
             </span>
             <div>
@@ -1041,7 +1053,7 @@ export function SydlePaymentsPage() {
       </div>
 
       {isAdmin && summary && !summary.config.configured && (
-        <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 sm:flex-row sm:items-center sm:justify-between dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
           <div className="flex items-start gap-3">
             <Settings className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
@@ -1054,7 +1066,7 @@ export function SydlePaymentsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         <KpiCard
           label="Comprado USD"
           value={fullCurrency(summary?.totalPurchaseUsd ?? 0)}
@@ -1296,7 +1308,7 @@ export function SydlePaymentsPage() {
               className={
                 dueBucket === b.key
                   ? 'rounded-full bg-primary-600 px-3 py-1 text-xs font-semibold text-white'
-                  : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900'
+                  : 'rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-900 dark:bg-slate-700/60 dark:text-slate-200 dark:border-slate-600'
               }
             >
               {b.label}
@@ -1423,7 +1435,7 @@ export function SydlePaymentsPage() {
                             className="inline-flex items-center gap-1 hover:text-slate-800 dark:hover:text-slate-200"
                           >
                             {col.label}
-                            <span className="text-slate-400">
+                            <span className="text-slate-500 dark:text-slate-400">
                               {sortBy === col.sort ? (sortOrder === 'asc' ? '▲' : '▼') : '↕'}
                             </span>
                           </button>
@@ -1473,7 +1485,7 @@ export function SydlePaymentsPage() {
                               {phaseLabel(row.logisticStatus)}
                             </span>
                           ) : (
-                            <span className="text-xs text-slate-400">--</span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">--</span>
                           )}
                         </td>
                         <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">

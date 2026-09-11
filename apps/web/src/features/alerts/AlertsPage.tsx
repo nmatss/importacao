@@ -50,30 +50,30 @@ const severityConfig = {
     icon: Info,
     dot: 'bg-primary-500',
     bar: 'bg-primary-500',
-    badgeBg: 'bg-primary-50',
-    badgeText: 'text-primary-700',
-    iconColor: 'text-primary-600',
-    iconBg: 'bg-primary-50',
+    badgeBg: 'bg-primary-50 dark:bg-primary-950/30',
+    badgeText: 'text-primary-700 dark:text-primary-300',
+    iconColor: 'text-primary-600 dark:text-primary-300',
+    iconBg: 'bg-primary-50 dark:bg-primary-950/30',
     label: 'Informativo',
   },
   warning: {
     icon: AlertTriangle,
     dot: 'bg-amber-500',
     bar: 'bg-amber-500',
-    badgeBg: 'bg-amber-50',
-    badgeText: 'text-amber-700',
-    iconColor: 'text-amber-600',
-    iconBg: 'bg-amber-50',
+    badgeBg: 'bg-amber-50 dark:bg-amber-950/30',
+    badgeText: 'text-amber-700 dark:text-amber-300',
+    iconColor: 'text-amber-600 dark:text-amber-300',
+    iconBg: 'bg-amber-50 dark:bg-amber-950/30',
     label: 'Atenção',
   },
   critical: {
     icon: AlertTriangle,
     dot: 'bg-danger-500',
     bar: 'bg-danger-500',
-    badgeBg: 'bg-danger-50',
-    badgeText: 'text-danger-700',
-    iconColor: 'text-danger-600',
-    iconBg: 'bg-danger-50',
+    badgeBg: 'bg-danger-50 dark:bg-danger-950/30',
+    badgeText: 'text-danger-700 dark:text-danger-300',
+    iconColor: 'text-danger-600 dark:text-danger-300',
+    iconBg: 'bg-danger-50 dark:bg-danger-950/30',
     label: 'Crítico',
   },
 } as const;
@@ -235,12 +235,12 @@ export function AlertsPage() {
             {exportingCsv ? 'Exportando...' : 'Exportar CSV'}
           </button>
           {pendingCount > 0 && (
-            <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2">
+            <div className="flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-2 dark:bg-amber-950/30 dark:border-amber-700/50">
               <span className="relative flex h-2.5 w-2.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
                 <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
               </span>
-              <span className="text-sm font-semibold text-amber-700">
+              <span className="text-sm font-semibold text-amber-700 dark:text-amber-300">
                 {pendingCount} pendente{pendingCount !== 1 ? 's' : ''}
               </span>
             </div>
@@ -253,10 +253,10 @@ export function AlertsPage() {
         <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           {/* Severity Filter */}
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Severidade
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {severityOptions.map((opt) => (
                 <button
                   type="button"
@@ -281,7 +281,7 @@ export function AlertsPage() {
 
           {/* Date Range Filter */}
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Período
             </p>
             <DateRangeFilter
@@ -299,10 +299,10 @@ export function AlertsPage() {
 
           {/* Ack Filter */}
           <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-400">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">
               Status
             </p>
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {ackOptions.map((opt) => (
                 <button
                   type="button"
@@ -327,8 +327,8 @@ export function AlertsPage() {
       {/* Alerts List */}
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
-          <div className="flex items-center justify-between">
-            <h3 className="flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
@@ -371,7 +371,7 @@ export function AlertsPage() {
                   {/* Severity bar on left */}
                   <div className={cn('absolute left-0 top-0 bottom-0 w-1', config.bar)} />
 
-                  <div className="flex items-start gap-3 sm:gap-4 px-4 sm:px-6 py-4 sm:py-5 pl-5 sm:pl-7">
+                  <div className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-3 sm:flex sm:gap-4 px-4 sm:px-6 py-4 sm:py-5 pl-5 sm:pl-7">
                     {/* Severity icon */}
                     <div
                       className={cn(
@@ -399,7 +399,7 @@ export function AlertsPage() {
                           {config.label}
                         </span>
                         {alert.acknowledged && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
                             <CheckCircle2 className="h-3 w-3" />
                             Tratado
                           </span>
@@ -409,7 +409,7 @@ export function AlertsPage() {
                             tela nao distinguia entregue de nao entregue. */}
                         {!alert.sentToChat && (
                           <span
-                            className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
                             title="Este alerta não foi entregue no Google Chat: existe apenas aqui."
                           >
                             <BellOff className="h-3 w-3" />
@@ -418,14 +418,14 @@ export function AlertsPage() {
                         )}
                       </div>
 
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600 dark:text-slate-400">
+                      <p className="mt-1.5 break-words text-sm leading-relaxed text-slate-600 dark:text-slate-400">
                         {alert.message}
                       </p>
 
                       {alert.processId && (
                         <Link
                           to={`/importacao/processos/${alert.processId}`}
-                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
+                          className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors dark:text-primary-300 dark:hover:text-primary-300"
                         >
                           <ExternalLink className="h-3 w-3" />
                           {alert.processCode || alert.processId}
@@ -455,10 +455,10 @@ export function AlertsPage() {
                         type="button"
                         aria-label={`Marcar alerta como tratado: ${alert.title}`}
                         onClick={() => handleAcknowledge(alert.id)}
-                        className="shrink-0 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 hover:border-slate-300 transition-all"
+                        className="col-start-2 justify-self-start shrink-0 inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 sm:gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 sm:px-4 py-2 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 transition-all"
                       >
                         <CheckCircle2 className="h-4 w-4" />
-                        <span className="hidden sm:inline">Marcar tratado</span>
+                        <span>Marcar tratado</span>
                       </button>
                     )}
                   </div>

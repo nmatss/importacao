@@ -269,9 +269,12 @@ function statusLabel(status: RegistroCheckStatus) {
 }
 
 function statusClass(status: RegistroCheckStatus) {
-  if (status === 'match') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-  if (status === 'divergent') return 'border-red-200 bg-red-50 text-red-700';
-  if (status === 'warning') return 'border-amber-200 bg-amber-50 text-amber-800';
+  if (status === 'match')
+    return 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300';
+  if (status === 'divergent')
+    return 'border-red-200 bg-red-50 text-red-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300';
+  if (status === 'warning')
+    return 'border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300';
   return 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
 }
 
@@ -341,7 +344,7 @@ export function RegistroTab({ processId }: { processId: string }) {
             key={label}
             className="rounded-xl border border-slate-200/70 bg-white p-4 dark:border-slate-700/70 dark:bg-slate-800"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
               {label}
             </p>
             <p className="mt-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -362,12 +365,12 @@ export function RegistroTab({ processId }: { processId: string }) {
             </p>
           </div>
           {registroChecks.some((check) => check.status === 'divergent') ? (
-            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700">
+            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-1 text-xs font-semibold text-red-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300">
               <AlertTriangle className="h-3.5 w-3.5" />
               Revisar divergencias
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300">
               <CheckCircle2 className="h-3.5 w-3.5" />
               Sem divergencia critica
             </span>
@@ -440,7 +443,7 @@ export function RegistroTab({ processId }: { processId: string }) {
         ))}
       </div>
 
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
         <div className="flex items-start gap-3">
           <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
           <p>

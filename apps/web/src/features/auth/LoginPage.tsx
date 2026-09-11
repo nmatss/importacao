@@ -137,10 +137,10 @@ export function LoginPage() {
               {error && (
                 <div
                   role="alert"
-                  className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3"
+                  className="mb-6 flex items-start gap-3 rounded-xl bg-danger-50 border border-danger-100 px-4 py-3 dark:bg-danger-950/30 dark:border-danger-700/50"
                 >
                   <div className="mt-0.5 h-2 w-2 rounded-full bg-danger-500 shrink-0" />
-                  <p className="text-sm text-danger-600">{error}</p>
+                  <p className="text-sm text-danger-600 dark:text-danger-300">{error}</p>
                 </div>
               )}
 
@@ -179,7 +179,9 @@ export function LoginPage() {
 
               <div className="mt-6 flex items-center gap-2 justify-center">
                 <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
-                <span className="text-[11px] text-slate-400 px-2 font-medium">@grupounico.com</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 px-2 font-medium">
+                  @grupounico.com
+                </span>
                 <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
               </div>
             </div>

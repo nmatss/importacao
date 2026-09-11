@@ -244,3 +244,59 @@ caminho de rollback — o Linx não versiona PROP_PRODUTOS.
   ausência de trava. Relatórios e telas consultam o próprio Linx.
 - Os logins ERP por marca ainda dependem de conta pessoal. Migrar para contas de
   serviço de menor privilégio permanece pendente operacional.
+
+## 9. Preparacao da troca de identidade — 2026-09-06
+
+A consulta somente leitura `IS_SRVROLEMEMBER('sysadmin')` retornou `1` nas duas
+conexoes atuais. Ambas tambem possuem `ALTER ANY LOGIN`. Conectividade foi
+confirmada sem imprimir identidades ou credenciais. Isso nao autoriza revogar
+um login pessoal que pode ser usado por outros consumidores.
+
+A troca deve ocorrer por base, com uma identidade dedicada a Cert-API. O DBA
+precisa validar os objetos configurados em `LINX_SCHEMA` e as dependencias do
+trigger de `PROP_PRODUTOS`. O codigo em `app/db/sqlserver.py` requer:
+
+| Objeto                             | Permissoes necessarias pelo codigo atual |
+| ---------------------------------- | ---------------------------------------- |
+| `estoque_produtos`                 | `SELECT`                                 |
+| `PRODUTOS_BARRA`                   | `SELECT`                                 |
+| Tabela de produtos configurada     | `SELECT`                                 |
+| Tabela de propriedades configurada | `SELECT`, `INSERT`, `UPDATE`             |
+
+Nao ha necessidade demonstrada de `DELETE`, `db_owner`, `sysadmin` ou
+`ALTER ANY LOGIN` para a aplicacao. Os grants acima sao o ponto de partida;
+nao provam que triggers ou ownership chaining funcionarao com uma nova conta.
+
+Procedimento revisavel:
+
+1. Confirmar nome/ownership das duas contas tecnicas e gerar senhas pelo cofre
+   corporativo, sem valores em comandos, logs ou Markdown.
+2. Criar login e usuario na base correspondente; conceder acesso apenas aos
+   objetos efetivamente configurados. Validar permissao efetiva e dependencias
+   de triggers antes de qualquer escrita.
+3. Executar consulta de estoque, resolucao SKU e leitura das duas propriedades
+   com a identidade nova; exigir `sysadmin=0` e `ALTER ANY LOGIN=0`.
+4. Atualizar `ERP_PUKET_USER/PASS` ou `ERP_IMG_USER/PASS` pelo SOPS e publicar
+   pelo procedimento oficial. Trocar uma base por vez para isolar falhas.
+5. Com certificado e SKU aprovados pela area, executar smoke de escrita e
+   confirmar valor final e auditoria. Nao usar dado de producao arbitrario nem
+   supor que rollback desfaz efeitos de triggers.
+6. Retirar a credencial pessoal da configuracao do aplicativo. Revogacao global
+   do login depende de inventario dos demais consumidores pelo DBA.
+
+Nenhuma conta foi criada, nenhum grant alterado e nenhum registro Linx foi
+escrito nesta verificacao. A execucao depende da identidade/ownership aprovados
+e do caso de teste de negocio; o plano operacional e as evidencias ficam na
+sessao dotcontext `142282d9-7495-4a36-a16f-12ffe22fdbaa`.
+
+## 10. Decisao posterior do usuario — 2026-09-06
+
+O usuario determinou manter suas credenciais atuais e tratar a migracao de
+identidade posteriormente. O procedimento da secao 9 permanece como referencia
+futura; nao executar criacao de contas, rotacao ou alteracao de grants nesta
+entrega. O risco de privilegios amplos continua conhecido, sem bloquear o deploy
+por uma migracao que foi explicitamente adiada.
+
+Consultas autenticadas reais ao endpoint de lookup retornaram HTTP 200 e
+`status=found` para Puket e Imaginarium. Nenhuma propriedade foi escrita. O smoke
+de cadastro continua dependendo de SKU, marca e datas aprovados pela area fiscal.

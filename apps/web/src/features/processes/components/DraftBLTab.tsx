@@ -202,7 +202,7 @@ function DraftUploadSection({
                   </span>
                 )}
                 {draftDoc.aiProcessingStatus === 'completed' && (
-                  <span className="inline-flex items-center gap-1 text-emerald-600">
+                  <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
                     <CheckCircle2 className="h-3 w-3" /> Dados extraidos
                   </span>
                 )}
@@ -216,10 +216,10 @@ function DraftUploadSection({
                     className={cn(
                       'rounded-full px-2 py-0.5 text-[10px] font-medium',
                       draftDoc.aiConfidence >= 0.8
-                        ? 'bg-emerald-50 text-emerald-700'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                         : draftDoc.aiConfidence >= 0.5
-                          ? 'bg-amber-50 text-amber-700'
-                          : 'bg-danger-50 text-danger-700',
+                          ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                          : 'bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
                     )}
                   >
                     {Math.round(draftDoc.aiConfidence * 100)}%
@@ -233,7 +233,9 @@ function DraftUploadSection({
         <div className="rounded-lg border-2 border-dashed border-violet-200 dark:border-violet-800 bg-violet-50/30 dark:bg-violet-950/20 px-4 py-6 text-center">
           <FileSearch className="mx-auto h-8 w-8 text-violet-300" />
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Nenhum Draft BL enviado</p>
-          <p className="text-xs text-slate-400">Envie o rascunho do BL abaixo</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Envie o rascunho do BL abaixo
+          </p>
         </div>
       )}
 
@@ -304,7 +306,7 @@ function ConferenceChecklist({ processId }: { processId: string }) {
       {/* Progress bar */}
       <div className="flex items-center gap-4 rounded-lg bg-slate-50 dark:bg-slate-900 px-4 py-3">
         <div className="flex-1">
-          <div className="flex items-center justify-between mb-1">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
             <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Progresso
             </span>
@@ -355,7 +357,7 @@ function ConferenceChecklist({ processId }: { processId: string }) {
                 ncmCheck.status === 'passed'
                   ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                   : ncmCheck.status === 'failed'
-                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    ? 'bg-red-100 text-red-700 dark:bg-danger-900/40 dark:text-danger-300'
                     : ncmCheck.status === 'warning'
                       ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
                       : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
@@ -428,12 +430,14 @@ function ConferenceChecklist({ processId }: { processId: string }) {
                 >
                   {check.label}
                 </p>
-                <p className="text-xs text-slate-400 truncate">{check.description}</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                  {check.description}
+                </p>
               </div>
 
               <div className="shrink-0 text-right">
                 {isChecked && timestamp ? (
-                  <span className="inline-flex max-w-[18rem] items-center gap-1 text-[11px] text-emerald-600">
+                  <span className="inline-flex max-w-[18rem] items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-300">
                     <Clock className="h-3 w-3" />
                     {checkedByName ? `${checkedByName} · ${timestamp}` : timestamp}
                   </span>
@@ -476,7 +480,7 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
     >
       <div className="flex items-center gap-1.5 mb-1">
         {Icon && <Icon className="h-3.5 w-3.5 text-slate-400" />}
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           {label}
         </span>
         {confidence != null && (
@@ -484,10 +488,10 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
             className={cn(
               'ml-auto rounded-full px-1.5 py-0.5 text-[9px] font-medium',
               confidence >= 0.8
-                ? 'bg-emerald-50 text-emerald-600'
+                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
                 : confidence >= 0.5
-                  ? 'bg-amber-50 text-amber-600'
-                  : 'bg-danger-50 text-danger-600',
+                  ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-300'
+                  : 'bg-danger-50 text-danger-600 dark:bg-danger-950/30 dark:text-danger-300',
             )}
           >
             {Math.round(confidence * 100)}%
@@ -503,7 +507,7 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
         {displayValue}
       </p>
       {warning && (
-        <p className="mt-1 text-[11px] text-amber-600 flex items-center gap-1">
+        <p className="mt-1 text-[11px] text-amber-600 flex items-center gap-1 dark:text-amber-300">
           <AlertCircle className="h-3 w-3 shrink-0" />
           {warning}
         </p>
@@ -534,14 +538,16 @@ function AIExtractedData({
         </h3>
         <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-4 py-8 text-center">
           {!activeDoc ? (
-            <p className="text-sm text-slate-400">Envie um Draft BL para ver os dados extraidos</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Envie um Draft BL para ver os dados extraidos
+            </p>
           ) : activeDoc.aiProcessingStatus === 'processing' ? (
             <div className="flex flex-col items-center gap-2">
               <Loader2 className="h-6 w-6 text-violet-400 animate-spin" />
-              <p className="text-sm text-slate-400">Processando com IA...</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Processando com IA...</p>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">Extracao IA nao disponivel</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Extracao IA nao disponivel</p>
           )}
         </div>
       </div>
@@ -586,7 +592,9 @@ function AIExtractedData({
           <span
             className={cn(
               'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-              isShowingFinal ? 'bg-emerald-100 text-emerald-700' : 'bg-violet-100 text-violet-700',
+              isShowingFinal
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                : 'bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-300',
             )}
           >
             {isShowingFinal ? finalDateBadge : 'Versao do Draft'}
@@ -608,7 +616,7 @@ function AIExtractedData({
         <div className="flex items-center gap-2 rounded-lg border border-danger-200 dark:border-danger-800 bg-danger-50 dark:bg-danger-950/30 px-4 py-2.5">
           <AlertTriangle className="h-4 w-4 text-danger-500 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-danger-700">
+            <p className="text-sm font-medium text-danger-700 dark:text-danger-300">
               Declaracao de Madeira NAO encontrada
             </p>
             <p className="text-xs text-danger-500">
@@ -622,7 +630,9 @@ function AIExtractedData({
         <div className="flex items-center gap-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-2.5">
           <Timer className="h-4 w-4 text-amber-500 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-amber-700">Free Time nao informado</p>
+            <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+              Free Time nao informado
+            </p>
             <p className="text-xs text-amber-500">
               Verifique se o free time negociado consta no BL.
             </p>
@@ -718,7 +728,7 @@ function AIExtractedData({
       {/* NCM List */}
       {Array.isArray(ncmList) && ncmList.length > 0 && (
         <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
             NCMs encontrados ({ncmList.length})
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -733,14 +743,14 @@ function AIExtractedData({
           </div>
           {ncmPrefixes.length > 0 && (
             <div className="mt-2 border-t border-slate-100 pt-2 dark:border-slate-700">
-              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Prefixos validados (4 digitos)
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {ncmPrefixes.map((prefix) => (
                   <span
                     key={prefix}
-                    className="inline-flex rounded bg-emerald-50 px-2 py-0.5 text-xs font-mono font-semibold text-emerald-700"
+                    className="inline-flex rounded bg-emerald-50 px-2 py-0.5 text-xs font-mono font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
                   >
                     {prefix}
                   </span>
@@ -790,7 +800,7 @@ function ExpandableCargoText({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700"
+          className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-violet-600 hover:text-violet-700 dark:text-violet-300 dark:hover:text-violet-300"
         >
           <ChevronDown className={cn('h-3 w-3 transition-transform', expanded && 'rotate-180')} />
           {expanded ? 'Ver menos' : 'Ver mais'}
@@ -805,7 +815,7 @@ function ExpandableCargoText({
 function CargoDescription({ text }: { text: string }) {
   return (
     <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
         Descricao da Carga
       </p>
       <ExpandableCargoText text={text} className="text-xs text-slate-600 dark:text-slate-400" />
@@ -906,7 +916,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                     </span>
                   )}
                   {revisadoDoc.aiProcessingStatus === 'completed' && (
-                    <span className="inline-flex items-center gap-1 text-emerald-600">
+                    <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
                       <CheckCircle2 className="h-3 w-3" /> Dados extraidos
                     </span>
                   )}
@@ -937,7 +947,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
               </div>
 
               <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                <table className="min-w-full text-xs">
+                <table className="w-full min-w-[640px] text-xs">
                   <thead>
                     <tr className="bg-slate-50 dark:bg-slate-900 text-left">
                       <th className="px-3 py-2 font-semibold text-slate-500 dark:text-slate-400">
@@ -988,7 +998,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                               'px-3 py-2 align-top',
                               isCargo ? 'max-w-[260px]' : 'max-w-[150px] truncate',
                               diff.changed
-                                ? 'text-amber-700 font-medium'
+                                ? 'text-amber-700 font-medium dark:text-amber-300'
                                 : 'text-slate-600 dark:text-slate-400',
                             )}
                           >
@@ -1000,12 +1010,12 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
                           </td>
                           <td className="px-3 py-2 text-center align-top">
                             {diff.changed ? (
-                              <span className="inline-flex items-center gap-1 text-amber-600">
+                              <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-300">
                                 <X className="h-3 w-3" />
                                 Alterado
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 text-emerald-600">
+                              <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-300">
                                 <Check className="h-3 w-3" />
                                 OK
                               </span>
@@ -1026,7 +1036,7 @@ function RevisadoSection({ draftDocs, processId }: { draftDocs: Document[]; proc
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
             Nenhum documento revisado
           </p>
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Envie a versao revisada do Draft BL apos a conferencia
           </p>
         </div>
@@ -1082,7 +1092,7 @@ function DraftVsFinalSection({
           Draft BL vs BL Final
         </h3>
         <div className="rounded-lg border border-slate-100 dark:border-slate-700 bg-slate-50/50 px-4 py-6 text-center">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             O BL Final (OHBL) ainda nao chegou — comparativo aparecera aqui assim que for emitido.
           </p>
         </div>
@@ -1100,25 +1110,25 @@ function DraftVsFinalSection({
           Draft BL vs BL Final
         </h3>
         {ohblDateLabel && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
             {ohblDateLabel}
           </span>
         )}
         {revisions.length > 0 && (
-          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700">
+          <span className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
             {revisions.length} campo(s) revisado(s)
           </span>
         )}
       </div>
 
       {revisions.length === 0 ? (
-        <div className="rounded-lg border border-emerald-100 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700">
+        <div className="rounded-lg border border-emerald-100 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">
           <Check className="inline h-4 w-4 mr-1" /> Nenhum campo divergente entre o Draft e o BL
           Final.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-violet-200 dark:border-violet-800">
-          <table className="min-w-full text-sm">
+        <div className="overflow-x-auto rounded-lg border border-violet-200 dark:border-violet-800">
+          <table className="w-full min-w-[640px] table-fixed text-sm">
             <thead>
               <tr className="bg-violet-50/50 dark:bg-violet-950/20">
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-violet-500">
@@ -1141,7 +1151,7 @@ function DraftVsFinalSection({
                   <tr key={i} className="border-b last:border-b-0">
                     <td className="px-3 py-2.5 align-top">
                       <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+                        <span className="inline-flex items-center rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700 dark:bg-violet-950/30 dark:text-violet-300">
                           Revisado
                         </span>
                         <span className="text-sm font-medium text-slate-800 dark:text-slate-100">
@@ -1160,7 +1170,7 @@ function DraftVsFinalSection({
                         <span className="line-through">{rev.draftValue ?? '—'}</span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 align-top text-sm font-mono text-emerald-700 font-semibold">
+                    <td className="px-3 py-2.5 align-top text-sm font-mono text-emerald-700 font-semibold dark:text-emerald-300">
                       {isCargo && rev.finalValue ? (
                         <ExpandableCargoText text={rev.finalValue} clampLines={4} />
                       ) : (

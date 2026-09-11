@@ -20,24 +20,12 @@ import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
+import type { CurrencyExchange } from '@/shared/types';
 
 interface Process {
   id: number;
   processCode: string;
   brand: string;
-}
-
-interface CurrencyExchange {
-  id: number;
-  processId: string;
-  type: 'balance' | 'deposit';
-  amountUsd: number;
-  exchangeRate: number;
-  amountBrl: number;
-  paymentDeadline: string;
-  expirationDate: string;
-  notes: string | null;
-  createdAt: string;
 }
 
 interface ExchangeForm {
@@ -83,7 +71,7 @@ export function CurrencyExchangePage() {
 
   const createMutation = useApiMutation<
     CurrencyExchange,
-    Omit<CurrencyExchange, 'id' | 'createdAt'>
+    ExchangeForm & { processId: number; amountBrl: string }
   >('/api/currency-exchange', 'post', {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['currency-exchange', selectedProcessId] });
@@ -128,26 +116,30 @@ export function CurrencyExchangePage() {
     }
     setFormError(null);
     createMutation.mutate({
-      processId: selectedProcessId,
+      processId: Number(selectedProcessId),
       type: form.type,
-      amountUsd: usd,
-      exchangeRate: rate,
-      amountBrl: calculatedBrl,
+      amountUsd: form.amountUsd.trim(),
+      exchangeRate: form.exchangeRate.trim(),
+      amountBrl: calculatedBrl.toFixed(2),
       paymentDeadline: form.paymentDeadline,
       expirationDate: form.expirationDate,
-      notes: form.notes || null,
+      notes: form.notes.trim(),
     });
   };
 
   const totalBalanceUsd =
-    exchanges?.filter((e) => e.type === 'balance').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+    exchanges
+      ?.filter((e) => e.type === 'balance')
+      .reduce((sum, e) => sum + Number(e.amountUsd), 0) ?? 0;
 
   const totalDepositUsd =
-    exchanges?.filter((e) => e.type === 'deposit').reduce((sum, e) => sum + e.amountUsd, 0) ?? 0;
+    exchanges
+      ?.filter((e) => e.type === 'deposit')
+      .reduce((sum, e) => sum + Number(e.amountUsd), 0) ?? 0;
 
   const saldoUsd = totalBalanceUsd - totalDepositUsd;
 
-  const totalBrl = exchanges?.reduce((sum, e) => sum + e.amountBrl, 0) ?? 0;
+  const totalBrl = exchanges?.reduce((sum, e) => sum + Number(e.amountBrl ?? 0), 0) ?? 0;
 
   const kpiCards = [
     {
@@ -155,28 +147,28 @@ export function CurrencyExchangePage() {
       value: formatCurrency(totalBalanceUsd),
       icon: Wallet,
       gradient: 'from-primary-500 to-primary-600',
-      bg: 'bg-primary-50',
+      bg: 'bg-primary-50 dark:bg-primary-950/30',
     },
     {
       label: 'Total Deposit USD',
       value: formatCurrency(totalDepositUsd),
       icon: TrendingUp,
       gradient: 'from-emerald-500 to-emerald-600',
-      bg: 'bg-emerald-50',
+      bg: 'bg-emerald-50 dark:bg-emerald-950/30',
     },
     {
       label: 'Saldo USD',
       value: formatCurrency(saldoUsd),
       icon: ArrowDownUp,
       gradient: 'from-violet-500 to-violet-600',
-      bg: 'bg-violet-50',
+      bg: 'bg-violet-50 dark:bg-violet-950/30',
     },
     {
       label: 'Total BRL',
       value: formatCurrency(totalBrl, 'BRL'),
       icon: Calculator,
       gradient: 'from-amber-500 to-amber-600',
-      bg: 'bg-amber-50',
+      bg: 'bg-amber-50 dark:bg-amber-950/30',
     },
   ];
 
@@ -337,11 +329,11 @@ export function CurrencyExchangePage() {
                 <label className="mb-1.5 block text-xs font-medium text-slate-500 dark:text-slate-400">
                   Valor BRL (calculado)
                 </label>
-                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 px-3 text-sm font-medium text-slate-600 dark:text-slate-400">
+                <div className="flex h-[38px] items-center rounded-lg border border-slate-200 dark:border-slate-600 bg-slate-50/80 dark:bg-slate-900 px-3 text-sm font-medium text-slate-600 dark:text-slate-300">
                   {calculatedBrl ? (
                     formatCurrency(calculatedBrl, 'BRL')
                   ) : (
-                    <span className="text-slate-400">--</span>
+                    <span className="text-slate-500 dark:text-slate-400">--</span>
                   )}
                 </div>
               </div>
@@ -407,7 +399,7 @@ export function CurrencyExchangePage() {
               <div
                 id="exchange-form-error"
                 role="alert"
-                className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700"
+                className="mt-4 rounded-lg border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300"
               >
                 {formError}
               </div>
@@ -515,8 +507,8 @@ export function CurrencyExchangePage() {
                           <span
                             className={`inline-flex items-center rounded-lg px-2.5 py-1 text-xs font-semibold ${
                               ex.type === 'balance'
-                                ? 'bg-primary-50 text-primary-700'
-                                : 'bg-emerald-50 text-emerald-700'
+                                ? 'bg-primary-50 text-primary-700 dark:bg-primary-950/30 dark:text-primary-300'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                             }`}
                           >
                             {ex.type === 'balance' ? 'Balance' : 'Deposit'}
@@ -526,16 +518,16 @@ export function CurrencyExchangePage() {
                           {formatCurrency(ex.amountUsd)}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-mono text-slate-700 dark:text-slate-300">
-                          {Number(ex.exchangeRate).toFixed(4)}
+                          {ex.exchangeRate != null ? Number(ex.exchangeRate).toFixed(4) : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm font-medium text-slate-900 dark:text-slate-100">
-                          {formatCurrency(ex.amountBrl, 'BRL')}
+                          {ex.amountBrl != null ? formatCurrency(ex.amountBrl, 'BRL') : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                          {formatDate(ex.paymentDeadline)}
+                          {ex.paymentDeadline ? formatDate(ex.paymentDeadline) : '—'}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
-                          {formatDate(ex.expirationDate)}
+                          {ex.expirationDate ? formatDate(ex.expirationDate) : '—'}
                         </td>
                         <td className="max-w-[200px] truncate px-3 py-2.5 sm:px-6 sm:py-3.5 text-sm text-slate-600 dark:text-slate-400">
                           {ex.notes || <span className="text-slate-300">--</span>}
@@ -543,7 +535,7 @@ export function CurrencyExchangePage() {
                         <td className="whitespace-nowrap px-3 py-2.5 sm:px-6 sm:py-3.5">
                           <button
                             onClick={() => setDeleteId(ex.id)}
-                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600"
+                            className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
                             title="Excluir"
                             aria-label="Excluir cambio"
                           >

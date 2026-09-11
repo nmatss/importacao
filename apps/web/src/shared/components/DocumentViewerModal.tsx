@@ -221,7 +221,7 @@ export function DocumentViewerModal({
                 <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
                   Pré-visualização indisponível para este formato.
                 </p>
-                <p className="text-xs text-slate-400">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Use &quot;Baixar&quot; para abrir o arquivo no aplicativo do seu computador.
                 </p>
               </div>

@@ -405,7 +405,7 @@ export function ProcessDetailPage() {
         <button
           type="button"
           onClick={() => navigate('/importacao/processos')}
-          className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors"
+          className="mt-2 text-sm font-medium text-primary-600 hover:text-primary-700 transition-colors dark:text-primary-300 dark:hover:text-primary-300"
         >
           Voltar para processos
         </button>
@@ -415,7 +415,9 @@ export function ProcessDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="sticky top-0 z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 sm:-mx-6 sm:px-6">
+      {/* Fixo so no desktop: em 375px o bloco mede 537px de 812px de viewport
+          (66% da tela) e sobra quase nada para o conteudo da aba. */}
+      <div className="z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:-mx-6 lg:px-6">
         <Breadcrumbs
           items={[
             { label: 'Processos', href: '/importacao/processos' },
@@ -479,7 +481,12 @@ export function ProcessDetailPage() {
                       : 'text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50',
                   )}
                 >
-                  <Icon className={cn('h-4 w-4', isActive ? 'text-primary-600' : '')} />
+                  <Icon
+                    className={cn(
+                      'h-4 w-4',
+                      isActive ? 'text-primary-600 dark:text-primary-300' : '',
+                    )}
+                  />
                   <span className="relative inline">
                     {tab.label}
                     {process && (

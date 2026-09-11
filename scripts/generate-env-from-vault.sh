@@ -38,9 +38,15 @@ if [[ "${MODE}" == "--sops" ]]; then
     exit 1
   fi
 
+  # Keep the current environment intact until both decryption and conversion
+  # succeed. pipefail observes SOPS failures, including partial output.
+  ENV_TMP="$(mktemp "${ENV_FILE}.tmp.XXXXXX")"
+  trap 'rm -f -- "${ENV_TMP}"' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   echo "Decrypting ${SOPS_FILE} -> ${ENV_FILE}..."
-  python3 - 3< <(sops --decrypt "${SOPS_FILE}") > "${ENV_FILE}" <<'PY'
-import os
+  sops --decrypt "${SOPS_FILE}" | python3 /dev/fd/3 3<<'PY' > "${ENV_TMP}"
+import sys
 import json
 import re
 
@@ -77,7 +83,8 @@ def encode_env(key: str, value: str) -> str:
     return f"{key}=\"{escaped}\""
 
 
-with os.fdopen(3) as stream:
+count = 0
+with sys.stdin as stream:
     for line in stream:
         line = line.rstrip("\n")
         if not line or line.lstrip().startswith("#") or line.strip() == "---":
@@ -89,9 +96,13 @@ with os.fdopen(3) as stream:
         if not key_re.match(key):
             continue
         print(encode_env(key, parse_scalar(val)))
+        count += 1
+if count == 0:
+    raise SystemExit("Error: decrypted configuration contains no environment variables.")
 PY
 
-  chmod 600 "${ENV_FILE}"
+  chmod 600 "${ENV_TMP}"
+  mv -f -- "${ENV_TMP}" "${ENV_FILE}"
   echo "Done. ${ENV_FILE} generated from SOPS (chmod 600)."
   exit 0
 fi

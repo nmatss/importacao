@@ -223,35 +223,35 @@ export function MeuDiaPage() {
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400 capitalize">{today}</p>
         </div>
         <div className="flex items-center gap-2">
-          <CalendarDays className="h-5 w-5 text-primary-600" />
-          <span className="text-sm font-medium text-primary-600 hidden sm:inline">
+          <CalendarDays className="h-5 w-5 text-primary-600 dark:text-primary-300" />
+          <span className="text-sm font-medium text-primary-600 hidden sm:inline dark:text-primary-300">
             Cockpit Pessoal
           </span>
         </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 stagger-children">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 stagger-children">
         <SummaryCard
-          icon={<Target className="h-5 w-5 text-primary-600" />}
+          icon={<Target className="h-5 w-5 text-primary-600 dark:text-primary-300" />}
           label="Processos Ativos"
           value={overview?.activeProcesses ?? 0}
           bgColor="bg-primary-50 dark:bg-primary-950/40"
         />
         <SummaryCard
-          icon={<AlertTriangle className="h-5 w-5 text-danger-600" />}
+          icon={<AlertTriangle className="h-5 w-5 text-danger-600 dark:text-danger-300" />}
           label="Atrasados"
           value={overview?.overdueProcesses ?? 0}
           bgColor="bg-danger-50 dark:bg-danger-700/20"
         />
         <SummaryCard
-          icon={<CheckCircle className="h-5 w-5 text-emerald-600" />}
+          icon={<CheckCircle className="h-5 w-5 text-emerald-600 dark:text-emerald-300" />}
           label="Concluidos no Mes"
           value={overview?.completedThisMonth ?? 0}
           bgColor="bg-emerald-50 dark:bg-emerald-950/40"
         />
         <SummaryCard
-          icon={<DollarSign className="h-5 w-5 text-amber-600" />}
+          icon={<DollarSign className="h-5 w-5 text-amber-600 dark:text-amber-300" />}
           label="Valor FOB Total"
           value={formatCurrency(overview?.totalFobValue ?? 0)}
           bgColor="bg-amber-50 dark:bg-amber-950/40"
@@ -266,7 +266,7 @@ export function MeuDiaPage() {
             <Clock className="h-5 w-5 text-slate-400" />
             Tarefas Pendentes
             {pendingTasks.length > 0 && (
-              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-danger-100 text-danger-700 ring-1 ring-danger-200/60">
+              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-danger-100 text-danger-700 ring-1 ring-danger-200/60 dark:bg-danger-950/30 dark:text-danger-300 dark:ring-danger-700/50">
                 {pendingTasks.length}
               </span>
             )}
@@ -290,8 +290,8 @@ export function MeuDiaPage() {
                     task.priority === 'critical'
                       ? 'border-danger-200 dark:border-danger-700/40 bg-danger-50 dark:bg-danger-700/20 hover:border-danger-500'
                       : task.priority === 'high'
-                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:border-amber-300'
-                        : 'border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-primary-300',
+                        ? 'border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:border-amber-300 dark:hover:border-amber-700/50'
+                        : 'border-slate-200/60 dark:border-slate-700/60 bg-white dark:bg-slate-800 hover:border-primary-300 dark:hover:border-primary-700/50',
                   )}
                 >
                   <div className="flex items-center justify-between">
@@ -312,7 +312,9 @@ export function MeuDiaPage() {
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {task.title}
                         </p>
-                        <p className="text-[11px] text-slate-400">{task.description}</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {task.description}
+                        </p>
                       </div>
                     </div>
                     <ArrowRight className="h-4 w-4 text-slate-400" />
@@ -334,7 +336,7 @@ export function MeuDiaPage() {
             {!alerts || alerts.length === 0 ? (
               <div className="p-6 text-center">
                 <Bell className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-400">Nenhum alerta recente</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum alerta recente</p>
               </div>
             ) : (
               alerts.slice(0, 8).map((alert) => (
@@ -353,7 +355,7 @@ export function MeuDiaPage() {
                     <p className="text-sm text-slate-600 dark:text-slate-400 truncate">
                       {alert.message}
                     </p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                       {formatDate(alert.createdAt)}
                     </p>
                   </div>
@@ -365,7 +367,7 @@ export function MeuDiaPage() {
           {alerts && alerts.length > 0 && (
             <Link
               to="/importacao/alertas"
-              className="block text-center text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors"
+              className="block text-center text-sm text-primary-600 hover:text-primary-700 font-medium transition-colors dark:text-primary-300 dark:hover:text-primary-300"
             >
               Ver todos os alertas
             </Link>
@@ -383,13 +385,13 @@ export function MeuDiaPage() {
                   <Link
                     key={li.id}
                     to={`/importacao/processos/${li.id}`}
-                    className="block p-3 hover:bg-amber-100 transition-colors"
+                    className="block p-3 hover:bg-amber-100 transition-colors dark:hover:bg-amber-950/30"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
                         {li.processCode}
                       </span>
-                      <span className="text-[11px] font-medium text-danger-600">
+                      <span className="text-[11px] font-medium text-danger-600 dark:text-danger-300">
                         {li.daysRemaining}d restantes
                       </span>
                     </div>
@@ -424,13 +426,13 @@ function SummaryCard({
         bgColor,
       )}
     >
-      <div className="flex items-center gap-3">
-        {icon}
-        <div>
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
+        <div className="col-start-2 row-start-1">{icon}</div>
+        <div className="contents">
           <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
             {label}
           </p>
-          <p className="text-base sm:text-xl font-bold text-slate-900 dark:text-slate-100 truncate">
+          <p className="col-span-2 row-start-2 mt-3 break-words text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
             {value}
           </p>
         </div>

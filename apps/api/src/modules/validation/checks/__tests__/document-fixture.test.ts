@@ -1,5 +1,13 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { allChecks, type CheckInput } from '../index.js';
+
+// Fixture local: configuracao ausente tanto no banco quanto no ambiente.
+// Mantem os checks reais, isolando apenas a fronteira de persistencia externa.
+vi.mock('../../../../shared/database/connection.js', () => ({
+  db: {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => [] }) }) }),
+  },
+}));
 
 const ODOO_ENV_KEYS = ['ODOO_URL', 'ODOO_DB', 'ODOO_USER', 'ODOO_PASSWORD'] as const;
 
@@ -151,6 +159,10 @@ describe('validation document fixture', () => {
     const failed = results.filter((result) => result.status === 'failed');
 
     expect(failed).toEqual([]);
+    expect(results.find((result) => result.checkName === 'description-odoo-match')).toMatchObject({
+      status: 'warning',
+      message: 'Odoo não configurado. Verificação de descrições ignorada.',
+    });
     expect(results.find((result) => result.checkName === 'incoterm-check')?.status).toBe('passed');
     expect(results.find((result) => result.checkName === 'currency-check')?.status).toBe('passed');
     expect(results.find((result) => result.checkName === 'dates-match')?.status).toBe('passed');

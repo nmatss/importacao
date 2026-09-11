@@ -228,7 +228,7 @@ export function AppLayout({
     .filter((section) => section.items.length > 0);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-page">
+    <div className="flex h-screen supports-[height:100dvh]:h-dvh overflow-hidden bg-page">
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -281,7 +281,7 @@ export function AppLayout({
             ref={mobileCloseButtonRef}
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="ml-auto rounded-lg p-1.5 text-sidebar-200/40 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
+            className="ml-auto rounded-lg p-1.5 text-sidebar-200/70 hover:bg-white/5 hover:text-white lg:hidden transition-colors"
             aria-label="Fechar menu"
           >
             <X className="h-5 w-5" />
@@ -293,7 +293,7 @@ export function AppLayout({
           {visibleNavSections.map((section) => (
             <div key={section.label}>
               {!collapsed && (
-                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-200/30">
+                <p className="px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-sidebar-200/70">
                   {section.label}
                 </p>
               )}
@@ -310,7 +310,7 @@ export function AppLayout({
                         'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-150',
                         isActive
                           ? a.navActive
-                          : 'text-sidebar-200/60 hover:bg-white/5 hover:text-white',
+                          : 'text-sidebar-200/80 hover:bg-white/5 hover:text-white',
                         collapsed && 'justify-center px-0',
                       )
                     }
@@ -322,7 +322,7 @@ export function AppLayout({
                             'h-[18px] w-[18px] shrink-0 transition-colors duration-150',
                             isActive
                               ? a.iconActive
-                              : 'text-sidebar-200/40 group-hover:text-sidebar-200/70',
+                              : 'text-sidebar-200/70 group-hover:text-sidebar-200/70',
                           )}
                         />
                         {!collapsed && <span className="truncate">{item.label}</span>}
@@ -348,7 +348,7 @@ export function AppLayout({
                 to={moduleSwitch.to}
                 aria-label={collapsed ? moduleSwitch.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/40 hover:bg-white/5 hover:text-white transition-all duration-150',
+                  'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/70 hover:bg-white/5 hover:text-white transition-all duration-150',
                   collapsed && 'justify-center px-0',
                 )}
               >
@@ -360,7 +360,7 @@ export function AppLayout({
               to="/portal"
               aria-label={collapsed ? 'Voltar ao Portal' : undefined}
               className={cn(
-                'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/40 hover:bg-white/5 hover:text-white transition-all duration-150',
+                'flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium text-sidebar-200/70 hover:bg-white/5 hover:text-white transition-all duration-150',
                 collapsed && 'justify-center px-0',
               )}
             >
@@ -383,14 +383,14 @@ export function AppLayout({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-xs font-medium text-white/80">{user.name}</p>
-                  <p className="truncate text-[10px] text-sidebar-200/30">{user.role}</p>
+                  <p className="truncate text-[10px] text-sidebar-200/70">{user.role}</p>
                 </div>
               </div>
             )}
             <button
               type="button"
               onClick={toggleCollapsed}
-              className="hidden lg:flex h-8 w-full items-center justify-center rounded-lg text-sidebar-200/30 hover:bg-white/5 hover:text-white/60 transition-all duration-150"
+              className="hidden lg:flex h-8 w-full items-center justify-center rounded-lg text-sidebar-200/70 hover:bg-white/5 hover:text-white/60 transition-all duration-150"
               aria-label={collapsed ? 'Expandir menu lateral' : 'Recolher menu lateral'}
             >
               <ChevronLeft
@@ -452,7 +452,9 @@ export function AppLayout({
                   <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200 leading-tight">
                     {user.name}
                   </p>
-                  <p className="truncate text-[11px] text-slate-400">{user.role}</p>
+                  <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                    {user.role}
+                  </p>
                 </div>
                 <div
                   className={cn(
@@ -483,7 +485,7 @@ export function AppLayout({
           id="main"
           role="main"
           tabIndex={-1}
-          className="flex-1 overflow-auto p-4 pb-24 outline-none lg:p-6"
+          className="flex-1 overflow-auto p-4 pb-24 outline-none lg:p-6 lg:pb-24"
         >
           {children}
         </main>

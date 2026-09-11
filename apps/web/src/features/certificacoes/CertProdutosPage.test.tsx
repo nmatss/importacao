@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { formatDateTime } from '@/shared/lib/utils';
 import { matchesStatusFilters } from './CertProdutosPage';
@@ -111,6 +111,32 @@ function renderPage() {
 describe('CertProdutosPage (server-authoritative)', () => {
   beforeEach(() => {
     mockedFetch.mockReset();
+  });
+
+  it('keeps the newest filter results when an older request finishes later', async () => {
+    let finishOld!: (value: CertProductsResponse) => void;
+    mockedFetch.mockImplementationOnce(
+      () =>
+        new Promise<CertProductsResponse>((resolve) => {
+          finishOld = resolve;
+        }),
+    );
+    mockedFetch.mockResolvedValue({
+      products: [{ sku: 'NEW', brand: 'Puket', name: 'Resultado atual' }],
+      total: 1,
+    });
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Puket' }));
+    expect(await screen.findByText('Resultado atual')).toBeInTheDocument();
+    await act(async () => {
+      finishOld({
+        products: [{ sku: 'OLD', brand: 'Imaginarium', name: 'Resultado antigo' }],
+        total: 1,
+      });
+    });
+    expect(screen.getByText('Resultado atual')).toBeInTheDocument();
+    expect(screen.queryByText('Resultado antigo')).not.toBeInTheDocument();
   });
 
   it('uses the server total for the "N produtos encontrados" count, not the page length', async () => {

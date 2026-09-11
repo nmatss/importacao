@@ -211,7 +211,7 @@ export function ProcessListPage() {
                   page: '',
                 });
               }}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors"
+              className="rounded-lg px-3 py-2 text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors dark:text-primary-300 dark:hover:bg-primary-950/30"
             >
               Limpar filtros
             </button>
@@ -278,10 +278,10 @@ export function ProcessListPage() {
                   >
                     <td className="px-3 py-3 sm:px-5 sm:py-4 text-sm">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600 group-hover:bg-primary-100 transition-colors">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary-50 text-primary-600 group-hover:bg-primary-100 transition-colors dark:bg-primary-950/30 dark:text-primary-300 dark:group-hover:bg-primary-950/30">
                           <Package className="h-4 w-4" />
                         </div>
-                        <span className="font-semibold text-primary-600 group-hover:text-primary-700 transition-colors">
+                        <span className="font-semibold text-primary-600 group-hover:text-primary-700 transition-colors dark:text-primary-300 dark:group-hover:text-primary-300">
                           {proc.processCode}
                         </span>
                       </div>
@@ -330,7 +330,7 @@ export function ProcessListPage() {
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                   aria-label="Página anterior"
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
@@ -340,7 +340,7 @@ export function ProcessListPage() {
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                   aria-label="Próxima página"
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
+                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   Proxima
                   <ChevronRight className="h-4 w-4" />

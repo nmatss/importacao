@@ -224,7 +224,7 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
     return (
       <div
         role="alert"
-        className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+        className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300"
       >
         Não foi possível confirmar a política de documentos. O upload manual permanece bloqueado por
         segurança.
@@ -234,13 +234,13 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
   if (!policy.data.manualUploadEnabled) {
     return (
-      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-primary-700/50 dark:bg-primary-950/30 dark:text-primary-300">
         <FolderOpen className="mt-0.5 h-4 w-4 shrink-0" />
         <div>
           <p className="font-medium">
             Documentos recebidos somente pela pasta do processo no Drive
           </p>
-          <p className="mt-0.5 text-xs text-blue-700">
+          <p className="mt-0.5 text-xs text-blue-700 dark:text-primary-300">
             Inclua o arquivo na pasta correta. A sincronização automática fará a leitura e
             registrará a origem.
           </p>
@@ -308,24 +308,27 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
         aria-disabled={state === 'uploading'}
         className={cn(
           'relative w-full rounded-xl border-2 border-dashed text-left transition-all duration-200',
-          dragOver && 'border-primary-400 bg-primary-50 scale-[1.01]',
+          dragOver && 'border-primary-400 bg-primary-50 scale-[1.01] dark:bg-primary-950/30',
           state === 'idle' &&
             !dragOver &&
-            'cursor-pointer border-slate-200 dark:border-slate-600 hover:border-primary-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900',
-          state === 'uploading' && 'border-primary-300 bg-primary-50/50 cursor-wait',
-          state === 'success' && 'border-emerald-300 bg-emerald-50',
-          state === 'error' && 'border-danger-300 bg-danger-50',
+            'cursor-pointer border-slate-200 dark:border-slate-600 hover:border-primary-300 hover:bg-slate-50 dark:hover:bg-slate-800 dark:bg-slate-900 dark:hover:border-primary-700/50',
+          state === 'uploading' &&
+            'border-primary-300 bg-primary-50/50 cursor-wait dark:border-primary-700/50 dark:bg-primary-950/30',
+          state === 'success' &&
+            'border-emerald-300 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-950/30',
+          state === 'error' &&
+            'border-danger-300 bg-danger-50 dark:border-danger-700/50 dark:bg-danger-950/30',
         )}
       >
-        <div className="flex items-center gap-4 px-5 py-4">
+        <div className="flex flex-col items-center gap-3 px-4 py-4 text-center sm:flex-row sm:gap-4 sm:px-5 sm:text-left">
           {/* Icon */}
           <div
             className={cn(
               'flex h-12 w-12 shrink-0 items-center justify-center rounded-lg',
               state === 'idle' && 'bg-slate-100 dark:bg-slate-700',
-              state === 'uploading' && 'bg-primary-100',
-              state === 'success' && 'bg-emerald-100',
-              state === 'error' && 'bg-danger-100',
+              state === 'uploading' && 'bg-primary-100 dark:bg-primary-950/30',
+              state === 'success' && 'bg-emerald-100 dark:bg-emerald-950/30',
+              state === 'error' && 'bg-danger-100 dark:bg-danger-950/30',
             )}
           >
             {state === 'idle' && <Upload className="h-5 w-5 text-slate-400" />}
@@ -335,13 +338,16 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
           </div>
 
           {/* Content */}
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 w-full flex-1">
             {state === 'idle' && (
               <>
                 <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
                   Arraste ou clique para enviar
                 </p>
-                <p id={`${inputId}-description`} className="text-xs text-slate-400">
+                <p
+                  id={`${inputId}-description`}
+                  className="text-xs text-slate-500 dark:text-slate-400"
+                >
                   PDF, Excel, Word, imagens, CSV, TXT, EML/MSG - max. 50MB
                 </p>
               </>
@@ -354,13 +360,13 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                   <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-300">
                     {selectedFile.name}
                   </p>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
                     {formatFileSize(selectedFile.size)}
                   </span>
                 </div>
                 <div className="mt-1.5 flex items-center gap-2">
                   <div
-                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-100"
+                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-primary-100 dark:bg-primary-950/30"
                     role="progressbar"
                     aria-label="Progresso do upload"
                     aria-valuemin={0}
@@ -372,14 +378,16 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
                       style={{ width: `${progress}%` }}
                     />
                   </div>
-                  <span className="text-xs font-medium text-primary-600">{progress}%</span>
+                  <span className="text-xs font-medium text-primary-600 dark:text-primary-300">
+                    {progress}%
+                  </span>
                 </div>
               </div>
             )}
 
             {state === 'success' && selectedFile && (
               <div id={`${inputId}-status`} role="status" aria-live="polite">
-                <p className="text-sm font-medium text-emerald-700">
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                   {selectedFile.name} enviado com sucesso
                 </p>
                 <p className="text-xs text-emerald-500">IA processando em background...</p>
@@ -388,7 +396,9 @@ export function DocumentUpload({ processId }: DocumentUploadProps) {
 
             {state === 'error' && (
               <div id={`${inputId}-status`} role="alert">
-                <p className="text-sm font-medium text-danger-700">{error || 'Erro no upload'}</p>
+                <p className="text-sm font-medium text-danger-700 dark:text-danger-300">
+                  {error || 'Erro no upload'}
+                </p>
                 <p className="text-xs text-danger-400">Clique para tentar novamente</p>
               </div>
             )}

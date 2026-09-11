@@ -75,8 +75,8 @@ export function CertStatsCards({
     <div
       className={
         showNeverValidated
-          ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4'
-          : 'grid grid-cols-2 md:grid-cols-4 gap-4'
+          ? 'grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-4'
+          : 'grid grid-cols-2 xl:grid-cols-4 gap-4'
       }
     >
       {cards.map((card) => (
@@ -84,17 +84,17 @@ export function CertStatsCards({
           key={card.key}
           className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-600/80 shadow-sm p-5 transition-shadow hover:shadow-md"
         >
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:gap-4">
             <div
               className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${card.iconBg} text-white shadow-lg ${card.shadowColor}`}
             >
               <card.icon className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none mb-1">
+              <p className="break-words text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none mb-1">
                 {loading ? '-' : error ? '—' : renderValue(data?.[card.key])}
               </p>
-              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 truncate">
+              <p className="text-xs font-medium text-slate-500 dark:text-slate-400 break-words">
                 {card.label}
               </p>
             </div>

@@ -170,7 +170,7 @@ export function AssistantBubble({ accent = 'primary' }: AssistantBubbleProps) {
         <section
           role="dialog"
           aria-labelledby={titleId}
-          className="mb-3 flex max-h-[min(680px,calc(100vh-110px))] w-[calc(100vw-2rem)] max-w-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40"
+          className="mb-3 flex max-h-[min(680px,calc(100dvh-110px))] w-[calc(100vw-2rem)] max-w-[420px] flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl shadow-slate-900/20 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/40"
         >
           <header className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
             <div className="flex min-w-0 items-center gap-3">
@@ -206,7 +206,7 @@ export function AssistantBubble({ accent = 'primary' }: AssistantBubbleProps) {
 
           <div className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
             <form className="space-y-3" onSubmit={(event) => askAssistant(event)}>
-              <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[104px_minmax(0,1fr)]">
                 <div>
                   <label
                     htmlFor="assistant-bubble-process"
@@ -356,7 +356,7 @@ export function AssistantBubble({ accent = 'primary' }: AssistantBubbleProps) {
         type="button"
         onClick={() => setOpen((current) => !current)}
         className={cn(
-          'flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl shadow-slate-900/25 transition-transform hover:scale-105 focus:outline-none focus:ring-4 dark:shadow-black/40',
+          'ml-auto flex h-14 w-14 items-center justify-center rounded-full text-white shadow-xl shadow-slate-900/25 transition-transform hover:scale-105 focus:outline-none focus:ring-4 dark:shadow-black/40',
           tone.button,
         )}
         aria-label={open ? 'Ocultar assistente IA' : 'Abrir assistente IA'}
