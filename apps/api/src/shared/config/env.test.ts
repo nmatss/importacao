@@ -23,6 +23,66 @@ afterEach(() => {
   vi.resetModules();
 });
 
+describe('variaveis da reuniao 2026-09-11', () => {
+  it('padroes: sem pastas, upload manual ligado, sync em dry_run', async () => {
+    const env = await loadEnv({ IA_LOCAL_API_KEY: 'test-token' });
+
+    expect(env.GOOGLE_DRIVE_PENDENTES_FOLDER_ID).toBeUndefined();
+    expect(env.GOOGLE_DRIVE_ESPELHOS_FOLDER_ID).toBeUndefined();
+    expect(env.MANUAL_UPLOAD_ENABLED).toBe('true');
+    expect(env.FOLLOW_UP_SYNC_MODE).toBe('dry_run');
+  });
+
+  it.each([
+    ['drive', 'off'],
+    ['both', 'off'],
+    ['email', 'sistema'],
+  ])('DRIVE_WRITE_MODE ausente com DOCUMENT_SOURCE=%s vira %s', async (source, esperado) => {
+    const env = await loadEnv({ IA_LOCAL_API_KEY: 'test-token', DOCUMENT_SOURCE: source });
+    expect(env.DRIVE_WRITE_MODE).toBe(esperado);
+  });
+
+  it('vazio (o `${VAR:-}` do compose) e ausente: cai no padrao, nao quebra o boot', async () => {
+    const env = await loadEnv({
+      IA_LOCAL_API_KEY: 'test-token',
+      DOCUMENT_SOURCE: 'drive',
+      DRIVE_WRITE_MODE: '',
+      MANUAL_UPLOAD_ENABLED: '',
+      FOLLOW_UP_SYNC_MODE: '',
+      GOOGLE_DRIVE_PENDENTES_FOLDER_ID: '',
+    });
+
+    expect(env.DRIVE_WRITE_MODE).toBe('off');
+    expect(env.MANUAL_UPLOAD_ENABLED).toBe('true');
+    expect(env.FOLLOW_UP_SYNC_MODE).toBe('dry_run');
+    expect(env.GOOGLE_DRIVE_PENDENTES_FOLDER_ID).toBeUndefined();
+  });
+
+  it('valor explicito vence o padrao derivado', async () => {
+    const env = await loadEnv({
+      IA_LOCAL_API_KEY: 'test-token',
+      DOCUMENT_SOURCE: 'drive',
+      DRIVE_WRITE_MODE: 'sistema',
+      MANUAL_UPLOAD_ENABLED: 'false',
+      FOLLOW_UP_SYNC_MODE: 'apply',
+    });
+
+    expect(env.DRIVE_WRITE_MODE).toBe('sistema');
+    expect(env.MANUAL_UPLOAD_ENABLED).toBe('false');
+    expect(env.FOLLOW_UP_SYNC_MODE).toBe('apply');
+  });
+
+  it.each([
+    ['DRIVE_WRITE_MODE', 'write'],
+    ['FOLLOW_UP_SYNC_MODE', 'yes'],
+    ['MANUAL_UPLOAD_ENABLED', 'sim'],
+  ])('%s=%s invalido derruba o boot com o nome da variavel', async (nome, valor) => {
+    await expect(loadEnv({ IA_LOCAL_API_KEY: 'test-token', [nome]: valor })).rejects.toThrow(
+      new RegExp(nome),
+    );
+  });
+});
+
 describe('env IA policy', () => {
   it('usa Follow Up e Drive como fontes operacionais seguras por padrao', async () => {
     const env = await loadEnv({ IA_LOCAL_API_KEY: 'test-token' });

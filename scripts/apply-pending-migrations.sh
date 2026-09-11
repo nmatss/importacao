@@ -46,5 +46,13 @@ apply 0023_communications_audit.sql
 apply 0024_document_analysis_hardening.sql
 apply 0025_ai_usage_telemetry.sql
 apply 0026_document_ingestion_source.sql
+# 0027 e 0028 ficaram fora desta lista quando foram criadas; em producao elas
+# entraram pelo `migrate.ts` do entrypoint da API, que descobre os arquivos do
+# disco. A guarda `apply-pending-migrations-script.test.ts` agora exige que
+# toda migration >= 0011 conste aqui.
+apply 0027_alert_delivery_tracking.sql
+apply 0028_process_items_lineage.sql
+apply 0029_document_content_dedupe_and_tombstones.sql
+apply 0030_process_checklist_hidden_steps.sql
 
 echo "[$(date '+%H:%M:%S')] done — pending migrations applied"

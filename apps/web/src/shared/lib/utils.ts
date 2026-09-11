@@ -23,15 +23,91 @@ export function formatCurrency(value: number | string, currency = 'USD'): string
   }
 }
 
-export function formatDate(date: string): string {
-  const d = new Date(date);
-  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+/**
+ * Formatacao de data — fonte UNICA da web.
+ *
+ * Dois tipos de valor chegam da API e NAO podem ser tratados igual:
+ *
+ * - Data de CALENDARIO (`etd`, `eta`, colunas `date`): `'2026-08-07'`, ou a
+ *   mesma data serializada como meia-noite UTC, `'2026-08-07T00:00:00.000Z'`.
+ *   Nao e um instante: e o dia 07/08 para qualquer pessoa. Passar isso por
+ *   `new Date()` e formatar no fuso do navegador mostrava 06/08 em Brasilia
+ *   (UTC-3) — o "ETD 06/08" do cabecalho enquanto a invoice dizia 07/08
+ *   (reuniao 2026-09-11). Aqui o dia e lido do texto, sem fuso nenhum.
+ * - INSTANTE real (`createdAt`, `registeredAt`, `sentAt`): formatado no fuso
+ *   da operacao, America/Sao_Paulo, e nao no fuso da maquina de quem abre a
+ *   tela. `2026-09-11T02:30:00Z` e 10/09 23:30 em Brasilia.
+ *
+ * Limite conhecido e aceito: um instante que caia EXATAMENTE em
+ * `T00:00:00.000Z` e lido como data de calendario por `formatDate`. Esse e o
+ * formato das colunas `date` serializadas, e um instante real nesse
+ * milissegundo e raro; `formatDateTime` nao tem essa regra.
+ *
+ * Valor ausente, vazio ou invalido vira `'-'`, nunca `'Invalid Date'`.
+ */
+const FUSO_OPERACAO = 'America/Sao_Paulo';
+const SEM_DATA = '-';
+
+const DATA_CALENDARIO = /^(\d{4})-(\d{2})-(\d{2})(T00:00:00(\.0{1,3})?Z)?$/;
+
+const formatoData = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: FUSO_OPERACAO,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+});
+
+const formatoDataHora = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: FUSO_OPERACAO,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+type ValorDeData = string | Date | null | undefined;
+
+/**
+ * `'DD/MM/AAAA'` de uma data de calendario; `null` se o texto tem o formato mas
+ * o dia nao existe (30/02); `undefined` se o texto nao e data de calendario.
+ */
+function dataDeCalendario(texto: string, aceitaMeiaNoiteUtc: boolean): string | null | undefined {
+  const match = DATA_CALENDARIO.exec(texto);
+  if (!match || (match[4] && !aceitaMeiaNoiteUtc)) return undefined;
+  const [, ano, mes, dia] = match;
+  const conferida = new Date(Date.UTC(Number(ano), Number(mes) - 1, Number(dia)));
+  const existe =
+    conferida.getUTCFullYear() === Number(ano) &&
+    conferida.getUTCMonth() === Number(mes) - 1 &&
+    conferida.getUTCDate() === Number(dia);
+  return existe ? `${dia}/${mes}/${ano}` : null;
 }
 
-/** Format a date-only ISO value without applying a timezone offset. */
-export function formatDateOnly(date: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  return match ? `${match[3]}/${match[2]}/${match[1]}` : formatDate(date);
+function formatarNoFuso(
+  valor: ValorDeData,
+  formato: Intl.DateTimeFormat,
+  aceitaMeiaNoiteUtc: boolean,
+): string {
+  if (valor === null || valor === undefined) return SEM_DATA;
+  if (typeof valor === 'string') {
+    const texto = valor.trim();
+    if (texto === '') return SEM_DATA;
+    const calendario = dataDeCalendario(texto, aceitaMeiaNoiteUtc);
+    if (calendario !== undefined) return calendario ?? SEM_DATA;
+  }
+  const instante = valor instanceof Date ? valor : new Date(valor.trim());
+  return Number.isNaN(instante.getTime()) ? SEM_DATA : formato.format(instante);
+}
+
+/** `'DD/MM/AAAA'`. Data de calendario sem deslocar o dia; instante no fuso da operacao. */
+export function formatDate(date: ValorDeData): string {
+  return formatarNoFuso(date, formatoData, true);
+}
+
+/** Mantido por compatibilidade: e o mesmo formatador de `formatDate`. */
+export function formatDateOnly(date: ValorDeData): string {
+  return formatDate(date);
 }
 
 export function formatWeight(kg: number | string): string {
@@ -113,14 +189,13 @@ export function certStatusColor(status: string): string {
   }
 }
 
-export function formatDateTime(date: string | Date): string {
-  return new Date(date).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+/**
+ * `'DD/MM/AAAA, HH:mm'` no fuso da operacao. Uma data de calendario pura
+ * (`'2026-08-07'`) nao tem hora: sai so o dia, sem inventar `21:00` do dia
+ * anterior.
+ */
+export function formatDateTime(date: ValorDeData): string {
+  return formatarNoFuso(date, formatoDataHora, false);
 }
 
 export function relativeTime(date: string | Date): string {
