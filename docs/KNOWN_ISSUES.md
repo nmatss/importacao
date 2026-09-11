@@ -1219,6 +1219,64 @@ Status:
   criptografado e `scripts/generate-env-from-vault.sh` passa a gerar `.env` a
   partir do arquivo criptografado durante o deploy.
 
+## MEDIO - Alerta De Inatividade Depende Da ETA Sincronizada
+
+Descricao:
+
+- A regra de "processo sem movimentacao" (11/09) passou a decidir pela FASE:
+  silencia processo em transito (`eta` maior ou igual a hoje) e cobra processo
+  atracado sem `registered_at`.
+- As duas colunas vem da Follow Up e hoje sao um retrato de 25/08: o sync roda
+  em `FOLLOW_UP_SYNC_MODE=dry_run` e `registered_at` esta nulo em 117/117
+  processos. O PK2192607SZ tem `eta = 2026-09-17` no banco enquanto a planilha
+  registra atracacao em 08/09 e registro da DUIMP em 04/09.
+
+Evidencias:
+
+- `apps/api/src/jobs/stalled-process.ts` (bloco de dependencia declarada)
+- `docs/BUSINESS_RULES.md`, secao "Alertas De Processo Sem Movimentacao"
+- SELECT em producao de 11/09 (processos ativos, `eta`, `registered_at`)
+
+Impacto:
+
+- Enquanto o sync nao rodar em `apply`, um processo ja registrado na planilha
+  continua elegivel ao digest (ruido) e uma ETA errada para frente silencia um
+  atraso real por ate 30 dias uteis (teto).
+
+Status:
+
+- **ABERTO / MEDIO.** Fecha junto com FUP-02/FUP-04 (sync da Follow Up em
+  `apply`). Mitigacoes ja no codigo: processo sem ETA nunca e silenciado e o
+  teto de 30 dias uteis fura o silencio do transito.
+
+## BAIXO - `STALLED_PROCESS_MILESTONE_DAYS` Declarada E Nao Lida
+
+Descricao:
+
+- A variavel configurava os marcos de 3/7/14/30/60 dias do alerta por processo,
+  que deixou de existir com o digest de 11/09. O codigo nao a le mais; a linha
+  continua em `docker-compose.prod.yml`.
+- A cadencia atual (5 dias uteis entre avisos, 10 para escalada, teto de 30) e
+  constante exportada em `stalled-process.ts`, sem variavel de ambiente: a lista
+  explicita do compose e do time de infraestrutura e nao foi tocada por esta
+  mudanca.
+
+Evidencias:
+
+- `docker-compose.prod.yml` (servico `api`)
+- `apps/api/src/jobs/stalled-process.ts`
+
+Impacto:
+
+- Nenhum em runtime: variavel declarada e nao lida nao faz nada. A guarda
+  `env-repassado-ao-container.test.ts` cobre o sentido oposto (leitura sem
+  declaracao), entao a sobra nao e detectada automaticamente.
+
+Status:
+
+- **ABERTO / BAIXO.** Remover a linha do compose quando algum time tocar o
+  arquivo; parametrizar a cadencia por env so se o negocio pedir.
+
 ## BAIXO - Warning CSS De `@import`
 
 Descricao:

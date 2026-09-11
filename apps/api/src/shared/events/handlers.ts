@@ -61,51 +61,18 @@ export function registerEventHandlers(): void {
     );
   });
 
-  appEvents.on('validation.completed', async (payload) => {
+  // Nao envia nada ao Chat. O envio que morava aqui era um SEGUNDO caminho de
+  // entrega, fora de `delivery.service.ts`: sem persistencia, sem deduplicacao,
+  // sem reentrega e sem o teto de tentativas. Estava morto (nenhum ponto do
+  // codigo emite 'validation.completed', e em sete dias de log nao ha uma linha
+  // 'Validação Concluída'), mas bastava alguem passar a emitir o evento para a
+  // mensagem duplicada voltar. Quem avisa falha de validacao e o alerta
+  // persistido criado por `validation/service.ts`.
+  appEvents.on('validation.completed', (payload) => {
     logger.info(
       { processId: payload.processId, passed: payload.passed, failed: payload.failed },
       'Event: validation completed',
     );
-
-    // Notify Google Chat on validation failures
-    if (payload.failed > 0) {
-      try {
-        const { db } = await import('../database/connection.js');
-        const { importProcesses } = await import('../database/schema.js');
-        const { eq } = await import('drizzle-orm');
-
-        const [proc] = await db
-          .select({ processCode: importProcesses.processCode })
-          .from(importProcesses)
-          .where(eq(importProcesses.id, payload.processId))
-          .limit(1);
-
-        // Resolucao UNICA do webhook. Este bloco reimplementava a leitura
-        // inline — banco primeiro, env de fallback, valor podendo vir como
-        // string ou como objeto `{url}`. Eram quatro copias da mesma regra no
-        // repositorio, e uma delas fazia `setting?.value as string`, que quebra
-        // no formato objeto. Divergencia entre copias e como o health ficava
-        // verde com o canal morto.
-        const { resolveGoogleChatWebhook } =
-          await import('../../modules/alerts/delivery.service.js');
-        const { url: webhookUrl } = await resolveGoogleChatWebhook();
-        if (webhookUrl && proc) {
-          const { sendToGoogleChat } = await import('../../modules/alerts/google-chat.service.js');
-          const severity = payload.failed > 3 ? 'critical' : 'warning';
-          await sendToGoogleChat(webhookUrl, {
-            severity,
-            title: `Validação Concluída - ${proc.processCode}`,
-            message: `Processo ${proc.processCode}: ${payload.passed} checks OK, ${payload.failed} falha(s).`,
-            processCode: proc.processCode,
-          });
-        }
-      } catch (err) {
-        logger.error(
-          { err, processId: payload.processId },
-          'Failed to notify validation results via event handler',
-        );
-      }
-    }
   });
 
   appEvents.on('espelho.generated', (payload) => {

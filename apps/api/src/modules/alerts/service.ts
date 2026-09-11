@@ -4,7 +4,42 @@ import { alerts } from '../../shared/database/schema.js';
 import { attemptDelivery } from './delivery.service.js';
 import { auditService } from '../audit/service.js';
 import { NotFoundError } from '../../shared/errors/index.js';
-import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
+import {
+  isSameLocalDay,
+  localDayEndExclusiveUtc,
+  localDayStartForInstant,
+  localDayStartUtc,
+} from '../../shared/utils/dates.js';
+
+/**
+ * Como este alerta reconhece que "ja avisou isso".
+ *
+ * - `window`: janela deslizante de 24h. Padrao historico, bom para o alerta que
+ *   descreve uma CONDICAO continua (prazo vencendo, job caido).
+ * - `local-day`: dia civil no fuso do operador. Para o alerta de AGREGACAO
+ *   diaria: uma janela de exatamente 24h comparada com um job de periodo 24h e
+ *   uma corrida de milissegundos — se o job de hoje dispara antes do instante de
+ *   ontem, o de ontem "ainda esta na janela", o de hoje nao nasce e a mensagem
+ *   VELHA e reentregue com numeros vencidos (medido: alerta 6509, criado 06/09,
+ *   entregue 07/09 com a contagem de sabado).
+ * - `change`: sem janela. Repete so quando o CONTEUDO muda. Para o alerta de
+ *   alteracao (falhas de validacao), que a reuniao quer manter, mas que sai uma
+ *   vez por reprocessamento enquanto o conjunto de falhas for o mesmo.
+ */
+export type DedupeEscopo = 'window' | 'local-day' | 'change';
+
+/** Mesma regra de escopo do `hasDuplicateRecent`: por processo, ou sem processo. */
+function condicaoDeProcesso(processId: number | undefined) {
+  return processId ? eq(alerts.processId, processId) : sql`${alerts.processId} IS NULL`;
+}
+
+function condicaoDeJanela(escopo: DedupeEscopo, agora: Date) {
+  if (escopo === 'local-day') {
+    return sql`${alerts.createdAt} >= ${localDayStartForInstant(agora).toISOString()}`;
+  }
+  if (escopo === 'change') return undefined;
+  return sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`;
+}
 
 export const alertService = {
   async list(filters?: {
@@ -61,23 +96,25 @@ export const alertService = {
     title: string;
     message: string;
     processCode?: string;
+    dedupeBy?: DedupeEscopo;
   }) {
     // Skip duplicate alerts (same processId + title within 24h). When there is
     // no processId (e.g. recurring cron failures like logistic-sync), dedupe by
     // title alone within the window so a failing job does not create ~48
     // identical alerts/day (alert storm).
-    const isDuplicate = await this.hasDuplicateRecent(data.processId, data.title);
+    const escopo = data.dedupeBy ?? 'window';
+    const agora = new Date();
+    const isDuplicate = await this.temDuplicado(data, escopo, agora);
     if (isDuplicate) {
+      const janela = condicaoDeJanela(escopo, agora);
       const [existing] = await db
         .select()
         .from(alerts)
         .where(
           and(
-            data.processId
-              ? eq(alerts.processId, data.processId)
-              : sql`${alerts.processId} IS NULL`,
+            condicaoDeProcesso(data.processId),
             eq(alerts.title, data.title),
-            sql`${alerts.createdAt} > NOW() - INTERVAL '24 hours'`,
+            ...(janela ? [janela] : []),
           ),
         )
         .orderBy(desc(alerts.createdAt))
@@ -87,9 +124,15 @@ export const alertService = {
       // a criacao. Se a primeira tentativa da janela falhava, nenhuma das
       // seguintes era sequer tentada: e o caso de `Falha no job: sydle-sync`,
       // criado todo dia de 08/08 a 13/08 e nunca entregue.
-      if (existing && existing.sentToChat !== true) {
+      //
+      // A excecao e o alerta de agregacao diaria: reentregar o de ontem e
+      // publicar numeros vencidos como se fossem de hoje.
+      if (
+        existing &&
+        existing.sentToChat !== true &&
+        !this.conteudoVencido(existing, escopo, agora)
+      )
         await attemptDelivery({ ...existing, processCode: data.processCode });
-      }
       return existing;
     }
 
@@ -117,6 +160,57 @@ export const alertService = {
     );
 
     return alert;
+  },
+
+  /**
+   * Ja existe alerta equivalente, no escopo pedido?
+   *
+   * `window` continua na regra historica (mesmo titulo em 24h). `local-day`
+   * troca a janela deslizante pelo dia civil do operador. `change` nao tem
+   * janela: compara o CONTEUDO com o ultimo alerta de mesmo titulo para aquele
+   * processo, de modo que reprocessar sem mudanca nao repete a mensagem, mas
+   * qualquer alteracao no conjunto de falhas volta a avisar.
+   */
+  async temDuplicado(
+    data: { processId?: number; title: string; message: string },
+    escopo: DedupeEscopo,
+    agora: Date,
+  ): Promise<boolean> {
+    if (escopo === 'window') return this.hasDuplicateRecent(data.processId, data.title);
+
+    const janela = condicaoDeJanela(escopo, agora);
+    const [existing] = await db
+      .select({ id: alerts.id, message: alerts.message })
+      .from(alerts)
+      .where(
+        and(
+          condicaoDeProcesso(data.processId),
+          eq(alerts.title, data.title),
+          ...(janela ? [janela] : []),
+        ),
+      )
+      .orderBy(desc(alerts.createdAt))
+      .limit(1);
+
+    if (!existing) return false;
+    if (escopo === 'change') return existing.message === data.message;
+    return true;
+  },
+
+  /**
+   * O alerta encontrado ainda vale hoje?
+   *
+   * So faz sentido para agregacao diaria: o texto conta quantos processos estao
+   * parados HOJE, entao reentregar o de ontem e publicar numero vencido.
+   */
+  conteudoVencido(
+    existing: { createdAt?: Date | string | null },
+    escopo: DedupeEscopo,
+    agora: Date,
+  ): boolean {
+    if (escopo !== 'local-day') return false;
+    if (!existing.createdAt) return false;
+    return !isSameLocalDay(existing.createdAt, agora);
   },
 
   /**

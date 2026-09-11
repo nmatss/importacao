@@ -121,6 +121,133 @@ export function localTodayIso(now: Date = new Date()): string {
 }
 
 /**
+ * Dia local ('YYYY-MM-DD') de qualquer entrada de calendario.
+ *
+ * Aceita tanto um instante (o `updated_at` de uma linha) quanto uma data de
+ * calendario ja em 'YYYY-MM-DD' (as colunas `date` do Postgres, como `eta`, que
+ * o driver devolve como string). A distincao importa: passar 'YYYY-MM-DD' por
+ * `new Date()` a interpreta como meia-noite UTC e, em Brasilia, volta um dia —
+ * o mesmo defeito do "ETD 06/08" com a invoice em 07/08.
+ */
+export function localDateIso(value: Date | string | number): string {
+  if (typeof value === 'string') {
+    if (isCalendarDate(value)) return value;
+    const isoPrefix = value.slice(0, 10);
+    const instante = new Date(value);
+    if (Number.isNaN(instante.getTime())) {
+      if (isCalendarDate(isoPrefix)) return isoPrefix;
+      throw new Error(`localDateIso recebeu um valor que nao e data: ${value}`);
+    }
+    return localTodayIso(instante);
+  }
+  const instante = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(instante.getTime())) {
+    throw new Error('localDateIso recebeu uma data invalida');
+  }
+  return localTodayIso(instante);
+}
+
+/** Indice do dia (dias inteiros desde 1970-01-01) de uma data 'YYYY-MM-DD'. */
+function indiceDoDia(isoDate: string): number {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return Date.UTC(year, month - 1, day) / 86_400_000;
+}
+
+/** 1970-01-01 foi quinta-feira, entao o indice 0 tem `diaDaSemana` 4 (0 = domingo). */
+function diaDaSemanaDoIndice(indice: number): number {
+  return (((indice + 4) % 7) + 7) % 7;
+}
+
+function ehDiaUtilPeloIndice(indice: number): boolean {
+  const dow = diaDaSemanaDoIndice(indice);
+  return dow >= 1 && dow <= 5;
+}
+
+/**
+ * E dia util (segunda a sexta) no calendario do operador?
+ *
+ * Primeira versao SEM feriados, por decisao registrada na reuniao de 11/09: o
+ * repositorio nao tem calendario de feriados e inventar um aqui seria pior que
+ * a aproximacao — o unico efeito de um feriado e adiantar em um dia um aviso
+ * que ja espera cinco.
+ */
+export function isBusinessDay(value: Date | string | number): boolean {
+  return ehDiaUtilPeloIndice(indiceDoDia(localDateIso(value)));
+}
+
+/**
+ * Dias uteis decorridos entre duas datas, no fuso do operador.
+ *
+ * Conta o intervalo ABERTO no inicio e FECHADO no fim — de sexta para segunda da
+ * 1, de sexta para sabado da 0, e o mesmo dia da 0. E a contagem que o operador
+ * faz quando diz "isso esta parado ha tres dias uteis": o dia em que a coisa
+ * aconteceu nao conta, o de hoje conta.
+ *
+ * Datas invertidas devolvem 0 (nunca negativo): quem pergunta "ha quantos dias
+ * uteis" sobre um evento futuro esta perguntando "nenhum".
+ */
+export function businessDaysBetween(
+  from: Date | string | number,
+  to: Date | string | number,
+): number {
+  const inicio = indiceDoDia(localDateIso(from));
+  const fim = indiceDoDia(localDateIso(to));
+  if (fim <= inicio) return 0;
+
+  const totalDias = fim - inicio;
+  const semanasCompletas = Math.floor(totalDias / 7);
+  // Sete dias consecutivos tem exatamente cinco dias uteis, entao as semanas
+  // inteiras entram por multiplicacao e sobram no maximo seis dias para andar.
+  let uteis = semanasCompletas * 5;
+  for (let cursor = inicio + semanasCompletas * 7 + 1; cursor <= fim; cursor++) {
+    if (ehDiaUtilPeloIndice(cursor)) uteis += 1;
+  }
+  return uteis;
+}
+
+/**
+ * Instante UTC do inicio do dia local que contem `now`.
+ *
+ * Chave de deduplicacao dos alertas de agregacao diaria. Uma janela deslizante
+ * de 24h aplicada a um job de periodo 24h e uma corrida de borda: se hoje o job
+ * dispara alguns milissegundos antes do instante de ontem, o de ontem "ainda
+ * esta na janela", o de hoje nao e criado e a mensagem VELHA e reentregue com os
+ * numeros de ontem (medido em producao: alerta 6509, criado 06/09 12:00:00.369,
+ * entregue 07/09 12:00:01.437).
+ */
+export function localDayStartForInstant(now: Date = new Date()): Date {
+  const iso = localTodayIso(now);
+  // A data vem do proprio formatador, entao e sempre valida; o `??` so satisfaz
+  // o tipo.
+  return localDayStartUtc(iso) ?? new Date(now);
+}
+
+/** Os dois instantes caem no MESMO dia do calendario do operador? */
+export function isSameLocalDay(a: Date | string | number, b: Date | string | number): boolean {
+  return localDateIso(a) === localDateIso(b);
+}
+
+/**
+ * Semana ISO local no formato '2026-S37'.
+ *
+ * Usada como chave de agrupamento de topico no Chat para as mensagens que nao
+ * pertencem a um processo (o digest de inatividade, as falhas de job): sem uma
+ * chave estavel cada mensagem abre um topico novo no espaco.
+ */
+export function localWeekKey(now: Date | string | number = new Date()): string {
+  const indice = indiceDoDia(localDateIso(now));
+  // Quinta-feira da mesma semana define o ano ISO (ISO-8601).
+  const dow = diaDaSemanaDoIndice(indice);
+  const deslocamentoParaQuinta = 4 - (dow === 0 ? 7 : dow);
+  const quinta = indice + deslocamentoParaQuinta;
+  const dataQuinta = new Date(quinta * 86_400_000);
+  const ano = dataQuinta.getUTCFullYear();
+  const primeiroDiaDoAno = Date.UTC(ano, 0, 1) / 86_400_000;
+  const semana = Math.floor((quinta - primeiroDiaDoAno) / 7) + 1;
+  return `${ano}-S${String(semana).padStart(2, '0')}`;
+}
+
+/**
  * Instante UTC do primeiro dia do mes local, deslocado por `monthOffset`.
  *
  * `new Date(now.getFullYear(), now.getMonth(), 1)` num container UTC produz a

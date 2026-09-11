@@ -1,5 +1,26 @@
 # Changelog
 
+## 2026-09-11 — Alertas e Google Chat
+
+- "Processo sem movimentacao" deixou de ser `updated_at` antigo e passou a ser
+  "fora do esperado para a fase": processo em transito (ETA futura), travado,
+  encerrado ou ja registrado nao alerta; atracado sem registro, sim. Com os
+  dados de 11/09, de 28 processos alertados para 4.
+- O Chat nao recebe mais um card por processo parado: sai UM digest de segunda a
+  sexta as 09:00, e so quando o conjunto muda. Cada processo reaparece no maximo
+  a cada 5 dias uteis; a partir de 10 dias uteis apos a ETA sem registro o aviso
+  escala para critico. Nada e enviado em fim de semana.
+- Alerta de agregacao diaria passou a deduplicar por DIA CIVIL (America/Sao_Paulo)
+  em vez de janela deslizante de 24h, e nao reentrega mensagem de um dia que ja
+  passou — era assim que o resumo de sabado chegava no domingo.
+- Falha de validacao virou uma mensagem so, pelo caminho unico de entrega
+  (`delivery.service.ts`), com o texto em portugues e sem nome tecnico de
+  verificacao. Reprocessar sem mudanca no conjunto de falhas nao repete o aviso.
+  O envio direto ao Chat do `validation/service.ts` e o do handler morto de
+  `validation.completed` foram removidos, com guarda estatica contra a volta.
+- Mensagens do mesmo processo caem no mesmo topico do espaco (`threadKey`); o
+  digest agrupa por semana.
+
 ## 2026-09-06 — Revisao de certificacao
 
 - Corrigidas respostas fora de ordem na lista de produtos e dupla decodificacao de parametros nos detalhes.
