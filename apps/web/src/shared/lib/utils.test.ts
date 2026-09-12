@@ -1,5 +1,15 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { formatCurrency, formatDate, formatDateOnly, formatDateTime, relativeTime } from './utils';
+import {
+  formatCurrency,
+  formatDate,
+  formatDateOnly,
+  formatDateTime,
+  formatDateTimeSeconds,
+  formatDateTimeShort,
+  formatDayMonth,
+  isDateInPast,
+  relativeTime,
+} from './utils';
 
 describe('formatCurrency', () => {
   it('formats ISO 4217 currency codes normally', () => {
@@ -131,5 +141,57 @@ describe('valor ausente ou invalido vira "-"', () => {
 describe('relativeTime', () => {
   it('cai no formatDateTime para datas antigas', () => {
     expect(relativeTime('2020-01-01T15:00:00.000Z')).toBe('01/01/2020, 12:00');
+  });
+});
+
+describe('formatDayMonth', () => {
+  it('mostra o dia da planilha, e nao o dia anterior', () => {
+    expect(formatDayMonth('2026-08-07')).toBe('07/08');
+    expect(formatDayMonth('2026-09-08T00:00:00.000Z')).toBe('08/09');
+  });
+
+  it('vazio vira traco', () => {
+    expect(formatDayMonth(null)).toBe('-');
+    expect(formatDayMonth('nao e data')).toBe('-');
+  });
+});
+
+describe('formatDateTimeSeconds / formatDateTimeShort', () => {
+  it('formatam o instante no fuso da operacao', () => {
+    expect(formatDateTimeSeconds('2026-09-08T15:11:50.000Z')).toBe('08/09/2026, 12:11:50');
+    expect(formatDateTimeShort('2026-09-08T15:11:50.000Z')).toContain('12:11');
+  });
+
+  it('valor ausente vira traco', () => {
+    expect(formatDateTimeSeconds(null)).toBe('-');
+    expect(formatDateTimeShort(undefined)).toBe('-');
+  });
+});
+
+describe('isDateInPast', () => {
+  const agora = new Date('2026-09-11T12:00:00.000Z'); // 11/09 09:00 em Sao Paulo
+
+  it('compara data de calendario por DIA, nao por instante', () => {
+    expect(isDateInPast('2026-09-10', agora)).toBe(true);
+    expect(isDateInPast('2026-09-11', agora)).toBe(true);
+    expect(isDateInPast('2026-09-12', agora)).toBe(false);
+    expect(isDateInPast('2026-10-15', agora)).toBe(false);
+  });
+
+  it('nao considera o dia de amanha como passado as 21h de hoje', () => {
+    // 11/09 21:30 em Sao Paulo. `new Date('2026-09-12') <= now` daria true.
+    const noiteBrasilia = new Date('2026-09-12T00:30:00.000Z');
+    expect(isDateInPast('2026-09-12', noiteBrasilia)).toBe(false);
+  });
+
+  it('instante real continua sendo comparado como instante', () => {
+    expect(isDateInPast('2026-09-11T11:00:00.000Z', agora)).toBe(true);
+    expect(isDateInPast('2026-09-11T13:00:00.000Z', agora)).toBe(false);
+  });
+
+  it('vazio nunca e passado', () => {
+    expect(isDateInPast(null)).toBe(false);
+    expect(isDateInPast('')).toBe(false);
+    expect(isDateInPast('nao e data')).toBe(false);
   });
 });

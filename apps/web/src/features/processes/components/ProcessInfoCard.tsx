@@ -24,11 +24,18 @@ export interface ProcessInfoCardProps {
   process: ImportProcess;
 }
 
-type ProcessInfoSource = 'invoice' | 'espelho' | 'processo' | 'bl';
+type ProcessInfoSource = 'invoice' | 'espelho' | 'processo' | 'bl' | 'packing';
+
+interface Divergence {
+  source: ProcessInfoSource;
+  value: unknown;
+}
 
 interface SourcedValue<T = unknown> {
   value: T | null;
   source: ProcessInfoSource | null;
+  /** Outras fontes que trazem valor DIFERENTE do exibido. */
+  divergences?: Divergence[];
 }
 
 const sourceStyles: Record<ProcessInfoSource, { label: string; badge: string; icon: string }> = {
@@ -50,8 +57,19 @@ const sourceStyles: Record<ProcessInfoSource, { label: string; badge: string; ic
       'bg-sky-50 text-sky-700 ring-sky-200 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-800',
     icon: 'bg-sky-50 text-sky-500 dark:bg-sky-950/40 dark:text-sky-300',
   },
+  // Violeta, e nao indigo: o indigo e a cor `primary` do sistema, e o selo
+  // ficaria indistinguivel de um elemento de acao.
+  packing: {
+    label: 'Packing List',
+    badge:
+      'bg-violet-50 text-violet-700 ring-violet-200 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-800',
+    icon: 'bg-violet-50 text-violet-500 dark:bg-violet-950/40 dark:text-violet-300',
+  },
+  // A planilha Follow Up e a referencia do processo: "quando esta cinza vem da
+  // follow-up" (reuniao 11/09). O rotulo dizia "Processo", que nao diz de onde
+  // o dado veio, e o selo ficava escondido.
   processo: {
-    label: 'Processo',
+    label: 'Follow-up',
     badge:
       'bg-slate-100 text-slate-600 ring-slate-200 dark:bg-slate-900 dark:text-slate-400 dark:ring-slate-700',
     icon: 'bg-slate-50 text-slate-400 dark:bg-slate-900',
@@ -135,17 +153,79 @@ function readPath(source: Record<string, unknown> | null | undefined, ...path: s
   return isEmptyValue(unwrapped) ? null : unwrapped;
 }
 
+/**
+ * Dois valores dizem a MESMA coisa?
+ *
+ * Numero compara como numero (a invoice traz 101246.01, a planilha
+ * '101246.01'); texto compara sem caixa, acento nem espaco sobrando, senao
+ * 'SHENZHEN' e 'Shenzhen' apareceriam como divergencia.
+ */
+function mesmoValor(a: unknown, b: unknown): boolean {
+  const left = unwrapAiValue(a);
+  const right = unwrapAiValue(b);
+  const leftNumber = typeof left === 'object' ? NaN : Number(left);
+  const rightNumber = typeof right === 'object' ? NaN : Number(right);
+  if (Number.isFinite(leftNumber) && Number.isFinite(rightNumber)) {
+    return Math.abs(leftNumber - rightNumber) < 0.01;
+  }
+  const normalize = (value: unknown) =>
+    String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toUpperCase();
+  return normalize(left) === normalize(right);
+}
+
+/**
+ * Primeiro candidato preenchido vence; os demais que discordam viram
+ * DIVERGENCIA.
+ *
+ * A ordem dos candidatos e a decisao da reuniao (11/09): nos campos que a
+ * planilha Follow Up tem — fornecedor, portos, FOB, frete, container, CBM, ETD,
+ * navio, BL, armador, agente — ela vem PRIMEIRO e o documento so preenche
+ * lacuna; nos que ela nao tem — importador, pesos, caixas, numero do container
+ * — mandam os documentos, com o packing list na frente. O valor do documento
+ * nao e escondido: aparece como divergencia ao lado, e o comparativo continua
+ * sendo o lugar de decidir.
+ */
 function pickValue<T = unknown>(
   candidates: Array<{ source: ProcessInfoSource; value: T | null | undefined }>,
 ): SourcedValue<T> {
-  const candidate = candidates.find((item) => !isEmptyValue(item.value));
-  return candidate
-    ? { value: candidate.value as T, source: candidate.source }
-    : { value: null, source: null };
+  const preenchidos = candidates.filter((item) => !isEmptyValue(item.value));
+  const candidate = preenchidos[0];
+  if (!candidate) return { value: null, source: null };
+
+  const divergences: Divergence[] = [];
+  for (const outro of preenchidos.slice(1)) {
+    if (outro.source === candidate.source) continue;
+    if (mesmoValor(outro.value, candidate.value)) continue;
+    if (divergences.some((item) => item.source === outro.source)) continue;
+    divergences.push({ source: outro.source, value: outro.value });
+  }
+
+  return { value: candidate.value as T, source: candidate.source, divergences };
+}
+
+/**
+ * O espelho AUTO-gerado nao e um espelho.
+ *
+ * `build-espelho.ts` monta um resumo a partir da propria invoice/PL e grava em
+ * `aiExtractedData.espelho` com `generatedBy: 'auto_*'`. A capa mostrava esse
+ * resumo com o selo "Espelho" mesmo em processo SEM espelho anexado — inclusive
+ * o lixo que veio do BL ("Place of receipt" como navio). O comparativo ja anula
+ * esse caso (documents/service.ts); aqui passava direto.
+ */
+function isEspelhoDerivado(summary: Record<string, unknown> | null | undefined): boolean {
+  const generatedBy = summary?.generatedBy;
+  return typeof generatedBy === 'string' && generatedBy.startsWith('auto_');
 }
 
 function firstEspelhoExporter(aiData: AiExtractedData | null | undefined) {
   const espelho = isRecord(aiData?.espelho) ? aiData?.espelho : null;
+  const summary = isRecord(espelho?.summary) ? espelho.summary : espelho;
+  if (isEspelhoDerivado(summary)) return null;
   const items = Array.isArray(espelho?.items) ? espelho.items : [];
   const first = items.find((item): item is Record<string, unknown> => isRecord(item));
   return first ? readPath(first, 'fornecedor') : null;
@@ -155,19 +235,24 @@ function getAiSources(process: ImportProcess) {
   const aiData = process.aiExtractedData as Record<string, unknown> | null | undefined;
   const invoice = isRecord(aiData?.invoice) ? aiData.invoice : null;
   const espelho = isRecord(aiData?.espelho) ? aiData.espelho : null;
-  const summary = isRecord(espelho?.summary) ? espelho.summary : espelho;
+  const summaryRaw = isRecord(espelho?.summary) ? espelho.summary : espelho;
+  const summary = isEspelhoDerivado(summaryRaw) ? null : summaryRaw;
   // The BL document carries shipping/freight/container fields that are not in
   // the invoice and only reach the espelho summary once it is built. Surface it
   // directly so "Data Embarque / Frete / Container" populate as soon as the BL
   // is extracted (Eduarda 2026-06-19).
   const blRaw = aiData?.ohbl ?? aiData?.draft_bl;
   const bl = isRecord(blRaw) ? blRaw : null;
+  // Packing list: fonte de pesos, caixas e CBM por item (decisao D3).
+  const packingRaw = aiData?.packing_list;
+  const packing = isRecord(packingRaw) ? packingRaw : null;
 
   return {
     invoice,
     espelhoSummary: summary,
     espelhoExporter: firstEspelhoExporter(process.aiExtractedData),
     bl,
+    packing,
   };
 }
 
@@ -176,14 +261,19 @@ function InfoField({
   value,
   icon: Icon,
   source,
+  divergences,
 }: {
   label: string;
   value: string | null | undefined;
   icon?: React.ComponentType<{ className?: string }>;
   source?: ProcessInfoSource | null;
+  /** Fontes que discordam do valor exibido, ja formatadas. */
+  divergences?: Array<{ source: ProcessInfoSource; value: string }>;
 }) {
   const sourceStyle = source ? sourceStyles[source] : null;
-  const showSource = source === 'invoice' || source === 'espelho' || source === 'bl';
+  // O selo aparece para TODA fonte, inclusive a Follow-up: sem ele o operador
+  // nao sabia se o numero da capa veio do documento ou da planilha.
+  const showSource = Boolean(sourceStyle);
 
   return (
     <div className="flex items-start gap-3 py-2">
@@ -217,9 +307,34 @@ function InfoField({
         <p className="mt-0.5 text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
           {value || '\u2014'}
         </p>
+        {divergences && divergences.length > 0 && value && (
+          <p
+            className="mt-0.5 truncate text-[11px] font-medium text-amber-700 dark:text-amber-300"
+            title="O documento diverge da follow-up; confira no comparativo"
+          >
+            {divergences
+              .map((item) => `${sourceStyles[item.source].label}: ${item.value}`)
+              .join(' · ')}
+          </p>
+        )}
       </div>
     </div>
   );
+}
+
+/**
+ * Divergencias prontas para a tela, com o MESMO formatador do valor principal
+ * (moeda como moeda, peso como peso). So sao mostradas quando quem venceu foi a
+ * follow-up: divergencia entre dois documentos e assunto do comparativo.
+ */
+function formatDivergences(
+  data: SourcedValue<unknown>,
+  format: (value: unknown) => string | null,
+): Array<{ source: ProcessInfoSource; value: string }> {
+  if (data.source !== 'processo' || !data.divergences) return [];
+  return data.divergences
+    .map((item) => ({ source: item.source, value: format(item.value) ?? '' }))
+    .filter((item) => item.value !== '');
 }
 
 function LogisticaSection({ process }: { process: ImportProcess }) {
@@ -343,54 +458,50 @@ function RegistroAduaneiroSection({ process }: { process: ImportProcess }) {
 }
 
 export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
-  const { invoice, espelhoSummary, espelhoExporter, bl } = getAiSources(process);
+  const { invoice, espelhoSummary, espelhoExporter, bl, packing } = getAiSources(process);
 
+  // ── Campos que a Follow Up TEM: planilha primeiro, documento preenche
+  // lacuna e, quando discorda, aparece como divergencia (decisao D3).
   const exporterName = pickValue<string>([
+    { source: 'processo', value: process.exporterName },
     { source: 'invoice', value: readPath(invoice, 'exporterName') as string | null },
     { source: 'espelho', value: espelhoExporter as string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'exporterName') as string | null },
-    { source: 'processo', value: process.exporterName },
-  ]);
-  const importerName = pickValue<string>([
-    { source: 'invoice', value: readPath(invoice, 'importerName') as string | null },
-    { source: 'espelho', value: readPath(espelhoSummary, 'importerName') as string | null },
-    { source: 'processo', value: process.importerName },
+    { source: 'packing', value: readPath(packing, 'exporterName') as string | null },
   ]);
   const portOfLoading = pickValue<string>([
+    { source: 'processo', value: process.portOfLoading },
     { source: 'invoice', value: readPath(invoice, 'portOfLoading') as string | null },
     { source: 'bl', value: readPath(bl, 'portOfLoading') as string | null },
-    { source: 'processo', value: process.portOfLoading },
+    { source: 'packing', value: readPath(packing, 'portOfLoading') as string | null },
   ]);
   const portOfDischarge = pickValue<string>([
+    { source: 'processo', value: process.portOfDischarge },
     { source: 'invoice', value: readPath(invoice, 'portOfDischarge') as string | null },
     { source: 'bl', value: readPath(bl, 'portOfDischarge') as string | null },
-    { source: 'processo', value: process.portOfDischarge },
-  ]);
-  const incoterm = pickValue<string>([
-    { source: 'invoice', value: readPath(invoice, 'incoterm') as string | null },
-    { source: 'processo', value: process.incoterm },
+    { source: 'packing', value: readPath(packing, 'portOfDischarge') as string | null },
   ]);
   const totalFobValue = pickValue<number | string>([
+    { source: 'processo', value: process.totalFobValue },
     { source: 'invoice', value: readPath(invoice, 'totalFobValue') as number | string | null },
     {
       source: 'espelho',
       value: readPath(espelhoSummary, 'totalAmountUsd') as number | string | null,
     },
-    { source: 'processo', value: process.totalFobValue },
   ]);
   const freightValue = pickValue<number | string>([
+    { source: 'processo', value: process.freightValue },
     {
       source: 'espelho',
       value: readPath(espelhoSummary, 'freightValue') as number | string | null,
     },
     { source: 'bl', value: readPath(bl, 'freightValue') as number | string | null },
     { source: 'invoice', value: readPath(invoice, 'freightValue') as number | string | null },
-    { source: 'processo', value: process.freightValue },
   ]);
   // Pair the currency with the SAME source that won freightValue, otherwise the
   // value (e.g. invoice freight) could be labelled with a currency from another
   // source (e.g. espelho freightCurrency). Default to no currency when the
-  // winning source carries none.
+  // winning source carries none. A follow-up guarda o frete em USD.
   const freightCurrency =
     freightValue.source === 'invoice'
       ? ((readPath(invoice, 'freightCurrency') as string | null) ?? undefined)
@@ -398,14 +509,63 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
         ? ((readPath(espelhoSummary, 'freightCurrency') as string | null) ?? undefined)
         : freightValue.source === 'bl'
           ? ((readPath(bl, 'freightCurrency') as string | null) ?? undefined)
-          : undefined;
+          : freightValue.source === 'processo'
+            ? 'USD'
+            : undefined;
+  const totalCbm = pickValue<number | string>([
+    { source: 'processo', value: process.totalCbm },
+    // Sem CBM na planilha, o packing list e a fonte (D3): o CBM por item esta
+    // la, e a reuniao apontou que ele so vinha da invoice.
+    { source: 'packing', value: readPath(packing, 'totalCbm') as number | string | null },
+    { source: 'invoice', value: readPath(invoice, 'totalCbm') as number | string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'totalCbm') as number | string | null },
+    { source: 'bl', value: readPath(bl, 'totalCbm') as number | string | null },
+  ]);
+  const containerType = pickValue<string>([
+    { source: 'processo', value: process.containerType },
+    { source: 'espelho', value: readPath(espelhoSummary, 'containerType') as string | null },
+    { source: 'bl', value: readPath(bl, 'containerType') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
+  ]);
+  // Data de embarque: a planilha tem 'ETD ORIGEM*' (process.etd). Ela nao
+  // entrava na capa — so `shipmentDate`, que e NULL em todo processo importado,
+  // entao a capa ficava vazia mesmo com a follow-up tendo a data.
+  const shipmentDate = pickValue<string>([
+    { source: 'processo', value: process.shipmentDate ?? process.etd },
+    { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
+    { source: 'bl', value: readPath(bl, 'shipmentDate') as string | null },
+    { source: 'bl', value: readPath(bl, 'etd') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
+    { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
+  ]);
+
+  // ── Campos que a Follow Up NAO tem (conferido nos cabecalhos da aba
+  // Processos): importador, pesos, caixas e numero do container. Aqui mandam os
+  // documentos, com o packing list na frente para peso/caixa.
+  const importerName = pickValue<string>([
+    { source: 'invoice', value: readPath(invoice, 'importerName') as string | null },
+    { source: 'packing', value: readPath(packing, 'importerName') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'importerName') as string | null },
+    { source: 'processo', value: process.importerName },
+  ]);
+  // Incoterm NAO entra na regra da follow-up: a aba Processos nao tem essa
+  // coluna, e `import_processes.incoterm` tem DEFAULT 'FOB' no schema — rotular
+  // esse default como "Follow-up" seria dar a um valor inventado a autoridade
+  // da planilha. O documento manda; o processo e o ultimo recurso.
+  const incoterm = pickValue<string>([
+    { source: 'invoice', value: readPath(invoice, 'incoterm') as string | null },
+    { source: 'processo', value: process.incoterm },
+  ]);
   const totalBoxes = pickValue<number | string>([
+    { source: 'packing', value: readPath(packing, 'totalBoxes') as number | string | null },
     { source: 'invoice', value: readPath(invoice, 'totalBoxes') as number | string | null },
     { source: 'espelho', value: readPath(espelhoSummary, 'totalBoxes') as number | string | null },
     { source: 'bl', value: readPath(bl, 'totalBoxes') as number | string | null },
     { source: 'processo', value: process.totalBoxes },
   ]);
   const totalNetWeight = pickValue<number | string>([
+    { source: 'packing', value: readPath(packing, 'totalNetWeight') as number | string | null },
     { source: 'invoice', value: readPath(invoice, 'totalNetWeight') as number | string | null },
     {
       source: 'espelho',
@@ -414,6 +574,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'processo', value: process.totalNetWeight },
   ]);
   const totalGrossWeight = pickValue<number | string>([
+    { source: 'packing', value: readPath(packing, 'totalGrossWeight') as number | string | null },
     { source: 'invoice', value: readPath(invoice, 'totalGrossWeight') as number | string | null },
     {
       source: 'espelho',
@@ -422,31 +583,11 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'bl', value: readPath(bl, 'totalGrossWeight') as number | string | null },
     { source: 'processo', value: process.totalGrossWeight },
   ]);
-  const totalCbm = pickValue<number | string>([
-    { source: 'invoice', value: readPath(invoice, 'totalCbm') as number | string | null },
-    { source: 'espelho', value: readPath(espelhoSummary, 'totalCbm') as number | string | null },
-    { source: 'bl', value: readPath(bl, 'totalCbm') as number | string | null },
-    { source: 'processo', value: process.totalCbm },
-  ]);
-  const containerType = pickValue<string>([
-    { source: 'espelho', value: readPath(espelhoSummary, 'containerType') as string | null },
-    { source: 'bl', value: readPath(bl, 'containerType') as string | null },
-    { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
-    { source: 'processo', value: process.containerType },
-  ]);
   const containerNumber = pickValue<string>([
-    { source: 'espelho', value: readPath(espelhoSummary, 'containerNumber') as string | null },
     { source: 'bl', value: readPath(bl, 'containerNumber') as string | null },
+    { source: 'packing', value: readPath(packing, 'containerNumber') as string | null },
+    { source: 'espelho', value: readPath(espelhoSummary, 'containerNumber') as string | null },
     { source: 'invoice', value: readPath(invoice, 'containerNumber') as string | null },
-  ]);
-  const shipmentDate = pickValue<string>([
-    { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
-    { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
-    { source: 'bl', value: readPath(bl, 'shipmentDate') as string | null },
-    { source: 'bl', value: readPath(bl, 'etd') as string | null },
-    { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
-    { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
-    { source: 'processo', value: process.shipmentDate },
   ]);
   const exporterAddress = pickValue<string>([
     { source: 'invoice', value: readPath(invoice, 'exporterAddress') as string | null },
@@ -477,6 +618,7 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="Exportador"
             value={exporterName.value}
             source={exporterName.source}
+            divergences={formatDivergences(exporterName, (value) => displayScalar(value))}
           />
           <InfoField
             icon={User}
@@ -489,12 +631,14 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="Porto Embarque"
             value={portOfLoading.value}
             source={portOfLoading.source}
+            divergences={formatDivergences(portOfLoading, (value) => displayScalar(value))}
           />
           <InfoField
             icon={Ship}
             label="Porto Destino"
             value={portOfDischarge.value}
             source={portOfDischarge.source}
+            divergences={formatDivergences(portOfDischarge, (value) => displayScalar(value))}
           />
           <InfoField
             icon={Globe}
@@ -507,6 +651,9 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="Valor FOB"
             value={totalFobValue.value != null ? formatCurrency(totalFobValue.value) : null}
             source={totalFobValue.source}
+            divergences={formatDivergences(totalFobValue, (value) =>
+              value != null ? formatCurrency(value as number | string) : null,
+            )}
           />
           <InfoField
             icon={Truck}
@@ -515,6 +662,9 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
               freightValue.value != null ? formatFreight(freightValue.value, freightCurrency) : null
             }
             source={freightValue.source}
+            divergences={formatDivergences(freightValue, (value) =>
+              value != null ? formatCurrency(value as number | string) : null,
+            )}
           />
           <InfoField
             icon={Box}
@@ -539,12 +689,16 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="CBM"
             value={totalCbm.value != null ? `${Number(totalCbm.value).toFixed(3)} m3` : null}
             source={totalCbm.source}
+            divergences={formatDivergences(totalCbm, (value) =>
+              value != null ? `${Number(unwrapAiValue(value)).toFixed(3)} m3` : null,
+            )}
           />
           <InfoField
             icon={Box}
             label="Container"
             value={containerType.value}
             source={containerType.source}
+            divergences={formatDivergences(containerType, (value) => displayScalar(value))}
           />
           {containerNumber.value && (
             <InfoField
@@ -559,6 +713,10 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
             label="Data Embarque"
             value={shipmentDate.value ? formatDate(shipmentDate.value) : null}
             source={shipmentDate.source}
+            divergences={formatDivergences(shipmentDate, (value) => {
+              const texto = displayScalar(value);
+              return texto ? formatDate(texto) : null;
+            })}
           />
           {exporterAddress.value && (
             <InfoField

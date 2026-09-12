@@ -36,7 +36,8 @@ import type { ProcessStatus } from '../../shared/state-machine/process-states.js
 import { ForbiddenError, NotFoundError, ValidationError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { logger } from '../../shared/utils/logger.js';
-import { deriveLogisticStatus, isForwardTransition } from './logistic-auto-advance.js';
+import { deriveLogisticStatus, shouldApplyDerivedStatus } from './logistic-auto-advance.js';
+import { isManualLogisticOverride } from './logistic-status-history.js';
 import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
 
 /**
@@ -819,6 +820,10 @@ export const processService = {
 
     const espelhoSummary = getEspelhoSummary(process.aiExtractedData);
     const blData = getBlData(process.aiExtractedData);
+    const processAiData =
+      process.aiExtractedData && typeof process.aiExtractedData === 'object'
+        ? (process.aiExtractedData as Record<string, unknown>)
+        : null;
 
     const [followUp] = await db
       .select()
@@ -842,6 +847,7 @@ export const processService = {
           readString(blData, 'shipmentDate') ??
           readString(blData, 'etd') ??
           null,
+        etaActual: process.etaActual ?? null,
         customsChannel: process.customsChannel ?? null,
         diNumber: process.diNumber ?? null,
         duimpNumber: process.duimpNumber ?? null,
@@ -850,6 +856,10 @@ export const processService = {
         cdArrivalAt: process.cdArrivalAt ?? null,
         logisticStatus: process.logisticStatus ?? null,
         status: process.status,
+        // Status escrito pela equipe na coluna B da planilha, gravado pela
+        // sincronizacao recorrente (follow-up/sheet-sync.ts).
+        sheetStatus: readString(processAiData, 'sheetStatus'),
+        sheetStatusSyncedAt: readString(processAiData, 'sheetStatusSyncedAt'),
       },
       followUp: followUp
         ? {
@@ -862,11 +872,15 @@ export const processService = {
         : null,
     });
 
-    if (!isForwardTransition(process.logisticStatus, derived)) {
+    if (process.logisticStatus === derived) {
       return { updated: false as const, current: process.logisticStatus };
     }
 
-    if (process.logisticStatus === derived) {
+    // Retroceder o estagio so e permitido quando o atual foi derivado pelo
+    // proprio sistema: e o unico jeito de corrigir um estagio que veio de uma
+    // PREVISAO que nao se cumpriu. Escolha manual permanece.
+    const manualOverride = await isManualLogisticOverride(processId);
+    if (!shouldApplyDerivedStatus({ current: process.logisticStatus, derived, manualOverride })) {
       return { updated: false as const, current: process.logisticStatus };
     }
 

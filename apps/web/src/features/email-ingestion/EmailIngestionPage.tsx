@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { useAuth } from '@/shared/hooks/useAuth';
-import { cn } from '@/shared/lib/utils';
+import { cn, formatDateTime as formatarDataHora } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
@@ -117,15 +117,11 @@ const statusBadgeConfig: Record<string, { dot: string; bg: string; text: string;
     },
   };
 
+// Formatador proprio removido: usava o fuso do navegador e, em
+// `toLocaleDateString` com hora, o resultado variava por navegador. A data do
+// e-mail e um instante, formatado no fuso da operacao.
 function formatDateTime(date: string): string {
-  const d = new Date(date);
-  return d.toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarDataHora(date);
 }
 
 export function EmailIngestionPage() {

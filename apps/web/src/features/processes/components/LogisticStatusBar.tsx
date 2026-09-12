@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { cn } from '@/shared/lib/utils';
+import { cn, formatDayMonth, isDateInPast } from '@/shared/lib/utils';
 import { LOGISTIC_STAGES } from '@/shared/lib/constants';
 import { api } from '@/shared/lib/api-client';
 import type { ImportProcess } from '@/shared/types';
@@ -52,6 +52,8 @@ export interface LogisticStatusBarProps {
   shipmentDate?: string | null;
   customsChannel?: string | null;
   diNumber?: string | null;
+  duimpNumber?: string | null;
+  registeredAt?: string | null;
   inspectionType?: string | null;
   portOfDischarge?: string | null;
   notes?: string | null;
@@ -59,22 +61,21 @@ export interface LogisticStatusBarProps {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
+//
+// Este componente tinha o SEU proprio par de funcoes de data
+// (`new Date(x).toLocaleDateString('pt-BR')` e `new Date(x) <= new Date()`), e
+// era dali que saia o "ETD: 06/08" com a invoice dizendo 07/08: uma data de
+// calendario virava meia-noite UTC e, em Brasilia, voltava um dia. As duas
+// agora sao so um nome local para a regra unica de `shared/lib/utils`.
 
 function isPastDate(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return false;
-  return new Date(dateStr) <= new Date();
+  return isDateInPast(dateStr ?? null);
 }
 
 function formatDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
-  try {
-    return new Date(dateStr).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-    });
-  } catch {
-    return null;
-  }
+  const formatado = formatDayMonth(dateStr);
+  return formatado === '-' ? null : formatado;
 }
 
 /**
@@ -91,6 +92,8 @@ function inferLogisticStep(props: LogisticStatusBarProps): number {
     customsClearanceAt,
     customsChannel,
     diNumber,
+    duimpNumber,
+    registeredAt,
     inspectionType,
     etaActual,
     eta,
@@ -104,22 +107,25 @@ function inferLogisticStep(props: LogisticStatusBarProps): number {
     return 10;
   }
 
-  // 9: Ag. Entrada — cdArrivalAt exists
-  if (cdArrivalAt) return 9;
+  // 9: Ag. Entrada — a carga JA chegou no CD. 'Chegada CD' e previsao enquanto
+  // a data nao chega: tratar previsao como chegada colocava em "Ag. Entrada"
+  // processo que a planilha dizia estar em transito (mesma regra do backend,
+  // modules/processes/logistic-auto-advance.ts).
+  if (isPastDate(cdArrivalAt)) return 9;
 
   // 8: Em Viagem CD — customsClearanceAt exists and no cdArrivalAt
   // 7: Ag. Carregamento — customsClearanceAt exists (same, manual override differentiates)
   // 6: Lib. Portuaria — customsClearanceAt exists
-  if (customsClearanceAt) return 8;
+  if (isPastDate(customsClearanceAt)) return 8;
 
   // 5: Conf. Aduaneira — customsChannel + inspectionType
   if (customsChannel && inspectionType) return 5;
 
-  // 4: Registrado — diNumber or customsChannel exists
-  if (diNumber || customsChannel) return 4;
+  // 4: Registrado — DI/DUIMP registrada
+  if (diNumber || duimpNumber || registeredAt || customsChannel) return 4;
 
-  // 3: Em Atracacao — etaActual or (eta is past)
-  if (etaActual || (eta && isPastDate(eta))) return 3;
+  // 3: Em Atracacao — atracou (ETA Realizado) ou a ETA firme ja passou
+  if (isPastDate(etaActual) || isPastDate(eta)) return 3;
 
   // 2: Em Transito — shipmentDate or (etd is past)
   if (shipmentDate || (etd && isPastDate(etd))) return 2;
@@ -163,17 +169,27 @@ function getStageSubInfo(
       return d ? { text: `ETD: ${d}` } : null;
     }
     case 3: {
-      // Em Atracacao → Porto + ETA
+      // Em Atracacao → Porto + data.
+      //
+      // Com 'ETA Realizado' preenchido a data nao e mais previsao: o rotulo
+      // vira "Atracou". A tela mostrava "ETA: 16/09" (o 'ETA Previsto Medio'
+      // de 17/09 menos um dia de fuso) para um processo que atracou em 08/09.
       const parts: string[] = [];
       if (props.portOfDischarge) parts.push(props.portOfDischarge);
-      const d = formatDate(props.etaActual ?? props.eta);
-      if (d) parts.push(`ETA: ${d}`);
+      const atracou = formatDate(props.etaActual);
+      const previsto = formatDate(props.eta);
+      if (atracou) parts.push(`Atracou: ${atracou}`);
+      else if (previsto) parts.push(`ETA: ${previsto}`);
       return parts.length > 0 ? { text: parts.join(' | ') } : null;
     }
     case 4: {
-      // Registrado → DUIMP + Canal badge
+      // Registrado → numero da DUIMP/DI + data de registro + Canal badge.
+      // A data do registro (04/09 no PK2192607SZ) nunca aparecia.
       const parts: string[] = [];
-      if (props.diNumber) parts.push(props.diNumber);
+      const registro = props.duimpNumber ?? props.diNumber;
+      if (registro) parts.push(registro);
+      const registroEm = formatDate(props.registeredAt);
+      if (registroEm) parts.push(registroEm);
       const channel = props.customsChannel?.toLowerCase();
       let badge: { label: string; color: string } | undefined;
       if (channel === 'verde')
@@ -196,7 +212,7 @@ function getStageSubInfo(
           label: props.customsChannel!,
           color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
         };
-      return parts.length > 0 || badge ? { text: parts.join(''), badge } : null;
+      return parts.length > 0 || badge ? { text: parts.join(' | '), badge } : null;
     }
     case 5: {
       // Conf. Aduaneira → Orgao
@@ -571,6 +587,8 @@ export function buildLogisticProps(process: ImportProcess): LogisticStatusBarPro
     shipmentDate,
     customsChannel: process.customsChannel,
     diNumber: process.diNumber,
+    duimpNumber: process.duimpNumber ?? null,
+    registeredAt: process.registeredAt ?? null,
     inspectionType: process.inspectionType,
     portOfDischarge: process.portOfDischarge,
     notes: process.notes,

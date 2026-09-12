@@ -678,7 +678,7 @@ export const openapiSpec = {
     '/api/follow-up/sheet-compare/{processCode}': {
       get: {
         tags: ['Follow-Up'],
-        summary: 'Compare follow-up with Google Sheet',
+        summary: 'Compara o processo com a linha da planilha Follow Up (nao grava)',
         parameters: [
           {
             name: 'processCode',
@@ -693,7 +693,8 @@ export const openapiSpec = {
     '/api/follow-up/sync-from-sheet/{processCode}': {
       post: {
         tags: ['Follow-Up'],
-        summary: 'Sync follow-up from Google Sheet',
+        summary:
+          'Aplica a planilha Follow Up ao processo. Corpo {"mode":"dry_run"|"apply"}; "apply" exige FOLLOW_UP_SYNC_MODE=apply',
         parameters: [
           {
             name: 'processCode',
