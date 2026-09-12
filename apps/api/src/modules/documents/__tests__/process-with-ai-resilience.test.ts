@@ -28,6 +28,7 @@ vi.mock('../../alerts/service.js', () => ({
 // service catch block. extract* are stubbed per-test.
 const extractInvoiceData = vi.fn();
 const extractPackingListData = vi.fn();
+const extractBLData = vi.fn();
 const extractEspelhoData = vi.fn();
 const extractProformaData = vi.fn();
 const extractDUIMPData = vi.fn();
@@ -39,6 +40,8 @@ vi.mock('../../ai/service.js', async () => {
     aiService: {
       extractInvoiceData,
       extractPackingListData,
+      extractBLData,
+      extractDraftBLData: extractBLData,
       extractEspelhoData,
       extractProformaData,
       extractDUIMPData,
@@ -248,7 +251,13 @@ describe('processWithAI — extraction failure resilience', () => {
     expect(extractDUIMPData).toHaveBeenCalledWith(
       'Extracted PDF text long enough to be real content',
       'draft_duimp',
-      { imageBase64: 'bW9jayBjb250ZW50', imageMimeType: 'application/pdf' },
+      // PDF sem camada de texto utilizavel: o arquivo original vai anexado e o
+      // texto residual e marcado como NAO confiavel (grounding/backfill desligados).
+      {
+        imageBase64: 'bW9jayBjb250ZW50',
+        imageMimeType: 'application/pdf',
+        sourceTextReliable: false,
+      },
     );
   });
 
@@ -405,6 +414,54 @@ describe('processWithAI — extraction failure resilience', () => {
       ]),
     );
   });
+
+  it.each(['ohbl', 'draft_bl'])(
+    'keeps sub-threshold %s as evidence and rebuilds stale projection',
+    async (type) => {
+      extractBLData.mockResolvedValueOnce({
+        data: { blNumber: 'BL-LOW' },
+        confidenceScore: 0.89,
+        fieldsWithLowConfidence: [],
+      });
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 13,
+            processId: 45,
+            type,
+            storagePath: '/tmp/bl.pdf',
+            mimeType: 'application/pdf',
+            isProcessed: false,
+            aiParsedData: null,
+            originalFilename: 'bl.pdf',
+          },
+        ]),
+      );
+      const update = queueLineageTransaction();
+      queryQueue.push(createResolvedChain(undefined));
+      queryQueue.push(
+        createResolvedChain([
+          { processCode: 'IMP-045', aiExtractedData: { [type]: { blNumber: 'STALE' } } },
+        ]),
+      );
+      const rebuild = vi
+        .spyOn(documentService, 'rebuildProcessAiExtractedData')
+        .mockResolvedValueOnce({});
+      try {
+        await documentService.processWithAI(13, type);
+        expect(update.set).toHaveBeenCalledWith(
+          expect.objectContaining({
+            confidenceScore: '0.89',
+            aiParsedData: { blNumber: 'BL-LOW' },
+          }),
+        );
+        expect(rebuild).toHaveBeenCalledWith(45);
+        expect(alertCreate).toHaveBeenCalledWith(expect.objectContaining({ severity: 'critical' }));
+      } finally {
+        rebuild.mockRestore();
+      }
+    },
+  );
 
   it('stores very-low-confidence extraction without projecting it into process data', async () => {
     extractPackingListData.mockResolvedValueOnce({

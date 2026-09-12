@@ -24,16 +24,22 @@ from app.services.cert_service import validate_single_product
 from app.services.derivation import compute_status_dimensions
 from app.services.erp_service import (
     normalize_brand_filter,
-    sync_sheets_to_db,
 )
 from app.services.erp_service import (
     safe_license_map as _safe_license_map,
 )
+from app.services.sync_runs import fetch_last_sync_run, run_sheet_sync
 from app.services.wms_service import summarize_stock_rows, sync_stock_all
 from app.utils.logging import log
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
+
+# Busca livre das telas de produto. O NUMERO DO CERTIFICADO entra aqui porque e
+# por ele que o time fiscal procura ("10584/2024"): ate 11/09/2026 a busca so
+# olhava sku/name e digitar o numero nao devolvia nada, mesmo com 668 de 674
+# produtos tendo numero preenchido.
+_SEARCH_SQL = "(sku ILIKE %s OR name ILIKE %s OR COALESCE(numero_certificado, '') ILIKE %s)"
 
 # In-memory store for running validations
 _running_validations: dict[str, dict] = {}
@@ -130,7 +136,10 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
             # 23/03/2026, e o painel exibia estoque de quatro meses atras.
             if SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY:
                 try:
-                    sync_result = sync_sheets_to_db()
+                    # Mesmo lock do botao manual: sem ele, o "Sincronizar agora"
+                    # e a validacao agendada podiam fazer o UPSERT/limpeza de
+                    # `cert_products` ao mesmo tempo.
+                    sync_result = run_sheet_sync("schedule")
                     log.info(f"Pre-validation sheets sync: {sync_result}")
                 except Exception as e:
                     log.warning(f"Pre-validation sheets sync failed: {e}")
@@ -302,20 +311,42 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
 @router.post("/api/sync-sheets")
 @limiter.limit("5/minute")
 def trigger_sync_sheets(request: Request) -> dict:
-    """Trigger a manual sync from Google Sheets to cert_products.
+    """Sincroniza a planilha AGORA (botao "Sincronizar planilha agora").
+
+    Ate 2026-09-11 a unica forma de forcar a leitura da planilha pela tela era
+    "Iniciar" na Validacao, que tambem roda estoque e VTEX de 674 produtos
+    (~17 min). Este endpoint faz so a planilha (mais os atributos do Linx) e
+    deixa rastro em `cert_sync_runs`.
 
     Returns:
-        Sync result dict with 'synced' count.
+        Dict com `sheets`, `linx`, `run_id` e `trigger`.
 
     Raises:
-        HTTPException: 400 if credentials not configured, 500 on sync error.
+        HTTPException: 400 se faltam credenciais do Sheets, 409 quando ja ha um
+            sync em andamento, 500 em erro de sincronizacao.
     """
     if not SHEETS_CLIENT_EMAIL or not SHEETS_PRIVATE_KEY:
         raise HTTPException(400, "Google Sheets credentials not configured")
-    result = sync_sheets_to_db()
-    if result.get("error"):
-        raise HTTPException(500, result["error"])
+
+    actor = (request.headers.get("X-Cert-Actor-Email") or "").strip()[:320] or None
+    result = run_sheet_sync("manual", actor)
+    if not result.get("locked"):
+        raise HTTPException(409, "Ja existe uma sincronizacao da planilha em andamento")
+    if result.get("error") or result.get("sheets", {}).get("error"):
+        raise HTTPException(502, result.get("error") or result["sheets"]["error"])
     return result
+
+
+@router.get("/api/sync-sheets/last")
+def get_last_sync_sheets() -> dict:
+    """Ultima sincronizacao da planilha registrada (quem, quando, resultado).
+
+    Returns:
+        `{'last_run': {...} | None}`.
+    """
+    if not DATABASE_URL:
+        return {"last_run": None}
+    return {"last_run": fetch_last_sync_run()}
 
 
 @router.get("/api/stats")
@@ -433,8 +464,8 @@ def list_expired_products(
         conditions = ["is_expired = TRUE"]
         params: list = []
         if search:
-            conditions.append("(sku ILIKE %s OR name ILIKE %s)")
-            params.extend([f"%{search}%", f"%{search}%"])
+            conditions.append(_SEARCH_SQL)
+            params.extend([f"%{search}%"] * 3)
         if brand:
             # Mesma normalizacao do relatorio: a UI manda o slug
             # `puket_escolares` e o banco guarda `Puket Escolares`.
@@ -480,6 +511,7 @@ def list_products(
     per_page: int = Query(25, ge=1, le=100),
     search: str = Query(""),
     brand: str = Query(""),
+    grife: str = Query(""),
     status: str = Query(""),
     start_date: str = Query(""),
     end_date: str = Query(""),
@@ -527,13 +559,19 @@ def list_products(
         params: list = []
 
         if search:
-            conditions.append("(sku ILIKE %s OR name ILIKE %s)")
-            params.extend([f"%{search}%", f"%{search}%"])
+            conditions.append(_SEARCH_SQL)
+            params.extend([f"%{search}%"] * 3)
         if brand:
             # Mesma normalizacao do relatorio: a UI manda o slug
             # `puket_escolares` e o banco guarda `Puket Escolares`.
             conditions.append("LOWER(REPLACE(brand, '_', ' ')) = %s")
             params.append(normalize_brand_filter(brand))
+        if grife:
+            # Grife/licenca vinda do Linx (PRODUTOS.GRIFFE na Puket,
+            # IMG_LICENCIAMENTO na Imaginarium). Comparacao exata e
+            # case-insensitive: os valores sao os que `/api/grifes` lista.
+            conditions.append("LOWER(COALESCE(grife, '')) = LOWER(%s)")
+            params.append(grife.strip())
         if status:
             statuses = [s.strip() for s in status.split(",") if s.strip()]
             if "EXPIRED" in statuses:
@@ -627,6 +665,31 @@ def list_products(
             "total_pages": max(1, (total + per_page - 1) // per_page),
             "last_validation_date": last_date,
         }
+
+
+@router.get("/api/grifes")
+def list_grifes() -> dict:
+    """Grifes/licencas distintas presentes em `cert_products` (para o filtro).
+
+    Vem do sync de atributos do Linx. A cobertura e parcial na Imaginarium
+    (IMG_LICENCIAMENTO esta preenchido em ~400 de 26 mil produtos do ERP), entao
+    a resposta traz tambem `sem_grife`, o numero de produtos sem valor — sem
+    isso a tela faria parecer que o filtro esta completo.
+
+    Returns:
+        `{'grifes': [{'grife': str, 'count': int}], 'sem_grife': int}`.
+    """
+    if not DATABASE_URL:
+        return {"grifes": [], "sem_grife": 0}
+    with db() as (conn, cur):
+        cur.execute(
+            "SELECT grife, COUNT(*) AS cnt FROM cert_products "
+            "WHERE COALESCE(grife, '') <> '' GROUP BY grife ORDER BY grife"
+        )
+        grifes = [{"grife": r["grife"], "count": r["cnt"]} for r in cur.fetchall()]
+        cur.execute("SELECT COUNT(*) AS cnt FROM cert_products WHERE COALESCE(grife, '') = ''")
+        sem = (cur.fetchone() or {}).get("cnt", 0)
+    return {"grifes": grifes, "sem_grife": sem}
 
 
 @router.get("/api/products/{sku}")

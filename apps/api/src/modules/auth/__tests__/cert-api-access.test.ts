@@ -82,6 +82,22 @@ describe('cert-api gateway access policy', () => {
       'cert.operate',
     );
 
+    // Reunião 11/09/2026: "Sincronizar planilha agora" é rotina do analista.
+    expect(requiredCertApiScope('POST', '/cert-api/api/sync-sheets')).toBe('cert.operate');
+    expect(requiredCertApiScope('GET', '/cert-api/api/sync-sheets/last')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/grifes')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/items')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/audit/run-1')).toBe('cert.read');
+    expect(requiredCertApiScope('POST', '/cert-api/api/marketplace/audit')).toBe('cert.operate');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/audit/a%2Fb')).toBe('cert.admin');
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items')).toBe(
+      'cert.operate',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
+      'cert.operate',
+    );
+
+    // Sincronizar ESTOQUE continua administrativo: escreve a partir do WMS.
     expect(requiredCertApiScope('POST', '/cert-api/api/sync-stock')).toBe('cert.admin');
     expect(requiredCertApiScope('GET', '/cert-api/api/products%2Fverify')).toBe('cert.admin');
     expect(requiredCertApiScope(undefined, undefined)).toBe('cert.admin');
@@ -107,6 +123,26 @@ describe('cert-api gateway access policy', () => {
       ),
     ).toBe('cert.admin');
     expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/retry-linx')).toBe(
+      'cert.admin',
+    );
+
+    // Vínculo de itens: mesma invariante de "sem `%`" e sem subpath extra.
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/items')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/a%2Fb')).toBe(
+      'cert.admin',
+    );
+    expect(
+      requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1/extra'),
+    ).toBe('cert.admin');
+    expect(requiredCertApiScope('PUT', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
       'cert.admin',
     );
   });
@@ -154,6 +190,14 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/reports/export-stock'],
     ['POST', '/cert-api/api/certificates'],
     ['POST', '/cert-api/api/certificates/cert-1/retry-linx'],
+    ['POST', '/cert-api/api/certificates/cert-1/items'],
+    ['DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1'],
+    ['PATCH', '/cert-api/api/certificates/cert-1/items/050404509/restriction'],
+    ['POST', '/cert-api/api/sync-sheets'],
+    ['GET', '/cert-api/api/sync-sheets/last'],
+    ['GET', '/cert-api/api/grifes'],
+    ['GET', '/cert-api/api/marketplace/items'],
+    ['POST', '/cert-api/api/marketplace/audit'],
   ])('allows analyst access to %s %s and returns trusted actor identity', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 
@@ -164,7 +208,6 @@ describe('cert-api gateway access policy', () => {
   });
 
   it.each([
-    ['POST', '/cert-api/api/sync-sheets'],
     ['POST', '/cert-api/api/sync-stock'],
     ['POST', '/cert-api/api/sync-licenciados'],
     ['DELETE', '/cert-api/api/certificates/cert-1'],
@@ -172,11 +215,27 @@ describe('cert-api gateway access policy', () => {
     ['GET', '/cert-api/api/not-yet-classified'],
     ['GET', '/cert-api/api/products/..%2fadmin'],
     ['GET', '/cert-api/api/certificates/a%2Fb/pdf'],
+    ['POST', '/cert-api/api/certificates/cert-1/items/SKU-1/restriction'],
+    ['PUT', '/cert-api/api/certificates/cert-1/items/SKU-1/restriction'],
+    ['DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1/restriction'],
+    ['PATCH', '/cert-api/api/certificates/cert-1/items/SKU-1'],
+    ['PATCH', '/cert-api/api/certificates/cert-1/items/SKU-1/restriction/extra'],
+    ['PATCH', '/cert-api/api/certificates/a%2Fb/items/SKU-1/restriction'],
+    ['PATCH', '/cert-api/api/certificates/cert-1/items/a%2Fb/restriction'],
   ])('denies analyst access to %s %s', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ success: false });
+  });
+
+  it('denies item restriction to an unrecognized role', async () => {
+    authGate.role = 'viewer';
+    const res = await certAccessRequest(
+      'PATCH',
+      '/cert-api/api/certificates/cert-1/items/SKU-1/restriction',
+    );
+    expect(res.status).toBe(403);
   });
 
   it('fails closed for an auth request without the original URI', async () => {

@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -32,7 +32,9 @@ export default function containerTypeVsFup(input: CheckInput): CheckResult {
   if (processContainer == null || processContainer === '') {
     return {
       checkName,
-      status: 'warning',
+      // Sem cadastro no processo nao ha o que comparar: verificacao NAO
+      // REALIZADA, fora da contagem de atencoes (decisao D6).
+      status: 'skipped',
       documentsCompared: 'BL vs Sistema',
       message: 'Ignorado: Tipo de container nao cadastrado no processo.',
     };

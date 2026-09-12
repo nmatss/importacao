@@ -21,9 +21,16 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine
 
+# poppler-data + fonte CJK: os BLs da reuniao 11/09/2026 usam fonte composta
+# Type0/CIDFontType0 com ordering Adobe-GB1. Sem os CMaps do poppler-data o
+# pdftotext/pdftoppm nao resolve o mapeamento ("Missing language pack for
+# Adobe-GB1 mapping") e a pagina sai em branco — o OCR entao le so o gabarito
+# do formulario. font-noto-cjk da os glifos para a rasterizacao.
 RUN apk upgrade --no-cache && apk add --no-cache \
   su-exec \
   poppler-utils \
+  poppler-data \
+  font-noto-cjk \
   tesseract-ocr \
   tesseract-ocr-data-eng \
   tesseract-ocr-data-por

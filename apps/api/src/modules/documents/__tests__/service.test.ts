@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import {
+  PK220_INVOICE_ITEMS,
+  PK220_PACKING_LIST_ITEMS,
+  espelhoSinteticoPk220,
+} from '../../../__tests__/fixtures/pk220-itens.js';
 
 const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 const mockQueueSend = vi.fn();
@@ -83,6 +88,21 @@ vi.mock('../reconcile.js', () => ({
   reconcileProcessConfidence: vi.fn().mockResolvedValue([]),
 }));
 
+// `delete()` recalcula o estado derivado do processo depois do commit (D8):
+// revalida com o que sobrou, ou limpa os resultados quando nao sobra documento
+// comparavel. O modulo real e carregado por `import()` dinamico.
+vi.mock('../../validation/service.js', () => ({
+  validationService: {
+    runAllChecks: vi.fn().mockResolvedValue([]),
+    clearResults: vi.fn().mockResolvedValue({ removed: 0 }),
+    // `getComparison` incorpora os cruzamentos da validacao as linhas
+    // agregadas; por padrao o processo nao tem nenhum resultado.
+    getEffectiveResults: vi
+      .fn()
+      .mockResolvedValue({ results: [], mode: 'none', runAt: null, validationRunId: null }),
+  },
+}));
+
 vi.mock('xlsx', () => ({
   read: vi.fn().mockReturnValue({
     SheetNames: ['Sheet1'],
@@ -97,6 +117,7 @@ const { documentService } = await import('../service.js');
 const { alertService } = await import('../../alerts/service.js');
 const { googleDriveService } = await import('../../integrations/google-drive.service.js');
 const { auditService } = await import('../../audit/service.js');
+const { validationService } = await import('../../validation/service.js');
 const { ocrScannedPdf, rasterizePdfPages } = await import('../ocr.js');
 const { aiService } = await import('../../ai/service.js');
 
@@ -164,6 +185,70 @@ describe('documentService', () => {
         1,
         expect.objectContaining({ processId: 1, type: 'invoice' }),
         null,
+      );
+    });
+
+    it('grava o hash do conteudo tambem no upload manual (dedupe com o Drive)', async () => {
+      // DRV-05: sem o sha256 aqui, o arquivo que a analista subiu a mao volta
+      // como documento NOVO na primeira varredura do Drive — e o nome com
+      // sufixo de download ('... (1).pdf') escapa ate do aviso por nome+tamanho.
+      const mockFile = {
+        originalname: 'KIOM INV - PK2192607SZ (1).pdf',
+        path: '/tmp/inv.pdf',
+        mimetype: 'application/pdf',
+        size: 1024,
+      } as Express.Multer.File;
+      mockFsReadFile.mockResolvedValueOnce(Buffer.from('conteudo do pdf'));
+      const insertChain = createResolvedChain([{ id: 7, processId: 1, type: 'invoice' }]);
+
+      queryQueue.push(createResolvedChain([])); // processo nao travado
+      queryQueue.push(insertChain); // insert do documento
+      queryQueue.push(createResolvedChain([])); // sem duplicata por nome+tamanho
+      queryQueue.push(createResolvedChain([{ type: 'invoice' }]));
+
+      await documentService.upload(1, 'invoice', mockFile, 1);
+
+      const { createHash } = await import('node:crypto');
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contentSha256: createHash('sha256').update(Buffer.from('conteudo do pdf')).digest('hex'),
+          ingestionSource: 'manual',
+        }),
+      );
+    });
+
+    it('propaga a identidade do arquivo do Drive (md5, versao e area)', async () => {
+      const mockFile = {
+        originalname: 'KIOM INV - PK2192607SZ.pdf',
+        path: '/tmp/inv.pdf',
+        mimetype: 'application/pdf',
+        size: 1024,
+      } as Express.Multer.File;
+      const insertChain = createResolvedChain([{ id: 8, processId: 1, type: 'invoice' }]);
+
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(insertChain);
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain([{ type: 'invoice' }]));
+
+      await documentService.upload(1, 'invoice', mockFile, null, {
+        driveFileId: 'f1',
+        ingestionSource: 'drive',
+        contentSha256: 'a'.repeat(64),
+        driveMd5: 'md5-do-drive',
+        driveVersion: 4,
+        driveModifiedTime: '2026-08-07T10:00:00.000Z',
+        driveArea: 'pendentes',
+      });
+
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contentSha256: 'a'.repeat(64),
+          driveMd5: 'md5-do-drive',
+          driveVersion: 4,
+          driveModifiedTime: new Date('2026-08-07T10:00:00.000Z'),
+          driveArea: 'pendentes',
+        }),
       );
     });
 
@@ -370,34 +455,65 @@ describe('documentService', () => {
   });
 
   describe('delete()', () => {
-    it('should remove file, DB record and rebuild process AI projection', async () => {
-      const mockDoc = {
-        id: 1,
-        processId: 1,
-        type: 'invoice',
-        storagePath: '/tmp/test.pdf',
-        originalFilename: 'test.pdf',
-      };
+    const deletedDoc = {
+      id: 1,
+      processId: 1,
+      type: 'invoice',
+      storagePath: '/tmp/test.pdf',
+      originalFilename: 'test.pdf',
+      ingestionSource: 'drive',
+      driveFileId: 'drive-abc',
+      contentSha256: 'a'.repeat(64),
+      fileSize: 1234,
+    };
 
-      // select doc
-      queryQueue.push(createResolvedChain([mockDoc]));
+    /** Documento que SOBROU no processo e volta a alimentar a projecao. */
+    const remaining = (id: number, type: string, data: Record<string, unknown>) => ({
+      id,
+      type,
+      isProcessed: true,
+      aiParsedData: data,
+      confidenceScore: '0.9',
+    });
+
+    /**
+     * Enfileira as consultas de `delete()` na ordem real: documento, trava do
+     * processo e, ja fora da transacao, o evento de historico. Dentro da
+     * transacao: tombstone, DELETE e a reconstrucao da projecao — que le os
+     * documentos RESTANTES (e nao a projecao antiga) para decidir o que ainda
+     * da para comparar.
+     */
+    function queueDelete(
+      options: {
+        remainingDocs?: Record<string, unknown>[];
+        processAiData?: Record<string, unknown>;
+      } = {},
+    ) {
+      queryQueue.push(createResolvedChain([deletedDoc]));
       queryQueue.push(createResolvedChain([])); // assert process not locked
+      const eventChain = createResolvedChain(undefined); // recordProcessEvent
+      queryQueue.push(eventChain);
+
+      const tombstoneChain = createResolvedChain(undefined);
+      txQueue.push(tombstoneChain); // tombstone
       txQueue.push(createResolvedChain(undefined)); // delete doc
-      txQueue.push(createResolvedChain([])); // remaining docs for rebuild
-      txQueue.push(
-        createResolvedChain([
-          {
-            aiExtractedData: {
-              invoice: { invoiceNumber: 'stale' },
-              customKey: { keep: true },
-            },
-          },
-        ]),
-      );
+      txQueue.push(createResolvedChain(options.remainingDocs ?? [])); // rebuild: docs restantes
+      txQueue.push(createResolvedChain([{ aiExtractedData: options.processAiData ?? {} }]));
       const processUpdateChain = createResolvedChain(undefined);
       txQueue.push(processUpdateChain);
 
-      const result = await documentService.delete(1, 2);
+      return { eventChain, tombstoneChain, processUpdateChain };
+    }
+
+    it('should remove file, DB record and rebuild process AI projection', async () => {
+      const { processUpdateChain } = queueDelete({
+        processAiData: {
+          invoice: { invoiceNumber: 'stale' },
+          customKey: { keep: true },
+        },
+      });
+
+      const result = await documentService.delete(1, 2, 'Anexado no processo errado');
 
       expect(result).toEqual({ id: 1 });
       expect(mockFsUnlink).toHaveBeenCalledWith('/tmp/test.pdf');
@@ -416,8 +532,89 @@ describe('documentService', () => {
         'delete',
         'document',
         1,
-        expect.objectContaining({ processId: 1 }),
+        expect.objectContaining({ processId: 1, reason: 'Anexado no processo errado' }),
         null,
+      );
+    });
+
+    // D8: a analista passou a excluir, entao a exclusao precisa deixar rastro
+    // suficiente para o admin auditar depois — e impedir que o arquivo volte.
+    it('grava tombstone com a origem do arquivo para o sweep do Drive nao reimportar', async () => {
+      const { tombstoneChain } = queueDelete({});
+
+      await documentService.delete(1, 7, 'Rascunho da DUIMP no processo errado');
+
+      expect(tombstoneChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          documentId: 1,
+          driveFileId: 'drive-abc',
+          contentSha256: 'a'.repeat(64),
+          originalFilename: 'test.pdf',
+          deletedBy: 7,
+          reason: 'Rascunho da DUIMP no processo errado',
+        }),
+      );
+      // O tombstone tem de existir ANTES do DELETE: os dois estao na mesma
+      // transacao, entao ou os dois valem ou nenhum vale.
+      expect(mockTx.insert.mock.invocationCallOrder[0]).toBeLessThan(
+        mockTx.delete.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('registra a exclusao no historico do processo, com o motivo', async () => {
+      const { eventChain } = queueDelete({});
+
+      await documentService.delete(1, 7, 'Documento duplicado');
+
+      expect(eventChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          eventType: 'document_deleted',
+          description: 'Documento duplicado',
+        }),
+      );
+    });
+
+    it('apaga os resultados de validacao quando nao sobra documento comparavel', async () => {
+      // Sem INV/PL/BL restantes, os resultados descrevem anexos que nao existem
+      // mais: o comparativo acusava divergencia de documento apagado.
+      queueDelete({ remainingDocs: [] });
+
+      await documentService.delete(1, 7, 'Anexo errado');
+
+      expect(validationService.clearResults).toHaveBeenCalledWith(1);
+      expect(validationService.runAllChecks).not.toHaveBeenCalled();
+    });
+
+    it('revalida em modo final quando INV, PL e BL continuam no processo', async () => {
+      queueDelete({
+        remainingDocs: [
+          remaining(2, 'invoice', { invoiceNumber: 'INV-1' }),
+          remaining(3, 'packing_list', { totalBoxes: 10 }),
+          remaining(4, 'ohbl', { blNumber: 'BL-1' }),
+        ],
+      });
+
+      await documentService.delete(1, 7, 'Copia duplicada do BL');
+
+      expect(validationService.runAllChecks).toHaveBeenCalledWith(
+        1,
+        null,
+        expect.objectContaining({ mode: 'final' }),
+      );
+      expect(validationService.clearResults).not.toHaveBeenCalled();
+    });
+
+    it('revalida em modo parcial quando so parte dos documentos sobrou', async () => {
+      queueDelete({ remainingDocs: [remaining(2, 'invoice', { invoiceNumber: 'INV-1' })] });
+
+      await documentService.delete(1, 7, 'Packing list errado');
+
+      expect(validationService.runAllChecks).toHaveBeenCalledWith(
+        1,
+        null,
+        expect.objectContaining({ mode: 'partial' }),
       );
     });
   });
@@ -657,7 +854,6 @@ describe('documentService', () => {
 
       expect(rebuilt).toEqual({
         customKey: { keep: true },
-        invoice: { invoiceNumber: 'INV-NEW' },
         espelho: { summary: { processCode: 'IMP-1' }, items: [{ itemCode: 'A1' }] },
       });
       expect(processUpdateChain.set).toHaveBeenCalledWith(
@@ -667,6 +863,28 @@ describe('documentService', () => {
         }),
       );
     });
+
+    it.each(['ohbl', 'draft_bl'])(
+      'withholds %s below 90% and clears stale projected data',
+      async (type) => {
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 10,
+              type,
+              isProcessed: true,
+              confidenceScore: '0.89',
+              aiParsedData: { blNumber: 'LOW' },
+            },
+          ]),
+        );
+        queryQueue.push(
+          createResolvedChain([{ aiExtractedData: { [type]: { blNumber: 'STALE' } } }]),
+        );
+        queryQueue.push(createResolvedChain(undefined));
+        expect(await documentService.rebuildProcessAiExtractedData(1)).toEqual({});
+      },
+    );
 
     it('does not project very-low-confidence document data', async () => {
       queryQueue.push(
@@ -703,7 +921,415 @@ describe('documentService', () => {
     });
   });
 
+  it.each([
+    { processReference: 'PK2202608SZ' },
+    { summary: { processCode: 'PK2202608SZ' } },
+    { items: [{ processo: 'PK2202608SZ' }] },
+  ])('does not project a source explicitly belonging to another process: %j', async (parsed) => {
+    queryQueue.push(
+      createResolvedChain([
+        {
+          id: 1,
+          type: 'invoice',
+          isProcessed: true,
+          confidenceScore: '0.99',
+          aiParsedData: { totalFobValue: 100, ...parsed },
+        },
+      ]),
+    );
+    queryQueue.push(
+      createResolvedChain([{ processCode: 'PK2192607SZ', aiExtractedData: { custom: 'kept' } }]),
+    );
+    queryQueue.push(createResolvedChain(undefined));
+    expect(await documentService.rebuildProcessAiExtractedData(1)).toEqual({ custom: 'kept' });
+  });
+
   describe('getComparison()', () => {
+    it.each([{ isProcessed: false }, { confidenceScore: '0.1' }, { failed: true }])(
+      'does not revive an old source when its latest replacement is unusable: %j',
+      async (failure) => {
+        const parsed = {
+          invoiceNumber: 'NEW',
+          totalFobValue: 999,
+          ...(failure.failed ? { extractionFailed: true } : {}),
+        };
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 1,
+              type: 'invoice',
+              isProcessed: true,
+              confidenceScore: '0.99',
+              createdAt: new Date('2026-09-01'),
+              updatedAt: new Date('2026-09-20'),
+              aiParsedData: { invoiceNumber: 'OLD', totalFobValue: 100 },
+            },
+            {
+              id: 2,
+              type: 'invoice',
+              isProcessed: true,
+              confidenceScore: '0.99',
+              ...failure,
+              createdAt: new Date('2026-09-12'),
+              aiParsedData: parsed,
+            },
+          ]),
+        );
+        queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+        const result = await documentService.getComparison(1);
+        expect(result.hasInvoice).toBe(false);
+        expect(result.sourceDocuments.invoice).toBeNull();
+      },
+    );
+    it('uses Drive version over reprocessing time or insertion order', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 99,
+            type: 'invoice',
+            driveFileId: 'file',
+            driveVersion: 1,
+            createdAt: new Date('2026-09-20'),
+            isProcessed: true,
+            confidenceScore: '0.99',
+            aiParsedData: { invoiceNumber: 'OLD', totalFobValue: 100 },
+          },
+          {
+            id: 2,
+            type: 'invoice',
+            driveFileId: 'file',
+            driveVersion: 2,
+            createdAt: new Date('2026-09-12'),
+            isProcessed: true,
+            confidenceScore: '0.99',
+            aiParsedData: { invoiceNumber: 'NEW', totalFobValue: 999 },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+      const result = await documentService.getComparison(1);
+      expect(result.sourceDocuments.invoice).toBe(2);
+    });
+    it.each([
+      { processReference: 'PK2202608SZ' },
+      { _trust: { trust: 'review' } },
+      { skipped: true },
+    ])('does not compare misplaced or untrusted extraction: %j', async (extra) => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            aiParsedData: { invoiceNumber: 'INV', totalFobValue: 100, ...extra },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([{ id: 1, processCode: 'PK2192607SZ', aiExtractedData: {} }]),
+      );
+      const result = await documentService.getComparison(1);
+      expect(result.hasInvoice).toBe(false);
+    });
+
+    it.each(['invoice', 'packing_list', 'bl'])(
+      'does not revive a removed %s through a stored cell correction',
+      async (sourceColumn) => {
+        queryQueue.push(createResolvedChain([]));
+        queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 90,
+              rowKey: 'aggregate:total-fob-usd',
+              sourceColumn,
+              valueText: '999',
+              editedAt: new Date('2026-09-12'),
+              editedByName: 'Analista',
+            },
+          ]),
+        );
+        const result = await documentService.getComparison(1);
+        const row = result.aggregateComparison.find(
+          (entry: any) => entry.label === 'Total FOB (USD)',
+        );
+        expect(row?.invoice).toBeNull();
+        expect(row?.packingList).toBeNull();
+        expect(row?.bl).toBeNull();
+        expect(row?.overrides).toHaveLength(1);
+      },
+    );
+
+    it.each([
+      { runAt: '2026-09-10T00:00:00Z', updatedAt: '2026-09-12T00:00:00Z', expected: 'skipped' },
+      { runAt: null, updatedAt: '2026-09-12T00:00:00Z', expected: 'skipped' },
+      { runAt: '2026-09-13T00:00:00Z', updatedAt: null, expected: 'skipped' },
+      { runAt: '2026-09-13T00:00:00Z', updatedAt: '2026-09-12T00:00:00Z', expected: 'match' },
+    ])(
+      'requires validation after the current source modification: %j',
+      async ({ runAt, updatedAt, expected }) => {
+        vi.mocked(validationService.getEffectiveResults).mockResolvedValueOnce({
+          results: [
+            {
+              id: 10,
+              checkName: 'description-odoo-match',
+              status: 'passed',
+              expectedValue: 'Produto',
+              actualValue: 'Produto',
+              documentsCompared: 'Invoice vs Sistema',
+              message: 'Conforme',
+              dataSource: 'cross_document',
+            },
+          ],
+          mode: 'partial',
+          runAt,
+          validationRunId: 480,
+        });
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 1,
+              type: 'invoice',
+              isProcessed: true,
+              confidenceScore: '0.99',
+              createdAt: new Date('2026-09-01'),
+              updatedAt: updatedAt ? new Date(updatedAt) : null,
+              aiParsedData: { invoiceNumber: 'INV' },
+            },
+          ]),
+        );
+        queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+        const result = await documentService.getComparison(1);
+        const row = result.aggregateComparison.find(
+          (entry: any) => entry.label === 'Descricao dos itens (Odoo)',
+        );
+        expect(row?.status).toBe(expected);
+        if (expected === 'skipped') expect(row?.invoice).toBeNull();
+      },
+    );
+
+    it('preserves explicit system-only checks without document timestamps', async () => {
+      vi.mocked(validationService.getEffectiveResults).mockResolvedValueOnce({
+        results: [
+          {
+            id: 10,
+            checkName: 'date-sequence-check',
+            status: 'warning',
+            expectedValue: null,
+            actualValue: null,
+            documentsCompared: 'Sistema',
+            message: 'Datas do sistema inconsistentes',
+            dataSource: 'cross_document',
+          },
+        ],
+        mode: 'partial',
+        runAt: null,
+        validationRunId: 480,
+      });
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+      const result = await documentService.getComparison(1);
+      expect(JSON.stringify(result.aggregateComparison)).toContain(
+        'Datas do sistema inconsistentes',
+      );
+    });
+
+    it('does not revive removed sources through historical validation checks', async () => {
+      vi.mocked(validationService.getEffectiveResults).mockResolvedValueOnce({
+        results: [
+          {
+            id: 10,
+            checkName: 'ncm-bl-description',
+            status: 'passed',
+            expectedValue: '95030099',
+            actualValue: '95030099',
+            documentsCompared: 'BL vs Espelho',
+            message: 'Conforme',
+            dataSource: 'cross_document',
+          },
+        ],
+        mode: 'partial',
+        runAt: '2026-09-11T12:00:00.000Z',
+        validationRunId: 480,
+      });
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+      const result = await documentService.getComparison(1);
+      const row = result.aggregateComparison.find(
+        (entry: any) => entry.label === 'NCM (BL x Espelho)',
+      );
+      expect(row?.status).toBe('skipped');
+      expect(row?.bl).toBeNull();
+      expect(row?.espelho).toBeNull();
+    });
+
+    it('does not revive an orphaned espelho through a stored cell correction', async () => {
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 90,
+            rowKey: 'aggregate:total-fob-usd',
+            sourceColumn: 'espelho',
+            valueText: '999',
+            editedAt: new Date('2026-09-12'),
+            editedByName: 'Analista',
+            note: 'Correção anterior',
+          },
+        ]),
+      );
+      const comparison = await documentService.getComparison(1);
+      const row = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Total FOB (USD)',
+      );
+      expect(row?.espelho).toBeNull();
+      expect(row?.overrides).toHaveLength(1);
+      expect(comparison.hasEspelho).toBe(false);
+    });
+
+    it('uses the associated espelho document instead of conflicting process cache', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 50,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.85',
+            aiParsedData: {
+              summary: { importerName: 'DOCUMENT IMPORTER', totalAmountUsd: 100 },
+              items: [{ codigo: 'A1', qty: 1 }],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: { importerName: 'STALE CACHE', totalAmountUsd: 999 },
+                items: [{ codigo: 'OLD', qty: 999 }],
+              },
+            },
+          },
+        ]),
+      );
+      const comparison = await documentService.getComparison(1);
+      expect(comparison.hasEspelho).toBe(true);
+      expect(comparison.sourceDocuments.espelho).toBe(50);
+      expect(comparison.espelhoConfidence).toBe('0.85');
+      expect(
+        comparison.aggregateComparison.find((row: any) => row.label === 'Total FOB (USD)')?.espelho,
+      ).toBe('100');
+      expect(JSON.stringify(comparison)).not.toContain('STALE CACHE');
+    });
+
+    it.each([null, 'operator', 'auto_deterministic'])(
+      'does not use orphaned process espelho (%s) as an independent source',
+      async (generatedBy) => {
+        queryQueue.push(createResolvedChain([]));
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 1,
+              aiExtractedData: {
+                espelho: {
+                  summary: { generatedBy, totalAmountUsd: 999 },
+                  items: [{ codigo: 'OLD', qty: 999 }],
+                },
+              },
+            },
+          ]),
+        );
+        const comparison = await documentService.getComparison(1);
+        expect(comparison.hasEspelho).toBe(false);
+        expect(comparison.sourceDocuments.espelho).toBeNull();
+        expect(comparison.espelhoConfidence).toBeNull();
+        expect(comparison.espelhoSource).toBe(
+          generatedBy === 'auto_deterministic' ? 'auto_deterministic' : null,
+        );
+        expect(comparison.aggregateComparison.every((row: any) => row.espelho == null)).toBe(true);
+      },
+    );
+
+    it.each([
+      { isProcessed: false },
+      { confidenceScore: '0.39' },
+      { skipped: true },
+      { extractionFailed: true },
+    ])('does not revive process cache when espelho extraction is unusable: %j', async (failure) => {
+      const extraction = {
+        summary: { totalAmountUsd: 100 },
+        items: [{ codigo: 'A1', qty: 1 }],
+        ...failure,
+      };
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 50,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.85',
+            ...failure,
+            aiParsedData: extraction,
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: { summary: { totalAmountUsd: 999 }, items: [{ codigo: 'OLD', qty: 999 }] },
+            },
+          },
+        ]),
+      );
+      const comparison = await documentService.getComparison(1);
+      expect(comparison.hasEspelho).toBe(false);
+      expect(comparison.sourceDocuments.espelho).toBeNull();
+      expect(comparison.espelhoConfidence).toBeNull();
+    });
+
+    it('keeps expected ETA separate from actual arrival in the source columns', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 3,
+            type: 'ohbl',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-09-01T00:00:00Z'),
+            aiParsedData: { eta: '2026-09-17', shipmentDate: '2026-08-07' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            shipmentDate: '2026-08-01',
+            eta: '2026-09-17',
+            etaActual: '2026-09-08',
+            aiExtractedData: {},
+          },
+        ]),
+      );
+      const comparison = await documentService.getComparison(1);
+      expect(
+        comparison.aggregateComparison.find((row: any) => row.label === 'ETA previsto'),
+      ).toMatchObject({ bl: '2026-09-17', system: '2026-09-17' });
+      expect(
+        comparison.aggregateComparison.find((row: any) => row.label === 'ETA realizado'),
+      ).toMatchObject({ bl: null, system: '2026-09-08' });
+      expect(
+        comparison.aggregateComparison.find((row: any) => row.label === 'Embarque realizado'),
+      ).toMatchObject({ status: 'divergent', system: '2026-08-01' });
+    });
+
     it('uses invoice issue date as a wide-tolerance ETD fallback and strict port normalization', async () => {
       queryQueue.push(
         createResolvedChain([
@@ -748,7 +1374,7 @@ describe('documentService', () => {
 
       const comparison = await documentService.getComparison(1);
       const etd = comparison.aggregateComparison.find(
-        (row: any) => row.label === 'ETD / Shipped On Board',
+        (row: any) => row.label === 'Datas documentais (emissão / embarque)',
       );
       const loadingPort = comparison.aggregateComparison.find(
         (row: any) => row.label === 'Porto Embarque',
@@ -767,6 +1393,18 @@ describe('documentService', () => {
         bl: '2026-02-01',
         status: 'match',
       });
+      const shipment = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Embarque realizado',
+      );
+      expect(shipment).toMatchObject({
+        invoice: null,
+        packingList: '2026-02-01',
+        bl: '2026-02-01',
+      });
+      const forecast = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'ETD previsto',
+      );
+      expect(forecast).toMatchObject({ invoice: null, packingList: null, bl: null });
       expect(loadingPort).toMatchObject({ status: 'divergent' });
       expect(dischargePort).toMatchObject({ status: 'match' });
     });
@@ -841,7 +1479,7 @@ describe('documentService', () => {
             id: 3,
             type: 'draft_bl',
             isProcessed: true,
-            confidenceScore: '0.88',
+            confidenceScore: '0.90',
             createdAt: new Date('2026-01-03T00:00:00Z'),
             updatedAt: new Date('2026-01-03T00:00:00Z'),
             aiParsedData: {
@@ -867,8 +1505,8 @@ describe('documentService', () => {
         hasFinalBl: false,
         hasOperationalBl: true,
         operationalBlSource: 'draft_bl',
-        blConfidence: '0.88',
-        draftBlConfidence: '0.88',
+        blConfidence: '0.90',
+        draftBlConfidence: '0.90',
       });
       expect(dischargePort).toMatchObject({ bl: 'ITAPOA', status: 'match' });
       expect(blNumber).toMatchObject({ bl: 'DRAFT-001' });
@@ -917,6 +1555,16 @@ describe('documentService', () => {
                   grossWeight: 35,
                 },
               ],
+            },
+          },
+          {
+            id: 3,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            aiParsedData: {
+              summary: {},
+              items: [{ codigo: 'PI7752Y', qty: 100, pesoLiquidoTotal: 29, pesoBrutoTotal: 33 }],
             },
           },
         ]),
@@ -1054,6 +1702,383 @@ describe('documentService', () => {
         itemCode: 'PI1111A',
         source: 'packing_list',
       });
+    });
+
+    it('trata CNPJ com e sem pontuacao como o mesmo CNPJ', async () => {
+      // Reuniao 11/09 [11:36]: "esse CNPJ e o mesmo desse aqui... Ele esta
+      // trazendo como errado". Dados reais do processo 287.
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { importerCnpj: '58500398000610', importerName: 'IMB TEXTIL S.A.' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { importerCnpj: '58500398000610', importerName: 'IMB TEXTIL S.A.' },
+          },
+          {
+            id: 3,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            aiParsedData: {
+              summary: {
+                importerCnpj: '58.500.398/0006-10',
+                importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207',
+              },
+              items: [],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: {
+                  importerCnpj: '58.500.398/0006-10',
+                  importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207',
+                },
+                items: [],
+              },
+            },
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const cnpj = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Importador — CNPJ',
+      );
+
+      expect(cnpj).toMatchObject({ status: 'match' });
+      // O valor exibido continua o da fonte: normalizamos so a comparacao.
+      expect(cnpj!.espelho).toBe('58.500.398/0006-10');
+    });
+
+    it('tira o prefixo "CNPJ:" que o espelho cola no endereco do importador', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { importerAddress: 'RUA GERCINO MACHADO, 207' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { importerAddress: 'RUA GERCINO MACHADO, 207' },
+          },
+          {
+            id: 3,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            aiParsedData: {
+              summary: { importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207' },
+              items: [],
+            },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: {
+                  importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207',
+                },
+                items: [],
+              },
+            },
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const address = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Importador — Endereço',
+      );
+
+      expect(address!.espelho).toBe('RUA GERCINO MACHADO, 207');
+      expect(address).toMatchObject({ status: 'match' });
+    });
+
+    it('nao empresta o fornecedor da follow-up para a coluna Espelho do exportador', async () => {
+      // Reuniao 11/09 [07:49]: "o exportador, ele pegou um nome no espelho. So
+      // que eu nao subi o espelho ainda". O valor vinha de
+      // import_processes.exporter_name, que e o FABRICANTE da follow-up.
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([{ id: 1, exporterName: 'CHUYANG', aiExtractedData: {} }]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const exporter = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Exportador / Shipper',
+      );
+
+      expect(exporter!.espelho).toBeNull();
+      expect(exporter).toMatchObject({ status: 'match' });
+      expect(comparison.hasEspelho).toBe(false);
+    });
+
+    it('preenche a coluna Sistema pelo cadastro do processo, mesmo sem validacao', async () => {
+      // PK220 (id 288): zero linhas em validation_results porque todo run e
+      // parcial. A coluna Sistema ficava so com tracinhos (FUP-01).
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { totalFobValue: 101265.19, currency: 'USD' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            totalFobValue: '101265.19',
+            freightValue: '10000.00',
+            totalCbm: '179.670',
+            aiExtractedData: {},
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const fob = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Total FOB (USD)',
+      );
+      const cbm = comparison.aggregateComparison.find((row: any) => row.label === 'CBM (m3)');
+
+      expect(comparison.systemDataAvailable).toBe(true);
+      expect(fob!.system).toBe('101265.19');
+      expect(cbm!.system).toBe('179.670');
+    });
+
+    it('incorpora o cruzamento a linha agregada em vez de criar linha de texto', async () => {
+      vi.mocked(validationService.getEffectiveResults).mockResolvedValueOnce({
+        results: [
+          {
+            id: 10,
+            checkName: 'invoice-pl-date-tolerance',
+            status: 'warning',
+            expectedValue: 'diferenca <= 30 dias',
+            actualValue: '40 dias',
+            documentsCompared: 'INV vs PL',
+            message: 'Diferenca de 40 dias entre Invoice e Packing List.',
+            dataSource: 'cross_document',
+          },
+          {
+            id: 11,
+            checkName: 'freight-value-match',
+            status: 'skipped',
+            expectedValue: null,
+            actualValue: null,
+            documentsCompared: 'BL vs Follow-up',
+            message: 'Ignorado: Nenhum valor de frete disponivel nos dados do follow-up.',
+            dataSource: 'cross_document',
+          },
+        ],
+        mode: 'partial',
+        runAt: '2026-09-11T12:00:00.000Z',
+        validationRunId: 480,
+      });
+
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { etd: '2026-08-07' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { etd: '2026-08-07' },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+      const etd = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Datas documentais (emissão / embarque)',
+      );
+
+      expect(comparison.validationMode).toBe('partial');
+      // O check nao vira linha nova, e o rotulo tecnico nunca aparece.
+      expect(
+        comparison.aggregateComparison.some((row: any) =>
+          String(row.label).includes('invoice-pl-date-tolerance'),
+        ),
+      ).toBe(false);
+      expect(etd).toMatchObject({ status: 'warning' });
+      expect(etd!.message).toContain('Datas Invoice x Packing List');
+
+      const frete = comparison.aggregateComparison.find((row: any) => row.label === 'Frete');
+      expect(frete!.message).toContain('Nao verificado');
+    });
+
+    it('casa os 14 itens reais do PK220 (invoice composta x packing list)', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 167,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:00:00Z'),
+            updatedAt: new Date('2026-09-11T10:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED', items: PK220_INVOICE_ITEMS },
+          },
+          {
+            id: 168,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:05:00Z'),
+            updatedAt: new Date('2026-09-11T10:05:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_PACKING_LIST_ITEMS,
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+
+      expect(comparison.unmatchedInvoiceItems).toEqual([]);
+      expect(comparison.unmatchedPlItems).toEqual([]);
+      expect(comparison.itemComparison).toHaveLength(14);
+      expect(comparison.itemComparison.every((item: any) => item.matched)).toBe(true);
+      expect(comparison.itemComparison.every((item: any) => item.qtyMatch)).toBe(true);
+      // O SKU exibido e o codigo real, nao a string composta PI+colecao+codigo.
+      expect(comparison.itemComparison[0].itemCode).toBe('050404509');
+      expect(comparison.itemComparison[13].itemCode).toBe('27.01.0007');
+      // Linhas repetidas do mesmo SKU casam com a linha certa da PL.
+      expect(comparison.itemComparison[0].plQty).toBe(1232);
+      expect(comparison.itemComparison[7].plQty).toBe(2476);
+    });
+
+    it('compara o espelho por item (NCM, preco, EAN) e o total de pecas', async () => {
+      const espelho = espelhoSinteticoPk220();
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 167,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:00:00Z'),
+            updatedAt: new Date('2026-09-11T10:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_INVOICE_ITEMS.map((item, index) =>
+                index === 0
+                  ? { ...item, ncmCode: '39264000', unitPrice: 1, totalPrice: item.quantity }
+                  : { ...item, ncmCode: '42029200', unitPrice: 1, totalPrice: item.quantity },
+              ),
+            },
+          },
+          {
+            id: 168,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:05:00Z'),
+            updatedAt: new Date('2026-09-11T10:05:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_PACKING_LIST_ITEMS,
+            },
+          },
+          {
+            id: 169,
+            type: 'espelho',
+            isProcessed: true,
+            confidenceScore: '0.99',
+            aiParsedData: espelho,
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: { espelho } }]));
+
+      const comparison = await documentService.getComparison(1);
+      const pecas = comparison.aggregateComparison.find((row: any) => row.label === 'Total Peças');
+
+      expect(pecas).toMatchObject({ status: 'match' });
+      expect(pecas!.espelho).toBe(String(espelho.summary.totalPieces));
+
+      const primeiro = comparison.itemComparison[0] as Record<string, any>;
+      expect(primeiro.espelhoNcm).toBe('42029200');
+      expect(primeiro.ncmMatch).toBe(false);
+      expect(primeiro.status).toBe('divergent');
+      expect(primeiro.divergence).toContain('NCM Invoice x Espelho');
+
+      const segundo = comparison.itemComparison[1] as Record<string, any>;
+      expect(segundo.ncmMatch).toBe(true);
+      expect(segundo.status).toBe('match');
     });
   });
 

@@ -169,16 +169,36 @@ function cbmVsContainerCheck(data: Record<string, any>, marginPct = 0.05): Harne
   if (typeof ctype !== 'string' || !ctype.trim()) return null; // sem tipo: no-op
   const cap = cbmCeilingForContainer(ctype);
   if (!cap) return null; // tipo não tabelado / KB ausente: não refuta
-  const ceiling = cap.ceiling * (1 + marginPct);
+  // O teto é POR CONTAINER. Ignorar a quantidade acusava "120 m³ excede o
+  // 40NOR" num embarque de DOIS 40NOR (doc 169, reunião 11/09/2026).
+  const units = containerUnitCount(data);
+  const ceiling = cap.ceiling * units * (1 + marginPct);
   return cbm <= ceiling
     ? null
     : finding(
         'totalCbm',
-        `CBM ${cbm.toFixed(1)} excede a capacidade do ${ctype} ` +
-          `(${cap.basis} ${cap.ceiling.toFixed(1)} m³ +${(marginPct * 100).toFixed(0)}% = ` +
+        `CBM ${cbm.toFixed(1)} excede a capacidade de ${units}x ${ctype} ` +
+          `(${cap.basis} ${cap.ceiling.toFixed(1)} m³ × ${units} +${(marginPct * 100).toFixed(0)}% = ` +
           `${ceiling.toFixed(1)}) — confira containerType/totalCbm`,
         'warning',
       );
+}
+
+/**
+ * Quantos contêineres o embarque tem, pela lista de `containerNumber` (o prompt
+ * manda separar por vírgula). Sem lista legível, assume 1 — nunca inflar o teto
+ * por dedução.
+ */
+function containerUnitCount(data: Record<string, any>): number {
+  const raw = fieldVal(data, 'containerNumber');
+  if (typeof raw !== 'string' || !raw.trim()) return 1;
+  const parts = raw
+    .split(/[,;/]+/)
+    .map((part) => part.trim())
+    // Só conta o que tem FORMA de contêiner (4 letras + 6/7 dígitos): a linha
+    // "CNTR/SEAL/SIZE/PIECES" do BL traz lacre, tipo e caixas na mesma string.
+    .filter((part) => /^[A-Z]{4}\s?\d{6,7}$/i.test(part));
+  return Math.max(1, parts.length);
 }
 
 /**
@@ -280,7 +300,7 @@ PORTOS: portOfLoading = embarque (Ásia). portOfDischarge = descarga (Brasil). N
 DATAS (ISO 8601): shipmentDate = "Shipped on Board". issueDate = "Date of Issue" (no OHBL quase sempre existe; é o que distingue do draft). eta >= etd; issueDate normalmente >= shipmentDate.
 CONTAINER: containerNumber = ISO 6346 (4 letras + 7 dígitos; 4º char U/J/Z; 11º é DÍGITO VERIFICADOR mod-11 — o harness valida, não fabrique). Vários -> separe por vírgula. sealNumber é o lacre (formato livre, distinto). containerType: "40HQ"/"20GP"/"LCL".
 PESOS/FRETE (decimal internacional, "12,345.67" = 12345.67): totalGrossWeight (KG), totalCbm (m³; 40HQ ~ até ~68), totalBoxes inteiro. freightValue/freightCurrency: se "PREPAID"/"COLLECT", freightValue=null e freightCurrency recebe o texto.
-woodDeclaration: true se qualquer menção a madeira/wood/pallet/ISPM15/fumigation. ncmList: TODOS os NCM impressos (8 dígitos). freeTime: dias de free time, ou null. Campo ausente -> {value:null, confidence:0}.`;
+woodDeclaration: true se qualquer menção a madeira/wood/pallet/ISPM15/fumigation. ncmList: TODOS os códigos fiscais impressos, COPIADOS COMO ESTÃO — o BL costuma trazer só a posição do SH com 4 ou 6 dígitos ("NCM NO.: 4202"); registre "4202" e NÃO complete com zeros nem invente os 8 dígitos da NCM. freeTime: dias de free time, ou null. Campo ausente -> {value:null, confidence:0}.`;
 
 const OHBL_FEWSHOT = `{
   "blNumber": { "value": "SHYY26021495A", "confidence": 0.97 },
@@ -340,6 +360,8 @@ const DRAFT_BL_FEWSHOT = `{
 const BL_VERIFICATION_BASE: VerificationConfig = {
   groundedFields: ['blNumber', 'customerReference', 'containerNumber'],
   ncmFields: ['ncmList'],
+  // O BL imprime "NCM NO.: 4202" (posição do SH). Ver VerificationConfig.
+  allowHsHeading: true,
   dateFields: ['etd', 'eta', 'shipmentDate', 'issueDate'],
   containerFields: ['containerNumber'],
   supplierFields: ['shipper'],

@@ -12,6 +12,7 @@ from app.services.erp_service import (
     _read_encerramentos_from_sheets,
     _resolve_columns,
     normalize_brand_filter,
+    resolver_encerramentos,
 )
 
 # Cabecalho A..W das abas "Imaginarium" / "Puket".
@@ -31,11 +32,19 @@ ESCOLARES_HEADERS = [
     "Coleção", "Prazo Final Venda", "NOME COMERCIAL TAG",
 ]
 
+# Cabecalho REAL da aba "Encerramentos" em 11/09/2026: ganhou 'DATA LEMBRETE -
+# TRANSF. ESTOQUE' em G (o prazo foi para H, o status para I) e 'Dupla
+# certificação?' em N. A leitura e por cabecalho, entao a posicao nao importa —
+# e e exatamente isso que estes testes provam.
 ENCERRAMENTOS_HEADERS = [
-    "CERTIFICADO", "SKU", "NOME", "ESTOQUE INFORMADO ENCERRAMENTO",
-    "DATA NOTIFICAÇÃO", "DATA LEMBRETE", "PRAZO FINAL VENDA", "STATUS",
-    "CÓDIGO DE BARRAS", "MARCA", "CUSTO MÉDIO ENTRADA", "REF CONCATENADA",
+    "CERTIFICADO", "SKU", "NOME", "ESTOQUE INFORMADO", "DATA NOTIFICAÇÃO",
+    "DATA LEMBRETE- FIM VENDA", "DATA LEMBRETE - TRANSF. ESTOQUE",
+    "PRAZO FINAL VENDA", "STATUS", "CÓDIGO DE BARRAS", "MARCA", "CUSTO",
+    "REF CONCATENADA", "Dupla certificação?",
 ]
+I_CERT, I_SKU, I_NOME = 0, 1, 2
+I_LEMBRETE_VENDA, I_LEMBRETE_ESTOQUE = 5, 6
+I_PRAZO, I_STATUS, I_BARRAS, I_MARCA = 7, 8, 9, 10
 
 
 class _FakeWorksheet:
@@ -82,14 +91,20 @@ class TestResolveColumns:
         assert cols["situacao"] == 20              # U
         assert cols["ecommerce_description"] == 21  # V
 
-    def test_layout_puket_escolares(self):
-        cfg = next(c for c in _ATIVOS_SHEETS if c["name"] == "Puket escolares")
-        cols = _resolve_columns(ESCOLARES_HEADERS, cfg["fields"], "Puket escolares")
-        assert cols["sku"] == 0
-        assert cols["certification_type"] == 3  # D, nao C (categoria)
-        assert cols["numero_certificado"] == 4  # E
-        assert cols["sheet_status"] == 7         # H
-        assert cols["ecommerce_description"] == 8  # I
+    def test_aba_puket_escolares_nao_e_mais_lida(self):
+        """Guarda estatica da decisao de 11/09: a aba foi ABANDONADA.
+
+        Enquanto ela era lida — e por ultimo — gravava brand='Puket Escolares' e
+        situacao='' por cima do U='Ativo' da aba Puket em 167 SKUs.
+        """
+        nomes = {c["name"].strip().lower() for c in _ATIVOS_SHEETS}
+        assert "puket escolares" not in nomes
+        assert nomes == {"imaginarium", "puket"}
+
+    def test_validade_da_certificacao_resolvida_por_cabecalho(self):
+        cfg = next(c for c in _ATIVOS_SHEETS if c["name"] == "Puket")
+        cols = _resolve_columns(MARCA_HEADERS, cfg["fields"], "Puket")
+        assert cols["validade_certificado"] == 13  # N
 
     def test_coluna_deslocada_e_seguida_pelo_cabecalho(self):
         deslocado = ["EXTRA", *MARCA_HEADERS]
@@ -129,25 +144,58 @@ class TestReadAtivos:
         ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, linha]})
         assert {p["sku"] for p in _read_ativos_from_sheets(ss)} == {"100400496", "100400497"}
 
-    def test_puket_escolares_separa_categoria_tipo_numero_e_descricao(self):
-        """A coluna C descreve o produto; so D e o tipo de certificacao."""
-        row = [""] * len(ESCOLARES_HEADERS)
-        row[0] = "ESC001"
-        row[1] = "ESTOJO ESCOLAR"
-        row[2] = "ESTOJO"
-        row[3] = "INMETRO ARTIGOS ESCOLARES SISTEMA 5 - PORTARIA 423"
-        row[4] = "CERT-2026-001"
-        row[7] = "ATIVO"
-        row[8] = "Produto certificado pelo Inmetro conforme Portaria 423."
+    def test_aba_escolares_presente_na_planilha_e_ignorada(self):
+        """O SKU escolar ja esta na aba Puket; a aba velha nao pode sobrescrever.
 
-        ss = _FakeSpreadsheet({"Puket escolares": [ESCOLARES_HEADERS, row]})
-        product = _read_ativos_from_sheets(ss)[0]
+        Cenario real: 100400496 nas DUAS abas. A escolar nao tem coluna U, e como
+        vinha por ultimo zerava a situacao do item.
+        """
+        escolar = [""] * len(ESCOLARES_HEADERS)
+        escolar[0], escolar[1], escolar[7] = "100400496", "ESTOJO ESCOLAR", "ATIVO"
+        ss = _FakeSpreadsheet({
+            "Puket": [MARCA_HEADERS, self._linha("PUKET", "100400496")],
+            "Puket escolares": [ESCOLARES_HEADERS, escolar],
+        })
 
-        assert product["certification_type"] == row[3]
-        assert product["certification_type"] != row[2]
-        assert product["numero_certificado"] == row[4]
-        assert product["sheet_status"] == row[7]
-        assert product["ecommerce_description"] == row[8]
+        produtos = _read_ativos_from_sheets(ss)
+
+        assert len(produtos) == 1
+        assert produtos[0]["brand"] == "Puket"
+        assert produtos[0]["situacao"] == "Ativo"
+
+    def test_le_a_validade_da_certificacao(self):
+        linha = self._linha("PUKET", "100400496")
+        linha[13] = "08/11/2024"
+        ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, linha]})
+
+        p = _read_ativos_from_sheets(ss)[0]
+
+        assert p["validade_certificado"] == "2024-11-08"
+        assert p["validade_certificado_raw"] == "08/11/2024"
+
+    def test_validade_sentinela_nao_vira_data(self):
+        linha = self._linha("PUKET", "100400497")
+        linha[13] = "01/01/1900"
+        ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, linha]})
+
+        p = _read_ativos_from_sheets(ss)[0]
+
+        assert p["validade_certificado"] is None
+        assert p["validade_certificado_raw"] == "01/01/1900"
+
+    def test_dupla_certificacao_a_linha_ativa_vence(self):
+        """PI6552Y (PELUCIA NEVINHO G): encerrado 8325/2022 + ativo 10473/2024."""
+        antiga = self._linha("IMAGINARIUM", "PI6552Y")
+        antiga[15], antiga[20] = "8325/2022-BRI-1", "Encerrado"
+        nova = self._linha("IMAGINARIUM", "PI6552Y")
+        nova[15], nova[20] = "10473/2024-BRI-1", "Ativo"
+
+        for ordem in ([antiga, nova], [nova, antiga]):
+            ss = _FakeSpreadsheet({"Imaginarium": [MARCA_HEADERS, *ordem]})
+            produtos = _read_ativos_from_sheets(ss)
+            assert len(produtos) == 1, "o SKU nao pode entrar duas vezes"
+            assert produtos[0]["situacao"] == "Ativo"
+            assert produtos[0]["numero_certificado"] == "10473/2024-BRI-1"
 
     def test_aba_ausente_nao_derruba_o_sync(self):
         ss = _FakeSpreadsheet({"Puket": [MARCA_HEADERS, self._linha("PUKET", "X1")]})
@@ -156,14 +204,45 @@ class TestReadAtivos:
 
 class TestReadEncerramentos:
     def _linha(self, sku, prazo, status, marca="IMAGINARIUM", cert="12224/2025-AE-2"):
-        row = [""] * 12
-        row[0], row[1], row[2] = cert, sku, "PRODUTO"
-        row[6], row[7], row[9] = prazo, status, marca
+        row = [""] * len(ENCERRAMENTOS_HEADERS)
+        row[I_CERT], row[I_SKU], row[I_NOME] = cert, sku, "PRODUTO"
+        row[I_PRAZO], row[I_STATUS], row[I_MARCA] = prazo, status, marca
         return row
 
     def _ler(self, linhas, mocker=None):
         ss = _FakeSpreadsheet({"Encerramentos": [ENCERRAMENTOS_HEADERS, *linhas]})
         return _read_encerramentos_from_sheets(ss)
+
+    def test_prazo_vem_do_cabecalho_e_nunca_de_um_lembrete(self):
+        """Caso PI5914Y: G=29/09/2026 (lembrete) e H=29/10/2026 (prazo real).
+
+        A coluna nova de lembrete de transferencia de estoque entrou ANTES do
+        prazo; ler por letra fixa devolveria a data errada.
+        """
+        linha = self._linha("PI5914Y", "29/10/2026", "Comerciação Permitida")
+        linha[I_LEMBRETE_VENDA] = "29/09/2026"
+        linha[I_LEMBRETE_ESTOQUE] = "15/09/2026"
+
+        out = self._ler([linha])
+
+        assert out[0]["sale_deadline"] == "29/10/2026"
+        assert out[0]["sale_deadline_date"] == "2026-10-29"
+        assert out[0]["encerramento_status"] == "Comerciação Permitida"
+
+    def test_coluna_extra_antes_do_prazo_nao_desloca_a_leitura(self):
+        """Prova de independencia de posicao: mais uma coluna no meio."""
+        headers = [
+            *ENCERRAMENTOS_HEADERS[:I_PRAZO], "COLUNA NOVA", *ENCERRAMENTOS_HEADERS[I_PRAZO:]
+        ]
+        linha = self._linha("PI5914Y", "29/10/2026", "Vencido - Venda Bloqueada")
+        linha.insert(I_PRAZO, "lixo")
+        ss = _FakeSpreadsheet({"Encerramentos": [headers, linha]})
+
+        out = _read_encerramentos_from_sheets(ss)
+
+        assert out[0]["sale_deadline"] == "29/10/2026"
+        assert out[0]["encerramento_status"] == "Vencido - Venda Bloqueada"
+        assert out[0]["is_expired"] is True
 
     def test_linha_sem_prazo_mas_com_status_e_lida(self):
         """28 linhas so tem a coluna H; a leitura antiga exigia data e as
@@ -193,6 +272,74 @@ class TestReadEncerramentos:
     def test_numero_certificado_vem_da_coluna_a(self):
         out = self._ler([self._linha("PI7560Y", "", "Comerciação Permitida")])
         assert out[0]["numero_certificado"] == "12224/2025-AE-2"
+
+
+class TestResolverEncerramentos:
+    """Encerramento de certificado ANTIGO nao trava SKU com certificado ativo."""
+
+    def _ativo(self, sku, situacao, cert):
+        return {"sku": sku, "situacao": situacao, "numero_certificado": cert}
+
+    def _enc(self, sku, prazo, cert, status="Comerciação Permitida"):
+        return {
+            "sku": sku,
+            "sale_deadline": prazo,
+            "sale_deadline_date": None,
+            "numero_certificado": cert,
+            "encerramento_status": status,
+            "is_expired": False,
+        }
+
+    def test_sku_ativo_nao_recebe_prazo_do_certificado_velho(self):
+        """PI6552Y: ativo por 10473/2024, encerramento do 8325/2022 e historico."""
+        aplicaveis, historicos = resolver_encerramentos(
+            [self._ativo("PI6552Y", "Ativo", "10473/2024-BRI-1")],
+            [self._enc("PI6552Y", "29/10/2026", "8325/2022-BRI-1")],
+        )
+        assert aplicaveis == []
+        assert len(historicos) == 1
+
+    def test_sku_ativo_com_encerramento_bloqueado_de_outro_certificado(self):
+        """PI5968Y aparecia ENCERRADO por um 'Vencido - Venda Bloqueada' antigo."""
+        aplicaveis, _ = resolver_encerramentos(
+            [self._ativo("PI5968Y", "Ativo", "9142/2023-BRI-2")],
+            [self._enc("PI5968Y", "29/10/2026", "8325/2022-BRI-1", "Vencido - Venda Bloqueada")],
+        )
+        assert aplicaveis == []
+
+    def test_sku_encerrado_continua_recebendo_o_prazo(self):
+        aplicaveis, historicos = resolver_encerramentos(
+            [self._ativo("PI5914Y", "Encerrado", "8325/2022-BRI-1")],
+            [self._enc("PI5914Y", "29/10/2026", "8325/2022-BRI-1")],
+        )
+        assert [a["sku"] for a in aplicaveis] == ["PI5914Y"]
+        assert historicos == []
+
+    def test_sku_sem_linha_de_produto_continua_recebendo_o_prazo(self):
+        """108 SKUs Puket so existem na aba Encerramentos."""
+        aplicaveis, _ = resolver_encerramentos([], [self._enc("050402301", "07/12/2025", "X")])
+        assert len(aplicaveis) == 1
+
+    def test_entre_dois_encerramentos_prefere_o_do_certificado_vigente(self):
+        aplicaveis, historicos = resolver_encerramentos(
+            [self._ativo("PI6073Y", "Encerrado", "9142/2023-BRI-2")],
+            [
+                self._enc("PI6073Y", "29/10/2026", "8325/2022-BRI-1"),
+                self._enc("PI6073Y", "26/01/2025", "9142/2023-BRI-2"),
+            ],
+        )
+        assert aplicaveis[0]["sale_deadline"] == "26/01/2025"
+        assert len(historicos) == 1
+
+    def test_ordem_das_linhas_nao_decide(self):
+        linhas = [
+            self._enc("PI6073Y", "26/01/2025", "9142/2023-BRI-2"),
+            self._enc("PI6073Y", "29/10/2026", "8325/2022-BRI-1"),
+        ]
+        aplicaveis, _ = resolver_encerramentos(
+            [self._ativo("PI6073Y", "Encerrado", "9142/2023-BRI-2")], linhas
+        )
+        assert aplicaveis[0]["sale_deadline"] == "26/01/2025"
 
 
 class TestEanESku:
@@ -339,6 +486,58 @@ class TestSyncSheetsToDb:
         )
         assert delete.args[1][0] == ["7909692117610"]
         assert delete.args[1][1] == ["100400416"]
+
+    def test_encerramento_de_sku_ativo_nao_e_gravado(self, mocker):
+        """PI6552Y: o prazo do certificado velho nao pode entrar no banco."""
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(
+            erp_service, "_read_ativos_from_sheets",
+            return_value=[{"sku": "PI6552Y", "name": "PELUCIA NEVINHO G",
+                           "brand": "Imaginarium", "certification_type": "INMETRO",
+                           "numero_certificado": "10473/2024-BRI-1", "situacao": "Ativo",
+                           "sheet_status": "S", "ecommerce_description": "D",
+                           "validade_certificado": None, "validade_certificado_raw": ""}],
+        )
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "PI6552Y", "name": "N", "brand": "Imaginarium",
+                            "numero_certificado": "8325/2022-BRI-1",
+                            "sale_deadline": "29/10/2026",
+                            "sale_deadline_date": "2026-10-29",
+                            "encerramento_status": "Comerciação Permitida",
+                            "is_expired": False}],
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert result["synced"] == 0
+        assert "Dupla certificacao" in result["error"]
+        cur.execute.assert_not_called()
+
+    def test_grava_a_validade_do_certificado(self, mocker):
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(
+            erp_service, "_read_ativos_from_sheets",
+            return_value=[{"sku": "PI5555Y", "name": "VITROLA", "brand": "Imaginarium",
+                           "certification_type": "INMETRO", "numero_certificado": "C",
+                           "situacao": "Ativo", "sheet_status": "S",
+                           "ecommerce_description": "D",
+                           "validade_certificado": "2027-03-22",
+                           "validade_certificado_raw": "22/03/2027"}],
+        )
+        mocker.patch.object(erp_service, "_read_encerramentos_from_sheets", return_value=[])
+
+        erp_service.sync_sheets_to_db()
+
+        upsert = next(
+            c for c in cur.execute.call_args_list if "validade_certificado" in c.args[0]
+        )
+        assert "2027-03-22" in upsert.args[1]
+        assert "22/03/2027" in upsert.args[1]
 
     def test_sem_ean_resolvido_nao_emite_delete(self, mocker):
         from app.services import erp_service

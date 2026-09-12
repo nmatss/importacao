@@ -238,6 +238,19 @@ export const createCustomStageSchema = z.object({
 
 export const updateCustomStageSchema = createCustomStageSchema.partial();
 
+/**
+ * Ocultar/reexibir uma etapa PADRAO neste processo (D7).
+ *
+ * Nao apaga coluna nem timestamp: a etapa some da lista e do denominador do
+ * progresso, e reexibir e apagar a linha de `process_checklist_hidden_steps`.
+ * O motivo e opcional — quem oculta costuma estar so tirando da rotina daquele
+ * processo —, mas quando vem fica no audit.
+ */
+export const hideChecklistStepSchema = z.object({
+  hidden: z.boolean(),
+  reason: z.string().trim().max(500).optional(),
+});
+
 export const createOperationalRecordSchema = z.object({
   recordKind: z.enum(['document_error', 'extra_cost']),
   // Campo livre por design (ver constants.ts); o transform apenas unifica a
@@ -280,6 +293,7 @@ export type UpdateProcessInput = z.infer<typeof updateProcessSchema>;
 export type ProcessFilter = z.infer<typeof processFilterSchema>;
 export type CreateCustomStageInput = z.infer<typeof createCustomStageSchema>;
 export type UpdateCustomStageInput = z.infer<typeof updateCustomStageSchema>;
+export type HideChecklistStepInput = z.infer<typeof hideChecklistStepSchema>;
 export type CreateOperationalRecordInput = z.infer<typeof createOperationalRecordSchema>;
 export type UpdateOperationalRecordInput = z.infer<typeof updateOperationalRecordSchema>;
 export type UpdateDraftBlChecklistInput = z.infer<typeof updateDraftBlChecklistSchema>;

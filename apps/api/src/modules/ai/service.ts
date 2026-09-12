@@ -118,6 +118,15 @@ export interface ImageExtractionOpts {
    * working; these are appended after it, in page order.
    */
   additionalImagesBase64?: string[];
+  /**
+   * `false` quando o texto que acompanha a imagem/PDF NAO representa o
+   * documento (OCR de um PDF cuja camada de texto o servidor nao le). O
+   * documento original vai anexado e e ele que o modelo le; o texto serve so
+   * de apoio. Nesse caso o harness PULA o grounding (comparar o que o modelo
+   * leu do PDF contra um gabarito em branco reprovaria extracao boa) e o
+   * preenchimento deterministico de nulos fica desligado.
+   */
+  sourceTextReliable?: boolean;
 }
 
 export interface EmailAnalysisResult {
@@ -714,12 +723,17 @@ class AIService {
     docType: string,
     result: ExtractionResult,
     sourceText: string,
+    imageOpts?: ImageExtractionOpts,
   ): ExtractionResult {
     const config = getVerificationConfig(docType);
     if (!config) return result;
 
     const sourceChars = (sourceText ?? '').replace(/\s/g, '').length;
-    const groundingViable = sourceChars >= 50;
+    // Texto marcado como nao confiavel (OCR de gabarito + PDF original anexado)
+    // conta como "sem texto-fonte": o grounding compararia o que o modelo leu
+    // do PDF contra um formulario em branco e reprovaria tudo (doc 169 da
+    // reuniao 11/09/2026 caiu para 0.39 por esse caminho).
+    const groundingViable = sourceChars >= 50 && imageOpts?.sourceTextReliable !== false;
     // Grounding pulado ≠ grounding aprovado: extração por imagem/scan sem OCR
     // nunca foi conferida contra o documento, então não pode sair com badge de
     // alta confiança. O flag é persistido em _trust (o cap correspondente vive
@@ -746,8 +760,13 @@ class AIService {
     dataRecord._trust.groundingSkipped = groundingSkipped;
     if (groundingSkipped) {
       logger.warn(
-        { docType, sourceTextChars: sourceChars },
-        'AI harness: grounding pulado — texto-fonte insuficiente (scan/imagem sem OCR); ' +
+        {
+          docType,
+          sourceTextChars: sourceChars,
+          sourceTextReliable: imageOpts?.sourceTextReliable,
+        },
+        'AI harness: grounding pulado — texto-fonte insuficiente ou não confiável ' +
+          '(scan/imagem sem OCR, ou OCR de gabarito com o PDF original anexado); ' +
           `confiança limitada a ${GROUNDING_SKIPPED_CONFIDENCE_CAP}`,
       );
     }
@@ -818,8 +837,11 @@ class AIService {
     registryKey: string,
     result: ExtractionResult,
     sourceText: string,
+    imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
     if (!selfRepairEnabled(this.provider.name) || !this.providerAvailable()) return result;
+    // Re-perguntar contra um texto que não é o documento só produz mais lixo.
+    if (imageOpts?.sourceTextReliable === false) return result;
     const groundingViable = (sourceText ?? '').replace(/\s/g, '').length >= 50;
     if (!groundingViable) return result;
 
@@ -903,6 +925,7 @@ Responda SOMENTE com JSON estrito no formato:
           registryKey,
           { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
           sourceText,
+          imageOpts,
         );
       }
       return result;
@@ -1038,6 +1061,7 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+        imageOpts,
       );
     }
 
@@ -1068,9 +1092,10 @@ Responda SOMENTE com JSON estrito no formato:
               string,
               any
             >,
-            text,
+            imageOpts?.sourceTextReliable === false ? '' : text,
           ),
           text,
+          { sourceTextReliable: imageOpts?.sourceTextReliable },
         );
         const dataAsRecord = data as Record<string, any>;
         if (Array.isArray(dataAsRecord.items)) {
@@ -1094,10 +1119,11 @@ Responda SOMENTE com JSON estrito no formato:
             fieldsWithLowConfidence: lowConfidenceFields,
           },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction('invoice', extracted, text);
+    return this.selfRepairExtraction('invoice', extracted, text, imageOpts);
   }
 
   async extractProformaData(
@@ -1127,6 +1153,7 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+        imageOpts,
       );
     }
 
@@ -1184,10 +1211,11 @@ Responda SOMENTE com JSON estrito no formato:
             fieldsWithLowConfidence: lowConfidenceFields,
           },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction('proforma_invoice', extracted, text);
+    return this.selfRepairExtraction('proforma_invoice', extracted, text, imageOpts);
   }
 
   async extractPackingListData(
@@ -1214,6 +1242,7 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+        imageOpts,
       );
     }
 
@@ -1251,7 +1280,9 @@ Responda SOMENTE com JSON estrito no formato:
         );
         // Backfill deterministico de escalares de header que o modelo deixou NULL
         // (simetrico a fillInvoiceNullsFromText). Eduarda 2026-06-22.
-        const dataAsRecord = fillPackingListNullsFromText(parsed as Record<string, any>, text);
+        const dataAsRecord = fillPackingListNullsFromText(parsed as Record<string, any>, text, {
+          sourceTextReliable: imageOpts?.sourceTextReliable,
+        });
         if (Array.isArray(dataAsRecord.items)) {
           stripSpuriousItemPrefix(dataAsRecord.items);
         }
@@ -1273,10 +1304,11 @@ Responda SOMENTE com JSON estrito no formato:
             fieldsWithLowConfidence: lowConfidenceFields,
           },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction('packing_list', extracted, text);
+    return this.selfRepairExtraction('packing_list', extracted, text, imageOpts);
   }
 
   async extractBLData(text: string, imageOpts?: ImageExtractionOpts): Promise<ExtractionResult> {
@@ -1301,7 +1333,9 @@ Responda SOMENTE com JSON estrito no formato:
           USE_STRUCTURED_OUTPUT ? EXTRACTION_SCHEMAS.bl : undefined,
         );
         const parsed = this.zodParse(response, 'bill of lading extraction', blResponseSchema);
-        const data = fillBLNullsFromText(parsed as Record<string, any>, text);
+        const data = fillBLNullsFromText(parsed as Record<string, any>, text, {
+          sourceTextReliable: imageOpts?.sourceTextReliable,
+        });
         const { score, lowConfidenceFields } = this.calculateConfidence(data);
         logger.info(
           {
@@ -1316,10 +1350,11 @@ Responda SOMENTE com JSON estrito no formato:
           'ohbl',
           { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction('ohbl', extracted, text);
+    return this.selfRepairExtraction('ohbl', extracted, text, imageOpts);
   }
 
   async extractDraftBLData(
@@ -1351,7 +1386,9 @@ Responda SOMENTE com JSON estrito no formato:
           'draft bill of lading extraction',
           draftBLResponseSchema,
         );
-        const data = fillBLNullsFromText(parsed as Record<string, any>, text);
+        const data = fillBLNullsFromText(parsed as Record<string, any>, text, {
+          sourceTextReliable: imageOpts?.sourceTextReliable,
+        });
         const { score, lowConfidenceFields } = this.calculateConfidence(data);
 
         logger.info(
@@ -1368,10 +1405,11 @@ Responda SOMENTE com JSON estrito no formato:
           'draft_bl',
           { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction('draft_bl', extracted, text);
+    return this.selfRepairExtraction('draft_bl', extracted, text, imageOpts);
   }
 
   /**
@@ -1453,6 +1491,7 @@ Responda SOMENTE com JSON estrito no formato:
       'certificate',
       { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
       text,
+      imageOpts,
     );
   }
 
@@ -1476,6 +1515,7 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+        imageOpts,
       );
     }
 
@@ -1510,6 +1550,7 @@ Responda SOMENTE com JSON estrito no formato:
       'li',
       { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
       text,
+      imageOpts,
     );
   }
 
@@ -1526,7 +1567,11 @@ Responda SOMENTE com JSON estrito no formato:
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
     const deterministic = tryParseDUIMPText(text);
-    if (deterministic) {
+    // Registration comparison also needs item evidence. A header-only parser
+    // must not short-circuit structured extraction of the declaration's table.
+    const hasItemTable =
+      /\b(?:SKU|NCM|ITENS|ITEMS|ADI[ÇC][ÕO]ES)\b|C[ÓO]DIGO\s+(?:DO\s+)?PRODUTO/i.test(text);
+    if (deterministic && !hasItemTable) {
       const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
       logger.info(
         {
@@ -1544,6 +1589,7 @@ Responda SOMENTE com JSON estrito no formato:
           fieldsWithLowConfidence: lowConfidenceFields,
         },
         text,
+        imageOpts,
       );
     }
 
@@ -1591,10 +1637,11 @@ Responda SOMENTE com JSON estrito no formato:
           documentType,
           { data, confidenceScore: score, fieldsWithLowConfidence: lowConfidenceFields },
           text,
+          imageOpts,
         );
       },
     );
-    return this.selfRepairExtraction(documentType, extracted, text);
+    return this.selfRepairExtraction(documentType, extracted, text, imageOpts);
   }
 
   async detectAnomalies(

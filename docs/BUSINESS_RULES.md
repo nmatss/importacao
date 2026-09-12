@@ -104,3 +104,44 @@ Evidencias:
 
 - `apps/api/src/modules/validation/utils/port-normalize.ts`
 - `apps/api/src/modules/validation/checks/ports-match.ts`
+
+## Alertas De Processo Sem Movimentacao
+
+- "Parado" e condicao calculada na leitura, nunca evento persistido por processo.
+- Nao entram: processo `completed`/`cancelled`, travado (`locked_at`), ja
+  registrado (`registered_at` ou `customs_clearance_at`) e em transito
+  (ETA maior ou igual a hoje no fuso America/Sao_Paulo).
+- Entram: ETA passada sem registro (a partir de 1 dia util) e processo sem ETA
+  parado ha 3 dias uteis ou mais.
+- Teto: processo em transito sem nenhuma atualizacao ha 30 dias uteis volta a
+  aparecer, porque a ETA pode estar errada para frente.
+- Escalada: 10 dias uteis apos a ETA sem registro o aviso vira `critical`.
+- Cadencia: UMA mensagem por dia util, com todos os processos; cada processo
+  reaparece no maximo a cada 5 dias uteis, salvo escalada. Sem mensagem em
+  sabado e domingo. Dia util = segunda a sexta; feriados nao sao considerados
+  nesta versao.
+- O estado da cadencia mora na propria mensagem gravada em `alerts` (linha
+  `Processos: ...`), por isso a regra nao exige migration.
+- DEPENDENCIA: a regra le `eta` e `registered_at` do banco do sistema. Enquanto
+  o sync da Follow Up (`FOLLOW_UP_SYNC_MODE=apply`) nao rodar, essas colunas sao
+  um retrato de 25/08 — processo ja registrado na planilha continua elegivel, e
+  ETA errada para frente silencia por ate 30 dias uteis.
+
+Evidencias:
+
+- `apps/api/src/jobs/stalled-process.ts`
+- `apps/api/src/shared/utils/dates.ts` (`businessDaysBetween`, `isBusinessDay`)
+- `apps/api/src/jobs/__tests__/stalled-process.test.ts`
+
+## Mensagens No Google Chat
+
+- Ha um unico caminho de entrega: `modules/alerts/delivery.service.ts`. Nenhum
+  outro modulo pode chamar `sendToGoogleChat` (guarda estatica em
+  `modules/alerts/__tests__/caminho-unico-de-chat.test.ts`).
+- Alerta de alteracao (falhas de validacao) repete apenas quando o conjunto de
+  falhas muda; reprocessar o mesmo documento nao gera mensagem nova.
+- Alerta de agregacao diaria deduplica por dia civil do operador e nao e
+  reentregue depois que o dia vira.
+- Mensagens de um mesmo processo caem no mesmo topico do espaco; mensagens sem
+  processo agrupam por titulo e semana.
+- Texto de alerta e sempre em portugues, sem nome tecnico de verificacao.

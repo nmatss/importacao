@@ -3,9 +3,11 @@ import { useParams, Link } from 'react-router-dom';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import {
   fetchCertProductDetail,
+  fetchLastCertSync,
   lookupCertificateLinx,
   verifyCertProduct,
   type CertLinxLookup,
+  type CertProduct,
 } from '@/shared/lib/cert-api-client';
 import { cn, formatDateOnly, formatDateTime } from '@/shared/lib/utils';
 import {
@@ -37,6 +39,133 @@ function translateDetailError(raw: string): string {
   return message;
 }
 
+/** Rótulos em português dos eixos de venda do contrato D11. */
+const STATUS_VENDA_LABEL: Record<string, string> = {
+  LIBERADA: 'Liberada',
+  BLOQUEADA: 'Bloqueada',
+};
+
+const TRAVA_ORIGEM_LABEL: Record<string, string> = {
+  certificacao: 'Fim de venda da certificação',
+  licenciamento: 'Fim do licenciamento (Linx)',
+};
+
+/**
+ * Compara a trava calculada pelo sistema com o `FIM_VENDAS` que o Linx tem hoje.
+ *
+ * `null` significa "não dá para comparar" — o produto ainda não foi sincronizado
+ * com o Linx. Devolver `false` aí diria "não diverge" sobre um dado que ninguém
+ * leu, que é exatamente o erro que a reunião de 11/09 apontou no painel.
+ */
+export function divergeDoLinx(
+  travaVenda?: string | null,
+  linxFimVendas?: string | null,
+  linxSyncedAt?: string | null,
+): boolean | null {
+  if (!linxSyncedAt) return null;
+  return (travaVenda ?? null) !== (linxFimVendas ?? null);
+}
+
+function SaleLockField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-4 dark:bg-slate-900">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Bloco da trava de venda (decisão D11). Os valores já vêm de `cert_products`;
+ * aqui eles apenas deixam de ficar invisíveis. Data ausente usa o "-" do
+ * formatador único, nunca uma data herdada da sentinela 01/01/1900 do ERP.
+ */
+function SaleLockPanel({ product }: { product: CertProduct }) {
+  const diverge = divergeDoLinx(
+    product.trava_venda,
+    product.linx_fim_vendas,
+    product.linx_synced_at,
+  );
+  const statusVenda = product.status_venda ?? '';
+  const travaOrigem = product.trava_origem ?? '';
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-slate-200/60 bg-white shadow-sm dark:border-slate-700/60 dark:bg-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-5 py-4 dark:border-slate-700 dark:bg-slate-900/60">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Trava de venda</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Menor data real entre o fim de venda da certificação e o fim do licenciamento
+          </p>
+        </div>
+        {statusVenda && (
+          <span
+            className={cn(
+              'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
+              statusVenda === 'BLOQUEADA'
+                ? 'bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300'
+                : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+            )}
+          >
+            {product.status_venda_reason
+              ? 'Pendente de validação'
+              : (STATUS_VENDA_LABEL[statusVenda] ?? statusVenda)}
+          </span>
+        )}
+      </div>
+      {product.status_venda_reason && (
+        <p className="px-5 pt-4 text-sm text-amber-700 dark:text-amber-300">
+          {product.status_venda_reason}
+        </p>
+      )}
+      {product.cert_status_reason && (
+        <p className="px-5 pt-4 text-sm text-amber-700 dark:text-amber-300">
+          {product.cert_status_reason}
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
+        <SaleLockField
+          label="Validade do certificado"
+          value={formatDateOnly(product.validade_certificado)}
+        />
+        {/* Texto cru da aba Encerramentos ('Comercialização Permitida' etc.),
+            então não passa pelo formatador de data; ausência usa o mesmo '-'
+            do formatador único para a tela não ter dois "vazios" diferentes. */}
+        <SaleLockField label="Fim de venda (certificação)" value={product.sale_deadline || '-'} />
+        <SaleLockField
+          label="Fim do licenciamento · Linx"
+          value={formatDateOnly(product.linx_fim_licenciamento)}
+        />
+        <SaleLockField label="Data da trava" value={formatDateOnly(product.trava_venda)} />
+        <SaleLockField
+          label="Origem da trava"
+          value={travaOrigem ? (TRAVA_ORIGEM_LABEL[travaOrigem] ?? travaOrigem) : '-'}
+        />
+        <SaleLockField
+          label="FIM_VENDAS atual no Linx"
+          value={formatDateOnly(product.linx_fim_vendas)}
+        />
+      </div>
+      <p className="px-5 pb-5 text-xs text-slate-500 dark:text-slate-400">
+        {diverge === null ? (
+          'Linx ainda não sincronizado para este produto — a comparação com o ERP não pode ser feita.'
+        ) : diverge ? (
+          <span className="font-semibold text-amber-600 dark:text-amber-400">
+            Diverge do Linx: a trava calculada e o FIM_VENDAS gravado no ERP são diferentes.
+          </span>
+        ) : (
+          'A trava calculada bate com o FIM_VENDAS gravado no Linx.'
+        )}
+        {product.linx_synced_at && ` · Sincronizado em ${formatDateTime(product.linx_synced_at)}`}
+      </p>
+    </div>
+  );
+}
+
 function linxDateLabel(
   lookup: CertLinxLookup,
   field: 'validade_certificado' | 'vencimento_licenciamento',
@@ -57,6 +186,7 @@ export default function CertProdutoDetailPage() {
   const [liveResult, setLiveResult] = useState<any>(null);
   const [linxLookup, setLinxLookup] = useState<CertLinxLookup | null>(null);
   const [linxLoading, setLinxLoading] = useState(false);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [linxError, setLinxError] = useState<string | null>(null);
 
   const loadProduct = useCallback(async () => {
@@ -69,6 +199,20 @@ export default function CertProdutoDetailPage() {
     } finally {
       setLoading(false);
     }
+  }, [sku]);
+
+  useEffect(() => {
+    let current = true;
+    fetchLastCertSync()
+      .then(({ last_run }) => {
+        if (current) setSyncWarning(last_run?.error ?? null);
+      })
+      .catch(() => {
+        if (current) setSyncWarning('Não foi possível consultar a última sincronização.');
+      });
+    return () => {
+      current = false;
+    };
   }, [sku]);
 
   useEffect(() => {
@@ -161,6 +305,15 @@ export default function CertProdutoDetailPage() {
         </div>
       ) : product ? (
         <>
+          {syncWarning && (
+            <div
+              role="status"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+              Sincronização não confirmada: {syncWarning}. Os dados exibidos são os últimos salvos e
+              não comprovam atualização das fontes.
+            </div>
+          )}
           {/* Product Header Card */}
           <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-7 py-4">
@@ -418,7 +571,7 @@ export default function CertProdutoDetailPage() {
               </div>
               <div className="rounded-xl bg-emerald-50/70 p-4 dark:bg-emerald-950/30">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Validade · Linx
+                  Fim de venda por certificação · Linx
                   {linxLookup &&
                     ` · prop ${linxLookup.properties.validade_certificado.property_code}`}
                 </p>
@@ -451,6 +604,8 @@ export default function CertProdutoDetailPage() {
               </div>
             )}
           </div>
+
+          <SaleLockPanel product={product} />
 
           {/* Side-by-side Text Comparison */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

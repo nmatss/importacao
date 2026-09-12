@@ -160,8 +160,9 @@ describe('validation document fixture', () => {
 
     expect(failed).toEqual([]);
     expect(results.find((result) => result.checkName === 'description-odoo-match')).toMatchObject({
-      status: 'warning',
-      message: 'Odoo não configurado. Verificação de descrições ignorada.',
+      // Integracao fora do ar = "nao verificado", nao atencao (decisao D6).
+      status: 'skipped',
+      message: 'Odoo nao configurado.',
     });
     expect(results.find((result) => result.checkName === 'incoterm-check')?.status).toBe('passed');
     expect(results.find((result) => result.checkName === 'currency-check')?.status).toBe('passed');

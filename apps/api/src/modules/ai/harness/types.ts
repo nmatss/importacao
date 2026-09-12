@@ -18,6 +18,8 @@ export interface HarnessFinding {
   kind: FindingKind;
   severity: 'error' | 'warning';
   message: string;
+  /** An informational warning grounded in the source is not a reading failure. */
+  confidenceImpact?: 'none';
 }
 
 export interface HarnessReport {
@@ -40,6 +42,13 @@ export interface VerificationConfig {
   groundedFields?: string[];
   /** NCM code fields — validated for format XXXX.XX.XX and (if KB present) catalog membership. */
   ncmFields?: string[];
+  /**
+   * Aceita posição do SH com 4 ou 6 dígitos (ex.: "4202") como AVISO em vez de
+   * erro, desde que o código apareça literalmente no documento. Ligar só em
+   * tipos que de fato imprimem o SH curto (BL/Draft BL); na invoice e no
+   * espelho a NCM de 8 dígitos continua obrigatória.
+   */
+  allowHsHeading?: boolean;
   /** ISO-8601 date fields. */
   dateFields?: string[];
   /** Brazilian CNPJ fields — validated by check digits. */

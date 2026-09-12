@@ -18,7 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { cn } from '@/shared/lib/utils';
+import { cn, formatDayMonth, isDateInPast } from '@/shared/lib/utils';
 import { LOGISTIC_STAGES } from '@/shared/lib/constants';
 import { api } from '@/shared/lib/api-client';
 import type { ImportProcess } from '@/shared/types';
@@ -52,6 +52,8 @@ export interface LogisticStatusBarProps {
   shipmentDate?: string | null;
   customsChannel?: string | null;
   diNumber?: string | null;
+  duimpNumber?: string | null;
+  registeredAt?: string | null;
   inspectionType?: string | null;
   portOfDischarge?: string | null;
   notes?: string | null;
@@ -59,22 +61,21 @@ export interface LogisticStatusBarProps {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
+//
+// Este componente tinha o SEU proprio par de funcoes de data
+// (`new Date(x).toLocaleDateString('pt-BR')` e `new Date(x) <= new Date()`), e
+// era dali que saia o "ETD: 06/08" com a invoice dizendo 07/08: uma data de
+// calendario virava meia-noite UTC e, em Brasilia, voltava um dia. As duas
+// agora sao so um nome local para a regra unica de `shared/lib/utils`.
 
 function isPastDate(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return false;
-  return new Date(dateStr) <= new Date();
+  return isDateInPast(dateStr ?? null);
 }
 
 function formatDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
-  try {
-    return new Date(dateStr).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-    });
-  } catch {
-    return null;
-  }
+  const formatado = formatDayMonth(dateStr);
+  return formatado === '-' ? null : formatado;
 }
 
 /**
@@ -87,54 +88,32 @@ const STAGE_INDEX_MAP = Object.fromEntries(LOGISTIC_STAGES.map((s, i) => [s.key,
 
 function inferLogisticStep(props: LogisticStatusBarProps): number {
   const {
-    cdArrivalAt,
     customsClearanceAt,
     customsChannel,
-    diNumber,
-    inspectionType,
+    registeredAt,
     etaActual,
-    eta,
     shipmentDate,
     etd,
-    notes,
+    currentStatus,
   } = props;
 
-  // 10: Internalizado — cdArrivalAt + notes contain "NF" or "internalizado"
-  if (cdArrivalAt && notes && (/\bNF\b/i.test(notes) || /internalizado/i.test(notes))) {
-    return 10;
-  }
-
-  // 9: Ag. Entrada — cdArrivalAt exists
-  if (cdArrivalAt) return 9;
-
-  // 8: Em Viagem CD — customsClearanceAt exists and no cdArrivalAt
-  // 7: Ag. Carregamento — customsClearanceAt exists (same, manual override differentiates)
-  // 6: Lib. Portuaria — customsClearanceAt exists
-  if (customsClearanceAt) return 8;
-
-  // 5: Conf. Aduaneira — customsChannel + inspectionType
-  if (customsChannel && inspectionType) return 5;
-
-  // 4: Registrado — diNumber or customsChannel exists
-  if (diNumber || customsChannel) return 4;
-
-  // 3: Em Atracacao — etaActual or (eta is past)
-  if (etaActual || (eta && isPastDate(eta))) return 3;
-
-  // 2: Em Transito — shipmentDate or (etd is past)
-  if (shipmentDate || (etd && isPastDate(etd))) return 2;
-
-  // 1: Ag. Embarque — etd exists and is future
-  if (etd && !isPastDate(etd)) return 1;
-
-  // 0: Em Consolidacao — default
+  if (currentStatus === 'completed') return 10;
+  // Chegada CD e ETA/ETD são previsões: passagem do tempo não prova o evento.
+  // Entrada/CD exige status explícito da operação; desembaraço comprova liberação,
+  // não que o transporte ao CD já começou.
+  if (isPastDate(customsClearanceAt)) return 6;
+  if (customsChannel) return 5;
+  if (isPastDate(registeredAt)) return 4;
+  if (isPastDate(etaActual)) return 3;
+  if (isPastDate(shipmentDate)) return 2;
+  if (formatDate(etd)) return 1;
   return 0;
 }
 
 /**
  * Derive the current logistic step index (0-based) from process fields.
  * Manual override via logisticStatus takes priority, except for the database
- * default "consolidation": real BL/ETD evidence should still advance it.
+ * default "consolidation": realized events can still advance it.
  */
 export function deriveLogisticStep(props: LogisticStatusBarProps): number {
   const inferredStep = inferLogisticStep(props);
@@ -163,17 +142,27 @@ function getStageSubInfo(
       return d ? { text: `ETD: ${d}` } : null;
     }
     case 3: {
-      // Em Atracacao → Porto + ETA
+      // Em Atracacao → Porto + data.
+      //
+      // Com 'ETA Realizado' preenchido a data nao e mais previsao: o rotulo
+      // vira "Atracou". A tela mostrava "ETA: 16/09" (o 'ETA Previsto Medio'
+      // de 17/09 menos um dia de fuso) para um processo que atracou em 08/09.
       const parts: string[] = [];
       if (props.portOfDischarge) parts.push(props.portOfDischarge);
-      const d = formatDate(props.etaActual ?? props.eta);
-      if (d) parts.push(`ETA: ${d}`);
+      const atracou = formatDate(props.etaActual);
+      const previsto = formatDate(props.eta);
+      if (atracou) parts.push(`Atracou: ${atracou}`);
+      else if (previsto) parts.push(`ETA: ${previsto}`);
       return parts.length > 0 ? { text: parts.join(' | ') } : null;
     }
     case 4: {
-      // Registrado → DUIMP + Canal badge
+      // Registrado → numero da DUIMP/DI + data de registro + Canal badge.
+      // A data do registro (04/09 no PK2192607SZ) nunca aparecia.
       const parts: string[] = [];
-      if (props.diNumber) parts.push(props.diNumber);
+      const registro = props.duimpNumber ?? props.diNumber;
+      if (registro) parts.push(registro);
+      const registroEm = formatDate(props.registeredAt);
+      if (registroEm) parts.push(registroEm);
       const channel = props.customsChannel?.toLowerCase();
       let badge: { label: string; color: string } | undefined;
       if (channel === 'verde')
@@ -196,7 +185,7 @@ function getStageSubInfo(
           label: props.customsChannel!,
           color: 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
         };
-      return parts.length > 0 || badge ? { text: parts.join(''), badge } : null;
+      return parts.length > 0 || badge ? { text: parts.join(' | '), badge } : null;
     }
     case 5: {
       // Conf. Aduaneira → Orgao
@@ -542,22 +531,12 @@ function asDateString(value: unknown): string | null {
 export function buildLogisticProps(process: ImportProcess): LogisticStatusBarProps {
   const summary = readEspelhoSummary(process);
 
-  // Fall back to the BL espelho milestones so the transport cycle advances to
-  // "Em Transito" when the BL ETD is already in the past, even when the
-  // process-level etd/shipmentDate are still null (Eduarda feedback).
+  // Previsões do espelho podem complementar a exibição, sem comprovar eventos.
   const etd = process.etd ?? asDateString(summary?.etd);
   const eta = process.eta ?? asDateString(summary?.eta);
-
-  // build-espelho.ts projects summary.shipmentDate = bl.shipmentDate ?? bl.etd,
-  // so a FUTURE etd can leak into shipmentDate. deriveLogisticStep treats any
-  // truthy shipmentDate as a real shipment event ("Em Transito"), which would
-  // wrongly skip the future-ETD "Ag. Embarque" step. Only honour a
-  // summary-derived shipmentDate when it is actually a past date; the raw etd
-  // already flows through the etd slot so future/past ETD logic governs.
-  const summaryShipmentDate = asDateString(summary?.shipmentDate);
-  const shipmentDate =
-    process.shipmentDate ??
-    (summaryShipmentDate && isPastDate(summaryShipmentDate) ? summaryShipmentDate : null);
+  // O espelho legado preenche shipmentDate com ETD quando falta embarque real.
+  // Somente a propriedade realizada do processo pode avançar o ciclo.
+  const shipmentDate = process.shipmentDate ?? null;
 
   return {
     processId: process.id,
@@ -571,6 +550,8 @@ export function buildLogisticProps(process: ImportProcess): LogisticStatusBarPro
     shipmentDate,
     customsChannel: process.customsChannel,
     diNumber: process.diNumber,
+    duimpNumber: process.duimpNumber ?? null,
+    registeredAt: process.registeredAt ?? null,
     inspectionType: process.inspectionType,
     portOfDischarge: process.portOfDischarge,
     notes: process.notes,

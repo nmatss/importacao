@@ -6,6 +6,7 @@ import {
   FileBarChart,
   CalendarClock,
   Settings,
+  Store,
 } from 'lucide-react';
 import { checkCertApiHealth } from '@/shared/lib/cert-api-client';
 import {
@@ -26,6 +27,7 @@ const navSections: AppNavSection[] = [
       { to: '/certificacoes/validacao', label: 'Validação', icon: PlayCircle },
       { to: '/certificacoes/produtos', label: 'Produtos', icon: Package },
       { to: '/certificacoes/cadastro', label: 'Cadastrar Certificado', icon: FilePlus2 },
+      { to: '/certificacoes/marketplace', label: 'Marketplace', icon: Store },
     ],
   },
   {

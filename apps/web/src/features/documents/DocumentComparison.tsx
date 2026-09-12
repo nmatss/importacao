@@ -16,15 +16,14 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { CONFIDENCE_HIGH, CONFIDENCE_MEDIUM } from '@/shared/lib/confidence';
-import { VALIDATION_CHECK_NAMES } from '@/shared/lib/constants';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { getErrorMessage } from '@/shared/utils/errors';
 
-type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
+type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source' | 'skipped';
 type DisplayStatus = RowStatus | 'accepted';
 type Criticality = 'critical' | 'secondary' | 'info';
-type ComparisonFilter = 'all' | 'divergent' | 'warning' | 'accepted' | 'match';
+type ComparisonFilter = 'all' | 'divergent' | 'warning' | 'accepted' | 'match' | 'skipped';
 type ComparisonSourceColumn = 'invoice' | 'packingList' | 'bl' | 'espelho' | 'system';
 
 interface AggregateField {
@@ -34,6 +33,12 @@ interface AggregateField {
   packingList: string | null;
   bl: string | null;
   espelho: string | null;
+  /**
+   * Coluna Sistema = cadastro do processo, alimentado pela Follow-up. Vem
+   * pronta da API: derivar de um check de validacao deixava a coluna vazia em
+   * processo sem validacao final (PK220).
+   */
+  system?: string | null;
   status: RowStatus;
   criticality?: Criticality;
   message?: string | null;
@@ -57,6 +62,15 @@ interface ItemComparison {
   itemCode: string;
   description: string;
   ncm: string;
+  espelhoNcm?: string | null;
+  espelhoDescription?: string | null;
+  invoiceEan?: string | null;
+  plEan?: string | null;
+  espelhoEan?: string | null;
+  ncmMatch?: boolean | null;
+  unitPriceMatch?: boolean | null;
+  totalPriceMatch?: boolean | null;
+  eanMatch?: boolean | null;
   invoiceQty: number | null;
   plQty: number | null;
   espelhoQty: number | null;
@@ -139,6 +153,10 @@ interface ComparisonAcceptance {
 interface ComparisonData {
   hasInvoice: boolean;
   hasPackingList: boolean;
+  /** Cadastro do processo tem algum valor de referencia para a coluna Sistema. */
+  systemDataAvailable?: boolean;
+  /** 'partial' = cruzamentos vindos do ultimo run parcial de validacao. */
+  validationMode?: 'final' | 'partial' | 'none';
   hasBl: boolean;
   hasFinalBl?: boolean;
   hasOperationalBl?: boolean;
@@ -168,23 +186,6 @@ interface ComparisonData {
     bl?: ExtractionCoverageSummary | null;
     draftBl?: ExtractionCoverageSummary | null;
   };
-}
-
-interface ValidationCheck {
-  id: number;
-  checkName: string;
-  status: 'passed' | 'failed' | 'warning' | 'skipped';
-  expectedValue?: string | null;
-  actualValue?: string | null;
-  documentsCompared?: string | null;
-  message?: string | null;
-  dataSource?: string | null;
-}
-
-interface ValidationReport {
-  systemDataAvailable?: boolean;
-  crossDocumentChecks: ValidationCheck[];
-  systemChecks: ValidationCheck[];
 }
 
 interface AcceptTarget {
@@ -285,16 +286,6 @@ function rowKey(scope: 'aggregate' | 'item', value: string | undefined | null, i
   return `${scope}:${slug || `linha-${index + 1}`}`;
 }
 
-function normalizeLabelKey(value: string | undefined | null) {
-  return String(value ?? '')
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
 function normalizeSupplierValue(value: string | undefined | null) {
   return String(value ?? '')
     .trim()
@@ -310,23 +301,6 @@ function supplierValuesMatch(a: string, b: string) {
   if (!left || !right) return false;
   return left === right || left.includes(right) || right.includes(left);
 }
-
-const SYSTEM_CHECK_BY_AGGREGATE_LABEL: Record<string, string> = {
-  'total-fob-usd': 'invoice-value-vs-fup',
-  frete: 'freight-vs-fup',
-  'cbm-m3': 'cbm-vs-fup',
-  'tipo-container': 'container-type-vs-fup',
-};
-
-const HIDDEN_CROSS_DOCUMENT_CHECKS = new Set([
-  'manufacturer-completeness',
-  'supplier-address-match',
-  'payment-terms-check',
-  'certificate-completeness',
-  'weight-ratio-check',
-  'item-level-match',
-  'unit-type-validation',
-]);
 
 const SOURCE_LABELS: Record<ComparisonSourceColumn, string> = {
   invoice: 'PDF',
@@ -348,6 +322,10 @@ function statusLabel(status: DisplayStatus) {
       return 'Conforme';
     case 'single_source':
       return 'Fonte única';
+    case 'skipped':
+      // Integracao fora do ar ou dado ausente na fonte: a conferencia nao
+      // aconteceu. Fica visivel, mas nao conta como atencao (decisao D6).
+      return 'Não verificado';
     default:
       return '-';
   }
@@ -365,6 +343,8 @@ function statusClasses(status: DisplayStatus) {
       return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700/50';
     case 'single_source':
       return 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/20 dark:text-sky-300 dark:border-sky-800';
+    case 'skipped':
+      return 'bg-slate-100 text-slate-600 border-slate-300 border-dashed dark:bg-slate-800 dark:text-slate-300 dark:border-slate-500';
     default:
       return 'bg-slate-50 text-slate-500 border-slate-200 dark:bg-slate-700/60 dark:text-slate-200 dark:border-slate-600';
   }
@@ -537,6 +517,98 @@ function WeightCell({
   );
 }
 
+/**
+ * Celula com o valor da Invoice e o do Espelho empilhados (mesmo padrao do
+ * WeightCell). Eduarda [05:47]: "precisa trazer mais informacao da invoice e do
+ * packing para comparar com o espelho" — antes so o valor da Invoice aparecia,
+ * mesmo com o espelho anexado.
+ */
+function SourceTextCell({
+  invoice,
+  espelho,
+  hasEspelho,
+  diverges,
+}: {
+  invoice: string | null | undefined;
+  espelho: string | null | undefined;
+  hasEspelho: boolean;
+  diverges?: boolean;
+}) {
+  const parts = [
+    { key: 'inv', label: 'INV', value: invoice },
+    ...(hasEspelho ? [{ key: 'esp', label: 'Esp', value: espelho }] : []),
+  ].filter((part) => part.value != null && part.value !== '');
+
+  if (parts.length === 0) {
+    return <td className="px-3 py-2 font-mono text-slate-300 dark:text-slate-600">-</td>;
+  }
+
+  return (
+    <td
+      className={cn(
+        'px-3 py-2 font-mono',
+        diverges
+          ? 'font-semibold text-danger-700 dark:text-danger-400'
+          : 'text-slate-600 dark:text-slate-400',
+      )}
+    >
+      <div className="flex flex-col gap-0.5">
+        {parts.map((part) => (
+          <span key={part.key}>
+            <span className="mr-1 text-[9px] uppercase text-slate-500 dark:text-slate-400">
+              {part.label}
+            </span>
+            {part.value}
+          </span>
+        ))}
+      </div>
+    </td>
+  );
+}
+
+function MoneyCell({
+  invoice,
+  espelho,
+  hasEspelho,
+  diverges,
+}: {
+  invoice: number | null | undefined;
+  espelho: number | null | undefined;
+  hasEspelho: boolean;
+  diverges?: boolean;
+}) {
+  const parts = [
+    { key: 'inv', label: 'INV', value: invoice },
+    ...(hasEspelho ? [{ key: 'esp', label: 'Esp', value: espelho }] : []),
+  ].filter((part) => part.value != null);
+
+  if (parts.length === 0) {
+    return <td className="px-3 py-2 text-right font-mono text-slate-300 dark:text-slate-600">-</td>;
+  }
+
+  return (
+    <td
+      className={cn(
+        'whitespace-nowrap px-3 py-2 text-right font-mono',
+        diverges
+          ? 'font-semibold text-danger-700 dark:text-danger-400'
+          : 'text-slate-700 dark:text-slate-300',
+      )}
+    >
+      <div className="flex flex-col items-end gap-0.5">
+        {parts.map((part) => (
+          <span key={part.key}>
+            <span className="mr-1 text-[9px] uppercase text-slate-500 dark:text-slate-400">
+              {part.label}
+            </span>
+            {formatMoney(part.value)}
+          </span>
+        ))}
+      </div>
+    </td>
+  );
+}
+
 function deriveItemStatus(item: ItemComparison, hasEspelho: boolean): RowStatus {
   if (item.status) return item.status;
   if (item.isFreeOfCharge) return 'warning';
@@ -558,30 +630,6 @@ function deriveItemMessage(item: ItemComparison, status: RowStatus) {
 
 function passesFilter(status: DisplayStatus, filter: ComparisonFilter) {
   return filter === 'all' || status === filter;
-}
-
-const checkLabel = (name: string) =>
-  VALIDATION_CHECK_NAMES.find((c) => c.value === name)?.description ?? name;
-
-function checkRowStatus(status: ValidationCheck['status']): RowStatus {
-  switch (status) {
-    case 'failed':
-      return 'divergent';
-    case 'warning':
-      return 'warning';
-    case 'passed':
-      return 'match';
-    default:
-      return 'empty';
-  }
-}
-
-function highestStatus(...statuses: RowStatus[]): RowStatus {
-  if (statuses.includes('divergent')) return 'divergent';
-  if (statuses.includes('warning')) return 'warning';
-  if (statuses.includes('match')) return 'match';
-  if (statuses.includes('single_source')) return 'single_source';
-  return 'empty';
 }
 
 /**
@@ -613,31 +661,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
   // esta tela reconstruir os aceites sobre 50 eventos, e os mais antigos sumiam.
   // A invalidacao dessa chave depois de uma edicao continua, para o historico
   // refletir o evento novo.
-  // Absorbs the standalone "Cruzamento entre Documentos" and "Documentos vs
-  // Sistema" panels (removed from FupComparisonPanel) into this consolidated
-  // comparison. We read the cross_document checks and the system_vs_document
-  // values inline so only one comparison remains.
-  const { data: report } = useApiQuery<ValidationReport>(
-    ['validation-report', processId],
-    `/api/validation/${processId}/report`,
-  );
-
-  const systemDataAvailable = report?.systemDataAvailable ?? false;
-
-  // Map system (Sydle) values by validation key and by normalized labels. Real
-  // aggregate labels are "Total FOB (USD)", "Frete", "CBM (m3)", etc., while
-  // validation labels are "Valor Invoice vs Sistema", so label-only matching
-  // leaves the Sistema column empty in production data.
-  const systemCheckByLabel = useMemo(() => {
-    const map = new Map<string, ValidationCheck>();
-    for (const check of report?.systemChecks ?? []) {
-      const value = check.expectedValue;
-      if (value == null || value === '') continue;
-      map.set(check.checkName, check);
-      map.set(normalizeLabelKey(checkLabel(check.checkName)), check);
-    }
-    return map;
-  }, [report?.systemChecks]);
+  //
+  // A consulta a `/api/validation/:id/report` TAMBEM saiu: os cruzamentos e a
+  // coluna Sistema agora vem prontos no payload do comparativo (decisao D6).
+  // Enquanto a tela montava as duas coisas, o mesmo campo aparecia duas vezes —
+  // uma nas colunas e outra como texto "esperado x encontrado" — e um check sem
+  // rotulo cadastrado vazava a chave tecnica ('invoice-pl-date-tolerance').
+  const systemDataAvailable = data?.systemDataAvailable ?? false;
 
   const acceptedByRow = useMemo(() => {
     const map = new Map<string, ComparisonAcceptance>();
@@ -655,58 +685,14 @@ export function DocumentComparison({ processId }: { processId: string }) {
         .map((field, index) => {
           const key = field.rowKey ?? rowKey('aggregate', field.label, index);
           const accepted = acceptedByRow.get(key);
-          const aggregateLabelKey = normalizeLabelKey(field.label);
-          const systemCheckName = SYSTEM_CHECK_BY_AGGREGATE_LABEL[aggregateLabelKey];
-          const systemCheck =
-            (systemCheckName ? systemCheckByLabel.get(systemCheckName) : null) ??
-            systemCheckByLabel.get(aggregateLabelKey) ??
-            null;
-          const systemStatus = systemCheck ? checkRowStatus(systemCheck.status) : 'empty';
-          const status = highestStatus(field.status, systemStatus);
-          const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
+          const displayStatus: DisplayStatus = accepted ? 'accepted' : field.status;
           const systemOverride = field.overrides?.find((item) => item.sourceColumn === 'system');
           // Override existente vale mesmo com valueText null (célula limpa).
-          const system = systemOverride
-            ? systemOverride.valueText
-            : (systemCheck?.expectedValue ?? null);
-          const message =
-            systemStatus !== 'empty' && systemStatus !== 'match'
-              ? (systemCheck?.message ?? field.message)
-              : field.message;
-          return { ...field, rowKey: key, status, displayStatus, accepted, system, message };
+          const system = systemOverride ? systemOverride.valueText : (field.system ?? null);
+          return { ...field, rowKey: key, displayStatus, accepted, system };
         }),
-    [acceptedByRow, data?.aggregateComparison, systemCheckByLabel],
+    [acceptedByRow, data?.aggregateComparison],
   );
-
-  // Cross-document validation checks (the old "Cruzamento entre Documentos"
-  // panel) absorbed as extra rows. Skip any whose label already appears as an
-  // aggregate field so we never duplicate a field the aggregate already shows.
-  const crossDocumentRows = useMemo(() => {
-    const existingLabels = new Set(
-      (data?.aggregateComparison ?? []).map((f) => f.label.trim().toLowerCase()),
-    );
-    return (report?.crossDocumentChecks ?? [])
-      .filter((check) => !HIDDEN_CROSS_DOCUMENT_CHECKS.has(check.checkName))
-      .map((check) => {
-        const label = checkLabel(check.checkName);
-        const status = checkRowStatus(check.status);
-        const key = `cross:${check.checkName}:${check.id}`;
-        const accepted = acceptedByRow.get(key);
-        const displayStatus: DisplayStatus = accepted ? 'accepted' : status;
-        return {
-          rowKey: key,
-          label,
-          expected: check.expectedValue ?? null,
-          actual: check.actualValue ?? null,
-          message: check.message ?? null,
-          status,
-          displayStatus,
-          accepted,
-          normalizedLabel: label.trim().toLowerCase(),
-        };
-      })
-      .filter((row) => row.status !== 'empty' && !existingLabels.has(row.normalizedLabel));
-  }, [acceptedByRow, data?.aggregateComparison, report?.crossDocumentChecks]);
 
   const itemRows = useMemo(
     () =>
@@ -732,26 +718,23 @@ export function DocumentComparison({ processId }: { processId: string }) {
     [aggregateRows, filter],
   );
 
-  const filteredCrossDocumentRows = useMemo(
-    () => crossDocumentRows.filter((row) => passesFilter(row.displayStatus, filter)),
-    [crossDocumentRows, filter],
-  );
-
   const filteredItemRows = useMemo(
     () => itemRows.filter((row) => passesFilter(row.displayStatus, filter)),
     [filter, itemRows],
   );
 
   const counts = useMemo(() => {
-    const rows = [...aggregateRows, ...crossDocumentRows, ...itemRows];
+    const rows = [...aggregateRows, ...itemRows];
     return {
       all: rows.length,
       match: rows.filter((row) => row.displayStatus === 'match').length,
       warning: rows.filter((row) => row.displayStatus === 'warning').length,
       divergent: rows.filter((row) => row.displayStatus === 'divergent').length,
       accepted: rows.filter((row) => row.displayStatus === 'accepted').length,
+      // Fora da contagem de atencoes de proposito (decisao D6).
+      skipped: rows.filter((row) => row.displayStatus === 'skipped').length,
     };
-  }, [aggregateRows, crossDocumentRows, itemRows]);
+  }, [aggregateRows, itemRows]);
 
   const manufacturerRows = useMemo(
     () =>
@@ -810,6 +793,47 @@ export function DocumentComparison({ processId }: { processId: string }) {
       status,
     };
   }, [data?.espelhoSuppliers, data?.supplierFooterAliases]);
+
+  /**
+   * Resumo do casamento de itens Invoice x Packing List.
+   *
+   * Sem itens extraidos NAO existe cartao verde: "vazio" nunca pode virar
+   * "tudo certo" — e o mesmo falso verde que ja mordeu o espelho auto-gerado.
+   */
+  const itemMatchSummary = useMemo(() => {
+    if (!data) return null;
+    const unmatchedPl = data.unmatchedPlItems ?? [];
+    const unmatchedInvoice = data.unmatchedInvoiceItems ?? [];
+    // A lista de pendencias aparece sempre que existe pendencia, mesmo sem um
+    // dos dois documentos (comportamento anterior preservado).
+    if (unmatchedPl.length > 0 || unmatchedInvoice.length > 0) {
+      return {
+        kind: 'unmatched' as const,
+        title: 'Itens sem correspondencia entre Invoice e Packing List',
+        detail: null,
+      };
+    }
+    // Sem os dois documentos nao ha o que declarar conferido: o aviso de
+    // "Comparativo parcial" ja explica o que falta.
+    if (!data.hasInvoice || !data.hasPackingList) return null;
+    const items = data.itemComparison ?? [];
+    if (items.length === 0) {
+      return {
+        kind: 'no-items' as const,
+        title: 'Sem itens extraidos para comparar',
+        detail:
+          'A Invoice e o Packing List nao trouxeram itens legiveis. Reprocesse os documentos antes de considerar a conferencia por item concluida.',
+      };
+    }
+    const espelhoMatched = items.filter((item) => item.espelhoMatched).length;
+    return {
+      kind: 'all-matched' as const,
+      title: `Todos os ${items.length} itens da Invoice foram encontrados no Packing List`,
+      detail: data.hasEspelho
+        ? `${espelhoMatched} de ${items.length} tambem foram encontrados no Espelho.`
+        : 'Nenhum item do Packing List ficou fora da Invoice.',
+    };
+  }, [data]);
 
   const missingComparisonDocs = useMemo(() => {
     if (!data) return [];
@@ -927,7 +951,13 @@ export function DocumentComparison({ processId }: { processId: string }) {
       );
     }
 
-    if (target.previousStatus === 'match' || target.previousStatus === 'empty') {
+    if (
+      target.previousStatus === 'match' ||
+      target.previousStatus === 'empty' ||
+      // Nao se "aceita" o que nao foi verificado: nao ha divergencia para
+      // assumir, so uma verificacao que ficou de fora.
+      target.previousStatus === 'skipped'
+    ) {
       return <span className="text-xs text-slate-300">-</span>;
     }
 
@@ -1070,53 +1100,81 @@ export function DocumentComparison({ processId }: { processId: string }) {
         </div>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      {/*
+        RESUMO UNICO E CLICAVEL. Antes havia dois: os botoes de filtro (cinzas)
+        e, logo abaixo, pills coloridas so decorativas com as MESMAS contagens.
+        Reuniao 11/09 [04:22]: "esse aqui e o clicavel e esse aqui e so visual...
+        Traz as cores para o clicavel e tira o outro."
+      */}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label="Filtrar comparativo por status"
+      >
         {[
-          { key: 'all' as const, label: 'Todos', count: counts.all },
-          { key: 'divergent' as const, label: 'Falhas', count: counts.divergent },
-          { key: 'warning' as const, label: 'Atencoes', count: counts.warning },
-          { key: 'accepted' as const, label: 'Aceitos', count: counts.accepted },
-          { key: 'match' as const, label: 'Conformes', count: counts.match },
-        ].map(({ key, label, count }) => (
-          <button
-            key={key}
-            onClick={() => setFilter(key)}
-            className={cn(
-              'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors',
-              filter === key
-                ? 'bg-primary-600 text-white'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
-            )}
-          >
-            {label}
-            <span
+          { key: 'all' as const, label: 'Todos', count: counts.all, status: null },
+          {
+            key: 'divergent' as const,
+            label: 'Falhas',
+            count: counts.divergent,
+            status: 'divergent' as const,
+            Icon: XCircle,
+          },
+          {
+            key: 'warning' as const,
+            label: 'Atencoes',
+            count: counts.warning,
+            status: 'warning' as const,
+            Icon: AlertTriangle,
+          },
+          {
+            key: 'accepted' as const,
+            label: 'Aceitos',
+            count: counts.accepted,
+            status: 'accepted' as const,
+            Icon: Wrench,
+          },
+          {
+            key: 'match' as const,
+            label: 'Conformes',
+            count: counts.match,
+            status: 'match' as const,
+            Icon: CheckCircle,
+          },
+          {
+            key: 'skipped' as const,
+            label: 'Nao verificados',
+            count: counts.skipped,
+            status: 'skipped' as const,
+            Icon: Minus,
+          },
+        ]
+          // "Nao verificados" so aparece quando existe algum: e um estado raro,
+          // e um zero fixo na barra vira ruido.
+          .filter(({ key, count }) => key !== 'skipped' || count > 0)
+          .map(({ key, label, count, status, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={filter === key}
+              onClick={() => setFilter(key)}
               className={cn(
-                'rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+                'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+                status
+                  ? statusClasses(status)
+                  : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-600 dark:bg-slate-700/60 dark:text-slate-200',
                 filter === key
-                  ? 'bg-white/20 text-white'
-                  : 'bg-slate-200 dark:bg-slate-600 text-slate-500 dark:text-slate-400',
+                  ? 'ring-2 ring-primary-500 ring-offset-1 dark:ring-offset-slate-900'
+                  : 'opacity-80 hover:opacity-100',
               )}
             >
-              {count}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex items-center gap-4 text-sm">
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-3 py-1 font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
-          <CheckCircle className="h-3.5 w-3.5" /> {counts.match} conformes
-        </span>
-        {counts.warning > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
-            <AlertTriangle className="h-3.5 w-3.5" /> {counts.warning} atencoes
-          </span>
-        )}
-        {counts.divergent > 0 && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-100 px-3 py-1 font-medium text-danger-700 dark:bg-danger-950/30 dark:text-danger-300">
-            <XCircle className="h-3.5 w-3.5" /> {counts.divergent} falhas
-          </span>
-        )}
+              {Icon ? <Icon className="h-3.5 w-3.5" /> : null}
+              {label}
+              <span className="rounded-full bg-white/70 px-1.5 py-0.5 text-[10px] font-bold dark:bg-black/30">
+                {count}
+              </span>
+            </button>
+          ))}
       </div>
 
       <div className="rounded-xl border border-slate-200 dark:border-slate-600 overflow-hidden">
@@ -1192,6 +1250,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     )}
                     {field.displayStatus === 'divergent' && (
                       <XCircle className="h-4 w-4 text-danger-500" />
+                    )}
+                    {field.displayStatus === 'skipped' && (
+                      <Minus className="h-4 w-4 text-slate-400" />
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">
@@ -1310,103 +1371,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                   </td>
                 </tr>
               ))}
-              {filteredCrossDocumentRows.map((row) => (
-                <tr
-                  key={row.rowKey}
-                  className={cn(
-                    'border-b last:border-b-0',
-                    row.displayStatus === 'accepted'
-                      ? 'bg-primary-50/30 dark:bg-primary-950/20'
-                      : row.status === 'divergent'
-                        ? 'bg-danger-50/30 dark:bg-danger-950/20'
-                        : row.status === 'warning'
-                          ? 'bg-amber-50/30 dark:bg-amber-950/20'
-                          : '',
-                  )}
-                >
-                  <td className="px-3 py-2.5">
-                    {row.displayStatus === 'accepted' && (
-                      <Wrench className="h-4 w-4 text-primary-500" />
-                    )}
-                    {row.displayStatus === 'match' && (
-                      <CheckCircle className="h-4 w-4 text-emerald-500" />
-                    )}
-                    {row.displayStatus === 'warning' && (
-                      <AlertTriangle className="h-4 w-4 text-amber-500" />
-                    )}
-                    {row.displayStatus === 'divergent' && (
-                      <XCircle className="h-4 w-4 text-danger-500" />
-                    )}
-                  </td>
-                  <td className="px-3 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-100">
-                    <div className="flex items-center gap-1.5">
-                      <span>{row.label}</span>
-                      <span
-                        title="Cruzamento entre documentos (Invoice, Packing List e BL)"
-                        className="inline-flex items-center rounded bg-slate-100 dark:bg-slate-700 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-500"
-                      >
-                        cruzamento
-                      </span>
-                    </div>
-                  </td>
-                  {/*
-                    Cross-document checks compare a derived expected value against
-                    what was found, not a per-document value. Render them as an
-                    explicit Esperado/Encontrado pair spanning the
-                    Invoice/PL/BL/Espelho/Sistema columns so a reader does not
-                    misread them under the document-specific headers.
-                  */}
-                  <td className="px-3 py-2.5" colSpan={5}>
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Esperado
-                        </span>
-                        <span className="font-mono text-slate-700 dark:text-slate-300">
-                          {row.expected ?? '-'}
-                        </span>
-                      </span>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                          Encontrado
-                        </span>
-                        <span
-                          className={cn(
-                            'font-mono',
-                            row.displayStatus === 'divergent'
-                              ? 'text-danger-700 dark:text-danger-400 font-semibold'
-                              : row.displayStatus === 'warning'
-                                ? 'text-amber-700 dark:text-amber-400 font-medium'
-                                : row.displayStatus === 'accepted'
-                                  ? 'text-primary-700 dark:text-primary-300 font-medium'
-                                  : 'text-slate-700 dark:text-slate-300',
-                          )}
-                        >
-                          {row.actual ?? '-'}
-                        </span>
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3 py-2.5">
-                    <StatusPill status={row.displayStatus} />
-                  </td>
-                  <td className="px-3 py-2.5 text-xs text-slate-600 dark:text-slate-400 min-w-[220px]">
-                    {row.message ?? '-'}
-                  </td>
-                  <td className="px-3 py-2.5">
-                    {renderAcceptanceCell(
-                      {
-                        scope: 'aggregate',
-                        rowKey: row.rowKey,
-                        fieldLabel: row.label,
-                        previousStatus: row.status,
-                      },
-                      row.accepted,
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {filteredAggregateRows.length === 0 && filteredCrossDocumentRows.length === 0 && (
+              {filteredAggregateRows.length === 0 && (
                 <tr>
                   <td colSpan={10} className="px-3 py-8 text-center text-sm text-slate-400">
                     Nenhuma linha no filtro selecionado.
@@ -1445,7 +1410,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     Descricao
                   </th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    NCM
+                    NCM INV/Esp
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-primary-500">
                     Qtd INV
@@ -1457,10 +1422,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     Qtd Espelho
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Unit INV
+                    Unit INV/Esp
                   </th>
                   <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                    Total INV
+                    Total INV/Esp
                   </th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     Fabricante
@@ -1530,9 +1495,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     <td className="px-3 py-2 text-slate-700 dark:text-slate-300 max-w-[220px] truncate">
                       {item.description || '-'}
                     </td>
-                    <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-400">
-                      {item.ncm || '-'}
-                    </td>
+                    <SourceTextCell
+                      invoice={item.ncm}
+                      espelho={item.espelhoNcm}
+                      hasEspelho={!!data.hasEspelho}
+                      diverges={item.ncmMatch === false}
+                    />
                     <td className="px-3 py-2 text-right font-mono text-primary-700 dark:text-primary-300">
                       {formatNumber(item.invoiceQty, 0)}
                     </td>
@@ -1549,12 +1517,18 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     <td className="px-3 py-2 text-right font-mono text-cyan-700 dark:text-cyan-300">
                       {formatNumber(item.espelhoQty, 0)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-600 dark:text-slate-400">
-                      {formatMoney(item.invoiceUnitPrice)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-slate-800 dark:text-slate-100 font-medium">
-                      {formatMoney(item.invoiceTotal)}
-                    </td>
+                    <MoneyCell
+                      invoice={item.invoiceUnitPrice}
+                      espelho={item.espelhoUnitPrice}
+                      hasEspelho={!!data.hasEspelho}
+                      diverges={item.unitPriceMatch === false}
+                    />
+                    <MoneyCell
+                      invoice={item.invoiceTotal}
+                      espelho={item.espelhoTotal}
+                      hasEspelho={!!data.hasEspelho}
+                      diverges={item.totalPriceMatch === false}
+                    />
                     <td className="px-3 py-2 text-xs text-slate-600 dark:text-slate-400 min-w-[180px]">
                       <div className="space-y-0.5">
                         {[
@@ -1794,30 +1768,73 @@ export function DocumentComparison({ processId }: { processId: string }) {
         (PL-without-Invoice and Invoice-without-PL). Keeping both lists in one
         quadro preserves a single source of truth instead of scattering a second
         panel elsewhere.
+
+        A secao agora aparece SEMPRE que ha Invoice e Packing List. Reuniao
+        11/09 [17:29]: "quando esta tudo certo, mostrar explicitamente que todos
+        os itens foram encontrados" — antes o quadro sumia e a analista ficava
+        sem a confirmacao no lugar onde ela procura.
       */}
-      {((data.unmatchedPlItems ?? []).length > 0 ||
-        (data.unmatchedInvoiceItems?.length ?? 0) > 0) && (
-        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 overflow-hidden">
-          <div className="bg-amber-50 dark:bg-amber-950/30 px-4 py-3 border-b border-amber-200 dark:border-amber-800">
-            <h4 className="text-sm font-semibold text-amber-800 flex items-center gap-2 dark:text-amber-300">
-              <AlertTriangle className="h-4 w-4" />
-              Itens sem correspondencia entre Invoice e Packing List
+      {itemMatchSummary && (
+        <div
+          className={cn(
+            'overflow-hidden rounded-xl border',
+            itemMatchSummary.kind === 'all-matched'
+              ? 'border-emerald-200 bg-emerald-50/30 dark:border-emerald-700/50 dark:bg-emerald-950/20'
+              : 'border-amber-200 bg-amber-50/30 dark:border-amber-800 dark:bg-amber-950/20',
+          )}
+        >
+          <div
+            className={cn(
+              'border-b px-4 py-3',
+              itemMatchSummary.kind === 'all-matched'
+                ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-700/50 dark:bg-emerald-950/30'
+                : 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30',
+            )}
+          >
+            <h4
+              className={cn(
+                'flex items-center gap-2 text-sm font-semibold',
+                itemMatchSummary.kind === 'all-matched'
+                  ? 'text-emerald-800 dark:text-emerald-300'
+                  : 'text-amber-800 dark:text-amber-300',
+              )}
+            >
+              {itemMatchSummary.kind === 'all-matched' ? (
+                <CheckCircle className="h-4 w-4" />
+              ) : (
+                <AlertTriangle className="h-4 w-4" />
+              )}
+              {itemMatchSummary.title}
             </h4>
-          </div>
-          <div className="divide-y divide-amber-200 dark:divide-amber-800">
-            {(data.unmatchedPlItems ?? []).length > 0 && (
-              <UnmatchedItemsTable
-                title={`Itens no Packing List sem correspondencia na Invoice (${(data.unmatchedPlItems ?? []).length})`}
-                items={data.unmatchedPlItems ?? []}
-              />
-            )}
-            {(data.unmatchedInvoiceItems?.length ?? 0) > 0 && (
-              <UnmatchedItemsTable
-                title={`Itens na Invoice sem correspondencia no Packing List (${data.unmatchedInvoiceItems?.length})`}
-                items={data.unmatchedInvoiceItems ?? []}
-              />
+            {itemMatchSummary.detail && (
+              <p
+                className={cn(
+                  'mt-0.5 text-xs',
+                  itemMatchSummary.kind === 'all-matched'
+                    ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-amber-700 dark:text-amber-300',
+                )}
+              >
+                {itemMatchSummary.detail}
+              </p>
             )}
           </div>
+          {itemMatchSummary.kind === 'unmatched' && (
+            <div className="divide-y divide-amber-200 dark:divide-amber-800">
+              {(data.unmatchedPlItems ?? []).length > 0 && (
+                <UnmatchedItemsTable
+                  title={`Itens no Packing List sem correspondencia na Invoice (${(data.unmatchedPlItems ?? []).length})`}
+                  items={data.unmatchedPlItems ?? []}
+                />
+              )}
+              {(data.unmatchedInvoiceItems?.length ?? 0) > 0 && (
+                <UnmatchedItemsTable
+                  title={`Itens na Invoice sem correspondencia no Packing List (${data.unmatchedInvoiceItems?.length})`}
+                  items={data.unmatchedInvoiceItems ?? []}
+                />
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -22,6 +22,12 @@ const READ_PATHS = new Set([
   '/cert-api/api/schedules',
   '/cert-api/api/certificates',
   '/cert-api/api/licenciados',
+  // Grifes/licenças lidas do Linx (filtro da tela de Produtos) e "quando a
+  // planilha foi lida pela última vez" — as duas são consulta pura.
+  '/cert-api/api/grifes',
+  '/cert-api/api/sync-sheets/last',
+  // Auditoria de marketplace: leitura pública da VTEX, resultado só de consulta.
+  '/cert-api/api/marketplace/items',
 ]);
 
 const OPERATE_PATHS = new Set([
@@ -30,6 +36,11 @@ const OPERATE_PATHS = new Set([
   '/cert-api/api/reports/export',
   '/cert-api/api/reports/export-stock',
   '/cert-api/api/certificates',
+  // Reunião 11/09/2026: o analista pode forçar a leitura da planilha. Só lê
+  // Sheets/Linx e grava no NOSSO banco; o lock advisory impede concorrência e
+  // cada execução fica registrada em cert_sync_runs com o ator.
+  '/cert-api/api/sync-sheets',
+  '/cert-api/api/marketplace/audit',
 ]);
 
 function originalPath(value: string | undefined): string | null {
@@ -59,7 +70,8 @@ function isReadPath(path: string): boolean {
     /^\/cert-api\/api\/schedules\/[^/%]+\/history$/.test(path) ||
     /^\/cert-api\/api\/certificates\/[^/%]+(?:\/pdf)?$/.test(path) ||
     /^\/cert-api\/api\/stock\/[^/%]+$/.test(path) ||
-    /^\/cert-api\/api\/licenciados\/[^/%]+$/.test(path)
+    /^\/cert-api\/api\/licenciados\/[^/%]+$/.test(path) ||
+    /^\/cert-api\/api\/marketplace\/audit\/[^/%]+$/.test(path)
   );
 }
 
@@ -73,7 +85,26 @@ function isOperatePath(path: string): boolean {
   // as well as `/`: Nginx resolves percent-encoded traversal before it proxies,
   // and a scope decided on the raw URI must never out-permit the path the
   // cert-api actually serves. Certificate ids are uuid4 — never percent-encoded.
-  return /^\/cert-api\/api\/certificates\/[^/%]+\/retry-linx$/.test(path);
+  return (
+    /^\/cert-api\/api\/certificates\/[^/%]+\/retry-linx$/.test(path) ||
+    // Vínculo em massa de SKUs ao certificado: mesma rotina do cadastro, com
+    // prévia obrigatória (`dry_run`) antes de qualquer gravação no Linx.
+    /^\/cert-api\/api\/certificates\/[^/%]+\/items$/.test(path)
+  );
+}
+
+/**
+ * DELETEs que um analista pode executar.
+ *
+ * Só a remoção de UM item do certificado — o par da operação de vínculo, e um
+ * soft delete que não apaga a trava do produto no Linx. Apagar o certificado
+ * inteiro (e qualquer outro DELETE do cert-api) continua administrativo.
+ *
+ * O curinga exclui `%` pelo mesmo motivo das regras acima: o Nginx resolve
+ * traversal percent-encoded antes de proxiar.
+ */
+function isOperateDeletePath(path: string): boolean {
+  return /^\/cert-api\/api\/certificates\/[^/%]+\/items\/[^/%]+$/.test(path);
 }
 
 /**
@@ -90,6 +121,15 @@ export function requiredCertApiScope(
 
   if ((method === 'GET' || method === 'HEAD') && isReadPath(path)) return 'cert.read';
   if (method === 'POST' && isOperatePath(path)) return 'cert.operate';
+  if (method === 'DELETE' && isOperateDeletePath(path)) return 'cert.operate';
+  // Restricao individual e rotina local do analista; outros PATCH continuam
+  // administrativos. Segmentos codificados nao podem atravessar a allowlist.
+  if (
+    method === 'PATCH' &&
+    /^\/cert-api\/api\/certificates\/[^/%]+\/items\/[^/%]+\/restriction$/.test(path)
+  ) {
+    return 'cert.operate';
+  }
 
   return 'cert.admin';
 }
@@ -97,10 +137,11 @@ export function requiredCertApiScope(
 /**
  * The project currently has only `admin` and `analyst` roles. Analysts may
  * consult certification data, trigger bounded validation/export operations and
- * register certificates (the cert team's own routine — the actor is recorded via
- * `X-Cert-Actor-Email`); synchronization, schedule changes, user management,
- * certificate deletion and future routes remain administrative until a
- * finer-grained role model is introduced.
+ * register certificates, link/unlink their products and force the spreadsheet
+ * sync (the cert team's own routine — the actor is recorded via
+ * `X-Cert-Actor-Email`); stock/licenciados synchronization, schedule changes,
+ * user management, certificate deletion and future routes remain administrative
+ * until a finer-grained role model is introduced.
  */
 export function canAccessCertApi(role: string | undefined, scope: CertApiScope): boolean {
   if (role === 'admin') return true;

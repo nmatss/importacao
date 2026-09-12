@@ -1,3 +1,4 @@
+import { RegistroDocumentComparison } from './RegistroDocumentComparison';
 import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
@@ -180,7 +181,13 @@ function compareRegistroField(
 }
 
 function buildRegistroChecks(process: ImportProcess, sourceDoc?: Document): RegistroCheck[] {
-  const data = sourceDoc?.aiParsedData ?? null;
+  const data =
+    sourceDoc?.aiProcessingStatus === 'completed' &&
+    sourceDoc.aiConfidence != null &&
+    sourceDoc.aiConfidence >= 0.4 &&
+    sourceDoc.aiConfidence <= 1
+      ? sourceDoc.aiParsedData
+      : null;
   const specs = [
     {
       key: 'customsValue',
@@ -338,6 +345,12 @@ export function RegistroTab({ processId }: { processId: string }) {
         </Link>
       </div>
 
+      <p className="text-sm text-slate-600 dark:text-slate-300">
+        Salve o rascunho DUIMP na pasta do processo no Drive, com o código completo do processo no
+        nome do arquivo. Após a leitura, confira o arquivo associado na aba Documentos. A rotina é
+        manual; o rascunho não registra a declaração.
+      </p>
+      <RegistroDocumentComparison processId={processId} />
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {fields.map(([label, value]) => (
           <div
@@ -369,10 +382,14 @@ export function RegistroTab({ processId }: { processId: string }) {
               <AlertTriangle className="h-3.5 w-3.5" />
               Revisar divergencias
             </span>
-          ) : (
+          ) : registroChecks.every((check) => check.status === 'match') ? (
             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 dark:border-emerald-700/50 dark:bg-emerald-950/30 dark:text-emerald-300">
               <CheckCircle2 className="h-3.5 w-3.5" />
-              Sem divergencia critica
+              Campos cadastrais conferidos
+            </span>
+          ) : (
+            <span className="text-sm text-amber-700 dark:text-amber-300">
+              Conferência cadastral pendente
             </span>
           )}
         </div>

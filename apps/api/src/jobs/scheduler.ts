@@ -7,6 +7,7 @@ import {
   getDocumentSource,
 } from '../modules/documents/drive-ingestion.service.js';
 import { runLogisticSync } from './logistic-sync.js';
+import { runFollowUpSync } from './follow-up-sheet-sync.js';
 import { runFinancialCheck } from './financial-check.js';
 import { runSydleSync } from './sydle-sync.js';
 import { runAlertRedelivery } from './alert-redelivery.js';
@@ -71,9 +72,14 @@ export function startScheduler() {
     tz,
   );
 
-  // Daily at 9:00 AM - Check stalled processes
+  // Seg-sex as 9:00 - Digest de processos sem movimentacao.
+  //
+  // Rodava sete dias por semana e postava o resumo no sabado e no domingo com a
+  // contagem da sexta (alerta 6509: criado 06/09 12:00 UTC, entregue no domingo
+  // 07/09). Ninguem trabalha o processo no fim de semana, entao a mensagem so
+  // gastava atencao.
   cron.schedule(
-    '0 9 * * *',
+    '0 9 * * 1-5',
     async () => {
       try {
         await checkStalledProcesses();
@@ -140,6 +146,22 @@ export function startScheduler() {
     tz,
   );
 
+  // A cada 30 minutos - Le a planilha Follow Up e atualiza a referencia do
+  // processo (FOB, datas de ETA/registro, canal, chegada no CD). Roda junto do
+  // logistic-sync porque e ele que consome essas datas. Em
+  // FOLLOW_UP_SYNC_MODE=dry_run (padrao) so registra o diff, sem gravar.
+  cron.schedule(
+    '*/30 * * * *',
+    async () => {
+      try {
+        await runFollowUpSync();
+      } catch (error) {
+        await handleCronError('follow-up-sheet-sync', error);
+      }
+    },
+    tz,
+  );
+
   // Every 10 minutes - Sync purchase/payment report from SYDLE (no-op when unconfigured)
   cron.schedule(
     '*/10 * * * *',
@@ -185,6 +207,6 @@ export function startScheduler() {
   );
 
   logger.info(
-    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), sydle-sync (*/10 min), pre-cons-drive-sync (*/6h), alert-redelivery (*/5 min) - timezone: America/Sao_Paulo',
+    'Cron scheduler initialized: deadline check (8:00), financial check (8:30), stalled check (9:00 weekdays), email check (*/5 min), double-check (22:00 weekdays), logistic-sync (*/30 min), follow-up-sheet-sync (*/30 min), sydle-sync (*/10 min), pre-cons-drive-sync (*/6h), alert-redelivery (*/5 min) - timezone: America/Sao_Paulo',
   );
 }

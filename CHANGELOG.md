@@ -1,5 +1,166 @@
 # Changelog
 
+### Revisão de fontes — 2026-09-12
+
+- Corrige origem do espelho no comparativo, Unicode de PDFs e penalização de avisos documentais comprovados.
+- Bloqueia carga bulk sem baseline/recuperação e alinha derivação de licenciamento no relatório ao snapshot da tela.
+- Registra auditoria dos30 pontos, divergências produtivas e piloto Vertex autorizado em STATUS-2026-09-12-RETOMADA-REUNIAO.md.
+
+## 2026-09-12 — Revisão antecipada adicional (local)
+
+- Recuperação digital Poppler com limites e preservação de layout; totais packing PK220.
+- Datas previstas e realizadas separadas no comparativo/capa; previsões e textos negados não avançam logística.
+- Registro rejeita aliases, versões e unidades conflitantes; caches atualizados após mutação documental.
+- Retry de certificado respeita vínculos atuais e conflitos ativos; restrição individual auditável com migration aditiva explícita.
+- Migration ainda não aplicada em produção; publicação e homologação permanecem pendentes.
+
+## 2026-09-12 — Retomada da reunião, sem publicação
+
+- BL exige 90% na API e interface; reprocessamento abaixo do piso retira projeção antiga.
+- Drive rejeita arquivo de outro processo antes da prioridade por tipo; CNPJ/endereço do
+  espelho e consulta SKU/Odoo corrigidos sem reescrever fonte.
+- Registro compara DUIMP, invoice e espelho com proveniência, formatos reais e pendências
+  explícitas; quantidade exata e divergência numérica dentro da tolerância exige revisão.
+- Licenciamento oficial protegido no cadastro e no serviço Linx; situação vigente prevalece
+  sobre histórico, ausência desconhecida não libera automaticamente.
+- Sync mostra erros/parcialidade, esquema ambíguo não promove snapshot; marketplace deixa
+  aplicabilidade pendente e remove regra automática por 500 peças.
+- Cronograma existente atualizado com evidência; fontes reais consultadas somente leitura.
+- [Validações e limites](docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
+## 2026-09-11 — Certificacao: status pela situacao, trava pela menor data e cadastro por certificado
+
+- A aba "Puket escolares" deixou de ser lida (ficam Imaginario, PUC e Encerramentos) e o
+  licenciamento passa a vir da propriedade do Linx, nao da planilha descontinuada.
+- Status do item passou a seguir a SITUACAO do certificado (coluna U) e a trava de venda passou a
+  ser a MENOR data entre fim de venda da certificacao e fim do licenciamento, descartando vazio e a
+  sentinela 01/01/1900. Certificado ativo nunca tem data de trava.
+- Dupla certificacao resolvida por precedencia: a linha ativa vence e o encerramento so vale quando
+  nao ha certificado ativo para o SKU.
+- Certificado virou entidade com itens: vinculo em massa (com previa obrigatoria), remocao
+  individual, campo "fim de venda" no cadastro e numero do certificado na lista e na busca.
+- Botao de sincronizar a planilha na hora, com trava contra execucao concorrente e historico de
+  execucoes, mais sincronizacao horaria so da planilha.
+- Auditoria do marketplace da Imaginarium: quebra-cabecas de terceiros com menos de 500 pecas
+  precisam de informacao de certificacao no site.
+- Carga do zero no Linx continua SEM execucao: so o relatorio antes/depois por SKU (dry-run).
+
+## 2026-09-11 — Comparativo: resumo unico, cruzamentos em coluna e casamento de item
+
+- Um unico resumo clicavel e colorido; o bloco duplicado so-visual saiu.
+- Os cruzamentos deixaram de ser linha de texto "esperado x encontrado": viraram status e mensagem
+  das linhas de cima, com os valores nas colunas Invoice / Packing / BL / Espelho / Sistema.
+- CNPJ comparado apenas pelos digitos; o endereco do espelho com prefixo "CNPJ: ..." nao gera mais
+  divergencia.
+- Itens da Invoice x Packing List: o codigo entre colchetes da descricao virou candidato primario e
+  o codigo composto (PI + colecao + codigo) casa pelo sufixo — os 14 itens "sem correspondencia" do
+  PK220 eram erro de leitura. Quando todos casam, a tela diz isso.
+- Integracao indisponivel (Odoo) e dado ausente na fonte (frete) aparecem como "Nao verificado" com
+  o motivo, fora da contagem de atencoes.
+- O exportador deixou de ser preenchido por fallback do cadastro quando nao ha espelho.
+
+## 2026-09-11 — Follow Up: sincronizacao por cabecalho, datas corretas e capa
+
+- Sincronizacao recorrente da planilha para o nosso banco, mapeada por cabecalho e tolerante a
+  coluna inserida; "#ERROR!", "-" e vazio contam como indisponivel e nunca viram zero. Nasce em
+  `dry_run`: so registra o diff ate ser autorizada.
+- Atracacao passou a usar "ETA Realizado" (ou "ETA Final\*"), nunca "ETA Previsto Medio" — a origem
+  do "ETA 16/09" quando as tres datas reais eram 08/09. "Registrado" mostra numero e data da DUIMP.
+- Capa do processo com precedencia por campo: Follow Up primeiro no que ela tem, documentos
+  completam o resto (packing list como fonte de pesos, caixas e CBM) e a divergencia fica visivel.
+- Estagio logistico so avanca por evento realizado e pode ser corrigido para tras.
+
+## 2026-09-11 — Extracao: BL lido pelo PDF original
+
+- Os BLs tem camada de texto CID que o servidor le vazia; como o OCR respondia alguma coisa, o PDF
+  original nunca chegava ao modelo. Agora ele vai anexado sempre que o provider aceita PDF, e o OCR
+  entra so como apoio.
+- Fim do dado inventado a partir do formulario: container exige ISO 6346 valido (fim do
+  "Numero container: ainers"), identificadores exigem digito e tamanho minimo, e valor vindo do
+  texto vale menos na nota do documento.
+- Tres falsos positivos do verificador que derrubavam o OHBL do PK220 para 39% foram corrigidos.
+- Packing list passou a fornecer CBM, quantidade e fabricante ao comparativo.
+
+## 2026-09-11 — Drive como fonte: indice da pasta PROCESSOS, dedupe por conteudo e somente leitura
+
+- A leitura do Drive deixou de procurar `<raiz>/<Marca>/Importado/Processo N <codigo>`
+  (layout que nao existe na pasta real) e passou a montar um INDICE por varredura:
+  `04. PENDENTES DE CORRECAO` na raiz, `02. IMAGINARIUM`/`03. PUKET` por ano e, quando
+  houver, por colecao ou `FAT <mes>`. Pasta cujo nome comeca com codigo de processo e
+  processo; qualquer outra e grupo e desce UM nivel. O ano da pasta e o da COLECAO
+  (PK2192607SZ e PK2202608SZ estao em PUKET/2027/HIGH SUMMER), nomes legados curtos
+  (`2080_SZ`) sao ignorados e as DUAS pastas de um codigo duplicado sao lidas.
+- Prioridade POR TIPO: para cada tipo de documento, o arquivo em PENDENTES vence e os
+  tipos ausentes vem da pasta da marca — o BL que so existe na marca nao se perde mais.
+- Espelho vem so de `01. ESPELHOS`, agora tambem quando e Google Sheets NATIVO (via
+  `files.export` em xlsx; eram 316 de 376 arquivos que a ingestao pulava). `CONSOLIDADO`
+  e `(antigo com erro)` sao excluidos por nome, e espelho ambiguo aparece no status.
+- Dentro da pasta do processo a varredura nao desce mais em subpasta de backup (a pasta
+  real do PK2202608SZ tem um `Backup/` com a invoice antiga) e arquivo que nao e do fluxo
+  (CT-e, manifesto, `fat_*.pdf`, `FATURA<numero>`) ou que o classificador nao reconhece
+  deixou de entrar como documento `other`: fica listado com o motivo.
+- Identidade do documento passou a ser o CONTEUDO. Todo upload grava `content_sha256`; o
+  que vem do Drive grava tambem `drive_md5`, `drive_version`, `drive_modified_time` e
+  `drive_area`. Arquivo copiado, pasta duplicada e o arquivo que a analista subiu a mao
+  nao viram documento duplicado, e a varredura consulta `document_ingestion_tombstones`
+  antes de reimportar — documento excluido pelo analista nao volta sozinho.
+- `DRIVE_WRITE_MODE` (padrao `off` com o Drive como fonte) tornou PROCESSOS somente
+  leitura: nada de mover a pasta do processo para correcao, criar `Puket`/`Imaginarium`
+  ou `00. SISTEMA AUTOMATICO`, nem subir copia de documento. O token pede
+  `drive.readonly` e ha guarda estatica sobre todo `files.create`/`files.update`.
+- `MANUAL_UPLOAD_ENABLED` (padrao `true`) passou a ser a unica chave do upload pela tela:
+  com `DOCUMENT_SOURCE=drive` ele continuava devolvendo 409, justamente o caminho de que
+  a operacao dependeu em 11/09.
+- Observabilidade: `GET /api/documents/process/:id/drive-status` responde o que a
+  varredura viu daquele processo (pastas por area, importados, ignorados com motivo) e
+  `/health/integrations` passou a mostrar as 4 areas resolvidas, o modo de escrita, o
+  upload manual e a ultima varredura, avisando quando falta area, quando a varredura nao
+  rodou ou quando ela esta parada ha mais de 30 minutos.
+- Contrato operacional atualizado em `docs/operations/document-intake-contract-2026-09-11.md`,
+  incluindo a sequencia de ativacao fora do codigo (compartilhamento, SOPS, backfill de
+  hash e smoke) e a cadeia completa que deixou o PK220 vazio.
+
+## 2026-09-11 — Tela do processo: cabecalho, checklist e exclusao de documento
+
+- Barra fixa do processo compactada em UMA linha no desktop: codigo, marca, status,
+  flags, "Criado/ETD/ETA", contagem de documentos e a observacao urgente editavel
+  inline; acoes viraram icones preservando os nomes acessiveis. O status de correcao
+  aparece em portugues ("Aguardando correção"), nao mais como `pending_correction`.
+- Ciclo de Transporte passou a vir logo apos o cabecalho, antes do stepper documental.
+- Checklist com fonte unica no servidor (`GET /api/processes/:id/checklist`): catalogo
+  padrao e etapas especificas na mesma lista, na posicao escolhida (linha 1-based),
+  com progresso calculado. A aba "Etapas" foi removida e `?tab=etapas` redireciona
+  para o Checklist. "Coletar Assinaturas" e "Enviar Docs Assinados" saem da rotina
+  sem apagar coluna nem timestamp, e `sentToFeniciaAt` passa a se chamar "Atualizar
+  Follow-up" tambem no historico (verdade: `scripts/import-follow-up.js`).
+- Etapa padrao pode ser ocultada por processo (`process_checklist_hidden_steps`) e
+  etapa especifica pode ser excluida, ambas com audit e evento no historico.
+- Exclusao de documento liberada para analista, com motivo obrigatorio, audit com a
+  origem do arquivo, evento `document_deleted`, tombstone contra reimportacao pelo
+  Drive e revalidacao do processo (ou limpeza dos resultados quando nao sobra
+  documento comparavel). O bloqueio 423 em processo travado continua valendo.
+
+## 2026-09-11 — Alertas e Google Chat
+
+- "Processo sem movimentacao" deixou de ser `updated_at` antigo e passou a ser
+  "fora do esperado para a fase": processo em transito (ETA futura), travado,
+  encerrado ou ja registrado nao alerta; atracado sem registro, sim. Com os
+  dados de 11/09, de 28 processos alertados para 4.
+- O Chat nao recebe mais um card por processo parado: sai UM digest de segunda a
+  sexta as 09:00, e so quando o conjunto muda. Cada processo reaparece no maximo
+  a cada 5 dias uteis; a partir de 10 dias uteis apos a ETA sem registro o aviso
+  escala para critico. Nada e enviado em fim de semana.
+- Alerta de agregacao diaria passou a deduplicar por DIA CIVIL (America/Sao_Paulo)
+  em vez de janela deslizante de 24h, e nao reentrega mensagem de um dia que ja
+  passou — era assim que o resumo de sabado chegava no domingo.
+- Falha de validacao virou uma mensagem so, pelo caminho unico de entrega
+  (`delivery.service.ts`), com o texto em portugues e sem nome tecnico de
+  verificacao. Reprocessar sem mudanca no conjunto de falhas nao repete o aviso.
+  O envio direto ao Chat do `validation/service.ts` e o do handler morto de
+  `validation.completed` foram removidos, com guarda estatica contra a volta.
+- Mensagens do mesmo processo caem no mesmo topico do espaco (`threadKey`); o
+  digest agrupa por semana.
+
 ## 2026-09-06 — Revisao de certificacao
 
 - Corrigidas respostas fora de ordem na lista de produtos e dupla decodificacao de parametros nos detalhes.

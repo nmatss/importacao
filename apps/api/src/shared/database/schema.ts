@@ -6,12 +6,14 @@ import {
   text,
   boolean,
   integer,
+  bigint,
   numeric,
   date,
   timestamp,
   jsonb,
   index,
   uniqueIndex,
+  unique,
 } from 'drizzle-orm/pg-core';
 
 // ── Enums ──────────────────────────────────────────────────────────────
@@ -186,6 +188,17 @@ export const documents = pgTable(
     // document concurrently. Expiry makes a crashed worker recoverable.
     extractionLeaseToken: varchar('extraction_lease_token', { length: 64 }),
     extractionLeaseExpiresAt: timestamp('extraction_lease_expires_at', { withTimezone: true }),
+    // Dedupe por conteudo e versao do Drive (migration 0029, reuniao
+    // 2026-09-11). Anulaveis: documentos anteriores nunca tiveram o hash
+    // calculado, e `null` aqui significa "desconhecido", nao "sem conteudo".
+    contentSha256: varchar('content_sha256', { length: 64 }),
+    driveMd5: varchar('drive_md5', { length: 32 }),
+    // O Drive devolve `version` como int64 em string; os valores reais cabem
+    // folgados em Number.MAX_SAFE_INTEGER.
+    driveVersion: bigint('drive_version', { mode: 'number' }),
+    driveModifiedTime: timestamp('drive_modified_time', { withTimezone: true }),
+    // Area da raiz PROCESSOS de onde o arquivo veio (pendentes, marca, espelhos).
+    driveArea: text('drive_area'),
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow(),
   },
@@ -194,6 +207,38 @@ export const documents = pgTable(
     index('documents_process_type_idx').on(table.processId, table.type),
     index('documents_ingestion_source_idx').on(table.ingestionSource),
     index('documents_extraction_lease_expires_idx').on(table.extractionLeaseExpiresAt),
+    index('documents_process_content_sha256_idx').on(table.processId, table.contentSha256),
+  ],
+);
+
+/**
+ * Documento EXCLUIDO que nao pode voltar sozinho (migration 0029, D8).
+ *
+ * O sweep do Drive consulta por `driveFileId` e por `(processId,
+ * contentSha256)` antes de reimportar. `documentId` fica sem FK de proposito: a
+ * linha em `documents` ja foi apagada quando o tombstone existe.
+ */
+export const documentIngestionTombstones = pgTable(
+  'document_ingestion_tombstones',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    documentId: integer('document_id'),
+    driveFileId: text('drive_file_id'),
+    contentSha256: varchar('content_sha256', { length: 64 }),
+    originalFilename: text('original_filename'),
+    deletedBy: integer('deleted_by').references(() => users.id, { onDelete: 'set null' }),
+    reason: text('reason').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index('document_ingestion_tombstones_drive_file_id_idx').on(table.driveFileId),
+    index('document_ingestion_tombstones_process_content_idx').on(
+      table.processId,
+      table.contentSha256,
+    ),
   ],
 );
 
@@ -406,6 +451,31 @@ export const processCustomStages = pgTable(
   (table) => [
     index('process_custom_stages_process_id_idx').on(table.processId),
     index('process_custom_stages_process_position_idx').on(table.processId, table.position),
+  ],
+);
+
+/**
+ * Etapa PADRAO do checklist oculta neste processo (migration 0030, D7).
+ *
+ * `stepKey` e a chave estavel do catalogo (ex.: `sentToFeniciaAt`), nao o
+ * rotulo. Reexibir = apagar a linha; a coluna de data da etapa em
+ * `import_processes` nunca e tocada.
+ */
+export const processChecklistHiddenSteps = pgTable(
+  'process_checklist_hidden_steps',
+  {
+    id: serial('id').primaryKey(),
+    processId: integer('process_id')
+      .references(() => importProcesses.id, { onDelete: 'cascade' })
+      .notNull(),
+    stepKey: text('step_key').notNull(),
+    hiddenBy: integer('hidden_by').references(() => users.id, { onDelete: 'set null' }),
+    reason: text('reason'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  // CONSTRAINT (nao so indice), igual a 0030 — e o alvo do ON CONFLICT.
+  (table) => [
+    unique('process_checklist_hidden_steps_process_step_uniq').on(table.processId, table.stepKey),
   ],
 );
 

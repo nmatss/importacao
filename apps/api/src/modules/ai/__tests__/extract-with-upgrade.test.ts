@@ -164,6 +164,37 @@ Data de Desembaraco: 10/07/2026`,
     );
   });
 
+  it('does not let header-only DUIMP parsing skip an item table', async () => {
+    process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
+    const field = (value: unknown) => ({ value, confidence: 0.95 });
+    const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValue(
+      JSON.stringify({
+        customsValue: field(123456.78),
+        registrationDollar: field(5.4321),
+        insuranceValue: field(0),
+        duimpNumber: field('26BR0000000001'),
+        registeredAt: field('2026-07-09'),
+        customsClearanceAt: field(null),
+        customsChannel: field(null),
+        currency: field('USD'),
+        totalFobValue: field(100),
+        items: [{ itemCode: field('050404509'), quantity: field(10), ncmCode: field('95030099') }],
+      }),
+    );
+    const result = await aiService.extractDUIMPData(
+      `DUIMP
+Numero da DUIMP: 26BR0000000001
+Data de Registro: 09/07/2026
+Valor Aduaneiro: R$ 123.456,78
+Dolar de Registro: 5,432100
+ITENS SKU 050404509 NCM 95030099 Quantidade 10 FOB USD 100`,
+      'draft_duimp',
+    );
+    expect(spy).toHaveBeenCalled();
+    expect(result.data.items[0].itemCode.value).toBe('050404509');
+    expect(result.data.items[0].quantity.value).toBe(10);
+  });
+
   it('falls back to AI when the packing-list parser mistakes a contact line for an item', async () => {
     process.env.AI_UPGRADE_ON_LOW_CONFIDENCE = '0';
     const spy = vi.spyOn(aiService as any, 'chat').mockResolvedValueOnce(packingListResponse(0.95));

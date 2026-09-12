@@ -61,7 +61,7 @@ function makeProcess(overrides: Partial<ImportProcess> = {}): ImportProcess {
 }
 
 describe('buildLogisticProps', () => {
-  it('feeds espelho.summary etd/shipmentDate when process fields are null', () => {
+  it('exibe previsão do espelho sem tratá-la como embarque realizado', () => {
     const props = buildLogisticProps(
       makeProcess({
         aiExtractedData: {
@@ -79,7 +79,7 @@ describe('buildLogisticProps', () => {
 
     expect(props.etd).toBe('2026-02-08T00:00:00.000Z');
     expect(props.eta).toBe('2026-03-01T00:00:00.000Z');
-    expect(props.shipmentDate).toBe('2026-02-10T00:00:00.000Z');
+    expect(props.shipmentDate).toBeNull();
   });
 
   it('keeps process-level fields when present (no espelho override)', () => {
@@ -95,7 +95,7 @@ describe('buildLogisticProps', () => {
     expect(props.etd).toBe('2026-05-01T00:00:00.000Z');
   });
 
-  it('yields Em Transito when the BL espelho ETD is in the past', () => {
+  it('ETD passada isolada não comprova embarque', () => {
     const props = buildLogisticProps(
       makeProcess({
         aiExtractedData: {
@@ -104,7 +104,7 @@ describe('buildLogisticProps', () => {
       }),
     );
 
-    expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
+    expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
   });
 
   it('does not advance to Em Transito when there is no espelho/process shipping data', () => {
@@ -132,7 +132,7 @@ describe('buildLogisticProps', () => {
     expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
   });
 
-  it('yields Em Transito for a past espelho ETD with no real shipmentDate', () => {
+  it('shipmentDate legado do espelho não comprova embarque', () => {
     const props = buildLogisticProps(
       makeProcess({
         aiExtractedData: {
@@ -145,10 +145,10 @@ describe('buildLogisticProps', () => {
       }),
     );
 
-    expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
+    expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
   });
 
-  it('does not let the default consolidation status hide a past espelho ETD', () => {
+  it('status padrão permite indicar embarque pendente com ETD passada', () => {
     const props = buildLogisticProps(
       makeProcess({
         logisticStatus: 'consolidation',
@@ -161,15 +161,107 @@ describe('buildLogisticProps', () => {
       }),
     );
 
-    expect(deriveLogisticStep(props)).toBe(IN_TRANSIT_STEP);
+    expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
   });
 });
 
 describe('LogisticStatusBar', () => {
+  it('usa apenas eventos realizados e preserva status operacional explícito', () => {
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ eta: PAST_DATE })))).toBe(0);
+    expect(
+      deriveLogisticStep(buildLogisticProps(makeProcess({ duimpNumber: '26BR0001660880-2' }))),
+    ).toBe(0);
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ registeredAt: PAST_DATE })))).toBe(
+      4,
+    );
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ shipmentDate: FUTURE_DATE })))).toBe(
+      0,
+    );
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ shipmentDate: PAST_DATE })))).toBe(
+      IN_TRANSIT_STEP,
+    );
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ etaActual: PAST_DATE })))).toBe(3);
+    expect(
+      deriveLogisticStep(buildLogisticProps(makeProcess({ customsClearanceAt: PAST_DATE }))),
+    ).toBe(6);
+    expect(deriveLogisticStep(buildLogisticProps(makeProcess({ customsChannel: 'verde' })))).toBe(
+      5,
+    );
+    expect(
+      deriveLogisticStep(buildLogisticProps(makeProcess({ logisticStatus: 'waiting_entry' }))),
+    ).toBe(9);
+  });
+
   it('names the mobile carousel controls for assistive technologies', () => {
     render(<LogisticStatusBar {...buildLogisticProps(makeProcess())} />);
 
     expect(screen.getByRole('button', { name: 'Etapa logística anterior' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Próxima etapa logística' })).toBeEnabled();
+  });
+
+  /**
+   * Reuniao 11/09 (PK2192607SZ): a barra mostrava "ETD: 06/08" com a planilha
+   * em 07/08 e "ETA: 16/09" para um processo que atracou em 08/09; o passo
+   * Registrado aparecia sem data nenhuma, com a DUIMP registrada em 04/09.
+   */
+  it('mostra a data de calendario sem tirar um dia', () => {
+    render(
+      <LogisticStatusBar
+        {...buildLogisticProps(
+          makeProcess({ etd: '2026-08-07', logisticStatus: 'waiting_shipment' }),
+        )}
+      />,
+    );
+
+    expect(screen.getAllByText('ETD: 07/08').length).toBeGreaterThan(0);
+    expect(screen.queryByText('ETD: 06/08')).not.toBeInTheDocument();
+  });
+
+  it('usa o ETA Realizado na atracacao, com o rotulo "Atracou"', () => {
+    render(
+      <LogisticStatusBar
+        {...buildLogisticProps(
+          makeProcess({
+            etd: '2026-08-07',
+            eta: '2026-09-08',
+            etaActual: '2026-09-08',
+            portOfDischarge: 'Itapoa',
+            logisticStatus: 'berthing',
+          }),
+        )}
+      />,
+    );
+
+    expect(screen.getAllByText('Itapoa | Atracou: 08/09').length).toBeGreaterThan(0);
+  });
+
+  it('mostra numero e data no passo Registrado', () => {
+    render(
+      <LogisticStatusBar
+        {...buildLogisticProps(
+          makeProcess({
+            etd: '2026-08-07',
+            eta: '2026-09-08',
+            etaActual: '2026-09-08',
+            duimpNumber: '26BR0001660880-2',
+            registeredAt: '2026-09-04T03:00:00.000Z',
+            customsChannel: 'Verde',
+            logisticStatus: 'registered',
+          }),
+        )}
+      />,
+    );
+
+    expect(screen.getAllByText('26BR0001660880-2 | 04/09').length).toBeGreaterThan(0);
+  });
+
+  it('nao trata Chegada CD futura como chegada realizada', () => {
+    const props = buildLogisticProps(makeProcess({ etd: PAST_DATE, cdArrivalAt: FUTURE_DATE }));
+    expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
+  });
+
+  it('Chegada CD passada não comprova entrada sem status operacional', () => {
+    const props = buildLogisticProps(makeProcess({ etd: PAST_DATE, cdArrivalAt: PAST_DATE }));
+    expect(deriveLogisticStep(props)).toBe(AWAITING_SHIPMENT_STEP);
   });
 });

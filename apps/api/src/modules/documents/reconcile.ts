@@ -23,7 +23,7 @@ import {
   type EspelhoSource,
   type ReconcileReport,
 } from './reconcile-core.js';
-import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
+import { hasOperationalConfidence } from './constants.js';
 
 export {
   reconcileItemizedDoc,
@@ -203,7 +203,7 @@ async function persistReconciliation(
   // Auditoria 2026-07-17: a re-projeção respeita o MESMO piso operacional da
   // extração — sem isso, um documento de 0.30 (não projetado no gate original)
   // entrava no agregado por efeito colateral de um boost aritmético parcial.
-  if (score >= MIN_OPERATIONAL_CONFIDENCE) {
+  if (hasOperationalConfidence(doc.type, score)) {
     const patch = { [doc.type]: flattenAiData(data) };
     await db
       .update(importProcesses)

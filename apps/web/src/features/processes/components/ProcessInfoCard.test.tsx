@@ -88,7 +88,6 @@ describe('ProcessInfoCard', () => {
     render(
       <ProcessInfoCard
         process={makeProcess({
-          exporterName: 'FORNECEDOR MANUAL',
           aiExtractedData: {
             invoice: {
               exporterName: 'FORNECEDOR INVOICE',
@@ -138,6 +137,18 @@ describe('ProcessInfoCard', () => {
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
   });
 
+  it('mantém previsão e embarque realizado em campos distintos', () => {
+    render(
+      <ProcessInfoCard process={makeProcess({ etd: '2026-08-07', shipmentDate: '2026-08-09' })} />,
+    );
+    expect(screen.getByText('ETD previsto').parentElement?.parentElement).toHaveTextContent(
+      '07/08/2026',
+    );
+    expect(screen.getByText('Data Embarque').parentElement?.parentElement).toHaveTextContent(
+      '09/08/2026',
+    );
+  });
+
   it('falls back to BL espelho summary for Data Embarque, Frete and Container', () => {
     render(
       <ProcessInfoCard
@@ -159,7 +170,9 @@ describe('ProcessInfoCard', () => {
     );
 
     // Data Embarque from espelho.summary.shipmentDate (timezone-tolerant)
-    expect(screen.getByText(/0[19]\/02\/2026|10\/02\/2026/)).toBeInTheDocument();
+    // Data de calendario: o dia exibido e o dia do documento, sem tolerancia de
+    // fuso (a expectativa antiga aceitava 09 ou 10/02 para um BL de 10/02).
+    expect(screen.getByText('10/02/2026')).toBeInTheDocument();
     // Frete formatted with the espelho currency
     expect(screen.getByText(/3\.200,00/)).toBeInTheDocument();
     // Container number (ISO 6346) distinct from containerType
@@ -227,7 +240,9 @@ describe('ProcessInfoCard', () => {
       />,
     );
 
-    expect(screen.getByText(/0[19]\/02\/2026|10\/02\/2026/)).toBeInTheDocument();
+    // Data de calendario: o dia exibido e o dia do documento, sem tolerancia de
+    // fuso (a expectativa antiga aceitava 09 ou 10/02 para um BL de 10/02).
+    expect(screen.getByText('10/02/2026')).toBeInTheDocument();
     expect(screen.getByText(/3\.200,00/)).toBeInTheDocument();
     expect(screen.getByText('MSKU1234567')).toBeInTheDocument();
     // Labelled as sourced from the BL
@@ -248,6 +263,118 @@ describe('ProcessInfoCard', () => {
       />,
     );
 
-    expect(screen.getByText(/0[78]\/02\/2026/)).toBeInTheDocument();
+    expect(screen.getByText('08/02/2026')).toBeInTheDocument();
+  });
+
+  /**
+   * Decisao D3 da reuniao de 11/09: "puxar da follow-up o que tiver la e depois
+   * so atualizar", com o valor do documento visivel como divergencia.
+   */
+  describe('precedencia por campo (follow-up x documento)', () => {
+    const processoComFollowUp = {
+      exporterName: 'KIOM GLOBAL LIMITED',
+      portOfLoading: 'SHENZHEN',
+      portOfDischarge: 'ITAPOA',
+      totalFobValue: '101346.01',
+      totalCbm: '120.250',
+      containerType: "40'NOR",
+      etd: '2026-08-08',
+    } satisfies Partial<ImportProcess>;
+
+    it('mostra o FOB da follow-up com selo e a divergencia da invoice', () => {
+      render(
+        <ProcessInfoCard
+          process={makeProcess({
+            ...processoComFollowUp,
+            aiExtractedData: { invoice: { totalFobValue: 101246.01 } },
+          })}
+        />,
+      );
+
+      expect(screen.getByText('US$ 101.346,01')).toBeInTheDocument();
+      expect(screen.getByText(/Invoice: US\$ 101\.246,01/)).toBeInTheDocument();
+      expect(screen.getAllByTitle('Fonte: Follow-up').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('nao inventa divergencia quando os valores batem', () => {
+      render(
+        <ProcessInfoCard
+          process={makeProcess({
+            ...processoComFollowUp,
+            aiExtractedData: { invoice: { totalFobValue: 101346.01, portOfLoading: 'shenzhen' } },
+          })}
+        />,
+      );
+
+      expect(screen.queryByText(/Invoice: US\$/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/Invoice: shenzhen/)).not.toBeInTheDocument();
+    });
+
+    it('mostra ETD previsto da follow-up sem declarar embarque', () => {
+      render(<ProcessInfoCard process={makeProcess(processoComFollowUp)} />);
+      expect(screen.getByText('08/08/2026')).toBeInTheDocument();
+      expect(screen.getByText('ETD previsto')).toBeInTheDocument();
+    });
+
+    it('importador e pesos continuam vindo do documento (a follow-up nao os tem)', () => {
+      render(
+        <ProcessInfoCard
+          process={makeProcess({
+            ...processoComFollowUp,
+            aiExtractedData: {
+              invoice: { importerName: 'IMB TEXTIL S.A.', totalNetWeight: 12560.68 },
+              packing_list: { totalNetWeight: 12560.68, totalBoxes: 1375 },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText('IMB TEXTIL S.A.')).toBeInTheDocument();
+      expect(screen.getByText('1375')).toBeInTheDocument();
+      expect(screen.getAllByTitle('Fonte: Packing List').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('prefere o CBM do packing list quando a follow-up nao tem', () => {
+      render(
+        <ProcessInfoCard
+          process={makeProcess({
+            aiExtractedData: {
+              invoice: { totalCbm: 65.527 },
+              packing_list: { totalCbm: 65.53 },
+            },
+          })}
+        />,
+      );
+
+      expect(screen.getByText('65.530 m3')).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * O espelho auto-gerado e uma copia da propria invoice/PL montada pelo
+   * sistema (build-espelho.ts). A usuaria via "Espelho" na capa de um processo
+   * em que nao tinha subido espelho nenhum.
+   */
+  it('nao rotula como Espelho o resumo gerado automaticamente', () => {
+    render(
+      <ProcessInfoCard
+        process={makeProcess({
+          aiExtractedData: {
+            espelho: {
+              summary: {
+                generatedBy: 'auto_deterministic',
+                exporterName: 'KIOM GLOBAL LIMITED',
+                totalBoxes: 42,
+              },
+              items: [{ fornecedor: 'FORNECEDOR ESPELHO' }],
+            },
+          },
+        })}
+      />,
+    );
+
+    expect(screen.queryByTitle('Fonte: Espelho')).not.toBeInTheDocument();
+    expect(screen.queryByText('FORNECEDOR ESPELHO')).not.toBeInTheDocument();
+    expect(screen.queryByText('42')).not.toBeInTheDocument();
   });
 });

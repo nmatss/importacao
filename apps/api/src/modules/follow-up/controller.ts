@@ -1,5 +1,5 @@
 import type { Request, Response } from 'express';
-import { followUpService } from './service.js';
+import { followUpService, type FollowUpSyncRequestMode } from './service.js';
 import { sendSuccess, sendError, sendPaginated } from '../../shared/utils/response.js';
 
 export const followUpController = {
@@ -82,7 +82,9 @@ export const followUpController = {
   async syncFromSheet(req: Request, res: Response) {
     try {
       const { processCode } = req.params;
-      const mode = (req.body?.mode || 'conservative') as 'conservative' | 'industrial';
+      // Sem modo explicito, SIMULA. Gravar exige pedir 'apply' e ter
+      // FOLLOW_UP_SYNC_MODE=apply configurado no ambiente.
+      const mode = (req.body?.mode || 'dry_run') as FollowUpSyncRequestMode;
       const result = await followUpService.syncFromSheet(processCode, mode);
       sendSuccess(res, result);
     } catch (error: any) {

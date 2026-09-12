@@ -6,6 +6,20 @@ import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key
 import { logger } from '../../shared/utils/logger.js';
 import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
 import { integrationRetryOptions } from './retry-policy.js';
+import { resolveDriveWriteMode } from '../../shared/config/env.js';
+import { getDocumentSource } from '../documents/source-policy.js';
+import {
+  FOLDER_MIME,
+  GOOGLE_SHEET_MIME,
+  XLSX_MIME,
+  isYearFolderName,
+  matchDriveArea,
+  matchEspelhoFileName,
+  matchProcessCodeInName,
+  type DriveArea,
+  type DriveProcessArea,
+  type ReferenceLookup,
+} from '../documents/drive-layout.js';
 
 const DRIVE_API_TIMEOUT_MS = 30_000;
 
@@ -59,7 +73,13 @@ function folderCacheSet(key: string, value: string): void {
 }
 
 const SUBFOLDER_NAMES = ['Invoice', 'Packing List', 'BL', 'Espelho', 'Outros'] as const;
-const PROCESS_FOLDER_PREFIXES = ['', 'Processo Nº ', 'Processo N° ', 'Processo No '] as const;
+
+/** Numero que a API do Drive devolve como string; nao numerico vira `null`. */
+function numeroDoDrive(valor: string | null | undefined): number | null {
+  if (valor == null) return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : null;
+}
 
 function escapeDriveQuery(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -71,6 +91,84 @@ const DOC_TYPE_TO_SUBFOLDER: Record<string, string> = {
   ohbl: 'BL',
   espelho: 'Espelho',
 };
+
+export interface DriveAreaFolder {
+  id: string;
+  name: string;
+}
+
+/** Areas da raiz PROCESSOS; `null` = area nao resolvida (vira aviso de health). */
+export type DriveAreaMap = Record<DriveArea, DriveAreaFolder | null>;
+
+export interface DriveProcessFolder {
+  folderId: string;
+  name: string;
+  area: DriveProcessArea;
+  /** Caminho legivel para o status do sweep, ex.: '03. PUKET/2027/HIGH SUMMER/PK2192607SZ'. */
+  path: string;
+  normalizedCode: string;
+}
+
+export interface DriveEspelhoFile {
+  fileId: string;
+  name: string;
+  mimeType: string;
+  /** Google Sheets nativo: precisa de `files.export`, nao tem md5. */
+  nativo: boolean;
+  md5: string | null;
+  size: number | null;
+  version: number | null;
+  modifiedTime: string | null;
+  normalizedCode: string;
+}
+
+export interface DriveUnknownFolder {
+  name: string;
+  path: string;
+  area: DriveProcessArea;
+}
+
+export interface DriveProcessIndex {
+  areas: DriveAreaMap;
+  /** codigo normalizado -> TODAS as pastas dele (pastas duplicadas incluidas). */
+  byCode: Map<string, DriveProcessFolder[]>;
+  espelhosByCode: Map<string, DriveEspelhoFile[]>;
+  unknownFolders: DriveUnknownFolder[];
+  builtAt: Date;
+}
+
+/**
+ * A integracao com PROCESSOS e SOMENTE LEITURA (D1/DRV-06).
+ *
+ * A pasta e o acervo da operacao, no Meu Drive de uma pessoa. Todo caminho de
+ * escrita que existia (mover a pasta do processo para "PENDENTES DE CORREÇÃO",
+ * criar 'Puket'/'Imaginarium'/'00. SISTEMA AUTOMATICO', subir copia de cada
+ * documento) passaria a agir DENTRO desse acervo assim que a raiz apontasse
+ * para ele. `DRIVE_WRITE_MODE` e a chave unica que separa leitura de escrita, e
+ * o padrao ja e 'off' quando o Drive e fonte de documentos.
+ */
+export function isDriveWriteEnabled(): boolean {
+  const explicit = process.env.DRIVE_WRITE_MODE?.trim();
+  const mode = resolveDriveWriteMode(
+    getDocumentSource(),
+    explicit === 'off' || explicit === 'sistema' ? explicit : undefined,
+  );
+  return mode === 'sistema';
+}
+
+/**
+ * Guarda unica das escritas. Devolve `false` (e loga) em vez de lancar: os
+ * chamadores sao caminhos de background (fila, upload, validacao) e transformar
+ * "modo somente leitura" em erro encheria o log de falhas que nao sao falhas.
+ */
+function writeBlocked(operacao: string, contexto: Record<string, unknown> = {}): boolean {
+  if (isDriveWriteEnabled()) return false;
+  logger.info(
+    { operacao, ...contexto },
+    'Escrita no Google Drive ignorada: DRIVE_WRITE_MODE=off (integracao somente leitura)',
+  );
+  return true;
+}
 
 function getDriveClient(): drive_v3.Drive {
   if (driveClient) return driveClient;
@@ -84,7 +182,13 @@ function getDriveClient(): drive_v3.Drive {
 
   const auth = new googleAuth.GoogleAuth({
     credentials: { client_email: clientEmail, private_key: privateKey },
-    scopes: ['https://www.googleapis.com/auth/drive'],
+    // Escopo minimo: com a escrita desligada o token nem consegue criar pasta,
+    // entao um caminho de escrita esquecido falha no Google, nao no acervo.
+    scopes: [
+      isDriveWriteEnabled()
+        ? 'https://www.googleapis.com/auth/drive'
+        : 'https://www.googleapis.com/auth/drive.readonly',
+    ],
   });
 
   driveClient = new drive_v3.Drive({ auth });
@@ -93,6 +197,12 @@ function getDriveClient(): drive_v3.Drive {
 
 export const googleDriveService = {
   async createFolder(name: string, parentId?: string): Promise<string> {
+    // Ponto mais baixo da escrita: aqui a guarda LANCA, porque quem chegou ate
+    // aqui com a escrita desligada furou uma guarda de nivel acima e criar
+    // pasta no acervo da operacao e irreversivel na pratica.
+    if (!isDriveWriteEnabled()) {
+      throw new Error('Escrita no Google Drive desativada (DRIVE_WRITE_MODE=off)');
+    }
     const drive = getDriveClient();
     const rootFolderId = parentId || getConfiguredRootFolderId();
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
@@ -118,6 +228,9 @@ export const googleDriveService = {
   },
 
   async uploadFile(filePath: string, fileName: string, folderId: string): Promise<string> {
+    if (!isDriveWriteEnabled()) {
+      throw new Error('Escrita no Google Drive desativada (DRIVE_WRITE_MODE=off)');
+    }
     const drive = getDriveClient();
     const fs = await import('fs');
 
@@ -256,6 +369,9 @@ export const googleDriveService = {
     processCode: string,
     brand: string,
   ): Promise<{ processFolderId: string; subfolders: Record<string, string> }> {
+    if (!isDriveWriteEnabled()) {
+      throw new Error('Escrita no Google Drive desativada (DRIVE_WRITE_MODE=off)');
+    }
     const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
 
@@ -272,40 +388,177 @@ export const googleDriveService = {
   },
 
   /**
-   * Locate the folder of an existing process WITHOUT creating anything.
+   * INDICE de pastas por varredura (D1), no lugar da busca por processo.
    *
-   * `ensureProcessFolder` is the write path and creates the brand/process/
-   * subfolder tree as a side effect. Ingestion must never do that: a process
-   * whose folder does not exist yet simply has no documents to read, and
-   * creating empty folders in the team's Drive would be noise.
+   * O finder antigo procurava `<raiz>/<Marca>/[Processo N ]<codigo>` e no maximo
+   * um nivel abaixo da marca. Na arvore real a marca vem numerada ('03. PUKET'),
+   * tem ano e as vezes colecao, e a pasta de entrada ('04. PENDENTES DE
+   * CORREÇÃO') fica na RAIZ — nenhum caminho casava.
+   *
+   * Aqui a arvore e percorrida UMA vez por varredura e devolve todas as pastas
+   * de cada codigo (inclusive as duplicadas, como PK2122607NB, que o `pageSize:
+   * 1` do finder perdia de forma nao deterministica). Custo: 1 + areas + anos +
+   * grupos chamadas por varredura, em vez de ~6 por processo.
    */
-  async findProcessFolder(processCode: string, brand: string): Promise<string | null> {
-    const rootFolderId = getConfiguredRootFolderId();
-    if (!rootFolderId) return null;
+  async buildProcessFolderIndex(references: ReferenceLookup): Promise<DriveProcessIndex> {
+    const areas = await this.resolveDriveAreas();
+    const byCode = new Map<string, DriveProcessFolder[]>();
+    const unknownFolders: DriveUnknownFolder[] = [];
 
-    const brandName = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
-    const brandFolderId = await this.findFolder(rootFolderId, brandName);
-    if (!brandFolderId) return null;
+    const registrar = (
+      folder: { id: string; name: string },
+      area: DriveProcessArea,
+      parentPath: string,
+    ): boolean => {
+      const normalizedCode = matchProcessCodeInName(folder.name, references);
+      if (!normalizedCode) return false;
+      const lista = byCode.get(normalizedCode) ?? [];
+      lista.push({
+        folderId: folder.id,
+        name: folder.name,
+        area,
+        path: `${parentPath}/${folder.name}`,
+        normalizedCode,
+      });
+      byCode.set(normalizedCode, lista);
+      return true;
+    };
 
-    const candidateNames = PROCESS_FOLDER_PREFIXES.map((prefix) => `${prefix}${processCode}`);
-    for (const candidateName of candidateNames) {
-      const directMatch = await this.findFolder(brandFolderId, candidateName);
-      if (directMatch) return directMatch;
-    }
-
-    // Estrutura operacional real observada no Shared Drive:
-    //   <ano>/<Marca>/Importado/Processo Nº <codigo>
-    // A busca fica limitada a um nível intermediário da marca para não fazer
-    // varredura recursiva ampla nem aceitar uma pasta homônima fora da raiz.
-    const operationalGroups = await this.listChildFolders(brandFolderId);
-    for (const group of operationalGroups) {
-      for (const candidateName of candidateNames) {
-        const nestedMatch = await this.findFolder(group.id, candidateName);
-        if (nestedMatch) return nestedMatch;
+    // 04. PENDENTES DE CORREÇÃO — plana, filhos diretos sao pastas de processo.
+    if (areas.pendentes) {
+      const pendentes = await this.listChildFolders(areas.pendentes.id);
+      for (const folder of pendentes) {
+        if (!registrar(folder, 'pendentes', areas.pendentes.name)) {
+          unknownFolders.push({
+            name: folder.name,
+            path: `${areas.pendentes.name}/${folder.name}`,
+            area: 'pendentes',
+          });
+        }
       }
     }
 
-    return null;
+    // 02. IMAGINARIUM / 03. PUKET — <ano>/[<grupo>/]<processo>. "Grupo" e
+    // colecao (PUKET) ou faturamento (IMAGINARIUM, 'FAT 11', 'FAT - 08'): nao
+    // ha lista fixa de nomes, o que decide e o codigo no inicio do nome.
+    for (const area of ['imaginarium', 'puket'] as const) {
+      const marca = areas[area];
+      if (!marca) continue;
+      const anos = await this.listChildFolders(marca.id);
+      for (const ano of anos) {
+        if (!isYearFolderName(ano.name)) {
+          unknownFolders.push({
+            name: ano.name,
+            path: `${marca.name}/${ano.name}`,
+            area,
+          });
+          continue;
+        }
+        const anoPath = `${marca.name}/${ano.name}`;
+        const filhos = await this.listChildFolders(ano.id);
+        for (const filho of filhos) {
+          if (registrar(filho, area, anoPath)) continue;
+          // Nao e processo: e grupo. Desce UM nivel, nunca mais.
+          const grupoPath = `${anoPath}/${filho.name}`;
+          const netos = await this.listChildFolders(filho.id);
+          for (const neto of netos) {
+            if (!registrar(neto, area, grupoPath)) {
+              unknownFolders.push({ name: neto.name, path: `${grupoPath}/${neto.name}`, area });
+            }
+          }
+        }
+      }
+    }
+
+    const espelhosByCode = areas.espelhos
+      ? await this.indexEspelhos(areas.espelhos.id, references)
+      : new Map<string, DriveEspelhoFile[]>();
+
+    return {
+      areas,
+      byCode,
+      espelhosByCode,
+      unknownFolders,
+      builtAt: new Date(),
+    };
+  },
+
+  /**
+   * Resolve as 4 areas da raiz. O ID explicito (`GOOGLE_DRIVE_*_FOLDER_ID`)
+   * vence; sem ele, o nome normalizado decide — a pasta real e acentuada
+   * ("04. PENDENTES DE CORREÇÃO") e comparar literal quebraria no primeiro
+   * rename. Area que nao resolve fica `null` e vira aviso de health, nunca
+   * adivinhacao.
+   */
+  async resolveDriveAreas(): Promise<DriveAreaMap> {
+    const areas: DriveAreaMap = {
+      pendentes: null,
+      espelhos: null,
+      imaginarium: null,
+      puket: null,
+    };
+
+    const rootFolderId = getConfiguredRootFolderId();
+    if (rootFolderId) {
+      for (const folder of await this.listChildFolders(rootFolderId)) {
+        const area = matchDriveArea(folder.name);
+        if (area && !areas[area]) areas[area] = { id: folder.id, name: folder.name };
+      }
+    }
+
+    const overrides: Array<[DriveArea, string | undefined]> = [
+      ['pendentes', process.env.GOOGLE_DRIVE_PENDENTES_FOLDER_ID?.trim()],
+      ['espelhos', process.env.GOOGLE_DRIVE_ESPELHOS_FOLDER_ID?.trim()],
+    ];
+    for (const [area, id] of overrides) {
+      if (id) areas[area] = { id, name: areas[area]?.name ?? area };
+    }
+
+    return areas;
+  },
+
+  /**
+   * 01. ESPELHOS e plana e tem os dois formatos: Sheets NATIVO (a maioria) e
+   * .xlsx binario. O casamento e por codigo no inicio do nome, com exclusao
+   * explicita de 'CONSOLIDADO' e '(antigo com erro)'.
+   */
+  async indexEspelhos(
+    folderId: string,
+    references: ReferenceLookup,
+  ): Promise<Map<string, DriveEspelhoFile[]>> {
+    const porCodigo = new Map<string, DriveEspelhoFile[]>();
+
+    for (const file of await this.listFolderEntries(folderId)) {
+      if (!file.id || !file.name) continue;
+      if (file.mimeType === FOLDER_MIME) continue;
+      const nativo = file.mimeType === GOOGLE_SHEET_MIME;
+      if (!nativo && !/\.(xlsx|xls)$/i.test(file.name)) continue;
+
+      const normalizedCode = matchEspelhoFileName(file.name, references);
+      if (!normalizedCode) continue;
+
+      const lista = porCodigo.get(normalizedCode) ?? [];
+      lista.push({
+        fileId: file.id,
+        name: file.name,
+        mimeType: file.mimeType ?? XLSX_MIME,
+        nativo,
+        md5: file.md5Checksum ?? null,
+        size: numeroDoDrive(file.size),
+        version: numeroDoDrive(file.version),
+        modifiedTime: file.modifiedTime ?? null,
+        normalizedCode,
+      });
+      porCodigo.set(normalizedCode, lista);
+    }
+
+    // Mais recente primeiro: com mais de um espelho valido para o mesmo codigo,
+    // a ingestao usa o primeiro e reporta ambiguidade.
+    for (const lista of porCodigo.values()) {
+      lista.sort((a, b) => (b.modifiedTime ?? '').localeCompare(a.modifiedTime ?? ''));
+    }
+
+    return porCodigo;
   },
 
   async uploadToProcessFolder(
@@ -314,7 +567,9 @@ export const googleDriveService = {
     documentType: string,
     filePath: string,
     fileName: string,
-  ): Promise<string> {
+  ): Promise<string | null> {
+    if (writeBlocked('uploadToProcessFolder', { processCode, documentType })) return null;
+
     const { processFolderId, subfolders } = await this.ensureProcessFolder(processCode, brand);
     const subfolderName = DOC_TYPE_TO_SUBFOLDER[documentType] || 'Outros';
     const targetFolderId = subfolders[subfolderName];
@@ -343,6 +598,7 @@ export const googleDriveService = {
   },
 
   async moveToCorrection(processCode: string, brand: string): Promise<void> {
+    if (writeBlocked('moveToCorrection', { processCode })) return;
     const configured = await this.isRootConfigured();
     if (!configured) return;
 
@@ -381,6 +637,7 @@ export const googleDriveService = {
   },
 
   async moveFromCorrection(processCode: string, brand: string): Promise<void> {
+    if (writeBlocked('moveFromCorrection', { processCode })) return;
     const configured = await this.isRootConfigured();
     if (!configured) return;
 
@@ -422,6 +679,9 @@ export const googleDriveService = {
   // ── Sistema Automatico methods ──────────────────────────────────────
 
   async ensureSistemaFolder(): Promise<string> {
+    if (!isDriveWriteEnabled()) {
+      throw new Error('Escrita no Google Drive desativada (DRIVE_WRITE_MODE=off)');
+    }
     const rootFolderId = getConfiguredRootFolderId();
     if (!rootFolderId) throw new Error('GOOGLE_DRIVE_ROOT_FOLDER_ID not configured');
     return this.ensureFolder(rootFolderId, '00. SISTEMA AUTOMATICO');
@@ -454,7 +714,8 @@ export const googleDriveService = {
     return subfolders;
   },
 
-  async uploadToSistemaInbox(filePath: string, fileName: string): Promise<string> {
+  async uploadToSistemaInbox(filePath: string, fileName: string): Promise<string | null> {
+    if (writeBlocked('uploadToSistemaInbox', { fileName })) return null;
     const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
     const inboxId = await this.ensureSistemaInbox();
@@ -466,6 +727,7 @@ export const googleDriveService = {
     processCode: string,
     docType: string,
   ): Promise<void> {
+    if (writeBlocked('moveFromInboxToProcessados', { processCode })) return;
     const configured = await this.isRootConfigured();
     if (!configured) return;
 
@@ -507,7 +769,8 @@ export const googleDriveService = {
   async uploadValidationReport(
     processCode: string,
     reportData: Record<string, any>,
-  ): Promise<string> {
+  ): Promise<string | null> {
+    if (writeBlocked('uploadValidationReport', { processCode })) return null;
     const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
 
@@ -544,7 +807,8 @@ export const googleDriveService = {
     return fileId;
   },
 
-  async uploadToAlertas(fileName: string, content: string): Promise<string> {
+  async uploadToAlertas(fileName: string, content: string): Promise<string | null> {
+    if (writeBlocked('uploadToAlertas', { fileName })) return null;
     const configured = await this.isRootConfigured();
     if (!configured) throw new Error('Google Drive not configured');
 
@@ -625,6 +889,11 @@ export const googleDriveService = {
     return Buffer.from(response.data as ArrayBuffer);
   },
 
+  /**
+   * Varredura RECURSIVA de uma pasta (usada pela tela de diagnostico do Drive e
+   * pelo anexo de comunicacao). A ingestao NAO usa mais este metodo: dentro da
+   * pasta do processo ela precisa decidir onde descer (nunca em 'Backup').
+   */
   async listProcessFiles(folderId: string): Promise<drive_v3.Schema$File[]> {
     const drive = getDriveClient();
     const allFiles: drive_v3.Schema$File[] = [];
@@ -658,5 +927,55 @@ export const googleDriveService = {
 
     await listRecursive(folderId);
     return allFiles;
+  },
+
+  /**
+   * Filhos DIRETOS de uma pasta (arquivos e subpastas), com os campos que a
+   * dedupe por conteudo e versao exige: `md5Checksum` (binarios), `version` e
+   * `modifiedTime` (Sheets nativos, que nao tem md5).
+   *
+   * Nao e recursiva de proposito: quem decide onde descer e a ingestao, que
+   * conhece as regras de subpasta (nunca em 'Backup', so nas subpastas de tipo
+   * do layout antigo do proprio sistema).
+   */
+  async listFolderEntries(folderId: string): Promise<drive_v3.Schema$File[]> {
+    const drive = getDriveClient();
+    const entries: drive_v3.Schema$File[] = [];
+    let pageToken: string | undefined;
+
+    do {
+      const response = await driveRead(`listFolderEntries(${folderId})`, (signal) =>
+        drive.files.list(
+          {
+            q: `'${escapeDriveQuery(folderId)}' in parents and trashed = false`,
+            fields:
+              'nextPageToken, files(id, name, mimeType, size, md5Checksum, version, modifiedTime, createdTime, webViewLink)',
+            pageSize: 100,
+            pageToken,
+            supportsAllDrives: true,
+            includeItemsFromAllDrives: true,
+          },
+          { signal },
+        ),
+      );
+
+      for (const file of response.data.files ?? []) entries.push(file);
+      pageToken = response.data.nextPageToken ?? undefined;
+    } while (pageToken);
+
+    return entries;
+  },
+
+  /**
+   * Espelho em Google Sheets NATIVO nao tem bytes para baixar: `alt=media`
+   * responde erro. `files.export` devolve o mesmo conteudo em xlsx, que e o
+   * formato que o `processEspelho` ja sabe ler.
+   */
+  async exportSpreadsheetAsXlsx(fileId: string): Promise<Buffer> {
+    const drive = getDriveClient();
+    const response = await driveRead(`exportSpreadsheetAsXlsx(${fileId})`, (signal) =>
+      drive.files.export({ fileId, mimeType: XLSX_MIME }, { responseType: 'arraybuffer', signal }),
+    );
+    return Buffer.from(response.data as ArrayBuffer);
   },
 };

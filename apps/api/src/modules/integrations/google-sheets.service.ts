@@ -6,6 +6,19 @@ import { integrationRetryOptions } from './retry-policy.js';
 
 const SHEETS_API_TIMEOUT_MS = 30_000;
 
+/**
+ * Largura da leitura da aba Processos.
+ *
+ * Era `A:Z` — 26 colunas. As datas que a tela mostra (ETA Final/Realizado em
+ * AM..AO), o numero e a data de registro da DUIMP (AV/AW), o canal, o
+ * desembaraco e a 'Chegada CD' (BD) ficam TODAS depois do Z, entao a
+ * comparacao com a planilha simplesmente nao enxergava nada disso e o
+ * `sheet-compare` procurava cabecalho que nunca chegava. A ultima coluna usada
+ * pelo importador e a 111a ('% numerario' = DG), e 'DZ' da folga para colunas
+ * novas sem passar a ler a planilha inteira.
+ */
+const FOLLOW_UP_LAST_COLUMN = 'DZ';
+
 function followUpRange(range: string): string {
   const tab = process.env.GOOGLE_SHEETS_FOLLOW_UP_TAB?.trim() || 'Processos';
   return `'${tab.replace(/'/g, "''")}'!${range}`;
@@ -165,7 +178,7 @@ export const googleSheetsService = {
       // Read the entire row (columns A through Z)
       const response = await sheetsRetry(`readProcessRow(${processCode})`, (signal) =>
         sheets.spreadsheets.values.get(
-          { spreadsheetId, range: followUpRange(`A${row}:Z${row}`) },
+          { spreadsheetId, range: followUpRange(`A${row}:${FOLLOW_UP_LAST_COLUMN}${row}`) },
           { signal },
         ),
       );
@@ -176,7 +189,7 @@ export const googleSheetsService = {
       // Read header row to map column names
       const headerResponse = await sheetsRetry(`readProcessRow.headers(${processCode})`, (signal) =>
         sheets.spreadsheets.values.get(
-          { spreadsheetId, range: followUpRange('A1:Z1') },
+          { spreadsheetId, range: followUpRange(`A1:${FOLLOW_UP_LAST_COLUMN}1`) },
           { signal },
         ),
       );
@@ -206,7 +219,10 @@ export const googleSheetsService = {
 
     try {
       const response = await sheetsRetry('readAllProcessRows', (signal) =>
-        sheets.spreadsheets.values.get({ spreadsheetId, range: followUpRange('A:Z') }, { signal }),
+        sheets.spreadsheets.values.get(
+          { spreadsheetId, range: followUpRange(`A:${FOLLOW_UP_LAST_COLUMN}`) },
+          { signal },
+        ),
       );
 
       const rows = response.data.values;
@@ -244,7 +260,7 @@ export const googleSheetsService = {
     try {
       const response = await sheetsRetry('getSheetHeaders', (signal) =>
         sheets.spreadsheets.values.get(
-          { spreadsheetId, range: followUpRange('A1:Z1') },
+          { spreadsheetId, range: followUpRange(`A1:${FOLLOW_UP_LAST_COLUMN}1`) },
           { signal },
         ),
       );
@@ -254,6 +270,42 @@ export const googleSheetsService = {
       logger.error({ error }, 'Failed to read sheet headers');
       return [];
     }
+  },
+
+  /**
+   * Aba Processos inteira, como cabecalho + linhas cruas.
+   *
+   * Deliberadamente LANCA quando a planilha nao pode ser lida, ao contrario de
+   * `readAllProcessRows`, que engole o erro e devolve `[]`. Quem chama e a
+   * sincronizacao Follow Up -> banco: "a planilha nao tem nada" e "nao
+   * consegui ler a planilha" nao podem virar a mesma resposta, senao a sync
+   * silenciosamente nao faz nada e ninguem fica sabendo.
+   */
+  async readProcessSheetMatrix(): Promise<{ headers: string[]; rows: string[][] }> {
+    if (!this.isConfigured()) {
+      throw new Error(
+        'Follow Up sheet not configured (GOOGLE_SHEETS_FOLLOW_UP_ID / GOOGLE_DRIVE_CLIENT_EMAIL / GOOGLE_DRIVE_PRIVATE_KEY)',
+      );
+    }
+
+    const spreadsheetId = process.env.GOOGLE_SHEETS_FOLLOW_UP_ID!;
+    const sheets = getSheetsClient();
+
+    const response = await sheetsRetry('readProcessSheetMatrix', (signal) =>
+      sheets.spreadsheets.values.get(
+        { spreadsheetId, range: followUpRange(`A:${FOLLOW_UP_LAST_COLUMN}`) },
+        { signal },
+      ),
+    );
+
+    const values = response.data.values;
+    if (!values || values.length === 0) {
+      throw new Error('Aba de processos da planilha Follow Up voltou vazia (nem cabecalho)');
+    }
+
+    const headers = (values[0] ?? []).map((header) => String(header ?? '').trim());
+    const rows = values.slice(1).map((row) => (row ?? []).map((cell) => String(cell ?? '')));
+    return { headers, rows };
   },
 
   /**

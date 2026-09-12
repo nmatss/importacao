@@ -1,5 +1,13 @@
 # Technical Debt
 
+## 2026-09-12 — Vínculo e aplicabilidade
+
+`cert_products` único por SKU não representa todo o histórico fornecedor/certificado. A
+guarda atual recusa sincronização ambígua; modelagem e seleção vigentes ainda exigem fonte
+aprovada. Não aplicabilidade de licença precisa de sinal persistido oficial, não de ausência/1900.
+Formatter Python de sete módulos alterados já falha no HEAD; diffs focados preservam estilo.
+Detalhes e evidências em [retomada](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 Ultima atualizacao: 2026-08-29
 
 ## Divida Registrada Em 2026-08-29

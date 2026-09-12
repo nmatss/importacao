@@ -166,3 +166,123 @@ describe('invoice total harness', () => {
     );
   });
 });
+
+/**
+ * EXT-02 (reunião 11/09/2026) — "ele nem leu, disse que era para desconsiderar...
+ * ficou 39, não utilizável". O OHBL do PK220 (doc 169) tinha sido extraído
+ * CORRETAMENTE; quem o derrubou foram falsos positivos do próprio harness.
+ */
+describe('harness do BL — falsos positivos que zeravam um OHBL correto', () => {
+  const ohbl = () => getVerificationConfig('ohbl') as VerificationConfig;
+
+  // Estrutura do documento real: os dois contêineres aparecem em LINHAS
+  // separadas, e o BL imprime a posição do SH com 4 dígitos.
+  const source = `OCEAN BILL OF LADING
+B/L No.: SHYY26080651
+ORDER NO.: PK2202608SZ
+CNTR/SEAL NO/SIZE/PIECES/KGS/CBM
+MNBU3949421 / 26H0011711 / 40NOR / 700 CARTONS
+MNBU0184030 / 26H0011712 / 40NOR / 675 CARTONS
+NCM NO.: 4202
+SAY TWO (2X40NOR) CONTAINERS ONLY
+TOTAL: 1375 CARTONS / 13997.48KGS / 120.246CBM`;
+
+  const data = () => ({
+    blNumber: cf('SHYY26080651', 0.98),
+    customerReference: cf('PK2202608SZ', 0.95),
+    containerNumber: cf('MNBU3949421,MNBU0184030', 0.95),
+    containerType: cf('40NOR', 0.9),
+    totalCbm: cf(120.246, 0.9),
+    ncmList: cf(['4202'], 0.9),
+  });
+
+  it('aceita a lista de contêineres com cada parte presente no documento', () => {
+    const report = verifyExtraction(ohbl(), data(), source, NOW);
+    expect(report.findings.filter((f) => f.kind === 'grounding')).toHaveLength(0);
+  });
+
+  it('continua reprovando quando UM dos contêineres não está no documento', () => {
+    const parcial = { ...data(), containerNumber: cf('MNBU3949421,MSKU7654321', 0.95) };
+    const report = verifyExtraction(ohbl(), parcial, source, NOW);
+    const grounding = report.findings.find((f) => f.kind === 'grounding');
+    expect(grounding?.severity).toBe('error');
+    expect(grounding?.message).toContain('MSKU7654321');
+    expect(grounding?.message).not.toContain('MNBU3949421,');
+  });
+
+  it('trata a posição do SH de 4 dígitos impressa no BL como aviso, não erro', () => {
+    const report = verifyExtraction(ohbl(), data(), source, NOW);
+    const ncm = report.findings.find((f) => f.field.startsWith('ncmList'));
+    expect(ncm?.severity).toBe('warning');
+  });
+
+  it('não aceita código curto que NÃO está impresso no documento', () => {
+    const inventado = { ...data(), ncmList: cf(['9503'], 0.9) };
+    const report = verifyExtraction(ohbl(), inventado, source, NOW);
+    const ncm = report.findings.find((f) => f.field.startsWith('ncmList'));
+    expect(ncm?.severity).toBe('error');
+  });
+
+  it.each(['42029200', '4202.92.00'])('não aceita SH truncado de NCM completa %s', (ncm) => {
+    const report = verifyExtraction(ohbl(), { ncmList: cf(['4202']) }, `NCM: ${ncm}`, NOW);
+    expect(report.trust).toBe('review');
+    expect(report.findings[0]?.severity).toBe('error');
+  });
+
+  it('mantém avisos cadastrais e SH impressos sem penalizar a leitura correta', () => {
+    const report = verifyExtraction(
+      ohbl(),
+      { ncmList: cf(['4202', '4414']), shipper: cf('NEW VERIFIED EXPORTER LTD') },
+      'SHIPPER NEW VERIFIED EXPORTER LTD NCM: 4202 / 4414',
+      NOW,
+    );
+    expect(report.findings).toHaveLength(3);
+    expect(
+      report.findings.every((f) => f.severity === 'warning' && f.confidenceImpact === 'none'),
+    ).toBe(true);
+    expect(report.adjustedConfidence).toBe(1);
+  });
+
+  it('penaliza fornecedor desconhecido que não está na fonte', () => {
+    const report = verifyExtraction(
+      ohbl(),
+      { shipper: cf('NEW VERIFIED EXPORTER LTD') },
+      'OTHER EXPORTER',
+      NOW,
+    );
+    expect(report.findings[0]?.confidenceImpact).toBeUndefined();
+    expect(report.adjustedConfidence).toBe(0.9);
+  });
+
+  it('na invoice a NCM continua exigindo 8 dígitos', () => {
+    const config = getVerificationConfig('invoice') as VerificationConfig;
+    const report = verifyExtraction(
+      config,
+      { items: [{ itemCode: cf('ABC123'), ncmCode: cf('4202') }] },
+      'invoice com ABC123 e 4202',
+      NOW,
+    );
+    expect(report.findings.some((f) => f.severity === 'error' && f.field.includes('ncmCode'))).toBe(
+      true,
+    );
+  });
+
+  it('mede o CBM contra a capacidade dos DOIS contêineres do embarque', () => {
+    const report = verifyExtraction(ohbl(), data(), source, NOW);
+    expect(report.findings.some((f) => f.field === 'totalCbm')).toBe(false);
+  });
+
+  it('continua acusando CBM acima da capacidade de UM contêiner', () => {
+    const umContainer = { ...data(), containerNumber: cf('MNBU3949421', 0.95) };
+    const report = verifyExtraction(ohbl(), umContainer, source, NOW);
+    expect(report.findings.some((f) => f.field === 'totalCbm' && f.severity === 'warning')).toBe(
+      true,
+    );
+  });
+
+  it('no conjunto, o OHBL correto do PK220 não vai mais para revisão', () => {
+    const report = verifyExtraction(ohbl(), data(), source, NOW);
+    expect(report.trust).toBe('trusted');
+    expect(report.findings.filter((f) => f.severity === 'error')).toHaveLength(0);
+  });
+});

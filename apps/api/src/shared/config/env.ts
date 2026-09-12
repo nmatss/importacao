@@ -17,6 +17,25 @@ const optionalEmailListEnv = z
     { message: 'deve conter e-mails válidos separados por vírgula ou ponto-e-vírgula' },
   );
 
+export type DriveWriteMode = 'off' | 'sistema';
+
+/**
+ * Padrao de DRIVE_WRITE_MODE quando a variavel nao foi definida (ou veio vazia).
+ *
+ * Com o Drive como fonte de documentos ('drive' ou 'both') a pasta PROCESSOS e
+ * da operacao: o sistema so le e o padrao e 'off'. Com DOCUMENT_SOURCE=email o
+ * Drive e so o backup do sistema, e o comportamento historico — gravar a copia
+ * na pasta do sistema — continua valendo: 'sistema'. Um valor explicito sempre
+ * vence o padrao.
+ */
+export function resolveDriveWriteMode(
+  documentSource: 'email' | 'drive' | 'both',
+  explicit: DriveWriteMode | undefined,
+): DriveWriteMode {
+  if (explicit) return explicit;
+  return documentSource === 'email' ? 'sistema' : 'off';
+}
+
 const envSchema = z
   .object({
     // Server
@@ -56,8 +75,21 @@ const envSchema = z
     // processo no Google Drive; 'email' e o comportamento historico.
     DOCUMENT_SOURCE: z.enum(['email', 'drive', 'both']).default('drive'),
     DRIVE_INGESTION_MAX_FILE_BYTES: z.coerce.number().int().positive().optional(),
+    // Pastas da raiz PROCESSOS (reuniao 2026-09-11, D1). Opcionais: sem elas a
+    // leitura dessas areas fica desligada, nunca adivinhada pelo nome.
+    GOOGLE_DRIVE_PENDENTES_FOLDER_ID: z.string().optional(),
+    GOOGLE_DRIVE_ESPELHOS_FOLDER_ID: z.string().optional(),
+    // Escrita do sistema no Drive. 'off' = somente leitura; 'sistema' = o
+    // sistema pode gravar na pasta propria dele (nunca em PROCESSOS). Ausente,
+    // o padrao depende de DOCUMENT_SOURCE — ver resolveDriveWriteMode().
+    DRIVE_WRITE_MODE: z.enum(['off', 'sistema']).optional(),
+    // Upload manual pela tela continua permitido, com dedupe por conteudo.
+    MANUAL_UPLOAD_ENABLED: z.enum(['true', 'false']).default('true'),
     FOLLOW_UP_REFERENCE_TTL_MS: z.coerce.number().int().positive().optional(),
     FOLLOW_UP_AUTO_CREATE: z.enum(['0', '1']).default('1'),
+    // Sincronizacao Follow Up -> import_processes (D4). 'dry_run' so gera o
+    // diff/log; 'apply' grava no NOSSO banco; 'off' nao roda.
+    FOLLOW_UP_SYNC_MODE: z.enum(['off', 'dry_run', 'apply']).default('dry_run'),
 
     // AI (IA_LOCAL by default; external providers require explicit opt-in)
     AI_PROVIDER: z.enum(['vertex', 'openrouter', 'ialocal']).default('ialocal'),
@@ -213,7 +245,11 @@ const envSchema = z
         message: 'obrigatório em produção para login Google',
       });
     }
-  });
+  })
+  .transform((env) => ({
+    ...env,
+    DRIVE_WRITE_MODE: resolveDriveWriteMode(env.DOCUMENT_SOURCE, env.DRIVE_WRITE_MODE),
+  }));
 
 export type Env = z.infer<typeof envSchema>;
 

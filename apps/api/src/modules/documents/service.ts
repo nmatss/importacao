@@ -9,6 +9,7 @@ import { db } from '../../shared/database/connection.js';
 import {
   documents,
   documentExtractionHistory,
+  documentIngestionTombstones,
   documentExtractionRuns,
   documentExtractedFields,
   comparisonAcceptances,
@@ -35,25 +36,46 @@ import type { ProcessStatus } from '../../shared/state-machine/process-states.js
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { getQueue } from '../../shared/queue/index.js';
-import { portsMatch as normalizedPortsMatch } from '../validation/utils/port-normalize.js';
-import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
 import { extractPartyParts } from '../validation/utils/party-extract.js';
 import {
-  itemCodesMatch,
   cleanItemCodesInAiData,
-  extractCanonicalItemCode,
+  primaryItemCode,
 } from '../validation/utils/item-code-normalize.js';
-import { compareDates } from '../validation/utils/date-compare.js';
+import {
+  aggregateMessage,
+  buildItemDivergence,
+  compareItemWeightRatio,
+  comparisonRowKey,
+  computeRowStatus,
+  eanValuesDiverge,
+  findCorrespondingItem,
+  itemComparisonMessage,
+  itemsCorrespond,
+  manufacturerValuesDiverge,
+  mergeValidationChecks,
+  ncmValuesDiverge,
+  normalizeStringList,
+  numericValuesDiverge,
+  isInvoiceFreeOfCharge,
+  stripTaxIdPrefix,
+  sumItemQuantities,
+  toNumberOrNull,
+  type ComparisonCheckResult,
+  type ComparisonKind,
+  type ComparisonRow,
+  type Criticality,
+  type RowStatus,
+} from './comparison-core.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
 import type {
   AcceptComparisonInput,
   EditComparisonFieldInput,
   RemoveComparisonFieldInput,
 } from './schema.js';
-import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 import { ocrScannedPdf, rasterizePdfPages } from './ocr.js';
-import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
+import { hasOperationalConfidence } from './constants.js';
+import { extractPopplerText } from './pdf-text.js';
 
 /**
  * Fonte ÚNICA da conversão XLSX → texto para extração por IA.
@@ -351,6 +373,12 @@ function unwrapAiFieldValue(value: unknown): unknown {
   return value;
 }
 
+function parseDriveModifiedTime(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const data = new Date(raw);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
 function sha256Text(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -492,24 +520,65 @@ function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Select the current source before checking extraction quality. Never sort by reprocessing time. */
+function newestSource<
+  T extends {
+    id: number;
+    type: string;
+    createdAt?: Date | null;
+    driveFileId?: string | null;
+    driveVersion?: number | null;
+  },
+>(rows: T[], type: string): T | undefined {
+  const candidates = rows.filter((row) => row.type === type);
+  const byFile = new Map<string, T[]>();
+  for (const row of candidates) {
+    const key = row.driveFileId ? `drive:${row.driveFileId}` : `upload:${row.id}`;
+    byFile.set(key, [...(byFile.get(key) ?? []), row]);
+  }
+  const byInsertion = (a: T, b: T) =>
+    (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0) || b.id - a.id;
+  const representatives = [...byFile.values()]
+    .map((versions) => {
+      const known = versions.every((row) => row.driveVersion != null);
+      const sorted = [...versions].sort(
+        known
+          ? (a, b) => Number(b.driveVersion) - Number(a.driveVersion) || byInsertion(a, b)
+          : byInsertion,
+      );
+      return { row: sorted[0], ambiguous: versions.length > 1 && !known };
+    })
+    .sort((a, b) => byInsertion(a.row, b.row));
+  return representatives[0]?.ambiguous ? undefined : representatives[0]?.row;
+}
+
+function hasConflictingProcessReference(
+  parsed: Record<string, any>,
+  processCode?: string | null,
+): boolean {
+  const expected = processCode?.trim().toUpperCase();
+  if (!expected) return false;
+  const refs = [parsed, parsed.summary, ...(Array.isArray(parsed.items) ? parsed.items : [])]
+    .filter(isRecord)
+    .flatMap((node) =>
+      ['processReference', 'processCode', 'processo'].map((key) => unwrapAiFieldValue(node[key])),
+    )
+    .filter((value) => typeof value === 'string' && value.trim());
+  return refs.some((ref) => String(ref).trim().toUpperCase() !== expected);
+}
+
 function shouldProjectAiData(
   type: string,
   aiParsedData: unknown,
   confidenceScore?: string | number | null,
 ): aiParsedData is Record<string, any> {
   if (!PROJECTED_AI_DATA_KEYS.has(type) || !isRecord(aiParsedData)) return false;
-  if (aiParsedData.extractionFailed || aiParsedData.skipped) return false;
+  if (aiParsedData.extractionFailed || aiParsedData.skipped || aiParsedData.error) return false;
+  if (aiParsedData._trust?.trust === 'review' || aiParsedData._trust?.contractFailure) return false;
   if (!hasMeaningfulAiData(aiParsedData)) return false;
-  if (!hasOperationalConfidence(confidenceScore)) return false;
+  if (!hasOperationalConfidence(type, confidenceScore)) return false;
   if (type === 'espelho' && hasFailedEspelhoExtraction(aiParsedData)) return false;
   return true;
-}
-
-function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
-  if (confidenceScore == null) return true;
-  const confidence =
-    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
-  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 function hasMeaningfulAiData(value: unknown): boolean {
@@ -918,6 +987,9 @@ export const documentService = {
       .select({
         id: documents.id,
         type: documents.type,
+        createdAt: documents.createdAt,
+        driveFileId: documents.driveFileId,
+        driveVersion: documents.driveVersion,
         isProcessed: documents.isProcessed,
         aiParsedData: documents.aiParsedData,
         confidenceScore: documents.confidenceScore,
@@ -927,9 +999,10 @@ export const documentService = {
       .orderBy(desc(documents.createdAt), desc(documents.id));
 
     const projected: Record<string, any> = {};
-    for (const doc of processDocs) {
+    for (const type of new Set(processDocs.map((doc) => doc.type))) {
+      const doc = newestSource(processDocs, type);
+      if (!doc) continue;
       if (
-        projected[doc.type] ||
         !doc.isProcessed ||
         !shouldProjectAiData(doc.type, doc.aiParsedData, doc.confidenceScore)
       ) {
@@ -940,10 +1013,17 @@ export const documentService = {
     }
 
     const [processRow] = await client
-      .select({ aiExtractedData: importProcesses.aiExtractedData })
+      .select({
+        aiExtractedData: importProcesses.aiExtractedData,
+        processCode: importProcesses.processCode,
+      })
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
+
+    for (const [type, parsed] of Object.entries(projected)) {
+      if (hasConflictingProcessReference(parsed, processRow?.processCode)) delete projected[type];
+    }
 
     const existing = isRecord(processRow?.aiExtractedData) ? processRow.aiExtractedData : {};
     const preserved = Object.fromEntries(
@@ -1025,6 +1105,12 @@ export const documentService = {
     options: {
       driveFileId?: string;
       ingestionSource?: 'legacy' | 'manual' | 'drive' | 'email';
+      /** Hash do conteudo. Quando ausente, e calculado a partir do arquivo. */
+      contentSha256?: string;
+      driveMd5?: string;
+      driveVersion?: number;
+      driveModifiedTime?: string;
+      driveArea?: string;
     } = {},
   ) {
     try {
@@ -1032,6 +1118,26 @@ export const documentService = {
     } catch (error) {
       await fs.unlink(file.path).catch(() => {});
       throw error;
+    }
+
+    // Identidade do documento e o CONTEUDO, nao o id do objeto no Drive
+    // (DRV-05). Sem o hash aqui, o arquivo que a analista subiu a mao volta
+    // como documento novo assim que a mesma pasta for lida pelo Drive — e os
+    // nomes com sufixo de download ('... (1).pdf') escapam ate do aviso por
+    // nome+tamanho. Falha de leitura nao pode derrubar o upload: `null` em
+    // `content_sha256` significa "desconhecido".
+    let contentSha256 = options.contentSha256 ?? null;
+    if (!contentSha256) {
+      try {
+        contentSha256 = createHash('sha256')
+          .update(await fs.readFile(file.path))
+          .digest('hex');
+      } catch (err) {
+        logger.warn(
+          { err, processId, file: file.originalname },
+          'Nao foi possivel calcular o sha256 do arquivo',
+        );
+      }
     }
 
     let doc;
@@ -1050,6 +1156,13 @@ export const documentService = {
           // re-import every file on every pass.
           driveFileId: options.driveFileId,
           ingestionSource: options.ingestionSource ?? 'manual',
+          contentSha256,
+          driveMd5: options.driveMd5 ?? null,
+          driveVersion: options.driveVersion ?? null,
+          // Data invalida viraria `Invalid Date` e derrubaria o INSERT inteiro;
+          // metadado ausente e so metadado ausente.
+          driveModifiedTime: parseDriveModifiedTime(options.driveModifiedTime),
+          driveArea: options.driveArea ?? null,
         })
         .returning();
     } catch (error) {
@@ -1501,6 +1614,10 @@ export const documentService = {
             imageBase64: extracted.imageBase64,
             imageMimeType: extracted.imageMimeType,
             additionalImagesBase64: extracted.additionalImagesBase64,
+            // Texto de apoio (OCR de gabarito) não pode servir de gabarito para
+            // grounding nem para preencher nulos — o documento de verdade foi
+            // anexado e é ele que o modelo leu.
+            sourceTextReliable: extracted.sourceTextReliable,
           }
         : undefined;
 
@@ -1651,7 +1768,7 @@ export const documentService = {
 
     await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
 
-    const veryLowConfidence = result.confidenceScore < MIN_OPERATIONAL_CONFIDENCE;
+    const veryLowConfidence = !hasOperationalConfidence(type, result.confidenceScore);
     // Marcadores meta ('_contract', '_grounding') não são campos do documento —
     // ficam fora da lista mostrada ao operador no alerta.
     const lowConfidenceFields = (
@@ -1698,10 +1815,13 @@ export const documentService = {
         );
       }
 
-      await this.runDegradableGate(
-        doc.processId,
-        (proc?.aiExtractedData as Record<string, any>) ?? {},
-      );
+      // A reprocessed BL may already have populated the process at an older
+      // score. Rebuild removes that stale projection before the gate runs.
+      const operationalData =
+        type === 'ohbl' || type === 'draft_bl'
+          ? await this.rebuildProcessAiExtractedData(doc.processId)
+          : ((proc?.aiExtractedData as Record<string, any>) ?? {});
+      await this.runDegradableGate(doc.processId, operationalData);
       return;
     }
 
@@ -2396,6 +2516,14 @@ export const documentService = {
     additionalImagesBase64?: string[];
     pageTexts?: string[];
     ocrUsed?: boolean;
+    /**
+     * `false` quando o texto devolvido NAO representa fielmente o documento
+     * (OCR de um PDF cuja camada de texto o servidor nao consegue ler) e o
+     * arquivo original foi anexado para o provider multimodal ler por conta
+     * propria. Nesse caso o texto serve so de apoio: o grounding e o
+     * preenchimento deterministico de nulos NAO podem usa-lo como verdade.
+     */
+    sourceTextReliable?: boolean;
   }> {
     const buffer = await fs.readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
@@ -2408,6 +2536,10 @@ export const documentService = {
 
     // ── PDF ──
     if (mimeType === 'application/pdf' || ext === '.pdf') {
+      // Poppler resolves CID fonts via the installed CMaps and preserves table
+      // columns that pdf-parse concatenates (BL/packing originals, 12/09/2026).
+      const digitalText = await extractPopplerText(filePath);
+      if (digitalText) return { ...digitalText, ocrUsed: false, sourceTextReliable: true };
       const data = await pdfParse(buffer);
       const text = data.text?.trim() || '';
 
@@ -2426,6 +2558,40 @@ export const documentService = {
 
       if (looksScanned) {
         const ocr = await ocrScannedPdf(filePath);
+        // Multimodal só até um teto de tamanho: base64 de PDF gigante estoura
+        // o limite de request do provider e pressiona a memória do worker.
+        const MULTIMODAL_MAX_BYTES = 15 * 1024 * 1024;
+        const canAttachPdf = aiService.acceptsPdfInput && buffer.length <= MULTIMODAL_MAX_BYTES;
+
+        // Reunião 11/09/2026: os BLs 155/156/165/166 SAO selecionáveis no
+        // visualizador da analista, mas a camada de texto usa fonte CID
+        // Adobe-GB1 sem ToUnicode — o pdf-parse devolve 0 caractere e o
+        // pdftoppm (sem poppler-data/fonte CJK) renderiza só o formulário em
+        // branco. O OCR então lia o GABARITO e, como o código retornava só
+        // esse texto, o PDF original nunca chegava ao Vertex — que lê PDF
+        // nativamente. Agora, sempre que o provider aceita PDF, o arquivo vai
+        // junto e o OCR entra apenas como apoio (sourceTextReliable=false).
+        if (canAttachPdf) {
+          logger.info(
+            {
+              filePath,
+              textLength: text.length,
+              charsPerPage: Math.round(charsPerPage),
+              ocrTextLength: ocr?.text.length ?? 0,
+              ocrPages: ocr?.pageCount ?? 0,
+            },
+            'PDF sem camada de texto legível — enviando o arquivo original ao provider multimodal (OCR como apoio)',
+          );
+          return {
+            text: ocr?.text ?? text,
+            pageTexts: ocr?.pageTexts ?? pages,
+            ocrUsed: !!ocr?.text,
+            imageBase64: buffer.toString('base64'),
+            imageMimeType: 'application/pdf',
+            sourceTextReliable: false,
+          };
+        }
+
         if (ocr?.text) {
           logger.info(
             {
@@ -2437,11 +2603,10 @@ export const documentService = {
             },
             'Scanned PDF preprocessed with local OCR',
           );
+          // Provider sem leitura de PDF: o modelo vê SOMENTE este texto, então
+          // ele é a fonte de verdade disponível e o grounding continua válido.
           return { text: ocr.text, pageTexts: ocr.pageTexts, ocrUsed: true };
         }
-        // Multimodal só até um teto de tamanho: base64 de PDF gigante estoura
-        // o limite de request do provider e pressiona a memória do worker.
-        const MULTIMODAL_MAX_BYTES = 15 * 1024 * 1024;
         if (buffer.length > MULTIMODAL_MAX_BYTES) {
           logger.warn(
             { filePath, bytes: buffer.length, charsPerPage: Math.round(charsPerPage) },
@@ -2459,31 +2624,26 @@ export const documentService = {
         // and used to receive `data:application/pdf;base64,...` — which they
         // cannot decode, so the extraction came back with nearly every field
         // empty and the UI showed "-" everywhere. Rasterize first.
-        if (!aiService.acceptsPdfInput) {
-          const pages = await rasterizePdfPages(filePath);
-          if (pages && pages.length > 0) {
-            logger.info(
-              { filePath, pages: pages.length, provider: aiService.providerName },
-              'Scanned PDF rasterized to PNG for a provider that cannot read PDF parts',
-            );
-            return {
-              text,
-              imageBase64: pages[0],
-              imageMimeType: 'image/png',
-              additionalImagesBase64: pages.slice(1),
-            };
-          }
-          // No OCR and no rasterizer: there is genuinely nothing readable to
-          // send. Failing here is what makes the document show up as "failed"
-          // with a reason the operator can act on, instead of silently
-          // producing a document whose fields are all empty.
-          throw new Error(
-            `PDF escaneado sem camada de texto e sem como rasterizar (provider "${aiService.providerName}" não lê PDF). Instale o Poppler (pdftoppm) ou habilite DOCUMENT_OCR_ENABLED=1 no servidor.`,
+        const rasterPages = await rasterizePdfPages(filePath);
+        if (rasterPages && rasterPages.length > 0) {
+          logger.info(
+            { filePath, pages: rasterPages.length, provider: aiService.providerName },
+            'Scanned PDF rasterized to PNG for a provider that cannot read PDF parts',
           );
+          return {
+            text,
+            imageBase64: rasterPages[0],
+            imageMimeType: 'image/png',
+            additionalImagesBase64: rasterPages.slice(1),
+          };
         }
-
-        const base64 = buffer.toString('base64');
-        return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
+        // No OCR and no rasterizer: there is genuinely nothing readable to
+        // send. Failing here is what makes the document show up as "failed"
+        // with a reason the operator can act on, instead of silently
+        // producing a document whose fields are all empty.
+        throw new Error(
+          `PDF escaneado sem camada de texto e sem como rasterizar (provider "${aiService.providerName}" não lê PDF). Instale o Poppler (pdftoppm) ou habilite DOCUMENT_OCR_ENABLED=1 no servidor.`,
+        );
       }
       return { text, pageTexts: pages };
     }
@@ -2743,6 +2903,8 @@ export const documentService = {
       await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
 
+    await invalidateComparisonAcceptances(doc.processId, `document_reprocessing:${documentId}`);
+
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 
     await this.enqueueAIExtraction(doc, doc.type);
@@ -2871,11 +3033,56 @@ export const documentService = {
     return { processesScanned: procs.length, processesChanged, documentsChanged };
   },
 
-  async delete(id: number, userId: number | null = null) {
+  /**
+   * Recalcula o estado DERIVADO do processo depois que um documento sai.
+   *
+   * `delete()` ja reconstruia a projecao `ai_extracted_data`, mas
+   * `validation_results` continuava vigente: o comparativo (e o ponto vermelho
+   * da aba) seguia acusando divergencia de um anexo que nao existe mais — o
+   * caso real da reuniao, com o rascunho da DUIMP anexado no processo errado.
+   *
+   * A regra de modo e a MESMA do pos-extracao (`runDegradableGate`): `final`
+   * com INV + PL + BL, `partial` com o que sobrou. Sem nenhum documento
+   * comparavel nao ha o que revalidar, e os resultados antigos sao apagados em
+   * vez de ficarem valendo (o historico em `validation_runs` permanece).
+   *
+   * Best-effort de proposito: a exclusao ja foi commitada, entao falha aqui e
+   * registrada e nao derruba a resposta.
+   */
+  async refreshProcessDerivedState(processId: number, mergedAiData: Record<string, any>) {
+    const data = isRecord(mergedAiData) ? mergedAiData : {};
+    const hasInvoice = hasMeaningfulAiData(data.invoice);
+    const hasPackingList = hasMeaningfulAiData(data.packing_list);
+    const hasBl = hasMeaningfulAiData(data.ohbl) || hasMeaningfulAiData(data.draft_bl);
+    const allThree = hasInvoice && hasPackingList && hasBl;
+
+    try {
+      const { validationService } = await import('../validation/service.js');
+
+      if (!hasInvoice && !hasPackingList && !hasBl) {
+        await validationService.clearResults(processId);
+        return;
+      }
+
+      await validationService.runAllChecks(processId, null, {
+        mode: allThree ? 'final' : 'partial',
+        triggerType: allThree ? 'auto_full' : 'auto_partial',
+      });
+      logger.info(
+        { processId, hasInvoice, hasPackingList, hasBl, partial: !allThree },
+        'Validation re-run after document removal',
+      );
+    } catch (err) {
+      logger.error({ err, processId }, 'Derived state refresh after document delete failed');
+    }
+  },
+
+  async delete(id: number, userId: number | null, reason: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new NotFoundError('Documento', id);
     await assertDocumentProcessNotLocked(doc.processId);
 
+    let mergedAiData: Record<string, any> = {};
     await db.transaction(async (tx) => {
       if (doc.aiParsedData != null) {
         await tx.insert(documentExtractionHistory).values({
@@ -2894,8 +3101,22 @@ export const documentService = {
         );
       }
 
+      // Tombstone ANTES de apagar a linha (D8): o sweep do Drive procura por
+      // `drive_file_id` e por (processo, `content_sha256`) antes de importar,
+      // senao o mesmo arquivo voltaria sozinho na passada seguinte e reabriria
+      // o caso do rascunho no processo errado.
+      await tx.insert(documentIngestionTombstones).values({
+        processId: doc.processId,
+        documentId: doc.id,
+        driveFileId: doc.driveFileId ?? null,
+        contentSha256: doc.contentSha256 ?? null,
+        originalFilename: doc.originalFilename,
+        deletedBy: userId,
+        reason,
+      });
+
       await tx.delete(documents).where(eq(documents.id, id));
-      await this.rebuildProcessAiExtractedData(doc.processId, tx);
+      mergedAiData = await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
 
     // Remove the physical file only after the database transaction commits.
@@ -2915,9 +3136,45 @@ export const documentService = {
       'delete',
       'document',
       id,
-      { processId: doc.processId, filename: doc.originalFilename },
+      {
+        processId: doc.processId,
+        filename: doc.originalFilename,
+        type: doc.type,
+        ingestionSource: doc.ingestionSource,
+        driveFileId: doc.driveFileId ?? null,
+        contentSha256: doc.contentSha256 ?? null,
+        fileSize: doc.fileSize ?? null,
+        reason,
+      },
       null,
     );
+
+    // O historico do processo e onde a analista (e depois o admin) enxerga a
+    // exclusao com o motivo; o audit sozinho nao aparece na tela do processo.
+    try {
+      await recordProcessEvent(
+        doc.processId,
+        {
+          eventType: 'document_deleted',
+          title: `Documento excluido: ${doc.originalFilename}`,
+          description: reason,
+          metadata: {
+            documentId: id,
+            type: doc.type,
+            filename: doc.originalFilename,
+            ingestionSource: doc.ingestionSource,
+            driveFileId: doc.driveFileId ?? null,
+            reason,
+          },
+        },
+        userId,
+      );
+    } catch (err) {
+      logger.warn({ err, documentId: id }, 'Could not record document_deleted process event');
+    }
+
+    await this.refreshProcessDerivedState(doc.processId, mergedAiData);
+
     return { id };
   },
 
@@ -2975,6 +3232,10 @@ export const documentService = {
       filePath,
       fileName,
     );
+
+    // `null` = escrita no Drive desligada (DRIVE_WRITE_MODE=off). Gravar null em
+    // `drive_file_id` apagaria a chave de dedupe de quem veio do Drive.
+    if (!driveFileId) return;
 
     await db
       .update(documents)
@@ -3466,28 +3727,34 @@ export const documentService = {
       return `${baseMessage ?? 'Valor revisado manualmente.'} Editado por ${author}.`;
     };
 
-    const newestFirst = [...docs].sort((a, b) => {
-      const aTime = (a.updatedAt ?? a.createdAt)?.getTime?.() ?? 0;
-      const bTime = (b.updatedAt ?? b.createdAt)?.getTime?.() ?? 0;
-      if (bTime !== aTime) return bTime - aTime;
-      return b.id - a.id;
-    });
-    const selectComparisonDoc = (type: string) =>
-      newestFirst.find(
-        (d) =>
-          d.type === type &&
-          d.isProcessed &&
-          d.aiParsedData &&
-          hasMeaningfulAiData(d.aiParsedData) &&
-          hasOperationalConfidence(d.confidenceScore) &&
-          !hasExtractionFailureData(d.aiParsedData),
-      );
+    const selectComparisonDoc = (type: string) => {
+      // Never fall back to an old source while its replacement is pending or invalid.
+      const doc = newestSource(docs, type);
+      if (
+        !doc ||
+        !doc.isProcessed ||
+        !shouldProjectAiData(doc.type, doc.aiParsedData, doc.confidenceScore)
+      )
+        return undefined;
+      if (hasConflictingProcessReference(doc.aiParsedData, processRow[0]?.processCode))
+        return undefined;
+      return doc;
+    };
 
     const invoiceDoc = selectComparisonDoc('invoice');
     const plDoc = selectComparisonDoc('packing_list');
     const blDoc = selectComparisonDoc('ohbl');
     const draftBlDoc = selectComparisonDoc('draft_bl');
-    const espelhoDoc = selectComparisonDoc('espelho');
+    const espelhoCandidate = selectComparisonDoc('espelho');
+    const espelhoDoc =
+      espelhoCandidate &&
+      shouldProjectAiData(
+        'espelho',
+        espelhoCandidate.aiParsedData,
+        espelhoCandidate.confidenceScore,
+      )
+        ? espelhoCandidate
+        : undefined;
 
     // Flatten { value, confidence } structures to plain values for comparison
     const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
@@ -3503,37 +3770,22 @@ export const documentService = {
     const operationalBlDoc = blDoc ?? draftBlDoc;
     const operationalBlSource = bl ? 'ohbl' : draftBl ? 'draft_bl' : null;
 
-    // Espelho data lives in importProcesses.aiExtractedData.espelho (atomic merge target).
-    // Fallback: read from the espelho document's aiParsedData if process column is empty.
+    // Only a valid associated document is an independent comparison source.
+    // Process projection is a cache and may survive replacement/deletion of its
+    // source; retain only the autobuilt warning, never its values or confidence.
     const processAiData = (processRow[0]?.aiExtractedData as Record<string, any>) ?? null;
-    const espelhoFromProcess = processAiData?.espelho as
-      | { summary?: Record<string, any>; items?: any[] }
-      | undefined;
+    const cachedEspelho = processAiData?.espelho as { summary?: Record<string, any> } | undefined;
     const espelhoFromDoc = espelhoDoc?.aiParsedData as
       | { summary?: Record<string, any>; items?: any[] }
       | undefined;
-    // Se a coluna do processo guarda o espelho AUTO-gerado mas existe um xlsx
-    // do operador, o do operador vence — ele é a fonte real de conferência.
-    let espelhoChosen = espelhoFromProcess ?? espelhoFromDoc ?? null;
-    if (
-      (espelhoChosen?.summary as any)?.generatedBy === 'auto_deterministic' &&
-      espelhoFromDoc?.summary
-    ) {
-      espelhoChosen = espelhoFromDoc;
-    }
-    const espelhoSource: string | null =
-      ((espelhoChosen?.summary as any)?.generatedBy as string | undefined) ??
-      (espelhoChosen?.summary ? 'operator' : null);
-    let espelhoSummary = espelhoChosen?.summary ?? null;
-    let espelhoItems = espelhoChosen?.items ?? [];
-    // FALSO VERDE (auditoria 2026-07-17): o espelho auto-gerado é uma CÓPIA da
-    // própria Invoice/PL (build-espelho.ts) — usá-lo como 4ª fonte faz a fatura
-    // conferir consigo mesma e pintar as linhas de verde a "99%". Derivado NÃO
-    // entra na conferência (agregado nem itens); a UI explica via espelhoSource.
-    if (espelhoSource === 'auto_deterministic') {
-      espelhoSummary = null;
-      espelhoItems = [];
-    }
+    const espelhoSource: string | null = espelhoFromDoc
+      ? ((espelhoFromDoc.summary?.generatedBy as string | undefined) ?? 'operator')
+      : cachedEspelho?.summary?.generatedBy === 'auto_deterministic'
+        ? 'auto_deterministic'
+        : null;
+    const independentEspelho = espelhoSource !== 'auto_deterministic' ? espelhoFromDoc : undefined;
+    const espelhoSummary = independentEspelho?.summary ?? null;
+    const espelhoItems = independentEspelho?.items ?? [];
     const supplierFooterAliases = normalizeStringList(
       inv?.manufacturerAliases ??
         inv?.manufacturerNicknames ??
@@ -3551,6 +3803,61 @@ export const documentService = {
       ),
     ]);
 
+    const invItems: Array<Record<string, any>> = inv?.items ?? [];
+    const plItems: Array<Record<string, any>> = pl?.items ?? [];
+
+    // Resultados da validacao (vigentes ou, quando so houve run PARCIAL, os do
+    // ultimo run do historico). Sem isso o PK220 — que so tem runs parciais —
+    // ficava sem nenhum cruzamento na tela.
+    const validation = await loadValidationChecks(processId);
+    // Historical checks cannot supply evidence for an unavailable current source.
+    validation.checks = validation.checks.map((check) => {
+      if (check.status === 'skipped') return check;
+      const compared = check.documentsCompared ?? '';
+      const dependencies = [
+        {
+          used:
+            /\b(?:INV|Invoice)\b/i.test(compared) || check.checkName === 'description-odoo-match',
+          doc: invoiceDoc,
+        },
+        { used: /\b(?:PL|Packing)\b/i.test(compared), doc: plDoc },
+        {
+          used: /\bBL\b/i.test(compared) || check.checkName === 'ncm-bl-description',
+          doc: operationalBlDoc,
+        },
+        {
+          used: /\bEspelho\b/i.test(compared) || check.checkName === 'ncm-bl-description',
+          doc: independentEspelho ? espelhoDoc : undefined,
+        },
+      ].filter((entry) => entry.used);
+      // Explicit system-only checks do not depend on document timestamps.
+      const systemOnly =
+        dependencies.length === 0 && /^(?:Sistema|System|Follow-up)$/i.test(compared.trim());
+      if (systemOnly) return check;
+      const runTime = validation.runAt ? new Date(validation.runAt).getTime() : NaN;
+      const stale =
+        dependencies.length === 0 ||
+        dependencies.some(({ doc }) => {
+          if (!doc || !doc.createdAt || !doc.updatedAt || !Number.isFinite(runTime)) return true;
+          const created = new Date(doc.createdAt).getTime();
+          const updated = new Date(doc.updatedAt).getTime();
+          return (
+            !Number.isFinite(created) ||
+            !Number.isFinite(updated) ||
+            Math.max(created, updated) > runTime
+          );
+        });
+      if (!stale) return check;
+      return {
+        ...check,
+        status: 'skipped' as const,
+        expectedValue: null,
+        actualValue: null,
+        message:
+          'Não verificado: documento-fonte atual ausente, inválido ou sem validação posterior à sua alteração. Revalide a fonte atual.',
+      };
+    });
+
     // Pre-extract structured party parts from each document
     const invExporter = extractPartyParts(inv?.exporterName);
     const plExporter = extractPartyParts(pl?.exporterName);
@@ -3560,20 +3867,30 @@ export const documentService = {
     const blConsignee = extractPartyParts(operationalBl?.consignee ?? operationalBl?.consigneeName);
 
     // Build aggregate field comparison — `kind` drives comparison semantics
-    type Kind = 'string' | 'numeric' | 'port' | 'date' | 'name';
     // Criticality flags which fields are mandatory for customs clearance
     // (Nicolas, 2026-05-21: "se for a parte do endereço do exportador ou
     // alguma outra coisa assim, que não seja da parte aduaneira, talvez a
     // gente consiga relevar"). Defaults are conservative — endereços,
     // pesos/CBM totals e moeda do frete são "secondary" (avisos, não erros).
-    type Criticality = 'critical' | 'secondary' | 'info';
     interface AggregateRow {
       label: string;
       inv?: unknown;
       pl?: unknown;
       bl?: unknown;
       espelho?: unknown;
-      kind?: Kind;
+      /**
+       * Valor de REFERENCIA do sistema (cadastro do processo, alimentado pela
+       * Follow-up). Reuniao 11/09 [06:47]: "nesse que eu fiz (220) nao tem nada
+       * na parte do sistema, esta tudo com um tracinho". A coluna vinha como
+       * efeito colateral de um check de validacao persistido, e o PK220 so tem
+       * runs PARCIAIS — zero linhas em `validation_results`. Agora ela e lida
+       * direto do cadastro e aparece mesmo sem validacao final.
+       *
+       * O valor NAO entra no calculo de status: quem compara documento x
+       * sistema continua sendo o check `*-vs-fup`, que tem tolerancia propria.
+       */
+      system?: unknown;
+      kind?: ComparisonKind;
       criticality?: Criticality;
       // Per-row date tolerance (only used when kind === 'date'). Lets the ETD row
       // widen tolerance so an Invoice/PL issue date used as a fallback is only
@@ -3581,13 +3898,28 @@ export const documentService = {
       dateOpts?: { matchDays?: number; warnDays?: number };
     }
 
+    const processRecord = processRow[0];
+    const systemNumber = (value: unknown, digits: number): string | null => {
+      const parsed = toNumberOrNull(value);
+      return parsed == null ? null : parsed.toFixed(digits);
+    };
+    const systemText = (value: unknown): string | null => {
+      const text = value == null ? '' : String(value).trim();
+      return text || null;
+    };
+
     const aggregateFields: AggregateRow[] = [
       {
+        // A coluna Espelho vinha com `?? processRow.exporterName` — o
+        // "Fornecedor/ Supplier" da Follow-up, que e o FABRICANTE, nao o
+        // exportador. Reuniao 11/09 [07:49]: "o exportador, ele pegou um nome
+        // no espelho. So que eu nao subi o espelho ainda". Sem espelho, a
+        // coluna fica vazia; nada de valor emprestado de outra fonte.
         label: 'Exportador / Shipper',
         inv: invExporter.name || inv?.exporterName,
         pl: plExporter.name || pl?.exporterName,
         bl: blShipper.name || (operationalBl?.shipper ?? operationalBl?.shipperName),
-        espelho: espelhoSummary?.exporterName ?? processRow[0]?.exporterName,
+        espelho: espelhoSummary?.exporterName ?? null,
         kind: 'name',
       },
       {
@@ -3596,6 +3928,7 @@ export const documentService = {
         pl: plExporter.taxId || pl?.exporterTaxId,
         bl: blShipper.taxId,
         espelho: null,
+        kind: 'taxId',
         criticality: 'secondary',
       },
       {
@@ -3621,13 +3954,16 @@ export const documentService = {
         pl: plImporter.taxId || pl?.importerCnpj,
         bl: blConsignee.taxId,
         espelho: espelhoSummary?.importerCnpj,
+        kind: 'taxId',
       },
       {
         label: 'Importador — Endereço',
         inv: invImporter.address || inv?.importerAddress,
         pl: plImporter.address || pl?.importerAddress,
         bl: blConsignee.address,
-        espelho: espelhoSummary?.importerAddress,
+        // O espelho traz "CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207";
+        // o prefixo fiscal sai da leitura para nao inventar divergencia.
+        espelho: stripTaxIdPrefix(espelhoSummary?.importerAddress),
         kind: 'name',
         criticality: 'secondary',
       },
@@ -3636,20 +3972,29 @@ export const documentService = {
         inv: inv?.invoiceNumber,
         pl: pl?.packingListNumber,
         bl: operationalBl?.customerReference,
+        system: systemText(processRecord?.purchaseRef),
       },
       {
         label: 'BL Number (shipping)',
         inv: null,
         pl: null,
         bl: operationalBl?.blNumber,
+        system: systemText(processRecord?.blNumber),
       },
-      { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
+      {
+        label: 'Incoterm',
+        inv: inv?.incoterm,
+        pl: null,
+        bl: null,
+        system: systemText(processRecord?.incoterm),
+      },
       { label: 'Moeda', inv: inv?.currency, pl: null, bl: operationalBl?.freightCurrency },
       {
         label: 'Porto Embarque',
         inv: inv?.portOfLoading,
         pl: pl?.portOfLoading,
         bl: operationalBl?.portOfLoading,
+        system: systemText(processRecord?.portOfLoading),
         kind: 'port',
       },
       {
@@ -3657,6 +4002,7 @@ export const documentService = {
         inv: inv?.portOfDischarge,
         pl: pl?.portOfDischarge,
         bl: operationalBl?.portOfDischarge,
+        system: systemText(processRecord?.portOfDischarge),
         kind: 'port',
       },
       {
@@ -3665,6 +4011,7 @@ export const documentService = {
         pl: null,
         bl: null,
         espelho: espelhoSummary?.totalAmountUsd,
+        system: systemNumber(processRecord?.totalFobValue, 2),
         kind: 'numeric',
       },
       {
@@ -3672,6 +4019,7 @@ export const documentService = {
         inv: null,
         pl: null,
         bl: operationalBl?.freightValue,
+        system: systemNumber(processRecord?.freightValue, 2),
         kind: 'numeric',
         criticality: 'info',
       },
@@ -3681,6 +4029,18 @@ export const documentService = {
         pl: pl?.totalBoxes,
         bl: operationalBl?.totalBoxes,
         espelho: espelhoSummary?.totalBoxes,
+        system: systemNumber(processRecord?.totalBoxes, 0),
+        kind: 'numeric',
+      },
+      {
+        // Eduarda [05:47]: "precisa trazer mais informacao da invoice e do
+        // packing para comparar com o espelho". O espelho ja trazia
+        // summary.totalPieces e ninguem comparava com a soma dos itens.
+        label: 'Total Peças',
+        inv: sumItemQuantities(invItems),
+        pl: sumItemQuantities(plItems),
+        bl: null,
+        espelho: espelhoSummary?.totalPieces,
         kind: 'numeric',
       },
       {
@@ -3689,6 +4049,7 @@ export const documentService = {
         pl: pl?.totalNetWeight,
         bl: null,
         espelho: espelhoSummary?.totalNetWeight,
+        system: systemNumber(processRecord?.totalNetWeight, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
@@ -3698,6 +4059,7 @@ export const documentService = {
         pl: pl?.totalGrossWeight,
         bl: operationalBl?.totalGrossWeight,
         espelho: espelhoSummary?.totalGrossWeight,
+        system: systemNumber(processRecord?.totalGrossWeight, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
@@ -3707,16 +4069,17 @@ export const documentService = {
         pl: pl?.totalCbm,
         bl: operationalBl?.totalCbm,
         espelho: espelhoSummary?.totalCbm,
+        system: systemNumber(processRecord?.totalCbm, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
       {
         // Eduarda: considerar a data da Invoice e do Packing List aqui, mas marcar
         // divergente apenas se MUITO divergentes (não precisam ser iguais). A data
-        // de embarque real (ETD/shipmentDate) tem precedência; a data de EMISSÃO da
+        // informada no documento tem precedência; a data de EMISSÃO da
         // Invoice / data do Packing List entram só como fallback, com tolerância
         // ampla (match ≤45d, warning ≤90d, divergente acima disso).
-        label: 'ETD / Shipped On Board',
+        label: 'Datas documentais (emissão / embarque)',
         inv:
           inv?.etd ??
           inv?.shipmentDate ??
@@ -3740,14 +4103,45 @@ export const documentService = {
           operationalBl?.onBoardDate ??
           operationalBl?.etd,
         espelho: null,
+        system: systemText(processRecord?.etd),
         kind: 'date',
         dateOpts: { matchDays: 45, warnDays: 90 },
       },
       {
-        label: 'ETA',
+        label: 'ETD previsto',
+        inv: inv?.etd,
+        pl: pl?.etd,
+        bl: operationalBl?.etd,
+        system: systemText(processRecord?.etd),
+        kind: 'date',
+        dateOpts: { matchDays: 0, warnDays: 0 },
+        criticality: 'info',
+      },
+      {
+        label: 'Embarque realizado',
+        inv: inv?.shipmentDate ?? inv?.shippedOnBoardDate,
+        pl: pl?.shipmentDate ?? pl?.shippedOnBoardDate,
+        bl: operationalBl?.shipmentDate ?? operationalBl?.shippedOnBoardDate,
+        system: systemText(processRecord?.shipmentDate),
+        kind: 'date',
+        dateOpts: { matchDays: 0, warnDays: 0 },
+        criticality: 'info',
+      },
+      {
+        label: 'ETA previsto',
         inv: null,
         pl: null,
         bl: operationalBl?.eta,
+        system: systemText(processRecord?.eta),
+        kind: 'date',
+        criticality: 'info',
+      },
+      {
+        label: 'ETA realizado',
+        inv: null,
+        pl: null,
+        bl: null,
+        system: systemText(processRecord?.etaActual),
         kind: 'date',
         criticality: 'info',
       },
@@ -3764,15 +4158,23 @@ export const documentService = {
         pl: null,
         bl: operationalBl?.containerType,
         espelho: espelhoSummary?.containerType,
+        system: systemText(processRecord?.containerType),
         criticality: 'info',
       },
-      { label: 'Navio', inv: null, pl: null, bl: operationalBl?.vesselName, criticality: 'info' },
+      {
+        label: 'Navio',
+        inv: null,
+        pl: null,
+        bl: operationalBl?.vesselName,
+        system: systemText(processRecord?.vesselName),
+        criticality: 'info',
+      },
     ];
 
     // Compute match status for each field — supports 4 docs (inv/pl/bl/espelho).
     // For 'secondary' criticality, a hard divergence is downgraded to warning
     // (per Nicolas: "endereço do exportador… talvez a gente consiga relevar").
-    const aggregateComparison = aggregateFields.map((f, index) => {
+    const aggregateComparison: ComparisonRow[] = aggregateFields.map((f, index) => {
       const key = comparisonRowKey('aggregate', f.label, index);
       const invoiceOverride = getOverride(key, 'invoice');
       const packingListOverride = getOverride(key, 'packingList');
@@ -3789,14 +4191,22 @@ export const documentService = {
         return raw != null && raw !== '' ? String(raw) : null;
       };
 
-      const invoice = resolveCell(invoiceOverride, f.inv);
-      const packingList = resolveCell(packingListOverride, f.pl);
-      const bl = resolveCell(blOverride, f.bl);
-      const espelho = resolveCell(espelhoOverride, f.espelho);
+      const invoice = invoiceDoc ? resolveCell(invoiceOverride, f.inv) : null;
+      const packingList = plDoc ? resolveCell(packingListOverride, f.pl) : null;
+      const bl = operationalBlDoc ? resolveCell(blOverride, f.bl) : null;
+      // A stored correction cannot resurrect a removed/invalid source document.
+      const espelho = independentEspelho ? resolveCell(espelhoOverride, f.espelho) : null;
+      const system = resolveCell(getOverride(key, 'system'), f.system);
 
       // O status considera os valores efetivamente exibidos: corrigir uma
       // célula editada deve reconciliar (ou divergir) a linha de verdade.
-      const values = [invoice, packingList, bl, espelho].filter((v) => v != null && v !== '');
+      // Para datas, Sistema e a fonte follow-up comparavel. Nao descartar a
+      // data exibida justamente nas linhas previsto/realizado.
+      const sources =
+        f.kind === 'date'
+          ? [invoice, packingList, bl, espelho, system]
+          : [invoice, packingList, bl, espelho];
+      const values = sources.filter((v) => v != null && v !== '');
       let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
       const criticality: Criticality = f.criticality ?? 'critical';
       if (criticality === 'secondary' && status === 'divergent') status = 'warning';
@@ -3808,6 +4218,7 @@ export const documentService = {
         packingList,
         bl,
         espelho,
+        system,
         status,
         criticality,
         message: editedMessage(key, baseMessage),
@@ -3816,37 +4227,26 @@ export const documentService = {
       };
     });
 
-    // Build item-level comparison — normalize item codes (PI7752Y vs PI 7752Y, etc.)
-    const invItems = inv?.items ?? [];
-    const plItems = pl?.items ?? [];
+    // Cruzamentos da validacao INCORPORADOS as linhas de cima (D6): quem tem
+    // linha equivalente vira regra/status dela; ncm-bl-description e a
+    // descricao do Odoo viram linha propria, com valores NAS COLUNAS.
+    const aggregateWithChecks = mergeValidationChecks(
+      aggregateComparison,
+      validation.checks,
+      (key) => acceptanceFor('aggregate', key),
+    );
 
-    const findPlMatch = (invItem: any) =>
-      plItems.find((plItem: any) => {
-        if (itemIdentityMatches(plItem, invItem)) return true;
-        const plDesc = plItem.description ?? plItem.descricao;
-        const invDesc = invItem.description ?? invItem.descricao;
-        return Boolean(
-          plDesc &&
-          invDesc &&
-          String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
-        );
-      });
-
-    const findEspelhoMatch = (invItem: any) =>
-      espelhoItems.find((espItem: any) => {
-        return itemIdentityMatches(espItem, invItem);
-      });
+    // Casamento de item: cada linha do outro documento e usada UMA vez
+    // (o PK220 repete o SKU 050404509 em duas linhas, de PIs diferentes).
+    const usedPlItems = new Set<Record<string, any>>();
+    const usedEspelhoItems = new Set<Record<string, any>>();
 
     const itemComparison = invItems.map((invItem: any, index: number) => {
-      const plMatch = findPlMatch(invItem);
-      const espelhoMatch = findEspelhoMatch(invItem);
-      const itemCode =
-        extractCanonicalItemCode(
-          invItem.itemCode ?? invItem.codigo ?? invItem.code ?? invItem.sku,
-        ) ||
-        itemCodeCandidates(invItem)[0] ||
-        invItem.itemCode ||
-        invItem.codigo;
+      const plMatch = findCorrespondingItem(invItem, plItems, usedPlItems);
+      const espelhoMatch = findCorrespondingItem(invItem, espelhoItems, usedEspelhoItems);
+      // SKU exibido: o codigo entre colchetes da descricao ('050404509'), nao a
+      // string composta PI+colecao+codigo que a IA leu ('PK2062607BXIS27...').
+      const itemCode = primaryItemCode(invItem) || invItem.itemCode || invItem.codigo;
       const invoiceQty = toNumberOrNull(invItem.quantity);
       const plQty = toNumberOrNull(plMatch?.quantity);
       const espelhoQty = toNumberOrNull(espelhoMatch?.qty ?? espelhoMatch?.quantity);
@@ -3878,13 +4278,34 @@ export const documentService = {
       });
       const matched = !!plMatch;
       const espelhoMatched = !!espelhoMatch;
+      // Campos do espelho que ninguem conferia (Eduarda [05:47]). Cada um so
+      // compara quando os DOIS lados existem — ausencia nunca vira divergencia.
+      const invoiceNcm = invItem.ncmCode ?? invItem.ncm ?? null;
+      const espelhoNcm = espelhoMatch?.ncm ?? null;
+      const espelhoUnitPrice = toNumberOrNull(espelhoMatch?.unitPrice);
+      const espelhoTotal = toNumberOrNull(espelhoMatch?.amountUsd);
+      const ncmDiverges = ncmValuesDiverge(invoiceNcm, espelhoNcm);
+      const unitPriceDiverges = numericValuesDiverge(
+        toNumberOrNull(invItem.unitPrice),
+        espelhoUnitPrice,
+      );
+      const totalPriceDiverges = numericValuesDiverge(
+        toNumberOrNull(invItem.totalPrice),
+        espelhoTotal,
+      );
+      const eanDiverges = eanValuesDiverge(invItem.ean ?? invItem.ean13, espelhoMatch?.ean13);
       const status: RowStatus = isFreeOfCharge
         ? 'warning'
         : !matched || (espelhoItems.length > 0 && !espelhoMatched) || manufacturerDiverges
           ? 'warning'
-          : quantityDiverges || espelhoDiverges || weightRatio.status === 'divergent'
+          : quantityDiverges ||
+              espelhoDiverges ||
+              ncmDiverges ||
+              unitPriceDiverges ||
+              totalPriceDiverges ||
+              weightRatio.status === 'divergent'
             ? 'divergent'
-            : weightRatio.status === 'warning'
+            : weightRatio.status === 'warning' || eanDiverges
               ? 'warning'
               : 'match';
       const divergence = buildItemDivergence({
@@ -3895,6 +4316,10 @@ export const documentService = {
         espelhoDiverges,
         isFreeOfCharge,
         manufacturerDiverges,
+        ncmDiverges,
+        unitPriceDiverges,
+        totalPriceDiverges,
+        eanDiverges,
         weightRatioMessage: weightRatio.message,
       });
 
@@ -3909,7 +4334,12 @@ export const documentService = {
         accepted: acceptanceFor('item', itemRowKey),
         itemCode,
         description: invItem.description ?? invItem.descricao,
-        ncm: invItem.ncmCode ?? invItem.ncm,
+        ncm: invoiceNcm,
+        espelhoNcm,
+        espelhoDescription: espelhoMatch?.nomeProduto ?? espelhoMatch?.description ?? null,
+        invoiceEan: invItem.ean ?? invItem.ean13 ?? null,
+        plEan: plMatch?.ean ?? plMatch?.ean13 ?? null,
+        espelhoEan: espelhoMatch?.ean13 ?? espelhoMatch?.ean ?? null,
         invoiceQty,
         plQty,
         espelhoQty,
@@ -3917,6 +4347,10 @@ export const documentService = {
         invoiceTotal: invItem.totalPrice,
         espelhoUnitPrice: espelhoMatch?.unitPrice ?? null,
         espelhoTotal: espelhoMatch?.amountUsd ?? null,
+        ncmMatch: !ncmDiverges,
+        unitPriceMatch: !unitPriceDiverges,
+        totalPriceMatch: !totalPriceDiverges,
+        eanMatch: !eanDiverges,
         invoiceManufacturer,
         plManufacturer,
         espelhoManufacturer,
@@ -3945,25 +4379,9 @@ export const documentService = {
 
     // Find PL items not matched in invoice
     const unmatchedPlItems = plItems
-      .filter(
-        (plItem: any) =>
-          !invItems.some((invItem: any) => {
-            if (itemIdentityMatches(plItem, invItem)) return true;
-            const plDesc = plItem.description ?? plItem.descricao;
-            const invDesc = invItem.description ?? invItem.descricao;
-            return Boolean(
-              invDesc &&
-              plDesc &&
-              String(invDesc).toLowerCase().includes(String(plDesc).toLowerCase().slice(0, 20)),
-            );
-          }),
-      )
-      .map((item: any) => ({
-        itemCode:
-          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
-          itemCodeCandidates(item)[0] ||
-          item.itemCode ||
-          item.codigo,
+      .filter((plItem) => !invItems.some((invItem) => itemsCorrespond(invItem, plItem)))
+      .map((item) => ({
+        itemCode: primaryItemCode(item) || item.itemCode || item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'packing_list',
@@ -3973,25 +4391,9 @@ export const documentService = {
     // matching primitives (EAN / itemCode / description) so the anomaly stream
     // and the comparison panels agree in BOTH directions, not just PL→INV.
     const unmatchedInvoiceItems = invItems
-      .filter(
-        (invItem: any) =>
-          !plItems.some((plItem: any) => {
-            if (itemIdentityMatches(plItem, invItem)) return true;
-            const plDesc = plItem.description ?? plItem.descricao;
-            const invDesc = invItem.description ?? invItem.descricao;
-            return Boolean(
-              plDesc &&
-              invDesc &&
-              String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
-            );
-          }),
-      )
-      .map((item: any) => ({
-        itemCode:
-          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
-          itemCodeCandidates(item)[0] ||
-          item.itemCode ||
-          item.codigo,
+      .filter((invItem) => !plItems.some((plItem) => itemsCorrespond(plItem, invItem)))
+      .map((item) => ({
+        itemCode: primaryItemCode(item) || item.itemCode || item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'invoice',
@@ -4019,8 +4421,13 @@ export const documentService = {
       hasOperationalBl: !!operationalBl,
       operationalBlSource,
       hasEspelho: !!espelhoSummary || espelhoItems.length > 0,
-      aggregateComparison,
+      aggregateComparison: aggregateWithChecks,
       itemComparison,
+      // A coluna Sistema tem conteudo? Vem do CADASTRO do processo, nao da
+      // existencia de um resultado de validacao (ver AggregateRow.system).
+      systemDataAvailable: aggregateWithChecks.some((row) => row.system != null),
+      // 'partial' quando os cruzamentos vieram do historico de um run parcial.
+      validationMode: validation.mode,
       // Aceites ATIVOS (invalidated_at IS NULL) lidos da tabela relacional.
       // O timeline (`comparison_acceptance`) permanece como historico.
       acceptances,
@@ -4045,263 +4452,35 @@ export const documentService = {
       blConfidence: operationalBlDoc?.confidenceScore,
       finalBlConfidence: blDoc?.confidenceScore,
       draftBlConfidence: draftBlDoc?.confidenceScore,
-      espelhoConfidence: espelhoDoc?.confidenceScore ?? (espelhoSummary ? 0.99 : null),
+      espelhoConfidence: espelhoDoc?.confidenceScore ?? null,
       espelhoSource,
     };
   },
 };
 
-type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
-
-function comparisonRowKey(scope: 'aggregate' | 'item', value: unknown, index: number): string {
-  const raw = String(value ?? `linha-${index + 1}`)
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-  return `${scope}:${raw || `linha-${index + 1}`}`;
-}
-
-function aggregateMessage(status: RowStatus, criticality: 'critical' | 'secondary' | 'info') {
-  if (status === 'empty') return 'Sem dados extraidos para comparar.';
-  if (status === 'single_source') {
-    return 'Fonte unica — nenhum outro documento disponivel para corroborar este valor.';
+/**
+ * Cruzamentos da validacao para o comparativo.
+ *
+ * Import dinamico (o modulo de validacao importa este de volta) e tolerante a
+ * falha: o comparativo tem de abrir mesmo sem validacao nenhuma — era
+ * exatamente o caso do PK220, que so tem runs parciais.
+ */
+async function loadValidationChecks(processId: number): Promise<{
+  checks: ComparisonCheckResult[];
+  mode: 'final' | 'partial' | 'none';
+  runAt: string | null;
+}> {
+  try {
+    const { validationService } = await import('../validation/service.js');
+    const effective = await validationService.getEffectiveResults(processId);
+    return { checks: effective.results, mode: effective.mode, runAt: effective.runAt };
+  } catch (err) {
+    logger.warn(
+      { processId, err: err instanceof Error ? err.message : err },
+      'Could not load validation results for the comparison; rendering documents only',
+    );
+    return { checks: [], mode: 'none', runAt: null };
   }
-  if (status === 'match') return 'Conforme entre os documentos disponiveis.';
-  if (status === 'warning' && criticality === 'secondary') {
-    return 'Divergencia secundaria registrada como atencao.';
-  }
-  if (status === 'warning') return 'Divergencia pequena ou informativa; revisar antes do envio.';
-  return 'Divergencia entre documentos; requer correcao ou aceite.';
-}
-
-function toNumberOrNull(value: unknown): number | null {
-  if (value == null || value === '') return null;
-  const parsed = Number(String(value).replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function itemCodeCandidates(item: Record<string, any> | null | undefined): string[] {
-  if (!item) return [];
-  const rawCandidates = [
-    item.itemCode,
-    item.codigo,
-    item.code,
-    item.sku,
-    item.reference,
-    item.referencia,
-    item.description,
-    item.descricao,
-  ];
-  const seen = new Set<string>();
-  const values: string[] = [];
-  for (const raw of rawCandidates) {
-    if (raw == null || raw === '') continue;
-    const cleaned = extractCanonicalItemCode(raw);
-    if (!cleaned) continue;
-    const key = String(cleaned).trim().toUpperCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    values.push(cleaned);
-  }
-  return values;
-}
-
-function itemIdentityMatches(left: Record<string, any>, right: Record<string, any>): boolean {
-  const leftEan = normalizeGtin(left.ean ?? left.ean13);
-  const rightEan = normalizeGtin(right.ean ?? right.ean13);
-  if (leftEan && rightEan && leftEan === rightEan) return true;
-
-  const leftCodes = itemCodeCandidates(left);
-  const rightCodes = itemCodeCandidates(right);
-  return leftCodes.some((leftCode) =>
-    rightCodes.some((rightCode) => itemCodesMatch(leftCode, rightCode)),
-  );
-}
-
-function isInvoiceFreeOfCharge(item: Record<string, any>): boolean {
-  const total = toNumberOrNull(item.totalPrice);
-  const unit = toNumberOrNull(item.unitPrice);
-  const marker = String(item.notes ?? item.observations ?? item.description ?? item.descricao ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  return (
-    item.isFreeOfCharge === true ||
-    total === 0 ||
-    marker.includes('free of charge') ||
-    marker.includes('foc') ||
-    marker.includes('discount') ||
-    marker.includes('desconto') ||
-    marker.includes('bonificacao') ||
-    marker.includes('bonificado') ||
-    unit === 0
-  );
-}
-
-function buildItemDivergence(input: {
-  matched: boolean;
-  espelhoMatched: boolean;
-  hasEspelho: boolean;
-  quantityDiverges: boolean;
-  espelhoDiverges: boolean;
-  isFreeOfCharge: boolean;
-  manufacturerDiverges?: boolean;
-  weightRatioMessage?: string | null;
-}): string {
-  if (input.isFreeOfCharge) return 'FOC/desconto identificado na Invoice';
-  if (!input.matched) return 'Item nao localizado no Packing List';
-  if (input.hasEspelho && !input.espelhoMatched) return 'Item nao localizado no Espelho';
-  const divergences: string[] = [];
-  if (input.quantityDiverges) divergences.push('quantidade Invoice x Packing List');
-  if (input.espelhoDiverges) divergences.push('quantidade Invoice x Espelho');
-  if (input.manufacturerDiverges) divergences.push('fabricante INV x PL x Espelho');
-  if (input.weightRatioMessage) divergences.push(input.weightRatioMessage);
-  return divergences.length > 0 ? divergences.join('; ') : 'Sem divergencia';
-}
-
-function manufacturerValuesDiverge(values: unknown[]): boolean {
-  const normalized = values
-    .filter((value) => value != null && value !== '')
-    .map((value) => normalizeCompanyName(value))
-    .filter(Boolean);
-  if (normalized.length <= 1) return false;
-  // Compara todos os pares (não só contra o primeiro): 'ACME X' vs 'ACME Y'
-  // diverge mesmo quando ambos casam por prefixo com 'ACME'. Prefixo mútuo
-  // continua tolerado para absorver sufixos societários/ruído de extração.
-  for (let i = 0; i < normalized.length; i += 1) {
-    for (let j = i + 1; j < normalized.length; j += 1) {
-      const a = normalized[i];
-      const b = normalized[j];
-      if (a !== b && !a.startsWith(b) && !b.startsWith(a)) return true;
-    }
-  }
-  return false;
-}
-
-function normalizeStringList(value: unknown): string[] {
-  const rawValues = Array.isArray(value) ? value : [value];
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const raw of rawValues.flatMap((item) =>
-    typeof item === 'string' ? item.split(/[;\n]/) : [item],
-  )) {
-    const text = String(raw ?? '')
-      .trim()
-      .replace(/\s+/g, ' ');
-    if (!text) continue;
-    const key = normalizeCompanyName(text) || text.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(text);
-  }
-
-  return result;
-}
-
-function compareItemWeightRatio(input: {
-  invoiceNetWeight: number | null;
-  invoiceGrossWeight: number | null;
-  plNetWeight: number | null;
-  plGrossWeight: number | null;
-}): { status: RowStatus; message: string | null } {
-  const ratio = (gross: number | null, net: number | null) => {
-    if (gross == null || net == null || net <= 0 || gross <= 0) return null;
-    return gross / net;
-  };
-  const invoiceRatio = ratio(input.invoiceGrossWeight, input.invoiceNetWeight);
-  const plRatio = ratio(input.plGrossWeight, input.plNetWeight);
-  if (invoiceRatio == null && plRatio == null) return { status: 'empty', message: null };
-  if (
-    (input.invoiceGrossWeight != null &&
-      input.invoiceNetWeight != null &&
-      input.invoiceGrossWeight < input.invoiceNetWeight) ||
-    (input.plGrossWeight != null &&
-      input.plNetWeight != null &&
-      input.plGrossWeight < input.plNetWeight)
-  ) {
-    return { status: 'divergent', message: 'peso bruto menor que peso liquido' };
-  }
-  if (invoiceRatio == null || plRatio == null) return { status: 'warning', message: null };
-  const diffPct = Math.abs(invoiceRatio - plRatio) / Math.max(invoiceRatio, plRatio, 1);
-  if (diffPct <= 0.15) return { status: 'match', message: null };
-  if (diffPct <= 0.25)
-    return { status: 'warning', message: 'proporcao peso bruto/liquido fora da margem de 15%' };
-  return { status: 'divergent', message: 'proporcao peso bruto/liquido divergente' };
-}
-
-function itemComparisonMessage(
-  status: RowStatus,
-  divergence: string,
-  isFreeOfCharge: boolean,
-): string {
-  if (isFreeOfCharge) return 'Diferença explicada por item FOC/desconto identificado na Invoice';
-  if (status === 'match') return 'Item conforme entre os documentos disponiveis.';
-  if (status === 'warning') return `${divergence}; revisar ou aceitar operacionalmente.`;
-  return `${divergence}; requer correcao ou aceite.`;
-}
-
-function computeRowStatus(
-  values: unknown[],
-  kind: string,
-  dateOpts?: { matchDays?: number; warnDays?: number },
-): RowStatus {
-  if (values.length === 0) return 'empty';
-  // FALSO VERDE (auditoria 2026-07-17): um valor sozinho não "confere" com nada
-  // — verde aqui fazia um Incoterm errado extraído só da Invoice parecer
-  // validado. Estado neutro próprio, nem conforme nem divergente.
-  if (values.length === 1) return 'single_source';
-
-  if (kind === 'date') {
-    return compareDates(values, dateOpts) as RowStatus;
-  }
-
-  if (kind === 'port') {
-    const base = values[0];
-    const allEqual = values.every((value) => normalizedPortsMatch(base, value));
-    return allEqual ? 'match' : 'divergent';
-  }
-
-  if (kind === 'name') {
-    // Compare normalized company names; tolerate punctuation/suffix differences.
-    const norm = values.map((v) => normalizeCompanyName(v));
-    const base = norm[0];
-    if (!base) return 'empty';
-    const allEqual = norm.every((n) => n === base);
-    if (allEqual) return 'match';
-    // Soft tolerance: prefix match counts as warning, not divergent
-    const allPrefix = norm.every((n) => n.startsWith(base) || base.startsWith(n));
-    return allPrefix ? 'warning' : 'divergent';
-  }
-
-  if (kind === 'numeric') {
-    const nums = values.map((v) => parseFloat(String(v).replace(',', '.')));
-    if (nums.some((n) => isNaN(n))) return 'divergent';
-    const max = Math.max(...nums);
-    const min = Math.min(...nums);
-    const diff = max - min;
-    const denom = Math.max(Math.abs(max), 1);
-    if (diff < 0.5 || diff / denom < 0.005) return 'match';
-    if (diff / denom < 0.02) return 'warning';
-    return 'divergent';
-  }
-
-  // Default string comparison
-  const norm = values.map((v) => String(v).trim().toLowerCase());
-  const base = norm[0];
-  if (norm.every((n) => n === base)) return 'match';
-  // Numeric fallback for cases where the field happens to be numeric
-  const nums = norm.map((n) => parseFloat(n));
-  if (nums.every((n) => !isNaN(n))) {
-    const max = Math.max(...nums);
-    const min = Math.min(...nums);
-    return max - min < 0.5 ? 'match' : 'divergent';
-  }
-  return 'divergent';
 }
 
 interface DraftBlRevision {

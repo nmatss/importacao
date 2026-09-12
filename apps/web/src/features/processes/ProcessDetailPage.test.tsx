@@ -124,6 +124,14 @@ vi.mock('./components/EspelhoTab', () => ({
 vi.mock('./components/CambiosTab', () => ({
   CambiosTab: () => <div>Cambios content</div>,
 }));
+vi.mock('./components/DocumentChecklistTab', () => ({
+  DocumentChecklistTab: () => <div>Checklist content</div>,
+}));
+// A aba padrao monta a lista de documentos, que tem consultas proprias; aqui o
+// que se testa e a ORDEM das secoes da pagina.
+vi.mock('./components/DocumentsTab', () => ({
+  DocumentsTab: () => <div>Documentos content</div>,
+}));
 
 function LocationProbe() {
   return <output data-testid="location-search">{useLocation().search}</output>;
@@ -157,6 +165,31 @@ describe('ProcessDetailPage conditional tab deep links', () => {
 
     expect(screen.getByRole('tab', { name: 'Espelho' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByText('Espelho content')).toBeInTheDocument();
+  });
+
+  it('mostra o Ciclo de Transporte logo apos o cabecalho, antes do stepper de status', () => {
+    // Reuniao 11/09: "esse ciclo de transporte podia vir antes".
+    render(app('/importacao/processos/1'));
+
+    const ciclo = screen.getByText('Logistic status');
+    const stepper = screen.getByText('Process timeline');
+    const capa = screen.getByText('Process info');
+
+    expect(ciclo.compareDocumentPosition(stepper) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stepper.compareDocumentPosition(capa) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('nao tem mais a aba Etapas e leva o link antigo para o Checklist', () => {
+    // D7: as etapas especificas viraram linhas do proprio Checklist.
+    const view = render(app('/importacao/processos/1?tab=etapas'));
+
+    expect(screen.queryByRole('tab', { name: 'Etapas' })).not.toBeInTheDocument();
+
+    view.rerender(app('/importacao/processos/1?tab=etapas'));
+
+    expect(screen.getByTestId('location-search')).toHaveTextContent('?tab=checklist');
+    expect(screen.getByRole('tab', { name: 'Checklist' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByText('Checklist content')).toBeInTheDocument();
   });
 
   it('preserves the Cambios deep link while the exchange summary is loading', () => {

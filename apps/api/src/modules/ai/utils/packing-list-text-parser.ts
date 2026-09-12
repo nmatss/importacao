@@ -11,6 +11,26 @@ const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.8): Confidenc
 
 const EMPTY_STRING = cf<string>(null, 0);
 
+/** The Puket PDF places the CBM cell before its split label. Only accept a
+ * unique standalone decimal in this explicit table layout; joined weight and
+ * carton totals are ambiguous and must be read from the original PDF.
+ */
+function parsePuketFooterCbm(source: string): number | null {
+  const compact = source.replace(/\s/g, '').toUpperCase();
+  if (!compact.includes('PUKET') || !compact.includes('CARTONS') || !compact.includes('TOTALCBM'))
+    return null;
+  const lines = source.split(/\r?\n/);
+  const column = lines.find((line) => /TOTAL CBM/i.test(line))?.search(/TOTAL CBM/i) ?? -1;
+  if (column > 0) {
+    const aligned = lines
+      .map((line) => line.slice(column).trim())
+      .filter((cell) => /^\d{1,3}(?:\.\d{3})*,\d{3}$/.test(cell));
+    if (aligned.length === 1) return parseNumber(aligned[0]);
+  }
+  const cells = [...source.matchAll(/^\s*(\d{1,3}(?:\.\d{3})*,\d{3})\s*$/gm)];
+  return cells.length === 1 ? parseNumber(cells[0]![1]) : null;
+}
+
 export function tryParsePackingListText(text: string): Record<string, any> | null {
   const source = text ?? '';
   if (!isPackingList(source)) return null;
@@ -48,9 +68,9 @@ export function tryParsePackingListText(text: string): Record<string, any> | nul
   const totalGrossWeight =
     parseNumber(matchFirst(source, [/\btotal\s*gross\s*weight\b[^\d]{0,20}([\d.,]+)/i])) ??
     sumField(items, 'grossWeight');
-  const totalCbm = parseNumber(
-    matchFirst(source, [/\btotal\s*(?:cbm|m3|m³|volume)\b[^\d]{0,20}([\d.,]+)/i]),
-  );
+  const totalCbm =
+    parseNumber(matchFirst(source, [/\btotal\s*(?:cbm|m3|m³|volume)\b[^\d]{0,20}([\d.,]+)/i])) ??
+    parsePuketFooterCbm(source);
 
   if (items.length === 0 && !totalBoxes && !totalNetWeight && !totalGrossWeight) return null;
 
@@ -258,8 +278,12 @@ function sumField(items: Record<string, any>[], key: string): number | null {
 export function fillPackingListNullsFromText(
   data: Record<string, any>,
   text: string,
+  options?: { sourceTextReliable?: boolean },
 ): Record<string, any> {
   const source = text ?? '';
+  // Ver fillInvoiceNullsFromText: texto de apoio (OCR de gabarito) nunca
+  // preenche campo nenhum.
+  if (options?.sourceTextReliable === false) return data;
   if (!source.trim() || !isPackingList(source)) return data;
 
   const out = { ...data };
@@ -324,9 +348,29 @@ export function fillPackingListNullsFromText(
     const v = parseNumber(
       matchFirst(source, [/\btotal\s*(?:cbm|m3|m\u00b3|volume)\b[^\d]{0,20}([\d.,]+)/i]),
     );
-    if (v != null) out.totalCbm = cf(v, FILLED);
+    const recovered = v ?? parsePuketFooterCbm(source);
+    if (recovered != null) out.totalCbm = cf(recovered, FILLED);
   }
 
+  // The Poppler layout preserves distinct cells on the Puket total row.
+  // Never split the concatenated pdf-parse version: its boundaries are ambiguous.
+  if (/PUKET/i.test(source) && /TOTAL CBM/i.test(source) && /CARTONS/i.test(source)) {
+    const totals = [
+      ...source.matchAll(
+        /^\s*TOTAL[ \t]+([\d.,]+)[ \t]+(\d+)[ \t]+([\d.,]+)[ \t]+([\d.,]+)[ \t]*$/gm,
+      ),
+    ];
+    if (totals.length === 1) {
+      for (const [field, index] of [
+        ['totalBoxes', 2],
+        ['totalNetWeight', 3],
+        ['totalGrossWeight', 4],
+      ] as const) {
+        const value = parseNumber(totals[0]![index]);
+        if (isNull(out[field]) && value != null && value >= 0) out[field] = cf(value, FILLED);
+      }
+    }
+  }
   return out;
 }
 

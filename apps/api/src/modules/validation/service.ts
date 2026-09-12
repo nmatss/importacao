@@ -36,8 +36,35 @@ type DocumentWithAiData = {
   updatedAt?: Date | string | null;
 };
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '../documents/constants.js';
+import {
+  hasOperationalConfidence,
+  MIN_OPERATIONAL_CONFIDENCE,
+  MIN_BL_OPERATIONAL_CONFIDENCE,
+} from '../documents/constants.js';
 type ValidationRunMode = 'final' | 'partial';
+
+/**
+ * Resultado de check como o comparativo e o relatorio consomem — vindo dos
+ * resultados vigentes OU do historico do ultimo run parcial.
+ */
+export interface EffectiveCheckResult {
+  id: number;
+  checkName: string;
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
+  expectedValue: string | null;
+  actualValue: string | null;
+  documentsCompared: string | null;
+  message: string | null;
+  dataSource: string | null;
+  /** Campos do resultado vigente preservados para os consumidores do relatorio. */
+  resolvedManually?: boolean | null;
+  resolutionNote?: string | null;
+  resolvedBy?: number | null;
+  resolvedByName?: string | null;
+  resolvedAt?: Date | string | null;
+  validationRunId?: number | null;
+  createdAt?: Date | string | null;
+}
 
 type RunAllChecksOptions = {
   mode?: ValidationRunMode;
@@ -66,13 +93,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasExtractionFailureData(aiParsedData: unknown): boolean {
   if (!isRecord(aiParsedData)) return false;
   return Boolean(aiParsedData.extractionFailed || aiParsedData.error || aiParsedData.skipped);
-}
-
-function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
-  if (confidenceScore == null) return true;
-  const confidence =
-    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
-  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 function hasMeaningfulAiData(value: unknown): boolean {
@@ -114,7 +134,7 @@ function isUsableValidationDocument(doc: DocumentWithAiData): boolean {
     doc.isProcessed !== false &&
     doc.aiParsedData != null &&
     hasMeaningfulAiData(doc.aiParsedData) &&
-    hasOperationalConfidence(doc.confidenceScore) &&
+    hasOperationalConfidence(doc.type, doc.confidenceScore) &&
     !hasExtractionFailureData(doc.aiParsedData)
   );
 }
@@ -153,7 +173,7 @@ function buildDocumentSetCompletenessResult(input: {
 
   const message =
     `Validacao ${input.mode === 'partial' ? 'parcial' : 'final'} sem conjunto documental completo: ` +
-    `${missing.join(', ')}. Documento utilizavel exige extracao concluida, dados uteis e confianca operacional >= ${(MIN_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}%.`;
+    `${missing.join(', ')}. Documento utilizavel exige extracao concluida, dados uteis e confianca operacional >= ${(MIN_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}% (BL >= ${(MIN_BL_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}%). O corte de leitura nao garante campos completos nem conformidade.`;
 
   return {
     checkName: 'document-set-completeness',
@@ -608,12 +628,35 @@ export const validationService = {
         ),
       );
 
+      // A mensagem do Chat sai daqui, e so daqui. Havia um segundo envio direto
+      // (`notifyGoogleChat`), fora do caminho unico de entrega: cada validacao
+      // final com falha rendia DUAS mensagens no espaco, e uma por
+      // reprocessamento — 11/09, PK2192607SZ: 4 envios diretos contra 2 alertas
+      // persistidos.
+      //
+      // O texto usa a explicacao de cada verificacao, nunca o `checkName`: o
+      // operador nao le `fob-value-match`. A ordem e estavel porque a
+      // deduplicacao por MUDANCA compara o conteudo.
+      const nomesCriticos = new Set(criticalItems.map((c) => c.checkName));
+      const linhas = [...failedChecks]
+        .sort((a, b) => a.checkName.localeCompare(b.checkName))
+        .map((c) => {
+          const explicacao = c.message?.trim() || 'Verificacao sem detalhe informado.';
+          return `• ${nomesCriticos.has(c.checkName) ? 'Crítico: ' : ''}${explicacao}`;
+        });
+
       await alertService.create({
         processId,
         severity,
         title: `Falhas na Validacao${severity === 'critical' ? ' (Critico)' : ''}`,
-        message: `Processo ${process.processCode ?? processId}: ${failedChecks.length} verificacao(oes) falharam: ${failedChecks.map((c) => c.checkName).join(', ')}.${criticalItems.length > 0 ? ` Itens criticos: ${criticalItems.map((c) => c.checkName).join(', ')}.` : ''}`,
+        message: [
+          `Processo ${process.processCode ?? processId}: ${failedChecks.length} verificação(ões) falharam.`,
+          ...linhas,
+        ].join('\n'),
         processCode: process.processCode,
+        // Reprocessar com o MESMO conjunto de falhas nao repete a mensagem;
+        // qualquer alteracao no conjunto volta a avisar.
+        dedupeBy: 'change',
       });
 
       // Auto-draft correction email for KIOM (only for cross-document failures, not system checks)
@@ -656,12 +699,6 @@ export const validationService = {
           logger.error({ err: emailErr, processId }, 'Failed to draft KIOM correction email');
         }
       }
-
-      // Send validation failure summary to Google Chat
-      this.notifyGoogleChat(process.processCode ?? String(processId), failedChecks, severity).catch(
-        (err) =>
-          logger.error({ err, processId }, 'Failed to send validation summary to Google Chat'),
-      );
     }
 
     return results;
@@ -700,6 +737,120 @@ export const validationService = {
       .from(validationResults)
       .leftJoin(users, eq(validationResults.resolvedBy, users.id))
       .where(eq(validationResults.processId, processId));
+  },
+
+  /**
+   * Resultados EFETIVOS do processo para leitura (comparativo e relatorio).
+   *
+   * `validation_results` so e escrito em validacao FINAL, e a validacao final
+   * exige Invoice + Packing List + BL projetados. O PK220 tem o OHBL abaixo do
+   * piso de confianca, entao todo run dele e PARCIAL e a tabela fica vazia: a
+   * tela mostrava zero cruzamentos e a coluna Sistema so com tracinhos, apesar
+   * de haver 203 linhas de historico. Sem run final, cai no ULTIMO run
+   * registrado em `validation_result_history` e marca `mode: 'partial'` — so
+   * leitura, sem abrir correcao nem mexer em status.
+   */
+  async getEffectiveResults(processId: number): Promise<{
+    results: EffectiveCheckResult[];
+    mode: 'final' | 'partial' | 'none';
+    runAt: string | null;
+    validationRunId: number | null;
+  }> {
+    const current = await this.getResults(processId);
+    if (current.length > 0) {
+      const runAt = current.reduce<Date | null>((latest, row) => {
+        const createdAt = row.createdAt ? new Date(row.createdAt) : null;
+        if (!createdAt) return latest;
+        return latest == null || createdAt > latest ? createdAt : latest;
+      }, null);
+      return {
+        // O `...row` preserva o contrato ja publicado de
+        // `GET /api/validation/:id/report` (resolvedManually, resolutionNote,
+        // resolvedByName...). Estreitar isso aqui quebraria consumidores.
+        results: current.map((row) => ({
+          ...row,
+          id: row.id,
+          checkName: row.checkName,
+          status: row.status as EffectiveCheckResult['status'],
+          expectedValue: row.expectedValue ?? null,
+          actualValue: row.actualValue ?? null,
+          documentsCompared: row.documentsCompared ?? null,
+          message: row.message ?? null,
+          dataSource: row.dataSource ?? null,
+        })),
+        mode: 'final',
+        runAt: runAt ? runAt.toISOString() : null,
+        validationRunId: current[0]?.validationRunId ?? null,
+      };
+    }
+
+    const history = await db
+      .select()
+      .from(validationResultHistory)
+      .where(eq(validationResultHistory.processId, processId))
+      .orderBy(desc(validationResultHistory.runAt), desc(validationResultHistory.id));
+
+    if (history.length === 0) {
+      return { results: [], mode: 'none', runAt: null, validationRunId: null };
+    }
+
+    const newest = history[0];
+    const sameRun = (row: (typeof history)[number]) =>
+      newest.validationRunId != null
+        ? row.validationRunId === newest.validationRunId
+        : new Date(row.runAt ?? 0).getTime() === new Date(newest.runAt ?? 0).getTime();
+
+    const seen = new Set<string>();
+    const results: EffectiveCheckResult[] = [];
+    for (const row of history.filter(sameRun)) {
+      // Um run parcial grava uma linha por check; duplicata so aconteceria em
+      // dado legado, e ai vale a mais recente (a lista ja vem ordenada).
+      if (seen.has(row.checkName)) continue;
+      seen.add(row.checkName);
+      const details = (row.details ?? {}) as Record<string, unknown>;
+      results.push({
+        id: row.id,
+        checkName: row.checkName,
+        status: row.status as EffectiveCheckResult['status'],
+        expectedValue: (details.expectedValue as string | null) ?? null,
+        actualValue: (details.actualValue as string | null) ?? null,
+        documentsCompared: (details.documentsCompared as string | null) ?? null,
+        message: row.message ?? null,
+        dataSource: (details.dataSource as string | null) ?? null,
+        resolvedManually: row.resolvedManually ?? false,
+        resolutionNote: row.resolutionNote ?? null,
+        validationRunId: row.validationRunId ?? null,
+        createdAt: row.runAt ?? null,
+      });
+    }
+
+    return {
+      results,
+      mode: 'partial',
+      runAt: newest.runAt ? new Date(newest.runAt).toISOString() : null,
+      validationRunId: newest.validationRunId ?? null,
+    };
+  },
+
+  /**
+   * Apaga os resultados VIGENTES do processo (o historico em `validation_runs`
+   * fica intacto).
+   *
+   * Usado quando o ultimo documento comparavel (INV/PL/BL) e excluido: os
+   * resultados descreviam documentos que nao existem mais, e mante-los deixava
+   * a aba Comparativo acusando divergencia de anexo apagado — inclusive o
+   * indicador vermelho da aba. Ver `documentService.refreshProcessDerivedState`.
+   */
+  async clearResults(processId: number) {
+    const removed = await db
+      .delete(validationResults)
+      .where(eq(validationResults.processId, processId))
+      .returning({ id: validationResults.id });
+    logger.info(
+      { processId, removed: removed.length },
+      'Validation results cleared: no comparable document left in the process',
+    );
+    return { removed: removed.length };
   },
 
   /**
@@ -1097,7 +1248,9 @@ export const validationService = {
 
     if (!process) throw new NotFoundError('Processo', processId);
 
-    const results = await this.getResults(processId);
+    // Resultados vigentes; sem run final, os do ultimo run parcial (FUP-01).
+    const effective = await this.getEffectiveResults(processId);
+    const results = effective.results;
 
     // Whether the process carries any SYSTEM (Sydle/FUP) reference values to
     // compare extracted documents against. When false, the "Documentos vs
@@ -1129,6 +1282,10 @@ export const validationService = {
         containerType: process.containerType,
       },
       systemDataAvailable,
+      // 'partial' avisa a leitura de que os resultados vieram do historico de
+      // um run parcial (nao houve validacao final); 'none' = nunca validado.
+      mode: effective.mode,
+      runAt: effective.runAt,
       summary: {
         total: results.length,
         passed: results.filter((r) => r.status === 'passed').length,
@@ -1141,55 +1298,11 @@ export const validationService = {
     };
   },
 
-  async notifyGoogleChat(
-    processCode: string,
-    failedChecks: CheckResult[],
-    severity: 'warning' | 'critical',
-  ) {
-    try {
-      const { sendToGoogleChat } = await import('../alerts/google-chat.service.js');
-      const { systemSettings } = await import('../../shared/database/schema.js');
-      const { eq: eqOp } = await import('drizzle-orm');
-
-      const [setting] = await db
-        .select()
-        .from(systemSettings)
-        .where(eqOp(systemSettings.key, 'google_chat_webhook_url'))
-        .limit(1);
-
-      const webhookUrl = (setting?.value as string) || process.env.GOOGLE_CHAT_WEBHOOK_URL;
-      if (!webhookUrl) return;
-
-      const criticalItems = failedChecks.filter((c) =>
-        ['fob-value-match', 'total-value-match', 'net-weight-match', 'gross-weight-match'].includes(
-          c.checkName,
-        ),
-      );
-
-      const message = [
-        `Validacao do processo ${processCode} concluida com ${failedChecks.length} falha(s).`,
-        criticalItems.length > 0
-          ? `Itens criticos: ${criticalItems.map((c) => c.checkName).join(', ')}.`
-          : '',
-        `Verificacoes com falha: ${failedChecks.map((c) => c.checkName).join(', ')}.`,
-        'Um rascunho de e-mail de correcao foi gerado automaticamente.',
-      ]
-        .filter(Boolean)
-        .join('\n');
-
-      await sendToGoogleChat(webhookUrl, {
-        severity,
-        title: `Validacao com Falhas - ${processCode}`,
-        message,
-        processCode,
-      });
-
-      logger.info(
-        { processCode, failedCount: failedChecks.length },
-        'Validation summary sent to Google Chat',
-      );
-    } catch (err) {
-      logger.error({ err, processCode }, 'Failed to send validation summary to Google Chat');
-    }
-  },
+  // `notifyGoogleChat` foi removido: era o segundo caminho de envio ao Chat,
+  // sem persistencia, sem deduplicacao, sem reentrega e sem teto de tentativas,
+  // e ainda reimplementava a resolucao do webhook com `setting?.value as string`
+  // — que quebra quando a configuracao vem no formato `{ url }`. A mensagem de
+  // falha de validacao agora sai pelo alerta persistido acima, que passa por
+  // `delivery.service.ts`. A guarda estatica
+  // `modules/alerts/__tests__/caminho-unico-de-chat.test.ts` impede a volta.
 };

@@ -1,6 +1,38 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-29 (ver
+## Release revisada em12/09 — pendências externas confirmadas
+
+- Dia limite resolvido pelo solicitante: inclusivo emAmerica/Sao_Paulo.
+- Odoo produtivo usa hostname de exemplo; exige configuração oficial, não ajusteDNS arbitrário.
+- DUIMP pilotos são extratos finais; faltam rascunhos,unidade comercial e vínculo catálogo/SKU.
+- Nevinho tem fornecedores/certificados diferentes; N ainda não validada. Linx apresenta datas
+  indevidas em amostras; licença ausente/1900 não comprova nãoaplicabilidade. Carga bloqueada.
+- FOLLOW_UP_SYNC_MODE permanece dry_run: aplicação geral pode sobrescrever dados manuais;
+  duplicatas/concorrência/auditoria corrigidas, mas precedência ainda exige conciliação.
+
+## Atualização da revisão antecipada — 12/09/2026
+
+- A rodada2 avança imediatamente, sem aguardar cronograma. Detalhes e evidências em
+  [relatório atual](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+- Antes de publicar o contrato de restrição individual, aplicar e verificar a migration explícita
+  `apps/cert-api/sql/20260912_certificate_item_restrictions.sql` pelo fluxo autorizado.
+- IA_LOCAL continua com falha DNS. Usuário autorizou piloto Vertex e quatro PDFs foram inferidos
+  sem persistência; homologação integral continua parcial. Política de egress local preservada.
+- Resolução manual/planilha/fornecedor e não aplicabilidade de licenciamento dependem de vínculo
+  aprovado. Datas propostas não são bloqueio; essas decisões permanecem dependências reais.
+
+## 2026-09-12 — Pendências atuais após retomada
+
+Estado atual em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md), que atualiza os
+itens históricos abaixo. Registro foi implementado; cronograma atualizado; imagem Docker
+construída; SELECT de FIM_VENDAS permitido nas duas marcas. Permanecem: homologação piloto
+com provider/rascunho real, vínculo vigente por fornecedor/certificado e validação N, decisão
+dia limite, fonte de não aplicabilidade do licenciamento, conciliação/carga Linx e ativação
+Drive em produção. Sincronização ambígua falha explicitamente e não resolve o vínculo.
+Produção ainda email/raiz placeholder, confirmado read-only; nenhum rollout realizado.
+
+Ultima atualizacao: 2026-09-11 (ver
+`docs/STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md`,
 `docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`,
 `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`,
 `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`,
@@ -14,6 +46,56 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## 2026-09-11 — Reuniao de importacao/certificacao: pendencias apos a implementacao
+
+Estado completo em [reuniao 11/09](STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md) e
+decisoes de negocio em [decisoes abertas](DECISOES-ABERTAS-2026-09-11.md). Tudo abaixo esta na
+branch local `fix/reuniao-2026-09-11`; **nada foi publicado**.
+
+**Bloqueadores para virar a fonte documental para o Drive (nesta ordem):**
+
+1. **Backfill de `content_sha256`** dos documentos ja existentes NAO foi executado (exige UPDATE em
+   producao e autorizacao). Sem ele, virar `DOCUMENT_SOURCE=drive` faz os arquivos subidos a mao em
+   11/09 (processos 287, 288 e 297) entrarem de novo como duplicata.
+2. **`GOOGLE_DRIVE_ROOT_FOLDER_ID` continua o placeholder `your-root-folder-id`** em producao, e
+   `DOCUMENT_SOURCE` continua `email`. Ambos dependem de SOPS e deploy autorizados.
+3. O compartilhamento com a conta de servico **ja foi concedido** em 11/09 (leitura de PROCESSOS,
+   PENDENTES DE CORRECAO e ESPELHOS confirmada por sonda somente leitura).
+
+**Nao implementado nesta rodada:**
+
+- **Registro/DUIMP**: o comparativo DUIMP x espelho x invoice foi desenhado (REG-01..REG-07) e nao
+  foi implementado. A aba Registro continua sem usar o rascunho anexado.
+- **Revisao adversarial cruzada** das entregas dos times.
+- **CMP-07 etapa 2** (mais campos do cabecalho do espelho): depende de ler um espelho oficial do
+  Drive.
+- **Cronograma no Sheets** com fases e prazos, pedido na reuniao.
+- **CFN-08 e CFN-09** ficaram sem codigo por divisao de arquivos entre os dois times de certificacao.
+- **Imagem Docker com `poppler-data`/fonte CJK nao foi construida** — o Dockerfile mudou, o build
+  nao foi executado.
+
+**Mudancas visiveis que dependem de aceite antes de publicar:**
+
+- ~107 SKUs com certificado encerrado passam de "Ativo" para "Encerrado" (venda ainda liberada ate o
+  fim de venda) e 3 voltam para "Ativo". **Exige aceite fiscal.**
+- `cert_products.status_venda`, `trava_venda` e `trava_origem` seguem NULL no banco: as regras rodam
+  em runtime e nenhum caminho de escrita as popula. Quem consultar o banco direto nao ve a trava.
+- "FIM_VENDAS Linx atual" e "Diverge do Linx" saem como "Nao lido" ate existir consulta a
+  `PRODUTO_CORES.FIM_VENDAS` por cor (exige GRANT de SELECT).
+- Progresso do checklist muda de denominador (15 para 13 etapas ativas); os valores persistidos so
+  sao recalculados no proximo toggle de etapa.
+- A contagem do comparativo cai, porque os cruzamentos viraram status das linhas de cima.
+- Exclusao de documento e definitiva (sem soft-delete) e agora disponivel para analista.
+
+**Riscos declarados que continuam abertos:**
+
+- A regra de "processo parado" le `eta` e `registered_at` do nosso banco, que sao um retrato de
+  25/08 enquanto `FOLLOW_UP_SYNC_MODE` ficar em `dry_run`. Ha protecao: processo sem ETA nunca e
+  silenciado e existe teto de 30 dias uteis.
+- `linx_attributes.py` nunca rodou contra o SQL Server real; os nomes de coluna vem do diagnostico.
+- O indice do Drive foi validado contra fixture sintetica derivada da arvore real, nao contra a API.
+- Nenhuma tela foi aberta em navegador nesta rodada.
 
 ## 2026-09-06 — Atualizacao apos verificacao autenticada
 
@@ -232,11 +314,24 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
   inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
   corrente em credencial/provider/operação, não no contrato básico do código.
 
+- **2026-09-11:** o acesso de LEITURA foi liberado e a árvore real foi lida. A
+  estrutura `<ano>/<Marca>/Importado/Processo Nº <código>` registrada acima NÃO é
+  a da pasta que a operação usa: a raiz é `PROCESSOS`, as marcas são numeradas
+  (`02. IMAGINARIUM`, `03. PUKET`), há nível de ano e, às vezes, de coleção ou
+  `FAT <mês>`, e existe uma pasta de entrada na raiz,
+  `04. PENDENTES DE CORREÇÃO`. Os espelhos ficam em `01. ESPELHOS`, 316 como Sheets
+  nativos. O código foi reescrito para esse layout (índice por varredura,
+  prioridade por tipo, export de Sheets, dedupe por conteúdo, tombstone e
+  `DRIVE_WRITE_MODE=off`); ver
+  `docs/operations/document-intake-contract-2026-09-11.md`.
+
 Status: **PARCIALMENTE RESOLVIDO / ALTO.** Follow Up está configurado e
-acessível. Para concluir o rollout Drive-only, adicionar a conta de serviço como
-leitora do Shared Drive/pasta operacional, cadastrar a raiz anual no SOPS e
-exigir `health/integrations` + smoke verdes. IMAP segue relevante enquanto o
-modo temporário `email` estiver ativo.
+acessível, e a leitura da pasta PROCESSOS foi liberada em 11/09. Para concluir o
+rollout Drive-only faltam, nesta ordem: deploy do código novo com
+`DOCUMENT_SOURCE=email`, backfill autorizado de `content_sha256` nos documentos
+já existentes, cadastro da raiz (e opcionalmente das áreas) no SOPS com
+`DRIVE_WRITE_MODE=off`, `health/integrations` sem aviso de Drive e smoke de
+leitura. IMAP segue relevante enquanto o modo temporário `email` estiver ativo.
 
 ## ALTO - Integrações Auxiliares Parcialmente Operacionais
 
@@ -1218,6 +1313,64 @@ Status:
 - Resolvido em 2026-06-17. Producao recebeu SOPS + age, `.env.sops.yaml`
   criptografado e `scripts/generate-env-from-vault.sh` passa a gerar `.env` a
   partir do arquivo criptografado durante o deploy.
+
+## MEDIO - Alerta De Inatividade Depende Da ETA Sincronizada
+
+Descricao:
+
+- A regra de "processo sem movimentacao" (11/09) passou a decidir pela FASE:
+  silencia processo em transito (`eta` maior ou igual a hoje) e cobra processo
+  atracado sem `registered_at`.
+- As duas colunas vem da Follow Up e hoje sao um retrato de 25/08: o sync roda
+  em `FOLLOW_UP_SYNC_MODE=dry_run` e `registered_at` esta nulo em 117/117
+  processos. O PK2192607SZ tem `eta = 2026-09-17` no banco enquanto a planilha
+  registra atracacao em 08/09 e registro da DUIMP em 04/09.
+
+Evidencias:
+
+- `apps/api/src/jobs/stalled-process.ts` (bloco de dependencia declarada)
+- `docs/BUSINESS_RULES.md`, secao "Alertas De Processo Sem Movimentacao"
+- SELECT em producao de 11/09 (processos ativos, `eta`, `registered_at`)
+
+Impacto:
+
+- Enquanto o sync nao rodar em `apply`, um processo ja registrado na planilha
+  continua elegivel ao digest (ruido) e uma ETA errada para frente silencia um
+  atraso real por ate 30 dias uteis (teto).
+
+Status:
+
+- **ABERTO / MEDIO.** Fecha junto com FUP-02/FUP-04 (sync da Follow Up em
+  `apply`). Mitigacoes ja no codigo: processo sem ETA nunca e silenciado e o
+  teto de 30 dias uteis fura o silencio do transito.
+
+## BAIXO - `STALLED_PROCESS_MILESTONE_DAYS` Declarada E Nao Lida
+
+Descricao:
+
+- A variavel configurava os marcos de 3/7/14/30/60 dias do alerta por processo,
+  que deixou de existir com o digest de 11/09. O codigo nao a le mais; a linha
+  continua em `docker-compose.prod.yml`.
+- A cadencia atual (5 dias uteis entre avisos, 10 para escalada, teto de 30) e
+  constante exportada em `stalled-process.ts`, sem variavel de ambiente: a lista
+  explicita do compose e do time de infraestrutura e nao foi tocada por esta
+  mudanca.
+
+Evidencias:
+
+- `docker-compose.prod.yml` (servico `api`)
+- `apps/api/src/jobs/stalled-process.ts`
+
+Impacto:
+
+- Nenhum em runtime: variavel declarada e nao lida nao faz nada. A guarda
+  `env-repassado-ao-container.test.ts` cobre o sentido oposto (leitura sem
+  declaracao), entao a sobra nao e detectada automaticamente.
+
+Status:
+
+- **ABERTO / BAIXO.** Remover a linha do compose quando algum time tocar o
+  arquivo; parametrizar a cadencia por env so se o negocio pedir.
 
 ## BAIXO - Warning CSS De `@import`
 

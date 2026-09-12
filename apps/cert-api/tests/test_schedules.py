@@ -374,3 +374,59 @@ class TestListSchedulesPeriodFilter:
         resp = await test_client.get("/api/schedules", headers=api_key_headers)
         assert resp.status_code == 200
         assert "WHERE" not in _sql_matching(calls, "SELECT * FROM cert_schedules")[0][0]
+
+
+# ---------------------------------------------------------------------------
+# CFN-06 — job horario so-planilha (decisao D11)
+# ---------------------------------------------------------------------------
+
+
+def test_hourly_job_id_survives_a_schedule_reload(mocker):
+    """O id NAO pode comecar com `cert_schedule_`.
+
+    `load_schedules_into_scheduler` remove todo job com esse prefixo a cada
+    create/update/delete de agendamento: o job horario sumiria em silencio na
+    primeira edicao feita na tela.
+    """
+    from app.routes import schedules
+
+    assert not schedules.HOURLY_SHEET_SYNC_JOB_ID.startswith("cert_schedule_")
+
+
+def test_schedule_hourly_sheet_sync_registers_an_hourly_cron(mocker):
+    from app.routes import schedules
+
+    add_job = mocker.patch.object(schedules.scheduler, "add_job")
+    schedules.schedule_hourly_sheet_sync()
+
+    add_job.assert_called_once()
+    kwargs = add_job.call_args.kwargs
+    assert kwargs["id"] == schedules.HOURLY_SHEET_SYNC_JOB_ID
+    assert kwargs["trigger"] == "cron"
+    assert kwargs["minute"] == 20
+    assert kwargs["max_instances"] == 1
+    assert kwargs["coalesce"] is True
+
+
+def test_hourly_job_runs_only_the_sheet_sync(mocker):
+    """So planilha: nada de VTEX nem estoque (a validacao diaria ja faz isso)."""
+    from app.routes import schedules
+
+    run = mocker.patch(
+        "app.services.sync_runs.run_sheet_sync",
+        return_value={"locked": True, "sheets": {"synced": 674}},
+    )
+    stock = mocker.patch("app.services.wms_service.sync_stock_all")
+
+    schedules._run_hourly_sheet_sync()
+
+    run.assert_called_once_with("hourly")
+    stock.assert_not_called()
+
+
+def test_hourly_job_swallows_failures(mocker):
+    """Excecao no job derrubaria o proximo disparo do APScheduler."""
+    from app.routes import schedules
+
+    mocker.patch("app.services.sync_runs.run_sheet_sync", side_effect=RuntimeError("boom"))
+    schedules._run_hourly_sheet_sync()

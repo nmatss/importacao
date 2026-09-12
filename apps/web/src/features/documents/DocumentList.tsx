@@ -20,11 +20,10 @@ import {
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useApiQuery } from '@/shared/hooks/useApi';
-import { useAuth } from '@/shared/hooks/useAuth';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import {
-  MIN_OPERATIONAL_CONFIDENCE,
+  isDocumentOperational,
   CONFIDENCE_HIGH,
   CONFIDENCE_MEDIUM,
   explainLowConfidence,
@@ -32,6 +31,8 @@ import {
 import { TableSkeleton } from '@/shared/components/Skeleton';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { ErrorState } from '@/shared/components/ErrorState';
+import { api } from '@/shared/lib/api-client';
+import { getErrorMessage } from '@/shared/utils/errors';
 import { AiExtractionSummary } from './AiExtractionSummary';
 import { invalidateDocumentWorkflow } from './queryInvalidation';
 
@@ -83,12 +84,6 @@ function SourceIcon({ source, className }: { source: DocumentSource; className: 
   return <Upload className={className} />;
 }
 
-// null = ainda sem score (doc não processado) → tratado como utilizável aqui;
-// o LIMIAR vem da fonte única em shared/lib/confidence.ts.
-function hasOperationalConfidence(value: number | null | undefined): boolean {
-  return value == null || value >= MIN_OPERATIONAL_CONFIDENCE;
-}
-
 const TYPE_COLORS: Record<string, string> = {
   invoice:
     'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-950/30 dark:text-primary-300 dark:border-primary-700/50',
@@ -110,9 +105,17 @@ const TYPE_COLORS: Record<string, string> = {
     'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600',
 };
 
-function ConfidenceBadge({ value, data }: { value: number; data?: Record<string, unknown> }) {
+function ConfidenceBadge({
+  value,
+  data,
+  documentType,
+}: {
+  value: number;
+  data?: Record<string, unknown>;
+  documentType: string;
+}) {
   const pct = Math.round(value * 100);
-  const usable = hasOperationalConfidence(value);
+  const usable = isDocumentOperational(value, documentType);
   // Limiar de cor unificado (shared/lib/confidence.ts) — a mesma % tinha
   // cores diferentes conforme a tela.
   // Compara sobre o pct ARREDONDADO (o número que o operador vê): 0.795
@@ -152,11 +155,13 @@ function ConfidenceBadge({ value, data }: { value: number; data?: Record<string,
 function AiStatus({
   status,
   confidence,
+  documentType,
 }: {
   status: Document['aiProcessingStatus'];
+  documentType: string;
   confidence?: number | null;
 }) {
-  if (status === 'completed' && !hasOperationalConfidence(confidence)) {
+  if (status === 'completed' && !isDocumentOperational(confidence, documentType)) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-danger-500">
         <AlertTriangle className="h-3 w-3" />
@@ -196,13 +201,16 @@ function AiStatus({
 function isOperationallyExtracted(doc: Document): boolean {
   return (
     doc.aiProcessingStatus === 'completed' &&
-    hasOperationalConfidence(doc.aiConfidence) &&
+    isDocumentOperational(doc.aiConfidence, doc.documentType) &&
     !!doc.aiParsedData
   );
 }
 
 function extractionFailureMessage(doc: Document): string | null {
-  if (doc.aiProcessingStatus === 'completed' && !hasOperationalConfidence(doc.aiConfidence)) {
+  if (
+    doc.aiProcessingStatus === 'completed' &&
+    !isDocumentOperational(doc.aiConfidence, doc.documentType)
+  ) {
     const pct = Math.round((doc.aiConfidence ?? 0) * 100);
     return `Confiança da extração (${pct}%) abaixo do piso operacional. Dados ficam apenas para revisão e não devem ser usados automaticamente.`;
   }
@@ -220,12 +228,15 @@ function extractionFailureMessage(doc: Document): string | null {
     : 'Falha na extração. Reprocesse o documento ou revise o arquivo enviado.';
 }
 
+/** Piso do motivo obrigatorio — igual ao `deleteDocumentSchema` da API (D8). */
+const DELETE_REASON_MIN_LENGTH = 5;
+
 export function DocumentList({ processId }: DocumentListProps) {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
-  const canDeleteDocuments = user?.role === 'admin';
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Document | null>(null);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
   const [sources, setSources] = useState<Record<string, DocumentSource>>({});
   const [activeFileAction, setActiveFileAction] = useState<string | null>(null);
   const [reprocessingId, setReprocessingId] = useState<number | null>(null);
@@ -373,22 +384,29 @@ export function DocumentList({ processId }: DocumentListProps) {
     }
   };
 
-  const handleDelete = (doc: Document) => {
-    const token = localStorage.getItem('importacao_token');
-    const baseUrl = import.meta.env.VITE_API_URL || '';
-    fetch(`${baseUrl}/api/documents/${doc.id}`, {
-      method: 'DELETE',
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('Falha ao excluir documento');
-        toast.success('Documento excluído');
-        void invalidateDocumentWorkflow(queryClient, processId);
-        setDeleteTarget(null);
-      })
-      .catch((err: any) => {
-        toast.error(err.message || 'Erro ao excluir documento');
-      });
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setDeleteReason('');
+  };
+
+  const handleDelete = async (doc: Document) => {
+    const reason = deleteReason.trim();
+    if (reason.length < DELETE_REASON_MIN_LENGTH) return;
+    setDeleting(true);
+    try {
+      // Via api-client: o `fetch` cru transformava QUALQUER falha em "Falha ao
+      // excluir documento" — o 423 "Processo travado ... Destrave antes" e o
+      // 403 chegavam irreconheciveis, e o 401 nao passava pelo
+      // redirecionamento de sessao expirada.
+      await api.delete(`/api/documents/${doc.id}`, { reason });
+      toast.success('Documento excluído');
+      void invalidateDocumentWorkflow(queryClient, processId);
+      closeDeleteDialog();
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setDeleting(false);
+    }
   };
 
   if (isLoading) return <TableSkeleton />;
@@ -444,7 +462,9 @@ export function DocumentList({ processId }: DocumentListProps) {
   const totalDocs = visibleDocuments.length;
   const completedDocs = visibleDocuments.filter(isOperationallyExtracted).length;
   const lowConfidenceDocs = visibleDocuments.filter(
-    (d) => d.aiProcessingStatus === 'completed' && !hasOperationalConfidence(d.aiConfidence),
+    (d) =>
+      d.aiProcessingStatus === 'completed' &&
+      !isDocumentOperational(d.aiConfidence, d.documentType),
   ).length;
   const failedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'failed').length;
   const coreTypes = ['invoice', 'packing_list', 'ohbl'];
@@ -566,9 +586,17 @@ export function DocumentList({ processId }: DocumentListProps) {
                           <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             {formatDate(doc.uploadedAt)}
                           </span>
-                          <AiStatus status={doc.aiProcessingStatus} confidence={doc.aiConfidence} />
+                          <AiStatus
+                            status={doc.aiProcessingStatus}
+                            confidence={doc.aiConfidence}
+                            documentType={doc.documentType}
+                          />
                           {doc.aiConfidence != null && (
-                            <ConfidenceBadge value={doc.aiConfidence} data={doc.aiParsedData} />
+                            <ConfidenceBadge
+                              value={doc.aiConfidence}
+                              data={doc.aiParsedData}
+                              documentType={doc.documentType}
+                            />
                           )}
                         </div>
                         {source && (
@@ -723,20 +751,23 @@ export function DocumentList({ processId }: DocumentListProps) {
                           )}
                         </button>
 
-                        {/* Delete */}
-                        {canDeleteDocuments && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setDeleteTarget(doc);
-                            }}
-                            className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
-                            title="Excluir"
-                            aria-label={`Excluir documento ${doc.fileName}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
+                        {/* Excluir: liberado para analista (D8). O anexo no
+                            processo errado e a analista sem como corrigir foi
+                            justamente o caso da reuniao. O que protege agora e
+                            o motivo obrigatorio + audit + tombstone, nao o
+                            papel do usuario. */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteReason('');
+                            setDeleteTarget(doc);
+                          }}
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
+                          title="Excluir"
+                          aria-label={`Excluir documento ${doc.fileName}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
 
@@ -792,11 +823,30 @@ export function DocumentList({ processId }: DocumentListProps) {
       <ConfirmDialog
         isOpen={!!deleteTarget}
         title="Excluir Documento"
-        message={`Tem certeza que deseja excluir "${deleteTarget?.fileName}"? Esta ação não pode ser desfeita.`}
+        message={`Excluir "${deleteTarget?.fileName}"? A exclusão é definitiva: o arquivo não volta pela varredura do Drive e o motivo fica registrado no histórico do processo.`}
         confirmLabel="Excluir"
+        confirmDisabled={deleting || deleteReason.trim().length < DELETE_REASON_MIN_LENGTH}
         onConfirm={() => deleteTarget && handleDelete(deleteTarget)}
-        onCancel={() => setDeleteTarget(null)}
-      />
+        onCancel={closeDeleteDialog}
+      >
+        <label
+          htmlFor="document-delete-reason"
+          className="block text-xs font-semibold text-slate-600 dark:text-slate-300"
+        >
+          Motivo da exclusão
+        </label>
+        <input
+          id="document-delete-reason"
+          value={deleteReason}
+          onChange={(event) => setDeleteReason(event.target.value)}
+          maxLength={500}
+          placeholder="Ex.: anexado no processo errado"
+          className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-danger-500 focus:outline-none focus:ring-2 focus:ring-danger-500/20 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+        />
+        <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+          Obrigatório, ao menos {DELETE_REASON_MIN_LENGTH} caracteres.
+        </p>
+      </ConfirmDialog>
     </>
   );
 }

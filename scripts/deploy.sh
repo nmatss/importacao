@@ -137,16 +137,23 @@ fi
 ROLLBACK_DIR="${DEPLOY_DIR}.rollback"
 ROLLBACK_READY=0
 info "Snapshotting current release to ${ROLLBACK_DIR} for rollback..."
-if ssh "${DEPLOY_USER}@${SERVER}" "test -d ${DEPLOY_DIR}"; then
-  # cp -al = fast hardlink copy; fall back to a full copy if hardlinks fail.
-  if ssh "${DEPLOY_USER}@${SERVER}" "rm -rf ${ROLLBACK_DIR} && { cp -al ${DEPLOY_DIR} ${ROLLBACK_DIR} 2>/dev/null || cp -a ${DEPLOY_DIR} ${ROLLBACK_DIR}; }"; then
+REMOTE_DIR_STATUS=0
+ssh "${DEPLOY_USER}@${SERVER}" "test -d ${DEPLOY_DIR}" || REMOTE_DIR_STATUS=$?
+if [[ "${REMOTE_DIR_STATUS}" == "0" ]]; then
+  # Build a complete candidate snapshot before replacing the previous rollback.
+  # cp -al may leave a partial directory on failure; never copy into that directory.
+  if ssh "${DEPLOY_USER}@${SERVER}" "stage=\"${ROLLBACK_DIR}.pending-${LOCAL_SHA:0:12}\"; rm -rf \"\$stage\"; if ! cp -al ${DEPLOY_DIR} \"\$stage\" 2>/dev/null; then rm -rf \"\$stage\" && cp -a ${DEPLOY_DIR} \"\$stage\" || exit 1; fi; test -f \"\$stage/${COMPOSE_FILE}\" && rm -rf ${ROLLBACK_DIR} && mv \"\$stage\" ${ROLLBACK_DIR}"; then
     ROLLBACK_READY=1
     success "Snapshot ready (previous release preserved)."
   else
-    warn "Could not snapshot current release — AUTOMATIC ROLLBACK WILL BE UNAVAILABLE."
+    error "Could not snapshot current release. Deploy aborted before code sync."
+    exit 1
   fi
+elif [[ "${REMOTE_DIR_STATUS}" == "1" && "${ALLOW_FIRST_DEPLOY:-0}" == "1" ]]; then
+  warn "Explicit first deployment: no previous release snapshot."
 else
-  warn "Remote dir does not exist yet (first deploy) — no rollback snapshot."
+  error "Cannot verify previous release directory (status ${REMOTE_DIR_STATUS}); deploy aborted."
+  exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -230,6 +237,9 @@ ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && python3 -" <<'PY'
 from pathlib import Path
 import shlex
 import sys
+import os
+import stat
+import tempfile
 
 env_file = Path(".env")
 target = Path("infra/alertmanager/alertmanager.yml")
@@ -274,10 +284,16 @@ if not template.exists():
     sys.exit(1)
 
 yaml_url = webhook_url.replace("'", "''")
-target.write_text(
-    template.read_text(encoding="utf-8").replace("${ALERTMANAGER_WEBHOOK_URL}", yaml_url),
-    encoding="utf-8",
-)
+# Atomic replacement keeps the hardlinked rollback snapshot unchanged.
+fd, temporary = tempfile.mkstemp(prefix=".alertmanager-", dir=target.parent)
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(template.read_text(encoding="utf-8").replace("${ALERTMANAGER_WEBHOOK_URL}", yaml_url))
+    os.chmod(temporary, stat.S_IMODE(target.stat().st_mode) if target.exists() else 0o644)
+    os.replace(temporary, target)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
 print(f"Rendered {target} from {template}.")
 PY
 
@@ -306,13 +322,25 @@ success "External Docker network ia-local-net exists."
 # ---------------------------------------------------------------------------
 # Apply pending SQL migrations (idempotente — mesmo script do caminho manual)
 # ---------------------------------------------------------------------------
+# Build before any schema mutation: failed compilation must not advance the DB.
+info "Building release images before applying migrations..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && APP_VERSION='${LOCAL_SHA}' docker compose -f ${COMPOSE_FILE} build api web cert-api"; then
+  error "Release image build failed. Existing containers were not restarted."
+  exit 1
+fi
+
 info "[6/8] Applying pending SQL migrations..."
 if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && bash scripts/apply-pending-migrations.sh"; then
   error "Migrations failed. Deploy aborted before starting the new api/web containers."
   notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: migrations failed"
   exit 1
 fi
-success "Migrations applied."
+info "Applying explicit certification migrations with the new release image..."
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COMPOSE_FILE} run --rm --no-deps cert-api python -m app.db.release_migrations --apply"; then
+  error "Certification migrations failed. Deploy aborted before restarting applications."
+  exit 1
+fi
+success "API and certification migrations applied and checked."
 
 # ---------------------------------------------------------------------------
 # Deploy: build + restart application services
@@ -346,111 +374,71 @@ if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && (docker compose -f ${CO
   notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: cert-api volume init failed"
   exit 1
 fi
-ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-  APP_VERSION='${LOCAL_SHA}' docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"
+# Check all application boundaries, including the browser proxy, before success.
+release_ready() {
+  ssh "${DEPLOY_USER}@${SERVER}" "curl --connect-timeout 5 --max-time 10 -sf '${HEALTH_ENDPOINT}'" >/dev/null 2>&1 &&
+  ssh "${DEPLOY_USER}@${SERVER}" "docker exec importacao-cert-api python -c \"import json, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:8000/api/ready', timeout=5)); raise SystemExit(0 if data.get('ready') is True else 1)\"" >/dev/null 2>&1 &&
+  ssh "${DEPLOY_USER}@${SERVER}" "curl --connect-timeout 5 --max-time 10 -sf '${WEB_HEALTH_ENDPOINT}'" >/dev/null 2>&1 &&
+  ssh "${DEPLOY_USER}@${SERVER}" "curl --connect-timeout 5 --max-time 10 -sf '${PROXY_HEALTH_ENDPOINT}'" >/dev/null 2>&1 &&
+  { [[ -z "${PUBLIC_WEB_HEALTH_ENDPOINT}" ]] || curl --connect-timeout 5 --max-time 10 -sf "${PUBLIC_WEB_HEALTH_ENDPOINT}" >/dev/null 2>&1; }
+}
+
+wait_release_ready() {
+  local attempt
+  for ((attempt=1; attempt<=HEALTH_RETRIES; attempt++)); do
+    if release_ready; then return 0; fi
+    info "Application readiness ${attempt}/${HEALTH_RETRIES} not ready yet..."
+    sleep "${HEALTH_INTERVAL}"
+  done
+  return 1
+}
+
+rollback_release() {
+  error "Release failed; restoring previous code and checking all application boundaries."
+  if [[ "${ROLLBACK_READY}" != "1" ]]; then
+    error "No previous release snapshot available; manual intervention required."
+    return 1
+  fi
+  # Environment and live uploaded data must not be replaced by a stale snapshot.
+  if ! ssh "${DEPLOY_USER}@${SERVER}" "rsync -a --delete --exclude '.env' --exclude 'uploads' --exclude 'reports/' --exclude 'logs' ${ROLLBACK_DIR}/ ${DEPLOY_DIR}/"; then
+    error "Snapshot restore failed; manual intervention required."
+    return 1
+  fi
+  if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api"; then
+    error "Previous release restart failed; manual intervention required."
+    return 1
+  fi
+  if wait_release_ready; then
+    warn "Previous code restored and all application checks passed. Database migrations were NOT rolled back."
+    return 0
+  fi
+  error "Previous release restored but readiness failed; manual intervention required."
+  return 1
+}
+
+if ! ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && APP_VERSION='${LOCAL_SHA}' docker compose -f ${COMPOSE_FILE} up -d --no-deps api web cert-api"; then
+  rollback_release || true
+  exit 1
+fi
 success "Containers started."
 
-# ---------------------------------------------------------------------------
-# Health check loop
-# ---------------------------------------------------------------------------
-info "[8/8] Waiting for health check: ${HEALTH_ENDPOINT}"
-ATTEMPT=0
-HEALTHY=0
-until [[ ${ATTEMPT} -ge ${HEALTH_RETRIES} ]]; do
-  ATTEMPT=$((ATTEMPT + 1))
-  if ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${HEALTH_ENDPOINT}'" > /dev/null 2>&1; then
-    HEALTHY=1
-    break
-  fi
-  info "  Health attempt ${ATTEMPT}/${HEALTH_RETRIES} — not ready yet..."
-  sleep "${HEALTH_INTERVAL}"
-done
-
-if [[ "${HEALTHY}" -ne 1 ]]; then
-  error "Health check failed after ${HEALTH_RETRIES} attempts."
-
-  if [[ "${ROLLBACK_READY}" -eq 1 ]]; then
-    error "Rolling CODE back to the previous release from snapshot..."
-    # Restore previous code from the snapshot, preserving live .env/secrets.
-    ssh "${DEPLOY_USER}@${SERVER}" "rsync -a --delete --exclude '.env' ${ROLLBACK_DIR}/ ${DEPLOY_DIR}/" || \
-      error "Snapshot restore command failed — release may be inconsistent."
-    ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && \
-      docker compose -f ${COMPOSE_FILE} up -d --no-deps --build api web cert-api" || true
-
-    # Re-check health so we report the TRUTH, not a hopeful message.
-    RB_OK=0
-    RB_ATTEMPT=0
-    until [[ ${RB_ATTEMPT} -ge ${HEALTH_RETRIES} ]]; do
-      RB_ATTEMPT=$((RB_ATTEMPT + 1))
-      if ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${HEALTH_ENDPOINT}'" > /dev/null 2>&1; then
-        RB_OK=1; break
-      fi
-      sleep "${HEALTH_INTERVAL}"
-    done
-
-    if [[ "${RB_OK}" -eq 1 ]]; then
-      warn "Rolled back to the previous release — health is GREEN again."
-      notify "ROLLBACK" "Health failed on ${LOCAL_SHA:0:12} — rolled back to previous release (healthy)"
-    else
-      error "Rollback applied but health is STILL failing — MANUAL INTERVENTION REQUIRED."
-      notify "ROLLBACK-FAILED" "Health failed AND rollback unhealthy on ${SERVER} — manual intervention"
-    fi
-  else
-    error "No rollback snapshot available — leaving the current (failed) release in place."
-    error "MANUAL INTERVENTION REQUIRED on ${SERVER}:${DEPLOY_DIR}."
-    notify "FAILED" "Health failed on ${LOCAL_SHA:0:12} and no rollback snapshot — manual intervention on ${SERVER}"
-  fi
-
-  warn "Database migrations are forward-only and were NOT rolled back — verify schema/data state."
+info "[8/8] Waiting for API, certification, web and proxy readiness..."
+if ! wait_release_ready; then
+  rollback_release || true
   exit 1
 fi
+success "All application readiness checks passed."
 
-success "Health check passed."
-ssh "${DEPLOY_USER}@${SERVER}" "docker exec importacao-cert-api python -c \"import json, urllib.request; data=json.load(urllib.request.urlopen('http://localhost:8000/api/ready', timeout=5)); raise SystemExit(0 if data.get('ready') is True else 1)\"" > /dev/null || {
-  error "cert-api readiness check failed after deploy."
-  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: cert-api readiness failed"
-  exit 1
-}
-success "cert-api readiness passed."
-ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${WEB_HEALTH_ENDPOINT}'" > /dev/null || {
-  error "web health check failed after deploy: ${WEB_HEALTH_ENDPOINT}"
-  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: web health failed"
-  exit 1
-}
-success "web health passed."
-
-# O caminho que o usuario realmente usa: browser -> nginx -> api. Os checks acima
-# batem na api pela porta direta (${HEALTH_ENDPOINT}) e no nginx so na raiz, entao
-# os dois passam mesmo com o proxy /api quebrado — foi assim que quatro deploys
-# em 16/07/2026 reportaram sucesso com o login do time fora do ar (nginx com o IP
-# antigo da api apos ela ser recriada). Este check fecha esse buraco.
-ssh "${DEPLOY_USER}@${SERVER}" "curl -sf '${PROXY_HEALTH_ENDPOINT}'" > /dev/null || {
-  error "proxy health check failed after deploy: ${PROXY_HEALTH_ENDPOINT}"
-  error "O portal responde, mas o nginx nao alcanca a api: /api/* esta quebrado (login inclusive)."
-  error "Tente: docker compose -f ${COMPOSE_FILE} restart web"
-  notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: proxy /api health failed"
-  exit 1
-}
-success "proxy /api health passed (browser -> nginx -> api)."
-
-if [[ -n "${PUBLIC_WEB_HEALTH_ENDPOINT}" ]]; then
-  if ! curl -sf "${PUBLIC_WEB_HEALTH_ENDPOINT}" > /dev/null; then
-    error "public web health check failed after deploy: ${PUBLIC_WEB_HEALTH_ENDPOINT}"
-    notify "FAIL" "Deploy ${LOCAL_SHA:0:12}: public web health failed"
-    exit 1
-  fi
-  success "public web health passed."
-fi
 info "Refreshing observability services..."
 ssh "${DEPLOY_USER}@${SERVER}" "cd ${DEPLOY_DIR} && docker compose -f ${COMPOSE_FILE} up -d --no-deps prometheus alertmanager grafana && docker compose -f ${COMPOSE_FILE} restart prometheus alertmanager" > /dev/null || \
   warn "Could not refresh observability services — verify Prometheus/Alertmanager manually."
 ssh "${DEPLOY_USER}@${SERVER}" "printf '%s\n' '${LOCAL_SHA}' > ${DEPLOY_DIR}/REVISION" 2>/dev/null || \
   warn "Could not write ${DEPLOY_DIR}/REVISION"
 
-# Deploy succeeded — drop the rollback snapshot to reclaim space.
+# Keep the previous release for the initial monitoring/rollback window.
+# The next deploy replaces it only after that deploy has its mandatory backup.
 if [[ "${ROLLBACK_READY}" -eq 1 ]]; then
-  ssh "${DEPLOY_USER}@${SERVER}" "rm -rf ${ROLLBACK_DIR}" 2>/dev/null || \
-    warn "Could not remove rollback snapshot ${ROLLBACK_DIR} — remove it manually."
+  info "Previous release retained at ${ROLLBACK_DIR}; database migrations remain forward-only."
 fi
 
 # ---------------------------------------------------------------------------

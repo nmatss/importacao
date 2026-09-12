@@ -1,5 +1,12 @@
 # Roadmap
 
+## 2026-09-12 — Cronograma e critérios de liberação
+
+Cronograma autorizado atualizado no Sheets, com janelas propostas 14/09–23/10/2026.
+[Estado técnico e dependências](STATUS-2026-09-12-RETOMADA-REUNIAO.md). Marcos semanais
+continuam sob Nicolas + áreas, sem automação recorrente ou envio ao grupo. Prioridade seguinte:
+resolver N/vínculo vigente, homologar extração/Registro e preparar conciliação antes de deploy/carga.
+
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
 Ultima atualizacao: 2026-08-29
@@ -30,9 +37,20 @@ Ultima atualizacao: 2026-08-29
      O gate de virada deve exigir, alem do que ja esta escrito acima, um smoke que
      baixe de fato um arquivo da pasta operacional e uma inspecao de
      `documents.drive_file_id` apos uma ingestao real.
-- Homologar Invoice, Packing List, BL e XLSX de Espelho vindos exclusivamente da
-  pasta de um processo listado no Follow Up; provar também os negativos de
-  código de item, referência incompleta e upload manual 409.
+- **ATUALIZACAO 2026-09-11 (reuniao 11/09, D1):** o acesso de leitura a pasta
+  PROCESSOS foi liberado e a arvore real foi lida. O layout que consta acima nao
+  e o real; o codigo passou a montar um indice de pastas (areas numeradas, ano,
+  colecao ou `FAT <mes>`, PENDENTES na raiz), a exportar espelho em Sheets
+  nativo, a deduplicar por conteudo (`content_sha256` / `drive_md5`), a consultar
+  tombstone antes de reimportar e a tratar PROCESSOS como SOMENTE LEITURA
+  (`DRIVE_WRITE_MODE=off`). Sequencia de ativacao, backfill de hash que precisa
+  de autorizacao e smoke em
+  `docs/operations/document-intake-contract-2026-09-11.md`.
+- Homologar Invoice, Packing List, BL e Espelho vindos exclusivamente da pasta de
+  um processo listado no Follow Up; provar também os negativos de código de item
+  e de referência incompleta. O negativo "upload manual 409" deixou de valer: a
+  partir de 11/09 o upload manual tem flag propria (`MANUAL_UPLOAD_ENABLED`,
+  padrao ligado) e o que impede a duplicata e o dedupe por conteudo.
 
 - Executar o plano aprovado
   `docs/operations/backfill-plan-2026-08-26-completeness.yaml`: backup/restore

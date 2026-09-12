@@ -88,6 +88,7 @@ const CertRelatoriosPage = lazy(() => import('@/features/certificacoes/CertRelat
 const CertRelatorioDetailPage = lazy(
   () => import('@/features/certificacoes/CertRelatorioDetailPage'),
 );
+const CertMarketplacePage = lazy(() => import('@/features/certificacoes/CertMarketplacePage'));
 const CertAgendamentosPage = lazy(() => import('@/features/certificacoes/CertAgendamentosPage'));
 const CertConfiguracoesPage = lazy(() => import('@/features/certificacoes/CertConfiguracoesPage'));
 
@@ -276,6 +277,7 @@ export function AppRoutes() {
                   <Route path="/produtos" element={<CertProdutosPage />} />
                   <Route path="/produtos/:sku" element={<CertProdutoDetailPage />} />
                   <Route path="/cadastro" element={<CertCadastroPage />} />
+                  <Route path="/marketplace" element={<CertMarketplacePage />} />
                   <Route path="/relatorios" element={<CertRelatoriosPage />} />
                   <Route path="/relatorios/:id" element={<CertRelatorioDetailPage />} />
                   <Route

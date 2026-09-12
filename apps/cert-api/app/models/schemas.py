@@ -1,6 +1,9 @@
 """Pydantic request/response models."""
 
-from pydantic import BaseModel
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from app.utils.cron import build_cron_trigger
 
@@ -43,6 +46,26 @@ class ValidateRequest(BaseModel):
     brand: str | None = None
     limit: int | None = None
     source: str | None = None
+
+
+class CertificateItemsRequest(BaseModel):
+    """Vinculo em massa de SKUs a um certificado (decisao D11).
+
+    `dry_run` e o padrao: a tela mostra a previa (o que seria vinculado, o que ja
+    esta, o que pertence a outro certificado ativo) ANTES de qualquer gravacao
+    no Linx. Confirmar exige mandar `dry_run=false` explicitamente.
+    """
+
+    skus: list[str] = []
+    dry_run: bool = True
+
+
+class CertificateItemRestrictionRequest(BaseModel):
+    """Overrides explicitos; null herda o certificado, nunca presume dispensa."""
+
+    situacao: Literal["ATIVO", "ENCERRADO"] | None
+    fim_venda: date | None
+    motivo: str = Field(min_length=1, max_length=1000)
 
 
 class ScheduleCreate(BaseModel):

@@ -1,4 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { eq } from 'drizzle-orm';
+import { db } from '../../shared/database/connection.js';
+import { documents, importProcesses } from '../../shared/database/schema.js';
+import { buildRegistroComparison } from './registro-comparison.js';
 import { documentController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { upload, validateMagicBytes } from '../../shared/middleware/upload.js';
@@ -7,6 +11,7 @@ import { getDocumentSourcePolicy, isManualDocumentUploadEnabled } from './source
 import { sendError, sendSuccess } from '../../shared/utils/response.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { paramsNumericos } from '../../shared/schemas/params.js';
+import { deleteDocumentSchema } from './schema.js';
 
 const router = Router();
 
@@ -45,6 +50,13 @@ router.get(
   validate(paramsNumericos('processId'), 'params'),
   documentController.getByProcess,
 );
+// Status da varredura do Drive para o processo (DRV-08). A tela mostra "o
+// Drive olhou e nao achou nada" em vez de deixar o processo vazio sem motivo.
+router.get(
+  '/process/:processId/drive-status',
+  validate(paramsNumericos('processId'), 'params'),
+  documentController.driveStatus,
+);
 router.get(
   '/process/:processId/extraction-history',
   validate(paramsNumericos('processId'), 'params'),
@@ -54,6 +66,25 @@ router.get(
   '/process/:processId/comparison',
   validate(paramsNumericos('processId'), 'params'),
   documentController.comparison,
+);
+router.get(
+  '/process/:processId/registro-comparison',
+  validate(paramsNumericos('processId'), 'params'),
+  async (req, res, next) => {
+    try {
+      const processId = Number(req.params.processId);
+      const [process] = await db
+        .select({ id: importProcesses.id, processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, processId))
+        .limit(1);
+      if (!process) return sendError(res, 'Processo não encontrado', 404);
+      const rows = await db.select().from(documents).where(eq(documents.processId, processId));
+      return sendSuccess(res, buildRegistroComparison(processId, rows, process.processCode));
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 router.post(
   '/process/:processId/comparison/accept',
@@ -110,10 +141,17 @@ router.post(
   documentController.reconcileProcess,
 );
 router.post('/reconcile-all', adminMiddleware, documentController.reconcileAll);
+// Excluir documento voltou a ser acao de ANALISTA (D8, reuniao 11/09: rascunho
+// da DUIMP anexado no processo errado e so o admin conseguia remover — "voces
+// estao sem acesso, eu vou liberar"). As salvaguardas que substituem o
+// `adminMiddleware` do hardening de junho: motivo obrigatorio (schema abaixo),
+// audit com a origem do arquivo, evento no historico do processo, tombstone
+// contra reimportacao pelo Drive e o bloqueio 423 em processo travado, que
+// continua valendo dentro do service.
 router.delete(
   '/:id',
-  adminMiddleware,
   validate(paramsNumericos('id'), 'params'),
+  validate(deleteDocumentSchema),
   documentController.delete,
 );
 

@@ -1,5 +1,62 @@
 # Session Memory
 
+## 12/09/2026 — Dia comercial confirmado
+
+Solicitante confirmou venda até fim do dia limite em America/Sao_Paulo; bloqueio no dia seguinte.
+Deploy autorizado após revisão profunda; candidato integrado no worktree de release.
+
+## 2026-09-12 — Auditoria de uso efetivo e piloto autorizado
+
+Usuário autorizou piloto limitado Vertex: quatro PDFs executados sem persistência nos bancos.
+Produção ainda email/raiz placeholder, zero documentos vinculados Drive e escolares presente.
+Relatório canônico contém matriz dos30 pontos e diferenças local/produção:
+[retomada12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md). Aprovação Vertex substitui a pendência
+da rodada anterior; não substitui decisões comerciais ou conciliação para carga.
+
+## 2026-09-12 — Segunda rodada antecipada
+
+Solicitante autorizou antecipar tudo sem aguardar datas propostas. Cronograma C6 registra essa
+orientação. Datas/rascunhos não comprovam eventos realizados; PDF usa Poppler antes do fallback;
+Registro exige unidades/fontes consistentes; restrição individual possui contrato aditivo local.
+Estado, testes e migration em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+Não houve publicação/carga. IA local indisponível por DNS; autorização de teste limitado Vertex
+foi solicitada, sem envio de documentos enquanto não houver resposta.
+
+## 2026-09-12 — Retomada com fontes reais e revisão cruzada
+
+Continuação na branch `fix/reuniao-2026-09-11`, base f4aa948. Quatro frentes corrigiram BL,
+certificação/licenciamento, Registro DUIMP e interface; fonte Sheets/Drive e Linx consultados
+somente leitura. Cronograma existente atualizado e relido, sem alteração das fontes.
+Estado e limites em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+Não confundir testes locais com homologação/carga definitiva. Nenhum push/deploy realizado.
+
+## 2026-09-11 — Reuniao de importacao e certificacao
+
+Objetivo: revisar e corrigir tudo o que Eduarda e Odett pediram na reuniao de 11/09, mais os 15
+prints enviados depois.
+
+Metodo: diagnostico com 9 times em paralelo (somente leitura) e um critico de completude — 73
+achados com evidencia, 10 contradicoes entre times; depois implementacao com uma fundacao
+compartilhada e um time por frente em `git worktree` isolado. A primeira rodada perdeu 6 de 8 times
+por LIMITE DE USO DA SESSAO (nao por erro tecnico) e foi relancada.
+
+Resultado: fundacao mais 8 frentes integradas na branch local `fix/reuniao-2026-09-11`, em 9 commits
+de merge. Gates rodados pelo orquestrador no estado integrado: typecheck, lint e build ok; API 1.919
+testes (base 1.608), web 356 (base 245), cert-api 772 (base 595) — 599 testes novos, sem regressao.
+
+Achado que nao estava no diagnostico: `scripts/apply-pending-migrations.sh`, passo 6/8 do deploy,
+estava parado na 0026 — as migrations 0027 e 0028 so chegavam a producao pelo boot da API. Corrigido,
+com guarda estatica.
+
+Fora do codigo: a conta de servico do Drive ganhou acesso de leitura a PROCESSOS em 11/09 (a conta do
+Nicolas e "Administrador de conteudo" e nao pode compartilhar; a solicitacao foi enviada pela UI e
+aprovada pela administradora). A arvore real foi lida e virou gabarito de aceitacao do indexador.
+
+Nao feito: Registro/DUIMP, revisao adversarial cruzada, cronograma no Sheets e o backfill de
+`content_sha256`. Detalhe em
+[reuniao 11/09](STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md) e
+[pendencias](KNOWN_ISSUES.md).
+
 ## 2026-09-06 — Correcao das pendencias autorizada
 
 - O pedido posterior ampliou o escopo para resolver pendencias funcionais e operacionais.

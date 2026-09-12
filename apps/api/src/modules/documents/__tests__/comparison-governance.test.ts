@@ -52,6 +52,19 @@ vi.mock('../reconcile.js', () => ({
   reconcileProcessConfidence: vi.fn().mockResolvedValue([]),
 }));
 
+// `getComparison` le os cruzamentos da validacao (vigentes ou do ultimo run
+// parcial). Mockado aqui para a fila de chains do mock-db continuar
+// representando so as consultas do comparativo.
+vi.mock('../../validation/service.js', () => ({
+  validationService: {
+    getEffectiveResults: vi
+      .fn()
+      .mockResolvedValue({ results: [], mode: 'none', runAt: null, validationRunId: null }),
+    runAllChecks: vi.fn().mockResolvedValue([]),
+    clearResults: vi.fn().mockResolvedValue({ removed: 0 }),
+  },
+}));
+
 vi.mock('../ocr.js', () => ({
   ocrScannedPdf: vi.fn().mockResolvedValue(null),
   rasterizePdfPages: vi.fn().mockResolvedValue(null),

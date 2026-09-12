@@ -14,7 +14,6 @@ import {
   FileSearch,
   History,
   ClipboardList,
-  ListPlus,
   AlertTriangle,
   ShieldCheck,
 } from 'lucide-react';
@@ -42,7 +41,6 @@ import { ProcessTimelineEvents } from './components/ProcessTimelineEvents';
 import { PreConsTab } from './components/PreConsTab';
 import { ProformasTab } from './components/ProformasTab';
 import { RegistroTab } from './components/RegistroTab';
-import { CustomStagesTab } from './components/CustomStagesTab';
 import { ErrorsCostsTab } from './components/ErrorsCostsTab';
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -57,7 +55,9 @@ const CORE_TABS = [
   { key: 'checklist', label: 'Checklist', icon: ListChecks },
   { key: 'followup', label: 'Follow-Up', icon: CalendarDays },
   { key: 'registro', label: 'Registro', icon: ShieldCheck },
-  { key: 'etapas', label: 'Etapas', icon: ListPlus },
+  // A aba "Etapas" saiu (D7): as etapas especificas do processo agora sao
+  // linhas do proprio Checklist, na posicao escolhida. `?tab=etapas` continua
+  // funcionando como link antigo e cai no Checklist.
   { key: 'erros_custos', label: 'Erros/Custos', icon: AlertTriangle },
   { key: 'comunicacoes', label: 'Atendimentos', icon: MessageSquare },
   { key: 'emails', label: 'E-mails', icon: Mail },
@@ -86,7 +86,7 @@ interface ValidationCheck {
   status: 'passed' | 'failed' | 'warning' | 'skipped';
 }
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
+import { isDocumentOperational } from '@/shared/lib/confidence';
 
 type EmailLogsResponse = { data: EmailLog[]; pagination: unknown };
 
@@ -122,16 +122,11 @@ function TabIndicator({
 
   if (tabKey === 'documentos') {
     const docs = process.documents ?? [];
-    const hasOperationalConfidence = (confidenceScore?: string | null) => {
-      if (!confidenceScore) return true;
-      const confidence = Number(confidenceScore);
-      return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
-    };
     const hasUsableDoc = (aliases: string[]) =>
       docs.some((doc) => {
         const type = doc.type?.toLowerCase();
         if (!type || !aliases.includes(type)) return false;
-        if (!hasOperationalConfidence(doc.confidenceScore)) return false;
+        if (!isDocumentOperational(doc.confidenceScore, type)) return false;
         const data = doc.aiParsedData;
         if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) {
           return false;
@@ -236,8 +231,6 @@ function TabContent({
       return <FollowUpTab processId={processId} />;
     case 'registro':
       return <RegistroTab processId={processId} />;
-    case 'etapas':
-      return <CustomStagesTab processId={processId} />;
     case 'erros_custos':
       return <ErrorsCostsTab processId={processId} />;
     case 'comunicacoes':
@@ -362,7 +355,14 @@ export function ProcessDetailPage() {
 
     const visibleKeys = new Set(visibleTabs.map((t) => t.key));
     if (!visibleKeys.has(activeTab)) {
-      setActiveTab(activeTab === 'validacao' ? 'comparativo' : 'documentos');
+      // Abas que deixaram de existir continuam navegaveis pelo link antigo:
+      // 'validacao' virou o Comparativo e 'etapas' virou parte do Checklist
+      // (D7). Qualquer outra chave desconhecida cai em Documentos.
+      const REMOVED_TAB_REDIRECTS: Record<string, string> = {
+        validacao: 'comparativo',
+        etapas: 'checklist',
+      };
+      setActiveTab(REMOVED_TAB_REDIRECTS[activeTab] ?? 'documentos');
     }
   }, [visibleTabs, activeTab, setActiveTab, process, isLoading, isLoadingCambios]);
 
@@ -415,24 +415,28 @@ export function ProcessDetailPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Fixo so no desktop: em 375px o bloco mede 537px de 812px de viewport
-          (66% da tela) e sobra quase nada para o conteudo da aba. */}
-      <div className="z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:-mx-6 lg:px-6">
-        <Breadcrumbs
-          items={[
-            { label: 'Processos', href: '/importacao/processos' },
-            { label: process.processCode || 'Detalhe' },
-          ]}
-        />
+      {/* O breadcrumb ROLA junto com a pagina: dentro da area fixa ele custava
+          ~28px permanentes so para repetir o codigo do processo, que ja esta na
+          barra e no titulo. */}
+      <Breadcrumbs
+        items={[
+          { label: 'Processos', href: '/importacao/processos' },
+          { label: process.processCode || 'Detalhe' },
+        ]}
+      />
 
-        <div className="mt-3">
-          <ProcessHeader process={process} processId={id} onBack={handleBack} onEdit={handleEdit} />
-        </div>
+      {/* Fixo so no desktop: em 375px o bloco media 537px de 812px de viewport
+          (66% da tela) e sobrava quase nada para o conteudo da aba. */}
+      <div className="z-30 -mx-4 border-b border-slate-200/70 bg-slate-50/95 px-4 py-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:sticky lg:top-0 lg:-mx-6 lg:px-6">
+        <ProcessHeader process={process} processId={id} onBack={handleBack} onEdit={handleEdit} />
       </div>
 
-      <ProcessTimeline currentStatus={process.status} followUp={process.followUp} />
-
+      {/* Ciclo de transporte primeiro (reuniao 11/09: "esse ciclo de
+          transporte podia vir antes"): e o que a operacao olha o dia inteiro.
+          O stepper documental e a capa vem depois. */}
       <LogisticStatusBar {...buildLogisticProps(process)} />
+
+      <ProcessTimeline currentStatus={process.status} followUp={process.followUp} />
 
       <ProcessInfoCard process={process} />
 
@@ -475,7 +479,7 @@ export function ProcessDetailPage() {
                   key={tab.key}
                   onClick={() => handleTabChange(tab.key)}
                   className={cn(
-                    'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
+                    'relative flex shrink-0 items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive
                       ? 'bg-white dark:bg-slate-800 text-primary-700 dark:text-primary-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60 border-b-white dark:border-b-slate-800 -mb-px z-10'
                       : 'text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50',

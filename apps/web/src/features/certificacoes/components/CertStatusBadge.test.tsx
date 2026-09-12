@@ -19,7 +19,7 @@ describe('CertStatusBadge (reduced enums)', () => {
   it('degrades gracefully for an unknown/legacy value (no throw, raw label)', () => {
     // PENDENTE / SKU_EXCLUIDO / EM_ANDAMENTO are no longer emitted by the backend,
     // but a stale value must still render a neutral badge instead of crashing.
-    expect(() => render(<CertStatusBadge status="PENDENTE" />)).not.toThrow();
-    expect(screen.getByText('PENDENTE')).toBeInTheDocument();
+    expect(() => render(<CertStatusBadge status="LEGACY_UNKNOWN" />)).not.toThrow();
+    expect(screen.getByText('LEGACY_UNKNOWN')).toBeInTheDocument();
   });
 });

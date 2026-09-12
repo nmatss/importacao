@@ -1,5 +1,14 @@
 # Project Memory - Importacao
 
+## Contratos confirmados em 12/09/2026
+
+- BL abaixo de 90% não utilizável, e corte não garante campos completos.
+- Validade, situação do certificado e fim de venda são eixos separados; licenciamento
+  pertence ao Linx/Produto. Ausência/sentinela não prova não aplicabilidade.
+- Regra regulatória de 500 peças não aprovada: inventário marketplace permanece pendente.
+- Fontes: Follow-up aba Processos; certificação Imaginarium/Puket/Encerramentos, nunca Notas.
+- Estado operacional/validações e dependências: [retomada](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 Ultima atualizacao: 2026-08-28
 
 ## Objetivo
@@ -343,6 +352,28 @@ Estado:
   Drive devem degradar sem afetar extração, comparativo ou validacao.
 - Para reativar a arvore operacional, preencher o folder ID real no SOPS/env e
   compartilhar a pasta com a service account.
+
+Layout real da pasta PROCESSOS (lido pela conta de servico em 2026-09-11, D1):
+
+- Raiz `PROCESSOS` com quatro areas numeradas: `01. ESPELHOS` (plana, Sheets
+  NATIVOS e .xlsx), `02. IMAGINARIUM` e `03. PUKET` (ano, depois colecao ou
+  `FAT <mes>` quando houver, depois a pasta do processo) e
+  `04. PENDENTES DE CORREÇÃO` (pasta de ENTRADA, na raiz, gerida pelas
+  analistas).
+- O ano da pasta e o da COLECAO, nao o do codigo: `PK2192607SZ` esta em
+  `03. PUKET/2027/HIGH SUMMER`. Nunca filtrar pelo ano derivado do codigo.
+- Pasta e de processo quando o nome COMECA com um codigo conhecido (apos trim,
+  terminando no fim ou num separador). Qualquer outra e grupo: desce-se UM
+  nivel. Nomes legados curtos (`2080_SZ`) nao correspondem a processo nenhum.
+- Prioridade POR TIPO: PENDENTES vence para os tipos que tem; os demais vem da
+  pasta da marca. Espelho so de `01. ESPELHOS`, via `files.export` quando for
+  Sheets nativo.
+- A integracao e SOMENTE LEITURA (`DRIVE_WRITE_MODE=off` por padrao com o Drive
+  como fonte): o sistema nao cria pasta, nao move pasta de processo e nao sobe
+  copia dentro de PROCESSOS.
+- Identidade do documento e o CONTEUDO (`content_sha256`, `drive_md5`), nao o id
+  do Drive; documento excluido por analista nao volta (tombstone).
+- Contrato completo: `docs/operations/document-intake-contract-2026-09-11.md`.
 
 Evidencias:
 

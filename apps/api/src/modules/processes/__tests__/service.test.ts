@@ -250,7 +250,30 @@ describe('processService', () => {
   });
 
   describe('advanceLogisticStatus()', () => {
-    it('uses ETD from espelho/BL summary when process columns are still empty', async () => {
+    it.each([{ espelho: { summary: { etd: '2026-02-01' } } }, { bl: { etd: '2026-02-01' } }])(
+      'does not project a planned ETD into shipmentDate: %j',
+      async (aiExtractedData) => {
+        queryQueue.push(createResolvedChain([]));
+        queryQueue.push(
+          createResolvedChain([
+            {
+              id: 1,
+              status: 'documents_received',
+              logisticStatus: 'consolidation',
+              aiExtractedData,
+            },
+          ]),
+        );
+        queryQueue.push(createResolvedChain([{ processId: 1 }]));
+        expect(await processService.advanceLogisticStatus(1, 7)).toEqual({
+          updated: false,
+          current: 'consolidation',
+        });
+        expect(mockDb.update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('uses confirmed shipped-on-board date when process columns are empty', async () => {
       queryQueue.push(createResolvedChain([])); // assertNotLocked
       queryQueue.push(
         createResolvedChain([
@@ -265,11 +288,14 @@ describe('processService', () => {
             diNumber: null,
             customsClearanceAt: null,
             cdArrivalAt: null,
-            aiExtractedData: { espelho: { summary: { etd: '2026-02-01' } } },
+            aiExtractedData: { espelho: { summary: { shippedOnBoardDate: '2026-02-01' } } },
           },
         ]),
       );
       queryQueue.push(createResolvedChain([{ processId: 1 }])); // follow-up
+      // isManualLogisticOverride: sem evento de status, o estagio atual e
+      // automatico (e portanto corrigivel).
+      queryQueue.push(createResolvedChain([]));
       const updateChain = createResolvedChain([]);
       queryQueue.push(updateChain);
 

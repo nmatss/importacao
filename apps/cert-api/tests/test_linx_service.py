@@ -1,6 +1,8 @@
 """Unit tests for the Linx certificate-write logic (pure logic, no DB/network)."""
 
+import json
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -149,13 +151,14 @@ def test_write_applied_upserts_both_props(monkeypatch):
     monkeypatch.setattr(linx_service, "upsert_produto_propriedade", fake_upsert)
 
     out = linx_service.write_certificate_to_linx(
-        "imaginarium", "SKU1", "2026-12-31", "2027-06-30"
+        "imaginarium", "SKU1", "2026-12-31", "2027-06-30", fim_venda="2028-03-02"
     )
     assert out["status"] == "applied"
     assert out["produto_codigo"] == "P-999"
-    # both properties written with formatted dates and correct codes
-    assert ("imaginarium", "P-999", "00106", "31/12/2026") in calls
-    assert ("imaginarium", "P-999", "00107", "30/06/2027") in calls
+    # D11: a propriedade de certificacao recebe o FIM DE VENDA, nunca a validade.
+    assert ("imaginarium", "P-999", "00106", "02/03/2028") in calls
+    assert all(c[2] != "00107" for c in calls)
+    assert "31/12/2026" not in [c[3] for c in calls]
 
 
 def test_write_skips_missing_date(monkeypatch):
@@ -167,9 +170,55 @@ def test_write_skips_missing_date(monkeypatch):
         "upsert_produto_propriedade",
         lambda b, p, c, v: calls.append(c) or "inserted",
     )
-    out = linx_service.write_certificate_to_linx("puket", "SKU", "2026-12-31", None)
+    out = linx_service.write_certificate_to_linx(
+        "puket", "SKU", "2026-12-31", None, fim_venda="2026-12-31"
+    )
     assert out["status"] == "applied"
-    assert calls == ["00224"]  # only validade written; vencimento skipped
+    assert calls == ["00224"]  # so o fim de venda; vencimento sem valor
+
+
+def test_write_nunca_grava_validade_de_certificado(monkeypatch):
+    """Reuniao 11/09: a propriedade do Linx e TRAVA, e validade nao trava nada.
+
+    Era essa gravacao que punha a validade (22/03/2027) como trava da Vitrola e
+    do Karaoke, ativos.
+    """
+    monkeypatch.setattr(linx_service, "LINX_WRITE_ENABLED", True)
+    monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda brand, sku: "P-1")
+    calls = []
+    monkeypatch.setattr(
+        linx_service,
+        "upsert_produto_propriedade",
+        lambda b, p, c, v: calls.append((c, v)) or "inserted",
+    )
+
+    out = linx_service.write_certificate_to_linx("puket", "SKU", "2027-03-22", None)
+
+    assert calls == []
+    assert out["status"] == "applied"
+    assert any(d["action"] == "skipped (sem valor)" for d in out["details"])
+
+
+def test_write_recusa_data_de_certificacao_para_certificado_ativo(monkeypatch):
+    """Certificado ATIVO nao pode ter data de certificacao no Linx ([39:17])."""
+    monkeypatch.setattr(linx_service, "LINX_WRITE_ENABLED", True)
+    monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda brand, sku: "P-1")
+    calls = []
+    monkeypatch.setattr(
+        linx_service,
+        "upsert_produto_propriedade",
+        lambda b, p, c, v: calls.append((c, v)) or "inserted",
+    )
+
+    out = linx_service.write_certificate_to_linx(
+        "puket", "PI5555Y", "2027-03-22", None, fim_venda="2027-03-22", situacao="Ativo"
+    )
+
+    assert [c for c in calls if c[0] == "00224"] == []
+    assert any(
+        d["action"] == linx_service.ACAO_ATIVO_SEM_DATA and d["prop"] == "00224"
+        for d in out["details"]
+    )
 
 
 class TestResolveWhenSkuIsProduto:
@@ -384,19 +433,46 @@ def test_upsert_rolls_back_and_closes_on_failure(monkeypatch):
 
 
 class TestSyncPrazoVenda:
+    DUPLICADO = [
+        {"sku": "PI6073Y", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "8325/2022-BRI-1"},
+        {"sku": "PI6073Y", "sale_deadline": "26/01/2025", "brand": "IMAGINARIUM", "certificado": "9142/2023-BRI-2"},
+    ]
     LINHAS = [
         {"sku": "070400034", "sale_deadline": "24/04/2027", "brand": "PUKET", "certificado": "9304"},
         {"sku": "PI4511Y", "sale_deadline": "02/03/2028", "brand": "IMAGINARIUM", "certificado": "8325"},
     ]
 
-    def _wire(self, monkeypatch, linhas=None, atual=None, produto="P1"):
+    @pytest.fixture(autouse=True)
+    def _reports_em_tmp(self, monkeypatch, tmp_path):
+        """O relatorio antes/depois e gravado SEMPRE — inclusive em dry-run.
+
+        Sem redirecionar REPORTS_DIR a suite deixaria arquivos no repositorio.
+        """
+        from app.services import linx_service
+
+        monkeypatch.setattr(linx_service, "REPORTS_DIR", tmp_path)
+        return tmp_path
+
+    def _wire(self, monkeypatch, linhas=None, atual=None, produto="P1", situacoes=None):
         """Planilha e Linx falsos; devolve a lista de gravacoes tentadas."""
         from app.services import erp_service, linx_service
 
+        linhas = linhas or self.LINHAS
         monkeypatch.setattr(linx_service, "LINX_WRITE_ENABLED", True)
-        monkeypatch.setattr(
-            erp_service, "read_encerramentos_prazos", lambda: linhas or self.LINHAS
-        )
+        monkeypatch.setattr(erp_service, "read_encerramentos_prazos", lambda: linhas)
+        # Por padrao, todo SKU do cenario esta ENCERRADO (e o que a aba
+        # "Encerramentos" descreve); os casos de certificado ativo passam o mapa.
+        if situacoes is None:
+            situacoes = {
+                ln["sku"]: {
+                    "situacao": "Encerrado",
+                    "numero_certificado": ln.get("certificado", ""),
+                    "brand": ln.get("brand", ""),
+                    "validade_certificado": None,
+                }
+                for ln in linhas
+            }
+        monkeypatch.setattr(erp_service, "read_situacao_por_sku", lambda: situacoes)
         monkeypatch.setattr(linx_service, "resolve_produto_codigo", lambda b, s: produto)
         monkeypatch.setattr(
             linx_service, "read_produto_propriedade",
@@ -417,11 +493,13 @@ class TestSyncPrazoVenda:
         assert r["dry_run"] is True
         assert r["counts"].get("gravaria") == 2
 
-    def test_apply_escreve_na_prop_de_validade_da_marca(self, monkeypatch):
+    def test_apply_bloqueado_antes_de_ler_fontes_ou_gravar(self, monkeypatch):
+        from app.services import erp_service
         svc, escritas = self._wire(monkeypatch, atual="01/01/2020")
-        svc.sync_prazo_venda_to_linx(dry_run=False)
-        assert ("PUKET", "P1", "00224", "24/04/2027") in escritas
-        assert ("IMAGINARIUM", "P1", "00106", "02/03/2028") in escritas
+        monkeypatch.setattr(erp_service, "read_encerramentos_prazos", lambda: pytest.fail("apply nao deve ler fontes"))
+        result = svc.sync_prazo_venda_to_linx(dry_run=False)
+        assert escritas == []
+        assert "baseline persistida" in result["error"]
 
     def test_apply_bloqueado_quando_a_escrita_esta_desligada(self, monkeypatch):
         from app.services import linx_service
@@ -434,21 +512,21 @@ class TestSyncPrazoVenda:
 
     def test_prazo_textual_nunca_vira_data(self, monkeypatch):
         # "venda ate fim do lote" nao cabe num campo de mascara 99/99/9999.
-        linhas = [{"sku": "X", "sale_deadline": "VENDA ATÉ FIM DO LOTE", "brand": "PUKET", "certificado": ""}]
+        linhas = [{"sku": "X", "sale_deadline": "VENDA ATÉ FIM DO LOTE", "brand": "PUKET", "certificado": "C1"}]
         svc, escritas = self._wire(monkeypatch, linhas=linhas, atual=None)
-        r = svc.sync_prazo_venda_to_linx(dry_run=False)
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
         assert escritas == []
         assert r["counts"].get("ignorado (prazo sem data)") == 1
 
     def test_valor_igual_nao_reescreve(self, monkeypatch):
         svc, escritas = self._wire(monkeypatch, atual="24/04/2027")
-        r = svc.sync_prazo_venda_to_linx(dry_run=False, brand_filter="puket")
+        r = svc.sync_prazo_venda_to_linx(dry_run=True, brand_filter="puket")
         assert escritas == []
         assert r["counts"].get("ja correto") == 1
 
     def test_sku_inexistente_no_linx_e_ignorado(self, monkeypatch):
         svc, escritas = self._wire(monkeypatch, atual=None, produto=None)
-        r = svc.sync_prazo_venda_to_linx(dry_run=False)
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
         assert escritas == []
         assert r["counts"].get("ignorado (SKU nao existe no Linx)") == 2
 
@@ -456,7 +534,7 @@ class TestSyncPrazoVenda:
         # Linx 21/04/2027 vs planilha 29/10/2026: gravar tiraria 174 dias de venda.
         linhas = [{"sku": "PI5968Y", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "8325"}]
         svc, escritas = self._wire(monkeypatch, linhas=linhas, atual="21/04/2027")
-        r = svc.sync_prazo_venda_to_linx(dry_run=False)
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
         assert escritas == []  # mesmo com --apply
         assert len(r["encurta_janela"]) == 1
         assert r["encurta_janela"][0]["dias_a_menos"] == 174
@@ -469,22 +547,13 @@ class TestSyncPrazoVenda:
 
     def test_brand_filter_limita_a_marca(self, monkeypatch):
         svc, escritas = self._wire(monkeypatch, atual="01/01/2020")
-        svc.sync_prazo_venda_to_linx(dry_run=False, brand_filter="imaginarium")
-        assert [e[0] for e in escritas] == ["IMAGINARIUM"]
-
-    # Regressao real: na 1a execucao em producao (16/07/2026) 3 SKUs vieram em dois
-    # encerramentos cada (produto recertificado, ex. PI6073Y nos certificados
-    # 8325/2022-BRI-1 e 9142/2023-BRI-2). Processando linha a linha, a 1a linha
-    # gravava e a 2a comparava contra o valor recem-escrito — a ORDEM DAS LINHAS
-    # decidia o prazo, e o dry-run mentia (9 "encurta janela" viraram 11 no apply).
-    DUPLICADO = [
-        {"sku": "PI6073Y", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "8325/2022-BRI-1"},
-        {"sku": "PI6073Y", "sale_deadline": "26/01/2025", "brand": "IMAGINARIUM", "certificado": "9142/2023-BRI-2"},
-    ]
+        result = svc.sync_prazo_venda_to_linx(dry_run=True, brand_filter="imaginarium")
+        assert escritas == []
+        assert [item["brand"] for item in result["items"]] == ["IMAGINARIUM"]
 
     def test_sku_com_prazos_divergentes_nao_e_gravado(self, monkeypatch):
         svc, escritas = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
-        r = svc.sync_prazo_venda_to_linx(dry_run=False)
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
         assert escritas == []
         assert r["counts"].get("ambiguo (prazos divergentes p/ o mesmo SKU)") == 1
         amb = r["ambiguos"][0]
@@ -492,39 +561,166 @@ class TestSyncPrazoVenda:
         assert amb["certificados"] == ["8325/2022-BRI-1", "9142/2023-BRI-2"]
         assert "26/01/2025" in amb["prazo"] and "29/10/2026" in amb["prazo"]
 
-    def test_sku_repetido_com_o_mesmo_prazo_grava_uma_vez_so(self, monkeypatch):
+    def test_certificados_distintos_mesmo_prazo_continuam_ambiguos(self, monkeypatch):
         linhas = [
-            {"sku": "PI1", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "A"},
-            {"sku": "PI1", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": "B"},
+            {"sku": "PI1", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM", "certificado": cert}
+            for cert in ("A", "B")
         ]
         svc, escritas = self._wire(monkeypatch, linhas=linhas, atual=None)
-        svc.sync_prazo_venda_to_linx(dry_run=False)
-        assert len(escritas) == 1  # sem prazo divergente, nao ha ambiguidade
+        result = svc.sync_prazo_venda_to_linx()
+        assert escritas == []
+        assert result["counts"] == {svc.ACAO_DUPLA: 1}
+        assert result["items"][0]["valor_proposto"] is None
 
-    def test_dry_run_e_apply_classificam_igual_com_duplicados(self, monkeypatch):
+    def test_dry_run_repetido_classifica_igual_com_duplicados(self, monkeypatch):
         # O defeito: o dry-run prometia um resultado e o apply entregava outro.
         svc, _ = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
         seco = svc.sync_prazo_venda_to_linx(dry_run=True)["counts"]
         svc, _ = self._wire(monkeypatch, linhas=self.DUPLICADO, atual=None)
-        molhado = svc.sync_prazo_venda_to_linx(dry_run=False)["counts"]
+        molhado = svc.sync_prazo_venda_to_linx(dry_run=True)["counts"]
         assert seco == molhado
 
-    def test_falha_de_um_sku_nao_derruba_o_resto(self, monkeypatch):
-        from app.services import linx_service
+    # ── Decisao D11 / CERT-07: o dry-run passa a conhecer a coluna U ─────────
+    ATIVO = [
+        {"sku": "PI5555Y", "sale_deadline": "22/03/2027", "brand": "IMAGINARIUM",
+         "certificado": "8325/2022-BRI-1"},
+    ]
 
+    def _situacao(self, sku, situacao, cert, validade=None):
+        return {
+            sku: {
+                "situacao": situacao,
+                "numero_certificado": cert,
+                "brand": "IMAGINARIUM",
+                "validade_certificado": validade,
+            }
+        }
+
+    def test_certificado_ativo_com_data_no_linx_vira_proposta_de_limpeza(self, monkeypatch):
+        """63 SKUs ativos tem data na propriedade; nenhum pode ser gravado."""
+        svc, escritas = self._wire(
+            monkeypatch,
+            linhas=self.ATIVO,
+            atual="22/03/2027",
+            situacoes=self._situacao("PI5555Y", "Ativo", "8325/2022-BRI-1", "2027-03-22"),
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert escritas == []
+        assert r["counts"].get(svc.ACAO_ATIVO_LIMPAR) == 1
+        item = r["items"][0]
+        assert item["valor_proposto"] == svc.SENTINELA_LINX
+        assert item["valor_atual"] == "22/03/2027"
+        assert item["situacao"] == "Ativo"
+
+    def test_certificado_ativo_sem_data_no_linx_e_apenas_bloqueado(self, monkeypatch):
+        svc, escritas = self._wire(
+            monkeypatch,
+            linhas=self.ATIVO,
+            atual=None,
+            situacoes=self._situacao("PI5555Y", "Ativo", "8325/2022-BRI-1"),
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert escritas == []
+        assert r["counts"].get(svc.ACAO_ATIVO_SEM_DATA) == 1
+
+    def test_sentinela_no_valor_atual_nao_conta_como_data(self, monkeypatch):
+        svc, escritas = self._wire(
+            monkeypatch,
+            linhas=self.ATIVO,
+            atual="01/01/1900",
+            situacoes=self._situacao("PI5555Y", "Ativo", "8325/2022-BRI-1"),
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert r["counts"].get(svc.ACAO_ATIVO_SEM_DATA) == 1
+        assert escritas == []
+
+    def test_dupla_certificacao_nao_e_gravada(self, monkeypatch):
+        """PI6552Y: encerramento do 8325/2022 com o 10473/2024 ativo."""
+        linhas = [
+            {"sku": "PI6552Y", "sale_deadline": "29/10/2026", "brand": "IMAGINARIUM",
+             "certificado": "8325/2022-BRI-1"}
+        ]
+        svc, escritas = self._wire(
+            monkeypatch,
+            linhas=linhas,
+            atual="29/10/2026",
+            situacoes=self._situacao("PI6552Y", "Ativo", "10473/2024-BRI-1"),
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert escritas == []
+        assert r["counts"].get(svc.ACAO_DUPLA) == 1
+
+    def test_situacao_ilegivel_bloqueia_a_gravacao(self, monkeypatch):
+        svc, escritas = self._wire(
+            monkeypatch,
+            linhas=self.ATIVO,
+            atual=None,
+            situacoes=self._situacao("PI5555Y", "em analise", "8325/2022-BRI-1"),
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert escritas == []
+        assert r["counts"].get(svc.ACAO_SITUACAO_DESCONHECIDA) == 1
+
+    def test_sem_mapa_de_situacao_o_apply_e_recusado(self, monkeypatch):
+        """Gravar trava sem saber se o certificado esta vivo e o defeito original."""
+        svc, escritas = self._wire(monkeypatch, atual=None, situacoes={})
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert escritas == []
+        assert "Situacao" in r["error"]
+
+    def test_relatorio_e_salvo_tambem_no_dry_run(self, monkeypatch, tmp_path):
+        """Antes so o --apply salvava: o dry-run so existia no stdout."""
+        svc, _ = self._wire(monkeypatch, atual="01/01/2020")
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        assert r["report_path"], "dry-run tem de deixar registro"
+        salvo = json.loads(Path(r["report_path"]).read_text(encoding="utf-8"))
+        assert salvo["dry_run"] is True
+        assert len(salvo["items"]) == 2
+        assert {i["sku"] for i in salvo["items"]} == {"070400034", "PI4511Y"}
+        assert all("valor_atual" in i and "valor_proposto" in i for i in salvo["items"])
+        assert sum(salvo["counts"].values()) == len(salvo["items"])
+        assert set(salvo["totais_por_marca"]) == {"PUKET", "IMAGINARIUM"}
+
+    def test_relatorio_traz_a_trava_esperada(self, monkeypatch):
+        """A trava esperada e a MENOR data real (certificacao x licenciamento)."""
+        linhas = [
+            {"sku": "PI4511Y", "sale_deadline": "02/03/2028", "brand": "IMAGINARIUM",
+             "certificado": "8325"}
+        ]
+        svc, _ = self._wire(
+            monkeypatch,
+            linhas=linhas,
+            atual=lambda b, p, c: "02/03/2028" if c == "00106" else "31/12/2026",
+        )
+
+        r = svc.sync_prazo_venda_to_linx(dry_run=True)
+
+        item = r["items"][0]
+        assert item["valor_atual_licenciamento"] == "31/12/2026"
+        assert item["trava_esperada"] == "2026-12-31"
+        assert item["trava_origem"] == "licenciamento"
+
+    def test_falha_persistencia_nao_declara_preparacao_concluida(self, monkeypatch):
         svc, escritas = self._wire(monkeypatch, atual="01/01/2020")
-
-        def meio_quebrado(b, p, c, v):
-            if b == "PUKET":
-                raise RuntimeError("SQL Server caiu")
-            escritas.append((b, p, c, v))
-            return "updated"
-
-        monkeypatch.setattr(linx_service, "upsert_produto_propriedade", meio_quebrado)
-        r = svc.sync_prazo_venda_to_linx(dry_run=False)
-        assert [e[0] for e in escritas] == ["IMAGINARIUM"]
-        assert r["counts"].get("erro (gravacao)") == 1
-
+        monkeypatch.setattr(svc, "_salvar_relatorio_sync", lambda _: None)
+        result = svc.sync_prazo_venda_to_linx()
+        assert escritas == []
+        assert "nao persistido" in result["error"]
+        assert result["baseline_complete"] is False
 
 # --------------------------------------------------------------------------- #
 # Credenciais por marca — db01 (Puket) e db02 (Imaginarium) sao instancias

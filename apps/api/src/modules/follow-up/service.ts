@@ -1,11 +1,6 @@
-import { eq, sql, count, and, desc } from 'drizzle-orm';
+import { eq, sql, count, and } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import {
-  followUpTracking,
-  importProcesses,
-  processEvents,
-  users,
-} from '../../shared/database/schema.js';
+import { followUpTracking, importProcesses, users } from '../../shared/database/schema.js';
 import type { FollowUpTracking } from '../../shared/database/schema.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -17,45 +12,41 @@ import {
   localDayEndExclusiveUtc,
   SQL_HOJE_LOCAL,
 } from '../../shared/utils/dates.js';
+import {
+  ACTIVE_CHECKLIST_STEP_KEYS,
+  CHECKLIST_STEP_KEYS,
+  checklistStepLabel,
+  isActiveChecklistStep,
+  isChecklistStep,
+  type ChecklistStepKey,
+} from '../processes/checklist-catalog.js';
+import {
+  getChecklistStepAttribution as getStepCompletedByMap,
+  type StepCompletedBy,
+} from '../processes/checklist-attribution.js';
+import { indexRowByHeader } from './sheet-columns.js';
+import { diffProcessAgainstRow, getSyncMode, runFollowUpSheetSync } from './sheet-sync.js';
 
-const TRACKING_STEPS = [
-  'documentsReceivedAt',
-  'preInspectionAt',
-  'savedToFolderAt',
-  'ncmVerifiedAt',
-  'ncmBlCheckedAt',
-  'freightBlCheckedAt',
-  'espelhoBuiltAt',
-  'invoiceSentFeniciaAt',
-  'espelhoGeneratedAt',
-  'signaturesCollectedAt',
-  'signedDocsSentAt',
-  'sentToFeniciaAt',
-  'diDraftAt',
-  'liSubmittedAt',
-  'liApprovedAt',
-] as const;
+/**
+ * Modos aceitos pelo endpoint manual. 'conservative' e 'industrial' sao os
+ * nomes antigos: o primeiro vira simulacao, o segundo e recusado.
+ */
+export type FollowUpSyncRequestMode = 'dry_run' | 'apply' | 'conservative' | 'industrial';
 
-const TRACKING_STEP_LABELS: Record<(typeof TRACKING_STEPS)[number], string> = {
-  documentsReceivedAt: 'Documentos recebidos',
-  preInspectionAt: 'Pre-inspecao',
-  savedToFolderAt: 'Salvo na pasta',
-  ncmVerifiedAt: 'NCM verificado',
-  ncmBlCheckedAt: 'NCM BL conferido',
-  freightBlCheckedAt: 'Frete BL conferido',
-  espelhoBuiltAt: 'Espelho montado',
-  invoiceSentFeniciaAt: 'Invoice enviada Fenicia',
-  espelhoGeneratedAt: 'Espelho gerado',
-  signaturesCollectedAt: 'Assinaturas coletadas',
-  signedDocsSentAt: 'Documentos assinados enviados',
-  sentToFeniciaAt: 'Enviado para Fenicia',
-  diDraftAt: 'Rascunho DI',
-  liSubmittedAt: 'LI protocolada',
-  liApprovedAt: 'LI aprovada',
-};
+/**
+ * O CATALOGO do checklist saiu deste arquivo (decisao D7, reuniao 11/09).
+ *
+ * Passos, rotulos e quais estao ativos vivem em
+ * `processes/checklist-catalog.ts` e sao servidos por
+ * `GET /api/processes/:id/checklist`. Aqui ficou so o que e desta camada:
+ * gravar em `follow_up_tracking` e registrar o evento de historico. Antes a
+ * lista existia aqui E na web, e os rotulos divergiam — clicar em "Atualizar
+ * Follow-up" gravava "Checklist: Enviado para Fenicia feito".
+ */
+const TRACKING_STEPS = CHECKLIST_STEP_KEYS;
 
 function calculateProgress(tracking: Partial<FollowUpTracking>): number {
-  const completedSteps = TRACKING_STEPS.reduce(
+  const completedSteps = ACTIVE_CHECKLIST_STEP_KEYS.reduce(
     (total, step) => total + (tracking[step] ? 1 : 0),
     0,
   );
@@ -64,12 +55,16 @@ function calculateProgress(tracking: Partial<FollowUpTracking>): number {
   // fully completed follow-up at 90%. The displayed progress is a business
   // completion indicator, so every persisted milestone must be able to reach
   // exactly 100%.
-  return Math.round((completedSteps / TRACKING_STEPS.length) * 100);
+  //
+  // O denominador conta so as etapas ATIVAS: "Coletar Assinaturas" e "Enviar
+  // Docs Assinados" sairam da rotina (D7) e, contadas, travariam em 87% um
+  // processo com tudo feito.
+  return Math.round((completedSteps / ACTIVE_CHECKLIST_STEP_KEYS.length) * 100);
 }
 
 async function recordChecklistEvent(
   processId: number,
-  step: (typeof TRACKING_STEPS)[number],
+  step: ChecklistStepKey,
   previousStatus: 'pendente' | 'feito',
   newStatus: 'pendente' | 'feito',
   completedAt: Date | null,
@@ -78,7 +73,8 @@ async function recordChecklistEvent(
 ) {
   if (previousStatus === newStatus) return;
 
-  const label = TRACKING_STEP_LABELS[step];
+  // Mesmo rotulo da tela: fonte unica no catalogo.
+  const label = checklistStepLabel(step);
   await recordProcessEvent(
     processId,
     {
@@ -119,57 +115,13 @@ async function resolveUserName(userId: number | null): Promise<string | null> {
   }
 }
 
-export interface StepCompletedBy {
-  completedBy: number | null;
-  completedByName: string | null;
-  completedAt: string | null;
-}
-
 /**
- * Builds a map of { [stepKey]: { completedBy, completedByName, completedAt } } from the
- * most recent checklist_step_changed event per step. Falls back to the event author's
- * current name when the metadata snapshot lacks a name (older events).
+ * A leitura de "quem concluiu cada etapa" mudou de arquivo para
+ * `processes/checklist-attribution.ts`: a aba Follow-Up (aqui) e a aba
+ * Checklist (`GET /api/processes/:id/checklist`) precisam da MESMA leitura, e
+ * o modulo de processos nao pode importar este service sem ciclo.
  */
-async function getStepCompletedByMap(processId: number): Promise<Record<string, StepCompletedBy>> {
-  try {
-    const events = await db
-      .select({
-        metadata: processEvents.metadata,
-        createdBy: processEvents.createdBy,
-        createdAt: processEvents.createdAt,
-        authorName: users.name,
-      })
-      .from(processEvents)
-      .leftJoin(users, eq(processEvents.createdBy, users.id))
-      .where(
-        and(
-          eq(processEvents.processId, processId),
-          eq(processEvents.eventType, 'checklist_step_changed'),
-        ),
-      )
-      .orderBy(desc(processEvents.createdAt));
-
-    const map: Record<string, StepCompletedBy> = {};
-    for (const ev of events) {
-      const meta = (ev.metadata ?? {}) as Record<string, unknown>;
-      const step = typeof meta.step === 'string' ? meta.step : null;
-      if (!step || meta.newStatus !== 'feito') continue;
-      // First occurrence wins because rows are ordered newest-first.
-      if (map[step]) continue;
-      map[step] = {
-        completedBy: ev.createdBy ?? null,
-        completedByName:
-          (typeof meta.completedByName === 'string' ? meta.completedByName : null) ??
-          ev.authorName ??
-          null,
-        completedAt: typeof meta.completedAt === 'string' ? meta.completedAt : null,
-      };
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
+export type { StepCompletedBy };
 
 export const followUpService = {
   async getAll(page = 1, limit = 20, startDate?: string, endDate?: string) {
@@ -293,12 +245,19 @@ export const followUpService = {
     completedAt: Date | null,
     userId: number | null = null,
   ) {
-    // Validate step name
-    const validSteps = TRACKING_STEPS as readonly string[];
-    if (!validSteps.includes(step)) {
-      throw new Error(`Passo invalido: ${step}. Passos validos: ${validSteps.join(', ')}`);
+    // Quem decide o que e passo valido e o catalogo (D7). Chave fora do
+    // catalogo e erro de cliente; chave INATIVA ("Coletar Assinaturas",
+    // "Enviar Docs Assinados") saiu da rotina e nao pode voltar a ser marcada
+    // por uma tela antiga — os timestamps ja gravados continuam no banco.
+    if (!isChecklistStep(step)) {
+      throw new Error(`Passo invalido: ${step}. Passos validos: ${TRACKING_STEPS.join(', ')}`);
     }
-    const typedStep = step as (typeof TRACKING_STEPS)[number];
+    if (!isActiveChecklistStep(step)) {
+      throw new Error(
+        `A etapa "${checklistStepLabel(step)}" saiu do checklist e nao pode mais ser marcada.`,
+      );
+    }
+    const typedStep: ChecklistStepKey = step;
 
     // Check if tracking exists, create if not
     const [existing] = await db
@@ -368,6 +327,17 @@ export const followUpService = {
     return Object.keys(stepCompletedBy).length > 0 ? { ...final, stepCompletedBy } : final;
   },
 
+  /**
+   * Diferencas entre a linha da planilha e o processo, SEM gravar nada.
+   *
+   * A versao anterior procurava cabecalhos que nao existem na planilha ('FOB',
+   * 'Frete', 'ETD', 'Fornecedor' — os reais sao 'Valor Invoice (USD)', 'Frete
+   * (USD)', 'ETD ORIGEM*', 'Fornecedor/ Supplier'), lia so ate a coluna Z (as
+   * datas de ETA e de registro ficam depois disso) e fazia
+   * `parseFloat('101.346,01'.replace(',', '.'))`, que da **101.346** — mil
+   * vezes menos que o valor real. O mapeamento e o parse agora sao os mesmos da
+   * sync agendada (`sheet-columns.ts`), testados contra os valores da planilha.
+   */
   async compareWithSheet(processCode: string) {
     const sheetData = await googleSheetsService.readProcessRow(processCode);
     if (!sheetData) {
@@ -384,160 +354,71 @@ export const followUpService = {
       throw new Error('Processo nao encontrado no sistema');
     }
 
-    // Map common sheet column names to DB fields (flexible mapping)
-    const fieldMap: Record<string, { dbField: keyof typeof process; sheetKeys: string[] }> = {
-      supplier: { dbField: 'exporterName', sheetKeys: ['Fornecedor', 'Supplier', 'FORNECEDOR'] },
-      brand: { dbField: 'brand', sheetKeys: ['Marca', 'Brand', 'MARCA'] },
-      fobValue: {
-        dbField: 'totalFobValue',
-        sheetKeys: ['FOB', 'Valor FOB', 'FOB Total', 'VALOR FOB'],
-      },
-      freightValue: { dbField: 'freightValue', sheetKeys: ['Frete', 'Freight', 'FRETE'] },
-      etd: { dbField: 'etd', sheetKeys: ['ETD', 'Data Embarque', 'EMBARQUE'] },
-      eta: { dbField: 'eta', sheetKeys: ['ETA', 'Previsao Chegada', 'CHEGADA'] },
-      incoterm: { dbField: 'incoterm', sheetKeys: ['Incoterm', 'INCOTERM'] },
-      totalBoxes: {
-        dbField: 'totalBoxes',
-        sheetKeys: ['Caixas', 'Volumes', 'CAIXAS', 'QTD CAIXAS'],
-      },
-      containerType: {
-        dbField: 'containerType',
-        sheetKeys: ['Container', 'CONTAINER', 'Tipo Container'],
-      },
-      totalCbm: { dbField: 'totalCbm', sheetKeys: ['CBM', 'M3', 'CUBAGEM'] },
-      totalGrossWeight: {
-        dbField: 'totalGrossWeight',
-        sheetKeys: ['Peso Bruto', 'PESO BRUTO', 'Gross Weight'],
-      },
-    };
-
-    const differences: Array<{
-      field: string;
-      sheetValue: string;
-      systemValue: string;
-      sheetColumn: string;
-    }> = [];
-
-    const matched: Array<{
-      field: string;
-      value: string;
-      sheetColumn: string;
-    }> = [];
-
-    for (const [fieldName, mapping] of Object.entries(fieldMap)) {
-      // Find the matching sheet column
-      let sheetValue = '';
-      let sheetColumn = '';
-      for (const key of mapping.sheetKeys) {
-        if (sheetData[key] !== undefined && sheetData[key] !== '') {
-          sheetValue = sheetData[key];
-          sheetColumn = key;
-          break;
-        }
-      }
-
-      if (!sheetColumn) continue; // Column not found in sheet
-
-      const dbValue = process[mapping.dbField];
-      const dbStr = dbValue != null ? String(dbValue).trim() : '';
-      const sheetStr = sheetValue.trim();
-
-      // Compare (case-insensitive, number-tolerant)
-      const dbNum = parseFloat(dbStr.replace(/[^\d.,-]/g, '').replace(',', '.'));
-      const sheetNum = parseFloat(sheetStr.replace(/[^\d.,-]/g, '').replace(',', '.'));
-
-      const isNumeric = !isNaN(dbNum) && !isNaN(sheetNum);
-      const isMatch = isNumeric
-        ? Math.abs(dbNum - sheetNum) < 0.01
-        : dbStr.toLowerCase() === sheetStr.toLowerCase();
-
-      if (!isMatch && sheetStr) {
-        differences.push({
-          field: fieldName,
-          sheetValue: sheetStr,
-          systemValue: dbStr || '(vazio)',
-          sheetColumn,
-        });
-      } else if (sheetStr) {
-        matched.push({ field: fieldName, value: sheetStr, sheetColumn });
-      }
-    }
+    const row = indexRowByHeader(Object.keys(sheetData), Object.values(sheetData));
+    const comparison = diffProcessAgainstRow(process, row);
 
     return {
       processCode,
+      sheetStatus: comparison.sheetStatus,
       sheetData,
-      differences,
-      matched,
-      hasDifferences: differences.length > 0,
+      differences: comparison.changes,
+      unavailable: comparison.unavailable,
+      hasDifferences: comparison.changes.length > 0,
     };
   },
 
-  async syncFromSheet(processCode: string, mode: 'conservative' | 'industrial' = 'conservative') {
-    const comparison = await this.compareWithSheet(processCode);
-
-    if (!comparison.hasDifferences) {
-      return { updated: false, message: 'Nenhuma diferenca encontrada', comparison };
+  /**
+   * Aplica a planilha a UM processo. Respeita `FOLLOW_UP_SYNC_MODE`.
+   *
+   * O modo 'industrial' saiu: ele gravava a string crua '07/08/2026' numa
+   * coluna `date` e o FOB dividido por mil, a um clique de distancia de
+   * qualquer admin. Quem quiser gravar passa `mode: 'apply'` COM
+   * `FOLLOW_UP_SYNC_MODE=apply` configurado — duas chaves, nao uma.
+   */
+  async syncFromSheet(processCode: string, mode: FollowUpSyncRequestMode = 'dry_run') {
+    if (mode === 'industrial') {
+      throw new Error(
+        'O modo "industrial" foi removido: ele gravava data e valor sem parse (FOB mil vezes menor). Use mode "apply" com FOLLOW_UP_SYNC_MODE=apply.',
+      );
     }
 
-    if (mode === 'conservative') {
-      // Conservative mode: just return differences for manual review
-      return { updated: false, message: 'Modo conservador: aprovacao necessaria', comparison };
+    const configured = getSyncMode();
+    if (mode === 'apply' && configured !== 'apply') {
+      throw new Error(
+        `Gravacao bloqueada: FOLLOW_UP_SYNC_MODE=${configured}. Configure "apply" para a sincronizacao poder escrever no banco.`,
+      );
     }
 
-    // Industrial mode: auto-update DB from sheet
-    const [process] = await db
-      .select()
-      .from(importProcesses)
-      .where(eq(importProcesses.processCode, processCode));
+    const effectiveMode = mode === 'apply' ? 'apply' : 'dry_run';
+    const result = await runFollowUpSheetSync({
+      mode: effectiveMode,
+      processCodes: [processCode],
+      includeTerminal: true,
+    });
 
-    if (!process) throw new Error('Processo nao encontrado');
+    const item = result.processes.find(
+      (entry) => entry.processCode.toUpperCase() === processCode.trim().toUpperCase(),
+    );
 
-    const updates: Record<string, any> = {};
-    const fieldToDb: Record<string, string> = {
-      fobValue: 'totalFobValue',
-      freightValue: 'freightValue',
-      etd: 'etd',
-      eta: 'eta',
-      totalBoxes: 'totalBoxes',
-      containerType: 'containerType',
-      totalCbm: 'totalCbm',
-      totalGrossWeight: 'totalGrossWeight',
-    };
-
-    for (const diff of comparison.differences) {
-      const dbField = fieldToDb[diff.field];
-      if (!dbField) continue;
-
-      const numericFields = [
-        'totalFobValue',
-        'freightValue',
-        'totalBoxes',
-        'totalCbm',
-        'totalGrossWeight',
-      ];
-      if (numericFields.includes(dbField)) {
-        const num = parseFloat(diff.sheetValue.replace(/[^\d.,-]/g, '').replace(',', '.'));
-        if (!isNaN(num)) updates[dbField] = num;
-      } else {
-        updates[dbField] = diff.sheetValue;
-      }
-    }
-
-    if (Object.keys(updates).length > 0) {
-      updates.updatedAt = new Date();
-      await db.update(importProcesses).set(updates).where(eq(importProcesses.id, process.id));
-
-      logger.info(
-        { processCode, updates: Object.keys(updates) },
-        'Process updated from Follow-Up sheet',
+    if (!item) {
+      throw new Error(
+        'Processo nao encontrado na planilha Follow-Up, ou esta travado para alteracoes',
       );
     }
 
     return {
-      updated: true,
-      message: `${Object.keys(updates).length} campo(s) atualizado(s)`,
-      comparison,
-      updatedFields: Object.keys(updates),
+      updated: effectiveMode === 'apply' && item.changes.length > 0,
+      mode: effectiveMode,
+      message:
+        item.changes.length === 0
+          ? 'Nenhuma diferenca encontrada'
+          : effectiveMode === 'apply'
+            ? `${item.changes.length} campo(s) atualizado(s)`
+            : `${item.changes.length} campo(s) divergente(s); nada foi gravado (simulacao)`,
+      differences: item.changes,
+      unavailable: item.unavailable,
+      updatedFields: effectiveMode === 'apply' ? item.changes.map((change) => change.field) : [],
+      diff: result.diff,
     };
   },
 
