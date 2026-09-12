@@ -25,6 +25,26 @@ class WebHeadersTests(unittest.TestCase):
             raise RuntimeError('Isolated web server did not become ready')
         subprocess.run(['docker','exec',cls.container,'nginx','-t'],
                        check=True,capture_output=True,text=True)
+        # A local-only upstream deliberately sends a conflicting policy.
+        # Substitute only its address in the rendered test container config.
+        upstream = '''server {
+ listen 3001;
+ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+ location / { return 200 "synthetic upstream"; }
+}'''
+        subprocess.run(['docker','exec','-i',cls.container,'sh','-c',
+                        'cat > /etc/nginx/conf.d/test-upstream.conf'],
+                       input=upstream,text=True,check=True,capture_output=True)
+        subprocess.run(['docker','exec',cls.container,'sed','-i',
+                        's#http://api:3001#http://127.0.0.1:3001#g',
+                        '/etc/nginx/conf.d/default.conf'],check=True,capture_output=True)
+        subprocess.run(['docker','exec',cls.container,'nginx','-s','reload'],
+                       check=True,capture_output=True)
+        # New worker generation must be active before exercising the proxy.
+        for _ in range(30):
+            if '200 OK' in cls.request('/api/health','importacao.grupounico.com').stdout:
+                break
+            time.sleep(.2)
 
     @classmethod
     def request(cls,path,host):
@@ -46,6 +66,13 @@ class WebHeadersTests(unittest.TestCase):
         r=self.request('/assets/missing-r7.js','importacao.grupounico.com')
         self.assertIn('404 Not Found',r.stdout)
         self.assertIn('Strict-Transport-Security: max-age=300',r.stdout)
+
+    def test_upstream_cannot_duplicate_or_extend_the_hostname_policy(self):
+        r=self.request('/api/health','importacao.grupounico.com')
+        self.assertIn('200 OK',r.stdout)
+        policies=[line for line in r.stdout.splitlines()
+                  if line.lower().startswith('strict-transport-security:')]
+        self.assertEqual(policies,['Strict-Transport-Security: max-age=300'])
 
     def test_localhost_and_other_domains_do_not_receive_hsts(self):
         for host in ['localhost','other.grupounico.com']:

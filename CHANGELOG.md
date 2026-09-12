@@ -6,7 +6,7 @@
 - Rejeita configuração de exemplo/inválida do Odoo antes de enviar autenticação.
 - Adiciona HSTS inicial de 300 segundos exclusivamente ao domínio produtivo, sem preload ou subdomínios.
 - Protege ensaio de restauração: não apaga banco preexistente, reprova carga incompleta e garante limpeza do banco criado pela execução.
-- Acrescenta 21 testes de regressão/HTTP/recuperação e os gates de restauração e cabeçalhos ao CI; corrige fixture de grifes/última sincronização do smoke web.
+- Acrescenta 22 testes de regressão/HTTP/recuperação e os gates de restauração e cabeçalhos ao CI; corrige fixture de grifes/última sincronização do smoke web.
 
 ## 2026-09-12 — Release R5 em produção
 

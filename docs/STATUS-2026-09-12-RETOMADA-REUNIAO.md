@@ -619,3 +619,7 @@ Evidências reais anteriores ao novo deploy:
 - Odoo: URL/base/usuário efetivos de exemplo; configuração real solicitada por caminho seguro, sem pedir senhas em conversa. Contratos de consulta/descrição são testados com casos válidos, divergentes e indisponíveis.
 
 Homologação técnica em consolidação: gates finais, CI e deploy pendentes neste checkpoint.
+
+R7 — fechamento dos gates locais: API 2.056 passaram/5 opt-in ignorados; web379; cert888; typecheck/lint/build aprovados. Browser82 passaram. E2EAPI teve falha ambiental de binding de portas Docker em dois arquivos (66 casos passaram,8 não executaram); reexecução apenas dos dois arquivos, com menor concorrência, passou8/8 em28,81s. Não houve skip silencioso de infraestrutura. Restore7,deploy8,env4 e Ruff aprovados. Commit candidato inicial4be68e3 publicado para CI.
+
+Revisão adicional do HSTS antes de deploy encontrou cabeçalho legado da API (`max-age=31536000; includeSubDomains`), ausente na raiz. O gateway passa a ocultar HSTS dos upstreams e publicar uma única política própria. Novo teste usa upstream sintético local com política conflitante e exige apenas max-age=300. Esse ajuste exige novo commit/CI/imagem; não reutilizar scan ou aceite da imagem anterior como prova da final.

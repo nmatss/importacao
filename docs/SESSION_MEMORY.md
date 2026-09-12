@@ -2,7 +2,7 @@
 
 ## 12/09/2026 — R7 em validação
 
-Usuário esclareceu que homologação significa testes gerados/executados pelo agente; não transferir aceite técnico às áreas. Corrigidos falso 404 do Sheets, aceitação de placeholders Odoo, gates perigosos/incompletos de restore e HSTS ausente. 21 testes novos. Leitura de um processo afetado recuperada com 115 colunas; backup restaurado (42 tabelas/117 processos) em contêiner sem rede, removido depois. IMAP/Odoo reais usam configuração de exemplo; caminho seguro solicitado, sem senha na conversa. CI/deploy do candidato ainda pendentes. Detalhes e fonte canônica: seção R7 do STATUS.
+Usuário esclareceu que homologação significa testes gerados/executados pelo agente; não transferir aceite técnico às áreas. Corrigidos falso 404 do Sheets, aceitação de placeholders Odoo, gates perigosos/incompletos de restore e HSTS ausente. 22 testes novos. Leitura de um processo afetado recuperada com 115 colunas; backup restaurado (42 tabelas/117 processos) em contêiner sem rede, removido depois. IMAP/Odoo reais usam configuração de exemplo; caminho seguro solicitado, sem senha na conversa. CI/deploy do candidato ainda pendentes. Detalhes e fonte canônica: seção R7 do STATUS.
 
 ## 12/09/2026 — Revisão final R6
 
