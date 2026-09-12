@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-12 — Correção dos bloqueios de CI da release
+
+- Atualiza Multer para 2.3.0, Nodemailer para 9.1.1, js-yaml para 4.3.2 e Vitest/coverage para 4.1.11, preservando as versões principais e os contratos de dados.
+- Corrige o E2E de upload para configurar explicitamente `MANUAL_UPLOAD_ENABLED`: bloqueio antes do parser multipart quando desativado e validação do arquivo quando habilitado com fonte Drive.
+- Auditoria do lockfile sem vulnerabilidades; validações e publicação registradas em [retomada](docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 ### Revisão de fontes — 2026-09-12
 
 - Corrige origem do espelho no comparativo, Unicode de PDFs e penalização de avisos documentais comprovados.

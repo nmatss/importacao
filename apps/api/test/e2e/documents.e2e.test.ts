@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import {
   handleE2ESetupFailure,
@@ -23,6 +23,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await ctx?.cleanup();
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe('Documents E2E', () => {
@@ -51,18 +55,38 @@ describe('Documents E2E', () => {
     expect([200, 404]).toContain(res.status);
   });
 
-  it('POST /api/documents/upload — Drive-only policy rejects before multipart parsing', async () => {
+  it('POST /api/documents/upload — disabled manual upload rejects before multipart parsing', async () => {
     if (skipReason) {
       console.warn(`SKIP: ${skipReason}`);
       return;
     }
+    vi.stubEnv('DOCUMENT_SOURCE', 'drive');
+    vi.stubEnv('MANUAL_UPLOAD_ENABLED', 'false');
+    const { app } = await import('../../src/app.js');
+    const res = await request(app)
+      .post('/api/documents/upload')
+      .set('Authorization', `Bearer ${authToken}`)
+      .set('Content-Type', 'multipart/form-data')
+      .send('invalid multipart without boundary');
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Google Drive');
+  });
+
+  it('POST /api/documents/upload — enabled manual upload validates missing file with Drive source', async () => {
+    if (skipReason) {
+      console.warn(`SKIP: ${skipReason}`);
+      return;
+    }
+    vi.stubEnv('DOCUMENT_SOURCE', 'drive');
+    vi.stubEnv('MANUAL_UPLOAD_ENABLED', 'true');
     const { app } = await import('../../src/app.js');
     const res = await request(app)
       .post('/api/documents/upload')
       .set('Authorization', `Bearer ${authToken}`)
       .send({});
 
-    expect(res.status).toBe(409);
-    expect(res.body.error).toContain('Google Drive');
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('Nenhum arquivo');
   });
 });

@@ -1,5 +1,7 @@
 # Retomada da reunião — 12/09/2026
 
+Estado mais recente: seção **Retomada R5 — desbloqueio de CI**, ao final. As rodadas anteriores são histórico.
+
 Estado: **correções locais implementadas e testes técnicos concluídos; entrega global parcial, sem publicação ou homologação integral**. Base `f4aa948`, branch
 `fix/reuniao-2026-09-11`. Pedido atual de 30 entregas, transcrição e 15 capturas são o contrato.
 O histórico de 11/09 não comprova o estado desta revisão.
@@ -499,3 +501,36 @@ Este registro substitui pendências anteriores de autorização: o solicitante a
 - **Pendências de negócio/homologação:** vínculo vigente/fornecedor, validação de dupla certificação na coluna N, aplicabilidade do licenciamento, baseline/carga conciliada e aceite das áreas; Odoo tem endereço placeholder; PDFs DUIMP disponíveis são extratos finais, faltam rascunhos reais. Dia limite deixou de ser pendência. Regra de 500 peças continua sem aprovação. Matriz dos 30 pontos e resultados por fonte estão nas seções anteriores deste documento.
 - **Preservação:** arquivos preexistentes não rastreados `apps/web/e2e/_offenders.spec.ts`, `apps/web/e2e/_shot.spec.ts` e `output/` mantidos. Evidências sanitizadas em `output/retomada-2026-09-12/revisao4/`; PDFs/respostas privadas permanecem fora do Git. Os logs temporários citados podem desaparecer: os resultados essenciais estão neste checkpoint.
 - **Memória e cronograma:** ai-memory confirmou página `decisions/certificacao-venda-dia-limite-2026-09-12.md` e handoff `01a0959c-ac9b-7f50-880b-c3e0e813bb07`; dotcontext recebeu checkpoint de pausa na sessão `11eb5436-440b-4a2d-bd6c-2bf5e9267a8f`. Cronograma atualizado nas notas de `Cronograma!E37` e `'Escopo e aceite'!F32`, mantendo bloqueio da liberação e preservando histórico. Não foi configurada continuação automática, reunião recorrente ou publicação automática.
+
+## Retomada R5 — desbloqueio de CI
+
+Inspeção de 12/09/2026: checkout `41fa789`, origin/master `c0e9234`; worktree temporário anterior ausente. Produção consultada por SSH ainda em `955d6a8`, serviços saudáveis. Autorizações de push, SYDLE e deploy confirmadas pelo pedido de retomada; fontes, colunas e carga Linx permanecem protegidas.
+
+O CI 34693884581 terminou com dois bloqueios: auditoria Node e E2E Documents (400 recebido versus 409 esperado). CodeQL 34693884558 passou. A causa do E2E era expectativa anterior ao contrato de `MANUAL_UPLOAD_ENABLED`: fonte Drive não desativa upload manual. O teste agora configura a flag explicitamente, verifica bloqueio antes de multipart inválido e validação de arquivo ausente quando habilitada. Nenhuma regra da aplicação foi alterada nesta rodada.
+
+Dependências corrigidas: Multer 2.3.0, Nodemailer 9.1.1 (incluindo override), js-yaml 4.3.2, Vitest/coverage 4.1.11 e transitivas da família de testes. Riscos anteriores: ALTO para negação de serviço em Multer/Nodemailer/js-yaml; MEDIO para leitura arbitrária no mocker e dependentes. A auditoria atual retornou zero vulnerabilidades. Fontes oficiais: [Multer](https://github.com/expressjs/multer/releases/tag/v2.3.0), [Nodemailer](https://github.com/nodemailer/nodemailer/releases), [Vitest](https://github.com/vitest-dev/vitest/releases).
+
+Validações locais no diff R5:
+
+| Comando                                                                                                                                   | Resultado                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `npm ci` com Node 22.23.1 / npm 10.8.2                                                                                                    | passou, zero vulnerabilidades; prepare/Husky executado                        |
+| `npm audit --audit-level=high`                                                                                                            | passou, zero vulnerabilidades                                                 |
+| `npm run typecheck`                                                                                                                       | passou API/web                                                                |
+| `npm run lint`                                                                                                                            | passou                                                                        |
+| `npm test`                                                                                                                                | API 2.045 passaram / 5 ignorados; web 379 passaram                            |
+| `CI=true npm run test:e2e -w apps/api`                                                                                                    | 74 passaram em 9 arquivos, PostgreSQL 16 efêmero; sem skips de infraestrutura |
+| `npm run build`                                                                                                                           | passou API/web                                                                |
+| `npx prettier --check package.json package-lock.json apps/api/package.json apps/web/package.json apps/api/test/e2e/documents.e2e.test.ts` | passou                                                                        |
+| `python3 -m pytest -q apps/cert-api/tests`                                                                                                | 888 passaram                                                                  |
+| `python3 -m ruff check apps/cert-api`                                                                                                     | passou                                                                        |
+| `python3 scripts/test-deploy-release.py`                                                                                                  | 8 passaram                                                                    |
+| `python3 scripts/test-generate-env.py`                                                                                                    | 4 passaram                                                                    |
+| `python3 scripts/test-trivy-secret-config.py`                                                                                             | passou                                                                        |
+| `git diff --check`                                                                                                                        | passou                                                                        |
+
+O npm 10 falhou internamente em `edgesOut` ao resolver os peers da atualização. O lockfile foi gerado com npm 11.19.0 já disponível e consumido normalmente por `npm ci` no Node 22/npm 10; não houve bypass de peers, auditoria ou hooks. Logs de testes em `/tmp/importacao-r5-{tests,e2e,pytest}.log`; os totais acima preservam as evidências essenciais.
+
+Configuração cifrada candidata conferida sem expor credenciais: DOCUMENT_SOURCE=drive, DRIVE_WRITE_MODE=off, FOLLOW_UP_SYNC_MODE=dry_run, LINX_WRITE_ENABLED=false, SYDLE_SYNC_ENABLED=true. MANUAL_UPLOAD_ENABLED ausente mantém o padrão true aprovado. Rede ia-local-net, SOPS/age e espaço em disco remoto verificados. Nenhum deploy desta rodada realizado neste checkpoint; publicação depende do novo CI completo.
+
+Dotcontext retomado na sessão existente; checkpoints acompanham R5-A dependências, R5-B E2E, R5-C gates/CI e R5-D deploy. PREVC continua com limitação histórica de associação do plano: estado de fase não comprova aceite. ai-memory retornou a memória pertinente na busca, mas a leitura por caminho resolveu outro projeto; nenhuma gravação foi feita nesse escopo inconsistente. Homologação comercial, N/vínculo/fornecedor, licenciamento, Odoo oficial e rascunhos DUIMP seguem pendentes. Não há alegação de homologação integral ou de carga conciliada.

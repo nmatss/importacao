@@ -1,5 +1,9 @@
 # Session Memory
 
+## 12/09/2026 — Retomada R5 em validação de release
+
+Dependências corrigidas e auditoria zero. E2E antigo foi alinhado à flag própria de upload manual, sem alterar comportamento da aplicação. Gates locais passaram: API 2.045/5 ignorados, web 379, E2E 74, cert 888, typecheck/lint/build/format, Ruff, 8 testes deploy e 4 geração de ambiente. Próximo gate: novo CI completo e deploy já autorizado. Produção ainda 955d6a8 na consulta inicial; Linx sem carga. Estado e comandos na seção R5 de `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`. ai-memory apresentou resolução cruzada na leitura; não gravar até confirmar escopo. Dotcontext da sessão existente retomado.
+
 ## 12/09/2026 — Encerramento e retomada prioritária
 
 Push c0e9234 concluído na origin/master. Deploy NÃO iniciado: CI 34693884581 falhou no Security Audit Node (3 altas e 5 moderadas). Usuário pediu encerrar agora. Autorizações push/SYDLE/deploy e limite inclusivo permanecem válidas. Ler seção final de `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`; corrigir dependências e validar CI antes do deploy. Carga Linx segue bloqueada por homologação/conciliação. Memória ai-memory e checkpoint dotcontext registrados; cronograma atualizado.
