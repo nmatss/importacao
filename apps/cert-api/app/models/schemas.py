@@ -45,6 +45,18 @@ class ValidateRequest(BaseModel):
     source: str | None = None
 
 
+class CertificateItemsRequest(BaseModel):
+    """Vinculo em massa de SKUs a um certificado (decisao D11).
+
+    `dry_run` e o padrao: a tela mostra a previa (o que seria vinculado, o que ja
+    esta, o que pertence a outro certificado ativo) ANTES de qualquer gravacao
+    no Linx. Confirmar exige mandar `dry_run=false` explicitamente.
+    """
+
+    skus: list[str] = []
+    dry_run: bool = True
+
+
 class ScheduleCreate(BaseModel):
     """Request body for creating a schedule."""
 

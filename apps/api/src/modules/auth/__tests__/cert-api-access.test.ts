@@ -82,6 +82,18 @@ describe('cert-api gateway access policy', () => {
       'cert.operate',
     );
 
+    // Reunião 11/09/2026: "Sincronizar planilha agora" é rotina do analista.
+    expect(requiredCertApiScope('POST', '/cert-api/api/sync-sheets')).toBe('cert.operate');
+    expect(requiredCertApiScope('GET', '/cert-api/api/sync-sheets/last')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/grifes')).toBe('cert.read');
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items')).toBe(
+      'cert.operate',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
+      'cert.operate',
+    );
+
+    // Sincronizar ESTOQUE continua administrativo: escreve a partir do WMS.
     expect(requiredCertApiScope('POST', '/cert-api/api/sync-stock')).toBe('cert.admin');
     expect(requiredCertApiScope('GET', '/cert-api/api/products%2Fverify')).toBe('cert.admin');
     expect(requiredCertApiScope(undefined, undefined)).toBe('cert.admin');
@@ -107,6 +119,26 @@ describe('cert-api gateway access policy', () => {
       ),
     ).toBe('cert.admin');
     expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/retry-linx')).toBe(
+      'cert.admin',
+    );
+
+    // Vínculo de itens: mesma invariante de "sem `%`" e sem subpath extra.
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/a%2Fb/items')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items')).toBe(
+      'cert.admin',
+    );
+    expect(requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/a%2Fb')).toBe(
+      'cert.admin',
+    );
+    expect(
+      requiredCertApiScope('DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1/extra'),
+    ).toBe('cert.admin');
+    expect(requiredCertApiScope('PUT', '/cert-api/api/certificates/cert-1/items/SKU-1')).toBe(
       'cert.admin',
     );
   });
@@ -154,6 +186,11 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/reports/export-stock'],
     ['POST', '/cert-api/api/certificates'],
     ['POST', '/cert-api/api/certificates/cert-1/retry-linx'],
+    ['POST', '/cert-api/api/certificates/cert-1/items'],
+    ['DELETE', '/cert-api/api/certificates/cert-1/items/SKU-1'],
+    ['POST', '/cert-api/api/sync-sheets'],
+    ['GET', '/cert-api/api/sync-sheets/last'],
+    ['GET', '/cert-api/api/grifes'],
   ])('allows analyst access to %s %s and returns trusted actor identity', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 
@@ -164,7 +201,6 @@ describe('cert-api gateway access policy', () => {
   });
 
   it.each([
-    ['POST', '/cert-api/api/sync-sheets'],
     ['POST', '/cert-api/api/sync-stock'],
     ['POST', '/cert-api/api/sync-licenciados'],
     ['DELETE', '/cert-api/api/certificates/cert-1'],

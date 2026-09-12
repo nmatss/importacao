@@ -10,6 +10,8 @@ _ROW = {
     "brand": "imaginarium",
     "produto_codigo": None,
     "validade_certificado": "2026-12-31",
+    "fim_venda": None,
+    "situacao": "ATIVO",
     "vencimento_licenciamento": None,
     "numero_certificado": None,
     "ocp": None,
@@ -25,8 +27,17 @@ _ROW = {
 }
 
 
-def _mock_certificates_env(mocker, row=_ROW, tmp_path=None):
+def _mock_certificates_env(mocker, row=_ROW, tmp_path=None, items=None, other_cert_items=None):
     """Point the certificate routes at a fake DB + Linx so the full path runs.
+
+    O cursor responde POR SQL (como `_mock_products_db`): depois da D11 a mesma
+    requisicao consulta `cert_certificates` E `cert_certificate_items`, e um
+    `fetchall` unico devolveria a linha do certificado onde o codigo espera itens.
+
+    Args:
+        row: linha de `cert_certificates` devolvida pelos SELECT de certificado.
+        items: linhas de `cert_certificate_items` ativas do certificado.
+        other_cert_items: `{sku: numero_certificado}` de outro certificado ATIVO.
 
     Returns:
         Tuple (mock_cursor, mock_linx) for assertions.
@@ -36,9 +47,43 @@ def _mock_certificates_env(mocker, row=_ROW, tmp_path=None):
     if tmp_path is not None:
         mocker.patch("app.routes.certificates.CERTS_DIR", tmp_path)
 
+    item_rows = [dict(i) for i in (items or [])]
+    outros = dict(other_cert_items or {})
+    state = {"sql": ""}
+
     cur = mocker.MagicMock()
-    cur.fetchone.return_value = dict(row) if row is not None else None
-    cur.fetchall.return_value = [dict(row)] if row is not None else []
+    cur.rowcount = 1
+
+    def _execute(sql, params=None):
+        state["sql"] = " ".join(str(sql).split())
+
+    def _fetchall():
+        sql = state["sql"]
+        if "FROM cert_certificate_items i" in sql:
+            return [{"sku": sku, "numero": numero} for sku, numero in outros.items()]
+        if "SELECT certificate_id, COUNT(*)" in sql:
+            return [{"certificate_id": row["id"], "cnt": len(item_rows)}] if row else []
+        # "FROM cert_certificates" vem ANTES: a listagem filtrada por SKU tem um
+        # EXISTS sobre cert_certificate_items dentro do proprio SELECT de
+        # certificados, e a ordem inversa devolveria itens no lugar da linha.
+        if "FROM cert_certificates" in sql:
+            return [dict(row)] if row is not None else []
+        if "cert_certificate_items" in sql:
+            return [dict(i) for i in item_rows]
+        return []
+
+    def _fetchone():
+        sql = state["sql"]
+        if "COUNT(*)" in sql and "cert_certificate_items" in sql:
+            return {"cnt": len(item_rows)}
+        if "COUNT(*)" in sql:
+            return {"cnt": 1 if row is not None else 0}
+        return dict(row) if row is not None else None
+
+    cur.execute.side_effect = _execute
+    cur.fetchall.side_effect = _fetchall
+    cur.fetchone.side_effect = _fetchone
+
     conn = mocker.MagicMock()
     ctx = mocker.MagicMock()
     ctx.__enter__ = mocker.MagicMock(return_value=(conn, cur))
@@ -55,6 +100,27 @@ def _mock_certificates_env(mocker, row=_ROW, tmp_path=None):
         },
     )
     return cur, linx
+
+
+def _make_item(sku: str, cert_id: str = _ROW["id"], **overrides) -> dict:
+    """Linha de `cert_certificate_items` com os defaults do DDL D11."""
+    item = {
+        "id": "22222222-2222-2222-2222-222222222222",
+        "certificate_id": cert_id,
+        "sku": sku,
+        "brand": "imaginarium",
+        "produto_codigo": None,
+        "linx_status": "disabled",
+        "linx_error": None,
+        "linx_detail": None,
+        "linx_applied_at": None,
+        "added_by": None,
+        "added_at": "2026-09-11T00:00:00+00:00",
+        "removed_by": None,
+        "removed_at": None,
+    }
+    item.update(overrides)
+    return item
 
 
 @pytest.mark.asyncio
@@ -171,12 +237,95 @@ async def test_create_happy_path_records_linx_outcome(
     body = resp.json()
     assert body["sku"] == "SKU1"
     assert body["linx_status"] == "disabled"
-    # SKU/brand are trimmed before reaching Linx; record saved even with Linx off
-    linx.assert_called_once_with("imaginarium", "SKU1", "2026-12-31", None)
+    # SKU/brand are trimmed before reaching Linx; record saved even with Linx off.
+    # A VALIDADE nao sobe (decisao D11): a propriedade 00106/00224 e o fim de
+    # venda, e aqui nao foi informado nenhum.
+    linx.assert_called_once_with("imaginarium", "SKU1", None, None)
     assert len(list(tmp_path.glob("*.pdf"))) == 1
     executed_sql = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "INSERT INTO cert_certificates" in executed_sql
+    assert "INSERT INTO cert_certificate_items" in executed_sql
     assert "UPDATE cert_certificates" in executed_sql
+
+
+@pytest.mark.asyncio
+async def test_create_sends_only_fim_venda_to_linx(test_client, api_key_headers, mocker):
+    """A propriedade 00106/00224 recebe o FIM DE VENDA, nunca a validade (D11).
+
+    Regressao do caso PI5558Y: com a validade indo para a propriedade, o Linx
+    copiava o valor para PRODUTO_CORES.FIM_VENDAS e BLOQUEAVA o faturamento de
+    um produto com certificado ativo.
+    """
+    _, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={
+            "sku": "PI5558Y",
+            "brand": "imaginarium",
+            "validade_certificado": "2028-07-27",
+            "fim_venda": "2026-10-29",
+        },
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 200
+    linx.assert_called_once_with("imaginarium", "PI5558Y", "2026-10-29", None)
+    assert "2028-07-27" not in [str(a) for a in linx.call_args.args]
+
+
+@pytest.mark.asyncio
+async def test_create_active_certificate_without_fim_venda_writes_no_date(
+    test_client, api_key_headers, mocker
+):
+    """Certificado ativo sem fim de venda nao manda data nenhuma de certificacao."""
+    _, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={
+            "sku": "PI5555Y",
+            "brand": "imaginarium",
+            "situacao": "ATIVO",
+            "validade_certificado": "2027-03-22",
+        },
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 200
+    assert linx.call_args.args[2] is None
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_invalid_fim_venda(test_client, api_key_headers, mocker):
+    _, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={"sku": "S1", "brand": "puket", "fim_venda": "2026-13-01"},
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 400
+    assert "AAAA-MM-DD" in resp.json()["detail"]
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_links_every_pasted_sku(test_client, api_key_headers, mocker):
+    """`skus` colada da planilha vira um item por SKU, sem repetidos nem vazios."""
+    cur, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL,
+        data={
+            "brand": "imaginarium",
+            "skus": "A\nB\n\nA\nC",
+            "fim_venda": "2026-10-29",
+        },
+        headers=api_key_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["link_result"]["added"] == ["A", "B", "C"]
+    assert [c.args[1] for c in linx.call_args_list] == ["A", "B", "C"]
+    inserts = [
+        c for c in cur.execute.call_args_list
+        if "INSERT INTO cert_certificate_items" in " ".join(str(c.args[0]).split())
+    ]
+    assert len(inserts) == 3
 
 
 @pytest.mark.asyncio
@@ -217,13 +366,217 @@ async def test_retry_linx_404_when_not_found(test_client, api_key_headers, mocke
 
 @pytest.mark.asyncio
 async def test_retry_linx_reprocesses_saved_certificate(test_client, api_key_headers, mocker):
-    """Retry must re-run the Linx write with the stored brand/sku/dates."""
+    """Retry must re-run the Linx write with the stored brand/sku/dates.
+
+    Como o cadastro, o retry manda o FIM DE VENDA para a propriedade de
+    certificacao — a linha de `_ROW` nao tem fim_venda, entao nada de data sobe.
+    """
     _, linx = _mock_certificates_env(mocker)
     resp = await test_client.post(
         f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers
     )
     assert resp.status_code == 200
-    linx.assert_called_once_with("imaginarium", "SKU1", "2026-12-31", None)
+    linx.assert_called_once_with("imaginarium", "SKU1", None, None)
+
+
+@pytest.mark.asyncio
+async def test_retry_linx_uses_fim_venda_when_present(test_client, api_key_headers, mocker):
+    _, linx = _mock_certificates_env(
+        mocker, row={**_ROW, "fim_venda": "2026-10-29", "vencimento_licenciamento": "2027-01-31"}
+    )
+    resp = await test_client.post(
+        f"{CREATE_URL}/{_ROW['id']}/retry-linx", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    linx.assert_called_once_with("imaginarium", "SKU1", "2026-10-29", "2027-01-31")
+
+
+# ---------------------------------------------------------------------------
+# D11 — certificado como entidade: vinculo em massa e remocao individual
+# ---------------------------------------------------------------------------
+
+_ITEMS_URL = f"{CREATE_URL}/{_ROW['id']}/items"
+
+
+@pytest.mark.asyncio
+async def test_link_items_dry_run_does_not_touch_linx(test_client, api_key_headers, mocker):
+    """A previa classifica sem gravar: nem no Linx, nem em cert_certificate_items."""
+    cur, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        _ITEMS_URL, json={"skus": ["A", "B"], "dry_run": True}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["dry_run"] is True
+    assert body["added"] == ["A", "B"]
+    linx.assert_not_called()
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "INSERT INTO cert_certificate_items" not in executed
+
+
+@pytest.mark.asyncio
+async def test_link_items_classifies_already_linked(test_client, api_key_headers, mocker):
+    """SKU ja vinculado a ESTE certificado nao e regravado no Linx."""
+    _, linx = _mock_certificates_env(mocker, items=[_make_item("A")])
+    resp = await test_client.post(
+        _ITEMS_URL, json={"skus": ["A"], "dry_run": False}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["already_linked"] == ["A"]
+    assert body["added"] == []
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_link_items_refuses_sku_of_another_active_certificate(
+    test_client, api_key_headers, mocker
+):
+    """Dupla certificacao e decisao fiscal: o sistema nao grava nada sozinho."""
+    cur, linx = _mock_certificates_env(mocker, other_cert_items={"PI6552Y": "8325/2022-BRI-1"})
+    resp = await test_client.post(
+        _ITEMS_URL, json={"skus": ["PI6552Y"], "dry_run": False}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["linked_to_other_active_cert"] == [
+        {"sku": "PI6552Y", "numero_certificado": "8325/2022-BRI-1"}
+    ]
+    assert body["added"] == []
+    linx.assert_not_called()
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "INSERT INTO cert_certificate_items" not in executed
+
+
+@pytest.mark.asyncio
+async def test_link_items_reports_sku_missing_in_linx(test_client, api_key_headers, mocker):
+    """Sem produto no Linx o vinculo nao teria efeito: vira erro visivel."""
+    cur, linx = _mock_certificates_env(mocker)
+    linx.return_value = {
+        "status": "error",
+        "produto_codigo": None,
+        "error": "SKU 'FANTASMA' nao encontrado no Linx",
+        "details": [],
+    }
+    resp = await test_client.post(
+        _ITEMS_URL, json={"skus": ["FANTASMA"], "dry_run": False}, headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    assert resp.json()["not_found_in_linx"] == ["FANTASMA"]
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "INSERT INTO cert_certificate_items" not in executed
+
+
+@pytest.mark.asyncio
+async def test_link_items_rejects_empty_and_oversized_lists(
+    test_client, api_key_headers, mocker
+):
+    _mock_certificates_env(mocker)
+    empty = await test_client.post(_ITEMS_URL, json={"skus": []}, headers=api_key_headers)
+    assert empty.status_code == 400
+    too_many = await test_client.post(
+        _ITEMS_URL, json={"skus": [f"S{i}" for i in range(501)]}, headers=api_key_headers
+    )
+    assert too_many.status_code == 400
+    assert "500" in too_many.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_link_items_404_for_unknown_certificate(test_client, api_key_headers, mocker):
+    _mock_certificates_env(mocker, row=None)
+    resp = await test_client.post(_ITEMS_URL, json={"skus": ["A"]}, headers=api_key_headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_remove_item_is_a_soft_delete_with_actor(test_client, api_key_headers, mocker):
+    """A remocao grava removed_at/removed_by e NAO apaga a trava do Linx."""
+    cur, linx = _mock_certificates_env(mocker, items=[_make_item("A")])
+    resp = await test_client.delete(
+        f"{_ITEMS_URL}/A",
+        headers={**api_key_headers, "X-Cert-Actor-Email": "odett@grupounico.com"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is True
+    linx.assert_not_called()
+    update = next(
+        c for c in cur.execute.call_args_list
+        if "UPDATE cert_certificate_items" in " ".join(str(c.args[0]).split())
+    )
+    assert "removed_at = NOW()" in " ".join(str(update.args[0]).split())
+    assert update.args[1][0] == "odett@grupounico.com"
+
+
+@pytest.mark.asyncio
+async def test_remove_item_404_when_not_linked(test_client, api_key_headers, mocker):
+    cur, _ = _mock_certificates_env(mocker)
+    cur.rowcount = 0
+    resp = await test_client.delete(f"{_ITEMS_URL}/NAO-VINCULADO", headers=api_key_headers)
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_certificate_with_items_returns_409(test_client, api_key_headers, mocker):
+    """FK ON DELETE RESTRICT: a violacao vira 409 explicado, nunca 500 opaco."""
+    cur, _ = _mock_certificates_env(mocker, items=[_make_item("A"), _make_item("B")])
+    resp = await test_client.delete(f"{CREATE_URL}/{_ROW['id']}", headers=api_key_headers)
+    assert resp.status_code == 409
+    assert "2 produto(s) vinculado(s)" in resp.json()["detail"]
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "DELETE FROM cert_certificates" not in executed
+
+
+@pytest.mark.asyncio
+async def test_delete_certificate_without_items_succeeds(test_client, api_key_headers, mocker):
+    cur, _ = _mock_certificates_env(mocker)
+    resp = await test_client.delete(f"{CREATE_URL}/{_ROW['id']}", headers=api_key_headers)
+    assert resp.status_code == 200
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "DELETE FROM cert_certificates" in executed
+
+
+@pytest.mark.asyncio
+async def test_get_certificate_includes_active_items(test_client, api_key_headers, mocker):
+    _mock_certificates_env(mocker, items=[_make_item("A"), _make_item("B")])
+    resp = await test_client.get(f"{CREATE_URL}/{_ROW['id']}", headers=api_key_headers)
+    assert resp.status_code == 200
+    assert [i["sku"] for i in resp.json()["items"]] == ["A", "B"]
+
+
+@pytest.mark.asyncio
+async def test_list_certificates_sku_filter_covers_linked_items(
+    test_client, api_key_headers, mocker
+):
+    """Depois da D11 o SKU mora nos itens: procurar so na coluna legada nao acha."""
+    cur, _ = _mock_certificates_env(mocker)
+    resp = await test_client.get(f"{CREATE_URL}?sku=PI55", headers=api_key_headers)
+    assert resp.status_code == 200
+    count_sql = next(
+        " ".join(str(c.args[0]).split())
+        for c in cur.execute.call_args_list
+        if "COUNT(*)" in str(c.args[0]) and "FROM cert_certificates" in str(c.args[0])
+    )
+    assert "FROM cert_certificate_items ci" in count_sql
+
+
+@pytest.mark.asyncio
+async def test_list_certificates_filters_by_numero_and_situacao(
+    test_client, api_key_headers, mocker
+):
+    cur, _ = _mock_certificates_env(mocker)
+    resp = await test_client.get(
+        f"{CREATE_URL}?numero=10584/2024&situacao=encerrado", headers=api_key_headers
+    )
+    assert resp.status_code == 200
+    count_call = next(
+        c for c in cur.execute.call_args_list
+        if "COUNT(*)" in str(c.args[0]) and "FROM cert_certificates" in str(c.args[0])
+    )
+    sql = " ".join(str(count_call.args[0]).split())
+    assert "numero_certificado ILIKE %s" in sql
+    assert "COALESCE(situacao, 'ATIVO') = %s" in sql
+    assert "%10584/2024%" in count_call.args[1]
+    assert "ENCERRADO" in count_call.args[1]
 
 
 @pytest.mark.asyncio
@@ -639,3 +992,85 @@ async def test_list_certificates_brand_filter_uses_shared_normalization(
     assert "LOWER(REPLACE(brand, '_', ' ')) = %s" in counts[0][0]
     assert "LOWER(brand) = LOWER(%s)" not in counts[0][0]
     assert counts[0][1] == ["puket escolares"]
+
+
+# ---------------------------------------------------------------------------
+# CFN-05 / CFN-01 — numero do certificado na busca e filtro de grife
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_products_search_covers_certificate_number(test_client, api_key_headers, mocker):
+    """O time fiscal procura pelo NUMERO ('10584/2024'), nao pelo SKU.
+
+    Antes a busca so olhava sku/name e o numero nao devolvia nada, embora 668 de
+    674 produtos tenham numero preenchido.
+    """
+    cur = _mock_products_db(mocker, [_make_product_row("PI1", numero_certificado="10584/2024-AE-1")])
+    resp = await test_client.get("/api/products?search=10584/2024", headers=api_key_headers)
+    assert resp.status_code == 200
+    call = next(
+        c for c in cur.execute.call_args_list if "COUNT(*)" in " ".join(str(c.args[0]).split())
+    )
+    sql = " ".join(str(call.args[0]).split())
+    assert "numero_certificado" in sql
+    assert call.args[1] == ["%10584/2024%"] * 3
+
+
+@pytest.mark.asyncio
+async def test_expired_search_covers_certificate_number(test_client, api_key_headers, mocker):
+    cur = _mock_products_db(mocker, [])
+    resp = await test_client.get("/api/expired?search=10584", headers=api_key_headers)
+    assert resp.status_code == 200
+    executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
+    assert "numero_certificado" in executed
+
+
+@pytest.mark.asyncio
+async def test_products_grife_filter_is_sent_to_sql(test_client, api_key_headers, mocker):
+    """`grife` vem do Linx e e coluna real, entao filtra em SQL (nao em Python)."""
+    cur = _mock_products_db(mocker, [_make_product_row("PI1", grife="MARVEL")])
+    resp = await test_client.get("/api/products?grife=marvel", headers=api_key_headers)
+    assert resp.status_code == 200
+    call = next(
+        c for c in cur.execute.call_args_list if "COUNT(*)" in " ".join(str(c.args[0]).split())
+    )
+    assert "LOWER(COALESCE(grife, \'\')) = LOWER(%s)" in " ".join(str(call.args[0]).split())
+    assert call.args[1] == ["marvel"]
+
+
+@pytest.mark.asyncio
+async def test_grifes_endpoint_reports_coverage_gap(test_client, api_key_headers, mocker):
+    """A cobertura da grife e parcial na Imaginarium: `sem_grife` precisa aparecer."""
+    from app.routes import certifications
+
+    mocker.patch.object(certifications, "DATABASE_URL", "postgres://test")
+    cur = mocker.MagicMock()
+    state = {"sql": ""}
+    cur.execute.side_effect = lambda sql, params=None: state.update(sql=" ".join(str(sql).split()))
+    cur.fetchall.side_effect = lambda: [{"grife": "MARVEL", "cnt": 248}]
+    cur.fetchone.side_effect = lambda: {"cnt": 31}
+    conn = mocker.MagicMock()
+    ctx = mocker.MagicMock()
+    ctx.__enter__ = mocker.MagicMock(return_value=(conn, cur))
+    ctx.__exit__ = mocker.MagicMock(return_value=False)
+    mocker.patch.object(certifications, "db", return_value=ctx)
+
+    resp = await test_client.get("/api/grifes", headers=api_key_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == {"grifes": [{"grife": "MARVEL", "count": 248}], "sem_grife": 31}
+
+
+@pytest.mark.asyncio
+async def test_grifes_endpoint_is_not_shadowed_by_the_sku_route(
+    test_client, api_key_headers, mocker
+):
+    """/api/grifes nao pode cair no handler de /api/products/{sku}."""
+    from app.routes import certifications
+
+    detail = mocker.patch.object(certifications, "get_product")
+    mocker.patch.object(certifications, "DATABASE_URL", "")
+    resp = await test_client.get("/api/grifes", headers=api_key_headers)
+    assert resp.status_code == 200
+    detail.assert_not_called()

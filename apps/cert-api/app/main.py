@@ -16,7 +16,11 @@ from app.config import (
     validate_linx_config,
 )
 from app.routes import certificates, certifications, health, reports, schedules, stock
-from app.routes.schedules import load_schedules_into_scheduler, scheduler
+from app.routes.schedules import (
+    load_schedules_into_scheduler,
+    schedule_hourly_sheet_sync,
+    scheduler,
+)
 from app.utils.auth import verify_api_key
 from app.utils.logging import log
 
@@ -34,9 +38,13 @@ def run_startup() -> None:
             log.warning(f"Could not create tables: {e}")
 
     if SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY:
-        from app.services.erp_service import sync_licenciados_to_db, sync_sheets_to_db
+        from app.services.erp_service import sync_licenciados_to_db
+        from app.services.sync_runs import run_sheet_sync
         try:
-            log.info(f"Startup sheets sync: {sync_sheets_to_db()}")
+            # Mesmo caminho do botao manual e do job horario: um lock so e uma
+            # linha em cert_sync_runs, para que "quando a planilha foi lida pela
+            # ultima vez" tenha resposta inclusive apos um restart.
+            log.info(f"Startup sheets sync: {run_sheet_sync('startup')}")
         except Exception as e:
             log.warning(f"Startup sheets sync failed: {e}")
         try:
@@ -47,6 +55,7 @@ def run_startup() -> None:
     try:
         scheduler.start()
         load_schedules_into_scheduler()
+        schedule_hourly_sheet_sync()
         log.info("APScheduler started successfully")
     except Exception as e:
         log.warning(f"Failed to start scheduler: {e}")
@@ -85,7 +94,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    # DELETE entrou com a remocao individual de item do certificado (D11); sem
+    # ele o preflight do navegador barra a lixeira da tela de cadastro.
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 

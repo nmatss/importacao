@@ -60,6 +60,20 @@ def db() -> Generator[tuple[psycopg2.extensions.connection, psycopg2.extras.Real
         _get_pool().putconn(conn)
 
 
+def put_conn(conn: psycopg2.extensions.connection) -> None:
+    """Devolve ao pool uma conexao tomada com `get_conn`.
+
+    `db()` cuida disso sozinho; este helper existe para quem precisa manter a
+    MESMA conexao aberta por varias transacoes — o caso do lock advisory de
+    sessao do sync da planilha (`pg_try_advisory_lock` so vale enquanto a
+    conexao que o tomou continuar viva).
+
+    Args:
+        conn: a conexao devolvida por `get_conn`.
+    """
+    _get_pool().putconn(conn)
+
+
 def close_pool() -> None:
     """Close all connections in the pool on shutdown."""
     global _pool
