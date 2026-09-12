@@ -39,6 +39,29 @@ type DocumentWithAiData = {
 import { MIN_OPERATIONAL_CONFIDENCE } from '../documents/constants.js';
 type ValidationRunMode = 'final' | 'partial';
 
+/**
+ * Resultado de check como o comparativo e o relatorio consomem — vindo dos
+ * resultados vigentes OU do historico do ultimo run parcial.
+ */
+export interface EffectiveCheckResult {
+  id: number;
+  checkName: string;
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
+  expectedValue: string | null;
+  actualValue: string | null;
+  documentsCompared: string | null;
+  message: string | null;
+  dataSource: string | null;
+  /** Campos do resultado vigente preservados para os consumidores do relatorio. */
+  resolvedManually?: boolean | null;
+  resolutionNote?: string | null;
+  resolvedBy?: number | null;
+  resolvedByName?: string | null;
+  resolvedAt?: Date | string | null;
+  validationRunId?: number | null;
+  createdAt?: Date | string | null;
+}
+
 type RunAllChecksOptions = {
   mode?: ValidationRunMode;
   triggerType?: 'manual' | 'auto_full' | 'auto_partial';
@@ -720,6 +743,99 @@ export const validationService = {
   },
 
   /**
+   * Resultados EFETIVOS do processo para leitura (comparativo e relatorio).
+   *
+   * `validation_results` so e escrito em validacao FINAL, e a validacao final
+   * exige Invoice + Packing List + BL projetados. O PK220 tem o OHBL abaixo do
+   * piso de confianca, entao todo run dele e PARCIAL e a tabela fica vazia: a
+   * tela mostrava zero cruzamentos e a coluna Sistema so com tracinhos, apesar
+   * de haver 203 linhas de historico. Sem run final, cai no ULTIMO run
+   * registrado em `validation_result_history` e marca `mode: 'partial'` — so
+   * leitura, sem abrir correcao nem mexer em status.
+   */
+  async getEffectiveResults(processId: number): Promise<{
+    results: EffectiveCheckResult[];
+    mode: 'final' | 'partial' | 'none';
+    runAt: string | null;
+    validationRunId: number | null;
+  }> {
+    const current = await this.getResults(processId);
+    if (current.length > 0) {
+      const runAt = current.reduce<Date | null>((latest, row) => {
+        const createdAt = row.createdAt ? new Date(row.createdAt) : null;
+        if (!createdAt) return latest;
+        return latest == null || createdAt > latest ? createdAt : latest;
+      }, null);
+      return {
+        // O `...row` preserva o contrato ja publicado de
+        // `GET /api/validation/:id/report` (resolvedManually, resolutionNote,
+        // resolvedByName...). Estreitar isso aqui quebraria consumidores.
+        results: current.map((row) => ({
+          ...row,
+          id: row.id,
+          checkName: row.checkName,
+          status: row.status as EffectiveCheckResult['status'],
+          expectedValue: row.expectedValue ?? null,
+          actualValue: row.actualValue ?? null,
+          documentsCompared: row.documentsCompared ?? null,
+          message: row.message ?? null,
+          dataSource: row.dataSource ?? null,
+        })),
+        mode: 'final',
+        runAt: runAt ? runAt.toISOString() : null,
+        validationRunId: current[0]?.validationRunId ?? null,
+      };
+    }
+
+    const history = await db
+      .select()
+      .from(validationResultHistory)
+      .where(eq(validationResultHistory.processId, processId))
+      .orderBy(desc(validationResultHistory.runAt), desc(validationResultHistory.id));
+
+    if (history.length === 0) {
+      return { results: [], mode: 'none', runAt: null, validationRunId: null };
+    }
+
+    const newest = history[0];
+    const sameRun = (row: (typeof history)[number]) =>
+      newest.validationRunId != null
+        ? row.validationRunId === newest.validationRunId
+        : new Date(row.runAt ?? 0).getTime() === new Date(newest.runAt ?? 0).getTime();
+
+    const seen = new Set<string>();
+    const results: EffectiveCheckResult[] = [];
+    for (const row of history.filter(sameRun)) {
+      // Um run parcial grava uma linha por check; duplicata so aconteceria em
+      // dado legado, e ai vale a mais recente (a lista ja vem ordenada).
+      if (seen.has(row.checkName)) continue;
+      seen.add(row.checkName);
+      const details = (row.details ?? {}) as Record<string, unknown>;
+      results.push({
+        id: row.id,
+        checkName: row.checkName,
+        status: row.status as EffectiveCheckResult['status'],
+        expectedValue: (details.expectedValue as string | null) ?? null,
+        actualValue: (details.actualValue as string | null) ?? null,
+        documentsCompared: (details.documentsCompared as string | null) ?? null,
+        message: row.message ?? null,
+        dataSource: (details.dataSource as string | null) ?? null,
+        resolvedManually: row.resolvedManually ?? false,
+        resolutionNote: row.resolutionNote ?? null,
+        validationRunId: row.validationRunId ?? null,
+        createdAt: row.runAt ?? null,
+      });
+    }
+
+    return {
+      results,
+      mode: 'partial',
+      runAt: newest.runAt ? new Date(newest.runAt).toISOString() : null,
+      validationRunId: newest.validationRunId ?? null,
+    };
+  },
+
+  /**
    * Apaga os resultados VIGENTES do processo (o historico em `validation_runs`
    * fica intacto).
    *
@@ -1135,7 +1251,9 @@ export const validationService = {
 
     if (!process) throw new NotFoundError('Processo', processId);
 
-    const results = await this.getResults(processId);
+    // Resultados vigentes; sem run final, os do ultimo run parcial (FUP-01).
+    const effective = await this.getEffectiveResults(processId);
+    const results = effective.results;
 
     // Whether the process carries any SYSTEM (Sydle/FUP) reference values to
     // compare extracted documents against. When false, the "Documentos vs
@@ -1167,6 +1285,10 @@ export const validationService = {
         containerType: process.containerType,
       },
       systemDataAvailable,
+      // 'partial' avisa a leitura de que os resultados vieram do historico de
+      // um run parcial (nao houve validacao final); 'none' = nunca validado.
+      mode: effective.mode,
+      runAt: effective.runAt,
       summary: {
         total: results.length,
         passed: results.filter((r) => r.status === 'passed').length,

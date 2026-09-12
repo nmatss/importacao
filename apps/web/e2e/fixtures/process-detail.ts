@@ -85,6 +85,8 @@ interface AggregateField {
   packingList: string | null;
   bl: string | null;
   espelho: string | null;
+  /** Coluna Sistema (cadastro do processo) agora vem pronta do comparativo. */
+  system?: string | null;
   status: RowStatus;
   criticality?: 'critical' | 'secondary' | 'info';
   message?: string | null;
@@ -1006,6 +1008,7 @@ const AGGREGATE_FULL: AggregateField[] = [
     packingList: null,
     bl: null,
     espelho: '48.190,00',
+    system: '48250.00',
     status: 'warning',
     criticality: 'critical',
     message: 'Diferenca de USD 60,00 entre Invoice e Espelho (desconto FOC do SKU-0012).',
@@ -1017,6 +1020,7 @@ const AGGREGATE_FULL: AggregateField[] = [
     packingList: null,
     bl: 'USD 3.850,00',
     espelho: 'USD 3.850,00',
+    system: '3700.00',
     status: 'match',
     criticality: 'critical',
     message: null,
@@ -1075,6 +1079,7 @@ const AGGREGATE_FULL: AggregateField[] = [
     packingList: '58,40',
     bl: '61,20',
     espelho: '58,40',
+    system: '55.000',
     status: 'divergent',
     criticality: 'critical',
     message: 'BL com 61,20 m3 contra 58,40 m3 nas demais fontes (4,8% acima).',
@@ -1086,6 +1091,7 @@ const AGGREGATE_FULL: AggregateField[] = [
     packingList: null,
     bl: '40HC',
     espelho: '40HC',
+    system: '40HC',
     status: 'match',
     criticality: 'info',
     message: null,
@@ -1319,6 +1325,10 @@ function buildComparison(url: URL) {
           },
         ]
       : [],
+    // A coluna Sistema e o `systemDataAvailable` passaram a vir do comparativo
+    // (antes eram derivados do relatorio de validacao).
+    systemDataAvailable: isFull(url),
+    validationMode: 'final',
     aggregateComparison: full ? AGGREGATE_FULL : AGGREGATE_FULL.slice(0, 9),
     itemComparison: items,
     unmatchedPlItems: [

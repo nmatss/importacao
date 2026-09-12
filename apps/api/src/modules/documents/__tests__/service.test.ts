@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
+import {
+  PK220_INVOICE_ITEMS,
+  PK220_PACKING_LIST_ITEMS,
+  espelhoSinteticoPk220,
+} from '../../../__tests__/fixtures/pk220-itens.js';
 
 const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 const mockQueueSend = vi.fn();
@@ -90,6 +95,11 @@ vi.mock('../../validation/service.js', () => ({
   validationService: {
     runAllChecks: vi.fn().mockResolvedValue([]),
     clearResults: vi.fn().mockResolvedValue({ removed: 0 }),
+    // `getComparison` incorpora os cruzamentos da validacao as linhas
+    // agregadas; por padrao o processo nao tem nenhum resultado.
+    getEffectiveResults: vi
+      .fn()
+      .mockResolvedValue({ results: [], mode: 'none', runAt: null, validationRunId: null }),
   },
 }));
 
@@ -1241,6 +1251,353 @@ describe('documentService', () => {
         itemCode: 'PI1111A',
         source: 'packing_list',
       });
+    });
+
+    it('trata CNPJ com e sem pontuacao como o mesmo CNPJ', async () => {
+      // Reuniao 11/09 [11:36]: "esse CNPJ e o mesmo desse aqui... Ele esta
+      // trazendo como errado". Dados reais do processo 287.
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { importerCnpj: '58500398000610', importerName: 'IMB TEXTIL S.A.' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { importerCnpj: '58500398000610', importerName: 'IMB TEXTIL S.A.' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: {
+                  importerCnpj: '58.500.398/0006-10',
+                  importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207',
+                },
+                items: [],
+              },
+            },
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const cnpj = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Importador — CNPJ',
+      );
+
+      expect(cnpj).toMatchObject({ status: 'match' });
+      // O valor exibido continua o da fonte: normalizamos so a comparacao.
+      expect(cnpj!.espelho).toBe('58.500.398/0006-10');
+    });
+
+    it('tira o prefixo "CNPJ:" que o espelho cola no endereco do importador', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { importerAddress: 'RUA GERCINO MACHADO, 207' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { importerAddress: 'RUA GERCINO MACHADO, 207' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            aiExtractedData: {
+              espelho: {
+                summary: {
+                  importerAddress: 'CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207',
+                },
+                items: [],
+              },
+            },
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const address = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Importador — Endereço',
+      );
+
+      expect(address!.espelho).toBe('RUA GERCINO MACHADO, 207');
+      expect(address).toMatchObject({ status: 'match' });
+    });
+
+    it('nao empresta o fornecedor da follow-up para a coluna Espelho do exportador', async () => {
+      // Reuniao 11/09 [07:49]: "o exportador, ele pegou um nome no espelho. So
+      // que eu nao subi o espelho ainda". O valor vinha de
+      // import_processes.exporter_name, que e o FABRICANTE da follow-up.
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([{ id: 1, exporterName: 'CHUYANG', aiExtractedData: {} }]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const exporter = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Exportador / Shipper',
+      );
+
+      expect(exporter!.espelho).toBeNull();
+      expect(exporter).toMatchObject({ status: 'match' });
+      expect(comparison.hasEspelho).toBe(false);
+    });
+
+    it('preenche a coluna Sistema pelo cadastro do processo, mesmo sem validacao', async () => {
+      // PK220 (id 288): zero linhas em validation_results porque todo run e
+      // parcial. A coluna Sistema ficava so com tracinhos (FUP-01).
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { totalFobValue: 101265.19, currency: 'USD' },
+          },
+        ]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            totalFobValue: '101265.19',
+            freightValue: '10000.00',
+            totalCbm: '179.670',
+            aiExtractedData: {},
+          },
+        ]),
+      );
+
+      const comparison = await documentService.getComparison(1);
+      const fob = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'Total FOB (USD)',
+      );
+      const cbm = comparison.aggregateComparison.find((row: any) => row.label === 'CBM (m3)');
+
+      expect(comparison.systemDataAvailable).toBe(true);
+      expect(fob!.system).toBe('101265.19');
+      expect(cbm!.system).toBe('179.670');
+    });
+
+    it('incorpora o cruzamento a linha agregada em vez de criar linha de texto', async () => {
+      vi.mocked(validationService.getEffectiveResults).mockResolvedValueOnce({
+        results: [
+          {
+            id: 10,
+            checkName: 'invoice-pl-date-tolerance',
+            status: 'warning',
+            expectedValue: 'diferenca <= 30 dias',
+            actualValue: '40 dias',
+            documentsCompared: 'INV vs PL',
+            message: 'Diferenca de 40 dias entre Invoice e Packing List.',
+            dataSource: 'cross_document',
+          },
+          {
+            id: 11,
+            checkName: 'freight-value-match',
+            status: 'skipped',
+            expectedValue: null,
+            actualValue: null,
+            documentsCompared: 'BL vs Follow-up',
+            message: 'Ignorado: Nenhum valor de frete disponivel nos dados do follow-up.',
+            dataSource: 'cross_document',
+          },
+        ],
+        mode: 'partial',
+        runAt: '2026-09-11T12:00:00.000Z',
+        validationRunId: 480,
+      });
+
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 1,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-01T00:00:00Z'),
+            updatedAt: new Date('2026-01-01T00:00:00Z'),
+            aiParsedData: { etd: '2026-08-07' },
+          },
+          {
+            id: 2,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.90',
+            createdAt: new Date('2026-01-02T00:00:00Z'),
+            updatedAt: new Date('2026-01-02T00:00:00Z'),
+            aiParsedData: { etd: '2026-08-07' },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+      const etd = comparison.aggregateComparison.find(
+        (row: any) => row.label === 'ETD / Shipped On Board',
+      );
+
+      expect(comparison.validationMode).toBe('partial');
+      // O check nao vira linha nova, e o rotulo tecnico nunca aparece.
+      expect(
+        comparison.aggregateComparison.some((row: any) =>
+          String(row.label).includes('invoice-pl-date-tolerance'),
+        ),
+      ).toBe(false);
+      expect(etd).toMatchObject({ status: 'warning' });
+      expect(etd!.message).toContain('Datas Invoice x Packing List');
+
+      const frete = comparison.aggregateComparison.find((row: any) => row.label === 'Frete');
+      expect(frete!.message).toContain('Nao verificado');
+    });
+
+    it('casa os 14 itens reais do PK220 (invoice composta x packing list)', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 167,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:00:00Z'),
+            updatedAt: new Date('2026-09-11T10:00:00Z'),
+            aiParsedData: { exporterName: 'KIOM GLOBAL LIMITED', items: PK220_INVOICE_ITEMS },
+          },
+          {
+            id: 168,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:05:00Z'),
+            updatedAt: new Date('2026-09-11T10:05:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_PACKING_LIST_ITEMS,
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+
+      const comparison = await documentService.getComparison(1);
+
+      expect(comparison.unmatchedInvoiceItems).toEqual([]);
+      expect(comparison.unmatchedPlItems).toEqual([]);
+      expect(comparison.itemComparison).toHaveLength(14);
+      expect(comparison.itemComparison.every((item: any) => item.matched)).toBe(true);
+      expect(comparison.itemComparison.every((item: any) => item.qtyMatch)).toBe(true);
+      // O SKU exibido e o codigo real, nao a string composta PI+colecao+codigo.
+      expect(comparison.itemComparison[0].itemCode).toBe('050404509');
+      expect(comparison.itemComparison[13].itemCode).toBe('27.01.0007');
+      // Linhas repetidas do mesmo SKU casam com a linha certa da PL.
+      expect(comparison.itemComparison[0].plQty).toBe(1232);
+      expect(comparison.itemComparison[7].plQty).toBe(2476);
+    });
+
+    it('compara o espelho por item (NCM, preco, EAN) e o total de pecas', async () => {
+      const espelho = espelhoSinteticoPk220();
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 167,
+            type: 'invoice',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:00:00Z'),
+            updatedAt: new Date('2026-09-11T10:00:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_INVOICE_ITEMS.map((item, index) =>
+                index === 0
+                  ? { ...item, ncmCode: '39264000', unitPrice: 1, totalPrice: item.quantity }
+                  : { ...item, ncmCode: '42029200', unitPrice: 1, totalPrice: item.quantity },
+              ),
+            },
+          },
+          {
+            id: 168,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.94',
+            createdAt: new Date('2026-09-11T10:05:00Z'),
+            updatedAt: new Date('2026-09-11T10:05:00Z'),
+            aiParsedData: {
+              exporterName: 'KIOM GLOBAL LIMITED',
+              items: PK220_PACKING_LIST_ITEMS,
+            },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: { espelho } }]));
+
+      const comparison = await documentService.getComparison(1);
+      const pecas = comparison.aggregateComparison.find((row: any) => row.label === 'Total Peças');
+
+      expect(pecas).toMatchObject({ status: 'match' });
+      expect(pecas!.espelho).toBe(String(espelho.summary.totalPieces));
+
+      const primeiro = comparison.itemComparison[0] as Record<string, any>;
+      expect(primeiro.espelhoNcm).toBe('42029200');
+      expect(primeiro.ncmMatch).toBe(false);
+      expect(primeiro.status).toBe('divergent');
+      expect(primeiro.divergence).toContain('NCM Invoice x Espelho');
+
+      const segundo = comparison.itemComparison[1] as Record<string, any>;
+      expect(segundo.ncmMatch).toBe(true);
+      expect(segundo.status).toBe('match');
     });
   });
 

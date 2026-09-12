@@ -1,4 +1,4 @@
-import { normalizeItemCode } from '../utils/item-code-normalize.js';
+import { descriptionWithoutItemCode, itemMatchKey } from '../utils/item-code-normalize.js';
 import { companySimilarity } from '../utils/name-normalize.js';
 import { parseDocumentNumber } from '../utils/number-normalize.js';
 
@@ -71,7 +71,11 @@ function aggregate(items: Array<Record<string, any>>): Aggregation {
   let linesWithoutCode = 0;
 
   for (const item of items) {
-    const code = normalizeItemCode(item.itemCode ?? item.code);
+    // Chave compartilhada com `getComparison` (item-code-normalize): resolve o
+    // codigo entre colchetes da descricao, o sufixo do codigo composto
+    // (PI + colecao + codigo) e os zeros a esquerda. Sem ela, os 14 itens do
+    // PK220 apareciam como "ausentes na PL" nos dois sentidos.
+    const code = itemMatchKey(item);
     if (!code) {
       linesWithoutCode++;
       continue;
@@ -96,7 +100,9 @@ function aggregate(items: Array<Record<string, any>>): Aggregation {
       current.quantityGaps++;
     }
 
-    const description = String(item.description ?? '').trim();
+    // O codigo entre colchetes do inicio da descricao e CODIGO, nao nome do
+    // produto: mante-lo fazia "[050404509] BACKPACK" divergir de "BACKPACK".
+    const description = descriptionWithoutItemCode(item.description);
     if (description) current.descriptions.push(description);
 
     byCode.set(code, current);

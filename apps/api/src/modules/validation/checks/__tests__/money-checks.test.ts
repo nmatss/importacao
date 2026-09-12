@@ -103,8 +103,21 @@ describe('freight-value-match', () => {
   it('reports the follow-up freight as absent, not as unreadable', () => {
     const result = freightValueMatch({ blData: { freightValue: 250 } });
 
-    expect(result.status).toBe('warning');
+    // Decisao D6 (reuniao 11/09): frete ausente na follow-up e verificacao NAO
+    // REALIZADA ("Nao verificado — ..."), nao uma atencao de conferencia.
+    expect(result.status).toBe('skipped');
     expect(result.message).toContain('Nenhum valor de frete disponivel');
+  });
+
+  it('mantem ATENCAO quando o valor da follow-up existe mas esta ilegivel', () => {
+    // Valor presente e nao numerico e problema de dado, nao indisponibilidade:
+    // continua pedindo conferencia.
+    const result = freightValueMatch({
+      blData: { freightValue: 250 },
+      followUpData: { freightValue: '#ERROR!' },
+    });
+
+    expect(result.status).toBe('warning');
   });
 
   it('never emits failed while the currency of both sides is unconfirmed', () => {

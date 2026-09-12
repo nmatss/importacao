@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import itemLevelMatch from '../item-level-match.js';
+import {
+  PK220_INVOICE_ITEMS,
+  PK220_PACKING_LIST_ITEMS,
+} from '../../../../__tests__/fixtures/pk220-itens.js';
 
 describe('itemLevelMatch', () => {
   it('matches invoice items with packing-list FAT prefixes', () => {
@@ -115,6 +119,32 @@ describe('itemLevelMatch', () => {
     });
 
     expect(result.status).toBe('passed');
+  });
+
+  it('casa os 14 itens reais do PK220 com codigo composto na invoice', () => {
+    // Reuniao 11/09 [17:29]: "esta olhando o codigo errado. Ele esta juntando
+    // PI com codigo... High Summer 27 e o codigo". Com `normalizeItemCode` cru
+    // os 14 codigos da invoice nao existiam na PL e vice-versa.
+    const result = itemLevelMatch({
+      invoiceData: { items: PK220_INVOICE_ITEMS },
+      packingListData: { items: PK220_PACKING_LIST_ITEMS },
+    });
+
+    expect(result.status).toBe('passed');
+    expect(result.message).not.toContain('ausentes');
+    // 050404509 e 050404510 aparecem em DUAS linhas cada: 12 codigos, 14 linhas.
+    expect(result.expectedValue).toContain('12 codigos / 14 linhas INV');
+    expect(result.actualValue).toContain('14 linhas');
+  });
+
+  it('acusa o item que realmente falta na PL, mesmo com codigo composto', () => {
+    const result = itemLevelMatch({
+      invoiceData: { items: PK220_INVOICE_ITEMS },
+      packingListData: { items: PK220_PACKING_LIST_ITEMS.slice(0, 13) },
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.message).toContain('27010007');
   });
 
   it('reports lines that carry no item code instead of dropping them', () => {

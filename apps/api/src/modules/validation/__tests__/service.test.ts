@@ -1003,6 +1003,75 @@ describe('validationService', () => {
       const report = await validationService.getReport(2);
 
       expect(report.systemDataAvailable).toBe(false);
+      expect(report.mode).toBe('none');
+    });
+
+    it('cai no ultimo run PARCIAL quando nao existe resultado vigente', async () => {
+      // PK220 (id 288): validation_results vazio, 203 linhas de historico so de
+      // runs 'auto_partial'. O relatorio e o comparativo mostravam zero
+      // cruzamentos e a coluna Sistema so com tracinhos (FUP-01).
+      queryQueue.push(createResolvedChain([processWithSystemData]));
+      queryQueue.push(createResolvedChain([])); // validation_results: vazio
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 90,
+            processId: 1,
+            validationRunId: 480,
+            runAt: new Date('2026-09-11T13:00:00Z'),
+            checkName: 'invoice-value-vs-fup',
+            status: 'passed',
+            message: 'Valor FOB da Invoice confere com o sistema.',
+            details: {
+              expectedValue: '101265.19',
+              actualValue: '101265.19',
+              documentsCompared: 'Invoice vs Sistema',
+              dataSource: 'system_vs_document',
+              mode: 'partial',
+            },
+          },
+          {
+            id: 89,
+            processId: 1,
+            validationRunId: 480,
+            runAt: new Date('2026-09-11T13:00:00Z'),
+            checkName: 'ports-match',
+            status: 'failed',
+            message: 'Portos divergentes.',
+            details: {
+              expectedValue: 'SHENZHEN',
+              actualValue: 'ITAPOA',
+              documentsCompared: 'INV vs PL vs BL',
+              dataSource: 'cross_document',
+            },
+          },
+          {
+            id: 50,
+            processId: 1,
+            validationRunId: 366,
+            runAt: new Date('2026-09-10T13:00:00Z'),
+            checkName: 'ports-match',
+            status: 'passed',
+            message: 'run anterior, nao deve aparecer',
+            details: { dataSource: 'cross_document' },
+          },
+        ]),
+      );
+
+      const report = await validationService.getReport(1);
+
+      expect(report.mode).toBe('partial');
+      expect(report.runAt).toBe('2026-09-11T13:00:00.000Z');
+      // So o run mais recente entra, e os valores voltam de `details`.
+      expect(report.summary.total).toBe(2);
+      expect(report.systemChecks[0]).toMatchObject({
+        checkName: 'invoice-value-vs-fup',
+        expectedValue: '101265.19',
+      });
+      expect(report.crossDocumentChecks.map((check: any) => check.checkName)).toEqual([
+        'ports-match',
+      ]);
+      expect(report.crossDocumentChecks[0].status).toBe('failed');
     });
   });
 

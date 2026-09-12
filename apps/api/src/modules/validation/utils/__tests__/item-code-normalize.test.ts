@@ -2,9 +2,18 @@ import { describe, it, expect } from 'vitest';
 import {
   normalizeItemCode,
   itemCodesMatch,
+  itemCodesMatchLoose,
+  extractBracketItemCode,
   extractCanonicalItemCode,
   cleanItemCodesInAiData,
+  itemMatchKey,
+  primaryItemCode,
+  stripPurchaseOrderAndCollection,
 } from '../item-code-normalize.js';
+import {
+  PK220_INVOICE_ITEMS,
+  PK220_PACKING_LIST_ITEMS,
+} from '../../../../__tests__/fixtures/pk220-itens.js';
 
 describe('normalizeItemCode', () => {
   it('strips whitespace', () => {
@@ -109,5 +118,68 @@ describe('cleanItemCodesInAiData', () => {
   it('is a noop when items is missing', () => {
     const data = { foo: 'bar' };
     expect(cleanItemCodesInAiData(data)).toBe(data);
+  });
+});
+
+describe('codigo composto do layout Puket (PI + colecao + codigo)', () => {
+  it('le o codigo entre colchetes no inicio da descricao', () => {
+    expect(extractBracketItemCode('[050404509] BACKPACK KIDS A')).toBe('050404509');
+    expect(extractBracketItemCode('[27.01.0007] STICKER YELLOW')).toBe('27.01.0007');
+  });
+
+  it('ignora rotulo entre colchetes que nao tem cara de codigo', () => {
+    expect(extractBracketItemCode('[SET] KIT ESCOLAR')).toBe('');
+    expect(extractBracketItemCode('BACKPACK [050404509]')).toBe('');
+    expect(extractBracketItemCode(null)).toBe('');
+  });
+
+  it('separa PI e colecao do codigo do item', () => {
+    expect(stripPurchaseOrderAndCollection('PK2062607BXIS2750404509')).toBe('50404509');
+    expect(stripPurchaseOrderAndCollection('PK2102606BSZS27050404637')).toBe('050404637');
+    expect(stripPurchaseOrderAndCollection('PK2272607BXIHS2727010007')).toBe('27010007');
+  });
+
+  it('nao mutila um codigo comum', () => {
+    expect(stripPurchaseOrderAndCollection('PI7752Y')).toBe('');
+    expect(stripPurchaseOrderAndCollection('050404509')).toBe('');
+  });
+
+  it('casa os 14 pares reais do PK220 (invoice x packing list)', () => {
+    // Antes da correcao os 14 itens da invoice e os 14 da PL apareciam como
+    // "sem correspondencia" nos DOIS sentidos (reuniao 11/09 [17:29]).
+    for (const [index, invoiceItem] of PK220_INVOICE_ITEMS.entries()) {
+      const plItem = PK220_PACKING_LIST_ITEMS[index];
+      expect(itemMatchKey(invoiceItem)).toBe(itemMatchKey(plItem));
+      expect(itemCodesMatchLoose(invoiceItem.itemCode, plItem.itemCode)).toBe(true);
+    }
+  });
+
+  it('casa mesmo quando o zero a esquerda se perdeu na concatenacao', () => {
+    expect(itemCodesMatchLoose('PK2102606BSZS2750404638', '050404638')).toBe(true);
+    expect(itemCodesMatchLoose('27.01.0007', 'PK2272607BXIHS2727.01.0007')).toBe(true);
+  });
+
+  it('nao casa codigos diferentes por acidente', () => {
+    expect(itemCodesMatchLoose('PK2062607BXIS2750404509', '050404510')).toBe(false);
+    expect(itemCodesMatchLoose('PI7752Y', 'PI7753Y')).toBe(false);
+    // Sufixo curto demais nao basta: '04509' tem 5 caracteres.
+    expect(itemCodesMatchLoose('PK2062607BXIS2750404509', '04509')).toBe(false);
+  });
+
+  it('mantem o casamento exato que ja funcionava', () => {
+    expect(itemCodesMatchLoose('PI7752Y', 'PI 7752Y')).toBe(true);
+    expect(itemCodesMatchLoose('PI7765Y', 'FAT03PI7765Y')).toBe(true);
+  });
+
+  it('exibe o SKU real, nao a string composta', () => {
+    expect(primaryItemCode(PK220_INVOICE_ITEMS[0])).toBe('050404509');
+    expect(primaryItemCode(PK220_INVOICE_ITEMS[13])).toBe('27.01.0007');
+    expect(primaryItemCode(PK220_PACKING_LIST_ITEMS[0])).toBe('050404509');
+    expect(primaryItemCode({ itemCode: 'PI7752Y', description: 'MEIA KIDS' })).toBe('PI7752Y');
+  });
+
+  it('linha sem codigo nao ganha chave de casamento', () => {
+    expect(itemMatchKey({ description: 'FRETE INTERNO', quantity: 1 })).toBe('');
+    expect(itemMatchKey(null)).toBe('');
   });
 });
