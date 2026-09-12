@@ -3,7 +3,14 @@ import { toast } from 'sonner';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getErrorMessage } from '@/shared/utils/errors';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
-import { fetchCertProducts, verifyCertProduct } from '@/shared/lib/cert-api-client';
+import {
+  fetchCertGrifes,
+  fetchCertProducts,
+  fetchLastCertSync,
+  syncCertSheets,
+  verifyCertProduct,
+  type CertSyncRun,
+} from '@/shared/lib/cert-api-client';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
 import { cn, formatDateTime } from '@/shared/lib/utils';
 import {
@@ -19,6 +26,7 @@ import {
   ArrowDown,
   ShieldCheck,
   X,
+  DownloadCloud,
 } from 'lucide-react';
 import type { CertProduct } from '@/shared/lib/cert-api-client';
 
@@ -184,6 +192,46 @@ const SORT_SCOPE_NOTE = 'Ordenação aplicada apenas à página exibida';
  * devolve 0 por ausência de dado. Renderizar "0" tornava isso indistinguível de
  * um estoque realmente zerado.
  */
+/** Rótulo em português do gatilho de `cert_sync_runs` (nunca a chave técnica). */
+const SYNC_TRIGGER_LABEL: Record<CertSyncRun['trigger'], string> = {
+  manual: 'manual',
+  startup: 'na subida do serviço',
+  schedule: 'pela validação agendada',
+  hourly: 'automática (a cada hora)',
+};
+
+/**
+ * Quebra o "Nº Certificado" (coluna P das abas) em linhas.
+ * Alguns produtos recertificados trazem DOIS números separados por quebra de
+ * linha (ex.: '6916-2021-BRI-1\n MT-5493/2021'); exibi-los concatenados fazia
+ * parecer um número único e impedia a leitura.
+ */
+export function certificateNumberLines(value?: string | null): string[] {
+  return (value ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function CertificateNumberCell({ value }: { value?: string | null }) {
+  const lines = certificateNumberLines(value);
+  if (lines.length === 0) {
+    return <span className="text-xs font-medium text-slate-400 dark:text-slate-500">--</span>;
+  }
+  return (
+    <span
+      title={lines.join(' · ')}
+      className="flex flex-col gap-0.5 font-mono text-[11px] leading-tight text-slate-600 dark:text-slate-300"
+    >
+      {lines.map((line) => (
+        <span key={line} className="truncate">
+          {line}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 const STOCK_UNKNOWN = '—';
 const STOCK_UNKNOWN_TITLE =
   'Sem sincronizacao de estoque para este SKU — o valor e desconhecido, nao zero';
@@ -214,6 +262,11 @@ export default function CertProdutosPage() {
   const [sortDir, setSortDir] = useState<SortDir>(DEFAULT_SORT_DIR);
   /** SKU cujo tooltip de estoque do CD está aberto por clique/foco (item 5). */
   const [openStockSku, setOpenStockSku] = useState<string | null>(null);
+  const [grife, setGrife] = useState('');
+  const [grifes, setGrifes] = useState<Array<{ grife: string; count: number }>>([]);
+  const [semGrife, setSemGrife] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [lastSync, setLastSync] = useState<CertSyncRun | null>(null);
 
   const latestRequest = useRef(0);
 
@@ -226,6 +279,7 @@ export default function CertProdutosPage() {
         per_page: perPage,
         search: search || undefined,
         brand: brand || undefined,
+        grife: grife || undefined,
         cert_status: statusFilters.cert_status || undefined,
         site_status: statusFilters.site_status || undefined,
         license_status: statusFilters.license_status || undefined,
@@ -249,6 +303,7 @@ export default function CertProdutosPage() {
     perPage,
     search,
     brand,
+    grife,
     statusFilters.cert_status,
     statusFilters.site_status,
     statusFilters.license_status,
@@ -262,6 +317,46 @@ export default function CertProdutosPage() {
       latestRequest.current += 1;
     };
   }, [loadProducts]);
+
+  const loadLastSync = useCallback(async () => {
+    try {
+      const data = await fetchLastCertSync();
+      setLastSync(data.last_run);
+    } catch {
+      // A última sincronização é informativa: falhar em lê-la não pode
+      // esconder a lista de produtos.
+      setLastSync(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadLastSync();
+    fetchCertGrifes()
+      .then((data) => {
+        setGrifes(data.grifes);
+        setSemGrife(data.sem_grife);
+      })
+      .catch(() => {
+        setGrifes([]);
+        setSemGrife(0);
+      });
+  }, [loadLastSync]);
+
+  async function handleSyncSheets() {
+    setSyncing(true);
+    try {
+      const result = await syncCertSheets();
+      const synced = Number((result.sheets as { synced?: number } | undefined)?.synced ?? 0);
+      toast.success(`Planilha sincronizada: ${synced} produto(s).`);
+      await Promise.all([loadProducts(), loadLastSync()]);
+    } catch (err) {
+      // Mensagem do backend preservada: 409 (já há um sync rodando) e 403 (sem
+      // permissão) precisam chegar ao operador com o motivo real.
+      toast.error(getErrorMessage(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   function handleStatusFilterChange(field: FilterField, value: string) {
     setStatusFilters((prev) => {
@@ -290,6 +385,7 @@ export default function CertProdutosPage() {
   function clearFilters() {
     setStatusFilters(EMPTY_STATUS_FILTERS);
     setBrand('');
+    setGrife('');
     setSearch('');
     setSearchInput('');
     setStartDate('');
@@ -387,6 +483,7 @@ export default function CertProdutosPage() {
     statusFilters.site_status ||
     statusFilters.license_status ||
     brand ||
+    grife ||
     search ||
     startDate ||
     endDate;
@@ -533,6 +630,42 @@ export default function CertProdutosPage() {
               );
             })}
           </div>
+
+          {/* Grife / licença — vem do Linx (PRODUTOS.GRIFFE na Puket,
+              IMG_LICENCIAMENTO na Imaginarium). A cobertura é parcial, então o
+              rótulo diz quantos produtos ainda não têm o campo preenchido: sem
+              isso a lista filtrada pareceria "a marca não tem esses itens". */}
+          {grifes.length > 0 && (
+            <div className="flex w-full min-w-0 flex-col gap-1.5 sm:w-auto">
+              <label
+                htmlFor="cert-products-grife"
+                className="text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-slate-400"
+              >
+                Grife / licença
+              </label>
+              <select
+                id="cert-products-grife"
+                value={grife}
+                onChange={(e) => {
+                  setGrife(e.target.value);
+                  setPage(1);
+                }}
+                className="w-full min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none sm:w-56 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              >
+                <option value="">Todas as grifes</option>
+                {grifes.map((g) => (
+                  <option key={g.grife} value={g.grife}>
+                    {g.grife} ({g.count})
+                  </option>
+                ))}
+              </select>
+              {semGrife > 0 && (
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {semGrife} produto{semGrife !== 1 ? 's' : ''} sem grife preenchida no Linx
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Summary line */}
@@ -552,16 +685,48 @@ export default function CertProdutosPage() {
               </span>
             )}
           </p>
-          <button
-            type="button"
-            onClick={loadProducts}
-            disabled={loading}
-            className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all"
-          >
-            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-            Atualizar
-          </button>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
+            {/* "Atualizar" só relê o banco. Forçar a leitura da PLANILHA não
+                tinha botão: a única forma era rodar a validação inteira, que
+                consulta a VTEX de 674 produtos (~17 min). */}
+            <button
+              type="button"
+              onClick={handleSyncSheets}
+              disabled={syncing}
+              title="Lê a planilha do time fiscal e os atributos do Linx (não roda a validação da VTEX)"
+              className="flex min-h-9 items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-1.5 text-xs font-semibold text-emerald-700 transition-all hover:bg-emerald-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+            >
+              <DownloadCloud className={cn('h-3.5 w-3.5', syncing && 'animate-pulse')} />
+              {syncing ? 'Sincronizando…' : 'Sincronizar planilha agora'}
+            </button>
+            <button
+              type="button"
+              onClick={loadProducts}
+              disabled={loading}
+              className="flex min-h-9 items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-[0.98] transition-all"
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+              Atualizar
+            </button>
+          </div>
         </div>
+
+        {lastSync && (
+          <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+            Última sincronização da planilha: {formatDateTime(lastSync.started_at)}
+            {lastSync.actor
+              ? ` por ${lastSync.actor}`
+              : ` (${SYNC_TRIGGER_LABEL[lastSync.trigger]})`}
+            {lastSync.error && (
+              <span className="ml-2 font-medium text-danger-600 dark:text-danger-300">
+                falhou — {lastSync.error}
+              </span>
+            )}
+            {!lastSync.finished_at && !lastSync.error && (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">em andamento…</span>
+            )}
+          </p>
+        )}
       </div>
 
       {/* ── Table ── */}
@@ -599,6 +764,9 @@ export default function CertProdutosPage() {
                   <SortHeader field="sku" label="SKU" />
                   <SortHeader field="name" label="Nome" />
                   <SortHeader field="brand" label="Marca" />
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Nº Certificado
+                  </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Status Certificacao
                   </th>
@@ -666,6 +834,13 @@ export default function CertProdutosPage() {
                         <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 rounded-lg">
                           {p.brand}
                         </span>
+                      </td>
+                      {/* Nº do certificado (coluna P das abas). Alguns produtos
+                          trazem DOIS números separados por quebra de linha
+                          (recertificação) — cada um vira uma linha, e o título
+                          mostra o valor inteiro quando a coluna trunca. */}
+                      <td className="max-w-[190px] px-5 py-3.5">
+                        <CertificateNumberCell value={p.numero_certificado} />
                       </td>
                       <td className="px-5 py-3.5">
                         {p.cert_status ? (
