@@ -25,6 +25,19 @@ export const reclassifyDocumentSchema = z.object({
   documentType: uploadDocumentSchema.shape.documentType,
 });
 
+/**
+ * Exclusao de documento (decisao D8, reuniao 11/09).
+ *
+ * O motivo e OBRIGATORIO e acompanha a exclusao no audit, no historico do
+ * processo e no tombstone que impede a reimportacao. E a salvaguarda que
+ * permitiu devolver a acao ao analista sem perder a trilha: o minimo de 5
+ * caracteres existe para nao aceitar "ok"/"." como justificativa de apagar um
+ * anexo em definitivo.
+ */
+export const deleteDocumentSchema = z.object({
+  reason: z.string().trim().min(5, 'Informe o motivo da exclusao (ao menos 5 caracteres)').max(500),
+});
+
 export const acceptComparisonSchema = z.object({
   scope: z.enum(['aggregate', 'item']),
   rowKey: z.string().trim().min(1).max(160),
@@ -53,6 +66,7 @@ export const removeComparisonFieldSchema = z.object({
 });
 
 export type UploadDocumentInput = z.infer<typeof uploadDocumentSchema>;
+export type DeleteDocumentInput = z.infer<typeof deleteDocumentSchema>;
 export type ReclassifyDocumentInput = z.infer<typeof reclassifyDocumentSchema>;
 export type AcceptComparisonInput = z.infer<typeof acceptComparisonSchema>;
 export type EditComparisonFieldInput = z.infer<typeof editComparisonFieldSchema>;

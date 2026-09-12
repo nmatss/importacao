@@ -59,67 +59,35 @@ export const VALIDATION_CHECK_NAMES = [
   { value: 'certificate-completeness', description: 'Completude do Certificado' },
 ] as const;
 
-export const CHECKLIST_STEPS = [
-  {
-    key: 'documentsReceivedAt',
-    label: 'Documentos Recebidos',
-    description: 'Invoice, Packing List e BL recebidos',
-  },
-  {
-    key: 'preInspectionAt',
-    label: 'Pre-conferencia',
-    description: 'Verificacao cruzada dos documentos',
-  },
-  {
-    key: 'savedToFolderAt',
-    label: 'Salvar na Pasta',
-    description: 'Documentos salvos na pasta do processo',
-  },
-  {
-    key: 'ncmVerifiedAt',
-    label: 'Conferir NCMs e Descricoes',
-    description: 'NCMs, descricoes e atributos conferidos',
-  },
-  {
-    key: 'ncmBlCheckedAt',
-    label: 'Conferir NCMs no BL',
-    description: 'Todas as NCMs constam no BL',
-  },
-  {
-    key: 'freightBlCheckedAt',
-    label: 'Conferir Frete no BL',
-    description: 'Valor do frete confere com BL',
-  },
-  {
-    key: 'espelhoBuiltAt',
-    label: 'Montar Espelho',
-    description: 'Consolidado e espelho do processo montados',
-  },
-  {
-    key: 'invoiceSentFeniciaAt',
-    label: 'Enviar Invoice Fenicia',
-    description: 'Invoice enviada para Fenicia',
-  },
-  { key: 'espelhoGeneratedAt', label: 'Espelho Gerado', description: 'Espelho gerado no sistema' },
-  {
-    key: 'signaturesCollectedAt',
-    label: 'Coletar Assinaturas',
-    description: 'Assinaturas coletadas nos documentos',
-  },
-  {
-    key: 'signedDocsSentAt',
-    label: 'Enviar Docs Assinados',
-    description: 'Copia dos docs assinados enviada por email',
-  },
-  { key: 'sentToFeniciaAt', label: 'Atualizar Follow-up', description: 'Follow-up atualizado' },
-  {
-    key: 'diDraftAt',
-    label: 'Rascunho da DI',
-    description: 'Rascunho da DI verificado/solicitado',
-  },
-  { key: 'liSubmittedAt', label: 'LI Solicitada', description: 'Licenca de Importacao solicitada' },
-  { key: 'liApprovedAt', label: 'LI Aprovada', description: 'Licenca de Importacao deferida' },
-] as const;
+/**
+ * O catalogo do checklist NAO mora mais aqui (decisao D7, reuniao 11/09).
+ *
+ * A lista de passos, os rotulos, quais estao ativos e as etapas especificas do
+ * processo vem prontos do servidor em `GET /api/processes/:id/checklist`
+ * (`apps/api/src/modules/processes/checklist-catalog.ts`). Manter uma copia na
+ * web era a causa de "Atualizar Follow-up" na tela virar "Enviado para
+ * Fenicia" no historico. O teste de guarda em
+ * `features/processes/components/DocumentChecklistTab.test.tsx` falha se a
+ * lista voltar para este arquivo.
+ */
+
+/**
+ * Rotulo em portugues do `correctionStatus` do processo.
+ *
+ * A barra fixa mostrava a chave tecnica crua — o print da reuniao tem um
+ * `pending_correction` em ingles ao lado do codigo do processo. Chave
+ * desconhecida cai num rotulo generico, nunca no valor do banco.
+ */
+const CORRECTION_STATUS_LABELS: Record<string, string> = {
+  pending_correction: 'Aguardando correção',
+  pending: 'Aguardando correção',
+  corrected: 'Corrigido',
+  resolved: 'Corrigido',
+};
+
+export function correctionStatusLabel(status: string): string {
+  return CORRECTION_STATUS_LABELS[status.trim().toLowerCase()] ?? 'Em correção';
+}
 
 export const DRAFT_BL_CHECKS = [
   {

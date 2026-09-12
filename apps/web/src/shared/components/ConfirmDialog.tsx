@@ -1,4 +1,4 @@
-import { useId, useRef } from 'react';
+import { useId, useRef, type ReactNode } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { ModalPortal } from './ModalPortal';
 
@@ -9,6 +9,14 @@ interface ConfirmDialogProps {
   confirmLabel?: string;
   cancelLabel?: string;
   variant?: 'danger' | 'primary';
+  /**
+   * Campo extra exibido abaixo da mensagem — hoje o motivo obrigatorio da
+   * exclusao de documento (D8). Sem ele cada tela que precisa coletar uma
+   * justificativa reescreveria o modal (foco, Escape, overlay) do zero.
+   */
+  children?: ReactNode;
+  /** Trava o botao de confirmar enquanto o campo acima nao esta valido. */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +28,8 @@ export function ConfirmDialog({
   confirmLabel = 'Confirmar',
   cancelLabel = 'Cancelar',
   variant = 'danger',
+  children,
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -64,6 +74,7 @@ export function ConfirmDialog({
               >
                 {message}
               </p>
+              {children && <div className="mt-3">{children}</div>}
             </div>
           </div>
           <div className="mt-6 flex justify-end gap-3">
@@ -78,7 +89,8 @@ export function ConfirmDialog({
             <button
               type="button"
               onClick={onConfirm}
-              className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus:outline-none transition-colors ${confirmColors}`}
+              disabled={confirmDisabled}
+              className={`rounded-lg px-4 py-2 text-sm font-medium text-white focus-visible:ring-2 focus-visible:ring-offset-2 focus:outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${confirmColors}`}
             >
               {confirmLabel}
             </button>

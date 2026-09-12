@@ -7,6 +7,7 @@ import { getDocumentSourcePolicy, isManualDocumentUploadEnabled } from './source
 import { sendError, sendSuccess } from '../../shared/utils/response.js';
 import { validate } from '../../shared/middleware/validate.js';
 import { paramsNumericos } from '../../shared/schemas/params.js';
+import { deleteDocumentSchema } from './schema.js';
 
 const router = Router();
 
@@ -110,10 +111,17 @@ router.post(
   documentController.reconcileProcess,
 );
 router.post('/reconcile-all', adminMiddleware, documentController.reconcileAll);
+// Excluir documento voltou a ser acao de ANALISTA (D8, reuniao 11/09: rascunho
+// da DUIMP anexado no processo errado e so o admin conseguia remover — "voces
+// estao sem acesso, eu vou liberar"). As salvaguardas que substituem o
+// `adminMiddleware` do hardening de junho: motivo obrigatorio (schema abaixo),
+// audit com a origem do arquivo, evento no historico do processo, tombstone
+// contra reimportacao pelo Drive e o bloqueio 423 em processo travado, que
+// continua valendo dentro do service.
 router.delete(
   '/:id',
-  adminMiddleware,
   validate(paramsNumericos('id'), 'params'),
+  validate(deleteDocumentSchema),
   documentController.delete,
 );
 

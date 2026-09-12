@@ -66,7 +66,11 @@ export const api = {
   patch<T>(url: string, data?: unknown): Promise<T> {
     return request<T>(url, { method: 'PATCH', body: data ? JSON.stringify(data) : undefined });
   },
-  delete<T>(url: string): Promise<T> {
-    return request<T>(url, { method: 'DELETE' });
+  /**
+   * DELETE aceita corpo: a exclusao de documento exige `reason` (D8). `fetch`
+   * envia o corpo e o Express le com o mesmo parser JSON das demais rotas.
+   */
+  delete<T>(url: string, data?: unknown): Promise<T> {
+    return request<T>(url, { method: 'DELETE', body: data ? JSON.stringify(data) : undefined });
   },
 };

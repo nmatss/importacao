@@ -206,7 +206,9 @@ export const documentController = {
   async delete(req: Request, res: Response) {
     try {
       const userId = req.user?.id ?? null;
-      await documentService.delete(Number(req.params.id), userId);
+      // `reason` chega validado pelo `deleteDocumentSchema` na rota (D8).
+      const { reason } = req.body as { reason: string };
+      await documentService.delete(Number(req.params.id), userId, reason);
       sendSuccess(res, { message: 'Documento removido' });
     } catch (error: any) {
       const status = error.statusCode || 400;

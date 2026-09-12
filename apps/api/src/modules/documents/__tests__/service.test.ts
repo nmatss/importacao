@@ -83,6 +83,16 @@ vi.mock('../reconcile.js', () => ({
   reconcileProcessConfidence: vi.fn().mockResolvedValue([]),
 }));
 
+// `delete()` recalcula o estado derivado do processo depois do commit (D8):
+// revalida com o que sobrou, ou limpa os resultados quando nao sobra documento
+// comparavel. O modulo real e carregado por `import()` dinamico.
+vi.mock('../../validation/service.js', () => ({
+  validationService: {
+    runAllChecks: vi.fn().mockResolvedValue([]),
+    clearResults: vi.fn().mockResolvedValue({ removed: 0 }),
+  },
+}));
+
 vi.mock('xlsx', () => ({
   read: vi.fn().mockReturnValue({
     SheetNames: ['Sheet1'],
@@ -97,6 +107,7 @@ const { documentService } = await import('../service.js');
 const { alertService } = await import('../../alerts/service.js');
 const { googleDriveService } = await import('../../integrations/google-drive.service.js');
 const { auditService } = await import('../../audit/service.js');
+const { validationService } = await import('../../validation/service.js');
 const { ocrScannedPdf, rasterizePdfPages } = await import('../ocr.js');
 const { aiService } = await import('../../ai/service.js');
 
@@ -370,34 +381,65 @@ describe('documentService', () => {
   });
 
   describe('delete()', () => {
-    it('should remove file, DB record and rebuild process AI projection', async () => {
-      const mockDoc = {
-        id: 1,
-        processId: 1,
-        type: 'invoice',
-        storagePath: '/tmp/test.pdf',
-        originalFilename: 'test.pdf',
-      };
+    const deletedDoc = {
+      id: 1,
+      processId: 1,
+      type: 'invoice',
+      storagePath: '/tmp/test.pdf',
+      originalFilename: 'test.pdf',
+      ingestionSource: 'drive',
+      driveFileId: 'drive-abc',
+      contentSha256: 'a'.repeat(64),
+      fileSize: 1234,
+    };
 
-      // select doc
-      queryQueue.push(createResolvedChain([mockDoc]));
+    /** Documento que SOBROU no processo e volta a alimentar a projecao. */
+    const remaining = (id: number, type: string, data: Record<string, unknown>) => ({
+      id,
+      type,
+      isProcessed: true,
+      aiParsedData: data,
+      confidenceScore: '0.9',
+    });
+
+    /**
+     * Enfileira as consultas de `delete()` na ordem real: documento, trava do
+     * processo e, ja fora da transacao, o evento de historico. Dentro da
+     * transacao: tombstone, DELETE e a reconstrucao da projecao — que le os
+     * documentos RESTANTES (e nao a projecao antiga) para decidir o que ainda
+     * da para comparar.
+     */
+    function queueDelete(
+      options: {
+        remainingDocs?: Record<string, unknown>[];
+        processAiData?: Record<string, unknown>;
+      } = {},
+    ) {
+      queryQueue.push(createResolvedChain([deletedDoc]));
       queryQueue.push(createResolvedChain([])); // assert process not locked
+      const eventChain = createResolvedChain(undefined); // recordProcessEvent
+      queryQueue.push(eventChain);
+
+      const tombstoneChain = createResolvedChain(undefined);
+      txQueue.push(tombstoneChain); // tombstone
       txQueue.push(createResolvedChain(undefined)); // delete doc
-      txQueue.push(createResolvedChain([])); // remaining docs for rebuild
-      txQueue.push(
-        createResolvedChain([
-          {
-            aiExtractedData: {
-              invoice: { invoiceNumber: 'stale' },
-              customKey: { keep: true },
-            },
-          },
-        ]),
-      );
+      txQueue.push(createResolvedChain(options.remainingDocs ?? [])); // rebuild: docs restantes
+      txQueue.push(createResolvedChain([{ aiExtractedData: options.processAiData ?? {} }]));
       const processUpdateChain = createResolvedChain(undefined);
       txQueue.push(processUpdateChain);
 
-      const result = await documentService.delete(1, 2);
+      return { eventChain, tombstoneChain, processUpdateChain };
+    }
+
+    it('should remove file, DB record and rebuild process AI projection', async () => {
+      const { processUpdateChain } = queueDelete({
+        processAiData: {
+          invoice: { invoiceNumber: 'stale' },
+          customKey: { keep: true },
+        },
+      });
+
+      const result = await documentService.delete(1, 2, 'Anexado no processo errado');
 
       expect(result).toEqual({ id: 1 });
       expect(mockFsUnlink).toHaveBeenCalledWith('/tmp/test.pdf');
@@ -416,8 +458,89 @@ describe('documentService', () => {
         'delete',
         'document',
         1,
-        expect.objectContaining({ processId: 1 }),
+        expect.objectContaining({ processId: 1, reason: 'Anexado no processo errado' }),
         null,
+      );
+    });
+
+    // D8: a analista passou a excluir, entao a exclusao precisa deixar rastro
+    // suficiente para o admin auditar depois — e impedir que o arquivo volte.
+    it('grava tombstone com a origem do arquivo para o sweep do Drive nao reimportar', async () => {
+      const { tombstoneChain } = queueDelete({});
+
+      await documentService.delete(1, 7, 'Rascunho da DUIMP no processo errado');
+
+      expect(tombstoneChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          documentId: 1,
+          driveFileId: 'drive-abc',
+          contentSha256: 'a'.repeat(64),
+          originalFilename: 'test.pdf',
+          deletedBy: 7,
+          reason: 'Rascunho da DUIMP no processo errado',
+        }),
+      );
+      // O tombstone tem de existir ANTES do DELETE: os dois estao na mesma
+      // transacao, entao ou os dois valem ou nenhum vale.
+      expect(mockTx.insert.mock.invocationCallOrder[0]).toBeLessThan(
+        mockTx.delete.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('registra a exclusao no historico do processo, com o motivo', async () => {
+      const { eventChain } = queueDelete({});
+
+      await documentService.delete(1, 7, 'Documento duplicado');
+
+      expect(eventChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          processId: 1,
+          eventType: 'document_deleted',
+          description: 'Documento duplicado',
+        }),
+      );
+    });
+
+    it('apaga os resultados de validacao quando nao sobra documento comparavel', async () => {
+      // Sem INV/PL/BL restantes, os resultados descrevem anexos que nao existem
+      // mais: o comparativo acusava divergencia de documento apagado.
+      queueDelete({ remainingDocs: [] });
+
+      await documentService.delete(1, 7, 'Anexo errado');
+
+      expect(validationService.clearResults).toHaveBeenCalledWith(1);
+      expect(validationService.runAllChecks).not.toHaveBeenCalled();
+    });
+
+    it('revalida em modo final quando INV, PL e BL continuam no processo', async () => {
+      queueDelete({
+        remainingDocs: [
+          remaining(2, 'invoice', { invoiceNumber: 'INV-1' }),
+          remaining(3, 'packing_list', { totalBoxes: 10 }),
+          remaining(4, 'ohbl', { blNumber: 'BL-1' }),
+        ],
+      });
+
+      await documentService.delete(1, 7, 'Copia duplicada do BL');
+
+      expect(validationService.runAllChecks).toHaveBeenCalledWith(
+        1,
+        null,
+        expect.objectContaining({ mode: 'final' }),
+      );
+      expect(validationService.clearResults).not.toHaveBeenCalled();
+    });
+
+    it('revalida em modo parcial quando so parte dos documentos sobrou', async () => {
+      queueDelete({ remainingDocs: [remaining(2, 'invoice', { invoiceNumber: 'INV-1' })] });
+
+      await documentService.delete(1, 7, 'Packing list errado');
+
+      expect(validationService.runAllChecks).toHaveBeenCalledWith(
+        1,
+        null,
+        expect.objectContaining({ mode: 'partial' }),
       );
     });
   });

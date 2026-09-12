@@ -15,6 +15,7 @@ import {
   processFilterSchema,
   createCustomStageSchema,
   updateCustomStageSchema,
+  hideChecklistStepSchema,
   createOperationalRecordSchema,
   updateOperationalRecordSchema,
   updateDraftBlChecklistSchema,
@@ -38,6 +39,20 @@ router.patch(
   validate(paramsNumericos('id'), 'params'),
   validate(updateDraftBlChecklistSchema),
   processController.updateDraftBlChecklist,
+);
+// Checklist: catalogo padrao + etapas especificas do processo, intercaladas e
+// com o progresso ja calculado (D7). A aba "Etapas" saiu da tela; adicionar,
+// reordenar, excluir e ocultar acontece tudo dentro do Checklist.
+router.get(
+  '/:id/checklist',
+  validate(paramsNumericos('id'), 'params'),
+  processController.getChecklist,
+);
+router.patch(
+  '/:id/checklist/steps/:stepKey',
+  validate(paramsNumericos('id'), 'params'),
+  validate(hideChecklistStepSchema),
+  processController.setChecklistStepHidden,
 );
 router.get(
   '/:id/custom-stages',

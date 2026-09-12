@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-11 — Tela do processo: cabecalho, checklist e exclusao de documento
+
+- Barra fixa do processo compactada em UMA linha no desktop: codigo, marca, status,
+  flags, "Criado/ETD/ETA", contagem de documentos e a observacao urgente editavel
+  inline; acoes viraram icones preservando os nomes acessiveis. O status de correcao
+  aparece em portugues ("Aguardando correção"), nao mais como `pending_correction`.
+- Ciclo de Transporte passou a vir logo apos o cabecalho, antes do stepper documental.
+- Checklist com fonte unica no servidor (`GET /api/processes/:id/checklist`): catalogo
+  padrao e etapas especificas na mesma lista, na posicao escolhida (linha 1-based),
+  com progresso calculado. A aba "Etapas" foi removida e `?tab=etapas` redireciona
+  para o Checklist. "Coletar Assinaturas" e "Enviar Docs Assinados" saem da rotina
+  sem apagar coluna nem timestamp, e `sentToFeniciaAt` passa a se chamar "Atualizar
+  Follow-up" tambem no historico (verdade: `scripts/import-follow-up.js`).
+- Etapa padrao pode ser ocultada por processo (`process_checklist_hidden_steps`) e
+  etapa especifica pode ser excluida, ambas com audit e evento no historico.
+- Exclusao de documento liberada para analista, com motivo obrigatorio, audit com a
+  origem do arquivo, evento `document_deleted`, tombstone contra reimportacao pelo
+  Drive e revalidacao do processo (ou limpeza dos resultados quando nao sobra
+  documento comparavel). O bloqueio 423 em processo travado continua valendo.
+
 ## 2026-09-06 — Revisao de certificacao
 
 - Corrigidas respostas fora de ordem na lista de produtos e dupla decodificacao de parametros nos detalhes.
