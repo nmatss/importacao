@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-12 — Release R5 em produção
+
+- Publicada e implantada a revisão `4eaffac`, com CI/CodeQL, scans das três imagens e SBOMs aprovados.
+- Backup/snapshot, migrations API/cert e health/smoke concluídos; SYDLE preservado, sem carga Linx ou escrita nas fontes. Homologação global permanece parcial; evidências no STATUS da retomada.
+
 ## 2026-09-12 — Correção dos bloqueios de CI da release
 
 - Atualiza pacotes Debian herdados no runtime de certificação durante o build, corrigindo o bloqueio Trivy por versões antigas de gzip, PCRE2, SQLite e Perl.

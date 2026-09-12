@@ -1,5 +1,9 @@
 # Session Memory
 
+## 12/09/2026 — Release R5 implantada
+
+Estado atual substitui os checkpoints anteriores de deploy pendente: `4eaffac` publicado e implantado às 17:21:50 BRT. CI 34716201043 e CodeQL 34716201050 passaram, incluindo três scans Trivy/SBOMs. Corrigidos dependências Node, expectativa E2E de upload e pacotes Debian no runtime cert. Backup/snapshot, migrations API/cert, readiness e smoke de integrações aprovados. SYDLE ativo; Drive sem escrita, follow-up dry_run, Linx sem escrita, ingestão e-mail desligada. Notas do cronograma atualizadas e relidas. Projeto ainda não 100% homologado: pendências comerciais/documentais e carga conciliada preservadas. IMAP inativo falha autenticação; HSTS ausente no edge público (BAIXO), com TLS validado por CA interna e redirect HTTP→HTTPS. Detalhes, comandos e evidências: seção final R5 em `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`. Dotcontext atualizado; ai-memory sem escrita por resolução inconsistente de projeto.
+
 ## 12/09/2026 — Retomada R5 em validação de release
 
 Dependências corrigidas e auditoria zero. E2E antigo foi alinhado à flag própria de upload manual, sem alterar comportamento da aplicação. Gates locais passaram: API 2.045/5 ignorados, web 379, E2E 74, cert 888, typecheck/lint/build/format, Ruff, 8 testes deploy e 4 geração de ambiente. Próximo gate: novo CI completo e deploy já autorizado. Produção ainda 955d6a8 na consulta inicial; Linx sem carga. Estado e comandos na seção R5 de `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`. ai-memory apresentou resolução cruzada na leitura; não gravar até confirmar escopo. Dotcontext da sessão existente retomado.

@@ -1,5 +1,13 @@
 # Known Issues
 
+## 2026-09-12 — Estado após deploy R5
+
+- Bloqueios técnicos de publicação resolvidos em `4eaffac`: auditoria Node zero, E2E corrigido e Trivy das três imagens aprovado. Release implantada; checkpoints anteriores de deploy pendente são históricos.
+- Permanecem os aceites de Importação/Certificação/Linx, vínculo vigente/fornecedor/N, aplicabilidade de licenciamento, Odoo oficial, rascunhos DUIMP e baseline/carga conciliada. Linx continua sem escrita.
+- IMAP ainda recusa autenticação; ingestão de e-mail desligada e fonte Drive operacional. Falha preexistente, sem impacto no fluxo ativo verificado.
+- **BAIXO — HSTS ausente no edge público:** HTTPS e hostname validados com CA interna; HTTP redireciona 301 para HTTPS, CSP e nosniff presentes. Cabeçalho Strict-Transport-Security não observado na raiz pública. Política do edge/certificados não foi modificada nesta correção de release.
+- Evidência e limites de homologação: [retomada R5](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 ## Release revisada em12/09 — pendências externas confirmadas
 
 - Dia limite resolvido pelo solicitante: inclusivo emAmerica/Sao_Paulo.

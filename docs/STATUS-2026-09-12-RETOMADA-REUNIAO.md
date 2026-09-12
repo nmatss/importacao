@@ -546,3 +546,31 @@ Versões verificadas na imagem: gzip `1.13-1+deb13u1`, libpcre2-8-0 `10.46-1~deb
 O preflight HTTPS padrão recusou a CA interna no WSL e no servidor. O certificado raiz público foi obtido do contêiner `internal-ca` por SSH autenticado; frontend e `/api/health` retornaram 200 usando `curl --cacert`, sem desativar TLS ou alterar trust stores. O endpoint público `/api/health/live` retornou 404 e não é usado como evidência de readiness; a revisão será conferida pela rota direta `/health/live` da API.
 
 Trivy local 0.74.0, com base atualizada em cache isolado, passou: `trivy --cache-dir /tmp/importacao-r5-trivy-cache image --no-progress --secret-config trivy-secret.yaml --ignorefile .trivyignore --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --format json --output /tmp/importacao-r5-cert-trivy.json importacao-cert-api:r5-security`. Zero achados HIGH/CRITICAL corrigíveis e zero secrets reportados; nenhuma exceção adicionada. Build, smoke dos drivers, Prettier dos documentos e `git diff --check` passaram. Gates de aplicação da revisão anterior continuam válidos para os mesmos arquivos; novo CI completo verificará a imagem corrigida antes do deploy.
+
+### R5 — entrega técnica implantada e verificada
+
+**Release `4eafface1b68e7cbbaf2b5802f35592d187b57e5` em produção desde 12/09/2026, 17:21:50 BRT.** [CI 34716201043](https://github.com/nmatss/importacao/actions/runs/34716201043) e [CodeQL 34716201050](https://github.com/nmatss/importacao/actions/runs/34716201050) concluídos com sucesso para essa revisão. CI aprovou os testes, auditorias, builds, três scans Trivy e três SBOMs. Hooks reais dos dois commits passaram; nenhuma exceção de segurança adicionada.
+
+Execução em master limpa e sincronizada no worktree `/tmp/importacao-release-20260912`:
+
+```bash
+env -u GOOGLE_CHAT_WEBHOOK_URL SKIP_BACKUP=0 ALLOW_SYDLE_SYNC_DEPLOY=1 \
+  DEPLOY_USER=nicolas DEPLOY_DIR=/home/nicolas/importacao \
+  COMPOSE_FILE=docker-compose.prod.yml \
+  CURL_CA_BUNDLE=/tmp/importacao-internal-ca-public.crt \
+  PUBLIC_WEB_HEALTH_ENDPOINT=https://importacao.grupounico.com/ \
+  bash scripts/deploy.sh 192.168.168.124
+```
+
+O prompt do script foi confirmado dentro da autorização já concedida. Exit 0. Backup `/home/nicolas/backups/importacao/importacao_2026-09-12_201810.pgdump`, 2,7 MB, verificado por `pg_restore --list`; isso não substitui ensaio completo de restauração. Volumes arquivados pelo script; snapshot de código anterior retido em `/home/nicolas/importacao.rollback`. Imagens construídas antes das migrations; migrations API e CLI cert aplicadas/verificadas. Rollback de código não desfaz DDL. Logs anteriores arquivados, observabilidade reiniciada e readiness API/cert/web/proxy/HTTPS aprovada. Log local: `/tmp/importacao-r5-deploy.log` e `deploy.log` no worktree de release.
+
+Pós-deploy:
+
+- `REVISION` remoto e `/health/live` direto da API confirmam `4eaffac`; API/web/cert/PostgreSQL/Redis saudáveis. CLI cert `python -m app.db.release_migrations --check` passou.
+- `docker exec importacao-api node scripts/smoke-integrations.mjs --network`: resumo operacional aprovado; Gmail perfil, SMTP transporte, Drive raiz e follow-up acessíveis, 1.415 referências. Nenhuma mensagem enviada pelo smoke. IMAP recusou autenticação, falha já registrada, fora do fluxo ativo de ingestão.
+- Flags conferidas nos contêineres: DOCUMENT_SOURCE=drive, DRIVE_WRITE_MODE=off, FOLLOW_UP_SYNC_MODE=dry_run, SYDLE_SYNC_ENABLED=true, EMAIL_INGESTION_ENABLED=false, LINX_WRITE_ENABLED=false. Nenhuma carga Linx ou escrita nas fontes foi executada nesta retomada. Provider observado em `/health/live`: vertex; nenhum novo piloto de inferência foi executado nesta sessão.
+- HTTPS com CA interna: raiz, theme-init e quatro assets JS/CSS principais retornaram 200; proxy `/api/health` 200; `/api/auth/me`, `/api/processes` e `/cert-api/products` sem autenticação retornaram 401. HTTP redireciona 301 para HTTPS. CSP e X-Content-Type-Options presentes; HSTS ausente no endpoint público, registrado como pendência BAIXO de configuração do edge. Não foi alterada infraestrutura de certificados/trust store.
+- Smoke HTTP inicial tinha uma premissa incorreta de que todo stylesheet era local; foi ajustado para distinguir Google Fonts. Esse erro era do procedimento de verificação, sem mudança na aplicação. Google Fonts e navegador/fluxos autenticados reais não foram revalidados nesta rodada; a evidência de UI anterior continua limitada às fixtures então testadas.
+- Cronograma atualizado somente nas **notas** de `Cronograma!E37` e `'Escopo e aceite'!F32`, com releitura e igualdade exata do texto gravado; valores, validação e formatação preservados. `Bloqueado` permanece correto para liberação global. Não houve envio ao grupo.
+
+R5-A/B/C/D concluídas no escopo técnico de correção, CI e deploy. **Entrega global permanece parcial**: aceites das áreas, vínculo vigente/fornecedor/N, aplicabilidade do licenciamento, Odoo oficial, rascunhos DUIMP e baseline/carga conciliada continuam pendentes. Não declarar o projeto 100% homologado. Próximo passo é obter essas evidências e homologar os fluxos autenticados antes de qualquer carga Linx. Checkpoint e artefato sanitizado atualizados no dotcontext e em `output/retomada-2026-09-12/revisao5/`; ai-memory não recebeu escrita devido à resolução inconsistente de projeto.
