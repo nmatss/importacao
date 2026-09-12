@@ -270,6 +270,9 @@ describe('processService', () => {
         ]),
       );
       queryQueue.push(createResolvedChain([{ processId: 1 }])); // follow-up
+      // isManualLogisticOverride: sem evento de status, o estagio atual e
+      // automatico (e portanto corrigivel).
+      queryQueue.push(createResolvedChain([]));
       const updateChain = createResolvedChain([]);
       queryQueue.push(updateChain);
 
