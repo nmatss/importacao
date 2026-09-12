@@ -1404,7 +1404,9 @@ export const emailProcessor = {
             const { googleDriveService } = await import('../integrations/google-drive.service.js');
             const configured = await googleDriveService.isRootConfigured();
             if (configured) {
-              sistemaFileId = await googleDriveService.uploadToSistemaInbox(filePath, att.filename);
+              sistemaFileId =
+                (await googleDriveService.uploadToSistemaInbox(filePath, att.filename)) ??
+                undefined;
             }
           } catch (driveErr) {
             logger.warn(

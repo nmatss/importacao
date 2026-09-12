@@ -232,11 +232,24 @@ leitura das tabelas auxiliares e leitura/escrita estritamente necessária em
   inclusive PDF, marcação como lido e envio pela API; isso isola o bloqueio
   corrente em credencial/provider/operação, não no contrato básico do código.
 
+- **2026-09-11:** o acesso de LEITURA foi liberado e a árvore real foi lida. A
+  estrutura `<ano>/<Marca>/Importado/Processo Nº <código>` registrada acima NÃO é
+  a da pasta que a operação usa: a raiz é `PROCESSOS`, as marcas são numeradas
+  (`02. IMAGINARIUM`, `03. PUKET`), há nível de ano e, às vezes, de coleção ou
+  `FAT <mês>`, e existe uma pasta de entrada na raiz,
+  `04. PENDENTES DE CORREÇÃO`. Os espelhos ficam em `01. ESPELHOS`, 316 como Sheets
+  nativos. O código foi reescrito para esse layout (índice por varredura,
+  prioridade por tipo, export de Sheets, dedupe por conteúdo, tombstone e
+  `DRIVE_WRITE_MODE=off`); ver
+  `docs/operations/document-intake-contract-2026-09-11.md`.
+
 Status: **PARCIALMENTE RESOLVIDO / ALTO.** Follow Up está configurado e
-acessível. Para concluir o rollout Drive-only, adicionar a conta de serviço como
-leitora do Shared Drive/pasta operacional, cadastrar a raiz anual no SOPS e
-exigir `health/integrations` + smoke verdes. IMAP segue relevante enquanto o
-modo temporário `email` estiver ativo.
+acessível, e a leitura da pasta PROCESSOS foi liberada em 11/09. Para concluir o
+rollout Drive-only faltam, nesta ordem: deploy do código novo com
+`DOCUMENT_SOURCE=email`, backfill autorizado de `content_sha256` nos documentos
+já existentes, cadastro da raiz (e opcionalmente das áreas) no SOPS com
+`DRIVE_WRITE_MODE=off`, `health/integrations` sem aviso de Drive e smoke de
+leitura. IMAP segue relevante enquanto o modo temporário `email` estiver ativo.
 
 ## ALTO - Integrações Auxiliares Parcialmente Operacionais
 

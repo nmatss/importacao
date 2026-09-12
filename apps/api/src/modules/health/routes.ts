@@ -15,6 +15,8 @@ import {
   isUsableWebhookUrl,
   resolveGoogleChatWebhook,
 } from '../alerts/delivery.service.js';
+import { getDriveSweepStatus, minutesSinceLastSweep } from '../documents/drive-sweep-status.js';
+import { getDocumentSourcePolicy } from '../documents/source-policy.js';
 
 const router = Router();
 
@@ -134,6 +136,15 @@ router.get(
       pendentes24h: 0,
     }));
 
+    // As 4 areas de PROCESSOS (01. ESPELHOS ... 04. PENDENTES DE CORREÇÃO). O
+    // gate de 28/08 so conferia a raiz: com a estrutura de 11/09, uma raiz
+    // acessivel e uma area faltando ainda entrega zero documento, em silencio.
+    const areasDrive = driveRootAccessible
+      ? await googleDriveService.resolveDriveAreas().catch(() => null)
+      : null;
+    const sweep = getDriveSweepStatus();
+    const policy = getDocumentSourcePolicy();
+
     const integracoes = {
       googleDrive: {
         credenciais: configured(process.env.GOOGLE_DRIVE_CLIENT_EMAIL),
@@ -142,6 +153,23 @@ router.get(
         pastaRaizConfigurada: driveRootConfigured,
         pastaRaizAcessivel: driveRootAccessible,
         pastaPreCons: configured(process.env.GOOGLE_DRIVE_PRE_CONS_FOLDER_ID),
+        escrita: process.env.DRIVE_WRITE_MODE?.trim() || 'padrao (off com o Drive como fonte)',
+        areas: {
+          pendentes: Boolean(areasDrive?.pendentes),
+          espelhos: Boolean(areasDrive?.espelhos),
+          imaginarium: Boolean(areasDrive?.imaginarium),
+          puket: Boolean(areasDrive?.puket),
+        },
+        ultimaVarredura: sweep
+          ? {
+              iniciadaEm: sweep.startedAt,
+              terminadaEm: sweep.finishedAt,
+              inativaPorque: sweep.inactiveReason ?? null,
+              totais: sweep.totals,
+              pastasDuplicadas: sweep.duplicatedFolders.length,
+              pastasSemProcesso: sweep.orphanFolders.length,
+            }
+          : null,
       },
       followUpSheet: {
         // Campo legado preservado: agora representa disponibilidade real.
@@ -153,6 +181,7 @@ router.get(
       documentos: {
         fonte: process.env.DOCUMENT_SOURCE || 'drive',
         ingestaoEmail: process.env.EMAIL_INGESTION_ENABLED === 'true',
+        uploadManual: policy.manualUploadEnabled,
       },
       alertas: {
         // Campo legado preservado: agora e o webhook REALMENTE resolvido, e
@@ -189,6 +218,23 @@ router.get(
     }
     if (integracoes.documentos.fonte !== 'email' && !integracoes.googleDrive.pastaRaizAcessivel) {
       avisos.push('DOCUMENT_SOURCE inclui drive mas a pasta raiz nao esta configurada');
+    } else if (policy.driveIngestionEnabled) {
+      const faltando = (Object.entries(integracoes.googleDrive.areas) as Array<[string, boolean]>)
+        .filter(([, resolvida]) => !resolvida)
+        .map(([area]) => area);
+      if (faltando.length > 0) {
+        avisos.push(
+          `Areas da pasta PROCESSOS nao resolvidas: ${faltando.join(', ')} — esses documentos nao serao lidos`,
+        );
+      }
+      const minutos = minutesSinceLastSweep();
+      if (sweep?.inactiveReason) {
+        avisos.push(`Ultima varredura do Drive nao rodou: ${sweep.inactiveReason}`);
+      } else if (minutos === null) {
+        avisos.push('A varredura do Drive ainda nao rodou nesta instancia');
+      } else if (minutos > 30) {
+        avisos.push(`Ultima varredura do Drive terminou ha ${minutos} minutos`);
+      }
     }
     if (!chatWebhook.url) {
       avisos.push(

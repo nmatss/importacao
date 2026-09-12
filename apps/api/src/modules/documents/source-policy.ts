@@ -15,9 +15,21 @@ export function isEmailIngestionEnabled(): boolean {
   return source === 'email' || source === 'both';
 }
 
-/** Manual multipart uploads are disabled while Drive is the sole authority. */
+/**
+ * Upload manual pela tela — flag PROPRIA (D1/DRV-10, reuniao 11/09/2026).
+ *
+ * Ate aqui "Drive e a fonte" implicava "upload manual bloqueado" (409 em
+ * POST /documents/upload). Em 11/09 o time dependeu justamente do upload manual
+ * para os tres processos-piloto e para trocar o tipo e reprocessar; a decisao da
+ * reuniao foi sobre e-mail x Drive, nao sobre tirar a mao da analista do
+ * processo. `MANUAL_UPLOAD_ENABLED` separa as duas coisas, e o dedupe por
+ * conteudo (content_sha256) impede que o mesmo arquivo entre duas vezes quando
+ * ele tambem aparecer na pasta do Drive.
+ *
+ * Vazio = ausente = ligado (mesma convencao do resto do sistema).
+ */
 export function isManualDocumentUploadEnabled(): boolean {
-  return getDocumentSource() !== 'drive';
+  return process.env.MANUAL_UPLOAD_ENABLED?.trim() !== 'false';
 }
 
 export function getDocumentSourcePolicy() {

@@ -551,6 +551,12 @@ export const espelhoService = {
       data.filename,
     );
 
+    // `null` = integracao somente leitura (DRIVE_WRITE_MODE=off): a pasta
+    // PROCESSOS e do time e o sistema nao publica nada la.
+    if (!driveFileId) {
+      throw new Error('Envio ao Drive desativado: a integracao esta em modo somente leitura');
+    }
+
     const [updated] = await db
       .update(espelhos)
       .set({ driveFileId })

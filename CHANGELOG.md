@@ -1,5 +1,44 @@
 # Changelog
 
+## 2026-09-11 — Drive como fonte: indice da pasta PROCESSOS, dedupe por conteudo e somente leitura
+
+- A leitura do Drive deixou de procurar `<raiz>/<Marca>/Importado/Processo N <codigo>`
+  (layout que nao existe na pasta real) e passou a montar um INDICE por varredura:
+  `04. PENDENTES DE CORRECAO` na raiz, `02. IMAGINARIUM`/`03. PUKET` por ano e, quando
+  houver, por colecao ou `FAT <mes>`. Pasta cujo nome comeca com codigo de processo e
+  processo; qualquer outra e grupo e desce UM nivel. O ano da pasta e o da COLECAO
+  (PK2192607SZ e PK2202608SZ estao em PUKET/2027/HIGH SUMMER), nomes legados curtos
+  (`2080_SZ`) sao ignorados e as DUAS pastas de um codigo duplicado sao lidas.
+- Prioridade POR TIPO: para cada tipo de documento, o arquivo em PENDENTES vence e os
+  tipos ausentes vem da pasta da marca — o BL que so existe na marca nao se perde mais.
+- Espelho vem so de `01. ESPELHOS`, agora tambem quando e Google Sheets NATIVO (via
+  `files.export` em xlsx; eram 316 de 376 arquivos que a ingestao pulava). `CONSOLIDADO`
+  e `(antigo com erro)` sao excluidos por nome, e espelho ambiguo aparece no status.
+- Dentro da pasta do processo a varredura nao desce mais em subpasta de backup (a pasta
+  real do PK2202608SZ tem um `Backup/` com a invoice antiga) e arquivo que nao e do fluxo
+  (CT-e, manifesto, `fat_*.pdf`, `FATURA<numero>`) ou que o classificador nao reconhece
+  deixou de entrar como documento `other`: fica listado com o motivo.
+- Identidade do documento passou a ser o CONTEUDO. Todo upload grava `content_sha256`; o
+  que vem do Drive grava tambem `drive_md5`, `drive_version`, `drive_modified_time` e
+  `drive_area`. Arquivo copiado, pasta duplicada e o arquivo que a analista subiu a mao
+  nao viram documento duplicado, e a varredura consulta `document_ingestion_tombstones`
+  antes de reimportar — documento excluido pelo analista nao volta sozinho.
+- `DRIVE_WRITE_MODE` (padrao `off` com o Drive como fonte) tornou PROCESSOS somente
+  leitura: nada de mover a pasta do processo para correcao, criar `Puket`/`Imaginarium`
+  ou `00. SISTEMA AUTOMATICO`, nem subir copia de documento. O token pede
+  `drive.readonly` e ha guarda estatica sobre todo `files.create`/`files.update`.
+- `MANUAL_UPLOAD_ENABLED` (padrao `true`) passou a ser a unica chave do upload pela tela:
+  com `DOCUMENT_SOURCE=drive` ele continuava devolvendo 409, justamente o caminho de que
+  a operacao dependeu em 11/09.
+- Observabilidade: `GET /api/documents/process/:id/drive-status` responde o que a
+  varredura viu daquele processo (pastas por area, importados, ignorados com motivo) e
+  `/health/integrations` passou a mostrar as 4 areas resolvidas, o modo de escrita, o
+  upload manual e a ultima varredura, avisando quando falta area, quando a varredura nao
+  rodou ou quando ela esta parada ha mais de 30 minutos.
+- Contrato operacional atualizado em `docs/operations/document-intake-contract-2026-09-11.md`,
+  incluindo a sequencia de ativacao fora do codigo (compartilhamento, SOPS, backfill de
+  hash e smoke) e a cadeia completa que deixou o PK220 vazio.
+
 ## 2026-09-11 — Tela do processo: cabecalho, checklist e exclusao de documento
 
 - Barra fixa do processo compactada em UMA linha no desktop: codigo, marca, status,

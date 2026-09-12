@@ -178,6 +178,70 @@ describe('documentService', () => {
       );
     });
 
+    it('grava o hash do conteudo tambem no upload manual (dedupe com o Drive)', async () => {
+      // DRV-05: sem o sha256 aqui, o arquivo que a analista subiu a mao volta
+      // como documento NOVO na primeira varredura do Drive — e o nome com
+      // sufixo de download ('... (1).pdf') escapa ate do aviso por nome+tamanho.
+      const mockFile = {
+        originalname: 'KIOM INV - PK2192607SZ (1).pdf',
+        path: '/tmp/inv.pdf',
+        mimetype: 'application/pdf',
+        size: 1024,
+      } as Express.Multer.File;
+      mockFsReadFile.mockResolvedValueOnce(Buffer.from('conteudo do pdf'));
+      const insertChain = createResolvedChain([{ id: 7, processId: 1, type: 'invoice' }]);
+
+      queryQueue.push(createResolvedChain([])); // processo nao travado
+      queryQueue.push(insertChain); // insert do documento
+      queryQueue.push(createResolvedChain([])); // sem duplicata por nome+tamanho
+      queryQueue.push(createResolvedChain([{ type: 'invoice' }]));
+
+      await documentService.upload(1, 'invoice', mockFile, 1);
+
+      const { createHash } = await import('node:crypto');
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contentSha256: createHash('sha256').update(Buffer.from('conteudo do pdf')).digest('hex'),
+          ingestionSource: 'manual',
+        }),
+      );
+    });
+
+    it('propaga a identidade do arquivo do Drive (md5, versao e area)', async () => {
+      const mockFile = {
+        originalname: 'KIOM INV - PK2192607SZ.pdf',
+        path: '/tmp/inv.pdf',
+        mimetype: 'application/pdf',
+        size: 1024,
+      } as Express.Multer.File;
+      const insertChain = createResolvedChain([{ id: 8, processId: 1, type: 'invoice' }]);
+
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(insertChain);
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain([{ type: 'invoice' }]));
+
+      await documentService.upload(1, 'invoice', mockFile, null, {
+        driveFileId: 'f1',
+        ingestionSource: 'drive',
+        contentSha256: 'a'.repeat(64),
+        driveMd5: 'md5-do-drive',
+        driveVersion: 4,
+        driveModifiedTime: '2026-08-07T10:00:00.000Z',
+        driveArea: 'pendentes',
+      });
+
+      expect(insertChain.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contentSha256: 'a'.repeat(64),
+          driveMd5: 'md5-do-drive',
+          driveVersion: 4,
+          driveModifiedTime: new Date('2026-08-07T10:00:00.000Z'),
+          driveArea: 'pendentes',
+        }),
+      );
+    });
+
     it('should update status to documents_received when all 3 docs present', async () => {
       const mockDoc = { id: 3, processId: 1, type: 'ohbl' };
       const mockFile = {

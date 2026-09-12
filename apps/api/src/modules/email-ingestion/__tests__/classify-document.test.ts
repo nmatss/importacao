@@ -53,3 +53,28 @@ describe('classifyDocument — BL vence tokens de referencia (auditoria 2026-07-
     expect(classifyDocument('DRAFT BL CI IM071.pdf')).toBe('draft_bl');
   });
 });
+
+/**
+ * DRV-03: o rascunho da DUIMP salvo na pasta do Drive tem de entrar como
+ * `draft_duimp`. O classificador ja fazia isso; estes casos CONGELAM o
+ * comportamento com os nomes reais das pastas de 11/09, agora que a varredura
+ * do Drive passa a ler esses arquivos de verdade.
+ */
+describe('classifyDocument — nomes reais das pastas do Drive (11/09/2026)', () => {
+  it.each([
+    ['RASCUNHO DUIMP - PK2202608SZ.pdf', 'draft_duimp'],
+    ['RASCUNHO DUIMP PUKET 437 - PK2202608SZ.pdf', 'draft_duimp'],
+    ['RASCUNHO DUIMP CORRIGIDO - PK2192607SZ (1).pdf', 'draft_duimp'],
+    ['RASCUNHO DA DUIMP - PUK034-26- PK2202608SZ.pdf', 'draft_duimp'],
+    // DUIMP REGISTRADA (extrato) nao pode virar rascunho.
+    ['Extrato-DUIMP-26BR00016608802-Versao-0001 - PUK032-26 - PK2192607SZ.pdf', 'duimp'],
+    ['2026.08.07 KIOM INV - PK2192607SZ.pdf', 'invoice'],
+    ['KIOM CI - PK2192607SZ.xlsx', 'invoice'],
+    ['KIOM PL - PK2192607SZ.pdf', 'packing_list'],
+    ['PK2192607SZ OHBL COPY.pdf', 'ohbl'],
+    ['Puket - 439 - OHBL COLORIDO.pdf', 'ohbl'],
+    ['Puket - 437 - HBL DRAFT 01.PDF', 'draft_bl'],
+  ])('%s -> %s', (nome, esperado) => {
+    expect(classifyDocument(nome)).toBe(esperado);
+  });
+});
