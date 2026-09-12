@@ -1541,6 +1541,10 @@ export const documentService = {
             imageBase64: extracted.imageBase64,
             imageMimeType: extracted.imageMimeType,
             additionalImagesBase64: extracted.additionalImagesBase64,
+            // Texto de apoio (OCR de gabarito) não pode servir de gabarito para
+            // grounding nem para preencher nulos — o documento de verdade foi
+            // anexado e é ele que o modelo leu.
+            sourceTextReliable: extracted.sourceTextReliable,
           }
         : undefined;
 
@@ -2436,6 +2440,14 @@ export const documentService = {
     additionalImagesBase64?: string[];
     pageTexts?: string[];
     ocrUsed?: boolean;
+    /**
+     * `false` quando o texto devolvido NAO representa fielmente o documento
+     * (OCR de um PDF cuja camada de texto o servidor nao consegue ler) e o
+     * arquivo original foi anexado para o provider multimodal ler por conta
+     * propria. Nesse caso o texto serve so de apoio: o grounding e o
+     * preenchimento deterministico de nulos NAO podem usa-lo como verdade.
+     */
+    sourceTextReliable?: boolean;
   }> {
     const buffer = await fs.readFile(filePath);
     const ext = path.extname(filePath).toLowerCase();
@@ -2466,6 +2478,40 @@ export const documentService = {
 
       if (looksScanned) {
         const ocr = await ocrScannedPdf(filePath);
+        // Multimodal só até um teto de tamanho: base64 de PDF gigante estoura
+        // o limite de request do provider e pressiona a memória do worker.
+        const MULTIMODAL_MAX_BYTES = 15 * 1024 * 1024;
+        const canAttachPdf = aiService.acceptsPdfInput && buffer.length <= MULTIMODAL_MAX_BYTES;
+
+        // Reunião 11/09/2026: os BLs 155/156/165/166 SAO selecionáveis no
+        // visualizador da analista, mas a camada de texto usa fonte CID
+        // Adobe-GB1 sem ToUnicode — o pdf-parse devolve 0 caractere e o
+        // pdftoppm (sem poppler-data/fonte CJK) renderiza só o formulário em
+        // branco. O OCR então lia o GABARITO e, como o código retornava só
+        // esse texto, o PDF original nunca chegava ao Vertex — que lê PDF
+        // nativamente. Agora, sempre que o provider aceita PDF, o arquivo vai
+        // junto e o OCR entra apenas como apoio (sourceTextReliable=false).
+        if (canAttachPdf) {
+          logger.info(
+            {
+              filePath,
+              textLength: text.length,
+              charsPerPage: Math.round(charsPerPage),
+              ocrTextLength: ocr?.text.length ?? 0,
+              ocrPages: ocr?.pageCount ?? 0,
+            },
+            'PDF sem camada de texto legível — enviando o arquivo original ao provider multimodal (OCR como apoio)',
+          );
+          return {
+            text: ocr?.text ?? text,
+            pageTexts: ocr?.pageTexts ?? pages,
+            ocrUsed: !!ocr?.text,
+            imageBase64: buffer.toString('base64'),
+            imageMimeType: 'application/pdf',
+            sourceTextReliable: false,
+          };
+        }
+
         if (ocr?.text) {
           logger.info(
             {
@@ -2477,11 +2523,10 @@ export const documentService = {
             },
             'Scanned PDF preprocessed with local OCR',
           );
+          // Provider sem leitura de PDF: o modelo vê SOMENTE este texto, então
+          // ele é a fonte de verdade disponível e o grounding continua válido.
           return { text: ocr.text, pageTexts: ocr.pageTexts, ocrUsed: true };
         }
-        // Multimodal só até um teto de tamanho: base64 de PDF gigante estoura
-        // o limite de request do provider e pressiona a memória do worker.
-        const MULTIMODAL_MAX_BYTES = 15 * 1024 * 1024;
         if (buffer.length > MULTIMODAL_MAX_BYTES) {
           logger.warn(
             { filePath, bytes: buffer.length, charsPerPage: Math.round(charsPerPage) },
@@ -2499,31 +2544,26 @@ export const documentService = {
         // and used to receive `data:application/pdf;base64,...` — which they
         // cannot decode, so the extraction came back with nearly every field
         // empty and the UI showed "-" everywhere. Rasterize first.
-        if (!aiService.acceptsPdfInput) {
-          const pages = await rasterizePdfPages(filePath);
-          if (pages && pages.length > 0) {
-            logger.info(
-              { filePath, pages: pages.length, provider: aiService.providerName },
-              'Scanned PDF rasterized to PNG for a provider that cannot read PDF parts',
-            );
-            return {
-              text,
-              imageBase64: pages[0],
-              imageMimeType: 'image/png',
-              additionalImagesBase64: pages.slice(1),
-            };
-          }
-          // No OCR and no rasterizer: there is genuinely nothing readable to
-          // send. Failing here is what makes the document show up as "failed"
-          // with a reason the operator can act on, instead of silently
-          // producing a document whose fields are all empty.
-          throw new Error(
-            `PDF escaneado sem camada de texto e sem como rasterizar (provider "${aiService.providerName}" não lê PDF). Instale o Poppler (pdftoppm) ou habilite DOCUMENT_OCR_ENABLED=1 no servidor.`,
+        const rasterPages = await rasterizePdfPages(filePath);
+        if (rasterPages && rasterPages.length > 0) {
+          logger.info(
+            { filePath, pages: rasterPages.length, provider: aiService.providerName },
+            'Scanned PDF rasterized to PNG for a provider that cannot read PDF parts',
           );
+          return {
+            text,
+            imageBase64: rasterPages[0],
+            imageMimeType: 'image/png',
+            additionalImagesBase64: rasterPages.slice(1),
+          };
         }
-
-        const base64 = buffer.toString('base64');
-        return { text, imageBase64: base64, imageMimeType: 'application/pdf' };
+        // No OCR and no rasterizer: there is genuinely nothing readable to
+        // send. Failing here is what makes the document show up as "failed"
+        // with a reason the operator can act on, instead of silently
+        // producing a document whose fields are all empty.
+        throw new Error(
+          `PDF escaneado sem camada de texto e sem como rasterizar (provider "${aiService.providerName}" não lê PDF). Instale o Poppler (pdftoppm) ou habilite DOCUMENT_OCR_ENABLED=1 no servidor.`,
+        );
       }
       return { text, pageTexts: pages };
     }

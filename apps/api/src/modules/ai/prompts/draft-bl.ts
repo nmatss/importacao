@@ -79,7 +79,7 @@ REGRAS:
 - issueDate: data de emissao do BL em ISO 8601, ou null se nao constar
 - freeTime: numero inteiro de dias, ou null se nao mencionado
 - woodDeclaration: true se qualquer mencao a madeira/wood/fumigation/ISPM15
-- ncmList: array de strings com codigos NCM encontrados (ex: ["6109.10.00", "6110.20.10"])
+- ncmList: array de strings com os codigos como impressos (ex: ["6109.10.00"] ou ["4202"] quando o BL so traz a posicao do SH)
 - Dados placeholder (TBD, TBA, XXX) devem ter confidence < 0.3
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },

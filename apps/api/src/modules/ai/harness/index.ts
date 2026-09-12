@@ -9,7 +9,14 @@
  * lower confidence.
  */
 
-import { isValidNcm, isValidContainerIso6346, isIsoDate, isValidCnpj, isUsd } from './format.js';
+import {
+  isValidNcm,
+  isValidContainerIso6346,
+  isIsoDate,
+  isValidCnpj,
+  isUsd,
+  isHsHeading,
+} from './format.js';
 import { appearsInSource } from './grounding.js';
 import { isKnownNcm, isKnownPort, isKnownSupplier } from './knowledge.js';
 import type { HarnessFinding, HarnessReport, VerificationConfig } from './types.js';
@@ -37,6 +44,29 @@ function asString(v: unknown): string | null {
   return null;
 }
 
+/**
+ * Partes de um valor que NAO aparecem no texto-fonte.
+ *
+ * Campos de lista (containerNumber com dois conteineres, sealNumber) sao
+ * gravados juntos — o proprio prompt manda "liste todos separados por virgula"
+ * — mas o documento imprime cada um em sua linha. Comparar a string inteira
+ * reprovava a leitura CORRETA como alucinacao (doc 169 da reuniao 11/09/2026,
+ * "MNBU3949421,MNBU0184030", que derrubou o BL para 0.39 e tirou o conteiner da
+ * capa). Regra: a string inteira vale primeiro; so entao cada parte e conferida
+ * isoladamente, e TODAS precisam aparecer — alucinacao parcial continua sendo
+ * reprovada, agora dizendo qual parte faltou.
+ */
+function groundingGaps(value: string, sourceText: string): string[] {
+  if (appearsInSource(value, sourceText)) return [];
+  const parts = value
+    .split(/[,;/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length < 2 || parts.some((part) => part.length < 3)) return [value];
+  const missing = parts.filter((part) => !appearsInSource(part, sourceText));
+  return missing.length > 0 ? missing : [];
+}
+
 export function verifyExtraction(
   config: VerificationConfig,
   data: Record<string, any>,
@@ -50,12 +80,17 @@ export function verifyExtraction(
   for (const path of config.groundedFields ?? []) {
     for (const { label, value } of resolveField(data, path)) {
       const s = asString(value);
-      if (s && !appearsInSource(s, sourceText)) {
+      if (!s) continue;
+      const missing = groundingGaps(s, sourceText);
+      if (missing.length > 0) {
         push({
           field: label,
           kind: 'grounding',
           severity: 'error',
-          message: `valor "${s}" não foi encontrado no documento — possível alucinação`,
+          message:
+            missing.length === 1 && missing[0] === s
+              ? `valor "${s}" não foi encontrado no documento — possível alucinação`
+              : `valor "${missing.join(', ')}" não foi encontrado no documento — possível alucinação`,
         });
       }
     }
@@ -71,12 +106,28 @@ export function verifyExtraction(
         if (!s) return;
         const lbl = Array.isArray(value) ? `${label}[${idx}]` : label;
         if (!isValidNcm(s)) {
-          push({
-            field: lbl,
-            kind: 'format',
-            severity: 'error',
-            message: `NCM "${s}" fora do formato XXXX.XX.XX`,
-          });
+          // O BL imprime a POSICAO do Sistema Harmonizado (4 ou 6 digitos, ex.:
+          // "NCM NO.: 4202"), nao a NCM de 8. Exigir 8 digitos transformava a
+          // leitura correta em erro e derrubava o documento para "nao
+          // utilizavel" (doc 169, reuniao 11/09/2026). Onde o tipo permite
+          // (allowHsHeading), o codigo curto vira aviso — e so quando ele
+          // aparece LITERALMENTE no documento, para nao mascarar NCM truncada
+          // pela IA.
+          if (config.allowHsHeading && isHsHeading(s) && appearsInSource(s, sourceText)) {
+            push({
+              field: lbl,
+              kind: 'format',
+              severity: 'warning',
+              message: `código "${s}" é posição do SH (4/6 dígitos) impressa no documento, não NCM de 8 dígitos`,
+            });
+          } else {
+            push({
+              field: lbl,
+              kind: 'format',
+              severity: 'error',
+              message: `NCM "${s}" fora do formato XXXX.XX.XX`,
+            });
+          }
         } else if (!isKnownNcm(s)) {
           push({
             field: lbl,

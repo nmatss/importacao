@@ -1,9 +1,24 @@
 import { findLabeledDate } from './dates.js';
 import { parseDecimal } from './numbers.js';
+import { isValidContainerIso6346 } from '../harness/format.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
-const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.82): ConfidenceField<T> => ({
+/**
+ * Confianca de valor recuperado por REGEX do texto-fonte ("text_fallback").
+ * Era 0.82 — patamar de campo lido pelo modelo — e por isso o lixo do gabarito
+ * de um BL escaneado (ver BL_FORM_LABELS abaixo) SUBIA a nota do documento
+ * (reuniao 11/09/2026: doc 156 marcou 0.50 so por causa de 6 campos-lixo; sem
+ * eles, 0.14). Fallback nunca e leitura de primeira classe: fica abaixo do
+ * corte de 0.7 de `computeConfidenceScore`, entao entra na lista de campos a
+ * conferir em vez de inflar o percentual.
+ */
+const BL_TEXT_FALLBACK_CONFIDENCE = 0.5;
+
+const cf = <T>(
+  value: T | null,
+  confidence = value == null ? 0 : BL_TEXT_FALLBACK_CONFIDENCE,
+): ConfidenceField<T> => ({
   value,
   confidence,
 });
@@ -11,7 +26,104 @@ const cf = <T>(value: T | null, confidence = value == null ? 0 : 0.82): Confiden
 const EMPTY_STRING = cf<string>(null, 0);
 const EMPTY_NUMBER = cf<number>(null, 0);
 
-const BL_DEFAULT_CONFIDENCE = 0.82;
+const BL_DEFAULT_CONFIDENCE = BL_TEXT_FALLBACK_CONFIDENCE;
+
+/**
+ * Rotulos impressos no FORMULARIO do BL. Quando o PDF nao tem camada de texto
+ * legivel pelo servidor, o OCR devolve so o gabarito em branco e os regexes
+ * abaixo capturam o proprio rotulo como se fosse valor ("Skipper" virando
+ * numero de BL, "Place of receipt" virando navio). Comparacao normalizada:
+ * maiusculas, sem pontuacao e com espacos colapsados.
+ */
+const BL_FORM_LABELS = new Set([
+  'AS CARRIER',
+  'BILL OF LADING',
+  'B L NO',
+  'CARRIER',
+  'CONSIGNEE',
+  'CONSIGNE',
+  'CONTAINER',
+  'CONTAINER NO',
+  'CONTAINERS',
+  'DESCRIPTION OF GOODS',
+  'FINAL DESTINATION',
+  'FREIGHT AND CHARGES',
+  'GROSS WEIGHT',
+  'KIND OF PACKAGES',
+  'LOCAL VESSEL',
+  'MARKS AND NUMBER',
+  'MARKS AND NUMBERS',
+  'MEASUREMENT',
+  'NOTIFY',
+  'NOTIFY PARTY',
+  'NUMBER OF PACKAGES',
+  'OCEAN BILL OF LADING',
+  'OCEAN VESSEL',
+  'PARTICULARS FURNISHED BY SHIPPER',
+  'PLACE OF DELIVERY',
+  'PLACE OF RECEIPT',
+  'PORT OF DISCHARGE',
+  'PORT OF LOADING',
+  'SEAL NO',
+  'SHIPPED ON BOARD',
+  'SHIPPER',
+  'SHIPPER REFERENCE',
+  'SKIPPER',
+  'VESSEL',
+]);
+
+function normalizeForLabelCheck(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim();
+}
+
+function isFormLabel(value: string): boolean {
+  return BL_FORM_LABELS.has(normalizeForLabelCheck(value));
+}
+
+/** Texto util: comeca com letra/numero, nao e rotulo do gabarito e tem corpo. */
+function acceptText(value: string | null, minLetters = 3): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed || !/^[A-Za-z0-9]/.test(trimmed)) return null;
+  if (isFormLabel(trimmed)) return null;
+  if ((trimmed.match(/[A-Za-z]/g) ?? []).length < minLetters) return null;
+  return trimmed;
+}
+
+/**
+ * Identificador (BL, referencia, lacre, viagem): alfanumerico, com pelo menos
+ * um digito e comprimento minimo. Mata "Skipper" (sem digito) e "S/C" (curto)
+ * sem recusar numeros reais como SHYY26080167 ou 0079W.
+ */
+function acceptIdentifier(value: string | null, minLength = 5): string | null {
+  if (!value) return null;
+  const trimmed = value.trim().replace(/[.,;:]+$/, '');
+  if (trimmed.length < minLength) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9./-]*$/.test(trimmed)) return null;
+  if (!/\d/.test(trimmed)) return null;
+  if (isFormLabel(trimmed)) return null;
+  return trimmed;
+}
+
+/**
+ * Container ISO 6346 COM digito verificador. Sem isso o regex `\bCONT...`
+ * capturava "ainers" do rotulo "Containers" do gabarito e a capa do processo
+ * exibia "Numero container: ainers" (print da reuniao 11/09/2026). Aceita
+ * lista separada por virgula/ponto-e-virgula/barra e devolve so as partes
+ * validas — uma alucinacao parcial nao contamina as demais.
+ */
+function acceptContainerNumbers(value: string | null): string | null {
+  if (!value) return null;
+  const parts = value
+    .split(/[,;/]+/)
+    .map((part) => part.trim().toUpperCase())
+    .filter(Boolean)
+    .filter((part) => isValidContainerIso6346(part));
+  return parts.length > 0 ? parts.join(',') : null;
+}
 
 function matchFirst(text: string, patterns: RegExp[]): string | null {
   for (const pattern of patterns) {
@@ -141,21 +253,25 @@ export function tryParseBLText(text: string): Record<string, any> | null {
   const source = text ?? '';
   if (!source.trim() || !isBillOfLadingText(source)) return null;
 
-  const blNumber = matchFirst(source, [
-    /\bb(?:ill)?\/?l\b\s*(?:n\.?|no\.?|number|num\.)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
-    /\bBL\s+#?\s*([A-Z0-9][A-Z0-9./-]{3,})\b/i,
-    /\bBL Number\b\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
-    /\bDocument\s+No\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
-  ]);
-
-  const customerReference = pickFirstNonEmpty([
+  const blNumber = acceptIdentifier(
     matchFirst(source, [
-      /\bCustomer\s*Reference\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
-      /\bReference\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
-      /\bPO\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
+      /\bb(?:ill)?\/?l\b\s*(?:n\.?|no\.?|number|num\.)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
+      /\bBL\s+#?\s*([A-Z0-9][A-Z0-9./-]{3,})\b/i,
+      /\bBL Number\b\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
+      /\bDocument\s+No\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{3,})/i,
     ]),
-    matchFirst(source, [/\bBooking\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i]),
-  ]);
+  );
+
+  const customerReference = acceptIdentifier(
+    pickFirstNonEmpty([
+      matchFirst(source, [
+        /\bCustomer\s*Reference\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
+        /\bReference\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
+        /\bPO\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i,
+      ]),
+      matchFirst(source, [/\bBooking\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9./-]{2,})/i]),
+    ]),
+  );
 
   const shipper = extractLabeledValue(source, [
     'shipper',
@@ -177,14 +293,19 @@ export function tryParseBLText(text: string): Record<string, any> | null {
     'notiy',
   ]);
 
-  const vesselName = matchFirst(source, [
-    /\bVessel\s*(?:Name)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9 .'/-]{2,60})(?:\r?\n|$)/i,
-    /\bSHIP\s*(?:Name)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9 .'/-]{2,60})(?:\r?\n|$)/i,
-  ]);
-  const voyageNumber = matchFirst(source, [
-    /\bVoyage\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9]{2,20})/i,
-    /\bVOY\s*[:#-]?\s*([A-Z0-9]{2,20})/i,
-  ]);
+  const vesselName = acceptText(
+    matchFirst(source, [
+      /\bVessel\s*(?:Name)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9 .'/-]{2,60})(?:\r?\n|$)/i,
+      /\bSHIP\s*(?:Name)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9 .'/-]{2,60})(?:\r?\n|$)/i,
+    ]),
+  );
+  const voyageNumber = acceptIdentifier(
+    matchFirst(source, [
+      /\bVoyage\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9]{2,20})/i,
+      /\bVOY\s*[:#-]?\s*([A-Z0-9]{2,20})/i,
+    ]),
+    3,
+  );
 
   const etd =
     findLabeledDate(source, [
@@ -206,21 +327,29 @@ export function tryParseBLText(text: string): Record<string, any> | null {
     'place and date of issue',
   ]);
 
-  const portOfLoading =
+  const portOfLoading = acceptText(
     extractPort(source, 'loading') ||
-    matchFirst(source, [/\bPort\s+of\s+Loading\s*[:#-]?\s*([A-Z][A-Z\s,.-]{2,80})(?:\n|$)/i]);
-  const portOfDischarge =
+      matchFirst(source, [/\bPort\s+of\s+Loading\s*[:#-]?\s*([A-Z][A-Z\s,.-]{2,80})(?:\n|$)/i]),
+  );
+  const portOfDischarge = acceptText(
     extractPort(source, 'discharge') ||
-    matchFirst(source, [/\bPort\s+of\s+Discharge\s*[:#-]?\s*([A-Z][A-Z\s,.-]{2,80})(?:\n|$)/i]);
+      matchFirst(source, [/\bPort\s+of\s+Discharge\s*[:#-]?\s*([A-Z][A-Z\s,.-]{2,80})(?:\n|$)/i]),
+  );
 
-  const containerNumber = matchFirst(source, [
-    /\b(?:Container\s*(?:No\.?|Number|#)?|CNT\s*(?:No\.?|Number|#)?)\s*[:#-]?\s*([A-Z0-9]{6,14})/i,
-    /\bCONT\s*[:#-]?\s*([A-Z0-9]{6,14})/i,
-  ]);
-  const sealNumber = matchFirst(source, [
-    /\bSeal\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9.-]{2,})/i,
-    /\bSeal\s*:??\s*([A-Z0-9.-]{4,})/i,
-  ]);
+  // ISO 6346 obrigatorio: o padrao `CONT...` sozinho casava "Cont"+"ainers" do
+  // rotulo do gabarito e gravava "ainers" como numero de container.
+  const containerNumber = acceptContainerNumbers(
+    matchFirst(source, [
+      /\b(?:Container|CNTR|CNT)\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z]{4}\s?\d{6,7}(?:\s*[,;/]\s*[A-Z]{4}\s?\d{6,7})*)/i,
+    ]),
+  );
+  const sealNumber = acceptIdentifier(
+    matchFirst(source, [
+      /\bSeal\s*(?:No\.?|Number|#)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9.-]{2,})/i,
+      /\bSeal\s*:??\s*([A-Z0-9.-]{4,})/i,
+    ]),
+    4,
+  );
 
   const totalBoxes = matchFirst(source, [
     /\bTotal\s*(?:No\.?\s*|Number\s*)?(?:Packages|CTNS|PACKAGES|BOXES|CARTONS)\s*[:#-]?\s*([\d.,]+)/i,
@@ -260,15 +389,21 @@ export function tryParseBLText(text: string): Record<string, any> | null {
     /\bwood\s*(?:declaration|certificate|plank|package|pallet)|\bmadeira\b/i.test(source)
       ? true
       : false;
-  const cargoDescription = extractCargoDescription(source);
+  // Descricao da carga precisa de corpo: "No, o" (pedaco de "Marks and Number
+  // No, of pkgs" lido pelo OCR do gabarito) nao e descricao de mercadoria.
+  const cargoDescription = acceptText(extractCargoDescription(source), 8);
   const ncmList = extractNcmList(source);
+
+  const shipperName = acceptText(normalizeParty(shipper));
+  const consigneeName = acceptText(normalizeParty(consignee));
+  const notifyPartyName = acceptText(normalizeParty(notifyParty));
 
   const parsed = {
     blNumber: toTextField(blNumber),
     customerReference: toTextField(customerReference),
-    shipper: toTextField(normalizeParty(shipper)),
-    consignee: toTextField(normalizeParty(consignee)),
-    notifyParty: toTextField(normalizeParty(notifyParty)),
+    shipper: toTextField(shipperName),
+    consignee: toTextField(consigneeName),
+    notifyParty: toTextField(notifyPartyName),
     vesselName: toTextField(vesselName),
     voyageNumber: toTextField(voyageNumber),
     portOfLoading: toTextField(portOfLoading),
@@ -300,8 +435,8 @@ export function tryParseBLText(text: string): Record<string, any> | null {
   const hasSignal = Boolean(
     blNumber ||
     customerReference ||
-    shipper ||
-    consignee ||
+    shipperName ||
+    consigneeName ||
     portOfLoading ||
     portOfDischarge ||
     vesselName ||
@@ -357,8 +492,19 @@ const BL_FILL_KEYS: string[] = [
   'ncmList',
 ];
 
-export function fillBLNullsFromText(data: Record<string, any>, text: string): Record<string, any> {
-  const parsed = tryParseBLText(text);
+/**
+ * @param options.sourceTextReliable - `false` quando o texto veio de OCR de um
+ *   PDF que o servidor nao consegue ler (o original foi anexado ao provider
+ *   multimodal). Nesse caso o texto e um GABARITO em branco: preencher nulos a
+ *   partir dele so injeta lixo com cara de dado lido. A normalizacao de frete
+ *   PREPAID/COLLECT continua valendo porque age sobre o que o modelo extraiu.
+ */
+export function fillBLNullsFromText(
+  data: Record<string, any>,
+  text: string,
+  options?: { sourceTextReliable?: boolean },
+): Record<string, any> {
+  const parsed = options?.sourceTextReliable === false ? null : tryParseBLText(text);
   const out = { ...data };
   if (parsed) {
     for (const key of BL_FILL_KEYS) {
