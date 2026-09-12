@@ -131,6 +131,7 @@ async def test_client(mocker):
         "app.routes.schedules",
         "app.routes.health",
         "app.routes.certificates",
+        "app.routes.marketplace",
     ):
         mocker.patch(f"{mod}.DATABASE_URL", "")
 

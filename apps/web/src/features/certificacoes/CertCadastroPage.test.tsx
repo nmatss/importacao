@@ -12,15 +12,23 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
     createCertificate: vi.fn(),
     retryCertificateLinx: vi.fn(),
     downloadCertificatePdf: vi.fn(),
+    fetchCertificateDetail: vi.fn(),
+    linkCertificateItems: vi.fn(),
+    removeCertificateItem: vi.fn(),
   };
 });
 
 import {
+  createCertificate,
   fetchCertProductDetail,
+  fetchCertificateDetail,
   fetchCertificates,
+  linkCertificateItems,
   lookupCertificateLinx,
+  removeCertificateItem,
+  type CertCertificate,
 } from '@/shared/lib/cert-api-client';
-import CertCadastroPage, { todayLocalIso } from './CertCadastroPage';
+import CertCadastroPage, { parsePastedSkus, todayLocalIso } from './CertCadastroPage';
 
 const mockedFetchCertificates = vi.mocked(fetchCertificates);
 const mockedFetchProduct = vi.mocked(fetchCertProductDetail);
@@ -209,5 +217,204 @@ describe('todayLocalIso', () => {
     if (lateNight.getTimezoneOffset() > 0) {
       expect(todayLocalIso(lateNight)).not.toBe(lateNight.toISOString().slice(0, 10));
     }
+  });
+});
+
+const mockedCreate = vi.mocked(createCertificate);
+const mockedDetail = vi.mocked(fetchCertificateDetail);
+const mockedLink = vi.mocked(linkCertificateItems);
+const mockedRemove = vi.mocked(removeCertificateItem);
+
+function certificate(overrides: Partial<CertCertificate> = {}): CertCertificate {
+  return {
+    id: 'c1',
+    sku: 'PI5555Y',
+    brand: 'imaginarium',
+    numero_certificado: '10584/2024-AE-1',
+    fim_venda: null,
+    situacao: 'ATIVO',
+    linx_status: 'disabled',
+    items_count: 2,
+    ...overrides,
+  };
+}
+
+describe('parsePastedSkus', () => {
+  it('le uma lista colada preservando a ordem e sem repetidos', () => {
+    expect(parsePastedSkus('A\nB\n\nA\nC')).toEqual(['A', 'B', 'C']);
+    expect(parsePastedSkus('A, B; C')).toEqual(['A', 'B', 'C']);
+    expect(parsePastedSkus('   ')).toEqual([]);
+  });
+});
+
+describe('CertCadastroPage — fim de venda e itens (D11)', () => {
+  beforeEach(() => {
+    mockedFetchCertificates.mockReset();
+    mockedFetchProduct.mockReset();
+    mockedLookup.mockReset();
+    mockedCreate.mockReset();
+    mockedDetail.mockReset();
+    mockedLink.mockReset();
+    mockedRemove.mockReset();
+    mockedFetchCertificates.mockResolvedValue({
+      items: [certificate()],
+      total: 1,
+      page: 1,
+      per_page: 10,
+      total_pages: 1,
+    });
+    mockedDetail.mockResolvedValue(
+      certificate({
+        items: [
+          {
+            id: 'i1',
+            certificate_id: 'c1',
+            sku: 'PI5555Y',
+            brand: 'imaginarium',
+            linx_status: 'disabled',
+          },
+        ],
+      }),
+    );
+  });
+
+  it('envia fim_venda no cadastro e explica que a validade fica no portal', async () => {
+    const user = userEvent.setup();
+    mockedCreate.mockResolvedValue(certificate());
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() =>
+      expect(mockedCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sku: 'PI5558Y',
+          validade_certificado: '2028-07-27',
+          fim_venda: '2026-10-29',
+        }),
+      ),
+    );
+    expect(
+      screen.getByText(/Deixe vazio enquanto o certificado estiver ativo/),
+    ).toBeInTheDocument();
+  });
+
+  it('aceita apenas o fim de venda como unica data informada', async () => {
+    const user = userEvent.setup();
+    mockedCreate.mockResolvedValue(certificate());
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKU do produto *'), 'PI5558Y');
+    await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+  });
+
+  it('manda a lista colada de SKUs no cadastro', async () => {
+    const user = userEvent.setup();
+    mockedCreate.mockResolvedValue(certificate());
+    render(<CertCadastroPage />);
+
+    await user.type(screen.getByLabelText('SKUs adicionais (um por linha)'), 'A\nB\nA\nC');
+    await user.type(screen.getByLabelText('Fim de venda (trava)'), '2026-10-29');
+    expect(screen.getByText(/3 SKU\(s\) serão vinculados/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+
+    await waitFor(() =>
+      expect(mockedCreate).toHaveBeenCalledWith(expect.objectContaining({ skus: 'A\nB\nC' })),
+    );
+  });
+
+  it('pre-visualiza o vinculo antes de gravar no Linx', async () => {
+    const user = userEvent.setup();
+    mockedLink.mockResolvedValue({
+      dry_run: true,
+      added: ['A', 'B'],
+      already_linked: ['PI5555Y'],
+      linked_to_other_active_cert: [{ sku: 'PI6552Y', numero_certificado: '8325/2022-BRI-1' }],
+      not_found_in_linx: ['FANTASMA'],
+      invalid: [],
+    });
+    render(<CertCadastroPage />);
+
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await waitFor(() => expect(mockedDetail).toHaveBeenCalledWith('c1'));
+
+    const textarea = screen.getByLabelText('Vincular SKUs (um por linha)');
+    await user.type(textarea, 'A\nB');
+    // O botao de confirmar so libera depois da previa.
+    expect(screen.getByRole('button', { name: 'Vincular' })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar \(2\)/ }));
+
+    await waitFor(() => expect(mockedLink).toHaveBeenCalledWith('c1', ['A', 'B'], true));
+    expect(await screen.findByText(/8325\/2022-BRI-1/)).toBeInTheDocument();
+    expect(screen.getByText(/FANTASMA/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Vincular' })).toBeEnabled();
+  });
+
+  it('confirma o vinculo com dry_run=false', async () => {
+    const user = userEvent.setup();
+    mockedLink.mockResolvedValueOnce({
+      dry_run: true,
+      added: ['A'],
+      already_linked: [],
+      linked_to_other_active_cert: [],
+      not_found_in_linx: [],
+      invalid: [],
+    });
+    mockedLink.mockResolvedValueOnce({
+      dry_run: false,
+      added: ['A'],
+      already_linked: [],
+      linked_to_other_active_cert: [],
+      not_found_in_linx: [],
+      invalid: [],
+      items: [
+        { id: 'i2', certificate_id: 'c1', sku: 'A', brand: 'imaginarium', linx_status: 'applied' },
+      ],
+    });
+    render(<CertCadastroPage />);
+
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await user.type(screen.getByLabelText('Vincular SKUs (um por linha)'), 'A');
+    await user.click(screen.getByRole('button', { name: /Pré-visualizar/ }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Vincular' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Vincular' }));
+
+    await waitFor(() => expect(mockedLink).toHaveBeenLastCalledWith('c1', ['A'], false));
+    // Confirmado uma vez, o botão trava: clicar de novo reenviaria uma lista
+    // vazia (o textarea foi limpo) e gravaria no Linx por engano.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Vincular' })).toBeDisabled());
+    expect(mockedLink).toHaveBeenCalledTimes(2);
+  });
+
+  it('remove um item pelo botao da lixeira', async () => {
+    const user = userEvent.setup();
+    mockedRemove.mockResolvedValue({ ok: true, items: [] });
+    render(<CertCadastroPage />);
+
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'Remover PI5555Y do certificado' }));
+
+    await waitFor(() => expect(mockedRemove).toHaveBeenCalledWith('c1', 'PI5555Y'));
+    expect(
+      await screen.findByText(/Nenhum produto vinculado a este certificado/),
+    ).toBeInTheDocument();
+  });
+
+  it('avisa que a remocao nao mexe na trava ja gravada no Linx', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+
+    expect(await screen.findByText(/a data já gravada no Linx permanece/)).toBeInTheDocument();
   });
 });

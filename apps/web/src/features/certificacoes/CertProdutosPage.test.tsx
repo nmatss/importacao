@@ -11,11 +11,19 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
     ...actual,
     fetchCertProducts: vi.fn(),
     verifyCertProduct: vi.fn(),
+    fetchCertGrifes: vi.fn(),
+    fetchLastCertSync: vi.fn(),
+    syncCertSheets: vi.fn(),
   };
 });
 
-import { fetchCertProducts } from '@/shared/lib/cert-api-client';
-import CertProdutosPage from './CertProdutosPage';
+import {
+  fetchCertGrifes,
+  fetchCertProducts,
+  fetchLastCertSync,
+  syncCertSheets,
+} from '@/shared/lib/cert-api-client';
+import CertProdutosPage, { certificateNumberLines } from './CertProdutosPage';
 
 type Semantic = Pick<CertProduct, 'cert_status' | 'site_status' | 'license_status'>;
 
@@ -108,9 +116,18 @@ function renderPage() {
   );
 }
 
+const mockedGrifes = vi.mocked(fetchCertGrifes);
+const mockedLastSync = vi.mocked(fetchLastCertSync);
+const mockedSync = vi.mocked(syncCertSheets);
+
 describe('CertProdutosPage (server-authoritative)', () => {
   beforeEach(() => {
     mockedFetch.mockReset();
+    mockedGrifes.mockReset();
+    mockedLastSync.mockReset();
+    mockedSync.mockReset();
+    mockedGrifes.mockResolvedValue({ grifes: [], sem_grife: 0 });
+    mockedLastSync.mockResolvedValue({ last_run: null });
   });
 
   it('keeps the newest filter results when an older request finishes later', async () => {
@@ -336,5 +353,136 @@ describe('CertProdutosPage (server-authoritative)', () => {
 
     fireEvent.click(trigger);
     expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+describe('certificateNumberLines', () => {
+  it('quebra numeros de recertificacao em linhas e ignora vazios', () => {
+    expect(certificateNumberLines('6916-2021-BRI-1\n MT-5493/2021')).toEqual([
+      '6916-2021-BRI-1',
+      'MT-5493/2021',
+    ]);
+    expect(certificateNumberLines('   ')).toEqual([]);
+    expect(certificateNumberLines(null)).toEqual([]);
+    expect(certificateNumberLines(undefined)).toEqual([]);
+  });
+});
+
+describe('CertProdutosPage — numero do certificado, grife e sync', () => {
+  beforeEach(() => {
+    mockedFetch.mockReset();
+    mockedGrifes.mockReset();
+    mockedLastSync.mockReset();
+    mockedSync.mockReset();
+    mockedGrifes.mockResolvedValue({ grifes: [], sem_grife: 0 });
+    mockedLastSync.mockResolvedValue({ last_run: null });
+    mockedFetch.mockResolvedValue({
+      products: [
+        {
+          sku: 'PI1',
+          brand: 'Puket',
+          name: 'Produto com certificado',
+          numero_certificado: '10584/2024-AE-1',
+        },
+        { sku: 'PI2', brand: 'Puket', name: 'Produto sem certificado' },
+      ],
+      total: 2,
+      total_pages: 1,
+    });
+  });
+
+  it('exibe o numero do certificado na lista', async () => {
+    renderPage();
+    expect(await screen.findByText('10584/2024-AE-1')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Nº Certificado' })).toBeInTheDocument();
+  });
+
+  it('mostra o filtro de grife com a cobertura real e envia o valor a API', async () => {
+    mockedGrifes.mockResolvedValue({
+      grifes: [
+        { grife: 'MARVEL', count: 248 },
+        { grife: 'DISNEY', count: 144 },
+      ],
+      sem_grife: 31,
+    });
+    renderPage();
+
+    const select = await screen.findByLabelText('Grife / licença');
+    expect(screen.getByText(/31 produtos sem grife preenchida no Linx/)).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: 'MARVEL' } });
+
+    await waitFor(() =>
+      expect(mockedFetch).toHaveBeenLastCalledWith(
+        expect.objectContaining({ grife: 'MARVEL', page: 1 }),
+      ),
+    );
+  });
+
+  it('nao mostra o filtro de grife quando o Linx ainda nao foi sincronizado', async () => {
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalled());
+    expect(screen.queryByLabelText('Grife / licença')).not.toBeInTheDocument();
+  });
+
+  it('o botao de sincronizar chama POST /api/sync-sheets, nao so recarrega a lista', async () => {
+    mockedSync.mockResolvedValue({
+      locked: true,
+      trigger: 'manual',
+      run_id: 'r1',
+      sheets: { synced: 674 },
+    });
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar planilha agora/ }));
+
+    await waitFor(() => expect(mockedSync).toHaveBeenCalledOnce());
+    // Recarrega a lista DEPOIS do sync — senao a tela seguiria com o dado velho.
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
+    expect(mockedLastSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('mostra a ultima sincronizacao com o ator, em portugues', async () => {
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'manual',
+        actor: 'odett@grupounico.com',
+        started_at: '2026-09-11T15:00:00+00:00',
+        finished_at: '2026-09-11T15:00:20+00:00',
+        result: null,
+        error: null,
+      },
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(/Última sincronização da planilha:.*odett@grupounico.com/),
+    ).toBeInTheDocument();
+  });
+
+  it('rotula o gatilho automatico em portugues, nunca a chave tecnica', async () => {
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-11T15:00:00+00:00',
+        finished_at: '2026-09-11T15:00:20+00:00',
+        result: null,
+        error: null,
+      },
+    });
+    renderPage();
+
+    expect(await screen.findByText(/automática \(a cada hora\)/)).toBeInTheDocument();
+    expect(screen.queryByText(/hourly/)).not.toBeInTheDocument();
+  });
+
+  it('nao esconde a lista quando a ultima sincronizacao falha ao carregar', async () => {
+    mockedLastSync.mockRejectedValue(new Error('Erro na API: 503'));
+    renderPage();
+    expect(await screen.findByText('Produto com certificado')).toBeInTheDocument();
   });
 });

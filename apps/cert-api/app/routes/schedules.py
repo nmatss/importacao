@@ -182,6 +182,53 @@ def _execute_schedule(schedule_id: str, brand_filter: str | None) -> None:
         _refresh_next_run(schedule_id)
 
 
+# Job fixo, fora de `cert_schedules`: a leitura da planilha a cada hora. O
+# prefixo NAO pode ser `cert_schedule_`, senao `load_schedules_into_scheduler`
+# o removeria junto com os agendamentos do banco a cada create/update/delete.
+HOURLY_SHEET_SYNC_JOB_ID = "cert_hourly_sheet_sync"
+
+
+def _run_hourly_sheet_sync() -> None:
+    """Sincroniza SO a planilha (sem VTEX nem estoque).
+
+    O unico agendamento cadastrado em producao era a validacao diaria das 06:00
+    BRT, que roda 674 produtos contra a VTEX (~17 min). Quem so precisa que a
+    planilha do time fiscal chegue ao painel esperava ate o dia seguinte. Este
+    job fecha essa lacuna; o lock compartilhado garante que ele nunca concorra
+    com a validacao nem com o botao manual.
+    """
+    from app.services.sync_runs import run_sheet_sync
+
+    try:
+        result = run_sheet_sync("hourly")
+        if result.get("locked"):
+            log.info(f"Hourly sheets sync: {result.get('sheets')}")
+        else:
+            log.info("Hourly sheets sync skipped: another sync is running")
+    except Exception as e:
+        log.warning(f"Hourly sheets sync failed: {e}")
+
+
+def schedule_hourly_sheet_sync() -> None:
+    """Registra (ou re-registra) o job horario de sync da planilha."""
+    try:
+        scheduler.add_job(
+            _run_hourly_sheet_sync,
+            trigger="cron",
+            minute=20,
+            id=HOURLY_SHEET_SYNC_JOB_ID,
+            replace_existing=True,
+            max_instances=1,
+            # Container reiniciado no meio da janela nao dispara um sync
+            # atrasado assim que sobe — o startup ja sincroniza.
+            coalesce=True,
+            misfire_grace_time=300,
+        )
+        log.info("Hourly sheets sync job registered (minute 20 of every hour)")
+    except Exception as e:
+        log.warning(f"Failed to register hourly sheets sync job: {e}")
+
+
 def load_schedules_into_scheduler() -> None:
     """Load all enabled cert_schedules into APScheduler."""
     if not DATABASE_URL:

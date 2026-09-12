@@ -10,6 +10,9 @@ import {
   RefreshCw,
   FileText,
   Search,
+  Boxes,
+  Trash2,
+  X,
 } from 'lucide-react';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { cn, formatDateOnly } from '@/shared/lib/utils';
@@ -17,10 +20,15 @@ import {
   createCertificate,
   downloadCertificatePdf,
   fetchCertProductDetail,
+  fetchCertificateDetail,
   fetchCertificates,
+  linkCertificateItems,
   lookupCertificateLinx,
+  removeCertificateItem,
   retryCertificateLinx,
   type CertCertificate,
+  type CertCertificateItem,
+  type CertLinkResult,
   type CertLinxLookup,
   type CertProduct,
   type LinxStatus,
@@ -98,6 +106,25 @@ export function todayLocalIso(now: Date = new Date()): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+/**
+ * Lê a lista de SKUs colada da planilha (uma por linha, vírgula ou ';').
+ * Espelha `_parse_skus` do cert-api: preserva a ordem e remove repetidos, para
+ * que a prévia mostre exatamente o que será enviado.
+ */
+export function parsePastedSkus(raw: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of raw.replace(/[;,]/g, '\n').split(/\r?\n/)) {
+    const clean = part.trim();
+    if (!clean || seen.has(clean)) continue;
+    seen.add(clean);
+    out.push(clean);
+  }
+  return out;
+}
+
+const MAX_ITEMS_PER_REQUEST = 500;
+
 const inputCls =
   'w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-800 dark:text-slate-100 shadow-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 focus:outline-none';
 const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 mb-1';
@@ -105,7 +132,9 @@ const labelCls = 'block text-xs font-medium text-slate-600 dark:text-slate-300 m
 export default function CertCadastroPage() {
   const [brand, setBrand] = useState('imaginarium');
   const [sku, setSku] = useState('');
+  const [skusText, setSkusText] = useState('');
   const [validade, setValidade] = useState('');
+  const [fimVenda, setFimVenda] = useState('');
   const [vencimento, setVencimento] = useState('');
   const [numero, setNumero] = useState('');
   const [ocp, setOcp] = useState('');
@@ -134,6 +163,18 @@ export default function CertCadastroPage() {
   const [linxLookupError, setLinxLookupError] = useState<string | null>(null);
   const linxLookupRequest = useRef(0);
 
+  // Gestão de itens do certificado selecionado na lista.
+  const [openCert, setOpenCert] = useState<CertCertificate | null>(null);
+  const [openItems, setOpenItems] = useState<CertCertificateItem[]>([]);
+  const [itemsSkus, setItemsSkus] = useState('');
+  const [preview, setPreview] = useState<CertLinkResult | null>(null);
+  const [itemsBusy, setItemsBusy] = useState(false);
+  const [itemsError, setItemsError] = useState<string | null>(null);
+  const [removingSku, setRemovingSku] = useState<string | null>(null);
+
+  const pastedSkus = parsePastedSkus(itemsSkus);
+  const formSkus = parsePastedSkus(skusText);
+
   // Os inputs type="date" produzem ISO (AAAA-MM-DD); o cert-api aceita esse formato
   // e o converte para dd/mm/AAAA somente na escrita do Linx (_format_date).
   // `toISOString()` converte para UTC: depois das 21:00 de Brasília o "hoje" em
@@ -141,7 +182,9 @@ export default function CertCadastroPage() {
   // vencido. A data tem de ser calculada no fuso local.
   const todayIso = todayLocalIso();
   const hasPastDate =
-    (validade !== '' && validade < todayIso) || (vencimento !== '' && vencimento < todayIso);
+    (validade !== '' && validade < todayIso) ||
+    (fimVenda !== '' && fimVenda < todayIso) ||
+    (vencimento !== '' && vencimento < todayIso);
 
   const loadRecent = useCallback(async () => {
     setListLoading(true);
@@ -191,7 +234,9 @@ export default function CertCadastroPage() {
 
   function resetForm() {
     setSku('');
+    setSkusText('');
     setValidade('');
+    setFimVenda('');
     setVencimento('');
     setNumero('');
     setOcp('');
@@ -238,13 +283,17 @@ export default function CertCadastroPage() {
     setError(null);
     setResult(null);
 
-    if (!sku.trim()) {
-      setError('Informe o SKU do produto.');
+    if (!sku.trim() && formSkus.length === 0) {
+      setError('Informe o SKU do produto (ou cole a lista de SKUs).');
       return;
     }
-    if (!validade && !vencimento) {
+    if (formSkus.length > MAX_ITEMS_PER_REQUEST) {
+      setError(`Vincule no máximo ${MAX_ITEMS_PER_REQUEST} SKUs por vez.`);
+      return;
+    }
+    if (!validade && !fimVenda && !vencimento) {
       setError(
-        'Informe ao menos uma data (validade do certificado ou vencimento do licenciamento).',
+        'Informe ao menos uma data (validade do certificado, fim de venda ou vencimento do licenciamento).',
       );
       return;
     }
@@ -252,9 +301,11 @@ export default function CertCadastroPage() {
     setSubmitting(true);
     try {
       const created = await createCertificate({
-        sku: sku.trim(),
+        sku: sku.trim() || undefined,
+        skus: formSkus.length > 0 ? formSkus.join('\n') : undefined,
         brand,
         validade_certificado: validade || undefined,
+        fim_venda: fimVenda || undefined,
         vencimento_licenciamento: vencimento || undefined,
         numero_certificado: numero || undefined,
         ocp: ocp || undefined,
@@ -288,6 +339,64 @@ export default function CertCadastroPage() {
       toast.error(err instanceof Error ? err.message : 'Falha ao reenviar ao Linx');
     } finally {
       setRetrying(null);
+    }
+  }
+
+  async function openItemsPanel(cert: CertCertificate) {
+    setOpenCert(cert);
+    setItemsSkus('');
+    setPreview(null);
+    setItemsError(null);
+    setItemsBusy(true);
+    try {
+      const detail = await fetchCertificateDetail(cert.id);
+      setOpenCert(detail);
+      setOpenItems(detail.items ?? []);
+    } catch (err) {
+      setOpenItems([]);
+      setItemsError(err instanceof Error ? err.message : 'Falha ao carregar os itens.');
+    } finally {
+      setItemsBusy(false);
+    }
+  }
+
+  /**
+   * `dryRun` primeiro, sempre: o vínculo grava no Linx de cada SKU, então a
+   * prévia é a única chance do operador ver o que a lista colada realmente faz
+   * antes de mexer no ERP.
+   */
+  async function handleLinkItems(dryRun: boolean) {
+    if (!openCert) return;
+    setItemsBusy(true);
+    setItemsError(null);
+    try {
+      const result = await linkCertificateItems(openCert.id, pastedSkus, dryRun);
+      setPreview(result);
+      if (!dryRun) {
+        setOpenItems(result.items ?? openItems);
+        setItemsSkus('');
+        toast.success(`${result.added.length} SKU(s) vinculado(s) ao certificado.`);
+        loadRecent();
+      }
+    } catch (err) {
+      setItemsError(err instanceof Error ? err.message : 'Falha ao vincular os SKUs.');
+    } finally {
+      setItemsBusy(false);
+    }
+  }
+
+  async function handleRemoveItem(skuToRemove: string) {
+    if (!openCert) return;
+    setRemovingSku(skuToRemove);
+    try {
+      const result = await removeCertificateItem(openCert.id, skuToRemove);
+      setOpenItems(result.items ?? []);
+      toast.success(`${skuToRemove} removido do certificado.`);
+      loadRecent();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Falha ao remover o item.');
+    } finally {
+      setRemovingSku(null);
     }
   }
 
@@ -465,6 +574,24 @@ export default function CertCadastroPage() {
               )}
             </div>
           )}
+          <div className="sm:col-span-2">
+            <label htmlFor="cert-skus" className={labelCls}>
+              SKUs adicionais (um por linha)
+            </label>
+            <textarea
+              id="cert-skus"
+              rows={3}
+              className={cn(inputCls, 'font-mono text-xs')}
+              value={skusText}
+              onChange={(e) => setSkusText(e.target.value)}
+              placeholder={'Cole aqui a coluna de SKUs da planilha\nPI5555Y\nPI7001Y'}
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {formSkus.length > 0
+                ? `${formSkus.length} SKU(s) serão vinculados a este certificado.`
+                : `Opcional. Um certificado pode cobrir vários produtos (até ${MAX_ITEMS_PER_REQUEST} por vez).`}
+            </p>
+          </div>
           <div>
             <label htmlFor="cert-validade" className={labelCls}>
               Validade do Certificado
@@ -476,6 +603,25 @@ export default function CertCadastroPage() {
               value={validade}
               onChange={(e) => setValidade(e.target.value)}
             />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Fica só no portal: não é enviada como trava para o Linx.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="cert-fim-venda" className={labelCls}>
+              Fim de venda (trava)
+            </label>
+            <input
+              id="cert-fim-venda"
+              type="date"
+              className={inputCls}
+              value={fimVenda}
+              onChange={(e) => setFimVenda(e.target.value)}
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Deixe vazio enquanto o certificado estiver ativo. É esta data que trava o faturamento
+              no Linx.
+            </p>
           </div>
           <div>
             <label htmlFor="cert-vencimento" className={labelCls}>
@@ -698,13 +844,31 @@ export default function CertCadastroPage() {
                     Cert: {formatDateOnly(c.validade_certificado)}
                   </span>
                 )}
+                {c.fim_venda && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Fim de venda: {formatDateOnly(c.fim_venda)}
+                  </span>
+                )}
                 {c.vencimento_licenciamento && (
                   <span className="text-xs text-slate-500 dark:text-slate-400">
                     Lic: {formatDateOnly(c.vencimento_licenciamento)}
                   </span>
                 )}
+                {c.numero_certificado && (
+                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
+                    {c.numero_certificado}
+                  </span>
+                )}
                 <LinxBadge status={c.linx_status} />
                 <div className="ml-auto flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openItemsPanel(c)}
+                    className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-300"
+                  >
+                    <Boxes className="h-3.5 w-3.5" />
+                    Itens ({c.items_count ?? 0})
+                  </button>
                   {c.pdf_filename && (
                     <button
                       type="button"
@@ -771,6 +935,165 @@ export default function CertCadastroPage() {
           </div>
         )}
       </div>
+
+      {/* Itens do certificado: vínculo em massa + remoção individual (D11) */}
+      {openCert && (
+        <section
+          aria-label="Produtos do certificado"
+          className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900"
+        >
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Produtos do certificado {openCert.numero_certificado || openCert.id.slice(0, 8)}
+            </h3>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{openCert.brand}</span>
+            <button
+              type="button"
+              onClick={() => setOpenCert(null)}
+              aria-label="Fechar produtos do certificado"
+              className="ml-auto text-slate-400 hover:text-danger-600 dark:hover:text-danger-300"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {itemsError && (
+            <p role="alert" className="px-5 pt-3 text-sm text-danger-700 dark:text-danger-300">
+              {itemsError}
+            </p>
+          )}
+
+          <div className="space-y-3 px-5 py-4">
+            <div>
+              <label htmlFor="cert-items-skus" className={labelCls}>
+                Vincular SKUs (um por linha)
+              </label>
+              <textarea
+                id="cert-items-skus"
+                rows={3}
+                className={cn(inputCls, 'font-mono text-xs')}
+                value={itemsSkus}
+                onChange={(e) => {
+                  setItemsSkus(e.target.value);
+                  setPreview(null);
+                }}
+                placeholder={'PI5555Y\nPI7001Y'}
+              />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLinkItems(true)}
+                  disabled={itemsBusy || pastedSkus.length === 0}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  {itemsBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Pré-visualizar ({pastedSkus.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleLinkItems(false)}
+                  // `pastedSkus` entra na condição para que o clique não possa
+                  // ser repetido depois de confirmar: o textarea é limpo, mas a
+                  // prévia continua na tela (é o recibo do que foi feito).
+                  disabled={
+                    itemsBusy ||
+                    pastedSkus.length === 0 ||
+                    !preview ||
+                    !preview.dry_run ||
+                    preview.added.length === 0
+                  }
+                  title={
+                    preview
+                      ? 'Grava o vínculo e envia as datas ao Linx'
+                      : 'Pré-visualize antes de confirmar'
+                  }
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Vincular
+                </button>
+              </div>
+            </div>
+
+            {preview && (
+              <div
+                aria-live="polite"
+                className="space-y-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              >
+                <p>
+                  <strong>{preview.added.length}</strong>{' '}
+                  {preview.dry_run ? 'serão vinculados' : 'vinculados'}
+                  {preview.already_linked.length > 0 &&
+                    ` · ${preview.already_linked.length} já estavam neste certificado`}
+                </p>
+                {preview.linked_to_other_active_cert.length > 0 && (
+                  <p className="text-amber-700 dark:text-amber-300">
+                    {preview.linked_to_other_active_cert.length} em outro certificado ativo (não
+                    serão alterados):{' '}
+                    {preview.linked_to_other_active_cert
+                      .map(
+                        (i) =>
+                          `${i.sku}${i.numero_certificado ? ` → ${i.numero_certificado}` : ''}`,
+                      )
+                      .join(', ')}
+                  </p>
+                )}
+                {preview.not_found_in_linx.length > 0 && (
+                  <p className="text-danger-700 dark:text-danger-300">
+                    Não encontrados no Linx: {preview.not_found_in_linx.join(', ')}
+                  </p>
+                )}
+                {preview.invalid.length > 0 && (
+                  <p className="text-danger-700 dark:text-danger-300">
+                    {preview.invalid.length} SKU(s) inválido(s) foram ignorados.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {openItems.length === 0 ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {itemsBusy ? 'Carregando…' : 'Nenhum produto vinculado a este certificado.'}
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+                {openItems.map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center gap-2 py-2 text-sm text-slate-700 dark:text-slate-200"
+                  >
+                    <span className="font-mono text-xs font-semibold">{item.sku}</span>
+                    <LinxBadge status={item.linx_status} />
+                    {item.linx_error && (
+                      <span className="text-xs text-danger-600 dark:text-danger-300">
+                        {item.linx_error}
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveItem(item.sku)}
+                      disabled={removingSku === item.sku}
+                      aria-label={`Remover ${item.sku} do certificado`}
+                      className="ml-auto inline-flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-danger-600 disabled:opacity-50 dark:hover:text-danger-300"
+                    >
+                      {removingSku === item.sku ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Remover um produto desfaz apenas o vínculo: a data já gravada no Linx permanece, para
+              que a liberação de venda nunca aconteça por efeito colateral.
+            </p>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

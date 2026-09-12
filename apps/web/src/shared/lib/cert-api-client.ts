@@ -44,6 +44,25 @@ export interface CertProduct {
   // a partir da planilha "Licenciamentos Vencidos" (ver followups).
   license_deadline?: string | null;
   license_deadline_date?: string | null;
+  // Contrato D11 (reunião 11/09/2026). Dois eixos separados: o STATUS do
+  // certificado vem da validade/situação, e a TRAVA de venda é a menor data real
+  // entre o fim de venda da certificação e o fim do licenciamento.
+  validade_certificado?: string | null;
+  /** Texto original da planilha, quando a data não pôde ser interpretada. */
+  validade_certificado_raw?: string | null;
+  status_venda?: 'LIBERADA' | 'BLOQUEADA' | null;
+  trava_venda?: string | null;
+  trava_origem?: 'certificacao' | 'licenciamento' | null;
+  // Grife/licença lida do Linx (PRODUTOS.GRIFFE na Puket, IMG_LICENCIAMENTO na
+  // Imaginarium). Cobertura parcial: vazio significa "não preenchido no ERP",
+  // nunca "sem licenciamento".
+  grife?: string | null;
+  // Propriedades do Linx copiadas pelo sync de atributos (somente leitura).
+  // `null` = sem data real (a sentinela 01/01/1900 do ERP já foi normalizada).
+  linx_fim_licenciamento?: string | null;
+  linx_prop_certificacao?: string | null;
+  linx_fim_vendas?: string | null;
+  linx_synced_at?: string | null;
   cert_url?: string | null;
   cert_expiry?: string | null;
   last_checked?: string | null;
@@ -351,12 +370,14 @@ export async function fetchCertProducts(params?: {
   site_status?: string;
   license_status?: string;
   comercializacao_status?: string;
+  grife?: string;
 }): Promise<CertProductsResponse> {
   const query = new URLSearchParams();
   if (params?.page) query.set('page', String(params.page));
   if (params?.per_page) query.set('per_page', String(params.per_page));
   if (params?.search) query.set('search', params.search);
   if (params?.brand) query.set('brand', params.brand);
+  if (params?.grife) query.set('grife', params.grife);
   if (params?.status) query.set('status', params.status);
   if (params?.start_date) query.set('start_date', params.start_date);
   if (params?.end_date) query.set('end_date', params.end_date);
@@ -559,12 +580,52 @@ export async function fetchCertExpired(params?: {
 
 export type LinxStatus = 'pending' | 'applied' | 'disabled' | 'error';
 
-export interface CertCertificate {
+export type CertSituacao = 'ATIVO' | 'ENCERRADO';
+
+/**
+ * Um produto vinculado a um certificado (`cert_certificate_items`).
+ * A remoção é soft delete: a linha some da lista, `removed_at` fica gravado e a
+ * trava do produto no Linx NÃO é apagada.
+ */
+export interface CertCertificateItem {
   id: string;
+  certificate_id: string;
   sku: string;
   brand: string;
   produto_codigo?: string | null;
+  linx_status: LinxStatus;
+  linx_error?: string | null;
+  linx_applied_at?: string | null;
+  added_by?: string | null;
+  added_at?: string;
+  [key: string]: unknown;
+}
+
+/** Resultado da classificação do vínculo em massa (prévia ou aplicação). */
+export interface CertLinkResult {
+  dry_run: boolean;
+  added: string[];
+  already_linked: string[];
+  linked_to_other_active_cert: Array<{ sku: string; numero_certificado: string | null }>;
+  not_found_in_linx: string[];
+  invalid: string[];
+  linx?: Array<{ sku: string; status: LinxStatus; error?: string | null }>;
+  items?: CertCertificateItem[];
+}
+
+export interface CertCertificate {
+  id: string;
+  /** Legado: o SKU do cadastro antigo. Os produtos moram em `items`. */
+  sku: string | null;
+  brand: string;
+  produto_codigo?: string | null;
   validade_certificado?: string | null;
+  /** Trava de venda. Vazio enquanto o certificado estiver ativo. */
+  fim_venda?: string | null;
+  situacao?: CertSituacao | null;
+  items?: CertCertificateItem[];
+  items_count?: number;
+  link_result?: CertLinkResult;
   vencimento_licenciamento?: string | null;
   numero_certificado?: string | null;
   ocp?: string | null;
@@ -589,9 +650,13 @@ export interface CertCertificatesResponse {
 }
 
 export interface CreateCertificateInput {
-  sku: string;
+  sku?: string;
+  /** Lista colada da planilha: uma SKU por linha. */
+  skus?: string;
   brand: string;
   validade_certificado?: string;
+  fim_venda?: string;
+  situacao?: CertSituacao;
   vencimento_licenciamento?: string;
   numero_certificado?: string;
   ocp?: string;
@@ -621,9 +686,12 @@ export interface CertLinxLookup {
 
 export async function createCertificate(input: CreateCertificateInput): Promise<CertCertificate> {
   const fd = new FormData();
-  fd.set('sku', input.sku);
+  if (input.sku) fd.set('sku', input.sku);
+  if (input.skus) fd.set('skus', input.skus);
   fd.set('brand', input.brand);
   if (input.validade_certificado) fd.set('validade_certificado', input.validade_certificado);
+  if (input.fim_venda) fd.set('fim_venda', input.fim_venda);
+  if (input.situacao) fd.set('situacao', input.situacao);
   if (input.vencimento_licenciamento)
     fd.set('vencimento_licenciamento', input.vencimento_licenciamento);
   if (input.numero_certificado) fd.set('numero_certificado', input.numero_certificado);
@@ -642,6 +710,8 @@ export async function fetchCertificates(params?: {
   per_page?: number;
   sku?: string;
   brand?: string;
+  numero?: string;
+  situacao?: string;
   linx_status?: string;
 }): Promise<CertCertificatesResponse> {
   const query = new URLSearchParams();
@@ -649,6 +719,8 @@ export async function fetchCertificates(params?: {
   if (params?.per_page) query.set('per_page', String(params.per_page));
   if (params?.sku) query.set('sku', params.sku);
   if (params?.brand) query.set('brand', params.brand);
+  if (params?.numero) query.set('numero', params.numero);
+  if (params?.situacao) query.set('situacao', params.situacao);
   if (params?.linx_status) query.set('linx_status', params.linx_status);
   const qs = query.toString();
   return certFetch<CertCertificatesResponse>(`/api/certificates${qs ? `?${qs}` : ''}`);
@@ -667,6 +739,126 @@ export async function retryCertificateLinx(id: string): Promise<CertCertificate>
 
 export async function downloadCertificatePdf(id: string): Promise<void> {
   await downloadCertApiResource(`/api/certificates/${encodeURIComponent(id)}/pdf`, `${id}.pdf`);
+}
+
+export async function fetchCertificateDetail(id: string): Promise<CertCertificate> {
+  return certFetch<CertCertificate>(`/api/certificates/${encodeURIComponent(id)}`);
+}
+
+/**
+ * Vincula SKUs em massa. `dryRun` é o padrão: a tela mostra a prévia antes de
+ * qualquer gravação no Linx.
+ */
+export async function linkCertificateItems(
+  id: string,
+  skus: string[],
+  dryRun = true,
+): Promise<CertLinkResult> {
+  return certFetch<CertLinkResult>(`/api/certificates/${encodeURIComponent(id)}/items`, {
+    method: 'POST',
+    body: JSON.stringify({ skus, dry_run: dryRun }),
+  });
+}
+
+export async function removeCertificateItem(
+  id: string,
+  sku: string,
+): Promise<{ ok: boolean; items: CertCertificateItem[] }> {
+  return certFetch<{ ok: boolean; items: CertCertificateItem[] }>(
+    `/api/certificates/${encodeURIComponent(id)}/items/${encodeURIComponent(sku)}`,
+    { method: 'DELETE' },
+  );
+}
+
+// ---------- Sync da planilha ----------
+
+export interface CertSyncRun {
+  id: string;
+  trigger: 'manual' | 'startup' | 'schedule' | 'hourly';
+  actor: string | null;
+  started_at: string;
+  finished_at: string | null;
+  result: Record<string, unknown> | null;
+  error: string | null;
+}
+
+export interface CertSyncResult {
+  locked: boolean;
+  trigger: string;
+  run_id: string | null;
+  sheets?: Record<string, unknown>;
+  linx?: Record<string, unknown>;
+}
+
+/** Força a leitura da planilha (só planilha + atributos do Linx, sem VTEX). */
+export async function syncCertSheets(): Promise<CertSyncResult> {
+  return certFetch<CertSyncResult>('/api/sync-sheets', { method: 'POST' });
+}
+
+export async function fetchLastCertSync(): Promise<{ last_run: CertSyncRun | null }> {
+  return certFetch<{ last_run: CertSyncRun | null }>('/api/sync-sheets/last');
+}
+
+export async function fetchCertGrifes(): Promise<{
+  grifes: Array<{ grife: string; count: number }>;
+  sem_grife: number;
+}> {
+  return certFetch('/api/grifes');
+}
+
+// ---------- Marketplace (auditoria Inmetro de quebra-cabeças) ----------
+
+export type MarketplaceVerdict = 'OK' | 'NAO_OK' | 'REVISAR' | 'NAO_EXIGE';
+
+export interface CertMarketplaceItem {
+  id: string;
+  vtex_product_id: string;
+  seller_id: string | null;
+  seller_name: string | null;
+  name: string | null;
+  url: string | null;
+  pieces: number | null;
+  cert_text: string | null;
+  verdict: MarketplaceVerdict;
+  reason: string | null;
+  checked_at: string | null;
+  run_id: string | null;
+}
+
+export interface CertMarketplaceResponse {
+  items: CertMarketplaceItem[];
+  run_id: string | null;
+  checked_at: string | null;
+  summary: Partial<Record<MarketplaceVerdict, number>>;
+}
+
+export async function fetchMarketplaceItems(params?: {
+  verdict?: string;
+  seller?: string;
+}): Promise<CertMarketplaceResponse> {
+  const query = new URLSearchParams();
+  if (params?.verdict) query.set('verdict', params.verdict);
+  if (params?.seller) query.set('seller', params.seller);
+  const qs = query.toString();
+  return certFetch<CertMarketplaceResponse>(`/api/marketplace/items${qs ? `?${qs}` : ''}`);
+}
+
+export async function startMarketplaceAudit(): Promise<{ run_id: string; status: string }> {
+  return certFetch<{ run_id: string; status: string }>('/api/marketplace/audit', {
+    method: 'POST',
+  });
+}
+
+export async function fetchMarketplaceAudit(
+  runId: string,
+): Promise<{ run_id: string; status: string; error?: string; summary?: Record<string, number> }> {
+  return certFetch(`/api/marketplace/audit/${encodeURIComponent(runId)}`);
+}
+
+export async function deleteCertificate(id: string): Promise<{ ok: boolean }> {
+  return certFetch<{ ok: boolean }>(`/api/certificates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
 }
 
 // ---------- Reports ----------
