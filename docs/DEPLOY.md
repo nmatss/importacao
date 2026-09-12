@@ -158,3 +158,11 @@ O historico detalhado fica no `deploy.log` local e no output do deploy.
 ```bash
 docker run --rm -v importacao_cert-reports:/data alpine chown -R 1001:1001 /data
 ```
+
+## Homologação técnica R7 — recuperação e HSTS (12/09/2026)
+
+Backup `importacao_2026-09-12_201810.pgdump` restaurado no próprio servidor em contêiner PostgreSQL 16 efêmero, sem rede, sem portas publicadas, com limite de CPU/memória e dados em tmpfs. `scripts/restore-test.sh` verificou 42 tabelas e 117 processos; banco temporário e contêiner removidos. Os três arquivos de volumes (uploads, cert-reports, cert-certs) passaram `gzip -t`; isso verifica integridade do arquivo, não um ensaio de recuperação funcional dos volumes. Dados não foram copiados para a estação ou serviço externo.
+
+O script aceita `BACKUP_FILE` para testar um dump exato. `TEST_DB` deve ser `importacao_restore_test` ou usar esse prefixo com sufixo alfanumérico minúsculo/underscore. Banco preexistente faz a execução falhar sem exclusão. A limpeza só remove o banco criado pela execução, inclusive após falha no restore; falha de limpeza retorna erro. Recomenda-se o contêiner isolado também para ensaios manuais. Os gates sintéticos rodam por `python3 scripts/test-restore-test.py`.
+
+O Nginx da aplicação define HSTS apenas para `importacao.grupounico.com`, com `max-age=300`, sem `includeSubDomains` e sem `preload`. É uma ativação inicial curta, reversível após a expiração; não altera o proxy compartilhado ou trust stores. HTTPS segue usando a CA interna. O navegador exige certificado confiável e ignora HSTS recebido por HTTP; consultar [semântica do HSTS](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security). O cabeçalho é repetido nos blocos com `add_header` para respeitar a [herança do Nginx](https://nginx.org/en/docs/http/ngx_http_headers_module.html). Teste real da imagem, sem portas/rede externa: `WEB_TEST_IMAGE=importacao-web:r7 python3 scripts/test-web-security-headers.py`.

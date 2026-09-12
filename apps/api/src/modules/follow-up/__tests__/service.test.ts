@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 import { dateRangeBounds } from '../../../__tests__/helpers/sql-inspect.js';
+import type { Request, Response } from 'express';
+import { ServiceUnavailableError } from '../../../shared/errors/index.js';
 
 const { mockDb, queryQueue } = createMockDb();
 
@@ -18,6 +20,23 @@ vi.mock('../../../shared/utils/logger.js', () => ({
 
 const { followUpService } = await import('../service.js');
 const { googleSheetsService } = await import('../../integrations/google-sheets.service.js');
+const { followUpController } = await import('../controller.js');
+
+it('returns HTTP 503 when the sheet comparison cannot read its source, not a false 404', async () => {
+  vi.mocked(googleSheetsService.readProcessRow).mockRejectedValueOnce(
+    new ServiceUnavailableError('Follow-Up temporariamente indisponivel'),
+  );
+  const res = { status: vi.fn().mockReturnThis(), json: vi.fn() };
+  await followUpController.compareWithSheet(
+    { params: { processCode: 'PK220' } } as unknown as Request,
+    res as unknown as Response,
+  );
+  expect(res.status).toHaveBeenCalledWith(503);
+  expect(res.json).toHaveBeenCalledWith({
+    success: false,
+    error: 'Follow-Up temporariamente indisponivel',
+  });
+});
 
 describe('followUpService', () => {
   beforeEach(() => {

@@ -1,5 +1,13 @@
 # Session Memory
 
+## 12/09/2026 — R7 em validação
+
+Usuário esclareceu que homologação significa testes gerados/executados pelo agente; não transferir aceite técnico às áreas. Corrigidos falso 404 do Sheets, aceitação de placeholders Odoo, gates perigosos/incompletos de restore e HSTS ausente. 21 testes novos. Leitura de um processo afetado recuperada com 115 colunas; backup restaurado (42 tabelas/117 processos) em contêiner sem rede, removido depois. IMAP/Odoo reais usam configuração de exemplo; caminho seguro solicitado, sem senha na conversa. CI/deploy do candidato ainda pendentes. Detalhes e fonte canônica: seção R7 do STATUS.
+
+## 12/09/2026 — Revisão final R6
+
+Produção permanece `4eaffac`; CI/CodeQL/auditoria e saúde reconfirmados. Conferência de hashes: 836 arquivos apps/scripts/infra iguais ao servidor, dois relatórios intencionalmente excluídos pelo deploy. Corrigida somente fixture do smoke de produtos (grifes e última sincronização); aplicação, colunas e fontes preservadas. Dois timeouts Sheets registrados como pendência operacional; smoke posterior acessou 1.415 referências, sem comprovar recuperação integral dos processos afetados. Evidências e limites atualizados na seção R6 de `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`. Aceite global continua parcial e Linx sem escrita. Não houve novo deploy/migration/carga ou mensagem.
+
 ## 12/09/2026 — Release R5 implantada
 
 Estado atual substitui os checkpoints anteriores de deploy pendente: `4eaffac` publicado e implantado às 17:21:50 BRT. CI 34716201043 e CodeQL 34716201050 passaram, incluindo três scans Trivy/SBOMs. Corrigidos dependências Node, expectativa E2E de upload e pacotes Debian no runtime cert. Backup/snapshot, migrations API/cert, readiness e smoke de integrações aprovados. SYDLE ativo; Drive sem escrita, follow-up dry_run, Linx sem escrita, ingestão e-mail desligada. Notas do cronograma atualizadas e relidas. Projeto ainda não 100% homologado: pendências comerciais/documentais e carga conciliada preservadas. IMAP inativo falha autenticação; HSTS ausente no edge público (BAIXO), com TLS validado por CA interna e redirect HTTP→HTTPS. Detalhes, comandos e evidências: seção final R5 em `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`. Dotcontext atualizado; ai-memory sem escrita por resolução inconsistente de projeto.

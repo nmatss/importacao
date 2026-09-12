@@ -65,7 +65,24 @@ async function getConfig(): Promise<OdooConfig> {
 }
 
 function isCompleteConfig(config: OdooConfig): boolean {
-  return !!(config.url && config.db && config.user && config.password);
+  if (!(config.url && config.db && config.user && config.password)) return false;
+  // Values shipped in .env.example are documentation, not usable credentials.
+  // Reject them before constructing an RPC client or sending authentication.
+  if (
+    config.db === 'your-odoo-db' ||
+    config.user === 'your-odoo-user' ||
+    config.password === 'your-odoo-password'
+  )
+    return false;
+  try {
+    const url = new URL(config.url);
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      url.hostname !== 'your-odoo-instance.com'
+    );
+  } catch {
+    return false;
+  }
 }
 
 function getConfigKey(config: OdooConfig): string {

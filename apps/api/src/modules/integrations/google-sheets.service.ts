@@ -3,6 +3,7 @@ import { normalizeGooglePrivateKey } from '../../shared/utils/google-private-key
 import { logger } from '../../shared/utils/logger.js';
 import { withRetry, withTimeout } from '../../shared/utils/resilience.js';
 import { integrationRetryOptions } from './retry-policy.js';
+import { ServiceUnavailableError } from '../../shared/errors/index.js';
 
 const SHEETS_API_TIMEOUT_MS = 30_000;
 
@@ -113,7 +114,9 @@ export const googleSheetsService = {
       return null;
     } catch (error) {
       logger.error({ error, processCode }, 'Failed to find process row in Google Sheets');
-      return null;
+      throw new ServiceUnavailableError(
+        'Nao foi possivel consultar o Follow-Up no Google Sheets. Tente novamente.',
+      );
     }
   },
 
@@ -175,7 +178,7 @@ export const googleSheetsService = {
       const row = await this.findProcessRow(processCode);
       if (!row) return null;
 
-      // Read the entire row (columns A through Z)
+      // Preserve the complete configured source range, including columns after Z.
       const response = await sheetsRetry(`readProcessRow(${processCode})`, (signal) =>
         sheets.spreadsheets.values.get(
           { spreadsheetId, range: followUpRange(`A${row}:${FOLLOW_UP_LAST_COLUMN}${row}`) },
@@ -207,7 +210,9 @@ export const googleSheetsService = {
       return result;
     } catch (error) {
       logger.error({ error, processCode }, 'Failed to read process row from Google Sheets');
-      return null;
+      throw new ServiceUnavailableError(
+        'Nao foi possivel ler o Follow-Up no Google Sheets. Tente novamente.',
+      );
     }
   },
 

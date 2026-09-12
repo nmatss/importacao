@@ -574,3 +574,48 @@ Pós-deploy:
 - Cronograma atualizado somente nas **notas** de `Cronograma!E37` e `'Escopo e aceite'!F32`, com releitura e igualdade exata do texto gravado; valores, validação e formatação preservados. `Bloqueado` permanece correto para liberação global. Não houve envio ao grupo.
 
 R5-A/B/C/D concluídas no escopo técnico de correção, CI e deploy. **Entrega global permanece parcial**: aceites das áreas, vínculo vigente/fornecedor/N, aplicabilidade do licenciamento, Odoo oficial, rascunhos DUIMP e baseline/carga conciliada continuam pendentes. Não declarar o projeto 100% homologado. Próximo passo é obter essas evidências e homologar os fluxos autenticados antes de qualquer carga Linx. Checkpoint e artefato sanitizado atualizados no dotcontext e em `output/retomada-2026-09-12/revisao5/`; ai-memory não recebeu escrita devido à resolução inconsistente de projeto.
+
+### R6 — revisão final após deploy (12/09/2026)
+
+Pedido: conferir integralmente as evidências e o estado operacional, corrigindo defeitos confirmados sem alterar dados/colunas. Produção e origin/master continuam em `4eafface1b68e7cbbaf2b5802f35592d187b57e5`; base documental local `de74794`. A revisão não equivale a aceite global: as dependências comerciais e os limites abaixo permanecem.
+
+- CI `34716201043` e CodeQL `34716201050` novamente consultados: sucesso na revisão implantada. `npm audit --audit-level=high`: zero vulnerabilidades. Gates R5 de typecheck/lint/build, API 2.045, web 379, API E2E 74, cert 888 e scripts continuam aplicáveis ao código funcional inalterado; não foram apresentados como novas execuções R6.
+- Comparação SHA-256 de 838 arquivos rastreados em apps/scripts/infra contra o servidor: 836 iguais; os outros dois são relatórios históricos em `apps/cert-api/reports`, explicitamente excluídos pelo rsync oficial. Nenhuma divergência de implementação encontrada nessa comparação, realizada antes da edição exclusiva do teste R6. Configuração cifrada/segredos não fizeram parte dessa coleta.
+- API/web/cert/PostgreSQL/Redis saudáveis, zero reinícios e `OOMKilled=false`; `/health/ready` confirmou DB/Redis, `/health/live` confirmou a revisão. `python -m app.db.release_migrations --check` passou.
+- Consulta SQL com `BEGIN READ ONLY`/`ROLLBACK`: três últimas execuções SYDLE em 20:10, 20:20 e 20:30 UTC com `success` e zero erros. `job_runs` não tinha registros nas duas horas consultadas; ausência de registros não comprova execução ou sucesso dos demais jobs.
+- Flags reais reconfirmadas: Drive como fonte, DRIVE_WRITE_MODE=off, FOLLOW_UP_SYNC_MODE=dry_run, SYDLE_SYNC_ENABLED=true, EMAIL_INGESTION_ENABLED=false, LINX_WRITE_ENABLED=false.
+- HTTPS com CA interna: raiz e `/api/health` 200; `/api/auth/me`, `/api/processes` e `/cert-api/api/products` sem autenticação 401. Revisão estática confirmou HS256 fixo e usuário ativo/role consultados no servidor, autenticação antes das rotas de documentos, gate antes de Multer e bloqueio de escrita Linx no serviço. Isso não substitui pentest nem homologação com perfis reais.
+- Logs sanitizados revelaram dois `ETIMEDOUT` em `findProcessRow` do Sheets. Retry limitado/timeout já existem; causa de rede não confirmada. Smoke posterior `docker exec importacao-api node scripts/smoke-integrations.mjs --network` passou resumo operacional, Drive e 1.415 referências; Gmail perfil/SMTP também passaram. IMAP continua recusando autenticação com ingestão desligada. O smoke não enviou mensagens. A disponibilidade posterior não comprova recuperação de todos os processos afetados: pendência MEDIO em KNOWN_ISSUES.
+
+**Correção de teste e validação de navegador:** `CI=true npm run test:e2e:web -- route-smoke.spec.ts email-workflows.spec.ts` executou 82 casos: 80 passaram e 2 falharam na listagem de produtos, também no retry. Causa confirmada: sandbox retornava envelope genérico para `/cert-api/api/grifes`, incompatível com `{grifes, sem_grife}` do backend; última sincronização também não tinha fixture explícita. Foram adicionadas somente essas duas respostas em `apps/web/e2e/route-smoke.spec.ts`, conforme `certifications.py`, cliente tipado e fixtures responsivas existentes. Não houve mudança de aplicação nem supressão das asserções.
+
+`CI=true npm run test:e2e:web -- route-smoke.spec.ts --grep 'renders /certificacoes/produtos'`: quatro passaram (listagem/detalhe em desktop/mobile). Os outros 80 resultados anteriores permanecem válidos para rotas não afetadas; não se declara que a primeira execução inteira passou. `npx prettier --check apps/web/e2e/route-smoke.spec.ts`, `npx eslint apps/web/e2e/route-smoke.spec.ts` e `git diff --check` passaram.
+
+`CI=true AUDIT_ASSERT=1 AUDIT_VIEWPORTS=375,1024,1440 AUDIT_ONLY='^(imp-registro-divergent|imp-checklist-move|cert-item-restriction)$' AUDIT_OUT=output/retomada-2026-09-12/revisao6/responsive npm run test:e2e:web -- responsive-audit.spec.ts --project=chromium-desktop`: três cenários passaram, 18 renderizações nos temas claro/escuro. Zero overflow, erros de browser e fixtures ausentes nos casos verificados; movimentação/persistência simulada do checklist e payload da restrição do item conferidos. Capturas mobile representativas também inspecionadas. Artefatos/logs sanitizados em `output/retomada-2026-09-12/revisao6/`.
+
+**Estado final R6:** revisão concluída, fixture corrigida e validada localmente; aceite global parcial. R6-A/B/C/D concluídas como revisão, sem transformar as pendências diagnosticadas em aprovação. Produção permanece 4eaffac; alterações R6 limitadas ao teste e registros locais.
+
+**Limites do aceite:** navegador usa fixtures, sem representar login Google real ou homologação integral dos três pilotos. Permanecem vínculo vigente/fornecedor/N, aplicabilidade de licenciamento, Odoo oficial, rascunhos DUIMP/unidade/SKU, baseline e carga conciliada Linx, recuperação dos processos afetados pelos timeouts e aceite das áreas. Backup foi listado, não restaurado integralmente em ensaio. IMAP inativo e HSTS do edge continuam pendências registradas. Não houve novo deploy, migration, carga, alteração de fonte ou envio a terceiros nesta revisão. Arquivos não rastreados preexistentes preservados.
+
+Dotcontext acompanha o plano R6; ai-memory não recebe gravação com resolução de projeto inconsistente. O próximo passo de negócio é homologar os fluxos reais e os vínculos oficiais antes da carga Linx; evidência técnica verde não remove esse gate.
+
+### R7 — correções e homologação técnica pelo agente
+
+O usuário esclareceu que homologar significa o agente gerar/executar testes e resolver falhas. O aceite técnico não depende de transferir essa validação às áreas. Dados oficiais indisponíveis continuam limites de integração real; testes não inventam credenciais, vínculos ou regras de negócio. Permanece a proteção de colunas/fontes e a proibição de carga Linx sem conciliação.
+
+Correções:
+
+- `google-sheets.service.ts`: erro esgotado de leitura não retorna `null`; usa `ServiceUnavailableError`, que o controller traduz para HTTP 503. `null` continua representando consulta bem-sucedida sem o processo. Testes cobrem três timeouts/cancelamentos, falha transitória recuperada, ausência real, falha de cabeçalhos e resposta HTTP; SKU textual e faixa A:DZ preservados.
+- `odoo.service.ts`: configuração de exemplo ou URL inválida não é considerada pronta e não cria cliente RPC. Seis casos de configuração inválida acrescidos. Consulta produtiva confirmou valores de exemplo efetivos no ambiente, sem override no banco.
+- `restore-test.sh`: sem DROP inicial; nome de banco restrito, cleanup somente do banco criado, `pg_restore --exit-on-error`, contagem mínima obrigatória, suporte a caminho com espaços/dump exato. Sete testes sintéticos verificam sucesso, falhas, SQL malicioso, banco preexistente e limpeza.
+- `apps/web/nginx.conf`: HSTS curto e restrito ao hostname próprio, com três testes no Nginx real. Nenhuma alteração no proxy compartilhado, CA ou outros projetos. Primeira execução do teste teve prazo de readiness insuficiente; `nginx -t` confirmou configuração válida, espera limitada ajustada e três testes passaram.
+- Fixture do smoke R6 integrada. CI passa a executar os gates de restauração e de cabeçalhos da imagem.
+
+Evidências reais anteriores ao novo deploy:
+
+- Os dois ETIMEDOUT registrados afetaram um único processo. `readProcessRow` foi reexecutado somente para ele e recuperou a linha com 115 cabeçalhos, sem escrita. A causa de rede dos timeouts originais não foi demonstrada; o defeito de classificação e a recuperação dessa leitura foram comprovados separadamente.
+- Backup do deploy R5 restaurado em PostgreSQL 16 isolado: 42 tabelas, 117 processos, exit 0, banco e contêiner removidos. Três arquivos de volumes passaram `gzip -t`.
+- IMAP: servidor respondeu NO/invalid credentials; senha configurada tem formato de placeholder. Gmail/Drive permanecem operacionais e ingestão por e-mail está desligada. Não se removeu a falha do diagnóstico nem se simulou autenticação bem-sucedida.
+- Odoo: URL/base/usuário efetivos de exemplo; configuração real solicitada por caminho seguro, sem pedir senhas em conversa. Contratos de consulta/descrição são testados com casos válidos, divergentes e indisponíveis.
+
+Homologação técnica em consolidação: gates finais, CI e deploy pendentes neste checkpoint.

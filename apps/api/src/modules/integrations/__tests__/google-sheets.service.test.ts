@@ -41,6 +41,7 @@ describe('googleSheetsService Follow Up ranges', () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const key of ENV_KEYS) {
       const value = originalEnv.get(key);
       if (value === undefined) delete process.env[key];
@@ -72,5 +73,64 @@ describe('googleSheetsService Follow Up ranges', () => {
       { spreadsheetId: 'follow-up-sheet', range: "'Processos ''2026'''!A2:A" },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
+  });
+
+  it('returns null only when a successful lookup does not contain the process', async () => {
+    sheetsMocks.valuesGet.mockResolvedValue({ data: { values: [['Processo'], ['OUTRO']] } });
+    const service = await loadService();
+    await expect(service.readProcessRow('PK220')).resolves.toBeNull();
+    expect(sheetsMocks.valuesGet).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports unavailable after bounded timeout retries instead of a missing process', async () => {
+    vi.useFakeTimers();
+    sheetsMocks.valuesGet.mockImplementation(() => new Promise(() => {}));
+    const service = await loadService();
+    const result = expect(service.readProcessRow('PK220')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'SERVICE_UNAVAILABLE',
+    });
+    await vi.runAllTimersAsync();
+    await result;
+    expect(sheetsMocks.valuesGet).toHaveBeenCalledTimes(3);
+    for (const [, options] of sheetsMocks.valuesGet.mock.calls) {
+      expect(options.signal.aborted).toBe(true);
+    }
+  });
+
+  it('recovers a transient lookup failure without changing source columns or text values', async () => {
+    vi.useFakeTimers();
+    sheetsMocks.valuesGet
+      .mockRejectedValueOnce(Object.assign(new Error('network timeout'), { code: 'ETIMEDOUT' }))
+      .mockResolvedValueOnce({ data: { values: [['Processo'], ['PK220']] } })
+      .mockResolvedValueOnce({ data: { values: [['PK220', '050404509', '31/12/2026']] } })
+      .mockResolvedValueOnce({ data: { values: [['Processo', 'SKU', 'ETA Final']] } });
+    const service = await loadService();
+    const result = service.readProcessRow('PK220');
+    await vi.runAllTimersAsync();
+    await expect(result).resolves.toEqual({
+      Processo: 'PK220',
+      SKU: '050404509',
+      'ETA Final': '31/12/2026',
+    });
+    expect(sheetsMocks.valuesGet.mock.calls.map(([request]) => request.range)).toEqual([
+      "'Processos'!A:A",
+      "'Processos'!A:A",
+      "'Processos'!A2:DZ2",
+      "'Processos'!A1:DZ1",
+    ]);
+  });
+
+  it('does not treat a header permission failure as a missing process or expose provider details', async () => {
+    sheetsMocks.valuesGet
+      .mockResolvedValueOnce({ data: { values: [['Processo'], ['PK220']] } })
+      .mockResolvedValueOnce({ data: { values: [['PK220']] } })
+      .mockRejectedValueOnce(Object.assign(new Error('private provider details'), { code: 403 }));
+    const service = await loadService();
+    await expect(service.readProcessRow('PK220')).rejects.toMatchObject({
+      statusCode: 503,
+      message: 'Nao foi possivel ler o Follow-Up no Google Sheets. Tente novamente.',
+    });
+    expect(sheetsMocks.valuesGet).toHaveBeenCalledTimes(3);
   });
 });

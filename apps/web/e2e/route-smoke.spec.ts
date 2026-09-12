@@ -172,6 +172,12 @@ async function installApiSandbox(page: Page) {
     if (request.method() === 'GET' && url.pathname === '/cert-api/api/products/SKU-E2E') {
       return json(route, { sku: 'SKU-E2E', brand: 'puket', name: 'Produto E2E' });
     }
+    if (request.method() === 'GET' && url.pathname === '/cert-api/api/grifes') {
+      return json(route, { grifes: [], sem_grife: 0 });
+    }
+    if (request.method() === 'GET' && url.pathname === '/cert-api/api/sync-sheets/last') {
+      return json(route, { last_run: null });
+    }
     if (request.method() === 'GET' && url.pathname === '/cert-api/api/stats') {
       return json(route, { total: 0, by_brand: [], last_run: null });
     }

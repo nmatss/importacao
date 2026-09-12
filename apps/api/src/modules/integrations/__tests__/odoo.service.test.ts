@@ -80,6 +80,28 @@ describe('odooService', () => {
     restoreEnv();
   });
 
+  it.each([
+    ['ODOO_URL', 'https://your-odoo-instance.com/'],
+    ['ODOO_DB', 'your-odoo-db'],
+    ['ODOO_USER', 'your-odoo-user'],
+    ['ODOO_PASSWORD', 'your-odoo-password'],
+    ['ODOO_URL', 'not-a-url'],
+    ['ODOO_URL', 'ftp://odoo.local'],
+  ])('rejects unusable %s before sending credentials', async (key, value) => {
+    process.env.ODOO_URL = 'https://odoo.local';
+    process.env.ODOO_DB = 'production';
+    process.env.ODOO_USER = 'integration@example.test';
+    process.env.ODOO_PASSWORD = 'test-secret';
+    process.env[key] = value;
+    queueSettings({});
+    queueSettings({});
+    const service = await loadOdooService();
+    await expect(service.isConfigured()).resolves.toBe(false);
+    await expect(service.authenticate()).rejects.toThrow('Odoo is not configured');
+    expect(xmlrpcMock.createClient).not.toHaveBeenCalled();
+    expect(xmlrpcMock.createSecureClient).not.toHaveBeenCalled();
+  });
+
   it('should consider Odoo configured from DB settings plus env password', async () => {
     queueSettings({
       odoo_url: 'http://odoo.local:8069',

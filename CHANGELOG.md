@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026-09-12 — Homologação técnica R7
+
+- Distingue indisponibilidade do Sheets (HTTP 503) de processo ausente, preservando valores, colunas e retries limitados.
+- Rejeita configuração de exemplo/inválida do Odoo antes de enviar autenticação.
+- Adiciona HSTS inicial de 300 segundos exclusivamente ao domínio produtivo, sem preload ou subdomínios.
+- Protege ensaio de restauração: não apaga banco preexistente, reprova carga incompleta e garante limpeza do banco criado pela execução.
+- Acrescenta 21 testes de regressão/HTTP/recuperação e os gates de restauração e cabeçalhos ao CI; corrige fixture de grifes/última sincronização do smoke web.
+
 ## 2026-09-12 — Release R5 em produção
 
 - Publicada e implantada a revisão `4eaffac`, com CI/CodeQL, scans das três imagens e SBOMs aprovados.

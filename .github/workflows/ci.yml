@@ -51,6 +51,8 @@ jobs:
         run: ruff check apps/cert-api/
       - name: Verify atomic environment generation
         run: python3 scripts/test-generate-env.py
+      - name: Verify restore safety and failure gates
+        run: python3 scripts/test-restore-test.py
 
   test-api:
     name: Test API
@@ -183,6 +185,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           outputs: type=docker
+      - name: Verify Web security headers in isolated Nginx
+        run: python3 scripts/test-web-security-headers.py
       - name: Build Cert API image
         uses: docker/build-push-action@v6
         with:

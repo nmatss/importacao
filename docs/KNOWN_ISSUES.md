@@ -1,5 +1,20 @@
 # Known Issues
 
+## 2026-09-12 — R7: correções técnicas e limites de conexão real
+
+- Leitura afetada pelos dois timeouts recuperada (um processo, 115 cabeçalhos); candidato passa a devolver 503 em falha de leitura, sem falso 404. Causa de rede original não demonstrada.
+- Ensaio de restauração concluído em contêiner isolado: 42 tabelas/117 processos, limpeza verificada; três arquivos de volumes íntegros.
+- HSTS curto e restrito ao hostname validado na imagem candidata; publicação depende do CI.
+- IMAP usa senha de exemplo e recebe invalid credentials; Odoo URL/base/usuário efetivos também são exemplos. Configurações reais não disponíveis. O candidato bloqueia autenticação Odoo com placeholders; isso não equivale a conectar ao Odoo real. Ingestão e-mail continua desligada, Drive/Gmail operacionais.
+- Homologação técnica é responsabilidade do agente, conforme esclarecimento do usuário: testes de contratos/dados sintéticos executados, sem exigir aceite humano para aprová-los. Vínculos/datas reais não foram inventados e carga Linx permanece bloqueada.
+- Os cinco testes opt-in da suíte API dependem de quatro PDFs privados ausentes localmente e de um provider OpenRouter fora do runtime ativo (Vertex); não são apresentados como executados.
+
+## 2026-09-12 — Revisão final R6
+
+- **MEDIO — leituras intermitentes do Sheets:** dois `ETIMEDOUT` observados após o deploy em `findProcessRow`. Smoke posterior acessou Drive e 1.415 referências do follow-up; isso comprova disponibilidade no momento, não recuperação de todos os processos afetados. Retry limitado e timeout já existem; causa de rede não confirmada. Conferir os processos afetados na homologação, sem reprocessamento amplo ou alteração de fontes.
+- Fixture do smoke de rotas não incluía `/api/grifes` e `/api/sync-sheets/last`; contrato do teste corrigido conforme backend, sem mudança de aplicação. Resultados finais na seção R6 do STATUS.
+- R5 abaixo continua válido para produção `4eaffac`; aceite global permanece parcial.
+
 ## 2026-09-12 — Estado após deploy R5
 
 - Bloqueios técnicos de publicação resolvidos em `4eaffac`: auditoria Node zero, E2E corrigido e Trivy das três imagens aprovado. Release implantada; checkpoints anteriores de deploy pendente são históricos.

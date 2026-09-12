@@ -17,10 +17,22 @@ MIN_ROWS_PROCESSES="${MIN_ROWS_PROCESSES:-1}"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-LATEST_BACKUP="$(find "${BACKUP_LOCAL_DIR}" -name "importacao_*.pgdump" -type f \
-  -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | awk '{print $2}')"
+# Never interpolate an arbitrary database name into SQL or remove a live DB.
+[[ "${TEST_DB}" =~ ^importacao_restore_test(_[a-z0-9_]+)?$ ]] \
+  || die "TEST_DB must be importacao_restore_test or use that prefix."
+[[ "${MIN_TABLES}" =~ ^[0-9]+$ && "${MIN_ROWS_PROCESSES}" =~ ^[0-9]+$ ]] \
+  || die "Minimum counts must be non-negative integers."
 
+LATEST_BACKUP="${BACKUP_FILE:-}"
 if [[ -z "${LATEST_BACKUP}" ]]; then
+  while IFS= read -r -d '' candidate; do
+    if [[ -z "${LATEST_BACKUP}" || "${candidate}" -nt "${LATEST_BACKUP}" ]]; then
+      LATEST_BACKUP="${candidate}"
+    fi
+  done < <(find "${BACKUP_LOCAL_DIR}" -name 'importacao_*.pgdump' -type f -print0)
+fi
+
+if [[ -z "${LATEST_BACKUP}" || ! -r "${LATEST_BACKUP}" ]]; then
   die "No backup files found in ${BACKUP_LOCAL_DIR}"
 fi
 
@@ -36,17 +48,31 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
   die "Container '${CONTAINER_NAME}' is not running."
 fi
 
-log "Dropping test DB if exists: ${TEST_DB}..."
-docker exec "${CONTAINER_NAME}" \
-  psql -U "${POSTGRES_USER}" -c "DROP DATABASE IF EXISTS ${TEST_DB};" postgres
+created_test_db=0
+cleanup() {
+  local result=$?
+  trap - EXIT
+  if [[ "${created_test_db}" == 1 ]]; then
+    log "Cleaning up the DB created by this run: ${TEST_DB}..."
+    docker exec "${CONTAINER_NAME}" \
+      psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" \
+      -c "DROP DATABASE ${TEST_DB};" postgres || result=1
+  fi
+  if [[ "${result}" == 0 ]]; then
+    log "Restore test PASSED; cleanup completed."
+  fi
+  exit "${result}"
+}
+trap cleanup EXIT
 
 log "Creating test DB: ${TEST_DB}..."
 docker exec "${CONTAINER_NAME}" \
-  psql -U "${POSTGRES_USER}" -c "CREATE DATABASE ${TEST_DB};" postgres
+  psql -v ON_ERROR_STOP=1 -U "${POSTGRES_USER}" -c "CREATE DATABASE ${TEST_DB};" postgres
+created_test_db=1
 
 log "Restoring backup into ${TEST_DB}..."
 docker exec -i "${CONTAINER_NAME}" \
-  pg_restore -U "${POSTGRES_USER}" -d "${TEST_DB}" --no-owner --no-acl \
+  pg_restore -U "${POSTGRES_USER}" -d "${TEST_DB}" --no-owner --no-acl --exit-on-error \
   < "${LATEST_BACKUP}" \
   || die "pg_restore failed"
 
@@ -67,11 +93,7 @@ PROCESS_COUNT="$(docker exec "${CONTAINER_NAME}" \
 
 log "import_processes rows: ${PROCESS_COUNT} (minimum: ${MIN_ROWS_PROCESSES})"
 if [[ "${PROCESS_COUNT}" -lt "${MIN_ROWS_PROCESSES}" ]]; then
-  log "WARNING: import_processes count below expected"
+  die "import_processes count below expected"
 fi
 
-log "Cleaning up test DB: ${TEST_DB}..."
-docker exec "${CONTAINER_NAME}" \
-  psql -U "${POSTGRES_USER}" -c "DROP DATABASE ${TEST_DB};" postgres
-
-log "Restore test PASSED. Tables: ${TABLE_COUNT}, Processes: ${PROCESS_COUNT}"
+log "Restore checks passed. Tables: ${TABLE_COUNT}, Processes: ${PROCESS_COUNT}; cleanup pending."
