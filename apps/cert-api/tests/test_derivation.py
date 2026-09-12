@@ -778,3 +778,296 @@ class TestHojeNoFusoDeSaoPaulo:
     def test_prazo_de_ontem_continua_vencido(self, mocker):
         mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
         assert derive_within_sale_deadline(None, "", date(2026, 8, 28)) is False
+
+
+# ---------------------------------------------------------------------------
+# Decisao D11 (reuniao 11/09/2026) — o STATUS do certificado vem da coluna U e a
+# TRAVA de venda e outra dimensao: a menor data real entre certificacao e
+# licenciamento. Casos reais citados na reuniao e nos prints.
+# ---------------------------------------------------------------------------
+
+
+class TestStatusPelaSituacao:
+    """"O status do item tem que ser pela validade do certificado" [50:07]."""
+
+    HOJE = date(2026, 9, 11)  # dia da reuniao
+
+    def _row(self, **overrides) -> dict:
+        row = {
+            "sku": "PI5914Y",
+            "name": "PELUCIA MOZI",
+            "situacao": "Encerrado",
+            "sheet_status": "18/03/2026 - Certificado encerrado.",
+            "encerramento_status": "Comerciação Permitida",
+            "sale_deadline": "29/10/2026",
+            "sale_deadline_date": date(2026, 10, 29),
+            "last_validation_status": "OK",
+            "certification_type": "INMETRO",
+            "expected_cert_text": "INMETRO",
+        }
+        row.update(overrides)
+        return row
+
+    def test_pelucia_mozi_encerrada_aparece_encerrada(self):
+        """Aparecia ATIVO porque o prazo de venda (29/10/2026) e futuro."""
+        dims = compute_status_dimensions(self._row(), today=self.HOJE)
+        assert dims["cert_status"] == "ENCERRADO"
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == "2026-10-29"
+        assert dims["trava_origem"] == "certificacao"
+
+    def test_bicho_machine_encerrado_com_prazo_em_2027(self):
+        dims = compute_status_dimensions(
+            self._row(
+                sku="990400023", name="BICHO MACHINE",
+                sale_deadline="20/11/2027", sale_deadline_date=date(2027, 11, 20),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ENCERRADO"
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == "2027-11-20"
+
+    def test_caneta_hp_encerrada_com_prazo_2028(self):
+        """PI4511Y do relatorio: encerrada, venda liberada ate 02/03/2028."""
+        dims = compute_status_dimensions(
+            self._row(
+                sku="PI4511Y", name="CANETA MUDA FRASES HP FEITICOS",
+                sheet_status=PI4511Y_SHEET_STATUS,
+                sale_deadline="02/03/2028", sale_deadline_date=date(2028, 3, 2),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ENCERRADO"
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == "2028-03-02"
+
+    def test_prazo_vencido_bloqueia_mesmo_com_texto_permissivo(self):
+        """050403179/050403180/PI6014Y: 'Comercializacao Permitida' com data vencida."""
+        dims = compute_status_dimensions(
+            self._row(sale_deadline="10/08/2026", sale_deadline_date=date(2026, 8, 10)),
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ENCERRADO"
+        assert dims["status_venda"] == "BLOQUEADA"
+
+    def test_sku_excluido_e_encerrado(self):
+        dims = compute_status_dimensions(self._row(situacao="SKU excluído"), today=self.HOJE)
+        assert dims["cert_status"] == "ENCERRADO"
+
+    def test_venda_bloqueada_na_planilha_bloqueia(self):
+        dims = compute_status_dimensions(
+            self._row(encerramento_status="Vencido - Venda Bloqueada"), today=self.HOJE
+        )
+        assert dims["status_venda"] == "BLOQUEADA"
+
+    def test_sku_so_em_encerramentos_e_encerrado(self):
+        """108 SKUs Puket nao tem linha em aba de produto — e por isso nao tem U."""
+        dims = compute_status_dimensions(
+            self._row(sku="050402301", situacao="", sheet_status=""), today=self.HOJE
+        )
+        assert dims["cert_status"] == "ENCERRADO"
+
+    def test_linha_sem_situacao_e_sem_encerramento_mantem_a_regra_antiga(self):
+        """Sem U e sem encerramento, quem decide continua sendo o historico."""
+        dims = compute_status_dimensions(
+            {
+                "sku": "PI7550Y",
+                "situacao": "",
+                "sheet_status": "01/09/25 - Registro concedido no Orquestra.",
+                "last_validation_status": "OK",
+            },
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ATIVO"
+
+
+class TestCertificadoAtivoNaoTemTrava:
+    """Vitrola e Karaoke: ativos, apareciam com trava = validade do certificado."""
+
+    HOJE = date(2026, 9, 11)
+
+    def _ativo(self, **overrides) -> dict:
+        row = {
+            "sku": "PI5555Y",
+            "name": "VITROLA DE MALA SEM FIO POR DO SOL",
+            "situacao": "Ativo",
+            "sheet_status": "23/04/2025 - Manutenção finalizada.",
+            "validade_certificado": date(2027, 3, 22),
+            "last_validation_status": "OK",
+        }
+        row.update(overrides)
+        return row
+
+    def test_vitrola_ativa_sem_trava(self):
+        dims = compute_status_dimensions(self._ativo(), today=self.HOJE)
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["trava_venda"] is None
+        assert dims["trava_origem"] is None
+        assert dims["status_venda"] == "LIBERADA"
+
+    def test_karaoke_ativo_sem_trava(self):
+        dims = compute_status_dimensions(
+            self._ativo(sku="PI5558Y", name="KARAOKE PORTATIL 2 MIC",
+                        validade_certificado=date(2028, 7, 27)),
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["trava_venda"] is None
+
+    def test_ativo_com_prazo_velho_no_banco_continua_sem_trava(self):
+        """Caso PI6552Y: sobrou no banco o prazo do certificado ANTERIOR."""
+        dims = compute_status_dimensions(
+            self._ativo(
+                sku="PI6552Y", name="PELUCIA NEVINHO G",
+                sale_deadline="29/10/2026", sale_deadline_date=date(2026, 10, 29),
+                encerramento_status="Comerciação Permitida",
+            ),
+            today=self.HOJE,
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["trava_venda"] is None
+        assert dims["status_venda"] == "LIBERADA"
+
+    def test_ativo_ainda_trava_pelo_licenciamento(self):
+        """O eixo de licenciamento e independente do certificado."""
+        dims = compute_status_dimensions(
+            self._ativo(linx_fim_licenciamento=date(2026, 12, 31)), today=self.HOJE
+        )
+        assert dims["trava_venda"] == "2026-12-31"
+        assert dims["trava_origem"] == "licenciamento"
+        assert dims["license_status"] == "VALIDO"
+
+
+class TestTravaMenorData:
+    """Trava = MENOR data real; nulo e 01/01/1900 sao AUSENTES [35:34]-[40:11]."""
+
+    @pytest.mark.parametrize(
+        ("cert", "lic", "esperado", "origem"),
+        [
+            ("29/10/2026", None, date(2026, 10, 29), "certificacao"),
+            ("01/01/1900", "31/12/2026", date(2026, 12, 31), "licenciamento"),
+            # PI4511Y: o Linx travava pelo cert (02/03/2028) com o lic menor.
+            ("02/03/2028", "31/12/2026", date(2026, 12, 31), "licenciamento"),
+            # PI4461Y: o inverso — o cert e que e menor.
+            ("04/03/2024", "31/12/2026", date(2024, 3, 4), "certificacao"),
+            (None, None, None, None),
+            ("", "", None, None),
+            ("31/12/1999", None, None, None),
+            ("Venda até fim do lote", None, None, None),
+            ("31/12/2026", "31/12/2026", date(2026, 12, 31), "certificacao"),
+        ],
+    )
+    def test_menor_data_real(self, cert, lic, esperado, origem):
+        assert derivation.derive_trava_venda(cert, lic, "ENCERRADO") == (esperado, origem)
+
+    def test_certificado_ativo_zera_o_componente_de_certificacao(self):
+        assert derivation.derive_trava_venda("22/03/2027", None, "ATIVO") == (None, None)
+        assert derivation.derive_trava_venda("22/03/2027", "31/12/2026", "ATIVO") == (
+            date(2026, 12, 31),
+            "licenciamento",
+        )
+
+    @pytest.mark.parametrize("sentinela", ["01/01/1900", "1900-01-01", "31/12/1999"])
+    def test_sentinela_nao_e_data(self, sentinela):
+        assert derivation.parse_data_real(sentinela) is None
+
+    @pytest.mark.parametrize(
+        ("valor", "esperado"),
+        [
+            ("29/10/2026", date(2026, 10, 29)),
+            ("2026-10-29", date(2026, 10, 29)),
+            (date(2026, 10, 29), date(2026, 10, 29)),
+            (datetime(2026, 10, 29, 15, 0), date(2026, 10, 29)),
+            ("a definir", None),
+            (None, None),
+        ],
+    )
+    def test_parser_unico_aceita_os_formatos_reais(self, valor, esperado):
+        assert derivation.parse_data_real(valor) == esperado
+
+    def test_status_venda_so_tem_dois_valores(self):
+        for cert_status in ("ATIVO", "ENCERRADO"):
+            for trava in (None, date(2020, 1, 1), date(2030, 1, 1)):
+                assert (
+                    derivation.derive_status_venda(cert_status, trava, today=date(2026, 9, 11))
+                    in derivation.STATUS_VENDA_VALUES
+                )
+
+    def test_trava_que_vence_hoje_ainda_permite_vender(self):
+        hoje = date(2026, 9, 11)
+        assert derivation.derive_status_venda("ENCERRADO", hoje, today=hoje) == "LIBERADA"
+        assert (
+            derivation.derive_status_venda("ENCERRADO", hoje - timedelta(days=1), today=hoje)
+            == "BLOQUEADA"
+        )
+
+
+class TestLicenciamentoVemDoLinx:
+    """[58:01]: a planilha de licenciamento nao sera mais atualizada."""
+
+    HOJE = date(2026, 9, 11)
+
+    def test_data_futura_no_linx_e_valido(self):
+        assert derivation.derive_license_status_linx("31/12/2026", self.HOJE) == (
+            "VALIDO",
+            "2026-12-31",
+        )
+
+    def test_data_passada_no_linx_e_vencido(self):
+        assert derivation.derive_license_status_linx("31/12/2025", self.HOJE) == (
+            "VENCIDO",
+            "2025-12-31",
+        )
+
+    def test_sentinela_e_nao_aplicavel(self):
+        assert derivation.derive_license_status_linx("01/01/1900", self.HOJE) == (
+            "NAO_APLICAVEL",
+            None,
+        )
+
+    def test_linx_vence_a_planilha(self):
+        row = {
+            "sku": "PI4257Y",
+            "situacao": "Ativo",
+            "last_validation_status": "OK",
+            "linx_fim_licenciamento": date(2027, 1, 31),
+        }
+        dims = compute_status_dimensions(
+            row,
+            license_map={"PI4257Y": {"status": "VENCIDO", "valid_until": "2024-05-01"}},
+            today=self.HOJE,
+        )
+        assert dims["license_status"] == "VALIDO"
+        assert dims["license_deadline"] == "2027-01-31"
+
+
+class TestGuardasEstaticas:
+    """Declaracao ausente e bug: prove que a regra esta escrita no codigo."""
+
+    def test_derive_cert_status_le_a_situacao(self):
+        import inspect
+
+        fonte = inspect.getsource(derivation.derive_cert_status)
+        assert "situacao" in fonte
+        assert "derive_situacao_status" in fonte
+
+    def test_report_e_linx_usam_o_mesmo_parser_de_sentinela(self):
+        """Os cortes divergiam: < 2000 no relatorio e <= 1900 no Linx."""
+        import inspect
+
+        from app.services import linx_service, report_service
+
+        for modulo in (report_service, linx_service):
+            assert "parse_data_real" in inspect.getsource(modulo), modulo.__name__
+        assert report_service.parse_data_real is derivation.parse_data_real
+        assert linx_service.parse_data_real is derivation.parse_data_real
+
+        # Guarda de comportamento: o mesmo valor tem de ser "sem data" nos dois.
+        # O corte divergente deixava 31/12/1999 contando como trava no Linx.
+        for sentinela in ("01/01/1900", "1900-01-01", "31/12/1999", "01/07/1950"):
+            assert report_service._trava_ativa(sentinela) is None, sentinela
+            assert linx_service._parse_linx_date(sentinela) == (None, "empty"), sentinela
+        for real in ("29/10/2026", "02/03/2028"):
+            assert report_service._trava_ativa(real) == real
+            assert linx_service._parse_linx_date(real)[1] == "found"

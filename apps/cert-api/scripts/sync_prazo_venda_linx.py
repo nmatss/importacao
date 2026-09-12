@@ -1,49 +1,37 @@
-"""Sincroniza o PRAZO FINAL VENDA da planilha com a validade do produto no Linx.
+"""Reconcilia o FIM DE VENDA da planilha com a propriedade de certificacao do Linx.
 
-O time fiscal mantem o prazo final de venda na aba "Encerramentos"; o Linx guarda o
-mesmo dado na propriedade VALIDADE DO CERTIFICADO (00224 Puket / 00106 Imaginarium),
-que vinha sem ser atualizada. Este script reconcilia os dois.
+O time fiscal mantem o fim de venda na aba "Encerramentos"; o Linx guarda a trava
+de faturamento na propriedade de certificacao (00224 Puket / 00106 Imaginarium).
+Este script compara os dois e produz o relatorio antes/depois POR SKU.
 
-DRY-RUN por padrao: sem `--apply`, nada e escrito no ERP.
+DRY-RUN por padrao: sem `--apply`, nada e escrito no ERP. O relatorio JSON e salvo
+em REPORTS_DIR NOS DOIS MODOS — e ele que o time fiscal confere antes de autorizar
+qualquer carga.
 
 Uso (no servidor):
 
-    docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py
+    docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --list
     docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --brand puket
     docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --apply
 
-Dois grupos NUNCA sao gravados, nem com --apply, porque dependem de decisao de
-negocio e nao podem sair como efeito colateral de um sync:
+Grupos que NUNCA sao gravados, nem com --apply (decisao fiscal, reuniao 11/09):
+  - "limpar: ativo" / "bloqueado: certificado ativo": o certificado esta ATIVO
+    (coluna U) e portanto NAO pode ter data de certificacao no Linx. Quando ja ha
+    data, o relatorio propoe 01/01/1900 (a sentinela do proprio ERP).
+  - "dupla certificacao": o encerramento e de um certificado DIFERENTE do vigente.
   - "encurta janela": o prazo da planilha e anterior ao que ja esta no Linx, entao
     gravar tira dias de venda do produto.
-  - "ambiguo": o mesmo SKU aparece em encerramentos com prazos diferentes (produto
-    recertificado) — qual certificado vale nao e o script que decide.
+  - "ambiguo": o mesmo SKU aparece em encerramentos com prazos diferentes.
 Doc: docs/CERT-LINX-WRITE.md
 """
 
 import argparse
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.config import REPORTS_DIR  # noqa: E402
 from app.services.linx_service import sync_prazo_venda_to_linx  # noqa: E402
-
-
-def _salvar_relatorio(resultado: dict) -> Path:
-    """Grava o antes/depois de cada SKU — e o unico caminho de volta.
-
-    O Linx nao versiona PROP_PRODUTOS: sem este arquivo, sobrescrever a validade de
-    centenas de produtos e irreversivel. Cada item carrega `valor_atual` (o valor
-    que estava la) e `prazo` (o que foi gravado).
-    """
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    path = Path(REPORTS_DIR) / f"sync-prazo-linx-{stamp}.json"
-    path.write_text(json.dumps(resultado, ensure_ascii=False, indent=2), encoding="utf-8")
-    return path
 
 
 def main() -> int:
@@ -83,19 +71,26 @@ def main() -> int:
         for it in r["ambiguos"]:
             print(f"   {it['sku']:12} prazos: {it['prazo']:26} certificados: {', '.join(it['certificados'])}")
 
+    if r["totais_por_marca"]:
+        print("\nPor marca:")
+        for marca, acoes in sorted(r["totais_por_marca"].items()):
+            resumo = ", ".join(f"{a}: {n}" for a, n in sorted(acoes.items()))
+            print(f"  {marca:14} {resumo}")
+
     if args.list:
-        print(f"\n{'SKU':12} {'MARCA':13} {'PRAZO':12} {'LINX HOJE':12} ACAO")
+        print(f"\n{'SKU':12} {'MARCA':13} {'U':10} {'PRAZO':12} {'LINX HOJE':12} {'PROPOSTO':12} ACAO")
         for it in r["items"]:
             print(
-                f"{it['sku']:12} {it['brand'][:12]:13} {it['prazo']:12} "
-                f"{str(it['valor_atual'] or '-'):12} {it['acao']}"
+                f"{it['sku']:12} {it['brand'][:12]:13} {str(it.get('situacao') or '-')[:9]:10} "
+                f"{it['prazo']:12} {str(it['valor_atual'] or '-'):12} "
+                f"{str(it.get('valor_proposto') or '-'):12} {it['acao']}"
             )
 
-    if args.apply:
-        path = _salvar_relatorio(r)
-        print(f"\nAntes/depois de cada SKU salvo em: {path}")
+    if r["report_path"]:
+        print(f"\nAntes/depois de cada SKU salvo em: {r['report_path']}")
+        print(f"   {len(r['diff'])} SKU(s) mudariam de valor.")
         print("   (guarde: e o unico caminho de rollback — o Linx nao versiona PROP_PRODUTOS)")
-    else:
+    if not args.apply:
         print("\nNada foi escrito. Para gravar de fato: --apply")
     return 0
 

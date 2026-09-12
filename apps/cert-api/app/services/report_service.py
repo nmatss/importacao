@@ -2,7 +2,7 @@
 
 import json
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -12,7 +12,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 from app.config import REPORTS_DIR
 from app.db.postgres import db
-from app.services.derivation import compute_status_dimensions
+from app.services.derivation import compute_status_dimensions, parse_data_real
 from app.services.wms_service import summarize_stock_rows
 from app.utils.logging import log
 
@@ -67,29 +67,42 @@ _FORMULA_PREFIXES = ("=", "+", "-", "@")
 TRAVA_NAO_VERIFICADA = "Nao verificado (Linx indisponivel)"
 TRAVA_SEM_MARCA = "Nao verificado (marca sem Linx)"
 
-# O Linx usa 01/01/1900 como sentinela de "campo criado, data nao preenchida" —
-# e e a MAIORIA das linhas: 2.210 dos 2.400 valores da propriedade de validade
-# da Puket e 999 dos 1.256 da Imaginarium (medido em 2026-08-07). Tratar essas
-# linhas como trava faria o relatorio afirmar "Sim" para centenas de itens que
-# nao travam nada. Nenhum certificado vivo tem validade anterior a 2000.
-_TRAVA_ANO_MINIMO = 2000
-
 
 def _trava_ativa(valor: str | None) -> str | None:
-    """Devolve a data da trava quando ela e real; None quando e sentinela/vazio."""
+    """Devolve a data da trava (texto original) quando ela e real.
+
+    A decisao de "e data real?" e do parser unico `derivation.parse_data_real`
+    (sentinela 01/01/1900 e qualquer ano < 2000 = ausente). Antes esta regra
+    estava duplicada aqui e em `linx_service`, com cortes diferentes.
+
+    Returns:
+        O texto como veio quando ha data real; None para vazio/sentinela. Texto
+        que nao e data e devolvido como veio: nao da para afirmar que trava, mas
+        tambem nao da para descartar — quem le o relatorio julga.
+    """
     texto = (valor or "").strip()
     if not texto:
         return None
+    if parse_data_real(texto) is not None:
+        return texto
+    return None if _parece_data(texto) else texto
+
+
+def _parece_data(texto: str) -> bool:
+    """True quando o texto tem forma de data (ainda que sentinela/antiga)."""
     for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
         try:
-            if datetime.strptime(texto, fmt).year < _TRAVA_ANO_MINIMO:
-                return None
-            return texto
+            datetime.strptime(texto, fmt)
+            return True
         except ValueError:
             continue
-    # Texto que nao e data: nao da para afirmar que trava, mas tambem nao da para
-    # descartar — devolve como veio para a operacao julgar.
-    return texto
+    return False
+
+
+def _fmt_br(value: object) -> str:
+    """Formata uma data (date, ISO ou pt-BR) como dd/mm/aaaa; '' quando ausente."""
+    data = parse_data_real(value)
+    return data.strftime("%d/%m/%Y") if data else ""
 
 
 def _fetch_stock_map() -> dict[str, dict]:
@@ -116,8 +129,8 @@ def _fetch_stock_map() -> dict[str, dict]:
         return {}
 
 
-def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str]]:
-    """Descobre, por SKU, se a trava de faturamento esta gravada no Linx.
+def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str | None]]:
+    """Le, por SKU, as duas propriedades de data gravadas no Linx.
 
     A "trava" e a data escrita na propriedade do produto no ERP: VALIDADE DO
     CERTIFICADO (00224 Puket / 00106 Imaginarium) e VENCIMENTO DO LICENCIAMENTO
@@ -137,7 +150,10 @@ def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str]]:
         rows: linhas de cert_products (usa `sku` e `brand`).
 
     Returns:
-        Dict {sku: {'cert': <rotulo>, 'lic': <rotulo>}}.
+        Dict {sku: {'cert': <texto cru ou None>, 'lic': <texto cru ou None>,
+        'indisponivel': <rotulo ou None>}}. `indisponivel` preenchido significa
+        que NAO foi possivel consultar (Linx fora do ar / marca sem Linx) — o
+        relatorio mostra isso em vez de afirmar "sem trava".
     """
     from app.db.sqlserver import _brand_linx, fetch_produto_propriedades
 
@@ -148,13 +164,13 @@ def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str]]:
         if sku and brand:
             por_marca[brand].append(sku)
 
-    travas: dict[str, dict[str, str]] = {}
+    travas: dict[str, dict[str, str | None]] = {}
     for brand, skus in por_marca.items():
         try:
             cfg = _brand_linx(brand)
         except ValueError:
             for sku in skus:
-                travas[sku] = {"cert": TRAVA_SEM_MARCA, "lic": TRAVA_SEM_MARCA}
+                travas[sku] = {"cert": None, "lic": None, "indisponivel": TRAVA_SEM_MARCA}
             continue
 
         prop_cert = cfg["prop_validade_certificado"]
@@ -164,22 +180,21 @@ def _fetch_travas_faturamento(rows: list[dict]) -> dict[str, dict[str, str]]:
         except Exception as e:
             log.warning(f"Trava de faturamento indisponivel para '{brand}': {e}")
             for sku in skus:
-                travas[sku] = {"cert": TRAVA_NAO_VERIFICADA, "lic": TRAVA_NAO_VERIFICADA}
+                travas[sku] = {"cert": None, "lic": None, "indisponivel": TRAVA_NAO_VERIFICADA}
             continue
 
         for sku in skus:
             valores = props.get(sku, {})
-            # O valor da propriedade E a data da trava — vai junto no rotulo,
-            # porque saber ate quando o item fatura vale mais que um "Sim".
-            # `_trava_ativa` descarta a sentinela 01/01/1900 do Linx.
-            data_cert = _trava_ativa(valores.get(prop_cert))
-            data_lic = _trava_ativa(valores.get(prop_lic))
+            # `_trava_ativa` descarta a sentinela 01/01/1900 do Linx; o valor que
+            # sobra e o texto cru da propriedade, que o relatorio mostra como
+            # esta hoje no ERP (a divergencia e o dado que a operacao precisa).
             travas[sku] = {
-                "cert": f"Sim ({data_cert})" if data_cert else "Nao",
-                "lic": f"Sim ({data_lic})" if data_lic else "Nao",
+                "cert": _trava_ativa(valores.get(prop_cert)),
+                "lic": _trava_ativa(valores.get(prop_lic)),
+                "indisponivel": None,
             }
 
-    log.info(f"Travas de faturamento consultadas no Linx para {len(travas)} SKUs")
+    log.info(f"Propriedades de data consultadas no Linx para {len(travas)} SKUs")
     return travas
 
 
@@ -258,19 +273,27 @@ _PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
     ("Motivo (E-commerce)", 38),
     ("Status Licenciamento", 20),
     # Cadastro vindo das abas Imaginarium/Puket.
-    ("Tipo Certificacao", 32),          # coluna H
-    ("Numero Certificado", 20),         # coluna P
-    ("Texto Esperado", 45),             # coluna V
+    ("Tipo Certificacao", 32),          # 'TIPO DE CERTIFICAÇÃO'
+    ("Numero Certificado", 20),         # 'Número Certificado'
+    ("Validade do Certificado", 22),    # 'Validade da Certificação'
+    ("Situacao (planilha)", 18),        # 'SITUAÇÃO' — a coluna que decide o status
+    ("Texto Esperado", 45),             # 'Descrição E-commerce'
     ("Texto Encontrado", 45),
     ("Pontuacao", 11),
     ("URL", 45),
     # Aba Encerramentos.
-    ("Prazo Final Venda", 16),          # coluna G
-    ("Situacao da Venda", 26),          # coluna H
-    ("Licen. - Prazo", 16),
-    # Travas de faturamento gravadas no Linx.
-    ("Trava Fat. Certificacao", 26),
-    ("Trava Fat. Licenciamento", 26),
+    ("Fim de Venda (cert)", 18),        # 'PRAZO FINAL VENDA'
+    ("Situacao da Venda", 26),          # 'STATUS'
+    # Trava de venda (decisao D11): menor data real entre certificacao e
+    # licenciamento, com a origem explicita e o que o Linx tem hoje ao lado.
+    ("Fim Licenciamento (Linx)", 22),
+    ("Data da Trava", 16),
+    ("Origem da Trava", 16),
+    ("Status de Venda", 16),
+    ("Prop. Certificacao no Linx", 26),
+    ("FIM_VENDAS Linx atual", 22),
+    ("Diverge do Linx", 18),
+    ("Ativo com Data no Linx", 22),
     # Estoque.
     ("Estoque CD Disponivel", 20),
     ("Estoque E-commerce", 18),
@@ -281,11 +304,55 @@ _PRODUCT_COLUMNS: tuple[tuple[str, int], ...] = (
 # 1-based, usada para pintar a celula de status de certificacao.
 _COL_STATUS_CERT = 4
 
+_TRAVA_ORIGEM_LABELS: dict[str, str] = {
+    "certificacao": "Certificacao",
+    "licenciamento": "Licenciamento",
+}
+_STATUS_VENDA_LABELS: dict[str, str] = {"LIBERADA": "Liberada", "BLOQUEADA": "Bloqueada"}
+
+# FIM_VENDAS mora em PRODUTO_CORES (por COR), fora do conjunto de propriedades que
+# o cert-api le hoje. Enquanto a coluna `cert_products.linx_fim_vendas` nao for
+# preenchida por um sync com GRANT de leitura nessa tabela, o relatorio diz que
+# NAO olhou — nunca que esta igual.
+FIM_VENDAS_NAO_LIDO = "Nao lido"
+DIVERGE_NAO_VERIFICAVEL = "Nao verificavel"
+
+
+def _diverge_do_linx(row: dict) -> str:
+    """Compara a trava calculada com o FIM_VENDAS que o Linx tem hoje.
+
+    Returns:
+        'Sim (<atual> -> <esperado>)', 'Nao', ou `DIVERGE_NAO_VERIFICAVEL` quando
+        `linx_fim_vendas` ainda nao foi lido do ERP.
+    """
+    atual = parse_data_real(row.get("linx_fim_vendas"))
+    if atual is None:
+        return DIVERGE_NAO_VERIFICAVEL
+    esperado = parse_data_real(row.get("trava_venda"))
+    if esperado == atual:
+        return "Nao"
+    return f"Sim ({atual.strftime('%d/%m/%Y')} -> {_fmt_br(esperado) or 'sem trava'})"
+
+
+def _ativo_com_data_no_linx(cert_status: str, trava: dict) -> str:
+    """Flag do caso Vitrola/Karaoke: certificado ATIVO com data de certificacao no ERP.
+
+    Sao 63 SKUs em 11/09/2026, 38 deles com a data IGUAL a validade do
+    certificado. O sistema nao limpa nada sozinho — mostra a divergencia, e a
+    limpeza passa pelo dry-run do `sync_prazo_venda_linx` com aceite fiscal.
+    """
+    if trava.get("indisponivel") or not trava:
+        return ""
+    if cert_status == "ATIVO" and trava.get("cert"):
+        return f"Sim ({trava['cert']})"
+    return "Nao"
+
 def generate_products_report(
     rows: list[dict],
     brand: str = "",
     status: str = "",
     license_map: dict | None = None,
+    today: date | None = None,
 ) -> Path:
     """Generate an Excel report for cert_products data.
 
@@ -299,8 +366,12 @@ def generate_products_report(
         rows: List of product dicts from cert_products.
         brand: Optional brand filter label (used only in filename).
         status: Optional status filter label (used only in filename).
-        license_map: Mapa de "Licenciamentos Vencidos" (SKU -> status/prazo).
-            Sem ele o status de licenciamento sai como "Nao aplicavel".
+        license_map: Mapa legado de licenciamento (SKU -> status/prazo). A fonte
+            corrente e a propriedade do Linx; sem nenhuma das duas o status sai
+            como "Nao aplicavel".
+        today: data de referencia do prazo de venda. Default: hoje em
+            America/Sao_Paulo; explicitavel para o Excel de um cenario congelado
+            (teste) nao mudar de veredito com a passagem do tempo.
 
     Returns:
         Path to the generated .xlsx file.
@@ -309,7 +380,16 @@ def generate_products_report(
     stock_map = _fetch_stock_map()
     travas = _fetch_travas_faturamento(rows)
 
-    enriched = [{**r, **compute_status_dimensions(r, license_map)} for r in rows]
+    # O fim do licenciamento vem do Linx (D11): injeta a propriedade lida antes de
+    # derivar, para trava/status de venda do Excel serem os MESMOS do painel — que
+    # le a coluna `linx_fim_licenciamento` de cert_products.
+    enriched = []
+    for r in rows:
+        trava = travas.get(str(r.get("sku") or ""), {})
+        base = dict(r)
+        if base.get("linx_fim_licenciamento") is None and trava.get("lic"):
+            base["linx_fim_licenciamento"] = trava["lic"]
+        enriched.append({**base, **compute_status_dimensions(base, license_map, today)})
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -321,7 +401,7 @@ def generate_products_report(
     conformes = sum(1 for r in enriched if r.get("site_status") == "CONFORME")
     nao_conformes = sum(1 for r in enriched if r.get("site_status") == "NAO_CONFORME")
     lic_vencidos = sum(1 for r in enriched if r.get("license_status") == "VENCIDO")
-    bloqueados = sum(1 for r in enriched if r.get("venda_encerramento") == "BLOQUEADA")
+    bloqueados = sum(1 for r in enriched if r.get("status_venda") == "BLOQUEADA")
 
     ws.append(["Relatorio de Produtos - Certificacoes"])
     ws.merge_cells("A1:J1")
@@ -348,6 +428,7 @@ def generate_products_report(
         sku = r.get("sku", "")
         stock = stock_map.get(sku, {})
         trava = travas.get(sku, {})
+        indisponivel = trava.get("indisponivel") or (TRAVA_NAO_VERIFICADA if not trava else None)
         row_data = [
             _safe_text(sku),
             _safe_text(r.get("name", "")),
@@ -362,15 +443,25 @@ def generate_products_report(
             ),
             _safe_text(r.get("certification_type", "")),
             _safe_text(r.get("numero_certificado", "")),
+            _safe_text(
+                _fmt_br(r.get("validade_certificado"))
+                or (r.get("validade_certificado_raw") or "")
+            ),
+            _safe_text(r.get("situacao", "")),
             _safe_text(r.get("expected_cert_text", "")),
             _safe_text(r.get("actual_cert_text", "")),
             _safe_text(score_str),
             _safe_text(r.get("last_validation_url", "")),
             _safe_text(r.get("sale_deadline", "")),
             _safe_text(r.get("encerramento_status", "")),
-            _safe_text(r.get("license_deadline") or ""),
-            _safe_text(trava.get("cert", TRAVA_NAO_VERIFICADA)),
-            _safe_text(trava.get("lic", TRAVA_NAO_VERIFICADA)),
+            _safe_text(_fmt_br(r.get("linx_fim_licenciamento")) or indisponivel or ""),
+            _safe_text(_fmt_br(r.get("trava_venda"))),
+            _safe_text(_TRAVA_ORIGEM_LABELS.get(r.get("trava_origem") or "", "")),
+            _safe_text(_STATUS_VENDA_LABELS.get(r.get("status_venda") or "", "")),
+            _safe_text(trava.get("cert") or indisponivel or ""),
+            _safe_text(_fmt_br(r.get("linx_fim_vendas")) or FIM_VENDAS_NAO_LIDO),
+            _safe_text(_diverge_do_linx(r)),
+            _safe_text(_ativo_com_data_no_linx(cert_status, trava)),
             stock.get("stock_cd", 0),
             stock.get("stock_ecommerce", 0),
             stock.get("stock_total", 0),
