@@ -16,6 +16,7 @@ import { useAuth } from '@/shared/hooks/useAuth';
 import { StatusBadge } from '@/shared/components/StatusBadge';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { api } from '@/shared/lib/api-client';
+import { correctionStatusLabel } from '@/shared/lib/constants';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { ImportProcess } from '@/shared/types';
 
@@ -27,6 +28,10 @@ export interface ProcessHeaderProps {
   onBack: () => void;
   onEdit: () => void;
 }
+
+/** Chip de 20px usado por marca, flags e avisos — tudo cabe na mesma linha. */
+const CHIP =
+  'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-semibold whitespace-nowrap';
 
 function ProcessFlags({ process }: { process: ImportProcess }) {
   const flags = [
@@ -53,20 +58,14 @@ function ProcessFlags({ process }: { process: ImportProcess }) {
   if (flags.length === 0) return null;
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <>
       {flags.map((f) => (
-        <span
-          key={f.label}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold',
-            f.color,
-          )}
-        >
-          <BadgeCheck className="h-3.5 w-3.5" />
+        <span key={f.label} className={cn(CHIP, f.color)}>
+          <BadgeCheck className="h-3 w-3" />
           {f.label}
         </span>
       ))}
-    </div>
+    </>
   );
 }
 
@@ -132,6 +131,25 @@ function readEspelhoSummaryDate(process: ImportProcess, key: 'etd' | 'eta'): str
   return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
+/**
+ * Barra fixa do processo — UMA linha no desktop (reuniao 11/09: "criado, ETD,
+ * ETA do lado da referencia; tudo pequeno e numa linha; quanto menor ali,
+ * melhor"; a usuaria digitou na propria observacao "precisamos diminuir essa
+ * telinha aqui urgent").
+ *
+ * O que mudou em relacao ao layout anterior, que empilhava cinco faixas:
+ * - identificacao, datas, contagem de documentos e flags (LI/Certificacao/FOC)
+ *   entram na MESMA linha, como chips de 11px;
+ * - a observacao urgente virou um campo de uma linha no meio da barra, salvo
+ *   com Enter ou pelo botao de disquete, em vez de um `textarea` de 42px+ com
+ *   um botao "Salvar" embaixo;
+ * - Drive, Sistema, Editar e Destravar viraram botoes so de icone (32px). O
+ *   texto continua acessivel por `aria-label`/`title`, que sao os mesmos de
+ *   antes — os testes e o leitor de tela nao perdem nada.
+ *
+ * Abaixo de `lg` a barra nao e fixa (correcao de 06/09: em 375px ela ocupava
+ * 537px de 812px) e o conteudo quebra em varias linhas normalmente.
+ */
 export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHeaderProps) {
   const docCounts = {
     total: process.documents?.length ?? 0,
@@ -147,6 +165,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
   const [showUnlockConfirm, setShowUnlockConfirm] = useState(false);
   const [urgentNote, setUrgentNote] = useState(process.urgentNote ?? '');
   const [savingUrgentNote, setSavingUrgentNote] = useState(false);
+  const urgentNoteChanged = urgentNote !== (process.urgentNote ?? '');
 
   useEffect(() => {
     setUrgentNote(process.urgentNote ?? '');
@@ -167,6 +186,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
   };
 
   const saveUrgentNote = async () => {
+    if (savingUrgentNote || !urgentNoteChanged) return;
     setSavingUrgentNote(true);
     try {
       await api.put(`/api/processes/${processId}`, { urgentNote: urgentNote.trim() || null });
@@ -179,112 +199,157 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
     }
   };
 
+  const iconButton =
+    'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors shadow-sm';
+
   return (
     <>
-      {/* Header row */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div
+        data-testid="process-header-bar"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 lg:flex-nowrap"
+      >
+        {/* Identificacao + datas + documentos + flags: tudo numa linha */}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <button
             onClick={onBack}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-700 dark:text-slate-300 hover:border-slate-300 transition-all shadow-sm"
+            className={cn(
+              iconButton,
+              'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-700 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-800',
+            )}
             aria-label="Voltar para lista de processos"
+            title="Voltar para lista de processos"
           >
-            <ArrowLeft className="h-5 w-5" />
+            <ArrowLeft className="h-4 w-4" />
           </button>
-          <div>
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-              <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-                {process.processCode}
-              </h2>
-              <span className="inline-flex items-center rounded-lg bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-xs font-semibold capitalize text-slate-600 dark:text-slate-400 tracking-wide">
-                {process.brand}
-              </span>
-              <StatusBadge status={process.status} />
-              {process.correctionStatus && (
-                <span className="inline-flex items-center gap-1 rounded-lg bg-amber-100 dark:bg-amber-900/50 border border-amber-200 dark:border-amber-700 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:text-amber-400">
-                  <AlertTriangle className="h-3 w-3" />
-                  {process.correctionStatus}
-                </span>
+
+          <h2 className="truncate text-base font-bold tracking-tight text-slate-900 dark:text-slate-100 sm:text-lg">
+            {process.processCode}
+          </h2>
+
+          <span
+            className={cn(
+              CHIP,
+              'border-slate-200 bg-slate-100 capitalize text-slate-600 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300',
+            )}
+          >
+            {process.brand}
+          </span>
+
+          <StatusBadge status={process.status} size="sm" />
+
+          {process.correctionStatus && (
+            <span
+              className={cn(
+                CHIP,
+                'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-700 dark:bg-amber-900/50 dark:text-amber-400',
               )}
-              {process.lockedAt && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-lg bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 px-2.5 py-1 text-xs font-semibold text-slate-700 dark:text-slate-300"
-                  title={`Travado em ${formatDate(process.lockedAt)} (${process.lockedReason ?? 'sem motivo'})`}
-                >
-                  <Lock className="h-3 w-3" />
-                  Travado
-                </span>
+            >
+              <AlertTriangle className="h-3 w-3" />
+              {correctionStatusLabel(process.correctionStatus)}
+            </span>
+          )}
+
+          {process.lockedAt && (
+            <span
+              className={cn(
+                CHIP,
+                'border-slate-300 bg-slate-200 text-slate-700 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300',
               )}
-              {process.previousCodes && process.previousCodes.length > 0 && (
-                <span
-                  className="inline-flex items-center gap-1 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 text-[11px] font-mono text-slate-500 dark:text-slate-400"
-                  title={`Códigos anteriores: ${process.previousCodes.join(', ')}`}
-                >
-                  ex.: {process.previousCodes[process.previousCodes.length - 1]}
-                </span>
+              title={`Travado em ${formatDate(process.lockedAt)} (${process.lockedReason ?? 'sem motivo'})`}
+            >
+              <Lock className="h-3 w-3" />
+              Travado
+            </span>
+          )}
+
+          <ProcessFlags process={process} />
+
+          {process.previousCodes && process.previousCodes.length > 0 && (
+            <span
+              className={cn(
+                CHIP,
+                'border-slate-200 bg-slate-100 font-mono text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
               )}
-            </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-3 text-xs sm:text-sm text-slate-400">
-              <span>Criado em {formatDate(process.createdAt)}</span>
-              {etd && (
-                <>
-                  <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-                  <span>
-                    ETD:{' '}
-                    <span className="text-slate-600 dark:text-slate-400 font-medium">
-                      {formatDate(etd)}
-                    </span>
-                  </span>
-                </>
-              )}
-              {eta && (
-                <>
-                  <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
-                  <span>
-                    ETA:{' '}
-                    <span className="text-slate-600 dark:text-slate-400 font-medium">
-                      {formatDate(eta)}
-                    </span>
-                  </span>
-                </>
-              )}
-              <span className="hidden sm:block h-1 w-1 rounded-full bg-slate-300 dark:bg-slate-600" />
+              title={`Códigos anteriores: ${process.previousCodes.join(', ')}`}
+            >
+              ex.: {process.previousCodes[process.previousCodes.length - 1]}
+            </span>
+          )}
+
+          <span className="flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400 sm:text-xs">
+            <span>Criado {formatDate(process.createdAt)}</span>
+            {etd && (
               <span>
-                {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.extracted}{' '}
-                extraido{docCounts.extracted !== 1 ? 's' : ''})
+                · ETD{' '}
+                <span className="font-medium text-slate-600 dark:text-slate-400">
+                  {formatDate(etd)}
+                </span>
               </span>
-            </div>
-            <div className="mt-3 flex max-w-3xl flex-col gap-2 sm:flex-row sm:items-start">
-              <textarea
-                aria-label="Observação urgente do processo"
-                value={urgentNote}
-                onChange={(event) => setUrgentNote(event.target.value)}
-                rows={1}
-                placeholder="Observacao urgente"
-                className="min-h-[42px] flex-1 resize-y rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-800 placeholder:text-red-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-200 dark:placeholder:text-red-500"
-              />
-              <button
-                type="button"
-                onClick={saveUrgentNote}
-                disabled={savingUrgentNote || urgentNote === (process.urgentNote ?? '')}
-                className="inline-flex h-[42px] items-center justify-center gap-1.5 rounded-lg border border-red-300 bg-red-600 px-3 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-danger-700"
-              >
-                <Save className="h-3.5 w-3.5" />
-                Salvar
-              </button>
-            </div>
-          </div>
+            )}
+            {eta && (
+              <span>
+                · ETA{' '}
+                <span className="font-medium text-slate-600 dark:text-slate-400">
+                  {formatDate(eta)}
+                </span>
+              </span>
+            )}
+            <span>
+              · {docCounts.total} doc{docCounts.total !== 1 ? 's' : ''} ({docCounts.extracted}{' '}
+              extraido{docCounts.extracted !== 1 ? 's' : ''})
+            </span>
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+
+        {/* Observacao urgente: inline, ao lado da referencia. O piso de largura
+            existe porque com codigo longo o grupo da esquerda comia o espaco
+            todo e o campo ficava com poucos pixels — invisivel na pratica. */}
+        <div className="flex min-w-0 flex-1 items-center gap-1.5 lg:min-w-[18rem]">
+          <input
+            type="text"
+            aria-label="Observação urgente do processo"
+            value={urgentNote}
+            onChange={(event) => setUrgentNote(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                void saveUrgentNote();
+              }
+            }}
+            placeholder="Observacao urgente"
+            title={urgentNote || undefined}
+            className="h-8 min-w-0 flex-1 truncate rounded-lg border border-red-300 bg-red-50 px-2.5 text-xs font-semibold text-red-800 placeholder:text-red-400 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/20 dark:border-danger-700 dark:bg-danger-950/40 dark:text-danger-200 dark:placeholder:text-red-500"
+          />
+          <button
+            type="button"
+            onClick={saveUrgentNote}
+            disabled={savingUrgentNote || !urgentNoteChanged}
+            aria-label="Salvar observação urgente"
+            title="Salvar observação urgente"
+            className={cn(
+              iconButton,
+              'border-red-300 bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-danger-700',
+            )}
+          >
+            <Save className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* Acoes: so icone, com o mesmo nome acessivel de antes */}
+        <div className="flex shrink-0 items-center gap-1.5">
           {process.driveFolderId && (
             <a
               href={`https://drive.google.com/drive/folders/${process.driveFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-emerald-200 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 hover:border-emerald-300 transition-all shadow-sm dark:hover:border-emerald-700/50"
+              aria-label="Abrir no Drive"
+              title="Abrir no Drive"
+              className={cn(
+                iconButton,
+                'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 dark:hover:bg-emerald-900/50',
+              )}
             >
               <ExternalLink className="h-4 w-4" />
-              Abrir no Drive
             </a>
           )}
           {process.sistemaDriveFolderId && (
@@ -292,40 +357,45 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
               href={`https://drive.google.com/drive/folders/${process.sistemaDriveFolderId}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-primary-200 dark:border-primary-700 bg-primary-50 dark:bg-primary-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-primary-700 dark:text-primary-400 hover:bg-primary-100 dark:hover:bg-primary-900/50 hover:border-primary-300 transition-all shadow-sm dark:hover:border-primary-700/50"
+              aria-label="Sistema Automatico"
+              title="Sistema Automatico"
+              className={cn(
+                iconButton,
+                'border-primary-200 bg-primary-50 text-primary-700 hover:bg-primary-100 dark:border-primary-700 dark:bg-primary-900/30 dark:text-primary-400 dark:hover:bg-primary-900/50',
+              )}
             >
               <ExternalLink className="h-4 w-4" />
-              Sistema Automatico
             </a>
           )}
           <button
             onClick={onEdit}
             disabled={!!process.lockedAt}
-            title={process.lockedAt ? 'Processo travado — destrave para editar' : undefined}
+            aria-label="Editar"
+            title={process.lockedAt ? 'Processo travado — destrave para editar' : 'Editar'}
             className={cn(
-              'inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold transition-all shadow-sm',
+              iconButton,
               process.lockedAt
-                ? 'border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed'
-                : 'border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300',
+                ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-800',
             )}
           >
             <Edit className="h-4 w-4" />
-            Editar
           </button>
           {process.lockedAt && canUnlock && (
             <button
               onClick={() => setShowUnlockConfirm(true)}
-              className="inline-flex items-center gap-1.5 sm:gap-2 rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/30 px-3 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50 hover:border-amber-300 transition-all shadow-sm dark:hover:border-amber-700/50"
+              aria-label="Destravar"
+              title="Destravar"
+              className={cn(
+                iconButton,
+                'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50',
+              )}
             >
               <Unlock className="h-4 w-4" />
-              Destravar
             </button>
           )}
         </div>
       </div>
-
-      {/* Flags */}
-      <ProcessFlags process={process} />
 
       <ConfirmDialog
         isOpen={showUnlockConfirm}

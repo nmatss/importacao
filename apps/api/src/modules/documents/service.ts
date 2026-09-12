@@ -9,6 +9,7 @@ import { db } from '../../shared/database/connection.js';
 import {
   documents,
   documentExtractionHistory,
+  documentIngestionTombstones,
   documentExtractionRuns,
   documentExtractedFields,
   comparisonAcceptances,
@@ -2871,11 +2872,56 @@ export const documentService = {
     return { processesScanned: procs.length, processesChanged, documentsChanged };
   },
 
-  async delete(id: number, userId: number | null = null) {
+  /**
+   * Recalcula o estado DERIVADO do processo depois que um documento sai.
+   *
+   * `delete()` ja reconstruia a projecao `ai_extracted_data`, mas
+   * `validation_results` continuava vigente: o comparativo (e o ponto vermelho
+   * da aba) seguia acusando divergencia de um anexo que nao existe mais — o
+   * caso real da reuniao, com o rascunho da DUIMP anexado no processo errado.
+   *
+   * A regra de modo e a MESMA do pos-extracao (`runDegradableGate`): `final`
+   * com INV + PL + BL, `partial` com o que sobrou. Sem nenhum documento
+   * comparavel nao ha o que revalidar, e os resultados antigos sao apagados em
+   * vez de ficarem valendo (o historico em `validation_runs` permanece).
+   *
+   * Best-effort de proposito: a exclusao ja foi commitada, entao falha aqui e
+   * registrada e nao derruba a resposta.
+   */
+  async refreshProcessDerivedState(processId: number, mergedAiData: Record<string, any>) {
+    const data = isRecord(mergedAiData) ? mergedAiData : {};
+    const hasInvoice = hasMeaningfulAiData(data.invoice);
+    const hasPackingList = hasMeaningfulAiData(data.packing_list);
+    const hasBl = hasMeaningfulAiData(data.ohbl) || hasMeaningfulAiData(data.draft_bl);
+    const allThree = hasInvoice && hasPackingList && hasBl;
+
+    try {
+      const { validationService } = await import('../validation/service.js');
+
+      if (!hasInvoice && !hasPackingList && !hasBl) {
+        await validationService.clearResults(processId);
+        return;
+      }
+
+      await validationService.runAllChecks(processId, null, {
+        mode: allThree ? 'final' : 'partial',
+        triggerType: allThree ? 'auto_full' : 'auto_partial',
+      });
+      logger.info(
+        { processId, hasInvoice, hasPackingList, hasBl, partial: !allThree },
+        'Validation re-run after document removal',
+      );
+    } catch (err) {
+      logger.error({ err, processId }, 'Derived state refresh after document delete failed');
+    }
+  },
+
+  async delete(id: number, userId: number | null, reason: string) {
     const [doc] = await db.select().from(documents).where(eq(documents.id, id)).limit(1);
     if (!doc) throw new NotFoundError('Documento', id);
     await assertDocumentProcessNotLocked(doc.processId);
 
+    let mergedAiData: Record<string, any> = {};
     await db.transaction(async (tx) => {
       if (doc.aiParsedData != null) {
         await tx.insert(documentExtractionHistory).values({
@@ -2894,8 +2940,22 @@ export const documentService = {
         );
       }
 
+      // Tombstone ANTES de apagar a linha (D8): o sweep do Drive procura por
+      // `drive_file_id` e por (processo, `content_sha256`) antes de importar,
+      // senao o mesmo arquivo voltaria sozinho na passada seguinte e reabriria
+      // o caso do rascunho no processo errado.
+      await tx.insert(documentIngestionTombstones).values({
+        processId: doc.processId,
+        documentId: doc.id,
+        driveFileId: doc.driveFileId ?? null,
+        contentSha256: doc.contentSha256 ?? null,
+        originalFilename: doc.originalFilename,
+        deletedBy: userId,
+        reason,
+      });
+
       await tx.delete(documents).where(eq(documents.id, id));
-      await this.rebuildProcessAiExtractedData(doc.processId, tx);
+      mergedAiData = await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
 
     // Remove the physical file only after the database transaction commits.
@@ -2915,9 +2975,45 @@ export const documentService = {
       'delete',
       'document',
       id,
-      { processId: doc.processId, filename: doc.originalFilename },
+      {
+        processId: doc.processId,
+        filename: doc.originalFilename,
+        type: doc.type,
+        ingestionSource: doc.ingestionSource,
+        driveFileId: doc.driveFileId ?? null,
+        contentSha256: doc.contentSha256 ?? null,
+        fileSize: doc.fileSize ?? null,
+        reason,
+      },
       null,
     );
+
+    // O historico do processo e onde a analista (e depois o admin) enxerga a
+    // exclusao com o motivo; o audit sozinho nao aparece na tela do processo.
+    try {
+      await recordProcessEvent(
+        doc.processId,
+        {
+          eventType: 'document_deleted',
+          title: `Documento excluido: ${doc.originalFilename}`,
+          description: reason,
+          metadata: {
+            documentId: id,
+            type: doc.type,
+            filename: doc.originalFilename,
+            ingestionSource: doc.ingestionSource,
+            driveFileId: doc.driveFileId ?? null,
+            reason,
+          },
+        },
+        userId,
+      );
+    } catch (err) {
+      logger.warn({ err, documentId: id }, 'Could not record document_deleted process event');
+    }
+
+    await this.refreshProcessDerivedState(doc.processId, mergedAiData);
+
     return { id };
   },
 

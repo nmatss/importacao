@@ -40,6 +40,15 @@ vi.mock('../../../shared/state-machine/process-states.js', () => ({
   assertTransition: vi.fn(),
 }));
 
+// `delete()` recalcula o estado derivado depois do commit (D8); aqui o foco e
+// o arquivamento da extracao.
+vi.mock('../../validation/service.js', () => ({
+  validationService: {
+    runAllChecks: vi.fn().mockResolvedValue([]),
+    clearResults: vi.fn().mockResolvedValue({ removed: 0 }),
+  },
+}));
+
 vi.mock('fs/promises', () => ({
   default: {
     readFile: vi.fn().mockResolvedValue(Buffer.from('mock content')),
@@ -212,12 +221,15 @@ describe('document extraction history (backlog #12)', () => {
       queryQueue.push(createResolvedChain([])); // assert process not locked
       const historyInsertChain = createResolvedChain(undefined);
       txQueue.push(historyInsertChain); // archive history
+      txQueue.push(createResolvedChain(undefined)); // tombstone de ingestao (D8)
       txQueue.push(createResolvedChain(undefined)); // delete document
       txQueue.push(createResolvedChain([])); // rebuild: remaining docs
       txQueue.push(createResolvedChain([{ aiExtractedData: { invoice: previousExtraction } }])); // process
       txQueue.push(createResolvedChain(undefined)); // update process projection
 
-      await documentService.delete(10, 1);
+      // O motivo passou a ser obrigatorio junto com a liberacao da exclusao
+      // para o analista (D8).
+      await documentService.delete(10, 1, 'Extracao arquivada antes de excluir');
 
       expect(historyInsertChain.values).toHaveBeenCalledWith(
         expect.objectContaining({

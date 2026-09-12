@@ -1,11 +1,6 @@
-import { eq, sql, count, and, desc } from 'drizzle-orm';
+import { eq, sql, count, and } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import {
-  followUpTracking,
-  importProcesses,
-  processEvents,
-  users,
-} from '../../shared/database/schema.js';
+import { followUpTracking, importProcesses, users } from '../../shared/database/schema.js';
 import type { FollowUpTracking } from '../../shared/database/schema.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -17,45 +12,33 @@ import {
   localDayEndExclusiveUtc,
   SQL_HOJE_LOCAL,
 } from '../../shared/utils/dates.js';
+import {
+  ACTIVE_CHECKLIST_STEP_KEYS,
+  CHECKLIST_STEP_KEYS,
+  checklistStepLabel,
+  isActiveChecklistStep,
+  isChecklistStep,
+  type ChecklistStepKey,
+} from '../processes/checklist-catalog.js';
+import {
+  getChecklistStepAttribution as getStepCompletedByMap,
+  type StepCompletedBy,
+} from '../processes/checklist-attribution.js';
 
-const TRACKING_STEPS = [
-  'documentsReceivedAt',
-  'preInspectionAt',
-  'savedToFolderAt',
-  'ncmVerifiedAt',
-  'ncmBlCheckedAt',
-  'freightBlCheckedAt',
-  'espelhoBuiltAt',
-  'invoiceSentFeniciaAt',
-  'espelhoGeneratedAt',
-  'signaturesCollectedAt',
-  'signedDocsSentAt',
-  'sentToFeniciaAt',
-  'diDraftAt',
-  'liSubmittedAt',
-  'liApprovedAt',
-] as const;
-
-const TRACKING_STEP_LABELS: Record<(typeof TRACKING_STEPS)[number], string> = {
-  documentsReceivedAt: 'Documentos recebidos',
-  preInspectionAt: 'Pre-inspecao',
-  savedToFolderAt: 'Salvo na pasta',
-  ncmVerifiedAt: 'NCM verificado',
-  ncmBlCheckedAt: 'NCM BL conferido',
-  freightBlCheckedAt: 'Frete BL conferido',
-  espelhoBuiltAt: 'Espelho montado',
-  invoiceSentFeniciaAt: 'Invoice enviada Fenicia',
-  espelhoGeneratedAt: 'Espelho gerado',
-  signaturesCollectedAt: 'Assinaturas coletadas',
-  signedDocsSentAt: 'Documentos assinados enviados',
-  sentToFeniciaAt: 'Enviado para Fenicia',
-  diDraftAt: 'Rascunho DI',
-  liSubmittedAt: 'LI protocolada',
-  liApprovedAt: 'LI aprovada',
-};
+/**
+ * O CATALOGO do checklist saiu deste arquivo (decisao D7, reuniao 11/09).
+ *
+ * Passos, rotulos e quais estao ativos vivem em
+ * `processes/checklist-catalog.ts` e sao servidos por
+ * `GET /api/processes/:id/checklist`. Aqui ficou so o que e desta camada:
+ * gravar em `follow_up_tracking` e registrar o evento de historico. Antes a
+ * lista existia aqui E na web, e os rotulos divergiam — clicar em "Atualizar
+ * Follow-up" gravava "Checklist: Enviado para Fenicia feito".
+ */
+const TRACKING_STEPS = CHECKLIST_STEP_KEYS;
 
 function calculateProgress(tracking: Partial<FollowUpTracking>): number {
-  const completedSteps = TRACKING_STEPS.reduce(
+  const completedSteps = ACTIVE_CHECKLIST_STEP_KEYS.reduce(
     (total, step) => total + (tracking[step] ? 1 : 0),
     0,
   );
@@ -64,12 +47,16 @@ function calculateProgress(tracking: Partial<FollowUpTracking>): number {
   // fully completed follow-up at 90%. The displayed progress is a business
   // completion indicator, so every persisted milestone must be able to reach
   // exactly 100%.
-  return Math.round((completedSteps / TRACKING_STEPS.length) * 100);
+  //
+  // O denominador conta so as etapas ATIVAS: "Coletar Assinaturas" e "Enviar
+  // Docs Assinados" sairam da rotina (D7) e, contadas, travariam em 87% um
+  // processo com tudo feito.
+  return Math.round((completedSteps / ACTIVE_CHECKLIST_STEP_KEYS.length) * 100);
 }
 
 async function recordChecklistEvent(
   processId: number,
-  step: (typeof TRACKING_STEPS)[number],
+  step: ChecklistStepKey,
   previousStatus: 'pendente' | 'feito',
   newStatus: 'pendente' | 'feito',
   completedAt: Date | null,
@@ -78,7 +65,8 @@ async function recordChecklistEvent(
 ) {
   if (previousStatus === newStatus) return;
 
-  const label = TRACKING_STEP_LABELS[step];
+  // Mesmo rotulo da tela: fonte unica no catalogo.
+  const label = checklistStepLabel(step);
   await recordProcessEvent(
     processId,
     {
@@ -119,57 +107,13 @@ async function resolveUserName(userId: number | null): Promise<string | null> {
   }
 }
 
-export interface StepCompletedBy {
-  completedBy: number | null;
-  completedByName: string | null;
-  completedAt: string | null;
-}
-
 /**
- * Builds a map of { [stepKey]: { completedBy, completedByName, completedAt } } from the
- * most recent checklist_step_changed event per step. Falls back to the event author's
- * current name when the metadata snapshot lacks a name (older events).
+ * A leitura de "quem concluiu cada etapa" mudou de arquivo para
+ * `processes/checklist-attribution.ts`: a aba Follow-Up (aqui) e a aba
+ * Checklist (`GET /api/processes/:id/checklist`) precisam da MESMA leitura, e
+ * o modulo de processos nao pode importar este service sem ciclo.
  */
-async function getStepCompletedByMap(processId: number): Promise<Record<string, StepCompletedBy>> {
-  try {
-    const events = await db
-      .select({
-        metadata: processEvents.metadata,
-        createdBy: processEvents.createdBy,
-        createdAt: processEvents.createdAt,
-        authorName: users.name,
-      })
-      .from(processEvents)
-      .leftJoin(users, eq(processEvents.createdBy, users.id))
-      .where(
-        and(
-          eq(processEvents.processId, processId),
-          eq(processEvents.eventType, 'checklist_step_changed'),
-        ),
-      )
-      .orderBy(desc(processEvents.createdAt));
-
-    const map: Record<string, StepCompletedBy> = {};
-    for (const ev of events) {
-      const meta = (ev.metadata ?? {}) as Record<string, unknown>;
-      const step = typeof meta.step === 'string' ? meta.step : null;
-      if (!step || meta.newStatus !== 'feito') continue;
-      // First occurrence wins because rows are ordered newest-first.
-      if (map[step]) continue;
-      map[step] = {
-        completedBy: ev.createdBy ?? null,
-        completedByName:
-          (typeof meta.completedByName === 'string' ? meta.completedByName : null) ??
-          ev.authorName ??
-          null,
-        completedAt: typeof meta.completedAt === 'string' ? meta.completedAt : null,
-      };
-    }
-    return map;
-  } catch {
-    return {};
-  }
-}
+export type { StepCompletedBy };
 
 export const followUpService = {
   async getAll(page = 1, limit = 20, startDate?: string, endDate?: string) {
@@ -293,12 +237,19 @@ export const followUpService = {
     completedAt: Date | null,
     userId: number | null = null,
   ) {
-    // Validate step name
-    const validSteps = TRACKING_STEPS as readonly string[];
-    if (!validSteps.includes(step)) {
-      throw new Error(`Passo invalido: ${step}. Passos validos: ${validSteps.join(', ')}`);
+    // Quem decide o que e passo valido e o catalogo (D7). Chave fora do
+    // catalogo e erro de cliente; chave INATIVA ("Coletar Assinaturas",
+    // "Enviar Docs Assinados") saiu da rotina e nao pode voltar a ser marcada
+    // por uma tela antiga — os timestamps ja gravados continuam no banco.
+    if (!isChecklistStep(step)) {
+      throw new Error(`Passo invalido: ${step}. Passos validos: ${TRACKING_STEPS.join(', ')}`);
     }
-    const typedStep = step as (typeof TRACKING_STEPS)[number];
+    if (!isActiveChecklistStep(step)) {
+      throw new Error(
+        `A etapa "${checklistStepLabel(step)}" saiu do checklist e nao pode mais ser marcada.`,
+      );
+    }
+    const typedStep: ChecklistStepKey = step;
 
     // Check if tracking exists, create if not
     const [existing] = await db

@@ -51,6 +51,36 @@ export const processController = {
     }
   },
 
+  /**
+   * Checklist do processo: catalogo padrao + etapas especificas ja
+   * intercaladas e progresso calculado no servidor (D7). Fonte unica da aba
+   * Checklist — a aba "Etapas" deixou de existir.
+   */
+  async getChecklist(req: Request, res: Response) {
+    try {
+      const checklist = await processService.getChecklist(Number(req.params.id));
+      sendSuccess(res, checklist);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  async setChecklistStepHidden(req: Request, res: Response) {
+    try {
+      const result = await processService.setChecklistStepHidden(
+        Number(req.params.id),
+        String(req.params.stepKey),
+        req.body,
+        req.user?.id ?? null,
+      );
+      sendSuccess(res, result);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
   async listCustomStages(req: Request, res: Response) {
     try {
       const stages = await processService.listCustomStages(Number(req.params.id));

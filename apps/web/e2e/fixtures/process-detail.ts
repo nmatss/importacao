@@ -1796,6 +1796,116 @@ const DRAFT_BL_CHECKLIST: Record<
   containersOk: { checked: false, timestamp: null, checkedBy: null, checkedByName: null },
 };
 
+/**
+ * `GET /api/processes/:id/checklist` (D7): catalogo padrao ATIVO + etapas
+ * especificas ja intercaladas pela posicao (linha 1-based), com o progresso
+ * calculado — o mesmo contrato que o servidor monta. "Coletar Assinaturas" e
+ * "Enviar Docs Assinados" nao aparecem: sairam do catalogo ativo.
+ */
+function buildChecklist(url: URL) {
+  const followUp = buildFollowUp(url) as Record<string, unknown>;
+  const attribution = (followUp.stepCompletedBy ?? {}) as Record<
+    string,
+    { completedByName: string | null }
+  >;
+  const catalog: { key: string; label: string; description: string }[] = [
+    {
+      key: 'documentsReceivedAt',
+      label: 'Documentos Recebidos',
+      description: 'Invoice, Packing List e BL recebidos',
+    },
+    {
+      key: 'preInspectionAt',
+      label: 'Pre-conferencia',
+      description: 'Verificacao cruzada dos documentos',
+    },
+    {
+      key: 'savedToFolderAt',
+      label: 'Salvar na Pasta',
+      description: 'Documentos salvos na pasta do processo',
+    },
+    {
+      key: 'ncmVerifiedAt',
+      label: 'Conferir NCMs e Descricoes',
+      description: 'NCMs, descricoes e atributos conferidos',
+    },
+    {
+      key: 'ncmBlCheckedAt',
+      label: 'Conferir NCMs no BL',
+      description: 'Todas as NCMs constam no BL',
+    },
+    {
+      key: 'freightBlCheckedAt',
+      label: 'Conferir Frete no BL',
+      description: 'Valor do frete confere com BL',
+    },
+    {
+      key: 'espelhoBuiltAt',
+      label: 'Montar Espelho',
+      description: 'Consolidado e espelho do processo montados',
+    },
+    {
+      key: 'invoiceSentFeniciaAt',
+      label: 'Enviar Invoice Fenicia',
+      description: 'Invoice e documentos assinados enviados para a Fenicia',
+    },
+    {
+      key: 'espelhoGeneratedAt',
+      label: 'Espelho Gerado',
+      description: 'Espelho gerado no sistema',
+    },
+    {
+      key: 'sentToFeniciaAt',
+      label: 'Atualizar Follow-up',
+      description: 'Planilha Follow-up atualizada',
+    },
+    {
+      key: 'diDraftAt',
+      label: 'Rascunho da DI',
+      description: 'Rascunho da DI verificado/solicitado',
+    },
+    {
+      key: 'liSubmittedAt',
+      label: 'LI Solicitada',
+      description: 'Licenca de Importacao solicitada',
+    },
+    { key: 'liApprovedAt', label: 'LI Aprovada', description: 'Licenca de Importacao deferida' },
+  ];
+
+  const steps: Record<string, unknown>[] = catalog.map((step) => ({
+    kind: 'default',
+    key: step.key,
+    label: step.label,
+    description: step.description,
+    completedAt: (followUp[step.key] as string | null) ?? null,
+    completedByName: attribution[step.key]?.completedByName ?? null,
+  }));
+
+  const stages = isFull(url) ? buildCustomStages(1) : buildCustomStages(idFrom(url)).slice(0, 1);
+  for (const stage of stages) {
+    const index = stage.position > 0 ? Math.min(stage.position - 1, steps.length) : steps.length;
+    steps.splice(index, 0, {
+      kind: 'custom',
+      id: stage.id,
+      label: stage.label,
+      notes: stage.notes,
+      position: stage.position,
+      completedAt: stage.completedAt,
+      completedByName: null,
+    });
+  }
+
+  const completed = steps.filter((step) => step.completedAt).length;
+  return {
+    steps,
+    progress: {
+      completed,
+      total: steps.length,
+      pct: steps.length === 0 ? 0 : Math.round((completed / steps.length) * 100),
+    },
+  };
+}
+
 function buildCustomStages(processId: number) {
   return [
     {
@@ -2538,6 +2648,10 @@ export const processDetailHandlers: FixtureHandler[] = [
               ]),
             ),
       ),
+  },
+  {
+    path: /^\/api\/processes\/\d+\/checklist$/,
+    body: (url: URL) => ok(buildChecklist(url)),
   },
   {
     path: /^\/api\/processes\/\d+\/custom-stages$/,

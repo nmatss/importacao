@@ -105,7 +105,8 @@ const processTabs = [
   'checklist',
   'followup',
   'registro',
-  'etapas',
+  // A aba "Etapas" saiu (D7): as etapas especificas viraram linhas do
+  // Checklist. `?tab=etapas` agora redireciona para o Checklist.
   'erros_custos',
   'comunicacoes',
   'emails',

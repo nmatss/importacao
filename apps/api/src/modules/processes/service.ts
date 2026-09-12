@@ -6,6 +6,7 @@ import {
   followUpTracking,
   processEvents,
   processCustomStages,
+  processChecklistHiddenSteps,
   processOperationalRecords,
   users,
 } from '../../shared/database/schema.js';
@@ -19,7 +20,15 @@ import type {
   CreateOperationalRecordInput,
   UpdateOperationalRecordInput,
   UpdateDraftBlChecklistInput,
+  HideChecklistStepInput,
 } from './schema.js';
+import {
+  ACTIVE_CHECKLIST_STEPS,
+  checklistStepLabel,
+  isActiveChecklistStep,
+  isChecklistStep,
+} from './checklist-catalog.js';
+import { getChecklistStepAttribution } from './checklist-attribution.js';
 import { DRAFT_BL_CHECK_KEYS, REOPEN_REASON_MIN_LENGTH, reopenReasonSchema } from './schema.js';
 import { auditService } from '../audit/service.js';
 import { assertTransition, isReopenTransition } from '../../shared/state-machine/process-states.js';
@@ -29,6 +38,42 @@ import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { logger } from '../../shared/utils/logger.js';
 import { deriveLogisticStatus, isForwardTransition } from './logistic-auto-advance.js';
 import { localDayStartUtc, localDayEndExclusiveUtc } from '../../shared/utils/dates.js';
+
+/**
+ * Uma linha do checklist do processo: etapa PADRAO (chave do catalogo) ou
+ * etapa ESPECIFICA deste processo. As duas convivem na mesma lista desde a
+ * decisao D7 — a aba "Etapas" deixou de existir.
+ */
+export type ChecklistStepView =
+  | {
+      kind: 'default';
+      key: string;
+      label: string;
+      description: string;
+      completedAt: string | null;
+      completedByName: string | null;
+    }
+  | {
+      kind: 'custom';
+      id: number;
+      label: string;
+      notes: string | null;
+      position: number;
+      completedAt: string | null;
+      completedByName: string | null;
+    };
+
+export interface ProcessChecklist {
+  steps: ChecklistStepView[];
+  progress: { completed: number; total: number; pct: number };
+}
+
+/** Timestamp do banco (Date ou texto) como ISO; ausente vira `null`, nunca "Invalid Date". */
+function toIsoTimestamp(value: Date | string | null | undefined): string | null {
+  if (value == null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
 
 // Colunas timestamp() (modo Date) recebem strings dos schemas: converte com
 // validação — '' limpa o campo; valor não parseável vira erro 400 claro.
@@ -236,6 +281,155 @@ export const processService = {
     };
   },
 
+  /**
+   * Checklist do processo: catalogo padrao + etapas especificas, JA
+   * intercaladas, com o progresso calculado (decisao D7, reuniao 11/09).
+   *
+   * Semantica de `position`, fixada aqui: e a LINHA 1-based da lista visivel —
+   * `position: 3` aparece como terceira linha, que e o pedido literal da
+   * reuniao ("que a etapa fique dentro do checklist na posicao escolhida, ex.:
+   * terceira linha"). Empate resolve por `createdAt` e depois por `id`;
+   * posicao maior que o total, ou <= 0 (o default antigo do formulario da aba
+   * Etapas), vai para o fim. Nenhuma conversao de dado: as 5 linhas que
+   * existem em producao (posicoes 2, 3 e 4) continuam validas.
+   *
+   * Etapa padrao oculta neste processo sai da lista E do denominador; o
+   * timestamp continua guardado em `follow_up_tracking`.
+   */
+  async getChecklist(processId: number): Promise<ProcessChecklist> {
+    const [process] = await db
+      .select({ id: importProcesses.id })
+      .from(importProcesses)
+      .where(eq(importProcesses.id, processId))
+      .limit(1);
+    if (!process) throw new NotFoundError('Processo', processId);
+
+    const [tracking] = await db
+      .select()
+      .from(followUpTracking)
+      .where(eq(followUpTracking.processId, processId))
+      .limit(1);
+
+    const hiddenRows = await db
+      .select({ stepKey: processChecklistHiddenSteps.stepKey })
+      .from(processChecklistHiddenSteps)
+      .where(eq(processChecklistHiddenSteps.processId, processId));
+    const hiddenKeys = new Set(hiddenRows.map((row) => row.stepKey));
+
+    const customStages = await db
+      .select()
+      .from(processCustomStages)
+      .where(eq(processCustomStages.processId, processId))
+      .orderBy(processCustomStages.position, processCustomStages.createdAt, processCustomStages.id);
+
+    const attribution = await getChecklistStepAttribution(processId);
+
+    const steps: ChecklistStepView[] = ACTIVE_CHECKLIST_STEPS.filter(
+      (step) => !hiddenKeys.has(step.key),
+    ).map((step) => ({
+      kind: 'default',
+      key: step.key,
+      label: step.label,
+      description: step.description,
+      completedAt: toIsoTimestamp(tracking ? tracking[step.key] : null),
+      completedByName: attribution[step.key]?.completedByName ?? null,
+    }));
+
+    for (const stage of customStages) {
+      const line = Number(stage.position);
+      const index =
+        Number.isFinite(line) && line > 0 ? Math.min(line - 1, steps.length) : steps.length;
+      steps.splice(index, 0, {
+        kind: 'custom',
+        id: stage.id,
+        label: stage.label,
+        notes: stage.notes ?? null,
+        position: stage.position,
+        completedAt: toIsoTimestamp(stage.completedAt),
+        completedByName: null,
+      });
+    }
+
+    const completed = steps.filter((step) => step.completedAt).length;
+    const total = steps.length;
+    return {
+      steps,
+      progress: {
+        completed,
+        total,
+        pct: total === 0 ? 0 : Math.round((completed / total) * 100),
+      },
+    };
+  },
+
+  /**
+   * Oculta (ou reexibe) uma etapa PADRAO neste processo.
+   *
+   * Nao apaga coluna nem timestamp — a restricao do usuario de nao mexer no
+   * dado das fontes vale aqui tambem. A etapa some da lista e do denominador
+   * do progresso deste processo e continua valendo nos demais.
+   */
+  async setChecklistStepHidden(
+    processId: number,
+    stepKey: string,
+    input: HideChecklistStepInput,
+    userId: number | null = null,
+  ) {
+    await this.assertNotLocked(processId);
+
+    if (!isChecklistStep(stepKey)) {
+      throw new ValidationError(`Etapa desconhecida no checklist: ${stepKey}`);
+    }
+    // Reexibir continua permitido para etapa que saiu do catalogo ativo: e
+    // assim que se limpa uma linha orfa depois de uma mudanca do catalogo.
+    if (input.hidden && !isActiveChecklistStep(stepKey)) {
+      throw new ValidationError(
+        `A etapa "${checklistStepLabel(stepKey)}" ja esta fora do checklist padrao.`,
+      );
+    }
+
+    const label = checklistStepLabel(stepKey);
+
+    if (input.hidden) {
+      await db
+        .insert(processChecklistHiddenSteps)
+        .values({ processId, stepKey, hiddenBy: userId, reason: input.reason ?? null })
+        .onConflictDoNothing({
+          target: [processChecklistHiddenSteps.processId, processChecklistHiddenSteps.stepKey],
+        });
+    } else {
+      await db
+        .delete(processChecklistHiddenSteps)
+        .where(
+          and(
+            eq(processChecklistHiddenSteps.processId, processId),
+            eq(processChecklistHiddenSteps.stepKey, stepKey),
+          ),
+        );
+    }
+
+    await auditService.log(
+      userId,
+      input.hidden ? 'hide_checklist_step' : 'show_checklist_step',
+      'process',
+      processId,
+      { stepKey, label, reason: input.reason ?? null },
+      null,
+    );
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: input.hidden ? 'checklist_step_hidden' : 'checklist_step_restored',
+        title: `Etapa ${input.hidden ? 'ocultada' : 'reexibida'} no checklist: ${label}`,
+        description: input.reason ?? undefined,
+        metadata: { step: stepKey, item: label, hidden: input.hidden },
+      },
+      userId,
+    );
+
+    return { stepKey, label, hidden: input.hidden };
+  },
+
   async listCustomStages(processId: number) {
     return db
       .select()
@@ -326,6 +520,28 @@ export const processService = {
       },
       null,
     );
+
+    // Concluir/reabrir uma etapa especifica agora aparece no Historico, como ja
+    // acontecia com as etapas padrao: dentro do checklist as duas sao a mesma
+    // lista, e so uma delas deixava rastro na tela.
+    if (input.completedAt !== undefined) {
+      const completed = !!stage.completedAt;
+      await recordProcessEvent(
+        processId,
+        {
+          eventType: completed ? 'custom_stage_completed' : 'custom_stage_reopened',
+          title: `Checklist: ${stage.label} ${completed ? 'feito' : 'pendente'}`,
+          metadata: {
+            stageId,
+            item: stage.label,
+            newStatus: completed ? 'feito' : 'pendente',
+            completedAt: stage.completedAt ? stage.completedAt.toISOString() : null,
+            completedBy: userId,
+          },
+        },
+        userId,
+      );
+    }
     return stage;
   },
 
@@ -346,6 +562,17 @@ export const processService = {
         label: stage.label,
       },
       null,
+    );
+    // Excluir etapa e acao destrutiva dentro do checklist: precisa aparecer no
+    // Historico do processo, nao so no audit.
+    await recordProcessEvent(
+      processId,
+      {
+        eventType: 'custom_stage_deleted',
+        title: `Etapa especifica removida: ${stage.label}`,
+        metadata: { stageId, item: stage.label, position: stage.position },
+      },
+      userId,
     );
     return { deleted: true };
   },

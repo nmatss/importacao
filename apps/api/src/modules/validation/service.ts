@@ -720,6 +720,27 @@ export const validationService = {
   },
 
   /**
+   * Apaga os resultados VIGENTES do processo (o historico em `validation_runs`
+   * fica intacto).
+   *
+   * Usado quando o ultimo documento comparavel (INV/PL/BL) e excluido: os
+   * resultados descreviam documentos que nao existem mais, e mante-los deixava
+   * a aba Comparativo acusando divergencia de anexo apagado — inclusive o
+   * indicador vermelho da aba. Ver `documentService.refreshProcessDerivedState`.
+   */
+  async clearResults(processId: number) {
+    const removed = await db
+      .delete(validationResults)
+      .where(eq(validationResults.processId, processId))
+      .returning({ id: validationResults.id });
+    logger.info(
+      { processId, removed: removed.length },
+      'Validation results cleared: no comparable document left in the process',
+    );
+    return { removed: removed.length };
+  },
+
+  /**
    * Historical validation runs for a process (append-only snapshots taken
    * before each delete+recreate). Rows are grouped by validation_run_id when
    * available and fall back to run_at for legacy rows; pagination is applied
