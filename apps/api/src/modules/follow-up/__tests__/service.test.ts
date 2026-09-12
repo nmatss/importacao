@@ -17,6 +17,7 @@ vi.mock('../../../shared/utils/logger.js', () => ({
 }));
 
 const { followUpService } = await import('../service.js');
+const { googleSheetsService } = await import('../../integrations/google-sheets.service.js');
 
 describe('followUpService', () => {
   beforeEach(() => {
@@ -233,5 +234,75 @@ describe('followUpService.getAll() — recorte por periodo', () => {
 
     await expect(followUpService.getAll(1, 20, 'abc')).resolves.toBeDefined();
     expect(mockDb.select.mock.results[0].value.where).toHaveBeenCalledWith(undefined);
+  });
+});
+
+/**
+ * FUP-09: `compareWithSheet` procurava cabecalhos que nao existem na planilha
+ * ('FOB', 'Frete', 'ETD', 'Fornecedor') e fazia
+ * `parseFloat('101.346,01'.replace(',', '.'))` = 101.346 — mil vezes menos.
+ * O endpoint de sync ficava a um clique de gravar isso no banco.
+ */
+describe('followUpService.compareWithSheet() — cabecalhos e parse reais', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+  });
+
+  it('le o FOB da coluna "Valor Invoice (USD)" sem dividir por mil', async () => {
+    vi.mocked(googleSheetsService.readProcessRow).mockResolvedValue({
+      Processos: 'PK2202608SZ',
+      Status: 'Aguardando Entrada',
+      'Valor Invoice (USD)': '$101.346,01',
+      'ETD ORIGEM*': '08/08/2026',
+      'ETA Previsto Médio': '17/09/2026',
+      'ETA Final*': '06/09/2026',
+      'Fornecedor/ Supplier': 'KIOM GLOBAL LIMITED',
+    });
+    queryQueue.push(
+      createResolvedChain([
+        {
+          id: 288,
+          processCode: 'PK2202608SZ',
+          totalFobValue: '101265.19',
+          etd: '2026-08-08',
+          eta: '2026-09-17',
+          exporterName: 'KIOM GLOBAL LIMITED',
+          aiExtractedData: null,
+        },
+      ]),
+    );
+
+    const resultado = await followUpService.compareWithSheet('PK2202608SZ');
+
+    const porCampo = new Map(resultado.differences.map((item) => [item.field, item]));
+    expect(porCampo.get('totalFobValue')).toMatchObject({
+      from: '101265.19',
+      to: '101346.01',
+      column: 'VALOR INVOICE (USD)',
+    });
+    // 'ETA Previsto Medio' (17/09) nao alimenta a ETA: vale o 'ETA Final*'.
+    expect(porCampo.get('eta')).toMatchObject({ to: '2026-09-06' });
+    // Campo igual nao vira diferenca.
+    expect(porCampo.has('exporterName')).toBe(false);
+    expect(porCampo.has('etd')).toBe(false);
+    expect(resultado.hasDifferences).toBe(true);
+    expect(resultado.sheetStatus).toBe('Aguardando Entrada');
+  });
+
+  it('nao grava nada: comparar e so ler', async () => {
+    vi.mocked(googleSheetsService.readProcessRow).mockResolvedValue({
+      Processos: 'PK2202608SZ',
+      'Valor Invoice (USD)': '$101.346,01',
+    });
+    queryQueue.push(
+      createResolvedChain([
+        { id: 288, processCode: 'PK2202608SZ', totalFobValue: '101265.19', aiExtractedData: null },
+      ]),
+    );
+
+    await followUpService.compareWithSheet('PK2202608SZ');
+
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 });
