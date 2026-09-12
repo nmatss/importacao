@@ -9,6 +9,17 @@ export function isValidNcm(raw: string): boolean {
   return digits.length === 8;
 }
 
+/**
+ * Posição do Sistema Harmonizado como o BL costuma imprimir: 4 dígitos
+ * (capítulo+posição, ex.: 4202) ou 6 (subposição, ex.: 420292). NÃO é NCM — a
+ * NCM brasileira tem 8 — mas também não é erro de leitura: é o que está no
+ * documento.
+ */
+export function isHsHeading(raw: string): boolean {
+  const digits = raw.replace(/\D/g, '');
+  return digits.length === 4 || digits.length === 6;
+}
+
 export function normalizeNcm(raw: string): string {
   const d = raw.replace(/\D/g, '');
   return d.length === 8 ? `${d.slice(0, 4)}.${d.slice(4, 6)}.${d.slice(6, 8)}` : raw.trim();

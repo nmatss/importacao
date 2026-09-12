@@ -24,7 +24,8 @@ ATENCAO ESPECIAL:
 - issueDate = DATA DE EMISSAO do BL ("Place and Date of Issue", "Date of Issue", "Issued on", "Data de Emissao"). NAO confunda com shipmentDate/ETD/ETA nem com a data em que o arquivo foi recebido.
 - Procure por declaracao de MADEIRA (wood, wooden, fumigation, ISPM15, heat treatment) — comum em descricao da carga e marcas de embalagem
 - woodDeclaration = true se houver QUALQUER mencao a madeira/fumigacao/ISPM15
-- Extraia TODOS os codigos NCM encontrados na descricao da carga (formato XXXX.XX.XX) em ncmList
+- Extraia TODOS os codigos fiscais encontrados na descricao da carga em ncmList, COPIADOS COMO ESTAO
+- O BL costuma imprimir so a posicao do SH com 4 ou 6 digitos ("NCM NO.: 4202"): registre "4202" e NAO complete com zeros nem invente os 8 digitos
 - freeTime = numero de dias de free time mencionados no documento (ou null)
 - Container number: formato ISO 6346 = 4 letras + 7 numeros (ex: TCLU1234567)
 - Se houver mais de 1 container, liste todos separados por virgula
@@ -80,7 +81,7 @@ REGRAS:
 - issueDate: data de emissao do BL em ISO 8601, ou null se nao constar
 - freeTime: numero inteiro de dias, ou null se nao mencionado
 - woodDeclaration: true se qualquer mencao a madeira/wood/fumigation/ISPM15
-- ncmList: array de strings com codigos NCM encontrados (ex: ["6109.10.00", "6110.20.10"])
+- ncmList: array de strings com os codigos como impressos (ex: ["6109.10.00"] ou ["4202"] quando o BL so traz a posicao do SH)
 - NAO invente dados. Responda SOMENTE com JSON.`,
     },
     {

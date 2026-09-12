@@ -248,7 +248,13 @@ describe('processWithAI — extraction failure resilience', () => {
     expect(extractDUIMPData).toHaveBeenCalledWith(
       'Extracted PDF text long enough to be real content',
       'draft_duimp',
-      { imageBase64: 'bW9jayBjb250ZW50', imageMimeType: 'application/pdf' },
+      // PDF sem camada de texto utilizavel: o arquivo original vai anexado e o
+      // texto residual e marcado como NAO confiavel (grounding/backfill desligados).
+      {
+        imageBase64: 'bW9jayBjb250ZW50',
+        imageMimeType: 'application/pdf',
+        sourceTextReliable: false,
+      },
     );
   });
 

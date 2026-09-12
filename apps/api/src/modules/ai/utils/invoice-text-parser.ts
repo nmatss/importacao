@@ -114,8 +114,13 @@ export function tryParseInvoiceText(text: string): Record<string, any> | null {
 export function fillInvoiceNullsFromText(
   data: Record<string, any>,
   text: string,
+  options?: { sourceTextReliable?: boolean },
 ): Record<string, any> {
   const source = text ?? '';
+  // Texto de apoio (OCR de um PDF ilegível para o servidor, com o original
+  // anexado ao provider) não é documento: preencher nulos a partir dele injeta
+  // rótulo de formulário como se fosse dado lido.
+  if (options?.sourceTextReliable === false) return data;
   // Only recover on documents that actually look like a commercial invoice.
   if (!source.trim() || !isCommercialInvoice(source)) return data;
 

@@ -258,8 +258,12 @@ function sumField(items: Record<string, any>[], key: string): number | null {
 export function fillPackingListNullsFromText(
   data: Record<string, any>,
   text: string,
+  options?: { sourceTextReliable?: boolean },
 ): Record<string, any> {
   const source = text ?? '';
+  // Ver fillInvoiceNullsFromText: texto de apoio (OCR de gabarito) nunca
+  // preenche campo nenhum.
+  if (options?.sourceTextReliable === false) return data;
   if (!source.trim() || !isPackingList(source)) return data;
 
   const out = { ...data };
