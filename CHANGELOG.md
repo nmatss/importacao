@@ -2,6 +2,8 @@
 
 ## 2026-09-12 — Homologação técnica R7
 
+- Release `268eabd` implantada, com CI/CodeQL, scans/SBOMs e smoke HTTPS aprovados; limites operacionais registrados no STATUS.
+
 - Distingue indisponibilidade do Sheets (HTTP 503) de processo ausente, preservando valores, colunas e retries limitados.
 - Rejeita configuração de exemplo/inválida do Odoo antes de enviar autenticação.
 - Adiciona HSTS inicial de 300 segundos exclusivamente ao domínio produtivo, sem preload ou subdomínios.

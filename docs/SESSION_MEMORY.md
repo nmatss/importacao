@@ -1,5 +1,9 @@
 # Session Memory
 
+## 12/09/2026 — R7 implantada e homologada tecnicamente
+
+Release 268eabd implantada às 18:16:50 BRT. CI 34718917866/CodeQL 34718917855 passaram, incluindo74 E2EAPI,3 scans/SBOMs e gates novos. Homologação pelo agente com 22 testes novos;2.056API/379web/888cert/82browser,7 restore,4 HTTP,8 deploy,4 env e typecheck/lint/build/Ruff aprovados. HSTS único de 300 segundos comprovado em produção; Sheets503,leituraafetada recuperada: 115 colunas;restoreisolado42 tabelas / 117 processos. Fontes preservadas, SYDLE ativo,Linx off. IMAP/Odoo reais permanecem com placeholders. Documento 192: extração diagnóstica recuperou campos,sem sobrescrever estado documental; reprocessamento controlado permanece pendente. Limites e evidências na seção final R7 do STATUS; não declarar todos os dados reais aprovados.
+
 ## 12/09/2026 — R7 em validação
 
 Usuário esclareceu que homologação significa testes gerados/executados pelo agente; não transferir aceite técnico às áreas. Corrigidos falso 404 do Sheets, aceitação de placeholders Odoo, gates perigosos/incompletos de restore e HSTS ausente. 22 testes novos. Leitura de um processo afetado recuperada com 115 colunas; backup restaurado (42 tabelas/117 processos) em contêiner sem rede, removido depois. IMAP/Odoo reais usam configuração de exemplo; caminho seguro solicitado, sem senha na conversa. CI/deploy do candidato ainda pendentes. Detalhes e fonte canônica: seção R7 do STATUS.

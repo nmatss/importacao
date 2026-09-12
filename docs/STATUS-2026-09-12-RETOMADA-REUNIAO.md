@@ -1,8 +1,8 @@
 # Retomada da reunião — 12/09/2026
 
-Estado mais recente: seção **Retomada R5 — desbloqueio de CI**, ao final. As rodadas anteriores são histórico.
+Estado mais recente: seção **R7 — deploy e homologação técnica concluídos**, ao final. Release `268eabd` implantada e gates aprovados; conexões reais e estado documental têm os limites explícitos da seção final. As rodadas anteriores são histórico.
 
-Estado: **correções locais implementadas e testes técnicos concluídos; entrega global parcial, sem publicação ou homologação integral**. Base `f4aa948`, branch
+Estado da rodada inicial (histórico): **correções locais implementadas e testes técnicos concluídos; entrega global parcial, sem publicação ou homologação integral**. Base `f4aa948`, branch
 `fix/reuniao-2026-09-11`. Pedido atual de 30 entregas, transcrição e 15 capturas são o contrato.
 O histórico de 11/09 não comprova o estado desta revisão.
 
@@ -623,3 +623,37 @@ Homologação técnica em consolidação: gates finais, CI e deploy pendentes ne
 R7 — fechamento dos gates locais: API 2.056 passaram/5 opt-in ignorados; web379; cert888; typecheck/lint/build aprovados. Browser82 passaram. E2EAPI teve falha ambiental de binding de portas Docker em dois arquivos (66 casos passaram,8 não executaram); reexecução apenas dos dois arquivos, com menor concorrência, passou8/8 em28,81s. Não houve skip silencioso de infraestrutura. Restore7,deploy8,env4 e Ruff aprovados. Commit candidato inicial4be68e3 publicado para CI.
 
 Revisão adicional do HSTS antes de deploy encontrou cabeçalho legado da API (`max-age=31536000; includeSubDomains`), ausente na raiz. O gateway passa a ocultar HSTS dos upstreams e publicar uma única política própria. Novo teste usa upstream sintético local com política conflitante e exige apenas max-age=300. Esse ajuste exige novo commit/CI/imagem; não reutilizar scan ou aceite da imagem anterior como prova da final.
+
+Conferência operacional adicional: logs do processamento automático mostraram violações de JSON tratadas pelo pipeline e o documento 192 (certificate) marcado como extração sem dados úteis. Arquivo preservado, PDF digital com6.696 caracteres. Uma única extração diagnóstica, sem persistir resultado documental, pelo `aiService.extractCertificateData` e provider ativo recuperou campos de certificado com confiança 0,88485. O diagnóstico passou pelo orçamento/harness normal e não enviou mensagens; houve uma chamada adicional de IA no provider já adotado. Isso não prova causa raiz da resposta vazia anterior nem atualiza o estado documental: 192 segue exigindo reprocessamento operacional controlado; não declarar o lote real inteiro aprovado.
+
+Matriz de homologação técnica R7 (cenários reais quando disponíveis; contratos com fixtures nos demais):
+
+| Critério                                                   | Evidência executada                                                                                           | Limite                                                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Sheets preserva colunas/SKU e diferencia ausência de falha | Novos testes de google-sheets/service e controller; releitura real115 colunas                                 | Sem alterar fonte ou provar ausência futura de falha de rede                                                |
+| Autenticação, processos, documentos e e-mail               | E2EAPI/PostgreSQL e82casos de navegador                                                                       | SMTP simulado nos testes; nenhum envio real                                                                 |
+| Invoice/packing/BL/DUIMP e Registro                        | Suíte API: parsers, unidades, referências, comparação e checks documentais                                    | Rascunho sintético testa contrato; extrato final não passa a ser rascunho                                   |
+| Certificados, licenciamento, restrição individual e Linx   | 888testes cert-api, incluindo teste de bloqueio sem flag, locks, rollback, herança e proteção de outros itens | Sem carga externa, alteração de licença ou escolha artificial de vínculo vigente                            |
+| Odoo                                                       | 13testes de serviço e checks de descrição: sucesso, divergência, indisponibilidade e placeholder              | Servidor real indisponível por configuração de exemplo                                                      |
+| Recuperação                                                | Restore real42 tabelas / 117 processos +7testes de falha/limpeza                                              | Arquivos de volumes com integridade verificada, sem ensaio completo de recuperação funcional desses volumes |
+| HTTP/HSTS                                                  | 4testes em Nginx real: HTML, erro, escopo de host e conflito de upstream                                      | Política inicial curta300segundos, CA interna                                                               |
+| Regressão e qualidade                                      | 2056API,379web,888cert,typecheck,lint,build,Ruff;CI da revisão final                                          | 5 opt-in explicitamente não executados na suíte local                                                       |
+
+Revisão final do candidato:268eabd8b708bab7ebafdd6ce7aca4d093cefc9a. CodeQL 34718917855 aprovado; CI 34718917866 com testes/auditorias aprovados e imagens em conclusão. Candidatos anteriores4be68e3 e respectivos runs foram substituídos; runs anteriores cancelados para não consumir recursos sem necessidade.
+
+### R7 — deploy e homologação técnica concluídos
+
+Release `268eabd8b708bab7ebafdd6ce7aca4d093cefc9a` publicada e implantada em 12/09/2026 às 18:16:50 BRT. [CI 34718917866](https://github.com/nmatss/importacao/actions/runs/34718917866) e [CodeQL 34718917855](https://github.com/nmatss/importacao/actions/runs/34718917855) passaram na mesma revisão; os 9 jobs do CI,3 scans Trivy,SBOMs e os novos gates de restore/HSTS foram executados e aprovados. Log do job TestAPI confirma2.056 testes unitários/5 opt-in e74 E2E em 9 arquivos, sem falha de infraestrutura no CI.
+
+Deploy oficial em master limpa/sincronizada, com `SKIP_BACKUP=0`, `ALLOW_SYDLE_SYNC_DEPLOY=1` e sem webhook de notificação no processo do script. Exit0. Backup pré-deploy `importacao_2026-09-12_211342.pgdump` (3,2MB), listado por pg_restore; snapshot anterior preservado e volumes arquivados. O ensaio completo de banco registrado acima usou o backup201810, não este novo arquivo. Imagens antes das verificações de schema/migrations e troca dos serviços; readiness aprovada.
+
+Pós-deploy comprovado:
+
+- `REVISION` e `/health/live` = 268eabd; provider Vertex. API/web/cert/PostgreSQL/Redis saudáveis, zero reinícios; `/health/ready` com DB/Redis true e CLI cert schema verified.
+- Raiz e 5 assets locais 200; `/api/health`200; `/api/auth/me`, `/api/processes`, `/cert-api/api/products` sem autenticação401; asset inexistente404. Todos os seis endpoints de teste enviam exatamente um HSTS `max-age=300`, inclusive API/erros, com TLS/hostname verificados pela CA interna.
+- Flags efetivas: DOCUMENT_SOURCE=drive, DRIVE_WRITE_MODE=off, FOLLOW_UP_SYNC_MODE=dry_run, SYDLE_SYNC_ENABLED=true, EMAIL_INGESTION_ENABLED=false, LINX_WRITE_ENABLED=false. `odooService.isConfigured()` false confirma o bloqueio de placeholders no runtime final.
+- Smoke de integrações: Gmail perfil,SMTP transporte,Drive e 1.415 referências do follow-up passaram; resumo operacional true. IMAP false permanece coerente com senha de exemplo. Nenhuma mensagem foi enviada pelo smoke.
+
+**Entrega:** correções de código e homologação técnica dos cenários executados concluídas, com 22 testes novos e regressão existente aprovada. As falhas técnicas Sheets/restore/HSTS/fixture foram tratadas; o contrato do Odoo inválido agora falha antes da autenticação. Não existe alegação de100%dos dados reais ou integrações externas aprovadas. **Limites concretos restantes:** IMAP/Odoo sem configuração real disponível; documento 192 teve nova extração diagnóstica bem-sucedida, mas seu estado no portal não foi sobrescrito e continua pendente de reprocessamento controlado;4 PDFs privados e 1 teste opt-in de OpenRouter não executados. Linx continua sem carga e fontes/colunas foram preservadas. Isso substitui a formulação anterior de que homologação técnica precisaria ser transferida às áreas.
+
+Evidências sanitizadas: `output/retomada-2026-09-12/revisao7/validation-evidence.json` e `public-smoke.json`; comandos/resultados locais estão nesta seção e nos logs anexos. Dotcontext e memória local atualizados; ai-memory não recebeu gravação porque continua resolvendo outro projeto.
