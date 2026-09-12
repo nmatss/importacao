@@ -36,22 +36,42 @@ import type { ProcessStatus } from '../../shared/state-machine/process-states.js
 import { NotFoundError } from '../../shared/errors/index.js';
 import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { getQueue } from '../../shared/queue/index.js';
-import { portsMatch as normalizedPortsMatch } from '../validation/utils/port-normalize.js';
-import { normalizeCompanyName } from '../validation/utils/name-normalize.js';
 import { extractPartyParts } from '../validation/utils/party-extract.js';
 import {
-  itemCodesMatch,
   cleanItemCodesInAiData,
-  extractCanonicalItemCode,
+  primaryItemCode,
 } from '../validation/utils/item-code-normalize.js';
-import { compareDates } from '../validation/utils/date-compare.js';
+import {
+  aggregateMessage,
+  buildItemDivergence,
+  compareItemWeightRatio,
+  comparisonRowKey,
+  computeRowStatus,
+  eanValuesDiverge,
+  findCorrespondingItem,
+  itemComparisonMessage,
+  itemsCorrespond,
+  manufacturerValuesDiverge,
+  mergeValidationChecks,
+  ncmValuesDiverge,
+  normalizeStringList,
+  numericValuesDiverge,
+  isInvoiceFreeOfCharge,
+  stripTaxIdPrefix,
+  sumItemQuantities,
+  toNumberOrNull,
+  type ComparisonCheckResult,
+  type ComparisonKind,
+  type ComparisonRow,
+  type Criticality,
+  type RowStatus,
+} from './comparison-core.js';
 import { buildEspelhoFromAiData } from './utils/build-espelho.js';
 import type {
   AcceptComparisonInput,
   EditComparisonFieldInput,
   RemoveComparisonFieldInput,
 } from './schema.js';
-import { normalizeGtin } from '../ai/harness/format.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 import { ocrScannedPdf, rasterizePdfPages } from './ocr.js';
 import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
@@ -3647,6 +3667,14 @@ export const documentService = {
       ),
     ]);
 
+    const invItems: Array<Record<string, any>> = inv?.items ?? [];
+    const plItems: Array<Record<string, any>> = pl?.items ?? [];
+
+    // Resultados da validacao (vigentes ou, quando so houve run PARCIAL, os do
+    // ultimo run do historico). Sem isso o PK220 — que so tem runs parciais —
+    // ficava sem nenhum cruzamento na tela.
+    const validation = await loadValidationChecks(processId);
+
     // Pre-extract structured party parts from each document
     const invExporter = extractPartyParts(inv?.exporterName);
     const plExporter = extractPartyParts(pl?.exporterName);
@@ -3656,20 +3684,30 @@ export const documentService = {
     const blConsignee = extractPartyParts(operationalBl?.consignee ?? operationalBl?.consigneeName);
 
     // Build aggregate field comparison — `kind` drives comparison semantics
-    type Kind = 'string' | 'numeric' | 'port' | 'date' | 'name';
     // Criticality flags which fields are mandatory for customs clearance
     // (Nicolas, 2026-05-21: "se for a parte do endereço do exportador ou
     // alguma outra coisa assim, que não seja da parte aduaneira, talvez a
     // gente consiga relevar"). Defaults are conservative — endereços,
     // pesos/CBM totals e moeda do frete são "secondary" (avisos, não erros).
-    type Criticality = 'critical' | 'secondary' | 'info';
     interface AggregateRow {
       label: string;
       inv?: unknown;
       pl?: unknown;
       bl?: unknown;
       espelho?: unknown;
-      kind?: Kind;
+      /**
+       * Valor de REFERENCIA do sistema (cadastro do processo, alimentado pela
+       * Follow-up). Reuniao 11/09 [06:47]: "nesse que eu fiz (220) nao tem nada
+       * na parte do sistema, esta tudo com um tracinho". A coluna vinha como
+       * efeito colateral de um check de validacao persistido, e o PK220 so tem
+       * runs PARCIAIS — zero linhas em `validation_results`. Agora ela e lida
+       * direto do cadastro e aparece mesmo sem validacao final.
+       *
+       * O valor NAO entra no calculo de status: quem compara documento x
+       * sistema continua sendo o check `*-vs-fup`, que tem tolerancia propria.
+       */
+      system?: unknown;
+      kind?: ComparisonKind;
       criticality?: Criticality;
       // Per-row date tolerance (only used when kind === 'date'). Lets the ETD row
       // widen tolerance so an Invoice/PL issue date used as a fallback is only
@@ -3677,13 +3715,28 @@ export const documentService = {
       dateOpts?: { matchDays?: number; warnDays?: number };
     }
 
+    const processRecord = processRow[0];
+    const systemNumber = (value: unknown, digits: number): string | null => {
+      const parsed = toNumberOrNull(value);
+      return parsed == null ? null : parsed.toFixed(digits);
+    };
+    const systemText = (value: unknown): string | null => {
+      const text = value == null ? '' : String(value).trim();
+      return text || null;
+    };
+
     const aggregateFields: AggregateRow[] = [
       {
+        // A coluna Espelho vinha com `?? processRow.exporterName` — o
+        // "Fornecedor/ Supplier" da Follow-up, que e o FABRICANTE, nao o
+        // exportador. Reuniao 11/09 [07:49]: "o exportador, ele pegou um nome
+        // no espelho. So que eu nao subi o espelho ainda". Sem espelho, a
+        // coluna fica vazia; nada de valor emprestado de outra fonte.
         label: 'Exportador / Shipper',
         inv: invExporter.name || inv?.exporterName,
         pl: plExporter.name || pl?.exporterName,
         bl: blShipper.name || (operationalBl?.shipper ?? operationalBl?.shipperName),
-        espelho: espelhoSummary?.exporterName ?? processRow[0]?.exporterName,
+        espelho: espelhoSummary?.exporterName ?? null,
         kind: 'name',
       },
       {
@@ -3692,6 +3745,7 @@ export const documentService = {
         pl: plExporter.taxId || pl?.exporterTaxId,
         bl: blShipper.taxId,
         espelho: null,
+        kind: 'taxId',
         criticality: 'secondary',
       },
       {
@@ -3717,13 +3771,16 @@ export const documentService = {
         pl: plImporter.taxId || pl?.importerCnpj,
         bl: blConsignee.taxId,
         espelho: espelhoSummary?.importerCnpj,
+        kind: 'taxId',
       },
       {
         label: 'Importador — Endereço',
         inv: invImporter.address || inv?.importerAddress,
         pl: plImporter.address || pl?.importerAddress,
         bl: blConsignee.address,
-        espelho: espelhoSummary?.importerAddress,
+        // O espelho traz "CNPJ: 58.500.398/0006-10 RUA GERCINO MACHADO, 207";
+        // o prefixo fiscal sai da leitura para nao inventar divergencia.
+        espelho: stripTaxIdPrefix(espelhoSummary?.importerAddress),
         kind: 'name',
         criticality: 'secondary',
       },
@@ -3732,20 +3789,29 @@ export const documentService = {
         inv: inv?.invoiceNumber,
         pl: pl?.packingListNumber,
         bl: operationalBl?.customerReference,
+        system: systemText(processRecord?.purchaseRef),
       },
       {
         label: 'BL Number (shipping)',
         inv: null,
         pl: null,
         bl: operationalBl?.blNumber,
+        system: systemText(processRecord?.blNumber),
       },
-      { label: 'Incoterm', inv: inv?.incoterm, pl: null, bl: null },
+      {
+        label: 'Incoterm',
+        inv: inv?.incoterm,
+        pl: null,
+        bl: null,
+        system: systemText(processRecord?.incoterm),
+      },
       { label: 'Moeda', inv: inv?.currency, pl: null, bl: operationalBl?.freightCurrency },
       {
         label: 'Porto Embarque',
         inv: inv?.portOfLoading,
         pl: pl?.portOfLoading,
         bl: operationalBl?.portOfLoading,
+        system: systemText(processRecord?.portOfLoading),
         kind: 'port',
       },
       {
@@ -3753,6 +3819,7 @@ export const documentService = {
         inv: inv?.portOfDischarge,
         pl: pl?.portOfDischarge,
         bl: operationalBl?.portOfDischarge,
+        system: systemText(processRecord?.portOfDischarge),
         kind: 'port',
       },
       {
@@ -3761,6 +3828,7 @@ export const documentService = {
         pl: null,
         bl: null,
         espelho: espelhoSummary?.totalAmountUsd,
+        system: systemNumber(processRecord?.totalFobValue, 2),
         kind: 'numeric',
       },
       {
@@ -3768,6 +3836,7 @@ export const documentService = {
         inv: null,
         pl: null,
         bl: operationalBl?.freightValue,
+        system: systemNumber(processRecord?.freightValue, 2),
         kind: 'numeric',
         criticality: 'info',
       },
@@ -3777,6 +3846,18 @@ export const documentService = {
         pl: pl?.totalBoxes,
         bl: operationalBl?.totalBoxes,
         espelho: espelhoSummary?.totalBoxes,
+        system: systemNumber(processRecord?.totalBoxes, 0),
+        kind: 'numeric',
+      },
+      {
+        // Eduarda [05:47]: "precisa trazer mais informacao da invoice e do
+        // packing para comparar com o espelho". O espelho ja trazia
+        // summary.totalPieces e ninguem comparava com a soma dos itens.
+        label: 'Total Peças',
+        inv: sumItemQuantities(invItems),
+        pl: sumItemQuantities(plItems),
+        bl: null,
+        espelho: espelhoSummary?.totalPieces,
         kind: 'numeric',
       },
       {
@@ -3785,6 +3866,7 @@ export const documentService = {
         pl: pl?.totalNetWeight,
         bl: null,
         espelho: espelhoSummary?.totalNetWeight,
+        system: systemNumber(processRecord?.totalNetWeight, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
@@ -3794,6 +3876,7 @@ export const documentService = {
         pl: pl?.totalGrossWeight,
         bl: operationalBl?.totalGrossWeight,
         espelho: espelhoSummary?.totalGrossWeight,
+        system: systemNumber(processRecord?.totalGrossWeight, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
@@ -3803,6 +3886,7 @@ export const documentService = {
         pl: pl?.totalCbm,
         bl: operationalBl?.totalCbm,
         espelho: espelhoSummary?.totalCbm,
+        system: systemNumber(processRecord?.totalCbm, 3),
         kind: 'numeric',
         criticality: 'secondary',
       },
@@ -3836,6 +3920,7 @@ export const documentService = {
           operationalBl?.onBoardDate ??
           operationalBl?.etd,
         espelho: null,
+        system: systemText(processRecord?.etd),
         kind: 'date',
         dateOpts: { matchDays: 45, warnDays: 90 },
       },
@@ -3844,6 +3929,7 @@ export const documentService = {
         inv: null,
         pl: null,
         bl: operationalBl?.eta,
+        system: systemText(processRecord?.etaActual ?? processRecord?.eta),
         kind: 'date',
         criticality: 'info',
       },
@@ -3860,15 +3946,23 @@ export const documentService = {
         pl: null,
         bl: operationalBl?.containerType,
         espelho: espelhoSummary?.containerType,
+        system: systemText(processRecord?.containerType),
         criticality: 'info',
       },
-      { label: 'Navio', inv: null, pl: null, bl: operationalBl?.vesselName, criticality: 'info' },
+      {
+        label: 'Navio',
+        inv: null,
+        pl: null,
+        bl: operationalBl?.vesselName,
+        system: systemText(processRecord?.vesselName),
+        criticality: 'info',
+      },
     ];
 
     // Compute match status for each field — supports 4 docs (inv/pl/bl/espelho).
     // For 'secondary' criticality, a hard divergence is downgraded to warning
     // (per Nicolas: "endereço do exportador… talvez a gente consiga relevar").
-    const aggregateComparison = aggregateFields.map((f, index) => {
+    const aggregateComparison: ComparisonRow[] = aggregateFields.map((f, index) => {
       const key = comparisonRowKey('aggregate', f.label, index);
       const invoiceOverride = getOverride(key, 'invoice');
       const packingListOverride = getOverride(key, 'packingList');
@@ -3889,6 +3983,7 @@ export const documentService = {
       const packingList = resolveCell(packingListOverride, f.pl);
       const bl = resolveCell(blOverride, f.bl);
       const espelho = resolveCell(espelhoOverride, f.espelho);
+      const system = resolveCell(getOverride(key, 'system'), f.system);
 
       // O status considera os valores efetivamente exibidos: corrigir uma
       // célula editada deve reconciliar (ou divergir) a linha de verdade.
@@ -3904,6 +3999,7 @@ export const documentService = {
         packingList,
         bl,
         espelho,
+        system,
         status,
         criticality,
         message: editedMessage(key, baseMessage),
@@ -3912,37 +4008,26 @@ export const documentService = {
       };
     });
 
-    // Build item-level comparison — normalize item codes (PI7752Y vs PI 7752Y, etc.)
-    const invItems = inv?.items ?? [];
-    const plItems = pl?.items ?? [];
+    // Cruzamentos da validacao INCORPORADOS as linhas de cima (D6): quem tem
+    // linha equivalente vira regra/status dela; ncm-bl-description e a
+    // descricao do Odoo viram linha propria, com valores NAS COLUNAS.
+    const aggregateWithChecks = mergeValidationChecks(
+      aggregateComparison,
+      validation.checks,
+      (key) => acceptanceFor('aggregate', key),
+    );
 
-    const findPlMatch = (invItem: any) =>
-      plItems.find((plItem: any) => {
-        if (itemIdentityMatches(plItem, invItem)) return true;
-        const plDesc = plItem.description ?? plItem.descricao;
-        const invDesc = invItem.description ?? invItem.descricao;
-        return Boolean(
-          plDesc &&
-          invDesc &&
-          String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
-        );
-      });
-
-    const findEspelhoMatch = (invItem: any) =>
-      espelhoItems.find((espItem: any) => {
-        return itemIdentityMatches(espItem, invItem);
-      });
+    // Casamento de item: cada linha do outro documento e usada UMA vez
+    // (o PK220 repete o SKU 050404509 em duas linhas, de PIs diferentes).
+    const usedPlItems = new Set<Record<string, any>>();
+    const usedEspelhoItems = new Set<Record<string, any>>();
 
     const itemComparison = invItems.map((invItem: any, index: number) => {
-      const plMatch = findPlMatch(invItem);
-      const espelhoMatch = findEspelhoMatch(invItem);
-      const itemCode =
-        extractCanonicalItemCode(
-          invItem.itemCode ?? invItem.codigo ?? invItem.code ?? invItem.sku,
-        ) ||
-        itemCodeCandidates(invItem)[0] ||
-        invItem.itemCode ||
-        invItem.codigo;
+      const plMatch = findCorrespondingItem(invItem, plItems, usedPlItems);
+      const espelhoMatch = findCorrespondingItem(invItem, espelhoItems, usedEspelhoItems);
+      // SKU exibido: o codigo entre colchetes da descricao ('050404509'), nao a
+      // string composta PI+colecao+codigo que a IA leu ('PK2062607BXIS27...').
+      const itemCode = primaryItemCode(invItem) || invItem.itemCode || invItem.codigo;
       const invoiceQty = toNumberOrNull(invItem.quantity);
       const plQty = toNumberOrNull(plMatch?.quantity);
       const espelhoQty = toNumberOrNull(espelhoMatch?.qty ?? espelhoMatch?.quantity);
@@ -3974,13 +4059,34 @@ export const documentService = {
       });
       const matched = !!plMatch;
       const espelhoMatched = !!espelhoMatch;
+      // Campos do espelho que ninguem conferia (Eduarda [05:47]). Cada um so
+      // compara quando os DOIS lados existem — ausencia nunca vira divergencia.
+      const invoiceNcm = invItem.ncmCode ?? invItem.ncm ?? null;
+      const espelhoNcm = espelhoMatch?.ncm ?? null;
+      const espelhoUnitPrice = toNumberOrNull(espelhoMatch?.unitPrice);
+      const espelhoTotal = toNumberOrNull(espelhoMatch?.amountUsd);
+      const ncmDiverges = ncmValuesDiverge(invoiceNcm, espelhoNcm);
+      const unitPriceDiverges = numericValuesDiverge(
+        toNumberOrNull(invItem.unitPrice),
+        espelhoUnitPrice,
+      );
+      const totalPriceDiverges = numericValuesDiverge(
+        toNumberOrNull(invItem.totalPrice),
+        espelhoTotal,
+      );
+      const eanDiverges = eanValuesDiverge(invItem.ean ?? invItem.ean13, espelhoMatch?.ean13);
       const status: RowStatus = isFreeOfCharge
         ? 'warning'
         : !matched || (espelhoItems.length > 0 && !espelhoMatched) || manufacturerDiverges
           ? 'warning'
-          : quantityDiverges || espelhoDiverges || weightRatio.status === 'divergent'
+          : quantityDiverges ||
+              espelhoDiverges ||
+              ncmDiverges ||
+              unitPriceDiverges ||
+              totalPriceDiverges ||
+              weightRatio.status === 'divergent'
             ? 'divergent'
-            : weightRatio.status === 'warning'
+            : weightRatio.status === 'warning' || eanDiverges
               ? 'warning'
               : 'match';
       const divergence = buildItemDivergence({
@@ -3991,6 +4097,10 @@ export const documentService = {
         espelhoDiverges,
         isFreeOfCharge,
         manufacturerDiverges,
+        ncmDiverges,
+        unitPriceDiverges,
+        totalPriceDiverges,
+        eanDiverges,
         weightRatioMessage: weightRatio.message,
       });
 
@@ -4005,7 +4115,12 @@ export const documentService = {
         accepted: acceptanceFor('item', itemRowKey),
         itemCode,
         description: invItem.description ?? invItem.descricao,
-        ncm: invItem.ncmCode ?? invItem.ncm,
+        ncm: invoiceNcm,
+        espelhoNcm,
+        espelhoDescription: espelhoMatch?.nomeProduto ?? espelhoMatch?.description ?? null,
+        invoiceEan: invItem.ean ?? invItem.ean13 ?? null,
+        plEan: plMatch?.ean ?? plMatch?.ean13 ?? null,
+        espelhoEan: espelhoMatch?.ean13 ?? espelhoMatch?.ean ?? null,
         invoiceQty,
         plQty,
         espelhoQty,
@@ -4013,6 +4128,10 @@ export const documentService = {
         invoiceTotal: invItem.totalPrice,
         espelhoUnitPrice: espelhoMatch?.unitPrice ?? null,
         espelhoTotal: espelhoMatch?.amountUsd ?? null,
+        ncmMatch: !ncmDiverges,
+        unitPriceMatch: !unitPriceDiverges,
+        totalPriceMatch: !totalPriceDiverges,
+        eanMatch: !eanDiverges,
         invoiceManufacturer,
         plManufacturer,
         espelhoManufacturer,
@@ -4041,25 +4160,9 @@ export const documentService = {
 
     // Find PL items not matched in invoice
     const unmatchedPlItems = plItems
-      .filter(
-        (plItem: any) =>
-          !invItems.some((invItem: any) => {
-            if (itemIdentityMatches(plItem, invItem)) return true;
-            const plDesc = plItem.description ?? plItem.descricao;
-            const invDesc = invItem.description ?? invItem.descricao;
-            return Boolean(
-              invDesc &&
-              plDesc &&
-              String(invDesc).toLowerCase().includes(String(plDesc).toLowerCase().slice(0, 20)),
-            );
-          }),
-      )
-      .map((item: any) => ({
-        itemCode:
-          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
-          itemCodeCandidates(item)[0] ||
-          item.itemCode ||
-          item.codigo,
+      .filter((plItem) => !invItems.some((invItem) => itemsCorrespond(invItem, plItem)))
+      .map((item) => ({
+        itemCode: primaryItemCode(item) || item.itemCode || item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'packing_list',
@@ -4069,25 +4172,9 @@ export const documentService = {
     // matching primitives (EAN / itemCode / description) so the anomaly stream
     // and the comparison panels agree in BOTH directions, not just PL→INV.
     const unmatchedInvoiceItems = invItems
-      .filter(
-        (invItem: any) =>
-          !plItems.some((plItem: any) => {
-            if (itemIdentityMatches(plItem, invItem)) return true;
-            const plDesc = plItem.description ?? plItem.descricao;
-            const invDesc = invItem.description ?? invItem.descricao;
-            return Boolean(
-              plDesc &&
-              invDesc &&
-              String(plDesc).toLowerCase().includes(String(invDesc).toLowerCase().slice(0, 20)),
-            );
-          }),
-      )
-      .map((item: any) => ({
-        itemCode:
-          extractCanonicalItemCode(item.itemCode ?? item.codigo ?? item.code ?? item.sku) ||
-          itemCodeCandidates(item)[0] ||
-          item.itemCode ||
-          item.codigo,
+      .filter((invItem) => !plItems.some((plItem) => itemsCorrespond(plItem, invItem)))
+      .map((item) => ({
+        itemCode: primaryItemCode(item) || item.itemCode || item.codigo,
         description: item.description ?? item.descricao,
         quantity: item.quantity,
         source: 'invoice',
@@ -4115,8 +4202,13 @@ export const documentService = {
       hasOperationalBl: !!operationalBl,
       operationalBlSource,
       hasEspelho: !!espelhoSummary || espelhoItems.length > 0,
-      aggregateComparison,
+      aggregateComparison: aggregateWithChecks,
       itemComparison,
+      // A coluna Sistema tem conteudo? Vem do CADASTRO do processo, nao da
+      // existencia de um resultado de validacao (ver AggregateRow.system).
+      systemDataAvailable: aggregateWithChecks.some((row) => row.system != null),
+      // 'partial' quando os cruzamentos vieram do historico de um run parcial.
+      validationMode: validation.mode,
       // Aceites ATIVOS (invalidated_at IS NULL) lidos da tabela relacional.
       // O timeline (`comparison_acceptance`) permanece como historico.
       acceptances,
@@ -4147,257 +4239,27 @@ export const documentService = {
   },
 };
 
-type RowStatus = 'match' | 'warning' | 'divergent' | 'empty' | 'single_source';
-
-function comparisonRowKey(scope: 'aggregate' | 'item', value: unknown, index: number): string {
-  const raw = String(value ?? `linha-${index + 1}`)
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 120);
-  return `${scope}:${raw || `linha-${index + 1}`}`;
-}
-
-function aggregateMessage(status: RowStatus, criticality: 'critical' | 'secondary' | 'info') {
-  if (status === 'empty') return 'Sem dados extraidos para comparar.';
-  if (status === 'single_source') {
-    return 'Fonte unica — nenhum outro documento disponivel para corroborar este valor.';
+/**
+ * Cruzamentos da validacao para o comparativo.
+ *
+ * Import dinamico (o modulo de validacao importa este de volta) e tolerante a
+ * falha: o comparativo tem de abrir mesmo sem validacao nenhuma — era
+ * exatamente o caso do PK220, que so tem runs parciais.
+ */
+async function loadValidationChecks(
+  processId: number,
+): Promise<{ checks: ComparisonCheckResult[]; mode: 'final' | 'partial' | 'none' }> {
+  try {
+    const { validationService } = await import('../validation/service.js');
+    const effective = await validationService.getEffectiveResults(processId);
+    return { checks: effective.results, mode: effective.mode };
+  } catch (err) {
+    logger.warn(
+      { processId, err: err instanceof Error ? err.message : err },
+      'Could not load validation results for the comparison; rendering documents only',
+    );
+    return { checks: [], mode: 'none' };
   }
-  if (status === 'match') return 'Conforme entre os documentos disponiveis.';
-  if (status === 'warning' && criticality === 'secondary') {
-    return 'Divergencia secundaria registrada como atencao.';
-  }
-  if (status === 'warning') return 'Divergencia pequena ou informativa; revisar antes do envio.';
-  return 'Divergencia entre documentos; requer correcao ou aceite.';
-}
-
-function toNumberOrNull(value: unknown): number | null {
-  if (value == null || value === '') return null;
-  const parsed = Number(String(value).replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function itemCodeCandidates(item: Record<string, any> | null | undefined): string[] {
-  if (!item) return [];
-  const rawCandidates = [
-    item.itemCode,
-    item.codigo,
-    item.code,
-    item.sku,
-    item.reference,
-    item.referencia,
-    item.description,
-    item.descricao,
-  ];
-  const seen = new Set<string>();
-  const values: string[] = [];
-  for (const raw of rawCandidates) {
-    if (raw == null || raw === '') continue;
-    const cleaned = extractCanonicalItemCode(raw);
-    if (!cleaned) continue;
-    const key = String(cleaned).trim().toUpperCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    values.push(cleaned);
-  }
-  return values;
-}
-
-function itemIdentityMatches(left: Record<string, any>, right: Record<string, any>): boolean {
-  const leftEan = normalizeGtin(left.ean ?? left.ean13);
-  const rightEan = normalizeGtin(right.ean ?? right.ean13);
-  if (leftEan && rightEan && leftEan === rightEan) return true;
-
-  const leftCodes = itemCodeCandidates(left);
-  const rightCodes = itemCodeCandidates(right);
-  return leftCodes.some((leftCode) =>
-    rightCodes.some((rightCode) => itemCodesMatch(leftCode, rightCode)),
-  );
-}
-
-function isInvoiceFreeOfCharge(item: Record<string, any>): boolean {
-  const total = toNumberOrNull(item.totalPrice);
-  const unit = toNumberOrNull(item.unitPrice);
-  const marker = String(item.notes ?? item.observations ?? item.description ?? item.descricao ?? '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-  return (
-    item.isFreeOfCharge === true ||
-    total === 0 ||
-    marker.includes('free of charge') ||
-    marker.includes('foc') ||
-    marker.includes('discount') ||
-    marker.includes('desconto') ||
-    marker.includes('bonificacao') ||
-    marker.includes('bonificado') ||
-    unit === 0
-  );
-}
-
-function buildItemDivergence(input: {
-  matched: boolean;
-  espelhoMatched: boolean;
-  hasEspelho: boolean;
-  quantityDiverges: boolean;
-  espelhoDiverges: boolean;
-  isFreeOfCharge: boolean;
-  manufacturerDiverges?: boolean;
-  weightRatioMessage?: string | null;
-}): string {
-  if (input.isFreeOfCharge) return 'FOC/desconto identificado na Invoice';
-  if (!input.matched) return 'Item nao localizado no Packing List';
-  if (input.hasEspelho && !input.espelhoMatched) return 'Item nao localizado no Espelho';
-  const divergences: string[] = [];
-  if (input.quantityDiverges) divergences.push('quantidade Invoice x Packing List');
-  if (input.espelhoDiverges) divergences.push('quantidade Invoice x Espelho');
-  if (input.manufacturerDiverges) divergences.push('fabricante INV x PL x Espelho');
-  if (input.weightRatioMessage) divergences.push(input.weightRatioMessage);
-  return divergences.length > 0 ? divergences.join('; ') : 'Sem divergencia';
-}
-
-function manufacturerValuesDiverge(values: unknown[]): boolean {
-  const normalized = values
-    .filter((value) => value != null && value !== '')
-    .map((value) => normalizeCompanyName(value))
-    .filter(Boolean);
-  if (normalized.length <= 1) return false;
-  // Compara todos os pares (não só contra o primeiro): 'ACME X' vs 'ACME Y'
-  // diverge mesmo quando ambos casam por prefixo com 'ACME'. Prefixo mútuo
-  // continua tolerado para absorver sufixos societários/ruído de extração.
-  for (let i = 0; i < normalized.length; i += 1) {
-    for (let j = i + 1; j < normalized.length; j += 1) {
-      const a = normalized[i];
-      const b = normalized[j];
-      if (a !== b && !a.startsWith(b) && !b.startsWith(a)) return true;
-    }
-  }
-  return false;
-}
-
-function normalizeStringList(value: unknown): string[] {
-  const rawValues = Array.isArray(value) ? value : [value];
-  const seen = new Set<string>();
-  const result: string[] = [];
-
-  for (const raw of rawValues.flatMap((item) =>
-    typeof item === 'string' ? item.split(/[;\n]/) : [item],
-  )) {
-    const text = String(raw ?? '')
-      .trim()
-      .replace(/\s+/g, ' ');
-    if (!text) continue;
-    const key = normalizeCompanyName(text) || text.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    result.push(text);
-  }
-
-  return result;
-}
-
-function compareItemWeightRatio(input: {
-  invoiceNetWeight: number | null;
-  invoiceGrossWeight: number | null;
-  plNetWeight: number | null;
-  plGrossWeight: number | null;
-}): { status: RowStatus; message: string | null } {
-  const ratio = (gross: number | null, net: number | null) => {
-    if (gross == null || net == null || net <= 0 || gross <= 0) return null;
-    return gross / net;
-  };
-  const invoiceRatio = ratio(input.invoiceGrossWeight, input.invoiceNetWeight);
-  const plRatio = ratio(input.plGrossWeight, input.plNetWeight);
-  if (invoiceRatio == null && plRatio == null) return { status: 'empty', message: null };
-  if (
-    (input.invoiceGrossWeight != null &&
-      input.invoiceNetWeight != null &&
-      input.invoiceGrossWeight < input.invoiceNetWeight) ||
-    (input.plGrossWeight != null &&
-      input.plNetWeight != null &&
-      input.plGrossWeight < input.plNetWeight)
-  ) {
-    return { status: 'divergent', message: 'peso bruto menor que peso liquido' };
-  }
-  if (invoiceRatio == null || plRatio == null) return { status: 'warning', message: null };
-  const diffPct = Math.abs(invoiceRatio - plRatio) / Math.max(invoiceRatio, plRatio, 1);
-  if (diffPct <= 0.15) return { status: 'match', message: null };
-  if (diffPct <= 0.25)
-    return { status: 'warning', message: 'proporcao peso bruto/liquido fora da margem de 15%' };
-  return { status: 'divergent', message: 'proporcao peso bruto/liquido divergente' };
-}
-
-function itemComparisonMessage(
-  status: RowStatus,
-  divergence: string,
-  isFreeOfCharge: boolean,
-): string {
-  if (isFreeOfCharge) return 'Diferença explicada por item FOC/desconto identificado na Invoice';
-  if (status === 'match') return 'Item conforme entre os documentos disponiveis.';
-  if (status === 'warning') return `${divergence}; revisar ou aceitar operacionalmente.`;
-  return `${divergence}; requer correcao ou aceite.`;
-}
-
-function computeRowStatus(
-  values: unknown[],
-  kind: string,
-  dateOpts?: { matchDays?: number; warnDays?: number },
-): RowStatus {
-  if (values.length === 0) return 'empty';
-  // FALSO VERDE (auditoria 2026-07-17): um valor sozinho não "confere" com nada
-  // — verde aqui fazia um Incoterm errado extraído só da Invoice parecer
-  // validado. Estado neutro próprio, nem conforme nem divergente.
-  if (values.length === 1) return 'single_source';
-
-  if (kind === 'date') {
-    return compareDates(values, dateOpts) as RowStatus;
-  }
-
-  if (kind === 'port') {
-    const base = values[0];
-    const allEqual = values.every((value) => normalizedPortsMatch(base, value));
-    return allEqual ? 'match' : 'divergent';
-  }
-
-  if (kind === 'name') {
-    // Compare normalized company names; tolerate punctuation/suffix differences.
-    const norm = values.map((v) => normalizeCompanyName(v));
-    const base = norm[0];
-    if (!base) return 'empty';
-    const allEqual = norm.every((n) => n === base);
-    if (allEqual) return 'match';
-    // Soft tolerance: prefix match counts as warning, not divergent
-    const allPrefix = norm.every((n) => n.startsWith(base) || base.startsWith(n));
-    return allPrefix ? 'warning' : 'divergent';
-  }
-
-  if (kind === 'numeric') {
-    const nums = values.map((v) => parseFloat(String(v).replace(',', '.')));
-    if (nums.some((n) => isNaN(n))) return 'divergent';
-    const max = Math.max(...nums);
-    const min = Math.min(...nums);
-    const diff = max - min;
-    const denom = Math.max(Math.abs(max), 1);
-    if (diff < 0.5 || diff / denom < 0.005) return 'match';
-    if (diff / denom < 0.02) return 'warning';
-    return 'divergent';
-  }
-
-  // Default string comparison
-  const norm = values.map((v) => String(v).trim().toLowerCase());
-  const base = norm[0];
-  if (norm.every((n) => n === base)) return 'match';
-  // Numeric fallback for cases where the field happens to be numeric
-  const nums = norm.map((n) => parseFloat(n));
-  if (nums.every((n) => !isNaN(n))) {
-    const max = Math.max(...nums);
-    const min = Math.min(...nums);
-    return max - min < 0.5 ? 'match' : 'divergent';
-  }
-  return 'divergent';
 }
 
 interface DraftBlRevision {

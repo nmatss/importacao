@@ -16,7 +16,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -34,7 +34,10 @@ export default function freightValueMatch(input: CheckInput): CheckResult {
   if (!followUpFreight.ok) {
     return {
       checkName,
-      status: 'warning',
+      // Dado INDISPONIVEL na fonte nao e atencao: a verificacao nao foi
+      // feita. 'Ignorado: ...' aparecia como pendencia e inflava a contagem
+      // (reuniao 11/09, decisao D6).
+      status: followUpFreight.reason === 'absent' ? 'skipped' : 'warning',
       documentsCompared,
       message:
         followUpFreight.reason === 'absent'

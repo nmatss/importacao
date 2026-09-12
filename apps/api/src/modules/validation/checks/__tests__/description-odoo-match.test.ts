@@ -49,13 +49,26 @@ describe('description-odoo-match', () => {
     expect(result.message).toContain('Todas as 3 descrições');
   });
 
-  it('warns when the Odoo lookup fails for every item', async () => {
+  it('marca "nao verificado" quando o Odoo nao responde para nenhum item', async () => {
+    // Decisao D6 (reuniao 11/09): integracao indisponivel nao e ATENCAO da
+    // conferencia — e verificacao NAO REALIZADA. A tela mostra
+    // "Nao verificado — o Odoo nao respondeu" e nao soma na contagem.
     validateDescription.mockRejectedValue(new Error('timeout'));
 
     const result = await descriptionOdooMatch({ invoiceData: { items } });
 
-    expect(result.status).toBe('warning');
-    expect(result.message).toContain('Nenhuma descrição pôde ser verificada');
+    expect(result.status).toBe('skipped');
+    expect(result.message).toContain('o Odoo nao respondeu');
+    expect(result.actualValue).toContain('0 de 3 verificadas');
+  });
+
+  it('marca "nao verificado" quando o Odoo nao esta configurado', async () => {
+    isConfigured.mockResolvedValue(false);
+
+    const result = await descriptionOdooMatch({ invoiceData: { items } });
+
+    expect(result.status).toBe('skipped');
+    expect(result.message).toContain('Odoo nao configurado');
   });
 
   it('keeps reporting real mismatches, with the coverage attached', async () => {

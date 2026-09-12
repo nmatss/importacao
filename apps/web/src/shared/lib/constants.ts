@@ -36,6 +36,11 @@ export const VALIDATION_CHECK_NAMES = [
   { value: 'incoterm-check', description: 'Verificação de Incoterm' },
   { value: 'ports-match', description: 'Verificação de Portos' },
   { value: 'dates-match', description: 'Verificação de Datas (ETD/Embarque)' },
+  // Sem estes dois, a checklist de validacao mostrava a CHAVE TECNICA crua
+  // ("invoice-pl-date-tolerance") no lugar do rotulo — foi o que a Odett viu no
+  // comparativo do PK219 (reuniao 11/09 [12:08]).
+  { value: 'invoice-pl-date-tolerance', description: 'Datas Invoice x Packing List (30 dias)' },
+  { value: 'document-set-completeness', description: 'Conjunto de Documentos' },
   { value: 'currency-check', description: 'Verificação de Moeda' },
   { value: 'fob-calculation', description: 'Cálculo FOB (Itens vs Total)' },
   { value: 'description-odoo-match', description: 'Descrição Odoo (Integração)' },

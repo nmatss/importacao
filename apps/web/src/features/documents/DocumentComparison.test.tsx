@@ -168,10 +168,15 @@ describe('DocumentComparison', () => {
     expect(within(row).getByText('5')).toBeInTheDocument();
   });
 
-  it('shows a Sistema column with inline system values when system data is available', () => {
+  it('shows a Sistema column with the value the API resolved from the process', () => {
+    // A coluna Sistema vem PRONTA do comparativo (cadastro do processo,
+    // alimentado pela Follow-up). Antes ela era derivada de um check de
+    // validacao persistido, e um processo com so runs parciais — o PK220 —
+    // exibia tracinho em todas as linhas.
     mockQueries({
       comparison: {
         ...baseComparison,
+        systemDataAvailable: true,
         aggregateComparison: [
           {
             rowKey: 'aggregate:total-fob-usd',
@@ -180,20 +185,8 @@ describe('DocumentComparison', () => {
             packingList: null,
             bl: null,
             espelho: null,
+            system: '$1.200,00',
             status: 'divergent',
-          },
-        ],
-      },
-      report: {
-        systemDataAvailable: true,
-        crossDocumentChecks: [],
-        systemChecks: [
-          {
-            id: 1,
-            checkName: 'invoice-value-vs-fup',
-            status: 'failed',
-            expectedValue: '$1.200,00',
-            actualValue: '$1.000,00',
           },
         ],
       },
@@ -202,7 +195,6 @@ describe('DocumentComparison', () => {
     renderComparison();
 
     expect(screen.getByRole('columnheader', { name: /^Sistema$/i })).toBeInTheDocument();
-    // The system expected value is shown inline against the matching label.
     expect(screen.getByText('$1.200,00')).toBeInTheDocument();
   });
 
@@ -231,10 +223,11 @@ describe('DocumentComparison', () => {
     expect(screen.getByText(/exporterName/i)).toBeInTheDocument();
   });
 
-  it('marks the aggregate row as failed when the system check fails', () => {
+  it('mostra a falha e a regra que reprovou na propria linha agregada', () => {
     mockQueries({
       comparison: {
         ...baseComparison,
+        systemDataAvailable: true,
         aggregateComparison: [
           {
             rowKey: 'aggregate:total-fob-usd',
@@ -243,21 +236,9 @@ describe('DocumentComparison', () => {
             packingList: '$1.000,00',
             bl: null,
             espelho: '$1.000,00',
-            status: 'match',
-          },
-        ],
-      },
-      report: {
-        systemDataAvailable: true,
-        crossDocumentChecks: [],
-        systemChecks: [
-          {
-            id: 1,
-            checkName: 'invoice-value-vs-fup',
-            status: 'failed',
-            expectedValue: '$1.200,00',
-            actualValue: '$1.000,00',
-            message: 'Valor no sistema diverge dos documentos.',
+            system: '$1.200,00',
+            status: 'divergent',
+            message: 'Valor da Invoice x Follow-up: Valor no sistema diverge dos documentos.',
           },
         ],
       },
@@ -268,6 +249,84 @@ describe('DocumentComparison', () => {
     const row = screen.getByText('Total FOB (USD)').closest('tr') as HTMLTableRowElement;
     expect(within(row).getByText('Falha')).toBeInTheDocument();
     expect(within(row).getByText(/Valor no sistema diverge/i)).toBeInTheDocument();
+  });
+
+  it('mostra "Nao verificado" fora da contagem de atencoes', () => {
+    // Decisao D6: "o Odoo nao respondeu" e "frete ausente na follow-up" sao
+    // verificacoes NAO REALIZADAS — visiveis, mas fora das pendencias.
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        aggregateComparison: [
+          {
+            rowKey: 'aggregate:frete',
+            label: 'Frete',
+            invoice: null,
+            packingList: null,
+            bl: null,
+            espelho: null,
+            system: null,
+            status: 'skipped',
+            message: 'Nao verificado — Nenhum valor de frete disponivel nos dados do follow-up',
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    const row = screen.getByText('Frete').closest('tr') as HTMLTableRowElement;
+    expect(within(row).getByText('Não verificado')).toBeInTheDocument();
+    expect(within(row).getByText(/Nenhum valor de frete disponivel/i)).toBeInTheDocument();
+
+    const atencoes = screen.getByRole('button', { name: /Atencoes/i });
+    expect(within(atencoes).getByText('0')).toBeInTheDocument();
+    const naoVerificados = screen.getByRole('button', { name: /Nao verificados/i });
+    expect(within(naoVerificados).getByText('1')).toBeInTheDocument();
+  });
+
+  it('resume falhas, atencoes e conformes num unico bloco clicavel e colorido', () => {
+    // Reuniao 11/09 [04:22]: havia dois resumos, um clicavel sem cor e outro
+    // colorido sem clique, com as mesmas contagens.
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        aggregateComparison: [
+          {
+            rowKey: 'aggregate:incoterm',
+            label: 'Incoterm',
+            invoice: 'FOB',
+            packingList: 'FOB',
+            bl: null,
+            espelho: null,
+            system: null,
+            status: 'match',
+          },
+          {
+            rowKey: 'aggregate:moeda',
+            label: 'Moeda',
+            invoice: 'USD',
+            packingList: 'BRL',
+            bl: null,
+            espelho: null,
+            system: null,
+            status: 'divergent',
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    const conformes = screen.getByRole('button', { name: /Conformes/i });
+    expect(conformes.className).toContain('emerald');
+    expect(within(conformes).getByText('1')).toBeInTheDocument();
+    const falhas = screen.getByRole('button', { name: /Falhas/i });
+    expect(falhas.className).toContain('danger');
+    expect(falhas).toHaveAttribute('aria-pressed', 'false');
+    // Uma unica ocorrencia de cada contagem: o bloco duplicado saiu.
+    expect(screen.queryByText(/1 conformes/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1 falhas/i)).not.toBeInTheDocument();
   });
 
   it('shows a "sem dados do sistema" hint when system data is unavailable', () => {
@@ -317,20 +376,35 @@ describe('DocumentComparison', () => {
     expect(screen.getByText(/Espelho ausente/i)).toBeInTheDocument();
   });
 
-  it('absorbs cross-document checks into the aggregate comparison', () => {
+  it('mostra os cruzamentos nas colunas, sem o par "Esperado/Encontrado"', () => {
+    // Reuniao 11/09 [12:08]: os cruzamentos vinham como texto solto, sem dizer
+    // a fonte, e repetiam linhas de cima. Agora a API ja entrega tudo como
+    // linha com valores POR DOCUMENTO; a tela nao remonta mais nada.
     mockQueries({
-      comparison: { ...baseComparison, aggregateComparison: [] },
-      report: {
-        systemDataAvailable: false,
-        systemChecks: [],
-        crossDocumentChecks: [
+      comparison: {
+        ...baseComparison,
+        aggregateComparison: [
           {
-            id: 9,
-            checkName: 'ports-match',
-            status: 'failed',
-            expectedValue: 'Santos',
-            actualValue: 'Itajai',
-            message: 'Portos divergentes',
+            rowKey: 'aggregate:porto-embarque',
+            label: 'Porto Embarque',
+            invoice: 'Santos',
+            packingList: 'Santos',
+            bl: 'Itajai',
+            espelho: null,
+            system: null,
+            status: 'divergent',
+            message: 'Portos: Portos divergentes',
+          },
+          {
+            rowKey: 'aggregate:ncm-bl-x-espelho',
+            label: 'NCM (BL x Espelho)',
+            invoice: null,
+            packingList: null,
+            bl: '4419',
+            espelho: '4414',
+            system: null,
+            status: 'divergent',
+            message: 'NCM do BL diverge do espelho.',
           },
         ],
       },
@@ -338,16 +412,18 @@ describe('DocumentComparison', () => {
 
     renderComparison();
 
-    expect(screen.getByText(/Verificação de Portos/i)).toBeInTheDocument();
-    expect(screen.getByText(/Portos divergentes/i)).toBeInTheDocument();
-    expect(screen.getByText(/cruzamento/i)).toBeInTheDocument();
-    // The expected/actual values are presented with explicit
-    // Esperado/Encontrado labels rather than reusing the Invoice/Espelho
-    // document columns, so the header/value semantics match.
-    expect(screen.getByText(/^Esperado$/i)).toBeInTheDocument();
-    expect(screen.getByText(/^Encontrado$/i)).toBeInTheDocument();
-    expect(screen.getByText('Santos')).toBeInTheDocument();
-    expect(screen.getByText('Itajai')).toBeInTheDocument();
+    expect(screen.queryByText(/^Esperado$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Encontrado$/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/cruzamento/i)).not.toBeInTheDocument();
+
+    const portos = screen.getByText('Porto Embarque').closest('tr') as HTMLTableRowElement;
+    expect(within(portos).getByText('Itajai')).toBeInTheDocument();
+    expect(within(portos).getByText(/Portos divergentes/i)).toBeInTheDocument();
+
+    // "NCM BL versus espelho" continua, agora com valor em cada coluna.
+    const ncm = screen.getByText('NCM (BL x Espelho)').closest('tr') as HTMLTableRowElement;
+    expect(within(ncm).getByText('4419')).toBeInTheDocument();
+    expect(within(ncm).getByText('4414')).toBeInTheDocument();
   });
 
   it('renders both unmatched directions in a single unified section', () => {
@@ -398,6 +474,120 @@ describe('DocumentComparison', () => {
     expect(
       screen.queryByText(/Itens na Invoice sem correspondencia no Packing List/i),
     ).not.toBeInTheDocument();
+  });
+
+  it('confirma explicitamente quando todos os itens foram encontrados', () => {
+    // Reuniao 11/09 [17:29]: o quadro so existia para o caso de erro; quando
+    // estava tudo certo ele sumia e a analista ficava sem a confirmacao.
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        hasEspelho: false,
+        unmatchedPlItems: [],
+        unmatchedInvoiceItems: [],
+        itemComparison: [
+          {
+            itemCode: '050404509',
+            description: 'BACKPACK KIDS A',
+            ncm: '42029200',
+            invoiceQty: 1232,
+            plQty: 1232,
+            espelhoQty: null,
+            invoiceUnitPrice: 1,
+            invoiceTotal: 1232,
+            espelhoUnitPrice: null,
+            espelhoTotal: null,
+            invoiceBoxes: null,
+            plBoxes: null,
+            espelhoBoxes: null,
+            invoiceNetWeight: null,
+            plNetWeight: null,
+            espelhoNetWeight: null,
+            invoiceGrossWeight: null,
+            plGrossWeight: null,
+            espelhoGrossWeight: null,
+            qtyMatch: true,
+            matched: true,
+            espelhoMatched: false,
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    expect(
+      screen.getByText(/Todos os 1 itens da Invoice foram encontrados no Packing List/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Itens sem correspondencia entre Invoice e Packing List/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('nao mostra o verde de "todos encontrados" quando nao ha item extraido', () => {
+    // Vazio nunca pode virar "tudo certo".
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        itemComparison: [],
+        unmatchedPlItems: [],
+        unmatchedInvoiceItems: [],
+      },
+    });
+
+    renderComparison();
+
+    expect(screen.getByText(/Sem itens extraidos para comparar/i)).toBeInTheDocument();
+    expect(screen.queryByText(/foram encontrados no Packing List/i)).not.toBeInTheDocument();
+  });
+
+  it('mostra NCM, unitario e total do espelho ao lado dos da invoice', () => {
+    mockQueries({
+      comparison: {
+        ...baseComparison,
+        hasEspelho: true,
+        itemComparison: [
+          {
+            itemCode: '050404509',
+            description: 'BACKPACK KIDS A',
+            ncm: '39264000',
+            espelhoNcm: '42029200',
+            ncmMatch: false,
+            invoiceQty: 10,
+            plQty: 10,
+            espelhoQty: 10,
+            invoiceUnitPrice: 5,
+            espelhoUnitPrice: 6,
+            unitPriceMatch: false,
+            invoiceTotal: 50,
+            espelhoTotal: 60,
+            totalPriceMatch: false,
+            invoiceBoxes: null,
+            plBoxes: null,
+            espelhoBoxes: null,
+            invoiceNetWeight: null,
+            plNetWeight: null,
+            espelhoNetWeight: null,
+            invoiceGrossWeight: null,
+            plGrossWeight: null,
+            espelhoGrossWeight: null,
+            qtyMatch: true,
+            matched: true,
+            espelhoMatched: true,
+            status: 'divergent',
+          },
+        ],
+      },
+    });
+
+    renderComparison();
+
+    const row = screen.getByText('BACKPACK KIDS A').closest('tr') as HTMLTableRowElement;
+    expect(within(row).getByText('39264000')).toBeInTheDocument();
+    expect(within(row).getByText('42029200')).toBeInTheDocument();
+    expect(within(row).getByText('$5,00')).toBeInTheDocument();
+    expect(within(row).getByText('$6,00')).toBeInTheDocument();
+    expect(within(row).getByText('$60,00')).toBeInTheDocument();
   });
 
   it('nao exibe "Aceito" so porque existe evento no timeline', async () => {

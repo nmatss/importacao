@@ -8,7 +8,7 @@ interface CheckInput {
 
 interface CheckResult {
   checkName: string;
-  status: 'passed' | 'failed' | 'warning';
+  status: 'passed' | 'failed' | 'warning' | 'skipped';
   expectedValue?: string;
   actualValue?: string;
   documentsCompared: string;
@@ -24,9 +24,11 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
   if (!configured) {
     return {
       checkName,
-      status: 'warning',
+      // Integracao indisponivel = verificacao NAO REALIZADA (decisao D6):
+      // aparece como "Nao verificado", fora da contagem de atencoes.
+      status: 'skipped',
       documentsCompared: 'INV vs Odoo',
-      message: 'Odoo não configurado. Verificação de descrições ignorada.',
+      message: 'Odoo nao configurado.',
     };
   }
 
@@ -34,7 +36,7 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
   if (!items || items.length === 0) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       documentsCompared: 'INV vs Odoo',
       message: 'Nenhum item encontrado na invoice para verificar no Odoo.',
     };
@@ -77,20 +79,20 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
   if (comparableCount === 0) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       documentsCompared: 'INV vs Odoo',
-      message: 'Nenhum item com código válido para verificar no Odoo.',
+      message: 'Nenhum item com codigo valido para verificar no Odoo.',
     };
   }
 
   if (checkedCount === 0) {
     return {
       checkName,
-      status: 'warning',
+      status: 'skipped',
       expectedValue: `${comparableCount} itens a verificar`,
       actualValue: coverage,
       documentsCompared: 'INV vs Odoo',
-      message: `Nenhuma descrição pôde ser verificada: o Odoo não respondeu para os ${unavailable.length} item(ns) consultados.`,
+      message: `o Odoo nao respondeu para os ${unavailable.length} item(ns) consultados`,
     };
   }
 
