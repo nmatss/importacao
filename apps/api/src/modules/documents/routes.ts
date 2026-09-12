@@ -46,6 +46,13 @@ router.get(
   validate(paramsNumericos('processId'), 'params'),
   documentController.getByProcess,
 );
+// Status da varredura do Drive para o processo (DRV-08). A tela mostra "o
+// Drive olhou e nao achou nada" em vez de deixar o processo vazio sem motivo.
+router.get(
+  '/process/:processId/drive-status',
+  validate(paramsNumericos('processId'), 'params'),
+  documentController.driveStatus,
+);
 router.get(
   '/process/:processId/extraction-history',
   validate(paramsNumericos('processId'), 'params'),

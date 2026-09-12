@@ -58,6 +58,7 @@ const ENV_KEYS = [
   'GOOGLE_DRIVE_PRIVATE_KEY',
   'GOOGLE_DRIVE_ROOT_FOLDER_ID',
   'GOOGLE_SHEETS_FOLLOW_UP_ID',
+  'DRIVE_WRITE_MODE',
 ] as const;
 const originalEnv = new Map(ENV_KEYS.map((key) => [key, process.env[key]]));
 
@@ -66,6 +67,10 @@ function setEnv() {
   process.env.GOOGLE_DRIVE_PRIVATE_KEY = 'test-key';
   process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID = 'root-folder';
   process.env.GOOGLE_SHEETS_FOLLOW_UP_ID = 'follow-up-sheet';
+  // Este arquivo testa a politica de RETRY das escritas. Com a integracao em
+  // modo somente leitura (padrao quando o Drive e fonte, DRV-06) elas nem saem,
+  // entao aqui a escrita fica explicitamente ligada.
+  process.env.DRIVE_WRITE_MODE = 'sistema';
 }
 
 function restoreEnv() {

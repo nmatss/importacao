@@ -4,6 +4,12 @@ Data: 2026-08-28
 Origem do requisito: Eduarda, 17/08/2026
 Escopo: fase inicial de uso operacional da conferência documental
 
+> **Atualização de 11/09/2026.** As cláusulas 7 e 8 de "Regras de autoridade", a
+> convenção de pasta `raiz/Marca/CODIGO` e a regra de entrada como `other` foram
+> substituídas por `document-intake-contract-2026-09-11.md`, escrito depois da
+> leitura da árvore real da pasta PROCESSOS. O restante deste documento continua
+> valendo.
+
 ## Objetivo
 
 Reduzir associações incorretas durante o pico de documentos. Nesta fase, a

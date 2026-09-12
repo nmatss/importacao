@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import { documentService } from './service.js';
+import { getDriveSweepStatusForProcess } from './drive-sweep-status.js';
+import { getDocumentSourcePolicy } from './source-policy.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
 import {
   acceptComparisonSchema,
@@ -55,6 +57,23 @@ export const documentController = {
       const userId = req.user?.id ?? null;
       const doc = await documentService.upload(processId, documentType, req.file, userId);
       sendSuccess(res, doc, 201);
+    } catch (error: any) {
+      const status = error.statusCode || 400;
+      sendError(res, error.message, status);
+    }
+  },
+
+  /**
+   * Status da ultima varredura do Drive PARA ESTE PROCESSO.
+   *
+   * Responde a pergunta que ficou sem resposta no PK220 ("tinha tudo no Drive e
+   * o sistema nao tinha nada"): quais pastas foram encontradas, o que entrou, o
+   * que foi ignorado e por que — ou que o Drive esta inativo, e por que.
+   */
+  async driveStatus(req: Request, res: Response) {
+    try {
+      const { sweep, process } = getDriveSweepStatusForProcess(Number(req.params.processId));
+      sendSuccess(res, { fonte: getDocumentSourcePolicy(), varredura: sweep, processo: process });
     } catch (error: any) {
       const status = error.statusCode || 400;
       sendError(res, error.message, status);

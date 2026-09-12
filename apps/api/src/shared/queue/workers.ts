@@ -82,7 +82,7 @@ async function handleDriveSync(data: DriveSyncJob): Promise<void> {
         data.filePath,
         data.filename,
       );
-      if (data.documentId) {
+      if (driveFileId && data.documentId) {
         const { db } = await import('../database/connection.js');
         const { documents } = await import('../database/schema.js');
         const { eq } = await import('drizzle-orm');

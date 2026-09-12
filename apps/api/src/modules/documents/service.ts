@@ -352,6 +352,12 @@ function unwrapAiFieldValue(value: unknown): unknown {
   return value;
 }
 
+function parseDriveModifiedTime(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const data = new Date(raw);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
 function sha256Text(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -1026,6 +1032,12 @@ export const documentService = {
     options: {
       driveFileId?: string;
       ingestionSource?: 'legacy' | 'manual' | 'drive' | 'email';
+      /** Hash do conteudo. Quando ausente, e calculado a partir do arquivo. */
+      contentSha256?: string;
+      driveMd5?: string;
+      driveVersion?: number;
+      driveModifiedTime?: string;
+      driveArea?: string;
     } = {},
   ) {
     try {
@@ -1033,6 +1045,26 @@ export const documentService = {
     } catch (error) {
       await fs.unlink(file.path).catch(() => {});
       throw error;
+    }
+
+    // Identidade do documento e o CONTEUDO, nao o id do objeto no Drive
+    // (DRV-05). Sem o hash aqui, o arquivo que a analista subiu a mao volta
+    // como documento novo assim que a mesma pasta for lida pelo Drive — e os
+    // nomes com sufixo de download ('... (1).pdf') escapam ate do aviso por
+    // nome+tamanho. Falha de leitura nao pode derrubar o upload: `null` em
+    // `content_sha256` significa "desconhecido".
+    let contentSha256 = options.contentSha256 ?? null;
+    if (!contentSha256) {
+      try {
+        contentSha256 = createHash('sha256')
+          .update(await fs.readFile(file.path))
+          .digest('hex');
+      } catch (err) {
+        logger.warn(
+          { err, processId, file: file.originalname },
+          'Nao foi possivel calcular o sha256 do arquivo',
+        );
+      }
     }
 
     let doc;
@@ -1051,6 +1083,13 @@ export const documentService = {
           // re-import every file on every pass.
           driveFileId: options.driveFileId,
           ingestionSource: options.ingestionSource ?? 'manual',
+          contentSha256,
+          driveMd5: options.driveMd5 ?? null,
+          driveVersion: options.driveVersion ?? null,
+          // Data invalida viraria `Invalid Date` e derrubaria o INSERT inteiro;
+          // metadado ausente e so metadado ausente.
+          driveModifiedTime: parseDriveModifiedTime(options.driveModifiedTime),
+          driveArea: options.driveArea ?? null,
         })
         .returning();
     } catch (error) {
@@ -3071,6 +3110,10 @@ export const documentService = {
       filePath,
       fileName,
     );
+
+    // `null` = escrita no Drive desligada (DRIVE_WRITE_MODE=off). Gravar null em
+    // `drive_file_id` apagaria a chave de dedupe de quem veio do Drive.
+    if (!driveFileId) return;
 
     await db
       .update(documents)

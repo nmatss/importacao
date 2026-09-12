@@ -1,0 +1,281 @@
+{
+  "_nota": [
+    "Arvore SINTETICA derivada do gabarito lido no Drive real em 11/09/2026.",
+    "Nenhum conteudo de documento: so ids falsos, tamanhos e md5 inventados.",
+    "Os FORMATOS de nome sao os reais e sao o objeto do teste: area acentuada",
+    "com prefixo numerico, pasta de processo duplicada, ano com colecao e com",
+    "processo solto, colecao com espaco no fim, grafias de FAT, sufixo depois do",
+    "codigo, espaco no fim do nome, nome legado curto, subpasta Backup, arquivos",
+    "que nao sao do fluxo (CT-e / manifesto / fatura de transporte) e espelhos",
+    "nativos e .xlsx na mesma pasta plana."
+  ],
+  "rootId": "root",
+  "referencias": [
+    "PK2122607NB",
+    "PK3022609SZ",
+    "PK2072602NB",
+    "PK2112606SZ",
+    "PK2192607SZ",
+    "PK2202608SZ",
+    "PKT-0032-BD-SEA",
+    "IM0752606NB",
+    "IM0802611NB",
+    "IM0112407NB",
+    "IMG-0001-BD"
+  ],
+  "tree": {
+    "root": [
+      { "id": "pend", "name": "04. PENDENTES DE CORREÇÃO", "mimeType": "folder" },
+      { "id": "esp", "name": "01. ESPELHOS", "mimeType": "folder" },
+      { "id": "img", "name": "02. IMAGINARIUM", "mimeType": "folder" },
+      { "id": "puk", "name": "03. PUKET", "mimeType": "folder" },
+      {
+        "id": "root-file",
+        "name": "Controle de Documentos Físicos",
+        "mimeType": "application/vnd.google-apps.spreadsheet"
+      }
+    ],
+
+    "pend": [
+      { "id": "pend-a", "name": "PK2122607NB", "mimeType": "folder" },
+      { "id": "pend-b", "name": "PK2122607NB", "mimeType": "folder" },
+      { "id": "pend-c", "name": "PK2192607SZ", "mimeType": "folder" },
+      { "id": "pend-x", "name": "Documentos avulsos", "mimeType": "folder" }
+    ],
+    "pend-a": [
+      {
+        "id": "f-inv-212",
+        "name": "2026.08.24 KIOM INV - PK2122607NB.pdf",
+        "mimeType": "application/pdf",
+        "size": "122775",
+        "md5Checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+        "version": "3",
+        "modifiedTime": "2026-09-09T11:33:58.858Z"
+      },
+      {
+        "id": "f-bl-212",
+        "name": "PK2122607NB OHBL COPY.pdf",
+        "mimeType": "application/pdf",
+        "size": "2012535",
+        "md5Checksum": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2",
+        "version": "2",
+        "modifiedTime": "2026-09-09T11:31:55.000Z"
+      }
+    ],
+    "pend-b": [
+      {
+        "id": "f-inv-212-copia",
+        "name": "2026.08.24 KIOM INV - PK2122607NB (1).pdf",
+        "mimeType": "application/pdf",
+        "size": "122775",
+        "md5Checksum": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1",
+        "version": "1",
+        "modifiedTime": "2026-09-09T12:00:00.000Z"
+      }
+    ],
+    "pend-c": [
+      {
+        "id": "f-inv-219-corrigida",
+        "name": "2026.09.05 KIOM INV - PK2192607SZ.pdf",
+        "mimeType": "application/pdf",
+        "size": "130000",
+        "md5Checksum": "ccccccccccccccccccccccccccccccc3",
+        "version": "1",
+        "modifiedTime": "2026-09-09T13:00:00.000Z"
+      }
+    ],
+    "pend-x": [],
+
+    "puk": [
+      { "id": "puk-2026", "name": "2026", "mimeType": "folder" },
+      { "id": "puk-2027", "name": "2027", "mimeType": "folder" },
+      { "id": "puk-morto", "name": "Arquivo Morto", "mimeType": "folder" }
+    ],
+    "puk-2026": [
+      { "id": "p-207", "name": "PK2072602NB", "mimeType": "folder" },
+      { "id": "puk-hs26", "name": "HIGH SUMMER - 26", "mimeType": "folder" },
+      { "id": "puk-s26", "name": "SUMMER - 26 ", "mimeType": "folder" },
+      { "id": "p-pkt32", "name": "PKT-0032-BD-SEA", "mimeType": "folder" }
+    ],
+    "puk-hs26": [{ "id": "p-211", "name": "PK2112606SZ", "mimeType": "folder" }],
+    "puk-s26": [],
+    "p-207": [],
+    "p-211": [],
+    "p-pkt32": [],
+    "puk-morto": [],
+    "puk-2027": [
+      { "id": "puk-hs27", "name": "HIGH SUMMER", "mimeType": "folder" },
+      { "id": "puk-s27", "name": "SUMMER", "mimeType": "folder" }
+    ],
+    "puk-s27": [],
+    "puk-hs27": [
+      { "id": "p-219", "name": "PK2192607SZ", "mimeType": "folder" },
+      { "id": "p-220", "name": "PK2202608SZ", "mimeType": "folder" }
+    ],
+    "p-219": [
+      {
+        "id": "f-inv-219",
+        "name": "2026.08.07 KIOM INV - PK2192607SZ.pdf",
+        "mimeType": "application/pdf",
+        "size": "118951",
+        "md5Checksum": "ddddddddddddddddddddddddddddddd4",
+        "version": "2",
+        "modifiedTime": "2026-08-07T10:00:00.000Z"
+      },
+      {
+        "id": "f-pl-219",
+        "name": "KIOM PL - PK2192607SZ.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "size": "13906",
+        "md5Checksum": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee5",
+        "version": "1",
+        "modifiedTime": "2026-08-07T10:01:00.000Z"
+      },
+      {
+        "id": "f-bl-219",
+        "name": "PK2192607SZ OHBL COPY.pdf",
+        "mimeType": "application/pdf",
+        "size": "973744",
+        "md5Checksum": "fffffffffffffffffffffffffffffff6",
+        "version": "1",
+        "modifiedTime": "2026-08-20T10:00:00.000Z"
+      },
+      {
+        "id": "f-duimp-219",
+        "name": "Extrato-DUIMP-26BR00016608802-Versao-0001 - PUK032-26 - PK2192607SZ.pdf",
+        "mimeType": "application/pdf",
+        "size": "220000",
+        "md5Checksum": "1111111111111111111111111111111a",
+        "version": "1",
+        "modifiedTime": "2026-09-08T10:00:00.000Z"
+      },
+      {
+        "id": "f-cte-219",
+        "name": "manistesto cte 5462.pdf",
+        "mimeType": "application/pdf",
+        "size": "50000",
+        "md5Checksum": "2222222222222222222222222222222b",
+        "version": "1",
+        "modifiedTime": "2026-09-10T10:00:00.000Z"
+      },
+      {
+        "id": "f-fatura-219",
+        "name": "2026.09.10 - FATURA2103.pdf",
+        "mimeType": "application/pdf",
+        "size": "40000",
+        "md5Checksum": "3333333333333333333333333333333c",
+        "version": "1",
+        "modifiedTime": "2026-09-10T10:05:00.000Z"
+      },
+      {
+        "id": "f-fat-219",
+        "name": "fat_138902_73839.pdf",
+        "mimeType": "application/pdf",
+        "size": "30000",
+        "md5Checksum": "4444444444444444444444444444444d",
+        "version": "1",
+        "modifiedTime": "2026-09-10T10:06:00.000Z"
+      }
+    ],
+    "p-220": [
+      { "id": "p-220-backup", "name": "Backup", "mimeType": "folder" },
+      {
+        "id": "f-inv-220",
+        "name": "2026.08.20 KIOM INV - PK2202608SZ.pdf",
+        "mimeType": "application/pdf",
+        "size": "120000",
+        "md5Checksum": "5555555555555555555555555555555e",
+        "version": "4",
+        "modifiedTime": "2026-08-20T09:00:00.000Z"
+      }
+    ],
+    "p-220-backup": [
+      {
+        "id": "f-inv-220-antiga",
+        "name": "2026.04.08 KIOM INV - PK2202608SZ.pdf",
+        "mimeType": "application/pdf",
+        "size": "119000",
+        "md5Checksum": "6666666666666666666666666666666f",
+        "version": "1",
+        "modifiedTime": "2026-04-08T09:00:00.000Z"
+      }
+    ],
+
+    "img": [
+      { "id": "img-2023", "name": "2023", "mimeType": "folder" },
+      { "id": "img-2026", "name": "2026", "mimeType": "folder" }
+    ],
+    "img-2023": [{ "id": "img-fat03", "name": "Fat - 03", "mimeType": "folder" }],
+    "img-fat03": [
+      { "id": "legado-2080", "name": "2080_SZ", "mimeType": "folder" },
+      { "id": "legado-2066", "name": "2066_SZB", "mimeType": "folder" }
+    ],
+    "legado-2080": [],
+    "legado-2066": [],
+    "img-2026": [
+      { "id": "img-fat06", "name": "FAT-06", "mimeType": "folder" },
+      { "id": "img-fat08", "name": "FAT - 08", "mimeType": "folder" },
+      { "id": "img-fat11", "name": "FAT 11", "mimeType": "folder" }
+    ],
+    "img-fat06": [
+      { "id": "p-im011", "name": "IM0112407NB - Licença de importação", "mimeType": "folder" }
+    ],
+    "img-fat08": [{ "id": "p-im075", "name": "IM0752606NB", "mimeType": "folder" }],
+    "img-fat11": [{ "id": "p-im080", "name": "IM0802611NB ", "mimeType": "folder" }],
+    "p-im011": [],
+    "p-im075": [],
+    "p-im080": [],
+
+    "esp": [
+      {
+        "id": "esp-219",
+        "name": "PK2192607SZ - Espelho",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "size": "33748",
+        "version": "12",
+        "modifiedTime": "2026-09-10T19:46:52.332Z"
+      },
+      {
+        "id": "esp-220-xlsx",
+        "name": "PK2202608SZ - ESPELHO.xlsx",
+        "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "size": "20000",
+        "md5Checksum": "7777777777777777777777777777777a",
+        "version": "2",
+        "modifiedTime": "2026-09-01T10:00:00.000Z"
+      },
+      {
+        "id": "esp-220-antigo",
+        "name": "PK2202608SZ (antigo com erro) - Espelho",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "size": "19000",
+        "version": "5",
+        "modifiedTime": "2026-09-02T10:00:00.000Z"
+      },
+      {
+        "id": "esp-cons-puk",
+        "name": "ESPELHO CONSOLIDADO PUKET",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "size": "2569570",
+        "version": "900",
+        "modifiedTime": "2026-09-10T20:07:01.499Z"
+      },
+      {
+        "id": "esp-cons-img",
+        "name": "ESPELHO CONSOLIDADO IMAGINARIUM",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "size": "1009384",
+        "version": "800",
+        "modifiedTime": "2026-09-09T13:35:45.724Z"
+      },
+      {
+        "id": "esp-im075",
+        "name": "IM0752606NB Espelho",
+        "mimeType": "application/vnd.google-apps.spreadsheet",
+        "size": "12000",
+        "version": "3",
+        "modifiedTime": "2026-09-05T10:00:00.000Z"
+      }
+    ]
+  }
+}
