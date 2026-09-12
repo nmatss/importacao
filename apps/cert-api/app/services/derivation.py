@@ -32,10 +32,13 @@ Feedback 2026-07-16 (Eduarda, via PI4511Y "CANETA MUDA FRASES HP FEITICOS"):
   reconhecido e o item caía em NAO_CONFORME indevidamente.
 
 Feedback 2026-08-07 (Eduarda, casos 100400496 / PI7560Y):
-- A coluna H da aba "Encerramentos" ("Comerciação Permitida" / "Vencido - Venda
-  Bloqueada" / "Venda até fim do lote") é a palavra final sobre poder vender ou
-  não. Ela existe para 28 SKUs que NÃO têm data na coluna G, e a leitura antiga,
-  que exigia data, simplesmente descartava essas linhas — deixando o produto sem
+- A coluna 'STATUS' da aba "Encerramentos" ("Comerciação Permitida" / "Vencido -
+  Venda Bloqueada" / "Venda até fim do lote") é a palavra final sobre poder
+  vender ou não. (Era a coluna H até 09/2026, quando a planilha inseriu uma
+  coluna de lembrete antes dela — por isso toda a leitura é por CABEÇALHO, e
+  estes textos citam cabeçalho, não letra.) Ela existe para 28 SKUs que NÃO têm
+  data em 'PRAZO FINAL VENDA', e a leitura antiga, que exigia data, simplesmente
+  descartava essas linhas — deixando o produto sem
   prazo nenhum e caindo em ENCERRADO/NAO_CONFORME (caso PI7560Y).
 - "Item excluído e incluído novamente" é REINCLUSÃO, não exclusão. O teste de
   substring `"exclu" in texto` sobre o histórico inteiro tratava a frase como
@@ -93,7 +96,7 @@ _DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y")
 # 1900. Nenhum certificado vivo tem data anterior a 2000.
 DATA_ANO_MINIMO = 2000
 
-# Coluna H da aba "Encerramentos", normalizada. PERMITIDA e FIM_LOTE liberam a
+# Coluna 'STATUS' da aba "Encerramentos", normalizada. PERMITIDA e FIM_LOTE liberam a
 # venda; BLOQUEADA a proíbe. None = SKU sem linha de encerramento.
 VENDA_ENCERRAMENTO_VALUES = {"PERMITIDA", "BLOQUEADA", "FIM_LOTE"}
 
@@ -245,7 +248,7 @@ def _is_sku_excluded(sheet_status: str | None) -> bool:
 
 
 def derive_venda_encerramento(encerramento_status: str | None) -> str | None:
-    """Normaliza a coluna H da aba "Encerramentos" em PERMITIDA/BLOQUEADA/FIM_LOTE.
+    """Normaliza a coluna 'STATUS' da aba "Encerramentos" em PERMITIDA/BLOQUEADA/FIM_LOTE.
 
     Valores reais da planilha (conferidos em 2026-08-07, 389 linhas):
         'Comerciação Permitida'              -> PERMITIDA  (203)
@@ -326,9 +329,10 @@ def derive_within_sale_deadline(
     Ordem de decisão:
     1. SKU excluído (e não reincluído) NUNCA está dentro do prazo — a regra da
        Eduarda (2026-06-19) põe a exclusão acima da janela de venda.
-    2. A coluna H da aba "Encerramentos" (`encerramento_status`) manda quando
-       existe: é onde o time fiscal declara "Comerciação Permitida" ou "Vencido -
-       Venda Bloqueada". 28 SKUs têm esse veredito SEM data na coluna G, então
+    2. A coluna 'STATUS' da aba "Encerramentos" (`encerramento_status`) manda
+       quando existe: é onde o time fiscal declara "Comerciação Permitida" ou
+       "Vencido - Venda Bloqueada". 28 SKUs têm esse veredito SEM data em
+       'PRAZO FINAL VENDA', então
        exigir data descartaria a única informação disponível (caso PI7560Y).
     3. Janela textual ("venda até o fim do lote") — sem data de corte.
     4. Data futura ou de hoje em `sale_deadline_date` (inclusiva: no último dia
@@ -431,7 +435,7 @@ def derive_cert_status(
     if _is_sku_excluded(sheet_status):
         return "ENCERRADO"
 
-    # A coluna H de "Encerramentos" é o veredito do time fiscal sobre a venda e
+    # A coluna 'STATUS' de "Encerramentos" é o veredito do time fiscal e
     # vence o texto livre do histórico (que costuma descrever o processo de
     # certificação, não a permissão de comercializar).
     venda = derive_venda_encerramento(encerramento_status)
