@@ -66,6 +66,24 @@ const formatoDataHora = new Intl.DateTimeFormat('pt-BR', {
   minute: '2-digit',
 });
 
+const formatoDataHoraSegundos = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: FUSO_OPERACAO,
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
+const formatoDataHoraCurto = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: FUSO_OPERACAO,
+  day: '2-digit',
+  month: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 type ValorDeData = string | Date | null | undefined;
 
 /**
@@ -108,6 +126,47 @@ export function formatDate(date: ValorDeData): string {
 /** Mantido por compatibilidade: e o mesmo formatador de `formatDate`. */
 export function formatDateOnly(date: ValorDeData): string {
   return formatDate(date);
+}
+
+/**
+ * `'DD/MM'` — a forma curta usada nas etapas do ciclo de transporte, onde o ano
+ * so ocupa espaco. Mesma regra de `formatDate`: data de calendario nao passa
+ * por `new Date()`.
+ */
+export function formatDayMonth(date: ValorDeData): string {
+  const completo = formatDate(date);
+  return completo === SEM_DATA ? SEM_DATA : completo.slice(0, 5);
+}
+
+/**
+ * A data ja passou, no calendario do operador?
+ *
+ * Para uma data de CALENDARIO a comparacao e entre dias, e nao entre instantes:
+ * `new Date('2026-09-11') <= new Date()` considera o dia 11 como passado a
+ * partir das 21h do dia 10 em Brasilia, porque a string vira meia-noite UTC. O
+ * proprio dia de hoje conta como "ja aconteceu" — um embarque marcado para hoje
+ * ja saiu.
+ */
+export function isDateInPast(value: ValorDeData, agora: Date = new Date()): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') {
+    const texto = value.trim();
+    if (texto === '') return false;
+    const calendario = dataDeCalendario(texto, true);
+    if (calendario !== undefined) {
+      if (calendario === null) return false;
+      const [dia, mes, ano] = calendario.split('/');
+      const hoje = new Intl.DateTimeFormat('en-CA', {
+        timeZone: FUSO_OPERACAO,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(agora);
+      return `${ano}-${mes}-${dia}` <= hoje;
+    }
+  }
+  const instante = value instanceof Date ? value : new Date(String(value).trim());
+  return !Number.isNaN(instante.getTime()) && instante.getTime() <= agora.getTime();
 }
 
 export function formatWeight(kg: number | string): string {
@@ -196,6 +255,19 @@ export function certStatusColor(status: string): string {
  */
 export function formatDateTime(date: ValorDeData): string {
   return formatarNoFuso(date, formatoDataHora, false);
+}
+
+/**
+ * `'DD/MM/AAAA, HH:mm:ss'` no fuso da operacao. O segundo importa no log de
+ * auditoria, onde duas acoes do mesmo minuto precisam ficar em ordem.
+ */
+export function formatDateTimeSeconds(date: ValorDeData): string {
+  return formatarNoFuso(date, formatoDataHoraSegundos, false);
+}
+
+/** `'11 de set., 10:13'` — instante em forma curta, no fuso da operacao. */
+export function formatDateTimeShort(date: ValorDeData): string {
+  return formatarNoFuso(date, formatoDataHoraCurto, false);
 }
 
 export function relativeTime(date: string | Date): string {

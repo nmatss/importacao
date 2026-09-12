@@ -16,7 +16,7 @@ import { userKeys } from '@/shared/api/query-keys';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
 import { ErrorState } from '@/shared/components/ErrorState';
-import { cn } from '@/shared/lib/utils';
+import { cn, formatDateTimeSeconds, formatDateTimeShort } from '@/shared/lib/utils';
 
 interface AuditLog {
   id: number;
@@ -146,26 +146,15 @@ const entityTypeLabels: Record<string, string> = {
   validation: 'Validação',
 };
 
+// Os dois formatadores locais daqui usavam o fuso da MAQUINA de quem abre a
+// tela; o horario do log de auditoria e o da operacao (America/Sao_Paulo).
+// Formatacao unica em shared/lib/utils.
 function formatDateTime(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
+  return formatDateTimeSeconds(dateStr);
 }
 
 function formatDateShort(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTimeShort(dateStr);
 }
 
 function DetailsExpander({ details }: { details: Record<string, unknown> | null }) {
