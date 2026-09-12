@@ -18,6 +18,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
 
+from app.config import DATABASE_URL
 from app.db.postgres import db, get_conn, put_conn
 from app.utils.logging import log
 
@@ -42,6 +43,13 @@ def sheet_sync_lock() -> Generator[bool, None, None]:
         True quando o lock foi obtido (o chamador pode sincronizar), False
         quando outra execucao ja esta em andamento.
     """
+    if not DATABASE_URL:
+        # Sem banco nao ha lock nem historico, mas o sync da planilha em si
+        # continua funcionando: exigir Postgres aqui transformaria uma melhoria
+        # de coordenacao em regressao para quem roda so com o Sheets.
+        yield True
+        return
+
     conn = get_conn()
     acquired = False
     try:
@@ -80,6 +88,8 @@ def start_sync_run(trigger: str, actor: str | None = None) -> str | None:
     """
     if trigger not in SYNC_TRIGGERS:
         raise ValueError(f"trigger invalido: {trigger!r}")
+    if not DATABASE_URL:
+        return None
     try:
         with db() as (conn, cur):
             cur.execute(

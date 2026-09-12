@@ -14,6 +14,7 @@ def _db_ctx(mocker, cursor):
 
 def _mock_lock_conn(mocker, locked: bool):
     """Conexao dedicada do lock advisory, com o resultado de pg_try_advisory_lock."""
+    mocker.patch.object(sync_runs, "DATABASE_URL", "postgres://test")
     cur = mocker.MagicMock()
     cur.fetchone.return_value = (locked,)
     cur.__enter__ = mocker.MagicMock(return_value=cur)
@@ -52,6 +53,21 @@ def test_lock_released_even_when_the_body_raises(mocker):
         raise RuntimeError("sync falhou")
     executed = " ".join(str(c.args[0]) for c in cur.execute.call_args_list)
     assert "pg_advisory_unlock" in executed
+
+
+def test_lock_is_a_noop_without_a_database(mocker):
+    """Sem Postgres nao ha lock nem historico, mas o sync continua rodando.
+
+    Exigir banco aqui transformaria uma melhoria de coordenacao em regressao
+    para a configuracao que roda so com o Google Sheets.
+    """
+    mocker.patch.object(sync_runs, "DATABASE_URL", "")
+    get_conn = mocker.patch.object(sync_runs, "get_conn")
+
+    with sync_runs.sheet_sync_lock() as acquired:
+        assert acquired is True
+    get_conn.assert_not_called()
+    assert sync_runs.start_sync_run("manual") is None
 
 
 def test_start_sync_run_rejects_unknown_trigger():

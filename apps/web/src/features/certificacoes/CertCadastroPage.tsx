@@ -992,7 +992,16 @@ export default function CertCadastroPage() {
                 <button
                   type="button"
                   onClick={() => handleLinkItems(false)}
-                  disabled={itemsBusy || !preview || preview.added.length === 0}
+                  // `pastedSkus` entra na condição para que o clique não possa
+                  // ser repetido depois de confirmar: o textarea é limpo, mas a
+                  // prévia continua na tela (é o recibo do que foi feito).
+                  disabled={
+                    itemsBusy ||
+                    pastedSkus.length === 0 ||
+                    !preview ||
+                    !preview.dry_run ||
+                    preview.added.length === 0
+                  }
                   title={
                     preview
                       ? 'Grava o vínculo e envia as datas ao Linx'

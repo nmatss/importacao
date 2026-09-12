@@ -676,17 +676,28 @@ def delete_certificate(request: Request, cert_id: str) -> dict:
     """
     _load_certificate(cert_id)
     with db() as (conn, cur):
+        # O RESTRICT conta TODA linha da tabela, inclusive a ja removida
+        # (removed_at preenchido): ela continua sendo historico com FK. A
+        # mensagem separa os dois para nao dizer "tem 3 produtos vinculados"
+        # quando os tres foram removidos e o que sobra e o registro.
         cur.execute(
-            "SELECT COUNT(*) AS cnt FROM cert_certificate_items WHERE certificate_id = %s",
+            "SELECT COUNT(*) AS total, "
+            "COUNT(*) FILTER (WHERE removed_at IS NULL) AS ativos "
+            "FROM cert_certificate_items WHERE certificate_id = %s",
             [cert_id],
         )
-        vinculados = (cur.fetchone() or {}).get("cnt", 0)
-    if vinculados:
-        raise HTTPException(
-            409,
-            f"O certificado tem {vinculados} produto(s) vinculado(s). "
-            "Remova os itens antes de excluir.",
+        counts = cur.fetchone() or {}
+        total = counts.get("total", 0)
+        ativos = counts.get("ativos", 0)
+    if total:
+        detalhe = (
+            f"O certificado tem {ativos} produto(s) vinculado(s). "
+            "Remova os itens antes de excluir."
+            if ativos
+            else f"O certificado guarda o historico de {total} produto(s) ja removido(s) "
+            "e nao pode ser excluido."
         )
+        raise HTTPException(409, detalhe)
 
     try:
         with db() as (conn, cur):

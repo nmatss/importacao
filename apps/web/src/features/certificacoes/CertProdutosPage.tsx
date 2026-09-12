@@ -187,11 +187,6 @@ const DEFAULT_SORT_DIR: SortDir = 'asc';
  */
 const SORT_SCOPE_NOTE = 'Ordenação aplicada apenas à página exibida';
 
-/**
- * Estoque sem `stock_synced_at`: o SKU não tem linha em `cert_stock` e o backend
- * devolve 0 por ausência de dado. Renderizar "0" tornava isso indistinguível de
- * um estoque realmente zerado.
- */
 /** Rótulo em português do gatilho de `cert_sync_runs` (nunca a chave técnica). */
 const SYNC_TRIGGER_LABEL: Record<CertSyncRun['trigger'], string> = {
   manual: 'manual',
@@ -232,6 +227,11 @@ function CertificateNumberCell({ value }: { value?: string | null }) {
   );
 }
 
+/**
+ * Estoque sem `stock_synced_at`: o SKU não tem linha em `cert_stock` e o backend
+ * devolve 0 por ausência de dado. Renderizar "0" tornava isso indistinguível de
+ * um estoque realmente zerado.
+ */
 const STOCK_UNKNOWN = '—';
 const STOCK_UNKNOWN_TITLE =
   'Sem sincronizacao de estoque para este SKU — o valor e desconhecido, nao zero';

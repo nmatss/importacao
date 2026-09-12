@@ -75,7 +75,8 @@ def _mock_certificates_env(mocker, row=_ROW, tmp_path=None, items=None, other_ce
     def _fetchone():
         sql = state["sql"]
         if "COUNT(*)" in sql and "cert_certificate_items" in sql:
-            return {"cnt": len(item_rows)}
+            ativos = [i for i in item_rows if i.get("removed_at") is None]
+            return {"cnt": len(item_rows), "total": len(item_rows), "ativos": len(ativos)}
         if "COUNT(*)" in sql:
             return {"cnt": 1 if row is not None else 0}
         return dict(row) if row is not None else None
@@ -524,6 +525,19 @@ async def test_delete_certificate_with_items_returns_409(test_client, api_key_he
     assert "2 produto(s) vinculado(s)" in resp.json()["detail"]
     executed = " ".join(" ".join(str(c.args[0]).split()) for c in cur.execute.call_args_list)
     assert "DELETE FROM cert_certificates" not in executed
+
+
+@pytest.mark.asyncio
+async def test_delete_certificate_with_only_removed_items_explains_the_history(
+    test_client, api_key_headers, mocker
+):
+    """Item removido ainda segura a FK: a mensagem nao pode dizer "vinculado"."""
+    _mock_certificates_env(
+        mocker, items=[_make_item("A", removed_at="2026-09-11T00:00:00+00:00")]
+    )
+    resp = await test_client.delete(f"{CREATE_URL}/{_ROW['id']}", headers=api_key_headers)
+    assert resp.status_code == 409
+    assert "historico" in resp.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -1066,11 +1080,16 @@ async def test_grifes_endpoint_reports_coverage_gap(test_client, api_key_headers
 async def test_grifes_endpoint_is_not_shadowed_by_the_sku_route(
     test_client, api_key_headers, mocker
 ):
-    """/api/grifes nao pode cair no handler de /api/products/{sku}."""
+    """/api/grifes tem de ser rota propria, nao um SKU de /api/products/{sku}.
+
+    Sem banco, o detalhe de produto responde 404; a rota de grifes responde 200
+    com a sua forma. E isso que separa as duas — e a prova continua valendo se
+    alguem reordenar as declaracoes no modulo.
+    """
     from app.routes import certifications
 
-    detail = mocker.patch.object(certifications, "get_product")
     mocker.patch.object(certifications, "DATABASE_URL", "")
     resp = await test_client.get("/api/grifes", headers=api_key_headers)
     assert resp.status_code == 200
-    detail.assert_not_called()
+    assert resp.json() == {"grifes": [], "sem_grife": 0}
+    assert (await test_client.get("/api/products/grifes", headers=api_key_headers)).status_code == 404

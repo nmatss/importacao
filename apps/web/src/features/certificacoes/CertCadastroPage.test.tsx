@@ -389,6 +389,10 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     await user.click(screen.getByRole('button', { name: 'Vincular' }));
 
     await waitFor(() => expect(mockedLink).toHaveBeenLastCalledWith('c1', ['A'], false));
+    // Confirmado uma vez, o botão trava: clicar de novo reenviaria uma lista
+    // vazia (o textarea foi limpo) e gravaria no Linx por engano.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Vincular' })).toBeDisabled());
+    expect(mockedLink).toHaveBeenCalledTimes(2);
   });
 
   it('remove um item pelo botao da lixeira', async () => {
