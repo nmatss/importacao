@@ -1,6 +1,6 @@
 """Report route and XLSX generation tests."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import openpyxl
 import pytest
@@ -196,7 +196,7 @@ def test_generated_xlsx_neutralizes_formula_like_text(mocker, tmp_path):
     assert cell("Texto Esperado") == "'=Esperado"
     assert cell("Texto Encontrado") == "'+Encontrado"
     assert cell("URL") == "'@https://example.invalid"
-    assert cell("Prazo Final Venda") == "'-2026-12-31"
+    assert cell("Fim de Venda (cert)") == "'-2026-12-31"
     assert cell("Situacao da Venda") == "'@Comerciacao Permitida"
 
 
@@ -218,9 +218,10 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
                 "sheet_status": "27/10/25 - Item excluído e incluído novamente com o novo nome.",
                 "encerramento_status": "Comerciação Permitida",
                 "last_validation_status": "OK",
+                # Licenciamento vem do Linx (D11), nao mais da aba descontinuada.
+                "linx_fim_licenciamento": "2026-01-31",
             }
         ],
-        license_map={"PI7560Y": {"status": "VENCIDO", "valid_until": "2026-01-31"}},
     )
 
     wb = openpyxl.load_workbook(output)
@@ -232,18 +233,18 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
     assert cell("Status Certificacao") == "Ativo"
     assert cell("Status E-commerce") == "Conforme"
     assert cell("Status Licenciamento") == "Vencido"
-    assert cell("Licen. - Prazo") == "2026-01-31"
+    assert cell("Fim Licenciamento (Linx)") == "31/01/2026"
     assert cell("Estoque CD Disponivel") == 10
     assert cell("Total Estoque") == 15
     assert cell("Estoque Atualizado Em") == "2026-08-07T09:00:00"
 
 
 def test_products_report_has_no_vencido_column_and_reports_travas(mocker, tmp_path):
-    """A coluna 'Vencido' saiu; entraram as duas travas de faturamento."""
+    """A coluna 'Vencido' saiu; entrou o bloco de trava da decisao D11."""
     _patch_products_report_io(
         mocker,
         tmp_path,
-        travas={"PI7223Y": {"cert": "Sim (24/07/2026)", "lic": "Nao - sem data cadastrada"}},
+        travas={"PI7223Y": {"cert": "24/07/2026", "lic": None, "indisponivel": None}},
     )
 
     output = generate_products_report([{"sku": "PI7223Y", "name": "CAIXA DE SOM", "brand": "Imaginarium"}])
@@ -253,11 +254,8 @@ def test_products_report_has_no_vencido_column_and_reports_travas(mocker, tmp_pa
     headers = [c.value for c in ws[7]]
 
     assert "Vencido" not in headers
-    assert ws.cell(row=8, column=_header_index(ws, "Trava Fat. Certificacao")).value == "Sim (24/07/2026)"
-    assert (
-        ws.cell(row=8, column=_header_index(ws, "Trava Fat. Licenciamento")).value
-        == "Nao - sem data cadastrada"
-    )
+    assert ws.cell(row=8, column=_header_index(ws, "Prop. Certificacao no Linx")).value == "24/07/2026"
+    assert ws.cell(row=8, column=_header_index(ws, "Fim Licenciamento (Linx)")).value in (None, "")
 
 
 def test_products_report_marks_missing_certificate_registration(mocker, tmp_path):
@@ -269,9 +267,109 @@ def test_products_report_marks_missing_certificate_registration(mocker, tmp_path
     wb = openpyxl.load_workbook(output)
     ws = wb["Produtos"]
     assert (
-        ws.cell(row=8, column=_header_index(ws, "Trava Fat. Certificacao")).value
+        ws.cell(row=8, column=_header_index(ws, "Prop. Certificacao no Linx")).value
         == "Nao verificado (Linx indisponivel)"
     )
+    assert ws.cell(row=8, column=_header_index(ws, "Ativo com Data no Linx")).value in (None, "")
+
+
+class TestColunasD11:
+    """O relatorio da reuniao 11/09: validade, fim de venda, trava e status de venda."""
+
+    # Relogio congelado no dia da reuniao: sem isso o veredito de venda destes
+    # cenarios mudaria sozinho quando os prazos reais vencessem.
+    HOJE = date(2026, 9, 11)
+
+    def _gerar(self, mocker, tmp_path, row, travas=None):
+        _patch_products_report_io(mocker, tmp_path, travas=travas)
+        output = generate_products_report([row], today=self.HOJE)
+        return openpyxl.load_workbook(output)["Produtos"]
+
+    def test_encerrado_mostra_validade_fim_de_venda_e_trava(self, mocker, tmp_path):
+        ws = self._gerar(
+            mocker,
+            tmp_path,
+            {
+                "sku": "PI5914Y",
+                "name": "PELUCIA MOZI",
+                "brand": "Imaginarium",
+                "situacao": "Encerrado",
+                "validade_certificado": "2024-11-08",
+                "sale_deadline": "29/10/2026",
+                "sale_deadline_date": "2026-10-29",
+                "encerramento_status": "Comerciação Permitida",
+                "last_validation_status": "OK",
+            },
+            travas={"PI5914Y": {"cert": "29/10/2026", "lic": None, "indisponivel": None}},
+        )
+
+        def cell(label):
+            return ws.cell(row=8, column=_header_index(ws, label)).value
+
+        assert cell("Status Certificacao") == "Encerrado"
+        assert cell("Validade do Certificado") == "08/11/2024"
+        assert cell("Situacao (planilha)") == "Encerrado"
+        assert cell("Fim de Venda (cert)") == "29/10/2026"
+        assert cell("Data da Trava") == "29/10/2026"
+        assert cell("Origem da Trava") == "Certificacao"
+        assert cell("Status de Venda") == "Liberada"
+        assert cell("FIM_VENDAS Linx atual") == "Nao lido"
+        assert cell("Diverge do Linx") == "Nao verificavel"
+
+    def test_ativo_com_data_no_linx_e_sinalizado_sem_trava(self, mocker, tmp_path):
+        """Vitrola: ativa, com 22/03/2027 (a validade) gravada na propriedade."""
+        ws = self._gerar(
+            mocker,
+            tmp_path,
+            {
+                "sku": "PI5555Y",
+                "name": "VITROLA DE MALA SEM FIO POR DO SOL",
+                "brand": "Imaginarium",
+                "situacao": "Ativo",
+                "validade_certificado": "2027-03-22",
+                "last_validation_status": "OK",
+            },
+            travas={"PI5555Y": {"cert": "22/03/2027", "lic": None, "indisponivel": None}},
+        )
+
+        def cell(label):
+            return ws.cell(row=8, column=_header_index(ws, label)).value
+
+        assert cell("Status Certificacao") == "Ativo"
+        assert cell("Data da Trava") in (None, "")
+        assert cell("Origem da Trava") in (None, "")
+        assert cell("Status de Venda") == "Liberada"
+        assert cell("Prop. Certificacao no Linx") == "22/03/2027"
+        assert cell("Ativo com Data no Linx") == "Sim (22/03/2027)"
+
+    def test_divergencia_com_o_fim_vendas_do_linx(self, mocker, tmp_path):
+        ws = self._gerar(
+            mocker,
+            tmp_path,
+            {
+                "sku": "PI4511Y",
+                "name": "CANETA MUDA FRASES HP FEITICOS",
+                "brand": "Imaginarium",
+                "situacao": "Encerrado",
+                "sale_deadline": "02/03/2028",
+                "sale_deadline_date": "2028-03-02",
+                "encerramento_status": "Comerciação Permitida",
+                "linx_fim_licenciamento": "2026-12-31",
+                "linx_fim_vendas": "2028-03-02",
+                "last_validation_status": "OK",
+            },
+            travas={"PI4511Y": {"cert": "02/03/2028", "lic": "31/12/2026", "indisponivel": None}},
+        )
+
+        def cell(label):
+            return ws.cell(row=8, column=_header_index(ws, label)).value
+
+        # A menor data real e a do licenciamento — o Linx esta travando pela outra.
+        assert cell("Data da Trava") == "31/12/2026"
+        assert cell("Origem da Trava") == "Licenciamento"
+        assert cell("Fim Licenciamento (Linx)") == "31/12/2026"
+        assert cell("FIM_VENDAS Linx atual") == "02/03/2028"
+        assert cell("Diverge do Linx").startswith("Sim (02/03/2028 -> 31/12/2026")
 
 
 class TestTravaFaturamento:
@@ -300,19 +398,21 @@ class TestTravaFaturamento:
         )
         travas = report_service._fetch_travas_faturamento(self._rows())
 
-        assert travas["PI7223Y"] == {"cert": "Sim (24/07/2026)", "lic": "Sim (31/12/2026)"}
+        assert travas["PI7223Y"] == {
+            "cert": "24/07/2026", "lic": "31/12/2026", "indisponivel": None,
+        }
         # Produto com validade mas sem licenciamento gravado.
-        assert travas["100400496"] == {"cert": "Sim (11/08/2027)", "lic": "Nao"}
+        assert travas["100400496"] == {"cert": "11/08/2027", "lic": None, "indisponivel": None}
 
     def test_produto_sem_propriedade_sai_como_nao(self, mocker):
         from app.services import report_service
 
         mocker.patch("app.db.sqlserver.fetch_produto_propriedades", return_value={})
         travas = report_service._fetch_travas_faturamento(self._rows())
-        assert travas["PI7223Y"] == {"cert": "Nao", "lic": "Nao"}
+        assert travas["PI7223Y"] == {"cert": None, "lic": None, "indisponivel": None}
 
     def test_linx_fora_do_ar_nao_derruba_o_relatorio(self, mocker):
-        """Dizer "Nao" sem ter consultado seria afirmar ausencia de trava."""
+        """Dizer "sem trava" sem ter consultado seria afirmar o que nao se sabe."""
         from app.services import report_service
 
         mocker.patch(
@@ -320,15 +420,16 @@ class TestTravaFaturamento:
             side_effect=OSError("db02 unreachable"),
         )
         travas = report_service._fetch_travas_faturamento(self._rows())
-        assert travas["PI7223Y"]["cert"] == report_service.TRAVA_NAO_VERIFICADA
-        assert travas["100400496"]["lic"] == report_service.TRAVA_NAO_VERIFICADA
+        assert travas["PI7223Y"]["indisponivel"] == report_service.TRAVA_NAO_VERIFICADA
+        assert travas["100400496"]["indisponivel"] == report_service.TRAVA_NAO_VERIFICADA
+        assert travas["PI7223Y"]["cert"] is None
 
     def test_marca_sem_linx_e_sinalizada(self, mocker):
         from app.services import report_service
 
         mocker.patch("app.db.sqlserver.fetch_produto_propriedades", return_value={})
         travas = report_service._fetch_travas_faturamento([{"sku": "X1", "brand": "Kayuan"}])
-        assert travas["X1"]["cert"] == report_service.TRAVA_SEM_MARCA
+        assert travas["X1"]["indisponivel"] == report_service.TRAVA_SEM_MARCA
 
     def test_consulta_uma_vez_por_marca_e_nao_por_sku(self, mocker):
         """658 produtos nao podem virar 658 idas ao SQL Server."""
@@ -376,4 +477,4 @@ class TestSentinelaDoLinx:
             return_value={"PI1Y": {"00106": "01/01/1900", "00107": "31/12/2027"}},
         )
         travas = report_service._fetch_travas_faturamento([{"sku": "PI1Y", "brand": "Imaginarium"}])
-        assert travas["PI1Y"] == {"cert": "Nao", "lic": "Sim (31/12/2027)"}
+        assert travas["PI1Y"] == {"cert": None, "lic": "31/12/2027", "indisponivel": None}

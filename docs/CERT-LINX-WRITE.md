@@ -214,6 +214,42 @@ anterior ao do Linx — gravaria tirando dias de venda) e `ambiguos` (mesmo SKU 
 prazos divergentes, produto recertificado). O relatório JSON do `--apply` é o único
 caminho de rollback — o Linx não versiona PROP_PRODUTOS.
 
+### Decisão D11 (reunião 11/09/2026): a propriedade é TRAVA, não validade
+
+A propriedade de certificação passa a ter **um** significado: fim de venda (trava de
+faturamento). Mudanças já implementadas no código:
+
+- `write_certificate_to_linx` grava em 00106/00224 **somente `fim_venda`**. A validade
+  do certificado nunca vai para o ERP (ela serve para decidir manutenção/encerramento).
+  Com `situacao='Ativo'`, a gravação é recusada com `bloqueado: certificado ativo` —
+  _"os produtos que estão ATIVOS a gente não pode ter data na coluna de certificação"_.
+- `sync_prazo_venda_to_linx` lê a coluna **U (SITUAÇÃO)** das abas de produto
+  (`erp_service.read_situacao_por_sku`) antes de classificar. Sem esse mapa, `--apply`
+  é **recusado** (fail-closed): não se decide trava sem saber se o certificado vive.
+- Ações novas, todas **sem gravação**: `limpar: ativo` (certificado ativo com data real
+  no Linx; valor proposto `01/01/1900`, a sentinela do próprio ERP — executar exige
+  autorização explícita e aceite fiscal), `bloqueado: certificado ativo` (ativo, sem
+  data no Linx), `dupla certificacao` (o encerramento é de certificado diferente do
+  vigente, caso PI6552Y) e `bloqueado: situacao desconhecida`.
+- O **relatório antes/depois por SKU é salvo sempre**, dry-run inclusive, em
+  `REPORTS_DIR/sync-prazo-linx-{dry-run|apply}-<timestamp>.json`, com situação,
+  certificado vigente × certificado do encerramento, validade, valores atuais das duas
+  propriedades, valor proposto, trava esperada (menor data real) e ação; mais
+  `totais_por_marca` e `diff` (só o que mudaria).
+- A **trava esperada** é a MENOR data real entre fim de venda da certificação e fim do
+  licenciamento (`derivation.derive_trava_venda`); nulo e ano < 2000 são ausência.
+
+Comando de conferência (somente leitura no Linx, nada é escrito):
+
+```
+docker exec importacao-cert-api python scripts/sync_prazo_venda_linx.py --list
+```
+
+A carga "do zero" (zerar e recarregar as propriedades) **não foi executada** e continua
+exigindo autorização explícita, aceite fiscal (Eduarda/Odett) e alinhamento com o time
+do Linx. Recomendação registrada: recarregar **apenas** a propriedade de certificação;
+o licenciamento é mantido pelo time de produto direto no Linx e não deve ser zerado.
+
 ---
 
 ## 7. Operação / troubleshooting
