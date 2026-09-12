@@ -44,6 +44,15 @@ export interface CertProduct {
   // a partir da planilha "Licenciamentos Vencidos" (ver followups).
   license_deadline?: string | null;
   license_deadline_date?: string | null;
+  // Contrato D11 (reunião 11/09/2026). Dois eixos separados: o STATUS do
+  // certificado vem da validade/situação, e a TRAVA de venda é a menor data real
+  // entre o fim de venda da certificação e o fim do licenciamento.
+  validade_certificado?: string | null;
+  /** Texto original da planilha, quando a data não pôde ser interpretada. */
+  validade_certificado_raw?: string | null;
+  status_venda?: 'LIBERADA' | 'BLOQUEADA' | null;
+  trava_venda?: string | null;
+  trava_origem?: 'certificacao' | 'licenciamento' | null;
   // Grife/licença lida do Linx (PRODUTOS.GRIFFE na Puket, IMG_LICENCIAMENTO na
   // Imaginarium). Cobertura parcial: vazio significa "não preenchido no ERP",
   // nunca "sem licenciamento".
