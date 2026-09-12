@@ -30,7 +30,10 @@ RUN pip install --no-cache-dir --target=/build/site-packages -r requirements.txt
 # ---- Stage 3: Runtime ----
 FROM python:3.12-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Apply available Debian fixes to inherited packages as well as new dependencies.
+# Installing only the packages below leaves base-image gzip/Perl/PCRE2/SQLite stale.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     freetds-bin libaio1t64 curl \
     && ln -sf /usr/lib/x86_64-linux-gnu/libaio.so.1t64 /usr/lib/x86_64-linux-gnu/libaio.so.1 \
     && rm -rf /var/lib/apt/lists/*
