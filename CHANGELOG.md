@@ -1,5 +1,58 @@
 # Changelog
 
+## 2026-09-11 — Certificacao: status pela situacao, trava pela menor data e cadastro por certificado
+
+- A aba "Puket escolares" deixou de ser lida (ficam Imaginario, PUC e Encerramentos) e o
+  licenciamento passa a vir da propriedade do Linx, nao da planilha descontinuada.
+- Status do item passou a seguir a SITUACAO do certificado (coluna U) e a trava de venda passou a
+  ser a MENOR data entre fim de venda da certificacao e fim do licenciamento, descartando vazio e a
+  sentinela 01/01/1900. Certificado ativo nunca tem data de trava.
+- Dupla certificacao resolvida por precedencia: a linha ativa vence e o encerramento so vale quando
+  nao ha certificado ativo para o SKU.
+- Certificado virou entidade com itens: vinculo em massa (com previa obrigatoria), remocao
+  individual, campo "fim de venda" no cadastro e numero do certificado na lista e na busca.
+- Botao de sincronizar a planilha na hora, com trava contra execucao concorrente e historico de
+  execucoes, mais sincronizacao horaria so da planilha.
+- Auditoria do marketplace da Imaginarium: quebra-cabecas de terceiros com menos de 500 pecas
+  precisam de informacao de certificacao no site.
+- Carga do zero no Linx continua SEM execucao: so o relatorio antes/depois por SKU (dry-run).
+
+## 2026-09-11 — Comparativo: resumo unico, cruzamentos em coluna e casamento de item
+
+- Um unico resumo clicavel e colorido; o bloco duplicado so-visual saiu.
+- Os cruzamentos deixaram de ser linha de texto "esperado x encontrado": viraram status e mensagem
+  das linhas de cima, com os valores nas colunas Invoice / Packing / BL / Espelho / Sistema.
+- CNPJ comparado apenas pelos digitos; o endereco do espelho com prefixo "CNPJ: ..." nao gera mais
+  divergencia.
+- Itens da Invoice x Packing List: o codigo entre colchetes da descricao virou candidato primario e
+  o codigo composto (PI + colecao + codigo) casa pelo sufixo — os 14 itens "sem correspondencia" do
+  PK220 eram erro de leitura. Quando todos casam, a tela diz isso.
+- Integracao indisponivel (Odoo) e dado ausente na fonte (frete) aparecem como "Nao verificado" com
+  o motivo, fora da contagem de atencoes.
+- O exportador deixou de ser preenchido por fallback do cadastro quando nao ha espelho.
+
+## 2026-09-11 — Follow Up: sincronizacao por cabecalho, datas corretas e capa
+
+- Sincronizacao recorrente da planilha para o nosso banco, mapeada por cabecalho e tolerante a
+  coluna inserida; "#ERROR!", "-" e vazio contam como indisponivel e nunca viram zero. Nasce em
+  `dry_run`: so registra o diff ate ser autorizada.
+- Atracacao passou a usar "ETA Realizado" (ou "ETA Final\*"), nunca "ETA Previsto Medio" — a origem
+  do "ETA 16/09" quando as tres datas reais eram 08/09. "Registrado" mostra numero e data da DUIMP.
+- Capa do processo com precedencia por campo: Follow Up primeiro no que ela tem, documentos
+  completam o resto (packing list como fonte de pesos, caixas e CBM) e a divergencia fica visivel.
+- Estagio logistico so avanca por evento realizado e pode ser corrigido para tras.
+
+## 2026-09-11 — Extracao: BL lido pelo PDF original
+
+- Os BLs tem camada de texto CID que o servidor le vazia; como o OCR respondia alguma coisa, o PDF
+  original nunca chegava ao modelo. Agora ele vai anexado sempre que o provider aceita PDF, e o OCR
+  entra so como apoio.
+- Fim do dado inventado a partir do formulario: container exige ISO 6346 valido (fim do
+  "Numero container: ainers"), identificadores exigem digito e tamanho minimo, e valor vindo do
+  texto vale menos na nota do documento.
+- Tres falsos positivos do verificador que derrubavam o OHBL do PK220 para 39% foram corrigidos.
+- Packing list passou a fornecer CBM, quantidade e fabricante ao comparativo.
+
 ## 2026-09-11 — Drive como fonte: indice da pasta PROCESSOS, dedupe por conteudo e somente leitura
 
 - A leitura do Drive deixou de procurar `<raiz>/<Marca>/Importado/Processo N <codigo>`

@@ -1,6 +1,7 @@
 # Known Issues
 
-Ultima atualizacao: 2026-08-29 (ver
+Ultima atualizacao: 2026-09-11 (ver
+`docs/STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md`,
 `docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`,
 `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`,
 `docs/STATUS-2026-08-26-FECHAMENTO-PENDENCIAS.md`,
@@ -14,6 +15,56 @@ Ultima atualizacao: 2026-08-29 (ver
 `docs/STATUS-2026-08-07-DUIMP-PK2052602TJ.md`,
 `docs/STATUS-2026-08-03-LOGIN-GOOGLE.md` e
 `docs/STATUS-2026-08-03-REPROCESSAMENTO-DOCUMENTAL.md`)
+
+## 2026-09-11 — Reuniao de importacao/certificacao: pendencias apos a implementacao
+
+Estado completo em [reuniao 11/09](STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md) e
+decisoes de negocio em [decisoes abertas](DECISOES-ABERTAS-2026-09-11.md). Tudo abaixo esta na
+branch local `fix/reuniao-2026-09-11`; **nada foi publicado**.
+
+**Bloqueadores para virar a fonte documental para o Drive (nesta ordem):**
+
+1. **Backfill de `content_sha256`** dos documentos ja existentes NAO foi executado (exige UPDATE em
+   producao e autorizacao). Sem ele, virar `DOCUMENT_SOURCE=drive` faz os arquivos subidos a mao em
+   11/09 (processos 287, 288 e 297) entrarem de novo como duplicata.
+2. **`GOOGLE_DRIVE_ROOT_FOLDER_ID` continua o placeholder `your-root-folder-id`** em producao, e
+   `DOCUMENT_SOURCE` continua `email`. Ambos dependem de SOPS e deploy autorizados.
+3. O compartilhamento com a conta de servico **ja foi concedido** em 11/09 (leitura de PROCESSOS,
+   PENDENTES DE CORRECAO e ESPELHOS confirmada por sonda somente leitura).
+
+**Nao implementado nesta rodada:**
+
+- **Registro/DUIMP**: o comparativo DUIMP x espelho x invoice foi desenhado (REG-01..REG-07) e nao
+  foi implementado. A aba Registro continua sem usar o rascunho anexado.
+- **Revisao adversarial cruzada** das entregas dos times.
+- **CMP-07 etapa 2** (mais campos do cabecalho do espelho): depende de ler um espelho oficial do
+  Drive.
+- **Cronograma no Sheets** com fases e prazos, pedido na reuniao.
+- **CFN-08 e CFN-09** ficaram sem codigo por divisao de arquivos entre os dois times de certificacao.
+- **Imagem Docker com `poppler-data`/fonte CJK nao foi construida** — o Dockerfile mudou, o build
+  nao foi executado.
+
+**Mudancas visiveis que dependem de aceite antes de publicar:**
+
+- ~107 SKUs com certificado encerrado passam de "Ativo" para "Encerrado" (venda ainda liberada ate o
+  fim de venda) e 3 voltam para "Ativo". **Exige aceite fiscal.**
+- `cert_products.status_venda`, `trava_venda` e `trava_origem` seguem NULL no banco: as regras rodam
+  em runtime e nenhum caminho de escrita as popula. Quem consultar o banco direto nao ve a trava.
+- "FIM_VENDAS Linx atual" e "Diverge do Linx" saem como "Nao lido" ate existir consulta a
+  `PRODUTO_CORES.FIM_VENDAS` por cor (exige GRANT de SELECT).
+- Progresso do checklist muda de denominador (15 para 13 etapas ativas); os valores persistidos so
+  sao recalculados no proximo toggle de etapa.
+- A contagem do comparativo cai, porque os cruzamentos viraram status das linhas de cima.
+- Exclusao de documento e definitiva (sem soft-delete) e agora disponivel para analista.
+
+**Riscos declarados que continuam abertos:**
+
+- A regra de "processo parado" le `eta` e `registered_at` do nosso banco, que sao um retrato de
+  25/08 enquanto `FOLLOW_UP_SYNC_MODE` ficar em `dry_run`. Ha protecao: processo sem ETA nunca e
+  silenciado e existe teto de 30 dias uteis.
+- `linx_attributes.py` nunca rodou contra o SQL Server real; os nomes de coluna vem do diagnostico.
+- O indice do Drive foi validado contra fixture sintetica derivada da arvore real, nao contra a API.
+- Nenhuma tela foi aberta em navegador nesta rodada.
 
 ## 2026-09-06 — Atualizacao apos verificacao autenticada
 

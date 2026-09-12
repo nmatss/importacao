@@ -1,5 +1,32 @@
 # Session Memory
 
+## 2026-09-11 — Reuniao de importacao e certificacao
+
+Objetivo: revisar e corrigir tudo o que Eduarda e Odett pediram na reuniao de 11/09, mais os 15
+prints enviados depois.
+
+Metodo: diagnostico com 9 times em paralelo (somente leitura) e um critico de completude — 73
+achados com evidencia, 10 contradicoes entre times; depois implementacao com uma fundacao
+compartilhada e um time por frente em `git worktree` isolado. A primeira rodada perdeu 6 de 8 times
+por LIMITE DE USO DA SESSAO (nao por erro tecnico) e foi relancada.
+
+Resultado: fundacao mais 8 frentes integradas na branch local `fix/reuniao-2026-09-11`, em 9 commits
+de merge. Gates rodados pelo orquestrador no estado integrado: typecheck, lint e build ok; API 1.919
+testes (base 1.608), web 356 (base 245), cert-api 772 (base 595) — 599 testes novos, sem regressao.
+
+Achado que nao estava no diagnostico: `scripts/apply-pending-migrations.sh`, passo 6/8 do deploy,
+estava parado na 0026 — as migrations 0027 e 0028 so chegavam a producao pelo boot da API. Corrigido,
+com guarda estatica.
+
+Fora do codigo: a conta de servico do Drive ganhou acesso de leitura a PROCESSOS em 11/09 (a conta do
+Nicolas e "Administrador de conteudo" e nao pode compartilhar; a solicitacao foi enviada pela UI e
+aprovada pela administradora). A arvore real foi lida e virou gabarito de aceitacao do indexador.
+
+Nao feito: Registro/DUIMP, revisao adversarial cruzada, cronograma no Sheets e o backfill de
+`content_sha256`. Detalhe em
+[reuniao 11/09](STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md) e
+[pendencias](KNOWN_ISSUES.md).
+
 ## 2026-09-06 — Correcao das pendencias autorizada
 
 - O pedido posterior ampliou o escopo para resolver pendencias funcionais e operacionais.
