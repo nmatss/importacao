@@ -18,7 +18,9 @@ vi.mock('../../../shared/utils/logger.js', () => ({
 
 const { diffProcessAgainstRow, indexSheetRows, renderDiff, runFollowUpSheetSync } =
   await import('../sheet-sync.js');
-const { indexRowByHeader, findMissingColumns } = await import('../sheet-columns.js');
+type SyncableProcess = import('../sheet-sync.js').SyncableProcess;
+const { indexRowByHeader, findMissingColumns, readField, toColumnValue } =
+  await import('../sheet-columns.js');
 
 /**
  * Cabecalho e linha REAIS da aba Processos (PK2192607SZ, lidos em 11/09/2026).
@@ -75,7 +77,7 @@ const ROW_219 = [
 ];
 
 /** Processo 287 como estava no banco: snapshot congelado de 25/08. */
-function processo287() {
+function processo287(): SyncableProcess & { status: string } {
   return {
     id: 287,
     processCode: 'PK2192607SZ',
@@ -112,7 +114,7 @@ function processo287() {
     purchaseRef: null,
     consolidationRef: null,
     aiExtractedData: { sheetStatus: 'Em transito', importedFromSheet: true },
-  } as never;
+  };
 }
 
 function linha(headers: string[], values: string[]) {
@@ -225,6 +227,37 @@ describe('sheet-sync — indisponivel nunca vira 0 nem apaga', () => {
     const diff = diffProcessAgainstRow(processo287(), linha(HEADERS, ROW_219));
     expect(diff.sheetStatus).toBe('Aguardando Entrada');
     expect(diff.sheetStatusChanged).toBe(true);
+  });
+
+  /**
+   * Idempotencia: depois de gravar, a proxima passada nao pode achar diferenca.
+   * Sem isso a sync reescreveria os mesmos valores a cada 30 minutos e encheria
+   * o historico do processo de mudanca que nao mudou nada.
+   */
+  it('nao acha diferenca no processo que ja foi sincronizado', () => {
+    const linhaIndexada = linha(HEADERS, ROW_219);
+    const atualizado: Record<string, unknown> = { ...processo287() };
+    for (const change of diffProcessAgainstRow(processo287(), linhaIndexada).changes) {
+      const { reading } = readField(linhaIndexada, change.field);
+      if (reading.available) atualizado[change.field] = toColumnValue(change.field, reading.value);
+    }
+    atualizado.aiExtractedData = { sheetStatus: 'Aguardando Entrada' };
+
+    const segundaPassada = diffProcessAgainstRow(atualizado as never, linha(HEADERS, ROW_219));
+    expect(segundaPassada.changes).toEqual([]);
+    expect(segundaPassada.sheetStatusChanged).toBe(false);
+  });
+
+  it('tolera a coluna date entregue como Date pelo driver', () => {
+    // O driver entrega `eta` como string hoje; o teste prova que a comparacao
+    // nao quebra se ele passar a entregar Date.
+    const comDate: Record<string, unknown> = { ...processo287() };
+    comDate.eta = new Date('2026-09-08T00:00:00.000Z');
+    const diff = diffProcessAgainstRow(
+      comDate as unknown as SyncableProcess,
+      linha(HEADERS, ROW_219),
+    );
+    expect(diff.changes.find((change) => change.field === 'eta')).toBeUndefined();
   });
 });
 

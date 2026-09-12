@@ -97,7 +97,16 @@ export function getSyncMode(): FollowUpSyncMode {
   return getEnv().FOLLOW_UP_SYNC_MODE;
 }
 
-type ProcessRow = typeof importProcesses.$inferSelect;
+/**
+ * O que a comparacao precisa de um processo: as colunas que a planilha alimenta
+ * mais a identificacao e o jsonb onde mora o status da planilha. Tipar so isso
+ * (em vez da linha inteira) deixa o teste montar uma fixture REAL, conferida
+ * pelo compilador, sem `as`.
+ */
+export type SyncableProcess = Pick<
+  typeof importProcesses.$inferSelect,
+  'id' | 'processCode' | 'aiExtractedData' | SyncableField
+>;
 
 function upper(code: string): string {
   return code.trim().toUpperCase();
@@ -123,7 +132,7 @@ export function indexSheetRows(headers: unknown[], rows: unknown[][]) {
 }
 
 /** Compara uma linha da planilha com o processo, sem tocar no banco. */
-export function diffProcessAgainstRow(process: ProcessRow, row: SheetRow): SheetSyncProcess {
+export function diffProcessAgainstRow(process: SyncableProcess, row: SheetRow): SheetSyncProcess {
   const changes: SheetSyncChange[] = [];
   const unavailable: SheetSyncUnavailable[] = [];
 

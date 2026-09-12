@@ -248,10 +248,27 @@ export function toColumnValue(
   }
 }
 
+/**
+ * Dia de uma coluna `date`, venha ela como 'YYYY-MM-DD' (o que o driver
+ * devolve hoje), como ISO completo ou como `Date`.
+ *
+ * A tolerancia nao e teorica: se o driver passar a entregar `Date`, a
+ * comparacao por texto nunca casaria e a sync reescreveria a MESMA data a cada
+ * 30 minutos, enchendo o historico de mudanca que nao mudou nada.
+ */
+function diaDeColuna(value: unknown): string {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : value.toISOString().slice(0, 10);
+  }
+  const texto = String(value);
+  return /^\d{4}-\d{2}-\d{2}T/.test(texto) ? texto.slice(0, 10) : texto;
+}
+
 /** Texto do valor para o diff que o operador le. */
 export function formatForDiff(field: SyncableField, value: unknown): string {
   if (value === null || value === undefined || value === '') return '(vazio)';
   const rule = COLUMN_RULES[field];
+  if (rule.kind === 'date') return diaDeColuna(value);
   if (rule.kind === 'timestamp') {
     const instant = value instanceof Date ? value : new Date(String(value));
     return Number.isNaN(instant.getTime()) ? String(value) : instant.toISOString();
@@ -289,6 +306,7 @@ export function isSameAsCurrent(
     return currentNumber.toFixed(rule.scale ?? 2) === next;
   }
   if (rule.kind === 'integer') return Number(current) === next;
+  if (rule.kind === 'date') return diaDeColuna(current) === next;
   return String(current) === next;
 }
 
