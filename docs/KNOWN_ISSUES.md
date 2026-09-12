@@ -1390,3 +1390,7 @@ Status:
 
 - Resolvido em 2026-06-17. Imports CSS foram reordenados para deixar regras
   `@import` antes das demais diretivas.
+
+## 12/09/2026 — Gate de segurança Node bloqueia publicação
+
+CI 34693884581, c0e9234: `npm audit --audit-level=high` falhou com 3 altas (js-yaml, multer, nodemailer) e 5 moderadas; auditoria local confirmou. Corrigir dependências e repetir gates antes do deploy já autorizado. Não houve deploy nem migration remota. Ver checkpoint final em `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`.
