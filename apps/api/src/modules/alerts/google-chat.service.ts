@@ -1,4 +1,5 @@
 import { alertDeliveryTotal } from '../../shared/metrics/index.js';
+import { localWeekKey } from '../../shared/utils/dates.js';
 import { logger } from '../../shared/utils/logger.js';
 
 interface Alert {
@@ -8,6 +9,57 @@ interface Alert {
   title: string;
   message: string;
   processCode?: string;
+}
+
+/** Texto vira chave: sem acento, sem espaco, curto. */
+function chavear(valor: string): string {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+}
+
+/**
+ * Sob qual topico do espaco esta mensagem cai.
+ *
+ * Sem `threadKey` toda mensagem abre um topico novo: em 11/09, 13 cards de
+ * eventos de 3 processos sairam em ~1h30, cada um num topico proprio. Agrupar
+ * por processo e o pedido da reuniao ("cuidar para nao ficar poluido").
+ *
+ * A chave sai do `processId` quando ele existe, e nao do codigo: o job de
+ * reentrega nao carrega o codigo do processo, e duas chaves diferentes para o
+ * mesmo processo partiriam a conversa em dois topicos. Mensagem sem processo
+ * (digest de inatividade, falha de job) agrupa por titulo + semana, para nao
+ * virar um topico eterno.
+ */
+export function threadKeyParaAlerta(alert: Alert, now: Date = new Date()): string {
+  if (alert.processId) return `processo-${alert.processId}`;
+  if (alert.processCode) return `processo-${chavear(alert.processCode)}`;
+  return `sistema-${chavear(alert.title)}-${localWeekKey(now)}`;
+}
+
+/**
+ * Acrescenta o topico ao URL do webhook NA HORA DO ENVIO.
+ *
+ * O segredo continua sendo o URL guardado (SOPS/banco), intocado; aqui so se
+ * junta o parametro. `REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD` garante que, se o
+ * espaco nao aceitar resposta em topico, o comportamento seja o atual — topico
+ * novo — em vez de erro.
+ */
+export function urlComTopico(webhookUrl: string, threadKey: string): string {
+  try {
+    const url = new URL(webhookUrl);
+    url.searchParams.set('threadKey', threadKey);
+    url.searchParams.set('messageReplyOption', 'REPLY_MESSAGE_FALLBACK_TO_NEW_THREAD');
+    return url.toString();
+  } catch {
+    // URL invalido nao e problema deste modulo: o envio segue e falha (ou nao)
+    // exatamente como falharia antes.
+    return webhookUrl;
+  }
 }
 
 function severityEmoji(severity: string): string {
@@ -92,9 +144,11 @@ export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promis
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
 
+  const threadKey = threadKeyParaAlerta(alert);
+
   try {
     const card = formatGoogleChatCard(alert);
-    const response = await fetch(webhookUrl, {
+    const response = await fetch(urlComTopico(webhookUrl, threadKey), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(card),
@@ -123,7 +177,8 @@ export async function sendToGoogleChat(webhookUrl: string, alert: Alert): Promis
     chatConsecutiveFailures = 0;
     chatSkipUntil = 0;
     alertDeliveryTotal.inc({ channel: 'google_chat', outcome: 'sent' });
-    logger.info({ alertTitle: alert.title }, 'Alert sent to Google Chat');
+    // Nunca o URL: ele carrega key e token do webhook.
+    logger.info({ alertTitle: alert.title, threadKey }, 'Alert sent to Google Chat');
     return true;
   } catch (error: any) {
     chatConsecutiveFailures += 1;
