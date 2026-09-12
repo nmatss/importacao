@@ -9,6 +9,19 @@
  */
 
 export const MIN_OPERATIONAL_CONFIDENCE = 0.4;
+export const MIN_BL_CONFIDENCE = 0.9;
+
+/** BL sem pontuação nunca comprova o corte mínimo de leitura. */
+export function isDocumentOperational(
+  value: number | string | null | undefined,
+  documentType: string,
+): boolean {
+  const isBL = ['ohbl', 'draft_bl', 'bl', 'bill_of_lading'].includes(documentType.toLowerCase());
+  if (value == null || value === '') return !isBL;
+  const score = Number(value);
+  return Number.isFinite(score) && score >= (isBL ? MIN_BL_CONFIDENCE : MIN_OPERATIONAL_CONFIDENCE);
+}
+
 export const CONFIDENCE_HIGH = 0.8;
 export const CONFIDENCE_MEDIUM = 0.5;
 

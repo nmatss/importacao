@@ -202,6 +202,76 @@ describe('ingestProcessFromDrive()', () => {
     );
   });
 
+  it.each(['KIOM INV - PK2202608SZ.pdf', 'invoice_PK2202608SZ_draft.pdf'])(
+    'arquivo estrangeiro %s em PENDENTES nao suprime invoice correta',
+    async (filename) => {
+      mockListFolderEntries
+        .mockResolvedValueOnce([
+          {
+            id: 'wrong',
+            name: filename,
+            mimeType: 'application/pdf',
+            size: '10',
+          },
+        ])
+        .mockResolvedValueOnce([
+          {
+            id: 'right',
+            name: 'KIOM INV - PK2192607SZ.pdf',
+            mimeType: 'application/pdf',
+            size: '10',
+          },
+        ]);
+      estadoLimpo();
+      const result = await ingestProcessFromDrive(
+        PROCESS,
+        makeIndex({
+          pastas: [
+            { folderId: 'pending', area: 'pendentes', path: 'pendentes' },
+            { folderId: 'brand', area: 'puket', path: 'puket' },
+          ],
+        }),
+      );
+      expect(result.imported).toBe(1);
+      expect(mockDownloadFileBuffer).toHaveBeenCalledWith('right');
+      expect(mockDownloadFileBuffer).not.toHaveBeenCalledWith('wrong');
+      expect(result.ignored).toContainEqual(
+        expect.objectContaining({
+          name: filename,
+          reason: expect.stringContaining('outro processo'),
+        }),
+      );
+    },
+  );
+
+  it('mesmo ID e versao listados em duas pastas sao baixados apenas uma vez', async () => {
+    const entry = {
+      id: 'same-file',
+      version: '7',
+      name: 'invoice PK2192607SZ.pdf',
+      mimeType: 'application/pdf',
+    };
+    mockListFolderEntries.mockResolvedValueOnce([entry]).mockResolvedValueOnce([entry]);
+    mockDownloadFileBuffer
+      .mockResolvedValueOnce(PDF)
+      .mockResolvedValueOnce(Buffer.from('%PDF-1.4 changed during sweep'));
+    estadoLimpo();
+    const result = await ingestProcessFromDrive(
+      PROCESS,
+      makeIndex({
+        pastas: [
+          { folderId: 'p1', area: 'puket', path: 'a' },
+          { folderId: 'p2', area: 'puket', path: 'b' },
+        ],
+      }),
+    );
+    expect(result.imported).toBe(1);
+    expect(result.skipped).toBe(1);
+    expect(mockDownloadFileBuffer).toHaveBeenCalledTimes(1);
+    expect(mockUpload).toHaveBeenCalledTimes(1);
+    mockDownloadFileBuffer.mockReset().mockResolvedValue(PDF);
+  });
+
   it('PENDENTES vence POR TIPO e a pasta da marca completa os tipos ausentes', async () => {
     mockListFolderEntries
       .mockResolvedValueOnce([
@@ -443,8 +513,14 @@ describe('ingestProcessFromDrive()', () => {
     );
   });
 
-  it('espelho ja importado na mesma versao nao e reexportado', async () => {
-    queryQueue.push(createResolvedChain([{ driveFileId: 'esp-219', driveVersion: 12 }]));
+  it('espelho na ultima versao nao e reexportado mesmo com historico fora de ordem', async () => {
+    queryQueue.push(
+      createResolvedChain([
+        { driveFileId: 'esp-219', driveVersion: 12 },
+        { driveFileId: 'esp-219', driveVersion: 10 },
+        { driveFileId: 'esp-219', driveVersion: null },
+      ]),
+    );
     queryQueue.push(createResolvedChain([]));
     queryQueue.push(createResolvedChain([]));
 
@@ -563,6 +639,26 @@ describe('ingestProcessFromDrive()', () => {
     expect(result.skipped).toBe(1);
     expect(mockDownloadFileBuffer).not.toHaveBeenCalled();
     delete process.env.DRIVE_INGESTION_MAX_FILE_BYTES;
+  });
+
+  it('recusa bytes reais acima do limite mesmo com tamanho ausente na listagem', async () => {
+    process.env.DRIVE_INGESTION_MAX_FILE_BYTES = '8';
+    try {
+      mockListFolderEntries.mockResolvedValueOnce([
+        { id: 'changed', name: 'invoice PK2192607SZ.pdf', mimeType: 'application/pdf' },
+      ]);
+      mockDownloadFileBuffer.mockResolvedValueOnce(PDF);
+      estadoLimpo();
+      const result = await ingestProcessFromDrive(
+        PROCESS,
+        makeIndex({ pastas: [{ folderId: 'p', area: 'puket', path: 'x' }] }),
+      );
+      expect(result.skipped).toBe(1);
+      expect(result.ignored[0]?.reason).toContain('conteudo baixado');
+      expect(mockUpload).not.toHaveBeenCalled();
+    } finally {
+      delete process.env.DRIVE_INGESTION_MAX_FILE_BYTES;
+    }
   });
 });
 
@@ -697,6 +793,25 @@ describe('ingestAllProcessesFromDrive()', () => {
       liberar();
       await primeira;
     }
+  });
+
+  it('trava antes do preflight assíncrono e libera após falha', async () => {
+    let rejectPreflight!: (reason: Error) => void;
+    mockIsRootConfigured.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectPreflight = reject;
+        }),
+    );
+    const primeira = ingestAllProcessesFromDrive();
+    const failed = expect(primeira).rejects.toThrow('Drive unavailable');
+    expect(await ingestAllProcessesFromDrive()).toEqual([]);
+    expect(mockIsRootConfigured).toHaveBeenCalledTimes(1);
+    rejectPreflight(new Error('Drive unavailable'));
+    await failed;
+    mockIsRootConfigured.mockResolvedValueOnce(false);
+    expect(await ingestAllProcessesFromDrive()).toEqual([]);
+    expect(mockIsRootConfigured).toHaveBeenCalledTimes(2);
   });
 
   it('libera a trava depois de terminar, para o proximo tick rodar', async () => {

@@ -1,3 +1,4 @@
+import { localDayStartUtc } from '../../shared/utils/dates.js';
 import { VALID_LOGISTIC_STATUSES } from './schema.js';
 
 type LogisticStatus = (typeof VALID_LOGISTIC_STATUSES)[number];
@@ -95,9 +96,18 @@ export function logisticStatusFromSheet(
   sheetStatus: string | null | undefined,
   syncedAt?: string | null,
 ): LogisticStatus | null {
-  if (!sheetStatus || !syncedAt) return null;
+  if (!sheetStatus || !syncedAt || Number.isNaN(new Date(syncedAt).getTime())) return null;
   const normalized = normalizeSheetStatus(sheetStatus);
   if (!normalized) return null;
+  // Palavra de evento em texto negado/pendente nao confirma sua realizacao.
+  // Somente os estados de espera explicitamente conhecidos sao mapeados.
+  if (/\b(?:NAO|SEM|PREVIST[AO]|PREVISAO|PENDENTE)\b/.test(normalized)) return null;
+  if (/\bAGUARDANDO\b|\bAG\./.test(normalized)) {
+    if (/^(?:AGUARDANDO|AG\.)\s+ENTRADA$/.test(normalized)) return 'waiting_entry';
+    if (/^(?:AGUARDANDO|AG\.)\s+EMBARQUE$/.test(normalized)) return 'waiting_shipment';
+    if (/^(?:AGUARDANDO|AG\.)\s+CARREGAMENTO$/.test(normalized)) return 'waiting_loading';
+    return null;
+  }
   for (const [needle, status] of SHEET_STATUS_DICTIONARY) {
     if (normalized.includes(needle)) return status;
   }
@@ -112,7 +122,8 @@ export function logisticStatusFromSheet(
  * vem da coluna 'Chegada CD', que e previsao enquanto a carga nao chega. Bastava
  * a planilha ter uma data futura ali para o processo aparecer como "Ag. Entrada"
  * no mesmo minuto em que foi importado (evento do PK2202608SZ, 25/08 17:30).
- * Agora toda data de marco so conta quando ja passou.
+ * Previsoes continuam informativas mesmo depois da data. Somente datas de
+ * eventos realizados ou o status declarado pela equipe comprovam a etapa.
  */
 export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
   const { process: p, followUp: f } = input;
@@ -129,8 +140,8 @@ export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
     return date !== null && date.getTime() <= now.getTime();
   };
 
-  // 10 — waiting_entry: chegou no CD (data de chegada ja passou)
-  if (jaAconteceu(p.cdArrivalAt)) return 'waiting_entry';
+  // Chegada CD nao distingue previsto de realizado: o status confirmado
+  // pela planilha (acima) deve comprovar waiting_entry, nunca o relogio.
 
   // 7 — port_release: desembaracado
   if (jaAconteceu(p.customsClearanceAt)) return 'port_release';
@@ -138,14 +149,14 @@ export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
   // 6 — customs_inspection: canal parametrizado
   if (p.customsChannel) return 'customs_inspection';
 
-  // 5 — registered: DI/DUIMP registrada
-  if (p.diNumber || p.duimpNumber || jaAconteceu(p.registeredAt)) return 'registered';
+  // 5 — registered: numero pode existir no rascunho; exigir registro realizado.
+  if (jaAconteceu(p.registeredAt)) return 'registered';
 
-  // 4 — berthing: atracou (ETA Realizado) ou a ETA firme ja passou
-  if (jaAconteceu(p.etaActual) || jaAconteceu(p.eta)) return 'berthing';
+  // 4 — berthing: atracacao comprovada pelo ETA Realizado.
+  if (jaAconteceu(p.etaActual)) return 'berthing';
 
   // 3 — in_transit: embarcou
-  if (jaAconteceu(p.etd) || jaAconteceu(p.shipmentDate)) return 'in_transit';
+  if (jaAconteceu(p.shipmentDate)) return 'in_transit';
 
   // 2 — waiting_shipment: espelho montado / invoice enviada a Fenicia.
   //
@@ -164,7 +175,8 @@ export function deriveLogisticStatus(input: DeriveInput): LogisticStatus {
 
 function toDate(v: Date | string | null | undefined): Date | null {
   if (!v) return null;
-  if (v instanceof Date) return v;
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return localDayStartUtc(v);
   const d = new Date(v);
   return isNaN(d.getTime()) ? null : d;
 }

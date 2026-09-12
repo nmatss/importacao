@@ -1,6 +1,9 @@
 """Pydantic request/response models."""
 
-from pydantic import BaseModel
+from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 from app.utils.cron import build_cron_trigger
 
@@ -55,6 +58,14 @@ class CertificateItemsRequest(BaseModel):
 
     skus: list[str] = []
     dry_run: bool = True
+
+
+class CertificateItemRestrictionRequest(BaseModel):
+    """Overrides explicitos; null herda o certificado, nunca presume dispensa."""
+
+    situacao: Literal["ATIVO", "ENCERRADO"] | None
+    fim_venda: date | None
+    motivo: str = Field(min_length=1, max_length=1000)
 
 
 class ScheduleCreate(BaseModel):

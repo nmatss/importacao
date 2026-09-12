@@ -21,8 +21,8 @@ DRIZZLE_DIR="$ROOT/apps/api/drizzle"
 apply() {
   local file="$1"
   if [[ ! -f "$DRIZZLE_DIR/$file" ]]; then
-    echo "[skip] $file (not found)" >&2
-    return
+    echo "[error] required migration $file not found" >&2
+    exit 1
   fi
   echo "[$(date '+%H:%M:%S')] applying $file"
   docker cp "$DRIZZLE_DIR/$file" "$PG_CONTAINER:/tmp/$file"

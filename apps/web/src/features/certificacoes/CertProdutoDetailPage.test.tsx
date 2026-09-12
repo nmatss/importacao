@@ -7,6 +7,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
   return {
     ...actual,
     fetchCertProductDetail: vi.fn(),
+    fetchLastCertSync: vi.fn().mockResolvedValue({ last_run: null }),
     lookupCertificateLinx: vi.fn(),
     verifyCertProduct: vi.fn(),
   };
@@ -14,6 +15,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
 
 import {
   fetchCertProductDetail,
+  fetchLastCertSync,
   lookupCertificateLinx,
   type CertProduct,
 } from '@/shared/lib/cert-api-client';
@@ -56,6 +58,30 @@ describe('CertProdutoDetailPage certificate sources', () => {
         },
       },
     });
+  });
+
+  it('identifica snapshot anterior quando a última sincronização falhou', async () => {
+    vi.mocked(fetchLastCertSync).mockResolvedValueOnce({
+      last_run: {
+        id: 'sync-1',
+        trigger: 'manual',
+        actor: null,
+        started_at: '2026-09-12T12:00:00Z',
+        finished_at: '2026-09-12T12:01:00Z',
+        result: null,
+        error: 'Linx indisponível',
+      },
+    });
+    render(
+      <MemoryRouter initialEntries={['/certificacoes/produtos/PI7223Y']}>
+        <Routes>
+          <Route path="/certificacoes/produtos/:sku" element={<CertProdutoDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('status')).toHaveTextContent('Linx indisponível');
+    expect(screen.getByRole('status')).toHaveTextContent('últimos salvos');
+    expect(await screen.findByText('CERT-2026-001')).toBeInTheDocument();
   });
 
   it('shows spreadsheet metadata and live Imaginarium Linx properties', async () => {

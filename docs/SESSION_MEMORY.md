@@ -1,5 +1,30 @@
 # Session Memory
 
+## 2026-09-12 — Auditoria de uso efetivo e piloto autorizado
+
+Usuário autorizou piloto limitado Vertex: quatro PDFs executados sem persistência nos bancos.
+Produção ainda email/raiz placeholder, zero documentos vinculados Drive e escolares presente.
+Relatório canônico contém matriz dos30 pontos e diferenças local/produção:
+[retomada12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md). Aprovação Vertex substitui a pendência
+da rodada anterior; não substitui decisões comerciais ou conciliação para carga.
+
+## 2026-09-12 — Segunda rodada antecipada
+
+Solicitante autorizou antecipar tudo sem aguardar datas propostas. Cronograma C6 registra essa
+orientação. Datas/rascunhos não comprovam eventos realizados; PDF usa Poppler antes do fallback;
+Registro exige unidades/fontes consistentes; restrição individual possui contrato aditivo local.
+Estado, testes e migration em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+Não houve publicação/carga. IA local indisponível por DNS; autorização de teste limitado Vertex
+foi solicitada, sem envio de documentos enquanto não houver resposta.
+
+## 2026-09-12 — Retomada com fontes reais e revisão cruzada
+
+Continuação na branch `fix/reuniao-2026-09-11`, base f4aa948. Quatro frentes corrigiram BL,
+certificação/licenciamento, Registro DUIMP e interface; fonte Sheets/Drive e Linx consultados
+somente leitura. Cronograma existente atualizado e relido, sem alteração das fontes.
+Estado e limites em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+Não confundir testes locais com homologação/carga definitiva. Nenhum push/deploy realizado.
+
 ## 2026-09-11 — Reuniao de importacao e certificacao
 
 Objetivo: revisar e corrigir tudo o que Eduarda e Odett pediram na reuniao de 11/09, mais os 15

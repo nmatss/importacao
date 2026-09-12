@@ -89,6 +89,13 @@ describe('ProcessHeader — barra fixa compacta', () => {
     vi.clearAllMocks();
   });
 
+  it('prioriza ETA realizado sem exibir a previsão como chegada real', () => {
+    renderHeader({ eta: '2026-09-16', etaActual: '2026-09-08' });
+    expect(screen.getByText(/ETA realizado/)).toBeInTheDocument();
+    expect(screen.getByText('08/09/2026')).toBeInTheDocument();
+    expect(screen.queryByText('16/09/2026')).not.toBeInTheDocument();
+  });
+
   it('poe codigo, marca, status, datas, documentos e flags na MESMA faixa', () => {
     // A reuniao pediu "criado, ETD, ETA do lado da referencia; tudo pequeno e
     // numa linha". Antes eram 5 faixas empilhadas.

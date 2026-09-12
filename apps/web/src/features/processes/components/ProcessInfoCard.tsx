@@ -527,16 +527,25 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
     { source: 'bl', value: readPath(bl, 'containerType') as string | null },
     { source: 'invoice', value: readPath(invoice, 'containerType') as string | null },
   ]);
-  // Data de embarque: a planilha tem 'ETD ORIGEM*' (process.etd). Ela nao
-  // entrava na capa — so `shipmentDate`, que e NULL em todo processo importado,
-  // entao a capa ficava vazia mesmo com a follow-up tendo a data.
+  // Datas de partida previstas e realizadas têm significados distintos.
+  // A projeção legada do espelho copiava ETD para shipmentDate; sem diferença
+  // ou uma fonte realizada independente, ela não comprova o embarque.
+  const summaryShipment = readPath(espelhoSummary, 'shipmentDate') as string | null;
+  const summaryEtd = readPath(espelhoSummary, 'etd') as string | null;
   const shipmentDate = pickValue<string>([
-    { source: 'processo', value: process.shipmentDate ?? process.etd },
-    { source: 'espelho', value: readPath(espelhoSummary, 'shipmentDate') as string | null },
-    { source: 'espelho', value: readPath(espelhoSummary, 'etd') as string | null },
+    { source: 'processo', value: process.shipmentDate },
+    {
+      source: 'espelho',
+      value: summaryShipment && summaryShipment !== summaryEtd ? summaryShipment : null,
+    },
     { source: 'bl', value: readPath(bl, 'shipmentDate') as string | null },
-    { source: 'bl', value: readPath(bl, 'etd') as string | null },
+    { source: 'bl', value: readPath(bl, 'shippedOnBoardDate') as string | null },
     { source: 'invoice', value: readPath(invoice, 'shipmentDate') as string | null },
+  ]);
+  const expectedShipmentDate = pickValue<string>([
+    { source: 'processo', value: process.etd },
+    { source: 'espelho', value: summaryEtd },
+    { source: 'bl', value: readPath(bl, 'etd') as string | null },
     { source: 'invoice', value: readPath(invoice, 'etd') as string | null },
   ]);
 
@@ -706,6 +715,14 @@ export function ProcessInfoCard({ process }: ProcessInfoCardProps) {
               label="Numero Container"
               value={containerNumber.value}
               source={containerNumber.source}
+            />
+          )}
+          {expectedShipmentDate.value && (
+            <InfoField
+              icon={CalendarDays}
+              label="ETD previsto"
+              value={formatDate(expectedShipmentDate.value)}
+              source={expectedShipmentDate.source}
             />
           )}
           <InfoField

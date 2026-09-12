@@ -241,7 +241,7 @@ def _create_d11_tables(cur) -> None:
     )
 
     # Auditoria de quebra-cabecas de sellers terceiros no marketplace
-    # Imaginarium (< 500 pecas exige Inmetro; >= 500 NAO_EXIGE).
+    # Imaginarium. Aplicabilidade por quantidade depende de validacao da area.
     cur.execute("""
         CREATE TABLE IF NOT EXISTS cert_marketplace_items (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -295,6 +295,40 @@ def _migrate_cert_certificates_d11() -> None:
             )
     except Exception as e:
         log.warning(f"Could not create unique index on cert_certificates(brand, numero): {e}")
+
+
+def verify_item_restriction_schema() -> None:
+    """Fail startup when the explicitly deployed item migration is missing.
+
+    This only reads the schema; it never applies the release migration.
+    """
+    try:
+        with db() as (_conn, cur):
+            cur.execute("SELECT situacao, fim_venda, restriction_updated_at, restriction_updated_by FROM cert_certificate_items WHERE false")
+            cur.execute("SELECT started_at, finished_at, trigger, actor, result, error FROM cert_sync_runs WHERE false")
+            cur.execute("SELECT validade_certificado, validade_certificado_raw, status_venda, trava_venda, trava_origem, linx_fim_licenciamento, linx_prop_certificacao, linx_fim_vendas, grife, linx_synced_at FROM cert_products WHERE false")
+            cur.execute("SELECT situacao, fim_venda FROM cert_certificates WHERE false")
+            cur.execute("""SELECT indexrelid::regclass::text AS name FROM pg_index
+                WHERE indisvalid AND indexrelid IN (
+                    to_regclass('cert_certificate_items_active_uniq'),
+                    to_regclass('cert_sync_runs_started_idx'),
+                    to_regclass('cert_item_restriction_events_item_idx'))""")
+            indexes = {row["name"].split(".")[-1] for row in cur.fetchall()}
+            if indexes != {"cert_certificate_items_active_uniq", "cert_sync_runs_started_idx", "cert_item_restriction_events_item_idx"}:
+                raise ValueError("Missing release indexes")
+            cur.execute("SELECT item_id, before_state, after_state, reason, actor, created_at FROM cert_certificate_item_restriction_events WHERE false")
+            cur.execute("""SELECT conname FROM pg_constraint
+                WHERE conrelid = 'cert_certificate_items'::regclass AND convalidated
+                AND conname IN ('cert_item_situacao_valid', 'cert_item_deadline_real', 'cert_item_active_without_deadline')""")
+            if {row["conname"] for row in cur.fetchall()} != {
+                "cert_item_situacao_valid", "cert_item_deadline_real", "cert_item_active_without_deadline"
+            }:
+                raise ValueError("Missing item restriction constraints")
+    except Exception:
+        raise RuntimeError(
+            "Schema de restricao individual indisponivel: aplicar e verificar explicitamente "
+            "sql/20260912_certificate_item_restrictions.sql antes de iniciar cert-api"
+        ) from None
 
 
 def ensure_tables() -> None:

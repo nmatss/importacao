@@ -25,7 +25,7 @@ interface AiExtractionSummaryProps {
   coverage?: CoverageSummary | null;
 }
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
+import { isDocumentOperational } from '@/shared/lib/confidence';
 
 // Fields below this per-field confidence are surfaced as "low confidence" in the
 // derived (fallback) coverage so the user knows to double-check them.
@@ -431,7 +431,7 @@ export function AiExtractionSummary({
 }: AiExtractionSummaryProps) {
   const labels = FIELD_LABELS[documentType] || FIELD_LABELS.invoice;
   const priority = PRIORITY_FIELDS[documentType] || [];
-  const lowDocumentConfidence = confidence != null && confidence < MIN_OPERATIONAL_CONFIDENCE;
+  const lowDocumentConfidence = !isDocumentOperational(confidence, documentType);
 
   // Separate priority fields from secondary
   const allEntries = Object.entries(data).filter(
@@ -476,8 +476,11 @@ export function AiExtractionSummary({
 
       {lowDocumentConfidence && (
         <div className="rounded-lg border border-danger-100 bg-danger-50/70 px-3 py-2 text-xs text-danger-700 dark:border-danger-700/50 dark:bg-danger-950/30 dark:text-danger-300">
-          <strong>Baixa confiança</strong> — extração com {Math.round(confidence * 100)}%, abaixo do
-          piso operacional. Use estes dados apenas para revisão manual.
+          <strong>Baixa confiança</strong> —{' '}
+          {confidence == null
+            ? 'confiança não informada; o corte mínimo de leitura não foi comprovado.'
+            : `extração com ${Math.round(confidence * 100)}%, abaixo do piso operacional.`}{' '}
+          Use estes dados apenas para revisão manual.
         </div>
       )}
 

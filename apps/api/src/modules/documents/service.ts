@@ -74,7 +74,8 @@ import type {
 } from './schema.js';
 import { reconcileProcessConfidence } from './reconcile.js';
 import { ocrScannedPdf, rasterizePdfPages } from './ocr.js';
-import { MIN_OPERATIONAL_CONFIDENCE } from './constants.js';
+import { hasOperationalConfidence } from './constants.js';
+import { extractPopplerText } from './pdf-text.js';
 
 /**
  * Fonte ÚNICA da conversão XLSX → texto para extração por IA.
@@ -519,24 +520,65 @@ function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+/** Select the current source before checking extraction quality. Never sort by reprocessing time. */
+function newestSource<
+  T extends {
+    id: number;
+    type: string;
+    createdAt?: Date | null;
+    driveFileId?: string | null;
+    driveVersion?: number | null;
+  },
+>(rows: T[], type: string): T | undefined {
+  const candidates = rows.filter((row) => row.type === type);
+  const byFile = new Map<string, T[]>();
+  for (const row of candidates) {
+    const key = row.driveFileId ? `drive:${row.driveFileId}` : `upload:${row.id}`;
+    byFile.set(key, [...(byFile.get(key) ?? []), row]);
+  }
+  const byInsertion = (a: T, b: T) =>
+    (b.createdAt?.getTime() ?? 0) - (a.createdAt?.getTime() ?? 0) || b.id - a.id;
+  const representatives = [...byFile.values()]
+    .map((versions) => {
+      const known = versions.every((row) => row.driveVersion != null);
+      const sorted = [...versions].sort(
+        known
+          ? (a, b) => Number(b.driveVersion) - Number(a.driveVersion) || byInsertion(a, b)
+          : byInsertion,
+      );
+      return { row: sorted[0], ambiguous: versions.length > 1 && !known };
+    })
+    .sort((a, b) => byInsertion(a.row, b.row));
+  return representatives[0]?.ambiguous ? undefined : representatives[0]?.row;
+}
+
+function hasConflictingProcessReference(
+  parsed: Record<string, any>,
+  processCode?: string | null,
+): boolean {
+  const expected = processCode?.trim().toUpperCase();
+  if (!expected) return false;
+  const refs = [parsed, parsed.summary, ...(Array.isArray(parsed.items) ? parsed.items : [])]
+    .filter(isRecord)
+    .flatMap((node) =>
+      ['processReference', 'processCode', 'processo'].map((key) => unwrapAiFieldValue(node[key])),
+    )
+    .filter((value) => typeof value === 'string' && value.trim());
+  return refs.some((ref) => String(ref).trim().toUpperCase() !== expected);
+}
+
 function shouldProjectAiData(
   type: string,
   aiParsedData: unknown,
   confidenceScore?: string | number | null,
 ): aiParsedData is Record<string, any> {
   if (!PROJECTED_AI_DATA_KEYS.has(type) || !isRecord(aiParsedData)) return false;
-  if (aiParsedData.extractionFailed || aiParsedData.skipped) return false;
+  if (aiParsedData.extractionFailed || aiParsedData.skipped || aiParsedData.error) return false;
+  if (aiParsedData._trust?.trust === 'review' || aiParsedData._trust?.contractFailure) return false;
   if (!hasMeaningfulAiData(aiParsedData)) return false;
-  if (!hasOperationalConfidence(confidenceScore)) return false;
+  if (!hasOperationalConfidence(type, confidenceScore)) return false;
   if (type === 'espelho' && hasFailedEspelhoExtraction(aiParsedData)) return false;
   return true;
-}
-
-function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
-  if (confidenceScore == null) return true;
-  const confidence =
-    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
-  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 function hasMeaningfulAiData(value: unknown): boolean {
@@ -945,6 +987,9 @@ export const documentService = {
       .select({
         id: documents.id,
         type: documents.type,
+        createdAt: documents.createdAt,
+        driveFileId: documents.driveFileId,
+        driveVersion: documents.driveVersion,
         isProcessed: documents.isProcessed,
         aiParsedData: documents.aiParsedData,
         confidenceScore: documents.confidenceScore,
@@ -954,9 +999,10 @@ export const documentService = {
       .orderBy(desc(documents.createdAt), desc(documents.id));
 
     const projected: Record<string, any> = {};
-    for (const doc of processDocs) {
+    for (const type of new Set(processDocs.map((doc) => doc.type))) {
+      const doc = newestSource(processDocs, type);
+      if (!doc) continue;
       if (
-        projected[doc.type] ||
         !doc.isProcessed ||
         !shouldProjectAiData(doc.type, doc.aiParsedData, doc.confidenceScore)
       ) {
@@ -967,10 +1013,17 @@ export const documentService = {
     }
 
     const [processRow] = await client
-      .select({ aiExtractedData: importProcesses.aiExtractedData })
+      .select({
+        aiExtractedData: importProcesses.aiExtractedData,
+        processCode: importProcesses.processCode,
+      })
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
+
+    for (const [type, parsed] of Object.entries(projected)) {
+      if (hasConflictingProcessReference(parsed, processRow?.processCode)) delete projected[type];
+    }
 
     const existing = isRecord(processRow?.aiExtractedData) ? processRow.aiExtractedData : {};
     const preserved = Object.fromEntries(
@@ -1715,7 +1768,7 @@ export const documentService = {
 
     await invalidateComparisonAcceptances(doc.processId, `document_reprocessed:${documentId}`);
 
-    const veryLowConfidence = result.confidenceScore < MIN_OPERATIONAL_CONFIDENCE;
+    const veryLowConfidence = !hasOperationalConfidence(type, result.confidenceScore);
     // Marcadores meta ('_contract', '_grounding') não são campos do documento —
     // ficam fora da lista mostrada ao operador no alerta.
     const lowConfidenceFields = (
@@ -1762,10 +1815,13 @@ export const documentService = {
         );
       }
 
-      await this.runDegradableGate(
-        doc.processId,
-        (proc?.aiExtractedData as Record<string, any>) ?? {},
-      );
+      // A reprocessed BL may already have populated the process at an older
+      // score. Rebuild removes that stale projection before the gate runs.
+      const operationalData =
+        type === 'ohbl' || type === 'draft_bl'
+          ? await this.rebuildProcessAiExtractedData(doc.processId)
+          : ((proc?.aiExtractedData as Record<string, any>) ?? {});
+      await this.runDegradableGate(doc.processId, operationalData);
       return;
     }
 
@@ -2480,6 +2536,10 @@ export const documentService = {
 
     // ── PDF ──
     if (mimeType === 'application/pdf' || ext === '.pdf') {
+      // Poppler resolves CID fonts via the installed CMaps and preserves table
+      // columns that pdf-parse concatenates (BL/packing originals, 12/09/2026).
+      const digitalText = await extractPopplerText(filePath);
+      if (digitalText) return { ...digitalText, ocrUsed: false, sourceTextReliable: true };
       const data = await pdfParse(buffer);
       const text = data.text?.trim() || '';
 
@@ -2842,6 +2902,8 @@ export const documentService = {
 
       await this.rebuildProcessAiExtractedData(doc.processId, tx);
     });
+
+    await invalidateComparisonAcceptances(doc.processId, `document_reprocessing:${documentId}`);
 
     auditService.log(userId, 'reprocess', 'document', documentId, { type: doc.type }, null);
 
@@ -3665,28 +3727,34 @@ export const documentService = {
       return `${baseMessage ?? 'Valor revisado manualmente.'} Editado por ${author}.`;
     };
 
-    const newestFirst = [...docs].sort((a, b) => {
-      const aTime = (a.updatedAt ?? a.createdAt)?.getTime?.() ?? 0;
-      const bTime = (b.updatedAt ?? b.createdAt)?.getTime?.() ?? 0;
-      if (bTime !== aTime) return bTime - aTime;
-      return b.id - a.id;
-    });
-    const selectComparisonDoc = (type: string) =>
-      newestFirst.find(
-        (d) =>
-          d.type === type &&
-          d.isProcessed &&
-          d.aiParsedData &&
-          hasMeaningfulAiData(d.aiParsedData) &&
-          hasOperationalConfidence(d.confidenceScore) &&
-          !hasExtractionFailureData(d.aiParsedData),
-      );
+    const selectComparisonDoc = (type: string) => {
+      // Never fall back to an old source while its replacement is pending or invalid.
+      const doc = newestSource(docs, type);
+      if (
+        !doc ||
+        !doc.isProcessed ||
+        !shouldProjectAiData(doc.type, doc.aiParsedData, doc.confidenceScore)
+      )
+        return undefined;
+      if (hasConflictingProcessReference(doc.aiParsedData, processRow[0]?.processCode))
+        return undefined;
+      return doc;
+    };
 
     const invoiceDoc = selectComparisonDoc('invoice');
     const plDoc = selectComparisonDoc('packing_list');
     const blDoc = selectComparisonDoc('ohbl');
     const draftBlDoc = selectComparisonDoc('draft_bl');
-    const espelhoDoc = selectComparisonDoc('espelho');
+    const espelhoCandidate = selectComparisonDoc('espelho');
+    const espelhoDoc =
+      espelhoCandidate &&
+      shouldProjectAiData(
+        'espelho',
+        espelhoCandidate.aiParsedData,
+        espelhoCandidate.confidenceScore,
+      )
+        ? espelhoCandidate
+        : undefined;
 
     // Flatten { value, confidence } structures to plain values for comparison
     const rawInv = (invoiceDoc?.aiParsedData as Record<string, any>) ?? null;
@@ -3702,37 +3770,22 @@ export const documentService = {
     const operationalBlDoc = blDoc ?? draftBlDoc;
     const operationalBlSource = bl ? 'ohbl' : draftBl ? 'draft_bl' : null;
 
-    // Espelho data lives in importProcesses.aiExtractedData.espelho (atomic merge target).
-    // Fallback: read from the espelho document's aiParsedData if process column is empty.
+    // Only a valid associated document is an independent comparison source.
+    // Process projection is a cache and may survive replacement/deletion of its
+    // source; retain only the autobuilt warning, never its values or confidence.
     const processAiData = (processRow[0]?.aiExtractedData as Record<string, any>) ?? null;
-    const espelhoFromProcess = processAiData?.espelho as
-      | { summary?: Record<string, any>; items?: any[] }
-      | undefined;
+    const cachedEspelho = processAiData?.espelho as { summary?: Record<string, any> } | undefined;
     const espelhoFromDoc = espelhoDoc?.aiParsedData as
       | { summary?: Record<string, any>; items?: any[] }
       | undefined;
-    // Se a coluna do processo guarda o espelho AUTO-gerado mas existe um xlsx
-    // do operador, o do operador vence — ele é a fonte real de conferência.
-    let espelhoChosen = espelhoFromProcess ?? espelhoFromDoc ?? null;
-    if (
-      (espelhoChosen?.summary as any)?.generatedBy === 'auto_deterministic' &&
-      espelhoFromDoc?.summary
-    ) {
-      espelhoChosen = espelhoFromDoc;
-    }
-    const espelhoSource: string | null =
-      ((espelhoChosen?.summary as any)?.generatedBy as string | undefined) ??
-      (espelhoChosen?.summary ? 'operator' : null);
-    let espelhoSummary = espelhoChosen?.summary ?? null;
-    let espelhoItems = espelhoChosen?.items ?? [];
-    // FALSO VERDE (auditoria 2026-07-17): o espelho auto-gerado é uma CÓPIA da
-    // própria Invoice/PL (build-espelho.ts) — usá-lo como 4ª fonte faz a fatura
-    // conferir consigo mesma e pintar as linhas de verde a "99%". Derivado NÃO
-    // entra na conferência (agregado nem itens); a UI explica via espelhoSource.
-    if (espelhoSource === 'auto_deterministic') {
-      espelhoSummary = null;
-      espelhoItems = [];
-    }
+    const espelhoSource: string | null = espelhoFromDoc
+      ? ((espelhoFromDoc.summary?.generatedBy as string | undefined) ?? 'operator')
+      : cachedEspelho?.summary?.generatedBy === 'auto_deterministic'
+        ? 'auto_deterministic'
+        : null;
+    const independentEspelho = espelhoSource !== 'auto_deterministic' ? espelhoFromDoc : undefined;
+    const espelhoSummary = independentEspelho?.summary ?? null;
+    const espelhoItems = independentEspelho?.items ?? [];
     const supplierFooterAliases = normalizeStringList(
       inv?.manufacturerAliases ??
         inv?.manufacturerNicknames ??
@@ -3757,6 +3810,53 @@ export const documentService = {
     // ultimo run do historico). Sem isso o PK220 — que so tem runs parciais —
     // ficava sem nenhum cruzamento na tela.
     const validation = await loadValidationChecks(processId);
+    // Historical checks cannot supply evidence for an unavailable current source.
+    validation.checks = validation.checks.map((check) => {
+      if (check.status === 'skipped') return check;
+      const compared = check.documentsCompared ?? '';
+      const dependencies = [
+        {
+          used:
+            /\b(?:INV|Invoice)\b/i.test(compared) || check.checkName === 'description-odoo-match',
+          doc: invoiceDoc,
+        },
+        { used: /\b(?:PL|Packing)\b/i.test(compared), doc: plDoc },
+        {
+          used: /\bBL\b/i.test(compared) || check.checkName === 'ncm-bl-description',
+          doc: operationalBlDoc,
+        },
+        {
+          used: /\bEspelho\b/i.test(compared) || check.checkName === 'ncm-bl-description',
+          doc: independentEspelho ? espelhoDoc : undefined,
+        },
+      ].filter((entry) => entry.used);
+      // Explicit system-only checks do not depend on document timestamps.
+      const systemOnly =
+        dependencies.length === 0 && /^(?:Sistema|System|Follow-up)$/i.test(compared.trim());
+      if (systemOnly) return check;
+      const runTime = validation.runAt ? new Date(validation.runAt).getTime() : NaN;
+      const stale =
+        dependencies.length === 0 ||
+        dependencies.some(({ doc }) => {
+          if (!doc || !doc.createdAt || !doc.updatedAt || !Number.isFinite(runTime)) return true;
+          const created = new Date(doc.createdAt).getTime();
+          const updated = new Date(doc.updatedAt).getTime();
+          return (
+            !Number.isFinite(created) ||
+            !Number.isFinite(updated) ||
+            Math.max(created, updated) > runTime
+          );
+        });
+      if (!stale) return check;
+      return {
+        ...check,
+        status: 'skipped' as const,
+        expectedValue: null,
+        actualValue: null,
+        message:
+          'Não verificado: documento-fonte atual ausente, inválido ou sem validação posterior à sua alteração. Revalide a fonte atual.',
+      };
+    });
 
     // Pre-extract structured party parts from each document
     const invExporter = extractPartyParts(inv?.exporterName);
@@ -3976,10 +4076,10 @@ export const documentService = {
       {
         // Eduarda: considerar a data da Invoice e do Packing List aqui, mas marcar
         // divergente apenas se MUITO divergentes (não precisam ser iguais). A data
-        // de embarque real (ETD/shipmentDate) tem precedência; a data de EMISSÃO da
+        // informada no documento tem precedência; a data de EMISSÃO da
         // Invoice / data do Packing List entram só como fallback, com tolerância
         // ampla (match ≤45d, warning ≤90d, divergente acima disso).
-        label: 'ETD / Shipped On Board',
+        label: 'Datas documentais (emissão / embarque)',
         inv:
           inv?.etd ??
           inv?.shipmentDate ??
@@ -4008,11 +4108,40 @@ export const documentService = {
         dateOpts: { matchDays: 45, warnDays: 90 },
       },
       {
-        label: 'ETA',
+        label: 'ETD previsto',
+        inv: inv?.etd,
+        pl: pl?.etd,
+        bl: operationalBl?.etd,
+        system: systemText(processRecord?.etd),
+        kind: 'date',
+        dateOpts: { matchDays: 0, warnDays: 0 },
+        criticality: 'info',
+      },
+      {
+        label: 'Embarque realizado',
+        inv: inv?.shipmentDate ?? inv?.shippedOnBoardDate,
+        pl: pl?.shipmentDate ?? pl?.shippedOnBoardDate,
+        bl: operationalBl?.shipmentDate ?? operationalBl?.shippedOnBoardDate,
+        system: systemText(processRecord?.shipmentDate),
+        kind: 'date',
+        dateOpts: { matchDays: 0, warnDays: 0 },
+        criticality: 'info',
+      },
+      {
+        label: 'ETA previsto',
         inv: null,
         pl: null,
         bl: operationalBl?.eta,
-        system: systemText(processRecord?.etaActual ?? processRecord?.eta),
+        system: systemText(processRecord?.eta),
+        kind: 'date',
+        criticality: 'info',
+      },
+      {
+        label: 'ETA realizado',
+        inv: null,
+        pl: null,
+        bl: null,
+        system: systemText(processRecord?.etaActual),
         kind: 'date',
         criticality: 'info',
       },
@@ -4062,15 +4191,22 @@ export const documentService = {
         return raw != null && raw !== '' ? String(raw) : null;
       };
 
-      const invoice = resolveCell(invoiceOverride, f.inv);
-      const packingList = resolveCell(packingListOverride, f.pl);
-      const bl = resolveCell(blOverride, f.bl);
-      const espelho = resolveCell(espelhoOverride, f.espelho);
+      const invoice = invoiceDoc ? resolveCell(invoiceOverride, f.inv) : null;
+      const packingList = plDoc ? resolveCell(packingListOverride, f.pl) : null;
+      const bl = operationalBlDoc ? resolveCell(blOverride, f.bl) : null;
+      // A stored correction cannot resurrect a removed/invalid source document.
+      const espelho = independentEspelho ? resolveCell(espelhoOverride, f.espelho) : null;
       const system = resolveCell(getOverride(key, 'system'), f.system);
 
       // O status considera os valores efetivamente exibidos: corrigir uma
       // célula editada deve reconciliar (ou divergir) a linha de verdade.
-      const values = [invoice, packingList, bl, espelho].filter((v) => v != null && v !== '');
+      // Para datas, Sistema e a fonte follow-up comparavel. Nao descartar a
+      // data exibida justamente nas linhas previsto/realizado.
+      const sources =
+        f.kind === 'date'
+          ? [invoice, packingList, bl, espelho, system]
+          : [invoice, packingList, bl, espelho];
+      const values = sources.filter((v) => v != null && v !== '');
       let status = computeRowStatus(values, f.kind ?? 'string', f.dateOpts);
       const criticality: Criticality = f.criticality ?? 'critical';
       if (criticality === 'secondary' && status === 'divergent') status = 'warning';
@@ -4316,7 +4452,7 @@ export const documentService = {
       blConfidence: operationalBlDoc?.confidenceScore,
       finalBlConfidence: blDoc?.confidenceScore,
       draftBlConfidence: draftBlDoc?.confidenceScore,
-      espelhoConfidence: espelhoDoc?.confidenceScore ?? (espelhoSummary ? 0.99 : null),
+      espelhoConfidence: espelhoDoc?.confidenceScore ?? null,
       espelhoSource,
     };
   },
@@ -4329,19 +4465,21 @@ export const documentService = {
  * falha: o comparativo tem de abrir mesmo sem validacao nenhuma — era
  * exatamente o caso do PK220, que so tem runs parciais.
  */
-async function loadValidationChecks(
-  processId: number,
-): Promise<{ checks: ComparisonCheckResult[]; mode: 'final' | 'partial' | 'none' }> {
+async function loadValidationChecks(processId: number): Promise<{
+  checks: ComparisonCheckResult[];
+  mode: 'final' | 'partial' | 'none';
+  runAt: string | null;
+}> {
   try {
     const { validationService } = await import('../validation/service.js');
     const effective = await validationService.getEffectiveResults(processId);
-    return { checks: effective.results, mode: effective.mode };
+    return { checks: effective.results, mode: effective.mode, runAt: effective.runAt };
   } catch (err) {
     logger.warn(
       { processId, err: err instanceof Error ? err.message : err },
       'Could not load validation results for the comparison; rendering documents only',
     );
-    return { checks: [], mode: 'none' };
+    return { checks: [], mode: 'none', runAt: null };
   }
 }
 

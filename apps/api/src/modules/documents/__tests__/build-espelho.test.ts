@@ -138,12 +138,13 @@ describe('buildEspelhoFromAiData', () => {
       expect(summary.containerType).toBe('40HQ');
     });
 
-    it('falls back to etd for Data Embarque when shipmentDate is absent', () => {
+    it('preserves ETD as forecast without inventing a shipment event', () => {
       const { summary } = buildEspelhoFromAiData(inv, pl, {
         ...blFull,
         shipmentDate: null,
       });
-      expect(summary.shipmentDate).toBe('2026-02-10'); // etd fallback
+      expect(summary.shipmentDate).toBeNull();
+      expect(summary.etd).toBe('2026-02-10');
     });
 
     it('leaves projected fields null when the BL has none of them', () => {

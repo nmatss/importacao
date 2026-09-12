@@ -36,7 +36,11 @@ type DocumentWithAiData = {
   updatedAt?: Date | string | null;
 };
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '../documents/constants.js';
+import {
+  hasOperationalConfidence,
+  MIN_OPERATIONAL_CONFIDENCE,
+  MIN_BL_OPERATIONAL_CONFIDENCE,
+} from '../documents/constants.js';
 type ValidationRunMode = 'final' | 'partial';
 
 /**
@@ -91,13 +95,6 @@ function hasExtractionFailureData(aiParsedData: unknown): boolean {
   return Boolean(aiParsedData.extractionFailed || aiParsedData.error || aiParsedData.skipped);
 }
 
-function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
-  if (confidenceScore == null) return true;
-  const confidence =
-    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
-  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
-}
-
 function hasMeaningfulAiData(value: unknown): boolean {
   if (value == null) return false;
   if (typeof value === 'string') return value.trim().length > 0;
@@ -137,7 +134,7 @@ function isUsableValidationDocument(doc: DocumentWithAiData): boolean {
     doc.isProcessed !== false &&
     doc.aiParsedData != null &&
     hasMeaningfulAiData(doc.aiParsedData) &&
-    hasOperationalConfidence(doc.confidenceScore) &&
+    hasOperationalConfidence(doc.type, doc.confidenceScore) &&
     !hasExtractionFailureData(doc.aiParsedData)
   );
 }
@@ -176,7 +173,7 @@ function buildDocumentSetCompletenessResult(input: {
 
   const message =
     `Validacao ${input.mode === 'partial' ? 'parcial' : 'final'} sem conjunto documental completo: ` +
-    `${missing.join(', ')}. Documento utilizavel exige extracao concluida, dados uteis e confianca operacional >= ${(MIN_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}%.`;
+    `${missing.join(', ')}. Documento utilizavel exige extracao concluida, dados uteis e confianca operacional >= ${(MIN_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}% (BL >= ${(MIN_BL_OPERATIONAL_CONFIDENCE * 100).toFixed(0)}%). O corte de leitura nao garante campos completos nem conformidade.`;
 
   return {
     checkName: 'document-set-completeness',

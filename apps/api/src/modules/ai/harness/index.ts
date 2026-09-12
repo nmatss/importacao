@@ -113,11 +113,17 @@ export function verifyExtraction(
           // (allowHsHeading), o codigo curto vira aviso — e so quando ele
           // aparece LITERALMENTE no documento, para nao mascarar NCM truncada
           // pela IA.
-          if (config.allowHsHeading && isHsHeading(s) && appearsInSource(s, sourceText)) {
+          const printedCodes =
+            sourceText.match(/(?<![\p{L}\p{N}.])\d{4}(?:\.?\d{2}){0,2}(?![\p{L}\p{N}.])/gu) ?? [];
+          const printedHeading = printedCodes.some(
+            (code) => code.replace(/\D/g, '') === s.replace(/\D/g, ''),
+          );
+          if (config.allowHsHeading && isHsHeading(s) && printedHeading) {
             push({
               field: lbl,
               kind: 'format',
               severity: 'warning',
+              confidenceImpact: 'none',
               message: `código "${s}" é posição do SH (4/6 dígitos) impressa no documento, não NCM de 8 dígitos`,
             });
           } else {
@@ -232,6 +238,11 @@ export function verifyExtraction(
           kind: 'knowledge',
           severity: 'warning',
           message: `fornecedor "${s}" não consta na base de parceiros`,
+          // A new partner still requires registration review, but its exact
+          // printed name is not evidence of a failed document reading.
+          ...(appearsInSource(s, sourceText) && s.replace(/[^\p{L}\p{N}]/gu, '').length >= 3
+            ? { confidenceImpact: 'none' as const }
+            : {}),
         });
       }
     }
@@ -245,9 +256,12 @@ export function verifyExtraction(
 
   const errors = findings.filter((f) => f.severity === 'error');
   const reviewFields = [...new Set(errors.map((f) => f.field))];
+  const readingWarnings = findings.filter(
+    (f) => f.severity === 'warning' && f.confidenceImpact !== 'none',
+  );
   const adjustedConfidence = Math.max(
     0,
-    Math.min(1, 1 - errors.length * 0.25 - (findings.length - errors.length) * 0.1),
+    Math.min(1, 1 - errors.length * 0.25 - readingWarnings.length * 0.1),
   );
 
   return {

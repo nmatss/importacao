@@ -223,6 +223,37 @@ TOTAL: 1375 CARTONS / 13997.48KGS / 120.246CBM`;
     expect(ncm?.severity).toBe('error');
   });
 
+  it.each(['42029200', '4202.92.00'])('não aceita SH truncado de NCM completa %s', (ncm) => {
+    const report = verifyExtraction(ohbl(), { ncmList: cf(['4202']) }, `NCM: ${ncm}`, NOW);
+    expect(report.trust).toBe('review');
+    expect(report.findings[0]?.severity).toBe('error');
+  });
+
+  it('mantém avisos cadastrais e SH impressos sem penalizar a leitura correta', () => {
+    const report = verifyExtraction(
+      ohbl(),
+      { ncmList: cf(['4202', '4414']), shipper: cf('NEW VERIFIED EXPORTER LTD') },
+      'SHIPPER NEW VERIFIED EXPORTER LTD NCM: 4202 / 4414',
+      NOW,
+    );
+    expect(report.findings).toHaveLength(3);
+    expect(
+      report.findings.every((f) => f.severity === 'warning' && f.confidenceImpact === 'none'),
+    ).toBe(true);
+    expect(report.adjustedConfidence).toBe(1);
+  });
+
+  it('penaliza fornecedor desconhecido que não está na fonte', () => {
+    const report = verifyExtraction(
+      ohbl(),
+      { shipper: cf('NEW VERIFIED EXPORTER LTD') },
+      'OTHER EXPORTER',
+      NOW,
+    );
+    expect(report.findings[0]?.confidenceImpact).toBeUndefined();
+    expect(report.adjustedConfidence).toBe(0.9);
+  });
+
   it('na invoice a NCM continua exigindo 8 dígitos', () => {
     const config = getVerificationConfig('invoice') as VerificationConfig;
     const report = verifyExtraction(

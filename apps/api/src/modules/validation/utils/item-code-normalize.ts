@@ -110,7 +110,7 @@ export function itemCodesMatchLoose(a: unknown, b: unknown): boolean {
 
   const suffix = stripPurchaseOrderAndCollection(long);
   if (!suffix) return false;
-  return stripLeadingZeros(suffix) === short || long.endsWith(short);
+  return stripLeadingZeros(suffix) === short;
 }
 
 /**
@@ -137,9 +137,11 @@ export function primaryItemCode(item: Record<string, any> | null | undefined): s
   const bracket = extractBracketItemCode(item.description ?? item.descricao);
   if (bracket) return bracket;
   const raw = item.itemCode ?? item.codigo ?? item.code ?? item.sku;
+  const suffix = stripPurchaseOrderAndCollection(normalizeItemCode(raw));
+  if (suffix) return suffix;
   const canonical = extractCanonicalItemCode(raw);
   if (canonical) return canonical;
-  return itemCodeCandidates(item)[0] ?? '';
+  return '';
 }
 
 /**

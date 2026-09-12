@@ -9,9 +9,14 @@ export type CertStatusKind = 'ATIVO' | 'ENCERRADO';
 
 export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME';
 
-export type LicenseStatusKind = 'VALIDO' | 'VENCIDO' | 'NAO_APLICAVEL';
+export type LicenseStatusKind = 'VALIDO' | 'VENCIDO' | 'NAO_APLICAVEL' | 'PENDENTE';
 
-export type ComercializacaoStatusKind = 'LIBERADA' | 'DENTRO_PRAZO' | 'ENCERRADA' | 'NAO_APLICA';
+export type ComercializacaoStatusKind =
+  | 'LIBERADA'
+  | 'DENTRO_PRAZO'
+  | 'ENCERRADA'
+  | 'NAO_APLICA'
+  | 'PENDENTE';
 
 export interface CertProduct {
   sku: string;
@@ -51,6 +56,9 @@ export interface CertProduct {
   /** Texto original da planilha, quando a data não pôde ser interpretada. */
   validade_certificado_raw?: string | null;
   status_venda?: 'LIBERADA' | 'BLOQUEADA' | null;
+  status_venda_reason?: string | null;
+  cert_status_reason?: string | null;
+  license_status_reason?: string | null;
   trava_venda?: string | null;
   trava_origem?: 'certificacao' | 'licenciamento' | null;
   // Grife/licença lida do Linx (PRODUTOS.GRIFFE na Puket, IMG_LICENCIAMENTO na
@@ -588,6 +596,12 @@ export type CertSituacao = 'ATIVO' | 'ENCERRADO';
  * trava do produto no Linx NÃO é apagada.
  */
 export interface CertCertificateItem {
+  situacao?: CertSituacao | null;
+  fim_venda?: string | null;
+  situacao_efetiva?: CertSituacao | null;
+  fim_venda_efetivo?: string | null;
+  restricao_pendente?: boolean;
+  restricao_origem?: 'item' | 'certificado';
   id: string;
   certificate_id: string;
   sku: string;
@@ -668,6 +682,7 @@ export interface CreateCertificateInput {
 export type LinxPropertyState = 'found' | 'empty' | 'invalid';
 
 export interface CertLinxLookup {
+  fim_venda_certificacao?: string | null;
   status: 'found' | 'empty';
   sku: string;
   brand: string;
@@ -760,6 +775,20 @@ export async function linkCertificateItems(
   });
 }
 
+export async function updateCertificateItemRestriction(
+  certificateId: string,
+  sku: string,
+  restriction: { situacao: CertSituacao | null; fim_venda: string | null; motivo: string },
+): Promise<CertCertificateItem> {
+  return certFetch<CertCertificateItem>(
+    `/api/certificates/${encodeURIComponent(certificateId)}/items/${encodeURIComponent(sku)}/restriction`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify(restriction),
+    },
+  );
+}
+
 export async function removeCertificateItem(
   id: string,
   sku: string,
@@ -783,6 +812,8 @@ export interface CertSyncRun {
 }
 
 export interface CertSyncResult {
+  status?: 'error' | 'completed';
+  error?: string;
   locked: boolean;
   trigger: string;
   run_id: string | null;

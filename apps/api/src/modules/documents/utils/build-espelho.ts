@@ -97,7 +97,7 @@ export function buildEspelhoFromAiData(
     // "Data Embarque" / "Frete" / "Container" (Eduarda feedback). The BL
     // schema extracts these (etd/eta/shipmentDate/issueDate/freight*) but they
     // were being dropped on the way into the espelho summary.
-    shipmentDate: bl.shipmentDate ?? bl.etd ?? null,
+    shipmentDate: bl.shipmentDate ?? bl.shippedOnBoardDate ?? null,
     etd: bl.etd ?? null,
     eta: bl.eta ?? null,
     issueDate: bl.issueDate ?? null,

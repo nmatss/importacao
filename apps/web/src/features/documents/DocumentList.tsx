@@ -23,7 +23,7 @@ import { useApiQuery } from '@/shared/hooks/useApi';
 import { cn, formatDate } from '@/shared/lib/utils';
 import { DOCUMENT_TYPES } from '@/shared/lib/constants';
 import {
-  MIN_OPERATIONAL_CONFIDENCE,
+  isDocumentOperational,
   CONFIDENCE_HIGH,
   CONFIDENCE_MEDIUM,
   explainLowConfidence,
@@ -84,12 +84,6 @@ function SourceIcon({ source, className }: { source: DocumentSource; className: 
   return <Upload className={className} />;
 }
 
-// null = ainda sem score (doc não processado) → tratado como utilizável aqui;
-// o LIMIAR vem da fonte única em shared/lib/confidence.ts.
-function hasOperationalConfidence(value: number | null | undefined): boolean {
-  return value == null || value >= MIN_OPERATIONAL_CONFIDENCE;
-}
-
 const TYPE_COLORS: Record<string, string> = {
   invoice:
     'bg-primary-50 text-primary-700 border-primary-200 dark:bg-primary-950/30 dark:text-primary-300 dark:border-primary-700/50',
@@ -111,9 +105,17 @@ const TYPE_COLORS: Record<string, string> = {
     'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-600',
 };
 
-function ConfidenceBadge({ value, data }: { value: number; data?: Record<string, unknown> }) {
+function ConfidenceBadge({
+  value,
+  data,
+  documentType,
+}: {
+  value: number;
+  data?: Record<string, unknown>;
+  documentType: string;
+}) {
   const pct = Math.round(value * 100);
-  const usable = hasOperationalConfidence(value);
+  const usable = isDocumentOperational(value, documentType);
   // Limiar de cor unificado (shared/lib/confidence.ts) — a mesma % tinha
   // cores diferentes conforme a tela.
   // Compara sobre o pct ARREDONDADO (o número que o operador vê): 0.795
@@ -153,11 +155,13 @@ function ConfidenceBadge({ value, data }: { value: number; data?: Record<string,
 function AiStatus({
   status,
   confidence,
+  documentType,
 }: {
   status: Document['aiProcessingStatus'];
+  documentType: string;
   confidence?: number | null;
 }) {
-  if (status === 'completed' && !hasOperationalConfidence(confidence)) {
+  if (status === 'completed' && !isDocumentOperational(confidence, documentType)) {
     return (
       <span className="inline-flex items-center gap-1 text-xs text-danger-500">
         <AlertTriangle className="h-3 w-3" />
@@ -197,13 +201,16 @@ function AiStatus({
 function isOperationallyExtracted(doc: Document): boolean {
   return (
     doc.aiProcessingStatus === 'completed' &&
-    hasOperationalConfidence(doc.aiConfidence) &&
+    isDocumentOperational(doc.aiConfidence, doc.documentType) &&
     !!doc.aiParsedData
   );
 }
 
 function extractionFailureMessage(doc: Document): string | null {
-  if (doc.aiProcessingStatus === 'completed' && !hasOperationalConfidence(doc.aiConfidence)) {
+  if (
+    doc.aiProcessingStatus === 'completed' &&
+    !isDocumentOperational(doc.aiConfidence, doc.documentType)
+  ) {
     const pct = Math.round((doc.aiConfidence ?? 0) * 100);
     return `Confiança da extração (${pct}%) abaixo do piso operacional. Dados ficam apenas para revisão e não devem ser usados automaticamente.`;
   }
@@ -455,7 +462,9 @@ export function DocumentList({ processId }: DocumentListProps) {
   const totalDocs = visibleDocuments.length;
   const completedDocs = visibleDocuments.filter(isOperationallyExtracted).length;
   const lowConfidenceDocs = visibleDocuments.filter(
-    (d) => d.aiProcessingStatus === 'completed' && !hasOperationalConfidence(d.aiConfidence),
+    (d) =>
+      d.aiProcessingStatus === 'completed' &&
+      !isDocumentOperational(d.aiConfidence, d.documentType),
   ).length;
   const failedDocs = visibleDocuments.filter((d) => d.aiProcessingStatus === 'failed').length;
   const coreTypes = ['invoice', 'packing_list', 'ohbl'];
@@ -577,9 +586,17 @@ export function DocumentList({ processId }: DocumentListProps) {
                           <span className="text-[11px] text-slate-500 dark:text-slate-400">
                             {formatDate(doc.uploadedAt)}
                           </span>
-                          <AiStatus status={doc.aiProcessingStatus} confidence={doc.aiConfidence} />
+                          <AiStatus
+                            status={doc.aiProcessingStatus}
+                            confidence={doc.aiConfidence}
+                            documentType={doc.documentType}
+                          />
                           {doc.aiConfidence != null && (
-                            <ConfidenceBadge value={doc.aiConfidence} data={doc.aiParsedData} />
+                            <ConfidenceBadge
+                              value={doc.aiConfidence}
+                              data={doc.aiParsedData}
+                              documentType={doc.documentType}
+                            />
                           )}
                         </div>
                         {source && (

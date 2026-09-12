@@ -512,12 +512,9 @@ class TestSyncSheetsToDb:
 
         result = erp_service.sync_sheets_to_db()
 
-        assert result["encerramentos"] == 0
-        assert result["skus_dupla_certificacao"] == 1
-        upserts = [c for c in cur.execute.call_args_list if "INSERT INTO cert_products" in c.args[0]]
-        assert not any("encerramento_status" in c.args[0] for c in upserts)
-        # A limpeza ainda roda: se o prazo velho ja estava gravado, some.
-        assert any("SET sale_deadline = NULL" in c.args[0] for c in cur.execute.call_args_list)
+        assert result["synced"] == 0
+        assert "Dupla certificacao" in result["error"]
+        cur.execute.assert_not_called()
 
     def test_grava_a_validade_do_certificado(self, mocker):
         from app.services import erp_service

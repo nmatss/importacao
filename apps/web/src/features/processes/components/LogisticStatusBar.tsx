@@ -88,59 +88,32 @@ const STAGE_INDEX_MAP = Object.fromEntries(LOGISTIC_STAGES.map((s, i) => [s.key,
 
 function inferLogisticStep(props: LogisticStatusBarProps): number {
   const {
-    cdArrivalAt,
     customsClearanceAt,
     customsChannel,
-    diNumber,
-    duimpNumber,
     registeredAt,
-    inspectionType,
     etaActual,
-    eta,
     shipmentDate,
     etd,
-    notes,
+    currentStatus,
   } = props;
 
-  // 10: Internalizado — cdArrivalAt + notes contain "NF" or "internalizado"
-  if (cdArrivalAt && notes && (/\bNF\b/i.test(notes) || /internalizado/i.test(notes))) {
-    return 10;
-  }
-
-  // 9: Ag. Entrada — a carga JA chegou no CD. 'Chegada CD' e previsao enquanto
-  // a data nao chega: tratar previsao como chegada colocava em "Ag. Entrada"
-  // processo que a planilha dizia estar em transito (mesma regra do backend,
-  // modules/processes/logistic-auto-advance.ts).
-  if (isPastDate(cdArrivalAt)) return 9;
-
-  // 8: Em Viagem CD — customsClearanceAt exists and no cdArrivalAt
-  // 7: Ag. Carregamento — customsClearanceAt exists (same, manual override differentiates)
-  // 6: Lib. Portuaria — customsClearanceAt exists
-  if (isPastDate(customsClearanceAt)) return 8;
-
-  // 5: Conf. Aduaneira — customsChannel + inspectionType
-  if (customsChannel && inspectionType) return 5;
-
-  // 4: Registrado — DI/DUIMP registrada
-  if (diNumber || duimpNumber || registeredAt || customsChannel) return 4;
-
-  // 3: Em Atracacao — atracou (ETA Realizado) ou a ETA firme ja passou
-  if (isPastDate(etaActual) || isPastDate(eta)) return 3;
-
-  // 2: Em Transito — shipmentDate or (etd is past)
-  if (shipmentDate || (etd && isPastDate(etd))) return 2;
-
-  // 1: Ag. Embarque — etd exists and is future
-  if (etd && !isPastDate(etd)) return 1;
-
-  // 0: Em Consolidacao — default
+  if (currentStatus === 'completed') return 10;
+  // Chegada CD e ETA/ETD são previsões: passagem do tempo não prova o evento.
+  // Entrada/CD exige status explícito da operação; desembaraço comprova liberação,
+  // não que o transporte ao CD já começou.
+  if (isPastDate(customsClearanceAt)) return 6;
+  if (customsChannel) return 5;
+  if (isPastDate(registeredAt)) return 4;
+  if (isPastDate(etaActual)) return 3;
+  if (isPastDate(shipmentDate)) return 2;
+  if (formatDate(etd)) return 1;
   return 0;
 }
 
 /**
  * Derive the current logistic step index (0-based) from process fields.
  * Manual override via logisticStatus takes priority, except for the database
- * default "consolidation": real BL/ETD evidence should still advance it.
+ * default "consolidation": realized events can still advance it.
  */
 export function deriveLogisticStep(props: LogisticStatusBarProps): number {
   const inferredStep = inferLogisticStep(props);
@@ -558,22 +531,12 @@ function asDateString(value: unknown): string | null {
 export function buildLogisticProps(process: ImportProcess): LogisticStatusBarProps {
   const summary = readEspelhoSummary(process);
 
-  // Fall back to the BL espelho milestones so the transport cycle advances to
-  // "Em Transito" when the BL ETD is already in the past, even when the
-  // process-level etd/shipmentDate are still null (Eduarda feedback).
+  // Previsões do espelho podem complementar a exibição, sem comprovar eventos.
   const etd = process.etd ?? asDateString(summary?.etd);
   const eta = process.eta ?? asDateString(summary?.eta);
-
-  // build-espelho.ts projects summary.shipmentDate = bl.shipmentDate ?? bl.etd,
-  // so a FUTURE etd can leak into shipmentDate. deriveLogisticStep treats any
-  // truthy shipmentDate as a real shipment event ("Em Transito"), which would
-  // wrongly skip the future-ETD "Ag. Embarque" step. Only honour a
-  // summary-derived shipmentDate when it is actually a past date; the raw etd
-  // already flows through the etd slot so future/past ETD logic governs.
-  const summaryShipmentDate = asDateString(summary?.shipmentDate);
-  const shipmentDate =
-    process.shipmentDate ??
-    (summaryShipmentDate && isPastDate(summaryShipmentDate) ? summaryShipmentDate : null);
+  // O espelho legado preenche shipmentDate com ETD quando falta embarque real.
+  // Somente a propriedade realizada do processo pode avançar o ciclo.
+  const shipmentDate = process.shipmentDate ?? null;
 
   return {
     processId: process.id,

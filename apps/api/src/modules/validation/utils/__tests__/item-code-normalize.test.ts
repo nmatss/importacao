@@ -162,6 +162,7 @@ describe('codigo composto do layout Puket (PI + colecao + codigo)', () => {
   it('nao casa codigos diferentes por acidente', () => {
     expect(itemCodesMatchLoose('PK2062607BXIS2750404509', '050404510')).toBe(false);
     expect(itemCodesMatchLoose('PI7752Y', 'PI7753Y')).toBe(false);
+    expect(itemCodesMatchLoose('PK2062607BXIS279950404509', '050404509')).toBe(false);
     // Sufixo curto demais nao basta: '04509' tem 5 caracteres.
     expect(itemCodesMatchLoose('PK2062607BXIS2750404509', '04509')).toBe(false);
   });
@@ -173,6 +174,7 @@ describe('codigo composto do layout Puket (PI + colecao + codigo)', () => {
 
   it('exibe o SKU real, nao a string composta', () => {
     expect(primaryItemCode(PK220_INVOICE_ITEMS[0])).toBe('050404509');
+    expect(primaryItemCode({ itemCode: 'PK2202608SZIS27050404509' })).toBe('050404509');
     expect(primaryItemCode(PK220_INVOICE_ITEMS[13])).toBe('27.01.0007');
     expect(primaryItemCode(PK220_PACKING_LIST_ITEMS[0])).toBe('050404509');
     expect(primaryItemCode({ itemCode: 'PI7752Y', description: 'MEIA KIDS' })).toBe('PI7752Y');

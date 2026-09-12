@@ -137,6 +137,18 @@ describe('ProcessInfoCard', () => {
     expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
   });
 
+  it('mantém previsão e embarque realizado em campos distintos', () => {
+    render(
+      <ProcessInfoCard process={makeProcess({ etd: '2026-08-07', shipmentDate: '2026-08-09' })} />,
+    );
+    expect(screen.getByText('ETD previsto').parentElement?.parentElement).toHaveTextContent(
+      '07/08/2026',
+    );
+    expect(screen.getByText('Data Embarque').parentElement?.parentElement).toHaveTextContent(
+      '09/08/2026',
+    );
+  });
+
   it('falls back to BL espelho summary for Data Embarque, Frete and Container', () => {
     render(
       <ProcessInfoCard
@@ -298,9 +310,10 @@ describe('ProcessInfoCard', () => {
       expect(screen.queryByText(/Invoice: shenzhen/)).not.toBeInTheDocument();
     });
 
-    it('usa o ETD da follow-up na Data Embarque quando nao ha documento', () => {
+    it('mostra ETD previsto da follow-up sem declarar embarque', () => {
       render(<ProcessInfoCard process={makeProcess(processoComFollowUp)} />);
       expect(screen.getByText('08/08/2026')).toBeInTheDocument();
+      expect(screen.getByText('ETD previsto')).toBeInTheDocument();
     });
 
     it('importador e pesos continuam vindo do documento (a follow-up nao os tem)', () => {

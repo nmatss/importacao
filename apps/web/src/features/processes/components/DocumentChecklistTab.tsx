@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import {
+  ArrowUp,
+  ArrowDown,
   CheckCircle2,
   Circle,
   Clock,
@@ -134,6 +136,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
       queryClient.invalidateQueries({ queryKey: ['process-checklist', processId] }),
       queryClient.invalidateQueries({ queryKey: ['follow-up', processId] }),
       queryClient.invalidateQueries({ queryKey: ['process', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['process-events', processId] }),
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'sla'] }),
     ]);
 
@@ -152,6 +155,19 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
       await refreshRelatedViews();
       if (completedAt) toast.success(`${step.label} concluido`);
       else toast.info(`${step.label} desmarcado`);
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err));
+    } finally {
+      setBusyStep(null);
+    }
+  };
+
+  const moveStage = async (step: Extract<ChecklistStep, { kind: 'custom' }>, position: number) => {
+    setBusyStep(stepId(step));
+    try {
+      await api.put(`/api/processes/${processId}/custom-stages/${step.id}`, { position });
+      await refreshRelatedViews();
+      toast.success('Posição da etapa atualizada');
     } catch (err: unknown) {
       toast.error(getErrorMessage(err));
     } finally {
@@ -241,7 +257,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
           <button
             type="button"
             onClick={() => createStageAt(line)}
-            disabled={saving || !newStage.label.trim()}
+            disabled={saving || busyStep !== null || !newStage.label.trim()}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white hover:bg-primary-700 disabled:opacity-50"
           >
             {saving ? <LoadingSpinner size="sm" /> : <ListPlus className="h-4 w-4" />}
@@ -274,6 +290,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
           setInsertAtLine(line);
           setNewStage({ label: '', notes: '' });
         }}
+        disabled={busyStep !== null || saving}
         aria-label={`Inserir etapa na linha ${line}`}
         className="group/insert flex w-full items-center gap-2 rounded-md px-4 py-0.5 text-[11px] font-medium text-slate-300 transition-colors hover:bg-primary-50 hover:text-primary-600 dark:text-slate-600 dark:hover:bg-primary-950/30 dark:hover:text-primary-300"
       >
@@ -346,7 +363,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                 <button
                   type="button"
                   onClick={() => toggleStep(step)}
-                  disabled={isBusy}
+                  disabled={busyStep !== null || saving}
                   aria-label={
                     isCompleted ? `Reabrir etapa ${step.label}` : `Concluir etapa ${step.label}`
                   }
@@ -413,12 +430,36 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                   </span>
                 </button>
 
+                {step.kind === 'custom' && (
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Mover ${step.label} para cima`}
+                      disabled={index === 0 || busyStep !== null || saving}
+                      onClick={() => moveStage(step, index)}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Mover ${step.label} para baixo`}
+                      disabled={index === steps.length - 1 || busyStep !== null || saving}
+                      onClick={() => moveStage(step, index + 2)}
+                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-30 dark:hover:bg-slate-800"
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                  </div>
+                )}
+
                 {step.kind === 'custom' ? (
                   <button
                     type="button"
                     onClick={() =>
                       setConfirm({ kind: 'delete-custom', id: step.id, label: step.label })
                     }
+                    disabled={busyStep !== null || saving}
                     aria-label={`Excluir etapa ${step.label}`}
                     title="Excluir etapa"
                     className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-danger-50 hover:text-danger-600 dark:hover:bg-danger-950/30 dark:hover:text-danger-300"
@@ -431,6 +472,7 @@ export function DocumentChecklistTab({ processId }: DocumentChecklistTabProps) {
                     onClick={() =>
                       setConfirm({ kind: 'hide-default', key: step.key, label: step.label })
                     }
+                    disabled={busyStep !== null || saving}
                     aria-label={`Ocultar etapa ${step.label}`}
                     title="Ocultar etapa neste processo"
                     className="shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"

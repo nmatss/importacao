@@ -24,6 +24,31 @@ describe('description-odoo-match', () => {
     validateDescription.mockReset();
   });
 
+  it('consulta SKU textual separado de PI/colecao, preservando zero inicial', async () => {
+    validateDescription.mockResolvedValue({ isValid: true, odooDescription: 'BACKPACK' });
+    await descriptionOdooMatch({
+      invoiceData: {
+        items: [
+          {
+            itemCode: 'PK2202608SZIS27050404509',
+            description: '[050404509] BACKPACK',
+          },
+        ],
+      },
+    });
+    expect(validateDescription).toHaveBeenCalledWith('050404509', 'BACKPACK');
+  });
+
+  it('nao declara correspondencia completa quando um item nao tem identificador', async () => {
+    validateDescription.mockResolvedValue({ isValid: true, odooDescription: 'ok' });
+    const result = await descriptionOdooMatch({
+      invoiceData: { items: [...items, { description: 'SEM CODIGO' }] },
+    });
+    expect(result.status).toBe('warning');
+    expect(result.message).toContain('3 de 4 verificadas');
+    expect(result.message).not.toContain('Todas as');
+  });
+
   it('reports Odoo lookup failures instead of shrinking the checked count', async () => {
     validateDescription.mockImplementation(async (code: string) => {
       if (code === 'PI7753Y') throw new Error('ECONNREFUSED');

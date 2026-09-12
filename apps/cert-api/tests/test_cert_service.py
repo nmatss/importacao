@@ -191,7 +191,7 @@ class TestStatusDerivation:
         assert result["cert_status"] == "ENCERRADO"
         assert result["site_status"] == "CONFORME"
         # license vem da aba 'Licenciamentos Vencidos'; sem map -> NAO_APLICAVEL.
-        assert result["license_status"] == "NAO_APLICAVEL"
+        assert result["license_status"] == "PENDENTE"
 
     def test_excluded_sku_maps_to_certificacao_encerrado(self):
         result = compute_status_dimensions(
@@ -223,5 +223,5 @@ class TestStatusDerivation:
             license_map={"PI4257Y": {"status": "VALIDO", "valid_until": "2027-01-01"}},
         )
 
-        assert result["license_status"] == "VALIDO"
-        assert result["license_deadline"] == "2027-01-01"
+        assert result["license_status"] == "PENDENTE"
+        assert result["license_deadline"] is None

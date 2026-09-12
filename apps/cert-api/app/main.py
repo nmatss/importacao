@@ -39,14 +39,11 @@ def run_startup() -> None:
     validate_linx_config()
 
     if DATABASE_URL:
-        from app.db.postgres import ensure_tables
-        try:
-            ensure_tables()
-        except Exception as e:
-            log.warning(f"Could not create tables: {e}")
+        from app.db.postgres import verify_item_restriction_schema
+        # All release DDL runs through the explicit migration CLI, never boot.
+        verify_item_restriction_schema()
 
     if SHEETS_CLIENT_EMAIL and SHEETS_PRIVATE_KEY:
-        from app.services.erp_service import sync_licenciados_to_db
         from app.services.sync_runs import run_sheet_sync
         try:
             # Mesmo caminho do botao manual e do job horario: um lock so e uma
@@ -55,10 +52,6 @@ def run_startup() -> None:
             log.info(f"Startup sheets sync: {run_sheet_sync('startup')}")
         except Exception as e:
             log.warning(f"Startup sheets sync failed: {e}")
-        try:
-            log.info(f"Startup licenciados sync: {sync_licenciados_to_db()}")
-        except Exception as e:
-            log.warning(f"Startup licenciados sync failed: {e}")
 
     try:
         scheduler.start()
@@ -104,7 +97,7 @@ app.add_middleware(
     allow_origins=CORS_ORIGINS,
     # DELETE entrou com a remocao individual de item do certificado (D11); sem
     # ele o preflight do navegador barra a lixeira da tela de cadastro.
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 

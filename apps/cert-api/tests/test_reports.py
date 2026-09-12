@@ -230,7 +230,7 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
     def cell(label: str):
         return ws.cell(row=8, column=_header_index(ws, label)).value
 
-    assert cell("Status Certificacao") == "Ativo"
+    assert cell("Status Certificacao") == "Encerrado"
     assert cell("Status E-commerce") == "Conforme"
     assert cell("Status Licenciamento") == "Vencido"
     assert cell("Fim Licenciamento (Linx)") == "31/01/2026"
@@ -323,6 +323,7 @@ class TestColunasD11:
             tmp_path,
             {
                 "sku": "PI5555Y",
+                "licenciamento_aplicavel": False,
                 "name": "VITROLA DE MALA SEM FIO POR DO SOL",
                 "brand": "Imaginarium",
                 "situacao": "Ativo",
@@ -478,3 +479,13 @@ class TestSentinelaDoLinx:
         )
         travas = report_service._fetch_travas_faturamento([{"sku": "PI1Y", "brand": "Imaginarium"}])
         assert travas["PI1Y"] == {"cert": None, "lic": "31/12/2027", "indisponivel": None}
+
+
+def test_products_export_marks_previous_snapshot_when_sync_failed(mocker, tmp_path):
+    mocker.patch("app.services.report_service.REPORTS_DIR", tmp_path)
+    mocker.patch("app.services.report_service._fetch_stock_map", return_value={})
+    mocker.patch("app.services.report_service._fetch_travas_faturamento", return_value={})
+    warning = "Ultima sincronizacao falhou; snapshot anterior preservado"
+    path = generate_products_report([{"sku": "TEST-SNAPSHOT"}], sync_warning=warning)
+    workbook = openpyxl.load_workbook(path)
+    assert workbook["Produtos"]["A4"].value == warning

@@ -19,6 +19,7 @@ export interface EspelhoItem {
   gwNt: number | null;
   pesoUnitario: number | null;
   qty: number | null;
+  unitType?: string | null;
   unitPrice: number | null;
   amountUsd: number | null;
 }
@@ -174,6 +175,14 @@ function buildColumnMap(headerRow: Row): Map<number, keyof EspelhoItem> {
     }
     if (cell.includes('caixas por ref')) {
       assign(colIdx, 'caixasPorRef');
+      return;
+    }
+    if (
+      ['unit', 'uom', 'unidade', 'unidade de medida', 'unidade comercial', 'unit type'].includes(
+        cell,
+      )
+    ) {
+      assign(colIdx, 'unitType');
       return;
     }
     if (cell.includes('unit price')) {
@@ -394,6 +403,7 @@ function parseItems(
       gwNt: null,
       pesoUnitario: null,
       qty: null,
+      unitType: null,
       unitPrice: null,
       amountUsd: null,
     };
@@ -453,7 +463,11 @@ function parseSummary(rows: Row[], headerIdx: number): EspelhoSummary {
         sawFirst = true;
         continue;
       }
-      addressLines.push(String(row[0]).trim());
+      const line = String(row[0]).trim();
+      // Official sheets put CNPJ on A2 and the address on A3/A4.
+      // Identification is extracted separately and must not consume an address line.
+      if (/^cnpj\b/i.test(line) || /^\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}$/.test(line)) continue;
+      addressLines.push(line);
       if (addressLines.length >= 2) break;
     }
   }

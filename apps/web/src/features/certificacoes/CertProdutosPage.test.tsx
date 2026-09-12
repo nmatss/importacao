@@ -1,9 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { toast } from 'sonner';
 import { formatDateTime } from '@/shared/lib/utils';
 import { matchesStatusFilters } from './CertProdutosPage';
 import type { CertProduct, CertProductsResponse } from '@/shared/lib/cert-api-client';
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/shared/lib/cert-api-client')>();
@@ -128,6 +131,31 @@ describe('CertProdutosPage (server-authoritative)', () => {
     mockedSync.mockReset();
     mockedGrifes.mockResolvedValue({ grifes: [], sem_grife: 0 });
     mockedLastSync.mockResolvedValue({ last_run: null });
+  });
+
+  it('separa validade, prazo e pendência comercial com a origem do problema', async () => {
+    mockedFetch.mockResolvedValue({
+      products: [
+        {
+          sku: '050404509',
+          brand: 'Puket',
+          name: 'Certificado ativo',
+          cert_status: 'ATIVO',
+          validade_certificado: '2027-03-22',
+          sale_deadline: '',
+          status_venda: 'BLOQUEADA',
+          status_venda_reason: 'Licenciamento ainda não consultado no Linx',
+          license_status: 'PENDENTE',
+        },
+      ],
+      total: 1,
+    });
+    renderPage();
+    const row = (await screen.findByText('Certificado ativo')).closest('tr') as HTMLElement;
+    expect(within(row).getByText('22/03/2027')).toBeInTheDocument();
+    expect(within(row).getByText('Licenciamento ainda não consultado no Linx')).toBeInTheDocument();
+    expect(within(row).getAllByText('Pendente de validação').length).toBe(2);
+    expect(within(row).queryByText('Bloqueada')).not.toBeInTheDocument();
   });
 
   it('keeps the newest filter results when an older request finishes later', async () => {
@@ -441,6 +469,25 @@ describe('CertProdutosPage — numero do certificado, grife e sync', () => {
     // Recarrega a lista DEPOIS do sync — senao a tela seguiria com o dado velho.
     await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(2));
     expect(mockedLastSync).toHaveBeenCalledTimes(2);
+  });
+
+  it('não anuncia sucesso quando Sheets aplica e Linx falha', async () => {
+    vi.mocked(toast.success).mockClear();
+    mockedSync.mockResolvedValue({
+      locked: true,
+      trigger: 'manual',
+      run_id: 'r2',
+      status: 'error',
+      error: 'Linx indisponível',
+      sheets: { synced: 2 },
+      linx: { error: 'Timeout' },
+    });
+    renderPage();
+    await waitFor(() => expect(mockedFetch).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: /Sincronizar planilha agora/ }));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Linx indisponível'));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(mockedFetch).toHaveBeenCalledTimes(2);
   });
 
   it('mostra a ultima sincronizacao com o ator, em portugues', async () => {

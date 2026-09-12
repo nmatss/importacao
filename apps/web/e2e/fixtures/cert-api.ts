@@ -1390,6 +1390,9 @@ const lastSegment = (url: URL, offsetFromEnd = 1): string =>
   decodeURIComponent(url.pathname.split('/').filter(Boolean).at(-offsetFromEnd) ?? '');
 
 export const certApiHandlers: FixtureHandler[] = [
+  { path: '/cert-api/api/grifes', method: 'GET', body: { grifes: [], sem_grife: 0 } },
+  { path: '/cert-api/api/sync-sheets/last', method: 'GET', body: { last_run: null } },
+
   { path: '/cert-api/api/health', method: 'GET', body: certHealth },
   { path: '/cert-api/api/ready', method: 'GET', body: { ready: true } },
   { path: '/cert-api/api/stats', method: 'GET', body: certStats },

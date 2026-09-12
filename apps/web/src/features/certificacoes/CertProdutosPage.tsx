@@ -12,7 +12,7 @@ import {
   type CertSyncRun,
 } from '@/shared/lib/cert-api-client';
 import { DateRangeFilter } from '@/shared/components/DateRangeFilter';
-import { cn, formatDateTime } from '@/shared/lib/utils';
+import { cn, formatDateTime, formatDate } from '@/shared/lib/utils';
 import {
   Search,
   ChevronLeft,
@@ -104,6 +104,12 @@ const STATUS_FILTER_GROUPS: StatusFilterGroup[] = [
     options: [
       ALL_OPTION,
       {
+        value: 'PENDENTE',
+        label: 'Pendente',
+        activeBg: 'bg-amber-600 text-white shadow-sm',
+        dotColor: 'bg-amber-500',
+      },
+      {
         value: 'VALIDO',
         label: 'Valido',
         activeBg: 'bg-emerald-600 text-white shadow-sm',
@@ -162,7 +168,6 @@ const BRAND_FILTERS = [
   { value: '', label: 'Todas' },
   { value: 'imaginarium', label: 'Imaginarium' },
   { value: 'puket', label: 'Puket' },
-  { value: 'puket_escolares', label: 'Puket Escolares' },
 ];
 
 /**
@@ -347,8 +352,22 @@ export default function CertProdutosPage() {
     try {
       const result = await syncCertSheets();
       const synced = Number((result.sheets as { synced?: number } | undefined)?.synced ?? 0);
-      toast.success(`Planilha sincronizada: ${synced} produto(s).`);
       await Promise.all([loadProducts(), loadLastSync()]);
+      if (!result.locked) {
+        toast.error('Outra sincronização está em andamento. Aguarde e consulte a última execução.');
+      } else if (
+        result.status === 'error' ||
+        result.error ||
+        result.sheets?.error ||
+        result.linx?.error ||
+        Number(result.linx?.errors ?? 0) > 0
+      ) {
+        toast.error(
+          result.error || 'Sincronização incompleta: confira os erros da planilha e do Linx.',
+        );
+      } else {
+        toast.success(`Planilha sincronizada: ${synced} produto(s).`);
+      }
     } catch (err) {
       // Mensagem do backend preservada: 409 (já há um sync rodando) e 403 (sem
       // permissão) precisam chegar ao operador com o motivo real.
@@ -719,7 +738,8 @@ export default function CertProdutosPage() {
               : ` (${SYNC_TRIGGER_LABEL[lastSync.trigger]})`}
             {lastSync.error && (
               <span className="ml-2 font-medium text-danger-600 dark:text-danger-300">
-                falhou — {lastSync.error}
+                falhou — {lastSync.error}. Os produtos exibem os últimos dados salvos; esta
+                tentativa não confirmou a atualização das fontes.
               </span>
             )}
             {!lastSync.finished_at && !lastSync.error && (
@@ -771,7 +791,13 @@ export default function CertProdutosPage() {
                     Status Certificacao
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Cert. - Prazo
+                    Validade do certificado
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Situação da venda
+                  </th>
+                  <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    Fim de venda por certificação
                   </th>
                   <th className="text-left px-5 py-3.5 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Status Ecommerce
@@ -844,16 +870,32 @@ export default function CertProdutosPage() {
                       </td>
                       <td className="px-5 py-3.5">
                         {p.cert_status ? (
-                          <CertStatusBadge status={p.cert_status} />
+                          <div>
+                            <CertStatusBadge status={p.cert_status} />
+                            {p.cert_status_reason && (
+                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                                {p.cert_status_reason}
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-300 font-medium">--</span>
                         )}
                       </td>
+                      <td className="px-5 py-3.5 text-xs whitespace-nowrap">
+                        {formatDate(p.validade_certificado)}
+                      </td>
                       <td className="px-5 py-3.5">
-                        {/* Prazo final de venda (coluna G da aba Encerramentos). 28 SKUs
-                          têm veredito de venda na coluna H e NENHUMA data em G — nesses
-                          a situação da venda é a única informação que existe, e é ela
-                          que aparece aqui em vez de um "--" mudo. */}
+                        <CertStatusBadge
+                          status={p.status_venda_reason ? 'PENDENTE' : p.status_venda || 'PENDENTE'}
+                        />
+                        {p.status_venda_reason && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                            {p.status_venda_reason}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
                         {p.sale_deadline || p.encerramento_status ? (
                           <span
                             className={cn(
@@ -889,7 +931,14 @@ export default function CertProdutosPage() {
                       </td>
                       <td className="px-5 py-3.5">
                         {p.license_status ? (
-                          <CertStatusBadge status={p.license_status} />
+                          <div>
+                            <CertStatusBadge status={p.license_status} />
+                            {p.license_status_reason && (
+                              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                                {p.license_status_reason}
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-slate-300 font-medium">--</span>
                         )}

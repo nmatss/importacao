@@ -297,27 +297,30 @@ export const processService = {
    * Etapa padrao oculta neste processo sai da lista E do denominador; o
    * timestamp continua guardado em `follow_up_tracking`.
    */
-  async getChecklist(processId: number): Promise<ProcessChecklist> {
-    const [process] = await db
+  async getChecklist(
+    processId: number,
+    reader: Pick<typeof db, 'select'> = db,
+  ): Promise<ProcessChecklist> {
+    const [process] = await reader
       .select({ id: importProcesses.id })
       .from(importProcesses)
       .where(eq(importProcesses.id, processId))
       .limit(1);
     if (!process) throw new NotFoundError('Processo', processId);
 
-    const [tracking] = await db
+    const [tracking] = await reader
       .select()
       .from(followUpTracking)
       .where(eq(followUpTracking.processId, processId))
       .limit(1);
 
-    const hiddenRows = await db
+    const hiddenRows = await reader
       .select({ stepKey: processChecklistHiddenSteps.stepKey })
       .from(processChecklistHiddenSteps)
       .where(eq(processChecklistHiddenSteps.processId, processId));
     const hiddenKeys = new Set(hiddenRows.map((row) => row.stepKey));
 
-    const customStages = await db
+    const customStages = await reader
       .select()
       .from(processCustomStages)
       .where(eq(processCustomStages.processId, processId))
@@ -336,10 +339,16 @@ export const processService = {
       completedByName: attribution[step.key]?.completedByName ?? null,
     }));
 
+    let lastPositionedIndex = -1;
     for (const stage of customStages) {
       const line = Number(stage.position);
-      const index =
-        Number.isFinite(line) && line > 0 ? Math.min(line - 1, steps.length) : steps.length;
+      const positioned = Number.isFinite(line) && line > 0;
+      // Colisoes preservam createdAt/id: inserir de novo no mesmo indice
+      // invertia a ordem retornada pelo banco e deslocava a etapa mais antiga.
+      const index = positioned
+        ? Math.min(Math.max(line - 1, lastPositionedIndex + 1), steps.length)
+        : steps.length;
+      if (positioned) lastPositionedIndex = index;
       steps.splice(index, 0, {
         kind: 'custom',
         id: stage.id,
@@ -503,11 +512,61 @@ export const processService = {
     }
     if (input.notes !== undefined) updateData.notes = input.notes ?? null;
 
-    const [stage] = await db
-      .update(processCustomStages)
-      .set(updateData)
-      .where(and(eq(processCustomStages.id, stageId), eq(processCustomStages.processId, processId)))
-      .returning();
+    const requestedPosition = input.position;
+    const stage =
+      requestedPosition === undefined
+        ? (
+            await db
+              .update(processCustomStages)
+              .set(updateData)
+              .where(
+                and(
+                  eq(processCustomStages.id, stageId),
+                  eq(processCustomStages.processId, processId),
+                ),
+              )
+              .returning()
+          )[0]
+        : await db.transaction(async (tx) => {
+            // Serialize moves in this process; persist all custom positions so
+            // moving across another custom row cannot leave an ambiguous tie.
+            await tx.execute(
+              sql`SELECT id FROM import_processes WHERE id = ${processId} FOR UPDATE`,
+            );
+            const checklist = await this.getChecklist(processId, tx);
+            const from = checklist.steps.findIndex(
+              (item) => item.kind === 'custom' && item.id === stageId,
+            );
+            if (from < 0) throw new NotFoundError('Etapa', stageId);
+            const [moving] = checklist.steps.splice(from, 1);
+            const target =
+              requestedPosition > 0
+                ? Math.min(requestedPosition - 1, checklist.steps.length)
+                : checklist.steps.length;
+            if (!moving) throw new NotFoundError('Etapa', stageId);
+            checklist.steps.splice(target, 0, moving);
+            let updated;
+            for (const [index, item] of checklist.steps.entries()) {
+              if (item.kind !== 'custom') continue;
+              const [saved] = await tx
+                .update(processCustomStages)
+                .set(
+                  item.id === stageId
+                    ? { ...updateData, position: index + 1 }
+                    : { position: index + 1, updatedAt: new Date() },
+                )
+                .where(
+                  and(
+                    eq(processCustomStages.id, item.id),
+                    eq(processCustomStages.processId, processId),
+                  ),
+                )
+                .returning();
+              if (!saved) throw new NotFoundError('Etapa', item.id);
+              if (item.id === stageId) updated = saved;
+            }
+            return updated;
+          });
     if (!stage) throw new NotFoundError('Etapa', stageId);
 
     await auditService.log(
@@ -521,6 +580,18 @@ export const processService = {
       },
       null,
     );
+
+    if (input.position !== undefined) {
+      await recordProcessEvent(
+        processId,
+        {
+          eventType: 'custom_stage_moved',
+          title: `Etapa reposicionada: ${stage.label}`,
+          metadata: { stageId, position: stage.position },
+        },
+        userId,
+      );
+    }
 
     // Concluir/reabrir uma etapa especifica agora aparece no Historico, como ja
     // acontecia com as etapas padrao: dentro do checklist as duas sao a mesma
@@ -842,10 +913,9 @@ export const processService = {
         eta: process.eta ?? readString(espelhoSummary, 'eta') ?? readString(blData, 'eta') ?? null,
         shipmentDate:
           process.shipmentDate ??
-          readString(espelhoSummary, 'shipmentDate') ??
           readString(espelhoSummary, 'shippedOnBoardDate') ??
           readString(blData, 'shipmentDate') ??
-          readString(blData, 'etd') ??
+          readString(blData, 'shippedOnBoardDate') ??
           null,
         etaActual: process.etaActual ?? null,
         customsChannel: process.customsChannel ?? null,
@@ -1393,13 +1463,8 @@ function readString(source: Record<string, unknown> | null, key: string): string
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
-// The BL (ohbl / draft_bl) carries the real shipping milestones (etd /
-// shipmentDate). They live inside aiExtractedData and — until the espelho is
-// auto-built — are NOT promoted to the process columns nor the espelho summary.
-// Reading them here lets the logistic status advance to "in_transit" as soon as
-// the BL is extracted, instead of waiting for the espelho build (Eduarda
-// 2026-06-19: "já deveria ter atualizado para em trânsito porque o ETD é de
-// fevereiro").
+// O BL pode fornecer shipmentDate realizado. ETD continua previsao e nao
+// comprova evento; summaries legados podiam copiar ETD para shipmentDate.
 function getBlData(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object') return null;
   const root = value as Record<string, unknown>;

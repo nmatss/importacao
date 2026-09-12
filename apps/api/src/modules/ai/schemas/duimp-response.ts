@@ -12,6 +12,22 @@ const confidenceField = <T extends z.ZodTypeAny>(valueSchema: T) =>
  * remains nullable and the extraction must never infer an absent field.
  */
 export const duimpResponseSchema = z.object({
+  processReference: confidenceField(z.string()).optional(),
+  importerCnpj: confidenceField(z.string()).optional(),
+  currency: confidenceField(z.string()).optional(),
+  totalFobValue: confidenceField(z.number()).optional(),
+  totalNetWeight: confidenceField(z.number()).optional(),
+  totalGrossWeight: confidenceField(z.number()).optional(),
+  items: z
+    .array(
+      z.object({
+        itemCode: confidenceField(z.string()),
+        quantity: confidenceField(z.number()),
+        unitType: confidenceField(z.string()).optional(),
+        ncmCode: confidenceField(z.string()).optional(),
+      }),
+    )
+    .optional(),
   customsValue: confidenceField(z.number()),
   registrationDollar: confidenceField(z.number()),
   insuranceValue: confidenceField(z.number()),

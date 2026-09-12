@@ -1,5 +1,12 @@
 # Roadmap
 
+## 2026-09-12 — Cronograma e critérios de liberação
+
+Cronograma autorizado atualizado no Sheets, com janelas propostas 14/09–23/10/2026.
+[Estado técnico e dependências](STATUS-2026-09-12-RETOMADA-REUNIAO.md). Marcos semanais
+continuam sob Nicolas + áreas, sem automação recorrente ou envio ao grupo. Prioridade seguinte:
+resolver N/vínculo vigente, homologar extração/Registro e preparar conciliação antes de deploy/carga.
+
 Plano mestre operacional e técnico: `docs/PLANO-MESTRE-SISTEMA-2026-07-10.md`.
 
 Ultima atualizacao: 2026-08-29

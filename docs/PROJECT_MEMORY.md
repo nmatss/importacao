@@ -1,5 +1,14 @@
 # Project Memory - Importacao
 
+## Contratos confirmados em 12/09/2026
+
+- BL abaixo de 90% não utilizável, e corte não garante campos completos.
+- Validade, situação do certificado e fim de venda são eixos separados; licenciamento
+  pertence ao Linx/Produto. Ausência/sentinela não prova não aplicabilidade.
+- Regra regulatória de 500 peças não aprovada: inventário marketplace permanece pendente.
+- Fontes: Follow-up aba Processos; certificação Imaginarium/Puket/Encerramentos, nunca Notas.
+- Estado operacional/validações e dependências: [retomada](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 Ultima atualizacao: 2026-08-28
 
 ## Objetivo

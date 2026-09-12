@@ -1567,7 +1567,11 @@ Responda SOMENTE com JSON estrito no formato:
     imageOpts?: ImageExtractionOpts,
   ): Promise<ExtractionResult> {
     const deterministic = tryParseDUIMPText(text);
-    if (deterministic) {
+    // Registration comparison also needs item evidence. A header-only parser
+    // must not short-circuit structured extraction of the declaration's table.
+    const hasItemTable =
+      /\b(?:SKU|NCM|ITENS|ITEMS|ADI[ÇC][ÕO]ES)\b|C[ÓO]DIGO\s+(?:DO\s+)?PRODUTO/i.test(text);
+    if (deterministic && !hasItemTable) {
       const { score, lowConfidenceFields } = this.calculateConfidence(deterministic);
       logger.info(
         {

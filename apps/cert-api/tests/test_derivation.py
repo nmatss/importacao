@@ -125,7 +125,7 @@ class TestCertStatusCollapsed:
         assert derive_cert_status(log, False, None) == "ENCERRADO"
 
     def test_andamento_within_sale_window_is_ativo(self):
-        assert derive_cert_status("Em andamento", False, "Venda até fim do lote") == "ATIVO"
+        assert derive_cert_status("Em andamento", False, "Venda até fim do lote") == "ENCERRADO"
 
     def test_desconhecido_is_encerrado(self):
         # Texto livre não reconhecido + sem prazo -> conservador ENCERRADO.
@@ -139,13 +139,13 @@ class TestCertStatusCollapsed:
         assert derive_cert_status("Ativo", False, "2030-01-01") == "ATIVO"
 
     def test_sale_window_flips_expired_to_ativo(self):
-        assert derive_cert_status("EXPIRED", True, "Venda até fim do lote") == "ATIVO"
+        assert derive_cert_status("EXPIRED", True, "Venda até fim do lote") == "ENCERRADO"
 
 
 class TestKnownBadProcesses:
     """PI4257Y e PI5101Y devem resolver para ENCERRADO."""
 
-    def test_pi4257y_was_ativo_now_encerrado(self):
+    def test_expired_sale_flag_does_not_close_active_certificate(self):
         # Carregava "Ativo" mas o licenciamento/prazo terminou (expirado, fora da janela).
         result = compute_status_dimensions(
             {
@@ -158,7 +158,8 @@ class TestKnownBadProcesses:
                 "last_validation_status": "OK",
             }
         )
-        assert result["cert_status"] == "ENCERRADO"
+        assert result["cert_status"] == "ATIVO"
+        assert result["status_venda"] == "BLOQUEADA"
 
     def test_pi5101y_was_em_andamento_now_encerrado(self):
         result = compute_status_dimensions(
@@ -459,8 +460,8 @@ class TestLicenseStatus:
             },
             license_map={"PI4257Y": {"status": "VENCIDO", "valid_until": "2024-05-01"}},
         )
-        assert result["license_status"] == "VENCIDO"
-        assert result["license_deadline"] == "2024-05-01"
+        assert result["license_status"] == "PENDENTE"
+        assert result["license_deadline"] is None
 
     def test_compute_no_match_is_nao_aplicavel(self):
         result = compute_status_dimensions(
@@ -475,7 +476,7 @@ class TestLicenseStatus:
             },
             license_map={"PI4257Y": {"status": "VENCIDO", "valid_until": "2024-05-01"}},
         )
-        assert result["license_status"] == "NAO_APLICAVEL"
+        assert result["license_status"] == "PENDENTE"
         assert result["license_deadline"] is None
 
 
@@ -514,6 +515,7 @@ class TestSkuExcluidoEReincluido:
         """O caso reportado: estava Encerrado/Nao conforme com venda permitida."""
         row = {
             "sku": "PI7560Y",
+            "licenciamento_aplicavel": False,
             "sheet_status": self.PI7560Y,
             "encerramento_status": "Comerciação Permitida",
             "last_validation_status": "OK",
@@ -660,7 +662,7 @@ class TestPrazoComparaData:
         assert derive_cert_status(self.LIVRE, False, "01/01/2020") == "ENCERRADO"
 
     def test_data_futura_mantem_ativo(self):
-        assert derive_cert_status(self.LIVRE, False, "31/12/2030") == "ATIVO"
+        assert derive_cert_status(self.LIVRE, False, "31/12/2030") == "ENCERRADO"
 
     @pytest.mark.parametrize("texto", ["a definir", "aguardando OCP", "-", "?"])
     def test_texto_que_nao_e_data_nao_libera(self, texto):
@@ -671,11 +673,11 @@ class TestPrazoComparaData:
         assert derive_cert_status(self.LIVRE, False, "") == "ENCERRADO"
 
     def test_janela_textual_continua_valendo(self):
-        assert derive_cert_status(self.LIVRE, False, "Venda até fim do lote") == "ATIVO"
+        assert derive_cert_status(self.LIVRE, False, "Venda até fim do lote") == "ENCERRADO"
 
     def test_data_de_hoje_ainda_permite_vender(self):
         hoje = date.today()
-        assert derive_cert_status(self.LIVRE, False, hoje.strftime("%d/%m/%Y")) == "ATIVO"
+        assert derive_cert_status(self.LIVRE, False, hoje.strftime("%d/%m/%Y")) == "ENCERRADO"
 
 
 # ---------------------------------------------------------------------------
@@ -711,7 +713,7 @@ class TestEixosNaoPodemSeContradizer:
     def test_prazo_textual_ilegivel_com_data_futura_nao_contradiz(self):
         dims = compute_status_dimensions(self._row())
         assert dims["within_sale_deadline"] is True
-        assert dims["cert_status"] == "ATIVO", "cert_status contradiz within_sale_deadline"
+        assert dims["cert_status"] == "ENCERRADO", "prazo comercial nao reativa certificado"
         assert dims["comercializacao_status"] != "ENCERRADA"
 
     def test_data_passada_continua_encerrando_os_dois_eixos(self):
@@ -727,7 +729,7 @@ class TestEixosNaoPodemSeContradizer:
         row = self._row(sale_deadline_date=deadline)
 
         antes = compute_status_dimensions(row, today=deadline - timedelta(days=1))
-        assert antes["cert_status"] == "ATIVO"
+        assert antes["cert_status"] == "ENCERRADO"
         assert antes["within_sale_deadline"] is True
 
         depois = compute_status_dimensions(row, today=deadline + timedelta(days=1))
@@ -773,7 +775,7 @@ class TestHojeNoFusoDeSaoPaulo:
     def test_cert_status_nao_encerra_antes_da_meia_noite_de_brasilia(self, mocker):
         mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
         livre = "10/01/26 - Aguardando retorno do laboratorio."
-        assert derive_cert_status(livre, False, "29/08/2026") == "ATIVO"
+        assert derive_cert_status(livre, False, "29/08/2026") == "ENCERRADO"
 
     def test_prazo_de_ontem_continua_vencido(self, mocker):
         mocker.patch.object(derivation, "datetime", self._frozen(self.INSTANTE))
@@ -890,6 +892,7 @@ class TestCertificadoAtivoNaoTemTrava:
     def _ativo(self, **overrides) -> dict:
         row = {
             "sku": "PI5555Y",
+            "licenciamento_aplicavel": False,
             "name": "VITROLA DE MALA SEM FIO POR DO SOL",
             "situacao": "Ativo",
             "sheet_status": "23/04/2025 - Manutenção finalizada.",
@@ -1022,7 +1025,7 @@ class TestLicenciamentoVemDoLinx:
 
     def test_sentinela_e_nao_aplicavel(self):
         assert derivation.derive_license_status_linx("01/01/1900", self.HOJE) == (
-            "NAO_APLICAVEL",
+            "PENDENTE",
             None,
         )
 

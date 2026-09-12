@@ -1204,7 +1204,65 @@ function idFrom(url: URL, pattern: RegExp): string {
   return pattern.exec(url.pathname)?.[1] ?? '';
 }
 
+export function registroComparisonFixture(status: 'match' | 'divergent' | 'pending') {
+  const sources = {
+    duimp: {
+      fileName: 'IMP-2026-0001-rascunho-duimp-v3.pdf',
+      type: 'draft_duimp',
+      driveVersion: 3,
+    },
+    invoice: { fileName: 'IMP-2026-0001-invoice-v2.pdf', type: 'invoice', driveVersion: 2 },
+    espelho:
+      status === 'pending'
+        ? null
+        : { fileName: 'IMP-2026-0001-espelho-v4.xlsx', type: 'espelho', driveVersion: 4 },
+  };
+  return {
+    processId: 1,
+    status,
+    sources,
+    issues:
+      status === 'pending'
+        ? ['Espelho não associado ao processo; a conferência não está completa.']
+        : [],
+    rows: [
+      {
+        key: 'fob',
+        label: 'Valor FOB',
+        values: [85313.93, 85313.93, status === 'divergent' ? 85000 : 85313.93],
+      },
+      { key: 'sku-050404509', label: 'SKU 050404509 · quantidade', values: [42, 42, 42] },
+    ].map((row) => ({
+      key: row.key,
+      label: row.label,
+      status:
+        status === 'pending'
+          ? 'skipped'
+          : status === 'divergent' && row.key === 'fob'
+            ? 'divergent'
+            : 'match',
+      values: Object.fromEntries(
+        (['duimp', 'invoice', 'espelho'] as const).map((source, index) => [
+          source,
+          {
+            value: sources[source] ? row.values[index] : null,
+            fileName: sources[source]?.fileName ?? null,
+            driveVersion: sources[source]?.driveVersion ?? null,
+            field: row.key === 'fob' ? 'totalFob' : 'items[0].quantity',
+            unitType: row.key === 'fob' || !sources[source] ? null : 'PCS',
+          },
+        ]),
+      ),
+    })),
+  };
+}
+
 export const importacaoCoreHandlers: FixtureHandler[] = [
+  {
+    path: /^\/api\/documents\/process\/\d+\/registro-comparison$/,
+    method: 'GET',
+    body: ok(registroComparisonFixture('divergent')),
+  },
   // Sessao / saude
   { path: '/api/auth/me', method: 'GET', body: ok(AUDIT_USER) },
   { path: '/api/health', method: 'GET', body: { status: 'ok' } },

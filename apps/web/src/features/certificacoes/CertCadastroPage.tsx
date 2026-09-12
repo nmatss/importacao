@@ -25,6 +25,7 @@ import {
   linkCertificateItems,
   lookupCertificateLinx,
   removeCertificateItem,
+  updateCertificateItemRestriction,
   retryCertificateLinx,
   type CertCertificate,
   type CertCertificateItem,
@@ -171,6 +172,12 @@ export default function CertCadastroPage() {
   const [itemsBusy, setItemsBusy] = useState(false);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [removingSku, setRemovingSku] = useState<string | null>(null);
+  const [restrictionForm, setRestrictionForm] = useState<{
+    sku: string;
+    inherit: boolean;
+    date: string;
+    reason: string;
+  } | null>(null);
 
   const pastedSkus = parsePastedSkus(itemsSkus);
   const formSkus = parsePastedSkus(skusText);
@@ -267,8 +274,8 @@ export default function CertCadastroPage() {
       setPortalProduct(product);
       // Preserve anything the operator already typed. Existing Linx dates only
       // fill empty fields, avoiding a silent overwrite during the review.
-      setValidade((current) => current || data.validade_certificado || '');
-      setVencimento((current) => current || data.vencimento_licenciamento || '');
+      setValidade((current) => current || product?.validade_certificado || '');
+      setVencimento(data.vencimento_licenciamento || '');
       setNumero((current) => current || String(product?.numero_certificado || ''));
     } catch (err) {
       if (requestId !== linxLookupRequest.current) return;
@@ -291,10 +298,8 @@ export default function CertCadastroPage() {
       setError(`Vincule no máximo ${MAX_ITEMS_PER_REQUEST} SKUs por vez.`);
       return;
     }
-    if (!validade && !fimVenda && !vencimento) {
-      setError(
-        'Informe ao menos uma data (validade do certificado, fim de venda ou vencimento do licenciamento).',
-      );
+    if (!validade && !fimVenda) {
+      setError('Informe a validade do certificado ou o fim de venda por certificação.');
       return;
     }
 
@@ -306,7 +311,6 @@ export default function CertCadastroPage() {
         brand,
         validade_certificado: validade || undefined,
         fim_venda: fimVenda || undefined,
-        vencimento_licenciamento: vencimento || undefined,
         numero_certificado: numero || undefined,
         ocp: ocp || undefined,
         orgao_certificador: orgao || undefined,
@@ -343,9 +347,11 @@ export default function CertCadastroPage() {
   }
 
   async function openItemsPanel(cert: CertCertificate) {
+    if (itemsBusy) return;
     setOpenCert(cert);
     setItemsSkus('');
     setPreview(null);
+    setRestrictionForm(null);
     setItemsError(null);
     setItemsBusy(true);
     try {
@@ -400,6 +406,28 @@ export default function CertCadastroPage() {
     }
   }
 
+  async function handleSaveRestriction(event: FormEvent) {
+    event.preventDefault();
+    if (!openCert || !restrictionForm || !restrictionForm.reason.trim()) return;
+    setItemsBusy(true);
+    setItemsError(null);
+    try {
+      const updated = await updateCertificateItemRestriction(openCert.id, restrictionForm.sku, {
+        situacao: restrictionForm.inherit ? null : 'ENCERRADO',
+        fim_venda: restrictionForm.inherit ? null : restrictionForm.date || null,
+        motivo: restrictionForm.reason.trim(),
+      });
+      setOpenItems((items) => items.map((item) => (item.sku === updated.sku ? updated : item)));
+      setRestrictionForm(null);
+      toast.success('Restrição do item salva no portal. O envio ao Linx permanece pendente.');
+      void loadRecent();
+    } catch (err) {
+      setItemsError(err instanceof Error ? err.message : 'Falha ao salvar a restrição do item.');
+    } finally {
+      setItemsBusy(false);
+    }
+  }
+
   async function handleDownloadPdf(id: string) {
     setDownloadingPdf(id);
     try {
@@ -422,8 +450,8 @@ export default function CertCadastroPage() {
             Cadastrar Certificado
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Registra validade do certificado e vencimento do licenciamento e grava as propriedades
-            no Linx do produto.
+            Registra a validade e o fim de venda por certificação. O licenciamento é mantido pelo
+            time de Produto no Linx.
           </p>
         </div>
       </div>
@@ -496,6 +524,7 @@ export default function CertCadastroPage() {
               onChange={(e) => {
                 linxLookupRequest.current += 1;
                 setBrand(e.target.value);
+                setVencimento('');
                 setLookingUpLinx(false);
                 setLinxLookup(null);
                 setPortalProduct(null);
@@ -521,6 +550,7 @@ export default function CertCadastroPage() {
                 onChange={(e) => {
                   linxLookupRequest.current += 1;
                   setSku(e.target.value);
+                  setVencimento('');
                   setLookingUpLinx(false);
                   setLinxLookup(null);
                   setPortalProduct(null);
@@ -552,7 +582,8 @@ export default function CertCadastroPage() {
                     Produto Linx {linxLookup.produto_codigo}: dados atuais consultados.
                   </p>
                   <p className="mt-1">
-                    Validade (prop {linxLookup.properties.validade_certificado.property_code}):{' '}
+                    Fim de venda por certificação (prop{' '}
+                    {linxLookup.properties.validade_certificado.property_code}):{' '}
                     {linxPropertyLabel(linxLookup, 'validade_certificado')} · Licenciamento (prop{' '}
                     {linxLookup.properties.vencimento_licenciamento.property_code}):{' '}
                     {linxPropertyLabel(linxLookup, 'vencimento_licenciamento')}
@@ -563,8 +594,8 @@ export default function CertCadastroPage() {
                     </p>
                   )}
                   <p className="mt-1 text-emerald-700/80 dark:text-emerald-300/80">
-                    Os valores encontrados preencheram apenas os campos que estavam vazios. Revise
-                    antes de gravar.
+                    A validade vem do cadastro no portal. O fim de venda do Linx é informativo e não
+                    preenche a validade. O licenciamento permanece somente leitura.
                   </p>
                 </div>
               ) : (
@@ -632,9 +663,14 @@ export default function CertCadastroPage() {
               type="date"
               className={inputCls}
               value={vencimento}
-              onChange={(e) => setVencimento(e.target.value)}
+              readOnly
+              aria-describedby="cert-licenciamento-origem"
             />
           </div>
+          <p id="cert-licenciamento-origem" className="text-xs text-slate-500">
+            Somente leitura: consulte o Linx para atualizar. Este cadastro não altera o
+            licenciamento.
+          </p>
           <div>
             <label htmlFor="cert-numero" className={labelCls}>
               Nº do Certificado
@@ -864,6 +900,7 @@ export default function CertCadastroPage() {
                   <button
                     type="button"
                     onClick={() => openItemsPanel(c)}
+                    disabled={itemsBusy}
                     className="inline-flex items-center gap-1 text-xs text-emerald-600 hover:underline dark:text-emerald-300"
                   >
                     <Boxes className="h-3.5 w-3.5" />
@@ -950,6 +987,7 @@ export default function CertCadastroPage() {
             <button
               type="button"
               onClick={() => setOpenCert(null)}
+              disabled={itemsBusy}
               aria-label="Fechar produtos do certificado"
               className="ml-auto text-slate-400 hover:text-danger-600 dark:hover:text-danger-300"
             >
@@ -1063,6 +1101,48 @@ export default function CertCadastroPage() {
                   >
                     <span className="font-mono text-xs font-semibold">{item.sku}</span>
                     <LinxBadge status={item.linx_status} />
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      {item.situacao_efetiva ?? openCert.situacao ?? 'Situação não informada'} ·{' '}
+                      {item.restricao_origem === 'item' ? 'Regra do item' : 'Herda o certificado'}
+                      {item.fim_venda_efetivo
+                        ? ` · Fim de venda: ${formatDateOnly(item.fim_venda_efetivo)}`
+                        : ''}
+                    </span>
+                    {item.restricao_pendente && (
+                      <span className="text-xs text-amber-700 dark:text-amber-300">
+                        Prazo de venda pendente de validação
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      disabled={itemsBusy || removingSku !== null}
+                      aria-label={`Encerrar item ${item.sku}`}
+                      onClick={() =>
+                        setRestrictionForm({
+                          sku: item.sku,
+                          inherit: false,
+                          date: item.fim_venda ?? '',
+                          reason: '',
+                        })
+                      }
+                      className="text-xs text-amber-700 dark:text-amber-300 disabled:opacity-50"
+                    >
+                      Encerrar item
+                    </button>
+                    {item.restricao_origem === 'item' && (
+                      <button
+                        type="button"
+                        disabled={itemsBusy || removingSku !== null}
+                        aria-label={`Herdar certificado para ${item.sku}`}
+                        onClick={() =>
+                          setRestrictionForm({ sku: item.sku, inherit: true, date: '', reason: '' })
+                        }
+                        className="text-xs text-primary-600 dark:text-primary-300 disabled:opacity-50"
+                      >
+                        Herdar certificado
+                      </button>
+                    )}
+
                     {item.linx_error && (
                       <span className="text-xs text-danger-600 dark:text-danger-300">
                         {item.linx_error}
@@ -1071,7 +1151,7 @@ export default function CertCadastroPage() {
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(item.sku)}
-                      disabled={removingSku === item.sku}
+                      disabled={removingSku !== null || itemsBusy}
                       aria-label={`Remover ${item.sku} do certificado`}
                       className="ml-auto inline-flex items-center gap-1 text-xs text-slate-400 transition-colors hover:text-danger-600 disabled:opacity-50 dark:hover:text-danger-300"
                     >
@@ -1085,6 +1165,77 @@ export default function CertCadastroPage() {
                   </li>
                 ))}
               </ul>
+            )}
+
+            {restrictionForm && (
+              <form
+                onSubmit={handleSaveRestriction}
+                className="space-y-3 rounded-lg border border-amber-200 p-4 dark:border-amber-800"
+                aria-label="Restrição individual do item"
+              >
+                <h4 className="text-sm font-semibold">
+                  {restrictionForm.inherit
+                    ? 'Herdar a situação e o prazo do certificado'
+                    : 'Encerrar somente este item'}{' '}
+                  · {restrictionForm.sku}
+                </h4>
+                {!restrictionForm.inherit && (
+                  <div>
+                    <label className={labelCls} htmlFor="item-restriction-date">
+                      Fim de venda por certificação do item
+                    </label>
+                    <input
+                      id="item-restriction-date"
+                      type="date"
+                      value={restrictionForm.date}
+                      onChange={(e) =>
+                        setRestrictionForm({ ...restrictionForm, date: e.target.value })
+                      }
+                      className={inputCls}
+                    />
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Sem prazo aprovado, o encerramento fica pendente de validação. Não será
+                      inventada uma data.
+                    </p>
+                  </div>
+                )}
+                <div>
+                  <label className={labelCls} htmlFor="item-restriction-reason">
+                    Motivo da alteração do item
+                  </label>
+                  <textarea
+                    id="item-restriction-reason"
+                    required
+                    maxLength={1000}
+                    value={restrictionForm.reason}
+                    onChange={(e) =>
+                      setRestrictionForm({ ...restrictionForm, reason: e.target.value })
+                    }
+                    className={inputCls}
+                  />
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Esta alteração fica no portal, preserva os demais itens e não grava imediatamente
+                  no Linx.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="submit"
+                    disabled={itemsBusy || !restrictionForm.reason.trim()}
+                    className="rounded-lg bg-primary-600 px-3 py-2 text-sm text-white disabled:opacity-50"
+                  >
+                    {itemsBusy ? 'Salvando…' : 'Salvar restrição do item'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={itemsBusy}
+                    onClick={() => setRestrictionForm(null)}
+                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
             )}
 
             <p className="text-xs text-slate-500 dark:text-slate-400">

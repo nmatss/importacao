@@ -15,6 +15,7 @@ vi.mock('@/shared/lib/cert-api-client', async (importOriginal) => {
     fetchCertificateDetail: vi.fn(),
     linkCertificateItems: vi.fn(),
     removeCertificateItem: vi.fn(),
+    updateCertificateItemRestriction: vi.fn(),
   };
 });
 
@@ -26,6 +27,7 @@ import {
   linkCertificateItems,
   lookupCertificateLinx,
   removeCertificateItem,
+  updateCertificateItemRestriction,
   type CertCertificate,
 } from '@/shared/lib/cert-api-client';
 import CertCadastroPage, { parsePastedSkus, todayLocalIso } from './CertCadastroPage';
@@ -73,21 +75,31 @@ describe('CertCadastroPage Linx lookup', () => {
     });
   });
 
-  it('consults Linx and fills only empty date fields', async () => {
+  it('consults Linx and preserves typed validity without permitting licensing edits', async () => {
     const user = userEvent.setup();
     render(<CertCadastroPage />);
 
     await user.selectOptions(screen.getByLabelText(/Marca \/ Loja/i), 'puket');
     await user.type(screen.getByLabelText(/SKU do produto/i), '100400496');
-    await user.type(screen.getByLabelText(/Vencimento do Licenciamento/i), '2028-01-20');
+    await user.type(screen.getByLabelText(/Validade do Certificado/i), '2028-01-20');
     await user.click(screen.getByRole('button', { name: /Buscar no Linx/i }));
 
     await waitFor(() => expect(mockedLookup).toHaveBeenCalledWith('puket', '100400496'));
-    expect(screen.getByLabelText(/Validade do Certificado/i)).toHaveValue('2027-08-11');
-    expect(screen.getByLabelText(/Vencimento do Licenciamento/i)).toHaveValue('2028-01-20');
+    expect(screen.getByLabelText(/Validade do Certificado/i)).toHaveValue('2028-01-20');
+    expect(screen.getByLabelText(/Vencimento do Licenciamento/i)).toHaveValue('');
     expect(screen.getByLabelText(/Nº do Certificado/i)).toHaveValue('006083/2024');
     expect(screen.getByText(/prop 00224/i)).toBeInTheDocument();
     expect(screen.getByText(/prop 00225/i)).toBeInTheDocument();
+  });
+
+  it('não usa o fim de venda legado do Linx para preencher a validade', async () => {
+    const user = userEvent.setup();
+    render(<CertCadastroPage />);
+    await user.type(screen.getByLabelText(/SKU do produto/i), '100400496');
+    await user.click(screen.getByRole('button', { name: /Buscar no Linx/i }));
+    await screen.findByText(/dados atuais consultados/);
+    expect(screen.getByLabelText(/Validade do Certificado/i)).toHaveValue('');
+    expect(screen.getByLabelText(/Fim de venda \(trava\)/i)).toHaveValue('');
   });
 
   it('discards a Linx response when the SKU changes while the lookup is pending', async () => {
@@ -302,6 +314,19 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     ).toBeInTheDocument();
   });
 
+  it('licenciamento é somente leitura e não é enviado ao cadastrar certificado ativo', async () => {
+    const user = userEvent.setup();
+    mockedCreate.mockResolvedValue(certificate());
+    render(<CertCadastroPage />);
+    expect(screen.getByLabelText('Vencimento do Licenciamento')).toHaveAttribute('readonly');
+    await user.type(screen.getByLabelText('SKU do produto *'), '050404509');
+    await user.type(screen.getByLabelText('Validade do Certificado'), '2028-07-27');
+    await user.click(screen.getByRole('button', { name: /Cadastrar e gravar no Linx/ }));
+    await waitFor(() => expect(mockedCreate).toHaveBeenCalledOnce());
+    expect(mockedCreate.mock.calls[0][0]).not.toHaveProperty('vencimento_licenciamento');
+    expect(mockedCreate.mock.calls[0][0].fim_venda).toBeUndefined();
+  });
+
   it('aceita apenas o fim de venda como unica data informada', async () => {
     const user = userEvent.setup();
     mockedCreate.mockResolvedValue(certificate());
@@ -393,6 +418,89 @@ describe('CertCadastroPage — fim de venda e itens (D11)', () => {
     // vazia (o textarea foi limpo) e gravaria no Linx por engano.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Vincular' })).toBeDisabled());
     expect(mockedLink).toHaveBeenCalledTimes(2);
+  });
+
+  it('encerra apenas um item e restaura herança com motivo sem apagar o vínculo', async () => {
+    const user = userEvent.setup();
+    const item = {
+      id: 'i1',
+      certificate_id: 'c1',
+      sku: 'PI5555Y',
+      brand: 'imaginarium',
+      linx_status: 'pending' as const,
+      situacao: 'ENCERRADO' as const,
+      situacao_efetiva: 'ENCERRADO' as const,
+      fim_venda: '2026-10-29',
+      fim_venda_efetivo: '2026-10-29',
+      restricao_origem: 'item' as const,
+    };
+    vi.mocked(updateCertificateItemRestriction)
+      .mockResolvedValueOnce(item)
+      .mockResolvedValueOnce({
+        ...item,
+        situacao: null,
+        situacao_efetiva: 'ATIVO',
+        fim_venda: null,
+        fim_venda_efetivo: null,
+        restricao_origem: 'certificado',
+      });
+    mockedDetail.mockResolvedValueOnce(
+      certificate({
+        items: [
+          {
+            ...item,
+            situacao: null,
+            situacao_efetiva: 'ATIVO',
+            fim_venda: null,
+            fim_venda_efetivo: null,
+            restricao_origem: 'certificado',
+          },
+          {
+            ...item,
+            id: 'i2',
+            sku: 'OUTRO-SKU',
+            situacao: null,
+            situacao_efetiva: 'ATIVO',
+            restricao_origem: 'certificado',
+          },
+        ],
+      }),
+    );
+    render(<CertCadastroPage />);
+    await user.click(await screen.findByRole('button', { name: /Itens \(2\)/ }));
+    await user.click(await screen.findByRole('button', { name: 'Encerrar item PI5555Y' }));
+    expect(screen.getByRole('button', { name: 'Salvar restrição do item' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Fim de venda por certificação do item'), '2026-10-29');
+    await user.type(
+      screen.getByLabelText('Motivo da alteração do item'),
+      'Prazo aprovado pela certificação',
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar restrição do item' }));
+    await waitFor(() =>
+      expect(updateCertificateItemRestriction).toHaveBeenCalledWith('c1', 'PI5555Y', {
+        situacao: 'ENCERRADO',
+        fim_venda: '2026-10-29',
+        motivo: 'Prazo aprovado pela certificação',
+      }),
+    );
+    expect(mockedRemove).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Encerrar item OUTRO-SKU' })).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole('button', { name: 'Herdar certificado para PI5555Y' }),
+    );
+    await user.type(
+      screen.getByLabelText('Motivo da alteração do item'),
+      'Retorno aprovado ao certificado vigente',
+    );
+    await user.click(screen.getByRole('button', { name: 'Salvar restrição do item' }));
+    await waitFor(() =>
+      expect(updateCertificateItemRestriction).toHaveBeenLastCalledWith('c1', 'PI5555Y', {
+        situacao: null,
+        fim_venda: null,
+        motivo: 'Retorno aprovado ao certificado vigente',
+      }),
+    );
+    expect(mockedRemove).not.toHaveBeenCalled();
   });
 
   it('remove um item pelo botao da lixeira', async () => {

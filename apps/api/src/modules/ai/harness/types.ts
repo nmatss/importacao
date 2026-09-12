@@ -18,6 +18,8 @@ export interface HarnessFinding {
   kind: FindingKind;
   severity: 'error' | 'warning';
   message: string;
+  /** An informational warning grounded in the source is not a reading failure. */
+  confidenceImpact?: 'none';
 }
 
 export interface HarnessReport {

@@ -135,7 +135,8 @@ export function daysBetween(a: Date, b: Date): number {
  *  - 'match' if all parse and pairwise differences are <= matchDays
  *  - 'warning' if differences are <= warnDays
  *  - 'divergent' if any difference exceeds warnDays
- *  - 'empty' if fewer than 2 parseable values
+ *  - 'warning' if a supplied date is invalid (without hiding a known divergence)
+ *  - 'empty' if fewer than 2 valid values and no supplied invalid date
  */
 export function compareDates(
   values: unknown[],
@@ -143,8 +144,10 @@ export function compareDates(
 ): DateMatchStatus {
   const matchDays = opts.matchDays ?? 10;
   const warnDays = opts.warnDays ?? 30;
-  const parsed = values.map(parseDate).filter((d): d is Date => d != null);
-  if (parsed.length < 2) return 'empty';
+  const supplied = values.filter((value) => value != null && String(value).trim() !== '');
+  const parsed = supplied.map(parseDate).filter((d): d is Date => d != null);
+  const hasInvalid = parsed.length !== supplied.length;
+  if (parsed.length < 2) return hasInvalid ? 'warning' : 'empty';
   let maxDiff = 0;
   for (let i = 0; i < parsed.length; i++) {
     for (let j = i + 1; j < parsed.length; j++) {
@@ -152,7 +155,7 @@ export function compareDates(
       if (diff > maxDiff) maxDiff = diff;
     }
   }
-  if (maxDiff <= matchDays) return 'match';
+  if (maxDiff <= matchDays) return hasInvalid ? 'warning' : 'match';
   if (maxDiff <= warnDays) return 'warning';
   return 'divergent';
 }

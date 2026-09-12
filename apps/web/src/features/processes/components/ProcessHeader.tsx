@@ -20,7 +20,7 @@ import { correctionStatusLabel } from '@/shared/lib/constants';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { ImportProcess } from '@/shared/types';
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
+import { isDocumentOperational } from '@/shared/lib/confidence';
 
 export interface ProcessHeaderProps {
   process: ImportProcess;
@@ -73,7 +73,7 @@ function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
   const data = doc.aiParsedData;
   if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) return false;
   if (data.extractionFailed || data.error || data.skipped) return false;
-  if (!hasOperationalConfidence(doc.confidenceScore)) return false;
+  if (!isDocumentOperational(doc.confidenceScore, doc.type ?? '')) return false;
 
   const metaKeys = new Set([
     'budgetExceeded',
@@ -103,13 +103,6 @@ function hasUsefulExtraction(doc: ImportProcess['documents'][number]) {
   };
 
   return hasValue(data);
-}
-
-function hasOperationalConfidence(confidenceScore: string | number | null | undefined): boolean {
-  if (confidenceScore == null) return true;
-  const confidence =
-    typeof confidenceScore === 'number' ? confidenceScore : Number.parseFloat(confidenceScore);
-  return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
 }
 
 /**
@@ -156,7 +149,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
     extracted: process.documents?.filter(hasUsefulExtraction).length ?? 0,
   };
   const etd = process.etd ?? readEspelhoSummaryDate(process, 'etd');
-  const eta = process.eta ?? readEspelhoSummaryDate(process, 'eta');
+  const eta = process.etaActual ?? process.eta ?? readEspelhoSummaryDate(process, 'eta');
   const queryClient = useQueryClient();
   const { user } = useAuth();
   // `/unlock` e admin-only no backend; o botao era exibido para todos e so
@@ -288,7 +281,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
             )}
             {eta && (
               <span>
-                · ETA{' '}
+                · ETA {process.etaActual ? 'realizado' : 'previsto'}{' '}
                 <span className="font-medium text-slate-600 dark:text-slate-400">
                   {formatDate(eta)}
                 </span>

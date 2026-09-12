@@ -75,6 +75,61 @@ describe('parseLocaleNumber', () => {
 });
 
 describe('parseEspelhoBuffer', () => {
+  it('reads official summary layout without mixing CNPJ into address', () => {
+    const rows = [
+      ['IMPORTADOR TESTE', '', '', 'TOTAL PCS', 13963],
+      ['CNPJ: 00.000.000/0001-00', '', '', 'PESO BRUTO', 5941.5],
+      ['RUA TESTE 100', '', '', 'PESO LIQUIDO', 5242.5],
+      ['CIDADE TESTE - SC', '', '', 'CBM', 65.527],
+      ['', '', '', 'TOTAL CAIXAS', 699],
+      [],
+      ['', '', '', 'FOB', 85313.93],
+      ['Process', 'Supplier', 'Code', 'Qty', 'Amount'],
+      ['PK2192607SZ', 'FORNECEDOR TESTE', '050404509', 13963, 85313.93],
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Espelho');
+    const parsed = parseEspelhoBuffer(
+      XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+    );
+    expect(parsed.summary).toMatchObject({
+      importerName: 'IMPORTADOR TESTE',
+      importerCnpj: '00.000.000/0001-00',
+      importerAddress: 'RUA TESTE 100 CIDADE TESTE - SC',
+      totalPieces: 13963,
+      totalGrossWeight: 5941.5,
+      totalNetWeight: 5242.5,
+      totalCbm: 65.527,
+      totalBoxes: 699,
+      totalAmountUsd: 85313.93,
+    });
+  });
+
+  it('reads an explicit commercial unit separately from unit price and leaves missing units unknown', () => {
+    for (const withUnit of [true, false]) {
+      const rows = [
+        ['IMPORTADOR TESTE', '', '', 'TOTAL PCS', 10],
+        [
+          'Process',
+          'Supplier',
+          'Code',
+          'Qty',
+          'Unit Price',
+          ...(withUnit ? ['Unidade comercial'] : []),
+        ],
+        ['PK2192607SZ', 'FORNECEDOR', '050404509', 10, 2.5, ...(withUnit ? ['PAR'] : [])],
+      ];
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(rows), 'Espelho');
+      const parsed = parseEspelhoBuffer(
+        XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' }) as Buffer,
+      );
+      expect(parsed.items[0].unitPrice).toBe(2.5);
+      expect(parsed.items[0].unitType).toBe(withUnit ? 'PAR' : null);
+      expect(parsed.items[0].qty).toBe(10);
+    }
+  });
+
   it('maps English net/gross weight headers from operator spreadsheets', () => {
     const rows = [
       ['IMB TEXTIL S.A.'],

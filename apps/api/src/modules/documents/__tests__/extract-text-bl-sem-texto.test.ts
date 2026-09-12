@@ -51,6 +51,9 @@ const ocrScannedPdf = vi.fn();
 const rasterizePdfPages = vi.fn();
 vi.mock('../ocr.js', () => ({ ocrScannedPdf, rasterizePdfPages }));
 
+const extractPopplerText = vi.fn();
+vi.mock('../pdf-text.js', () => ({ extractPopplerText }));
+
 const pdfParse = vi.fn();
 vi.mock('pdf-parse', () => ({ default: pdfParse }));
 
@@ -76,10 +79,21 @@ AS CARRIER`;
 describe('extractText — PDF de BL sem camada de texto legível (EXT-01)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    extractPopplerText.mockResolvedValue(null);
     aiServiceMock.acceptsPdfInput = true;
     aiServiceMock.providerName = 'vertex';
     readFile.mockResolvedValue(Buffer.from('%PDF-1.4 conteudo binario'));
     pdfParse.mockResolvedValue({ text: '', numpages: 1 });
+  });
+
+  it('uses the recovered CID digital text before OCR or provider fallback', async () => {
+    const text = 'BILL OF LADING: recovered digital fields with preserved columns';
+    extractPopplerText.mockResolvedValueOnce({ text, pageTexts: [text] });
+    const result = await documentService.extractText('/tmp/bl.pdf', 'application/pdf');
+    expect(result).toEqual({ text, pageTexts: [text], sourceTextReliable: true, ocrUsed: false });
+    expect(pdfParse).not.toHaveBeenCalled();
+    expect(ocrScannedPdf).not.toHaveBeenCalled();
+    expect(rasterizePdfPages).not.toHaveBeenCalled();
   });
 
   it('anexa o PDF original ao provider multimodal mesmo quando o OCR devolve texto', async () => {

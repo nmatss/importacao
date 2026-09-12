@@ -150,6 +150,23 @@ describe('processService.getChecklist()', () => {
     expect(checklist.steps[3]).toMatchObject({ kind: 'custom', label: 'teste 3' });
   });
 
+  it('preserva ordem cronologica em posicoes iguais e colisoes consecutivas', async () => {
+    queueChecklistReads({
+      customStages: [
+        stage({ id: 1, label: 'Primeira', position: 3 }),
+        stage({ id: 2, label: 'Segunda', position: 3 }),
+        stage({ id: 3, label: 'Terceira', position: 4 }),
+      ],
+    });
+    const checklist = await processService.getChecklist(1);
+    expect(checklist.steps.slice(2, 5).map((step) => step.label)).toEqual([
+      'Primeira',
+      'Segunda',
+      'Terceira',
+    ]);
+    expect(checklist.progress.total).toBe(ACTIVE_CHECKLIST_STEPS.length + 3);
+  });
+
   it('manda para o fim a etapa sem posicao (0, o default antigo) e a posicao alem do total', async () => {
     queueChecklistReads({
       tracking: { processId: 1 },
@@ -261,5 +278,60 @@ describe('processService.setChecklistStepHidden()', () => {
     await expect(
       processService.setChecklistStepHidden(1, 'inventado', { hidden: true }, 9),
     ).rejects.toThrow(/Etapa desconhecida no checklist/);
+  });
+});
+
+describe('movimentacao de etapa existente', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    queryQueue.length = 0;
+    txQueue.length = 0;
+  });
+  it('move sobre outra custom, persiste ambas posicoes e mantem conclusao', async () => {
+    queryQueue.push(createResolvedChain([{ id: 1, lockedAt: null }]));
+    const completedAt = new Date('2026-09-12T12:00:00Z');
+    const first = stage({ id: 91, position: 3, completedAt });
+    const second = stage({ id: 92, position: 4 });
+    txQueue.push(createResolvedChain([{ id: 1 }]));
+    txQueue.push(createResolvedChain([]));
+    txQueue.push(createResolvedChain([]));
+    txQueue.push(createResolvedChain([first, second]));
+    queryQueue.push(createResolvedChain([])); // attribution
+    const saveSecond = createResolvedChain([{ ...second, position: 3 }]);
+    const saveFirst = createResolvedChain([{ ...first, position: 4 }]);
+    txQueue.push(saveSecond, saveFirst);
+    const result = await processService.updateCustomStage(1, 91, { position: 4 }, 7);
+    expect(saveSecond.set).toHaveBeenCalledWith({ position: 3, updatedAt: expect.any(Date) });
+    expect(saveFirst.set).toHaveBeenCalledWith({ position: 4, updatedAt: expect.any(Date) });
+    expect(result.completedAt).toEqual(completedAt);
+    expect(mockDb.transaction).toHaveBeenCalledOnce();
+    queueChecklistReads({
+      customStages: [
+        { ...second, position: 3 },
+        { ...first, position: 4 },
+      ],
+    });
+    const reread = await processService.getChecklist(1);
+    expect(
+      reread.steps.slice(2, 4).map((item) => (item.kind === 'custom' ? item.id : item.key)),
+    ).toEqual([92, 91]);
+    expect(reread.progress.completed).toBe(1);
+    expect(recordProcessEvent).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        eventType: 'custom_stage_moved',
+        metadata: { stageId: 91, position: 4 },
+      }),
+      7,
+    );
+  });
+
+  it('recusa etapa de outro processo sem modificar nenhuma linha', async () => {
+    queryQueue.push(createResolvedChain([{ id: 1, lockedAt: null }]));
+    txQueue.push(createResolvedChain([{ id: 1 }]));
+    txQueue.push(createResolvedChain([]), createResolvedChain([]), createResolvedChain([]));
+    queryQueue.push(createResolvedChain([]));
+    await expect(processService.updateCustomStage(1, 999, { position: 1 }, 7)).rejects.toThrow();
+    expect(auditService.log).not.toHaveBeenCalled();
   });
 });

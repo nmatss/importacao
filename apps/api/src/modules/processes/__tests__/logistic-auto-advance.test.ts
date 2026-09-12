@@ -5,9 +5,8 @@ import {
   shouldApplyDerivedStatus,
 } from '../logistic-auto-advance.js';
 
-// Regression coverage for Eduarda's feedback: a process whose BL/Invoice carries
-// an ETD in the past must auto-advance the Ciclo de Transporte to "em trânsito".
-// Closes the audit gap that the end-to-end logic had no test proving it.
+// Datas previstas nao comprovam eventos, mesmo vencidas. A etapa depende
+// de marco realizado ou status confirmado na fonte follow-up.
 
 const baseProcess = {
   etd: null,
@@ -24,13 +23,13 @@ const baseProcess = {
 const NOW = new Date('2026-06-21T00:00:00Z');
 
 describe('deriveLogisticStatus — em trânsito (in_transit)', () => {
-  it('advances to in_transit when ETD is in the past (embarque de fevereiro)', () => {
+  it('does not invent departure when a planned ETD expires', () => {
     const status = deriveLogisticStatus({
       process: { ...baseProcess, etd: new Date('2026-02-10T00:00:00Z') },
       followUp: null,
       now: NOW,
     });
-    expect(status).toBe('in_transit');
+    expect(status).toBe('consolidation');
   });
 
   it('falls back to shipmentDate when etd is absent', () => {
@@ -51,7 +50,7 @@ describe('deriveLogisticStatus — em trânsito (in_transit)', () => {
     expect(status).not.toBe('in_transit');
   });
 
-  it('berthing takes precedence once ETA is reached', () => {
+  it('elapsed ETA does not prove berthing', () => {
     const status = deriveLogisticStatus({
       process: {
         ...baseProcess,
@@ -61,7 +60,7 @@ describe('deriveLogisticStatus — em trânsito (in_transit)', () => {
       followUp: null,
       now: NOW,
     });
-    expect(status).toBe('berthing');
+    expect(status).toBe('consolidation');
   });
 });
 
@@ -72,7 +71,7 @@ describe('deriveLogisticStatus — em trânsito (in_transit)', () => {
  * nao chega.
  */
 describe('deriveLogisticStatus — previsao nao e evento realizado', () => {
-  const baseFuturo = { ...baseProcess, etd: new Date('2026-02-10T00:00:00Z') };
+  const baseFuturo = { ...baseProcess, shipmentDate: '2026-02-10' };
 
   it('nao vai para waiting_entry com Chegada CD no futuro', () => {
     const status = deriveLogisticStatus({
@@ -83,13 +82,13 @@ describe('deriveLogisticStatus — previsao nao e evento realizado', () => {
     expect(status).toBe('in_transit');
   });
 
-  it('vai para waiting_entry quando a chegada no CD ja passou', () => {
+  it('chegada CD prevista no passado nao comprova chegada', () => {
     const status = deriveLogisticStatus({
       process: { ...baseFuturo, cdArrivalAt: new Date('2026-06-10T00:00:00Z') },
       followUp: null,
       now: NOW,
     });
-    expect(status).toBe('waiting_entry');
+    expect(status).toBe('in_transit');
   });
 
   it('nao libera no porto com desembaraco futuro', () => {
@@ -136,7 +135,7 @@ describe('deriveLogisticStatus — coluna Status da planilha', () => {
       followUp: null,
       now: NOW,
     });
-    expect(status).toBe('waiting_entry');
+    expect(status).toBe('consolidation');
   });
 
   it('reconhece os textos usados na planilha', () => {
@@ -223,4 +222,52 @@ describe('shouldApplyDerivedStatus', () => {
       }),
     ).toBe(false);
   });
+});
+
+describe('marcos realizados no calendario de Sao Paulo', () => {
+  it.each(['shipmentDate', 'etaActual'] as const)('%s nao acontece na vespera local', (field) => {
+    const process = { ...baseProcess, [field]: '2026-09-12' };
+    expect(
+      deriveLogisticStatus({ process, followUp: null, now: new Date('2026-09-12T02:59:59Z') }),
+    ).toBe('consolidation');
+    expect(
+      deriveLogisticStatus({ process, followUp: null, now: new Date('2026-09-12T03:00:00Z') }),
+    ).toBe(field === 'shipmentDate' ? 'in_transit' : 'berthing');
+  });
+  it('ignora data de calendario impossivel', () => {
+    expect(
+      deriveLogisticStatus({
+        process: { ...baseProcess, etaActual: '2026-02-30' },
+        followUp: null,
+        now: NOW,
+      }),
+    ).toBe('consolidation');
+  });
+});
+
+describe('status textual e numero nao comprovam evento negado ou futuro', () => {
+  it.each([
+    'Aguardando liberação',
+    'Aguardando atracação',
+    'Não registrado',
+    'Sem canal',
+    'Atracação prevista',
+  ])('%s nao declara evento realizado', (text) => {
+    expect(logisticStatusFromSheet(text, '2026-06-20T12:00:00Z')).toBeNull();
+  });
+  it('ignora timestamp de sincronizacao invalido', () => {
+    expect(logisticStatusFromSheet('Atracado', 'invalido')).toBeNull();
+  });
+  it.each([null, '2026-12-01'])(
+    'numero DUIMP com data %s nao comprova registro',
+    (registeredAt) => {
+      expect(
+        deriveLogisticStatus({
+          process: { ...baseProcess, duimpNumber: '26BR000001', registeredAt },
+          followUp: null,
+          now: NOW,
+        }),
+      ).toBe('consolidation');
+    },
+  );
 });

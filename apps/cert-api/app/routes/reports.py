@@ -20,6 +20,7 @@ from app.services.report_service import (
     generate_stock_report,
     generate_validation_report_xlsx,
 )
+from app.services.sync_runs import snapshot_sync_warning
 
 router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
@@ -85,7 +86,7 @@ def export_products_report(
 
     try:
         filepath = generate_products_report(
-            rows, brand=brand, status=status, license_map=safe_license_map()
+            rows, brand=brand, status=status, license_map=safe_license_map(), sync_warning=snapshot_sync_warning()
         )
     except Exception as exc:
         raise _safe_export_error(exc) from exc

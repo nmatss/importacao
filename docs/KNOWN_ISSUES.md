@@ -1,5 +1,26 @@
 # Known Issues
 
+## Atualização da revisão antecipada — 12/09/2026
+
+- A rodada2 avança imediatamente, sem aguardar cronograma. Detalhes e evidências em
+  [relatório atual](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+- Antes de publicar o contrato de restrição individual, aplicar e verificar a migration explícita
+  `apps/cert-api/sql/20260912_certificate_item_restrictions.sql` pelo fluxo autorizado.
+- IA_LOCAL continua com falha DNS. Usuário autorizou piloto Vertex e quatro PDFs foram inferidos
+  sem persistência; homologação integral continua parcial. Política de egress local preservada.
+- Resolução manual/planilha/fornecedor e não aplicabilidade de licenciamento dependem de vínculo
+  aprovado. Datas propostas não são bloqueio; essas decisões permanecem dependências reais.
+
+## 2026-09-12 — Pendências atuais após retomada
+
+Estado atual em [retomada 12/09](STATUS-2026-09-12-RETOMADA-REUNIAO.md), que atualiza os
+itens históricos abaixo. Registro foi implementado; cronograma atualizado; imagem Docker
+construída; SELECT de FIM_VENDAS permitido nas duas marcas. Permanecem: homologação piloto
+com provider/rascunho real, vínculo vigente por fornecedor/certificado e validação N, decisão
+dia limite, fonte de não aplicabilidade do licenciamento, conciliação/carga Linx e ativação
+Drive em produção. Sincronização ambígua falha explicitamente e não resolve o vínculo.
+Produção ainda email/raiz placeholder, confirmado read-only; nenhum rollout realizado.
+
 Ultima atualizacao: 2026-09-11 (ver
 `docs/STATUS-2026-09-11-REUNIAO-IMPORTACAO-CERTIFICACAO.md`,
 `docs/STATUS-2026-08-29-AUDITORIA-E-CORRECAO-INTEGRAL.md`,

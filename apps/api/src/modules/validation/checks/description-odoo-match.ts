@@ -1,3 +1,5 @@
+import { primaryItemCode, descriptionWithoutItemCode } from '../utils/item-code-normalize.js';
+
 interface CheckInput {
   invoiceData?: Record<string, any>;
   packingListData?: Record<string, any>;
@@ -46,12 +48,16 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
   let checkedCount = 0;
   let comparableCount = 0;
   const unavailable: string[] = [];
+  let missingFieldsCount = 0;
 
   for (const item of items) {
-    const code = String(item.itemCode || item.item_code || '').trim();
-    const description = String(item.description || '').trim();
+    const code = primaryItemCode({ ...item, itemCode: item.itemCode ?? item.item_code });
+    const description = descriptionWithoutItemCode(item.description);
 
-    if (!code || !description) continue;
+    if (!code || !description) {
+      missingFieldsCount++;
+      continue;
+    }
     comparableCount++;
 
     try {
@@ -70,7 +76,7 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
     }
   }
 
-  const coverage = `${checkedCount} de ${comparableCount} verificadas${
+  const coverage = `${checkedCount} de ${items.length} verificadas${missingFieldsCount > 0 ? `, ${missingFieldsCount} sem codigo ou descricao` : ''}${
     unavailable.length > 0
       ? `, ${unavailable.length} indisponíveis (${unavailable.join(', ')})`
       : ''
@@ -89,7 +95,7 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
     return {
       checkName,
       status: 'skipped',
-      expectedValue: `${comparableCount} itens a verificar`,
+      expectedValue: `${items.length} itens a verificar`,
       actualValue: coverage,
       documentsCompared: 'INV vs Odoo',
       message: `o Odoo nao respondeu para os ${unavailable.length} item(ns) consultados`,
@@ -99,13 +105,13 @@ export default async function descriptionOdooMatch(input: CheckInput): Promise<C
   if (mismatches.length === 0) {
     return {
       checkName,
-      status: unavailable.length > 0 ? 'warning' : 'passed',
-      expectedValue: `${comparableCount} itens a verificar`,
+      status: unavailable.length > 0 || missingFieldsCount > 0 ? 'warning' : 'passed',
+      expectedValue: `${items.length} itens a verificar`,
       actualValue: coverage,
       documentsCompared: 'INV vs Odoo',
       message:
-        unavailable.length > 0
-          ? `${coverage}: as verificadas correspondem ao catálogo Odoo, as indisponíveis não foram conferidas.`
+        unavailable.length > 0 || missingFieldsCount > 0
+          ? `${coverage}: as verificadas correspondem ao catálogo Odoo, as demais não foram conferidas.`
           : `Todas as ${checkedCount} descrições correspondem ao catálogo Odoo.`,
     };
   }

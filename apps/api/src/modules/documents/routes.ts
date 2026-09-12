@@ -1,4 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
+import { eq } from 'drizzle-orm';
+import { db } from '../../shared/database/connection.js';
+import { documents, importProcesses } from '../../shared/database/schema.js';
+import { buildRegistroComparison } from './registro-comparison.js';
 import { documentController } from './controller.js';
 import { authMiddleware, adminMiddleware } from '../../shared/middleware/auth.js';
 import { upload, validateMagicBytes } from '../../shared/middleware/upload.js';
@@ -62,6 +66,25 @@ router.get(
   '/process/:processId/comparison',
   validate(paramsNumericos('processId'), 'params'),
   documentController.comparison,
+);
+router.get(
+  '/process/:processId/registro-comparison',
+  validate(paramsNumericos('processId'), 'params'),
+  async (req, res, next) => {
+    try {
+      const processId = Number(req.params.processId);
+      const [process] = await db
+        .select({ id: importProcesses.id, processCode: importProcesses.processCode })
+        .from(importProcesses)
+        .where(eq(importProcesses.id, processId))
+        .limit(1);
+      if (!process) return sendError(res, 'Processo não encontrado', 404);
+      const rows = await db.select().from(documents).where(eq(documents.processId, processId));
+      return sendSuccess(res, buildRegistroComparison(processId, rows, process.processCode));
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 router.post(
   '/process/:processId/comparison/accept',

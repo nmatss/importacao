@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { CertStatusBadge } from '@/features/certificacoes/components/CertStatusBadge';
 import {
   fetchCertProductDetail,
+  fetchLastCertSync,
   lookupCertificateLinx,
   verifyCertProduct,
   type CertLinxLookup,
@@ -110,10 +111,22 @@ function SaleLockPanel({ product }: { product: CertProduct }) {
                 : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
             )}
           >
-            {STATUS_VENDA_LABEL[statusVenda] ?? statusVenda}
+            {product.status_venda_reason
+              ? 'Pendente de validação'
+              : (STATUS_VENDA_LABEL[statusVenda] ?? statusVenda)}
           </span>
         )}
       </div>
+      {product.status_venda_reason && (
+        <p className="px-5 pt-4 text-sm text-amber-700 dark:text-amber-300">
+          {product.status_venda_reason}
+        </p>
+      )}
+      {product.cert_status_reason && (
+        <p className="px-5 pt-4 text-sm text-amber-700 dark:text-amber-300">
+          {product.cert_status_reason}
+        </p>
+      )}
       <div className="grid grid-cols-1 gap-3 p-5 sm:grid-cols-2 xl:grid-cols-3">
         <SaleLockField
           label="Validade do certificado"
@@ -173,6 +186,7 @@ export default function CertProdutoDetailPage() {
   const [liveResult, setLiveResult] = useState<any>(null);
   const [linxLookup, setLinxLookup] = useState<CertLinxLookup | null>(null);
   const [linxLoading, setLinxLoading] = useState(false);
+  const [syncWarning, setSyncWarning] = useState<string | null>(null);
   const [linxError, setLinxError] = useState<string | null>(null);
 
   const loadProduct = useCallback(async () => {
@@ -185,6 +199,20 @@ export default function CertProdutoDetailPage() {
     } finally {
       setLoading(false);
     }
+  }, [sku]);
+
+  useEffect(() => {
+    let current = true;
+    fetchLastCertSync()
+      .then(({ last_run }) => {
+        if (current) setSyncWarning(last_run?.error ?? null);
+      })
+      .catch(() => {
+        if (current) setSyncWarning('Não foi possível consultar a última sincronização.');
+      });
+    return () => {
+      current = false;
+    };
   }, [sku]);
 
   useEffect(() => {
@@ -277,6 +305,15 @@ export default function CertProdutoDetailPage() {
         </div>
       ) : product ? (
         <>
+          {syncWarning && (
+            <div
+              role="status"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300"
+            >
+              Sincronização não confirmada: {syncWarning}. Os dados exibidos são os últimos salvos e
+              não comprovam atualização das fontes.
+            </div>
+          )}
           {/* Product Header Card */}
           <div className="rounded-2xl border border-slate-200/60 dark:border-slate-700/60 shadow-sm bg-white dark:bg-slate-800 overflow-hidden">
             <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 px-7 py-4">
@@ -534,7 +571,7 @@ export default function CertProdutoDetailPage() {
               </div>
               <div className="rounded-xl bg-emerald-50/70 p-4 dark:bg-emerald-950/30">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                  Validade · Linx
+                  Fim de venda por certificação · Linx
                   {linxLookup &&
                     ` · prop ${linxLookup.properties.validade_certificado.property_code}`}
                 </p>

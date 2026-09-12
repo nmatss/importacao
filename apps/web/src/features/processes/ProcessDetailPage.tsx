@@ -86,7 +86,7 @@ interface ValidationCheck {
   status: 'passed' | 'failed' | 'warning' | 'skipped';
 }
 
-import { MIN_OPERATIONAL_CONFIDENCE } from '@/shared/lib/confidence';
+import { isDocumentOperational } from '@/shared/lib/confidence';
 
 type EmailLogsResponse = { data: EmailLog[]; pagination: unknown };
 
@@ -122,16 +122,11 @@ function TabIndicator({
 
   if (tabKey === 'documentos') {
     const docs = process.documents ?? [];
-    const hasOperationalConfidence = (confidenceScore?: string | null) => {
-      if (!confidenceScore) return true;
-      const confidence = Number(confidenceScore);
-      return Number.isFinite(confidence) && confidence >= MIN_OPERATIONAL_CONFIDENCE;
-    };
     const hasUsableDoc = (aliases: string[]) =>
       docs.some((doc) => {
         const type = doc.type?.toLowerCase();
         if (!type || !aliases.includes(type)) return false;
-        if (!hasOperationalConfidence(doc.confidenceScore)) return false;
+        if (!isDocumentOperational(doc.confidenceScore, type)) return false;
         const data = doc.aiParsedData;
         if (!doc.isProcessed || !data || typeof data !== 'object' || Array.isArray(data)) {
           return false;
@@ -484,7 +479,7 @@ export function ProcessDetailPage() {
                   key={tab.key}
                   onClick={() => handleTabChange(tab.key)}
                   className={cn(
-                    'relative flex items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
+                    'relative flex shrink-0 items-center gap-1.5 sm:gap-2 whitespace-nowrap rounded-t-xl px-3 py-2.5 sm:px-5 sm:py-3 text-sm font-semibold transition-all',
                     isActive
                       ? 'bg-white dark:bg-slate-800 text-primary-700 dark:text-primary-400 shadow-sm border border-slate-200/60 dark:border-slate-700/60 border-b-white dark:border-b-slate-800 -mb-px z-10'
                       : 'text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-white/50 dark:hover:bg-slate-700/50',

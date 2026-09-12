@@ -161,6 +161,8 @@ def read_certificate_from_linx(brand: str, sku: str) -> dict:
             "raw_value": raw_value,
             "state": state,
         }
+    # Alias explicito: o nome legado refere-se a trava, nao a validade cadastral.
+    result["fim_venda_certificacao"] = result.get("validade_certificado")
     result["properties"] = details
     result["status"] = "found" if any(result[field] for field, _ in fields) else "empty"
     return result
@@ -254,7 +256,7 @@ def write_certificate_to_linx(
         (
             "vencimento_licenciamento",
             cfg["prop_vencimento_licenciamento"],
-            vencimento_licenciamento,
+            None,  # Produto e dono desta propriedade; o portal nunca a sobrescreve.
         ),
     ]
 
@@ -308,14 +310,11 @@ def _parse_br_date(value: str) -> date | None:
 
 
 def _salvar_relatorio_sync(resultado: dict) -> str | None:
-    """Grava o antes/depois por SKU em REPORTS_DIR — SEMPRE, dry-run inclusive.
+    """Persist diagnostic before/after evidence; this is not a complete backup.
 
-    O Linx nao versiona PROP_PRODUTOS: sem este arquivo, sobrescrever a validade
-    de centenas de produtos e irreversivel. E o dry-run precisa do arquivo tanto
-    quanto o apply — e ele que o time fiscal confere antes de autorizar a carga
-    (antes so o `--apply` salvava, e o unico registro do dry-run era o stdout).
+    A report does not approve a load or establish a tested restoration path.
     """
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     sufixo = "dry-run" if resultado.get("dry_run") else "apply"
     path = REPORTS_DIR / f"sync-prazo-linx-{sufixo}-{stamp}.json"
     try:
@@ -331,13 +330,13 @@ def sync_prazo_venda_to_linx(
 ) -> dict:
     """Reconcilia o FIM DE VENDA da planilha com a propriedade do Linx.
 
-    O time fiscal mantem o fim de venda na aba "Encerramentos"; o Linx guarda o
-    mesmo dado na propriedade de certificacao (00224 Puket / 00106 Imaginarium),
-    que e a trava de faturamento.
+    Compara Encerramentos com as propriedades configuradas de certificacao
+    (00224 Puket / 00106 Imaginarium). A semantica de escrita dessas propriedades
+    ainda requer homologacao Linx; o relatorio nao equivale a essa aprovacao.
 
-    `dry_run=True` (padrao) NAO escreve nada: apenas classifica o que aconteceria
-    e grava o relatorio antes/depois. Escrever no ERP de producao exige
-    `dry_run=False` explicito.
+    `dry_run=True` (padrao) apenas classifica propostas e grava evidencia.
+    `dry_run=False` permanece bloqueado ate existir plano de carga aprovado,
+    baseline persistida, conciliacao e recuperacao verificadas.
 
     Grupos que NUNCA sao gravados, nem com `dry_run=False`, porque dependem de
     decisao fiscal e nao podem sair como efeito colateral de um sync:
@@ -376,19 +375,36 @@ def sync_prazo_venda_to_linx(
         "ambiguos": [],
         "report_path": None,
         "error": None,
+        "load_gate": "BLOCKED_PENDING_REVIEW_AND_RECOVERY",
+        "baseline_complete": False,
     }
 
     if not dry_run and not LINX_WRITE_ENABLED:
         result["error"] = "Escrita no Linx desabilitada (LINX_WRITE_ENABLED=false)"
         return result
 
-    linhas = read_encerramentos_prazos()
+    if not dry_run:
+        result["error"] = (
+            "Carga em lote bloqueada: preparar baseline persistida, plano aprovado, "
+            "conciliacao e recuperacao verificadas antes de habilitar apply. "
+            "Use dry_run=True para preparar o relatorio; ele nao autoriza escrita."
+        )
+        return result
+
+    try:
+        linhas = read_encerramentos_prazos()
+        situacoes = read_situacao_por_sku()
+    except ValueError as exc:
+        result["error"] = str(exc)
+        return result
+    except Exception:
+        result["error"] = "Fonte de certificacao incompleta ou esquema/vinculo invalido; preparacao interrompida"
+        return result
     if not linhas:
         result["error"] = "Nenhum prazo lido da aba 'Encerramentos'"
         return result
 
-    situacoes = read_situacao_por_sku()
-    if not situacoes and not dry_run:
+    if not situacoes:
         result["error"] = (
             "Situacao (coluna U) indisponivel: sem ela nao da para saber se o "
             "certificado esta ativo, e certificado ativo nao pode receber data."
@@ -442,6 +458,20 @@ def sync_prazo_venda_to_linx(
             registrar(item, "ambiguo (prazos divergentes p/ o mesmo SKU)")
             continue
 
+        identities = {(_so_alfanumerico(ln.get("certificado")), ln.get("brand")) for ln in grupo}
+        cert_enc = _so_alfanumerico(linha.get("certificado"))
+        cert_vig = _so_alfanumerico(vigente.get("numero_certificado"))
+        double_flags = {str(ln.get("dupla_certificacao_raw") or "").strip().lower() for ln in grupo}
+        if len(identities) > 1 or (cert_enc and cert_vig and cert_enc != cert_vig) or double_flags - {"", "não", "nao"}:
+            item["dupla_certificacao_raw"] = linha.get("dupla_certificacao_raw", "")
+            item["pendencia"] = "Validar coluna N e vinculo por fornecedor/certificado; nenhum prazo selecionado"
+            result["ambiguos"].append(dict(item))
+            registrar(item, ACAO_DUPLA)
+            continue
+        if not cert_enc or not cert_vig or not vigente:
+            registrar(item, ACAO_SITUACAO_DESCONHECIDA)
+            continue
+
         prazo_date = _parse_br_date(prazo_raw)
         if prazo_date is None:
             # "venda ate fim do lote" e afins: nao ha data para gravar num campo
@@ -467,7 +497,14 @@ def sync_prazo_venda_to_linx(
 
         prop = cfg["prop_validade_certificado"]
         valor = _format_date(prazo_date)
-        atual = read_produto_propriedade(brand, produto, prop)
+        try:
+            atual = read_produto_propriedade(brand, produto, prop)
+        except Exception:
+            registrar(item, "erro (leitura certificacao)")
+            continue
+        item["produto_linx"] = produto
+        item["propriedade_certificacao"] = prop
+        item["propriedade_licenciamento"] = cfg["prop_vencimento_licenciamento"]
         item["valor_atual"] = atual
         try:
             atual_lic = read_produto_propriedade(
@@ -476,6 +513,7 @@ def sync_prazo_venda_to_linx(
         except Exception as e:  # leitura extra nao pode derrubar a classificacao
             log.warning(f"Nao foi possivel ler o licenciamento de {sku}: {type(e).__name__}")
             atual_lic = None
+            item["erro_leitura_licenciamento"] = True
         item["valor_atual_licenciamento"] = atual_lic
 
         situacao_status = derive_situacao_status(vigente.get("situacao"))
@@ -500,12 +538,7 @@ def sync_prazo_venda_to_linx(
             registrar(item, ACAO_ATIVO_SEM_DATA)
             continue
 
-        if situacao_status is None and not vigente:
-            # SKU que so existe em "Encerramentos": e encerrado por definicao,
-            # segue o fluxo normal. Sem linha de produto NENHUMA nao ha o que
-            # conferir; o caso bloqueado e outro: linha existe com U ilegivel.
-            pass
-        elif situacao_status is None:
+        if situacao_status is None:
             registrar(item, ACAO_SITUACAO_DESCONHECIDA)
             continue
 
@@ -525,14 +558,7 @@ def sync_prazo_venda_to_linx(
             registrar(item, "encurta janela")
             continue
 
-        if dry_run:
-            registrar(item, "gravaria" if atual is not None else "inseriria")
-            continue
-
-        try:
-            registrar(item, upsert_produto_propriedade(brand, produto, prop, valor))
-        except Exception as e:
-            registrar(item, f"erro (gravacao: {str(e)[:60]})", "erro (gravacao)")
+        registrar(item, "gravaria" if atual is not None else "inseriria")
 
     result["counts"] = counts
     por_marca: dict[str, dict[str, int]] = {}
@@ -545,6 +571,8 @@ def sync_prazo_venda_to_linx(
     ]
     if salvar_relatorio:
         result["report_path"] = _salvar_relatorio_sync(result)
+        if result["report_path"] is None:
+            result["error"] = "Relatorio nao persistido; preparacao nao concluida"
     return result
 
 

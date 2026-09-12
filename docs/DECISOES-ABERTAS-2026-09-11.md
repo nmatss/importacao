@@ -1,5 +1,11 @@
 # Decisoes abertas com Eduarda/Odett — reuniao 11/09/2026
 
+> Atualização 12/09: o pedido atual substitui os padrões históricos 6 e 21:
+> BL abaixo de 90% é não utilizável; aplicabilidade marketplace permanece pendente, sem
+> regra automática de 500 peças. Item20 não está homologado: N/vínculo por fornecedor precisam
+> de validação. Item17 não autoriza zerar propriedades. Nenhuma carga/deploy executada.
+> Ver [estado atual](STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 Cada item abaixo ja tem uma opcao implementada como padrao reversivel (marcada "Padrao adotado"). Basta confirmar ou pedir a troca.
 
 ## Leitura de documentos (Drive)

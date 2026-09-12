@@ -97,6 +97,40 @@ TOTAL CARTONS: 48`);
 });
 
 describe('fillPackingListNullsFromText', () => {
+  it('reads column-aligned CBM and separated footer cells from digital Puket PDF', () => {
+    const text = [
+      'PACKING LIST PUKET',
+      'QTY CARTONS'.padEnd(70) + 'TOTAL CBM',
+      'ROW ITEMS'.padEnd(70) + '120,246',
+      ' TOTAL 90.615,00 1375 12.560,68 13.997,48',
+    ].join('\n');
+    const filled = fillPackingListNullsFromText({}, text);
+    expect(filled.totalCbm.value).toBe(120.246);
+    expect(filled.totalBoxes.value).toBe(1375);
+    expect(filled.totalNetWeight.value).toBe(12560.68);
+    expect(filled.totalGrossWeight.value).toBe(13997.48);
+    expect(filled.items).toBeUndefined();
+    expect(
+      fillPackingListNullsFromText({}, text + '\n TOTAL 1,00 2 3,00 4,00').totalBoxes,
+    ).toBeUndefined();
+  });
+
+  it('recovers unique Puket CBM without guessing joined weight and carton totals', () => {
+    const text =
+      'PACKING LIST\nPUKET BACKPACK\nTOTAL90.615,00137512.560,6813.997,48\n120,246\nTOTA L NET WEIGHT\nTOTA L GROSS WEIGHT\nTOTA L C B M\nQTY CARTONS';
+    const filled = fillPackingListNullsFromText({}, text);
+    expect(filled.totalBoxes).toBeUndefined();
+    expect(filled.totalNetWeight).toBeUndefined();
+    expect(filled.totalGrossWeight).toBeUndefined();
+    expect(filled.totalCbm.value).toBe(120.246);
+    expect(filled.items).toBeUndefined();
+    expect(fillPackingListNullsFromText({}, text, { sourceTextReliable: false })).toEqual({});
+    expect(
+      fillPackingListNullsFromText({ totalCbm: { value: 121, confidence: 0.95 } }, text).totalCbm
+        .value,
+    ).toBe(121);
+  });
+
   const cf = (value: unknown, confidence = 0.9) => ({ value, confidence });
 
   it('preenche escalares de header NULL a partir do texto sem tocar no que o modelo extraiu', () => {

@@ -156,7 +156,14 @@ async function loadKnownState(processId: number): Promise<ProcessKnownState> {
   };
 
   for (const row of docRows) {
-    if (row.driveFileId) state.versionByFileId.set(row.driveFileId, row.driveVersion ?? null);
+    if (row.driveFileId) {
+      const previous = state.versionByFileId.get(row.driveFileId);
+      // Database row order is not guaranteed; a historical revision must not
+      // replace the latest already-ingested revision in the dedupe snapshot.
+      if (previous == null || (row.driveVersion != null && row.driveVersion > previous)) {
+        state.versionByFileId.set(row.driveFileId, row.driveVersion ?? null);
+      }
+    }
     if (row.driveMd5) state.md5s.add(row.driveMd5);
     if (row.contentSha256) state.shas.add(row.contentSha256);
   }
@@ -304,6 +311,25 @@ export async function ingestProcessFromDrive(
   for (const pasta of pastas) {
     const arquivos = await listProcessFolderFiles(pasta.folderId, pasta.path, result.ignored);
     for (const arquivo of arquivos) {
+      // Reject a named foreign process before priority selection; otherwise
+      // a misplaced pending invoice suppresses the correct brand invoice.
+      const namedCodes = [
+        ...new Set([
+          ...index.byCode.keys(),
+          ...index.espelhosByCode.keys(),
+          ...(arquivo.name
+            .toUpperCase()
+            .match(/(?<![A-Z0-9])(?:PK|IM)\d{7}[A-Z]{2}(?![A-Z0-9])/g) ?? []),
+        ]),
+      ].filter((code) => nameReferencesCode(arquivo.name, code));
+      if (namedCodes.some((code) => code !== normalizedCode)) {
+        result.ignored.push({
+          name: arquivo.name,
+          reason: 'arquivo referencia outro processo — revisar associacao na pasta',
+        });
+        result.skipped += 1;
+        continue;
+      }
       const decisao = classifyDriveFile(arquivo.name, {
         hasKnownProcessCode: nameReferencesCode(arquivo.name, normalizedCode),
       });
@@ -408,6 +434,17 @@ export async function ingestProcessFromDrive(
         ? await googleDriveService.exportSpreadsheetAsXlsx(file.fileId)
         : await googleDriveService.downloadFileBuffer(file.fileId);
 
+      // Native exports have no reliable size metadata; downloaded content
+      // can also change after the listing. Check actual bytes before storage.
+      if (buffer.length > maxFileBytes()) {
+        result.ignored.push({
+          name: file.name,
+          reason: 'conteudo baixado acima do limite de tamanho',
+        });
+        result.skipped += 1;
+        continue;
+      }
+
       const contentSha256 = sha256(buffer);
       if (known.tombstoneShas.has(contentSha256)) {
         result.ignored.push({
@@ -452,6 +489,7 @@ export async function ingestProcessFromDrive(
       });
 
       known.shas.add(contentSha256);
+      known.versionByFileId.set(file.fileId, file.version);
       if (file.md5) known.md5s.add(file.md5);
       result.imported += 1;
       logger.info(
@@ -515,27 +553,29 @@ export async function ingestAllProcessesFromDrive(): Promise<DriveIngestionResul
     logger.info('Drive ingestion sweep already running — skipping this tick');
     return [];
   }
-  if (!(await googleDriveService.isRootConfigured())) {
-    logger.warn(
-      'DOCUMENT_SOURCE inclui drive mas GOOGLE_DRIVE_ROOT_FOLDER_ID nao esta configurado — nenhum documento sera lido do Drive',
-    );
-    return registrarInativo('GOOGLE_DRIVE_ROOT_FOLDER_ID ausente ou placeholder');
-  }
-
-  // The same Follow Up allow-list that governs process creation also governs
-  // which process folders may feed documents. When it cannot be established,
-  // importing nothing is safer and visible; falling back would re-authorize
-  // stale/item-code processes.
-  const referenceSource = getReferenceSource();
-  const followUp = referenceSource === 'follow_up' ? await getFollowUpReferences() : null;
-  if (referenceSource === 'follow_up' && !followUp) {
-    logger.error('Follow Up allow-list unavailable — Drive ingestion sweep blocked');
-    return registrarInativo('lista de referencias do Follow Up indisponivel');
-  }
-
+  // Acquire before the first await: concurrent HTTP/job callers must not
+  // both pass preflight and import the same snapshot. Finally covers failures.
   sweepRunning = true;
   const startedAt = new Date().toISOString();
   try {
+    if (!(await googleDriveService.isRootConfigured())) {
+      logger.warn(
+        'DOCUMENT_SOURCE inclui drive mas GOOGLE_DRIVE_ROOT_FOLDER_ID nao esta configurado — nenhum documento sera lido do Drive',
+      );
+      return registrarInativo('GOOGLE_DRIVE_ROOT_FOLDER_ID ausente ou placeholder');
+    }
+
+    // The same Follow Up allow-list that governs process creation also governs
+    // which process folders may feed documents. When it cannot be established,
+    // importing nothing is safer and visible; falling back would re-authorize
+    // stale/item-code processes.
+    const referenceSource = getReferenceSource();
+    const followUp = referenceSource === 'follow_up' ? await getFollowUpReferences() : null;
+    if (referenceSource === 'follow_up' && !followUp) {
+      logger.error('Follow Up allow-list unavailable — Drive ingestion sweep blocked');
+      return registrarInativo('lista de referencias do Follow Up indisponivel');
+    }
+
     const processes = await db
       .select({
         id: importProcesses.id,

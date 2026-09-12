@@ -88,6 +88,39 @@ describe('DocumentChecklistTab', () => {
     mockChecklist();
   });
 
+  it('move a etapa existente por linha e atualiza as consultas relacionadas', async () => {
+    const user = userEvent.setup();
+    const { invalidateSpy } = renderChecklist();
+    await user.click(screen.getByRole('button', { name: 'Mover Vistoria INMETRO para cima' }));
+    expect(api.put).toHaveBeenCalledWith('/api/processes/7/custom-stages/91', { position: 2 });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['process-checklist', '7'] });
+    expect(api.post).not.toHaveBeenCalled();
+    expect(api.delete).not.toHaveBeenCalled();
+  });
+
+  it('limita movimento nas extremidades', async () => {
+    const user = userEvent.setup();
+    mockChecklist({ ...CHECKLIST, steps: [CHECKLIST.steps[2]] });
+    renderChecklist();
+    expect(screen.getByRole('button', { name: /para cima/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /para baixo/ })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: /para cima/ }));
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it('falha ao mover preserva a lista e permite tentar novamente', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.put).mockRejectedValueOnce(new Error('Processo bloqueado'));
+    const { invalidateSpy } = renderChecklist();
+    await user.click(screen.getByRole('button', { name: 'Mover Vistoria INMETRO para cima' }));
+    expect(screen.getAllByRole('button', { name: /^(Concluir|Reabrir) etapa/ })[2]).toHaveAttribute(
+      'aria-label',
+      'Concluir etapa Vistoria INMETRO',
+    );
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Mover Vistoria INMETRO para cima' })).toBeEnabled();
+  });
+
   it('le a lista pronta do servidor, com as etapas especificas na posicao escolhida', () => {
     renderChecklist();
 
@@ -125,6 +158,7 @@ describe('DocumentChecklistTab', () => {
     });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['process-checklist', PROCESS_ID] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['process', PROCESS_ID] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['process-events', PROCESS_ID] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['dashboard', 'sla'] });
   });
 

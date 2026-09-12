@@ -48,6 +48,22 @@ describe('DocumentList', () => {
     vi.clearAllMocks();
   });
 
+  it.each([0.89, null])('BL com confiança %s não é utilizável', (confidence) => {
+    renderDocumentList([
+      {
+        id: 20,
+        fileName: 'bl.pdf',
+        documentType: 'ohbl',
+        uploadedAt: '2026-09-12T12:00:00.000Z',
+        aiProcessingStatus: 'completed',
+        aiConfidence: confidence,
+        aiParsedData: { containerNumber: { value: 'MSCU1234567' } },
+      },
+    ]);
+    expect(screen.getByText(/IA: 0\/1 extraídos/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/não utilizável/i).length).toBeGreaterThan(0);
+  });
+
   it('marks completed low-confidence documents as not usable', () => {
     renderDocumentList([
       {

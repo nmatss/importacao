@@ -18,13 +18,15 @@ from slowapi.util import get_remote_address
 
 from app.config import CERTS_DIR, DATABASE_URL
 from app.db.postgres import db
-from app.models.schemas import CertificateItemsRequest
+from app.models.schemas import CertificateItemRestrictionRequest, CertificateItemsRequest
+from app.services.derivation import parse_data_real
 from app.services.erp_service import normalize_brand_filter
 from app.services.linx_service import (
     is_brand_supported,
     read_certificate_from_linx,
     write_certificate_to_linx,
 )
+from app.services.sync_runs import sheet_sync_lock
 from app.utils.logging import log
 
 router = APIRouter()
@@ -36,6 +38,9 @@ _MAX_PDF_BYTES = 15 * 1024 * 1024  # 15 MB
 # + upsert da propriedade); sem teto, uma planilha colada inteira seguraria o
 # request por minutos e escreveria no ERP sem ninguem conseguir acompanhar.
 _MAX_ITEMS_PER_REQUEST = 500
+
+# Lock compartilhado entre replicas antes de ler conflitos e chamar o ERP.
+_CERTIFICATE_LINK_LOCK_KEY = 776_120_912
 
 _SITUACOES = ("ATIVO", "ENCERRADO")
 
@@ -114,26 +119,49 @@ def _serialize(row: dict) -> dict:
     return row
 
 
-def _serialize_item(row: dict) -> dict:
+def _item_restriction(item: dict, certificate: dict) -> dict:
+    parent_situation = certificate.get("situacao") or "ATIVO"
+    inconsistent = item.get("situacao") == "ATIVO" and parent_situation == "ENCERRADO"
+    situation = parent_situation if inconsistent else item.get("situacao") or parent_situation
+    inherited_deadline = item.get("fim_venda") if item.get("fim_venda") is not None else certificate.get("fim_venda")
+    deadline = parse_data_real(inherited_deadline) if situation == "ENCERRADO" and not inconsistent else None
+    return {
+        "situacao_efetiva": situation,
+        "fim_venda_efetivo": deadline.isoformat() if deadline else None,
+        "restricao_pendente": inconsistent or (situation == "ENCERRADO" and deadline is None),
+        "restricao_origem": "item" if item.get("situacao") is not None or item.get("fim_venda") is not None else "certificado",
+    }
+
+
+def _item_linx_result(brand: str, item: dict, certificate: dict) -> dict:
+    restriction = _item_restriction(item, certificate)
+    if restriction["restricao_pendente"]:
+        return {"status": "pending", "produto_codigo": item.get("produto_codigo"),
+                "error": "Restricao individual inconsistente ou sem fim de venda valido; confirmar antes do envio ao Linx", "details": []}
+    return _write_item_to_linx(brand, item["sku"], restriction["fim_venda_efetivo"], None)
+
+
+def _serialize_item(row: dict, certificate: dict | None = None) -> dict:
     """Serialize a cert_certificate_items row to JSON-safe types."""
     out = dict(row)
     out["id"] = str(out["id"])
     out["certificate_id"] = str(out["certificate_id"])
-    for f in ("linx_applied_at", "added_at", "removed_at"):
+    for f in ("linx_applied_at", "added_at", "removed_at", "fim_venda", "restriction_updated_at"):
         v = out.get(f)
         if v is not None and hasattr(v, "isoformat"):
             out[f] = v.isoformat()
+    out.update(_item_restriction(row, certificate or {}))
     return out
 
 
-def _fetch_active_items(cur, cert_id: str) -> list[dict]:
+def _fetch_active_items(cur, cert_id: str, certificate: dict) -> list[dict]:
     """Itens ainda vinculados (sem `removed_at`) de um certificado."""
     cur.execute(
         "SELECT * FROM cert_certificate_items "
         "WHERE certificate_id = %s AND removed_at IS NULL ORDER BY added_at, sku",
         [cert_id],
     )
-    return [_serialize_item(dict(r)) for r in cur.fetchall()]
+    return [_serialize_item(dict(r), certificate) for r in cur.fetchall()]
 
 
 def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento: str | None) -> dict:
@@ -148,7 +176,9 @@ def _write_item_to_linx(brand: str, sku: str, fim_venda: str | None, vencimento:
     nao grava nada nessa propriedade (`write_certificate_to_linx` trata None como
     "skipped (sem valor)").
     """
-    return write_certificate_to_linx(brand, sku, fim_venda or None, vencimento or None)
+    return write_certificate_to_linx(
+        brand, sku, None, None, fim_venda=fim_venda or None
+    )
 
 
 def _save_pdf(file: UploadFile, cert_id: str) -> str:
@@ -183,7 +213,38 @@ def _save_pdf(file: UploadFile, cert_id: str) -> str:
     return stored
 
 
+def _other_active_certificates(cur, cert_id: str, brand: str, skus: list[str]) -> dict:
+    brand_key = normalize_brand_filter(brand)
+    aliases = ["puket", "puket escolares"] if brand_key in ("puket", "puket escolares") else [brand_key]
+    cur.execute(
+        """
+        SELECT i.sku AS sku, c.numero_certificado AS numero
+        FROM cert_certificate_items i JOIN cert_certificates c ON c.id = i.certificate_id
+        WHERE i.removed_at IS NULL AND i.certificate_id <> %s
+          AND COALESCE(i.situacao, c.situacao, 'ATIVO') = 'ATIVO'
+          AND LOWER(REPLACE(c.brand, '_', ' ')) = ANY(%s)
+          AND i.sku = ANY(%s)
+        UNION
+        SELECT c.sku AS sku, c.numero_certificado AS numero
+        FROM cert_certificates c
+        WHERE c.id <> %s AND COALESCE(c.situacao, 'ATIVO') = 'ATIVO'
+          AND LOWER(REPLACE(c.brand, '_', ' ')) = ANY(%s) AND c.sku = ANY(%s)
+          AND NOT EXISTS (SELECT 1 FROM cert_certificate_items history WHERE history.certificate_id = c.id)
+        """, [cert_id, aliases, skus, cert_id, aliases, skus],
+    )
+    return {row["sku"]: row["numero"] for row in cur.fetchall()}
+
+
 def _link_skus(cert: dict, skus: list[str], actor: str | None, dry_run: bool) -> dict:
+    if dry_run:
+        return _link_skus_locked(cert, skus, actor, dry_run=True)
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+        return _link_skus_locked(cert, skus, actor, dry_run=False)
+
+
+def _link_skus_locked(cert: dict, skus: list[str], actor: str | None, dry_run: bool) -> dict:
     """Vincula uma lista de SKUs a um certificado, classificando cada um.
 
     Cada SKU cai em exatamente um balde:
@@ -206,8 +267,6 @@ def _link_skus(cert: dict, skus: list[str], actor: str | None, dry_run: bool) ->
     """
     cert_id = str(cert["id"])
     brand = cert["brand"]
-    fim_venda = cert.get("fim_venda")
-    vencimento = cert.get("vencimento_licenciamento")
     out: dict = {
         "dry_run": dry_run,
         "added": [],
@@ -230,19 +289,7 @@ def _link_skus(cert: dict, skus: list[str], actor: str | None, dry_run: bool) ->
             [cert_id, candidatos],
         )
         ja_neste = {r["sku"] for r in cur.fetchall()}
-        cur.execute(
-            """
-            SELECT i.sku AS sku, c.numero_certificado AS numero
-            FROM cert_certificate_items i
-            JOIN cert_certificates c ON c.id = i.certificate_id
-            WHERE i.removed_at IS NULL
-              AND i.certificate_id <> %s
-              AND COALESCE(c.situacao, 'ATIVO') = 'ATIVO'
-              AND i.sku = ANY(%s)
-            """,
-            [cert_id, candidatos],
-        )
-        em_outro = {r["sku"]: r["numero"] for r in cur.fetchall()}
+        em_outro = _other_active_certificates(cur, cert_id, brand, candidatos)
 
     for sku in candidatos:
         if sku in ja_neste:
@@ -257,7 +304,7 @@ def _link_skus(cert: dict, skus: list[str], actor: str | None, dry_run: bool) ->
             out["added"].append(sku)
             continue
 
-        linx = _write_item_to_linx(brand, sku, fim_venda, vencimento)
+        linx = _item_linx_result(brand, {"sku": sku}, cert)
         if linx.get("produto_codigo") is None and "nao encontrado" in (linx.get("error") or ""):
             out["not_found_in_linx"].append(sku)
             continue
@@ -340,9 +387,9 @@ def create_certificate(
     brand = _bounded(brand, "Marca", 100)
     validade_certificado = _iso_date(validade_certificado, "Validade do certificado")
     fim_venda = _iso_date(fim_venda, "Fim de venda")
-    vencimento_licenciamento = _iso_date(
-        vencimento_licenciamento, "Vencimento do licenciamento"
-    )
+    if vencimento_licenciamento.strip():
+        raise HTTPException(400, "Licenciamento e mantido pelo time de Produto no Linx; campo somente leitura")
+    vencimento_licenciamento = ""
     numero_certificado = _bounded(numero_certificado, "Numero do certificado", 255)
     ocp = _bounded(ocp, "OCP", 255)
     orgao_certificador = _bounded(orgao_certificador, "Orgao certificador", 255)
@@ -350,6 +397,9 @@ def create_certificate(
     situacao = (situacao or "ATIVO").strip().upper()
     if situacao not in _SITUACOES:
         raise HTTPException(400, "Situacao deve ser ATIVO ou ENCERRADO")
+
+    if situacao == "ATIVO" and fim_venda:
+        raise HTTPException(400, "Certificado ativo nao possui fim de venda por certificacao")
 
     lista = _parse_skus(skus)
     if sku and sku not in lista:
@@ -394,24 +444,24 @@ def create_certificate(
     cert = {
         "id": cert_id,
         "brand": brand,
+        "situacao": situacao,
         "fim_venda": fim_venda or None,
         "vencimento_licenciamento": vencimento_licenciamento or None,
     }
     link_result = _link_skus(cert, lista, effective_created_by, dry_run=False)
 
-    # A linha do certificado continua exibindo o resultado do PRIMEIRO SKU (o
-    # contrato antigo, de um certificado por SKU, que a tela ainda mostra). O
-    # Linx e chamado uma unica vez por SKU, dentro de `_link_skus` — repetir a
-    # chamada aqui gravaria duas vezes no ERP.
-    linx = next(
-        (e for e in link_result["linx"] if e["sku"] == lista[0]),
-        {
-            "status": "pending",
-            "produto_codigo": None,
-            "error": "SKU nao vinculado (ja pertence a outro certificado ativo ou nao existe no Linx)",
-            "details": [],
-        },
-    )
+    # Resultado do lote: erro de um SKU nao pode ser escondido pelo primeiro.
+    resultados_linx = list(link_result["linx"])
+    if any(link_result[key] for key in ("invalid", "not_found_in_linx", "linked_to_other_active_cert")):
+        resultados_linx.append({
+            "status": "pending", "produto_codigo": None,
+            "error": "Lote incompleto: existem SKUs nao vinculados; consulte link_result", "details": [],
+        })
+    prioridade = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+    linx = min(resultados_linx, key=lambda item: prioridade.get(item["status"], 0)) if resultados_linx else {
+        "status": "pending", "produto_codigo": None,
+        "error": "Nenhum SKU novo foi vinculado", "details": [],
+    }
     applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
 
     with db() as (conn, cur):
@@ -429,7 +479,7 @@ def create_certificate(
         )
         cur.execute("SELECT * FROM cert_certificates WHERE id=%s", [cert_id])
         row = _serialize(dict(cur.fetchone()))
-        row["items"] = _fetch_active_items(cur, cert_id)
+        row["items"] = _fetch_active_items(cur, cert_id, row)
 
     row["link_result"] = link_result
 
@@ -471,7 +521,8 @@ def list_certificates(
     params: list = []
     if sku:
         conditions.append(
-            "(sku ILIKE %s OR EXISTS (SELECT 1 FROM cert_certificate_items ci "
+            "((sku ILIKE %s AND NOT EXISTS (SELECT 1 FROM cert_certificate_items legacy "
+            "WHERE legacy.certificate_id = cert_certificates.id)) OR EXISTS (SELECT 1 FROM cert_certificate_items ci "
             "WHERE ci.certificate_id = cert_certificates.id AND ci.removed_at IS NULL "
             "AND ci.sku ILIKE %s))"
         )
@@ -577,7 +628,7 @@ def get_certificate(cert_id: str) -> dict:
         if not row:
             raise HTTPException(404, "Certificado nao encontrado")
         out = _serialize(dict(row))
-        out["items"] = _fetch_active_items(cur, cert_id)
+        out["items"] = _fetch_active_items(cur, cert_id, out)
         return out
 
 
@@ -621,13 +672,82 @@ def link_certificate_items(request: Request, cert_id: str, req: CertificateItems
     result = _link_skus(cert, lista, _actor(request), dry_run=bool(req.dry_run))
     if not req.dry_run:
         with db() as (conn, cur):
-            result["items"] = _fetch_active_items(cur, cert_id)
+            result["items"] = _fetch_active_items(cur, cert_id, cert)
         log.info(
             f"Certificate {cert_id}: {len(result['added'])} item(s) vinculado(s), "
             f"{len(result['already_linked'])} ja vinculado(s), "
             f"{len(result['not_found_in_linx'])} fora do Linx"
         )
     return result
+
+
+@router.patch("/api/certificates/{cert_id}/items/{sku}/restriction")
+@limiter.limit("30/minute")
+def update_item_restriction(request: Request, cert_id: str, sku: str, req: CertificateItemRestrictionRequest) -> dict:
+    """Altera somente a restricao local do vinculo e audita antes/depois.
+
+    Nao remove o vinculo, nao altera o certificado e nunca chama o Linx.
+    Migration SQL explicita 20260912_certificate_item_restrictions e pre-requisito.
+    """
+    reason = req.motivo.strip()
+    if not reason:
+        raise HTTPException(400, "Informe o motivo da alteracao")
+    if req.fim_venda is not None and parse_data_real(req.fim_venda) is None:
+        raise HTTPException(400, "Fim de venda deve ser uma data valida, sem sentinela")
+    cert = _load_certificate(cert_id)
+    if req.situacao == "ATIVO" and cert.get("situacao") == "ENCERRADO":
+        raise HTTPException(409, "Item nao pode reativar certificado encerrado; vincule certificacao vigente")
+    proposed = {"situacao": req.situacao, "fim_venda": req.fim_venda}
+    effective = _item_restriction(proposed, cert)
+    if effective["situacao_efetiva"] == "ATIVO" and req.fim_venda is not None:
+        raise HTTPException(400, "Item ativo nao possui fim de venda por certificacao")
+    actor = _actor(request)
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+        with db() as (conn, cur):
+            cur.execute("SELECT * FROM cert_certificates WHERE id=%s FOR UPDATE", [cert_id])
+            current_cert = cur.fetchone()
+            if not current_cert:
+                raise HTTPException(404, "Certificado nao encontrado")
+            cert = dict(current_cert)
+            effective = _item_restriction(proposed, cert)
+            if req.situacao == "ATIVO" and cert.get("situacao") == "ENCERRADO":
+                raise HTTPException(409, "Item nao pode reativar certificado encerrado; vincule certificacao vigente")
+            if effective["situacao_efetiva"] == "ATIVO" and req.fim_venda is not None:
+                raise HTTPException(400, "Item ativo nao possui fim de venda por certificacao")
+            cur.execute(
+                "SELECT * FROM cert_certificate_items WHERE certificate_id=%s AND sku=%s "
+                "AND removed_at IS NULL FOR UPDATE", [cert_id, sku],
+            )
+            found = cur.fetchone()
+            if not found:
+                raise HTTPException(404, "SKU nao esta vinculado a este certificado")
+            item = dict(found)
+            if item.get("situacao") == req.situacao and str(item.get("fim_venda") or "") == str(req.fim_venda or ""):
+                return _serialize_item(item, cert)
+            if effective["situacao_efetiva"] == "ATIVO" and _other_active_certificates(cur, cert_id, cert["brand"], [sku]):
+                raise HTTPException(409, "SKU possui outro vinculo ativo; resolver dupla certificacao antes de reativar")
+            before = {"situacao": item.get("situacao"), "fim_venda": item.get("fim_venda"), **_item_restriction(item, cert)}
+            after = {**proposed, **effective}
+            cur.execute(
+                "UPDATE cert_certificate_items SET situacao=%s, fim_venda=%s, restriction_updated_at=NOW(), "
+                "restriction_updated_by=%s, linx_status='pending', linx_applied_at=NULL, "
+                "linx_error='Restricao local alterada; envio ao Linx pendente', linx_detail=NULL "
+                "WHERE id=%s RETURNING *", [req.situacao, req.fim_venda, actor, item["id"]],
+            )
+            updated = dict(cur.fetchone())
+            cur.execute(
+                "UPDATE cert_certificates SET linx_status='pending', linx_applied_at=NULL, "
+                "linx_error='Restricao de item alterada; envio ao Linx pendente', updated_at=NOW() WHERE id=%s",
+                [cert_id],
+            )
+            cur.execute(
+                "INSERT INTO cert_certificate_item_restriction_events (item_id,before_state,after_state,reason,actor) "
+                "VALUES (%s,%s::jsonb,%s::jsonb,%s,%s)",
+                [item["id"], json.dumps(before, default=str), json.dumps(after, default=str), reason, actor],
+            )
+            return _serialize_item(updated, cert)
 
 
 @router.delete("/api/certificates/{cert_id}/items/{sku}")
@@ -644,7 +764,7 @@ def remove_certificate_item(request: Request, cert_id: str, sku: str) -> dict:
         HTTPException: 404 quando o certificado nao existe ou o SKU nao esta
             vinculado a ele.
     """
-    _load_certificate(cert_id)
+    cert = _load_certificate(cert_id)
     with db() as (conn, cur):
         cur.execute(
             "UPDATE cert_certificate_items SET removed_at = NOW(), removed_by = %s "
@@ -653,7 +773,7 @@ def remove_certificate_item(request: Request, cert_id: str, sku: str) -> dict:
         )
         if cur.rowcount == 0:
             raise HTTPException(404, "SKU nao esta vinculado a este certificado")
-        items = _fetch_active_items(cur, cert_id)
+        items = _fetch_active_items(cur, cert_id, cert)
 
     sku_log = sku.replace("\r", " ").replace("\n", " ")
     log.info(f"Certificate {cert_id}: item {sku_log} removido")
@@ -737,6 +857,13 @@ def download_certificate_pdf(cert_id: str) -> FileResponse:
 @router.post("/api/certificates/{cert_id}/retry-linx")
 @limiter.limit("30/minute")
 def retry_linx(request: Request, cert_id: str) -> dict:
+    with sheet_sync_lock(_CERTIFICATE_LINK_LOCK_KEY) as acquired:
+        if not acquired:
+            raise HTTPException(409, "Outro vinculo de certificacao esta em andamento; tente novamente")
+        return _retry_linx_locked(request, cert_id)
+
+
+def _retry_linx_locked(request: Request, cert_id: str) -> dict:
     """Retry the Linx upsert for a previously saved certificate.
 
     Useful after enabling LINX_WRITE_ENABLED or fixing the schema config.
@@ -745,18 +872,49 @@ def retry_linx(request: Request, cert_id: str) -> dict:
         HTTPException: 404 if not found, 500 if DB unavailable.
     """
     cert = _load_certificate(cert_id)
-    if not cert.get("sku"):
-        raise HTTPException(
-            400, "Certificado sem SKU proprio: reenvie pelos itens vinculados"
-        )
-
-    linx = _write_item_to_linx(
-        cert["brand"], cert["sku"],
-        cert.get("fim_venda"), cert.get("vencimento_licenciamento"),
-    )
-    applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
-
+    resultados = []
     with db() as (conn, cur):
+        cur.execute("SELECT * FROM cert_certificates WHERE id=%s FOR UPDATE", [cert_id])
+        current_cert = cur.fetchone()
+        if not current_cert:
+            raise HTTPException(404, "Certificado nao encontrado")
+        cert = dict(current_cert)
+        # A remocao individual espera este lock; um item removido antes do retry
+        # nunca e enviado usando o SKU legado da linha principal.
+        cur.execute(
+            "SELECT * FROM cert_certificate_items WHERE certificate_id = %s ORDER BY sku FOR UPDATE",
+            [cert_id],
+        )
+        historico = [dict(item) for item in cur.fetchall()]
+        ativos = [item for item in historico if item.get("removed_at") is None]
+        if historico and not ativos:
+            raise HTTPException(409, "Certificado sem itens ativos para reenvio; vinculos removidos preservados no historico")
+        if not historico:
+            if not cert.get("sku"):
+                raise HTTPException(400, "Certificado sem itens vinculados para reenvio")
+            ativos = [{"sku": cert["sku"]}]  # Compatibilidade apenas para registros sem historico de vinculo.
+
+        other_active = _other_active_certificates(cur, cert_id, cert["brand"], [item["sku"] for item in ativos])
+        for item in ativos:
+            sku = item["sku"]
+            if sku in other_active:
+                resultado = {"status": "pending", "produto_codigo": item.get("produto_codigo"),
+                             "error": "Outro certificado ativo vinculado ao SKU; prazo historico nao enviado ao Linx", "details": []}
+            else:
+                resultado = _item_linx_result(cert["brand"], item, cert)
+            aplicado = datetime.now(UTC) if resultado["status"] == "applied" else None
+            cur.execute(
+                "UPDATE cert_certificate_items SET produto_codigo=%s, linx_status=%s, linx_error=%s, "
+                "linx_detail=%s::jsonb, linx_applied_at=%s WHERE certificate_id=%s AND sku=%s AND removed_at IS NULL",
+                [resultado.get("produto_codigo"), resultado["status"], resultado.get("error"),
+                 json.dumps(resultado.get("details", [])), aplicado, cert_id, sku],
+            )
+            resultados.append({"sku": sku, **resultado})
+
+        # Um item com erro nao pode ser escondido pelo sucesso do primeiro SKU.
+        priority = {"error": 0, "pending": 1, "disabled": 2, "applied": 3}
+        linx = min(resultados, key=lambda item: priority.get(item["status"], 0))
+        applied_at = datetime.now(UTC) if linx["status"] == "applied" else None
         cur.execute(
             """
             UPDATE cert_certificates
@@ -764,10 +922,10 @@ def retry_linx(request: Request, cert_id: str) -> dict:
                 linx_detail=%s, linx_applied_at=%s, updated_at=NOW()
             WHERE id=%s
             """,
-            [
-                linx.get("produto_codigo"), linx["status"], linx.get("error"),
-                json.dumps(linx.get("details", [])), applied_at, cert_id,
-            ],
+            [linx.get("produto_codigo"), linx["status"], linx.get("error"),
+             json.dumps(linx.get("details", [])), applied_at, cert_id],
         )
         cur.execute("SELECT * FROM cert_certificates WHERE id=%s", [cert_id])
-        return _serialize(dict(cur.fetchone()))
+        response = _serialize(dict(cur.fetchone()))
+        response["retry_results"] = resultados
+        return response

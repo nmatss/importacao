@@ -2,6 +2,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { installFixtureSandbox } from './fixtures';
+import { registroComparisonFixture } from './fixtures/importacao-core';
 
 /**
  * Auditoria responsiva: renderiza cada tela com fixtures RICAS (o smoke usa
@@ -172,6 +173,98 @@ const scenarios: Scenario[] = [
           }
         : undefined,
   })),
+  ...(['match', 'pending', 'divergent'] as const).map((status) => ({
+    id: `imp-registro-${status}`,
+    path: '/importacao/processos/1?tab=registro',
+    prepare: async (page: Page) => {
+      await page.route('**/api/documents/process/1/registro-comparison', (route) =>
+        route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, data: registroComparisonFixture(status) }),
+        }),
+      );
+      await page.reload();
+      const section = page
+        .locator('section')
+        .filter({ has: page.getByRole('heading', { name: 'Rascunho DUIMP × Invoice × Espelho' }) });
+      const expected =
+        status === 'match'
+          ? 'Todos os itens e campos conferidos correspondem nas três fontes.'
+          : status === 'divergent'
+            ? 'Divergências encontradas. Revise os valores e arquivos abaixo.'
+            : 'Conferência pendente: há fontes, campos ou itens que precisam de revisão.';
+      await expect(section.getByRole('status')).toHaveText(expected);
+      await expect(
+        section.getByRole('rowheader', { name: 'SKU 050404509 · quantidade' }),
+      ).toBeVisible();
+      if (status === 'pending')
+        await expect(section.getByText('Sem arquivo associado')).toBeVisible();
+      if (status === 'divergent')
+        await expect(section.getByRole('cell', { name: 'Divergente', exact: true })).toBeVisible();
+      await section.scrollIntoViewIfNeeded();
+    },
+  })),
+  {
+    id: 'imp-checklist-move',
+    path: '/importacao/processos/1?tab=checklist',
+    prepare: async (page: Page) => {
+      const first = {
+        kind: 'default',
+        key: 'documentsReceivedAt',
+        label: 'Documentos Recebidos',
+        completedAt: null,
+      };
+      const custom = {
+        kind: 'custom',
+        id: 91,
+        label: 'Conferência adicional deste processo',
+        position: 2,
+        completedAt: null,
+        notes: 'Preservar observação e histórico',
+      };
+      const last = {
+        kind: 'default',
+        key: 'preInspectionAt',
+        label: 'Pré-conferência',
+        completedAt: null,
+      };
+      const steps = [first, custom, last];
+      await page.route('**/api/processes/1/checklist', (route) =>
+        route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            success: true,
+            data: { steps, progress: { completed: 0, total: 3, pct: 0 } },
+          }),
+        }),
+      );
+      await page.route('**/api/processes/1/custom-stages/91', (route) => {
+        expect(route.request().method()).toBe('PUT');
+        expect(route.request().postDataJSON()).toEqual({ position: 1 });
+        steps.splice(1, 1);
+        steps.unshift(custom);
+        return route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true, data: { ...custom, position: 1 } }),
+        });
+      });
+      await page.reload();
+      await page.getByRole('button', { name: `Mover ${custom.label} para cima` }).click();
+      await expect(page.getByRole('button', { name: /^Concluir etapa/ }).first()).toHaveAttribute(
+        'aria-label',
+        `Concluir etapa ${custom.label}`,
+      );
+      await expect(
+        page.getByRole('button', { name: `Mover ${custom.label} para cima` }),
+      ).toBeDisabled();
+      await page.reload();
+      await expect(page.getByRole('button', { name: /^Concluir etapa/ }).first()).toHaveAttribute(
+        'aria-label',
+        `Concluir etapa ${custom.label}`,
+      );
+      await page.getByText(custom.notes).scrollIntoViewIfNeeded();
+    },
+  },
   { id: 'imp-processo-editar', path: '/importacao/processos/1/editar' },
   { id: 'imp-pre-cons', path: '/importacao/pre-cons' },
   { id: 'imp-sydle', path: '/importacao/compras-pagamentos' },
@@ -237,6 +330,75 @@ const scenarios: Scenario[] = [
     prepare: clickText(/^Assinaturas$/),
   },
   { id: 'imp-rota-inexistente', path: '/importacao/rota-inexistente' },
+  {
+    id: 'cert-item-restriction',
+    path: '/certificacoes/cadastro',
+    prepare: async (page: Page) => {
+      const item = {
+        id: 'item-a',
+        certificate_id: 'cert-item-test',
+        sku: '050404509',
+        brand: 'puket',
+        linx_status: 'applied',
+        situacao_efetiva: 'ATIVO',
+        restricao_origem: 'certificado',
+      };
+      await page.route(/\/cert-api\/api\/certificates\/[^/?]+$/, (route) =>
+        route.fulfill({
+          contentType: 'application/json',
+          body: JSON.stringify({
+            id: 'cert-item-test',
+            sku: item.sku,
+            brand: 'puket',
+            situacao: 'ATIVO',
+            linx_status: 'applied',
+            numero_certificado: 'CERT-QA',
+            items: [item, { ...item, id: 'item-b', sku: 'OUTRO-SKU' }],
+          }),
+        }),
+      );
+      let requestBody: unknown;
+      await page.route(
+        '**/api/certificates/cert-item-test/items/050404509/restriction',
+        (route) => {
+          requestBody = route.request().postDataJSON();
+          return route.fulfill({
+            contentType: 'application/json',
+            body: JSON.stringify({
+              ...item,
+              linx_status: 'pending',
+              situacao: 'ENCERRADO',
+              situacao_efetiva: 'ENCERRADO',
+              fim_venda: '2026-10-29',
+              fim_venda_efetivo: '2026-10-29',
+              restricao_origem: 'item',
+            }),
+          });
+        },
+      );
+      await page
+        .getByRole('button', { name: /^Itens \(/ })
+        .first()
+        .click();
+      await page.getByRole('button', { name: 'Encerrar item 050404509', exact: true }).click();
+      await page.getByLabel('Fim de venda por certificação do item').fill('2026-10-29');
+      await page.getByLabel('Motivo da alteração do item').fill('Prazo aprovado pela certificação');
+      await page.getByRole('button', { name: 'Salvar restrição do item' }).click();
+      await expect(
+        page.getByRole('button', { name: 'Herdar certificado para 050404509' }),
+      ).toBeVisible();
+      expect(requestBody).toEqual({
+        situacao: 'ENCERRADO',
+        fim_venda: '2026-10-29',
+        motivo: 'Prazo aprovado pela certificação',
+      });
+      await expect(page.getByRole('button', { name: 'Encerrar item OUTRO-SKU' })).toBeVisible();
+      await page.getByRole('button', { name: 'Herdar certificado para 050404509' }).click();
+      await page
+        .getByRole('form', { name: 'Restrição individual do item' })
+        .scrollIntoViewIfNeeded();
+    },
+  },
   { id: 'cert-dashboard', path: '/certificacoes' },
   {
     id: 'cert-dashboard-menu',

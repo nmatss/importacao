@@ -1,9 +1,7 @@
 import { and, eq, inArray, isNull, notInArray, sql } from 'drizzle-orm';
 import { db } from '../../shared/database/connection.js';
-import { importProcesses } from '../../shared/database/schema.js';
+import { importProcesses, auditLogs, processEvents } from '../../shared/database/schema.js';
 import { googleSheetsService } from '../integrations/google-sheets.service.js';
-import { auditService } from '../audit/service.js';
-import { recordProcessEvent } from '../../shared/utils/process-events.js';
 import { logger } from '../../shared/utils/logger.js';
 import { getEnv } from '../../shared/config/env.js';
 import {
@@ -80,8 +78,10 @@ export interface SheetSyncResult {
   processes: SheetSyncProcess[];
   /** Codigos que aparecem na planilha e nao existem como processo aqui. */
   unknownCodes: string[];
-  /** Codigos repetidos na planilha (vale a primeira linha). */
+  /** Codigos repetidos na planilha. Conflitos são excluídos da aplicação. */
   duplicatedCodes: string[];
+  conflictingCodes: string[];
+  concurrentCodes: string[];
   /** Campos cuja coluna sumiu do cabecalho da planilha. */
   missingColumns: SyncableField[];
   /** Diff legivel, uma linha por campo alterado. */
@@ -116,19 +116,25 @@ function upper(code: string): string {
 export function indexSheetRows(headers: unknown[], rows: unknown[][]) {
   const byCode = new Map<string, SheetRow>();
   const duplicated: string[] = [];
+  const conflicting = new Set<string>();
 
   for (const values of rows) {
     const row = indexRowByHeader(headers, values);
     const code = upper(readRowText(row, PROCESS_CODE_HEADERS));
     if (!code) continue;
+    if (conflicting.has(code)) continue;
     if (byCode.has(code)) {
       if (!duplicated.includes(code)) duplicated.push(code);
-      continue; // Vale a PRIMEIRA linha; a segunda so vira aviso.
+      if (JSON.stringify(byCode.get(code)) !== JSON.stringify(row)) {
+        conflicting.add(code);
+        byCode.delete(code);
+      }
+      continue;
     }
     byCode.set(code, row);
   }
 
-  return { byCode, duplicated };
+  return { byCode, duplicated, conflicting: [...conflicting] };
 }
 
 /** Compara uma linha da planilha com o processo, sem tocar no banco. */
@@ -254,6 +260,8 @@ export async function runFollowUpSheetSync(
     processes: [],
     unknownCodes: [],
     duplicatedCodes: [],
+    conflictingCodes: [],
+    concurrentCodes: [],
     missingColumns: [],
     diff: 'FOLLOW_UP_SYNC_MODE=off: a sincronizacao da planilha esta desligada.',
   };
@@ -264,7 +272,7 @@ export async function runFollowUpSheetSync(
   }
 
   const { headers, rows } = await googleSheetsService.readProcessSheetMatrix();
-  const { byCode, duplicated } = indexSheetRows(headers, rows);
+  const { byCode, duplicated, conflicting } = indexSheetRows(headers, rows);
   const missingColumns = findMissingColumns(headers);
   if (missingColumns.length > 0) {
     logger.warn(
@@ -291,6 +299,8 @@ export async function runFollowUpSheetSync(
   let changedProcesses = 0;
   let totalChanges = 0;
   let matched = 0;
+  let appliedProcesses = 0;
+  const concurrentCodes: string[] = [];
 
   for (const process of processes) {
     const row = byCode.get(upper(process.processCode));
@@ -318,34 +328,78 @@ export async function runFollowUpSheetSync(
     }
     if (Object.keys(patch).length === 0) continue;
 
-    await db
-      .update(importProcesses)
-      .set({ ...patch, updatedAt: new Date() })
-      .where(eq(importProcesses.id, process.id));
-
     const changedFields: string[] = item.changes.map((change) => change.field);
     if (item.sheetStatusChanged) changedFields.push('sheetStatus');
-    await auditService.log(
-      options.userId ?? null,
-      'follow_up_sheet_sync',
-      'process',
-      process.id,
-      { fields: changedFields, changes: item.changes },
-      null,
-    );
-    if (item.changes.length === 0) continue;
-    await recordProcessEvent(
-      process.id,
-      {
+    const applied = await db.transaction(async (tx) => {
+      const guards = [
+        eq(importProcesses.id, process.id),
+        isNull(importProcesses.lockedAt),
+        process.updatedAt
+          ? eq(importProcesses.updatedAt, process.updatedAt)
+          : isNull(importProcesses.updatedAt),
+      ];
+      if (!options.includeTerminal)
+        guards.push(notInArray(importProcesses.status, [...TERMINAL_STATUSES]));
+      const updated = await tx
+        .update(importProcesses)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(and(...guards))
+        .returning({ id: importProcesses.id });
+      if (updated.length === 0) return false;
+      // These records are part of the mutation, not optional telemetry. Failure
+      // rolls back the process update instead of silently losing provenance.
+      await tx.insert(auditLogs).values({
+        userId: options.userId ?? null,
+        action: 'follow_up_sheet_sync',
+        entityType: 'process',
+        entityId: process.id,
+        details: {
+          fields: changedFields,
+          changes: item.changes,
+          ...(item.sheetStatusChanged
+            ? {
+                sheetStatus: {
+                  from: readStoredSheetStatus(process.aiExtractedData),
+                  to: item.sheetStatus,
+                },
+              }
+            : {}),
+        },
+        ipAddress: null,
+      });
+      await tx.insert(processEvents).values({
+        processId: process.id,
         eventType: 'follow_up_sheet_synced',
         title: `Follow Up atualizou ${changedFields.length} campo(s) do processo`,
         description: item.changes
           .map((change) => `${change.field}: ${change.from} -> ${change.to}`)
           .join(' | '),
-        metadata: { source: 'follow_up_sheet', changes: item.changes },
-      },
-      options.userId ?? null,
-    );
+        metadata: {
+          source: 'follow_up_sheet',
+          changes: item.changes,
+          ...(item.sheetStatusChanged
+            ? {
+                sheetStatus: {
+                  from: readStoredSheetStatus(process.aiExtractedData),
+                  to: item.sheetStatus,
+                },
+              }
+            : {}),
+        },
+        createdBy: options.userId ?? null,
+      });
+      return true;
+    });
+    if (!applied) {
+      concurrentCodes.push(process.processCode);
+      results.pop();
+      if (item.changes.length > 0) {
+        changedProcesses -= 1;
+        totalChanges -= item.changes.length;
+      }
+      continue;
+    }
+    appliedProcesses += 1;
   }
 
   // Os codigos conhecidos vem da tabela INTEIRA, e nao da selecao filtrada:
@@ -358,7 +412,7 @@ export async function runFollowUpSheetSync(
 
   const result: SheetSyncResult = {
     mode,
-    applied: mode === 'apply' && totalChanges > 0,
+    applied: mode === 'apply' && appliedProcesses > 0,
     scannedRows: byCode.size,
     matchedProcesses: matched,
     changedProcesses,
@@ -366,6 +420,8 @@ export async function runFollowUpSheetSync(
     processes: results,
     unknownCodes,
     duplicatedCodes: duplicated,
+    conflictingCodes: conflicting,
+    concurrentCodes,
     missingColumns,
     diff: renderDiff(results, mode),
   };

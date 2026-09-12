@@ -21,6 +21,8 @@ const STATUS_LABELS: Record<string, string> = {
   NAO_APLICAVEL: 'N/A',
   // Comercialização (derivado)
   LIBERADA: 'Liberada',
+  BLOQUEADA: 'Bloqueada',
+  PENDENTE: 'Pendente de validação',
   DENTRO_PRAZO: 'Dentro do Prazo',
   ENCERRADA: 'Encerrada',
   NAO_APLICA: 'N/A',
@@ -32,6 +34,8 @@ const DOT_COLORS: Record<string, string> = {
   VALIDO: 'bg-emerald-500',
   CONFORME: 'bg-emerald-500',
   LIBERADA: 'bg-emerald-500',
+  BLOQUEADA: 'bg-pink-500',
+  PENDENTE: 'bg-amber-500',
   INCONSISTENT: 'bg-amber-500',
   EXPIRING: 'bg-amber-500',
   DENTRO_PRAZO: 'bg-amber-500',

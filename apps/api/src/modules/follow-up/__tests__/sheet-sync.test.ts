@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { createMockDb, createResolvedChain } from '../../../__tests__/helpers/mock-db.js';
 
-const { mockDb, queryQueue } = createMockDb();
+const { mockDb, mockTx, queryQueue, txQueue } = createMockDb();
 
 vi.mock('../../../shared/database/connection.js', () => ({ db: mockDb }));
 
@@ -267,6 +268,13 @@ describe('indexSheetRows', () => {
     expect(byCode.size).toBe(1);
     expect(duplicated).toEqual(['PK2192607SZ']);
   });
+  it('não escolhe arbitrariamente uma referência com valores conflitantes', () => {
+    const changed = [...ROW_219];
+    changed[7] = '$99.999,99';
+    const result = indexSheetRows(HEADERS, [ROW_219, changed, ROW_219]);
+    expect(result.byCode.size).toBe(0);
+    expect(result.conflicting).toEqual(['PK2192607SZ']);
+  });
 });
 
 describe('renderDiff', () => {
@@ -283,6 +291,7 @@ describe('runFollowUpSheetSync', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     queryQueue.length = 0;
+    txQueue.length = 0;
     readProcessSheetMatrix.mockResolvedValue({ headers: HEADERS, rows: [ROW_219] });
   });
 
@@ -306,21 +315,86 @@ describe('runFollowUpSheetSync', () => {
   });
 
   it('apply grava os campos divergentes', async () => {
-    queryQueue.push(createResolvedChain([processo287()]));
-    const updateChain = createResolvedChain([]);
-    queryQueue.push(updateChain);
+    const revision = new Date('2026-09-12T10:00:00Z');
+    queryQueue.push(createResolvedChain([{ ...processo287(), updatedAt: revision }]));
+    const updateChain = createResolvedChain([{ id: 287 }]);
+    txQueue.push(updateChain, createResolvedChain([]), createResolvedChain([]));
     queryQueue.push(createResolvedChain([{ processCode: 'PK2192607SZ' }]));
 
     const result = await runFollowUpSheetSync({ mode: 'apply' });
 
     expect(result.applied).toBe(true);
-    expect(mockDb.update).toHaveBeenCalled();
+    expect(mockTx.update).toHaveBeenCalled();
+    expect(mockTx.insert).toHaveBeenCalledTimes(2);
     const patch = updateChain.set.mock.calls[0][0] as Record<string, unknown>;
     expect(patch.eta).toBe('2026-09-08');
     expect(patch.etaActual).toBe('2026-09-08');
     expect(patch.duimpNumber).toBe('26BR0001660880-2');
     expect(patch.customsChannel).toBe('Verde');
     expect(patch.cdArrivalAt).toEqual(new Date('2026-09-11T03:00:00.000Z'));
+    const guard = new PgDialect().sqlToQuery(updateChain.where.mock.calls[0][0]);
+    expect(guard.sql).toContain('"locked_at" is null');
+    expect(guard.sql).toContain('"updated_at" =');
+    expect(guard.sql).toContain('"status" not in');
+    expect(guard.params).toContain(revision.toISOString());
+  });
+
+  it('mudança só de status é aplicada e auditada com antes e depois', async () => {
+    readProcessSheetMatrix.mockResolvedValue({
+      headers: ['Processos', 'Status'],
+      rows: [['PK2192607SZ', 'Aguardando Entrada']],
+    });
+    queryQueue.push(
+      createResolvedChain([processo287()]),
+      createResolvedChain([{ processCode: 'PK2192607SZ' }]),
+    );
+    const audit = createResolvedChain([]);
+    txQueue.push(createResolvedChain([{ id: 287 }]), audit, createResolvedChain([]));
+    const result = await runFollowUpSheetSync({ mode: 'apply' });
+    expect(result.applied).toBe(true);
+    expect(audit.values.mock.calls[0][0].details.sheetStatus).toEqual({
+      from: 'Em transito',
+      to: 'Aguardando Entrada',
+    });
+  });
+
+  it('apply não altera referência duplicada com valores divergentes', async () => {
+    const changed = [...ROW_219];
+    changed[7] = '1,00';
+    readProcessSheetMatrix.mockResolvedValue({ headers: HEADERS, rows: [ROW_219, changed] });
+    queryQueue.push(
+      createResolvedChain([processo287()]),
+      createResolvedChain([{ processCode: 'PK2192607SZ' }]),
+    );
+    const result = await runFollowUpSheetSync({ mode: 'apply' });
+    expect(result.conflictingCodes).toEqual(['PK2192607SZ']);
+    expect(result.applied).toBe(false);
+    expect(mockDb.transaction).not.toHaveBeenCalled();
+  });
+
+  it('update que perde a guarda não audita nem reporta aplicação', async () => {
+    queryQueue.push(
+      createResolvedChain([processo287()]),
+      createResolvedChain([{ processCode: 'PK2192607SZ' }]),
+    );
+    txQueue.push(createResolvedChain([]));
+    const result = await runFollowUpSheetSync({ mode: 'apply' });
+    expect(result.concurrentCodes).toEqual(['PK2192607SZ']);
+    expect(result.applied).toBe(false);
+    expect(result.changedProcesses).toBe(0);
+    expect(result.processes).toEqual([]);
+    expect(mockTx.insert).not.toHaveBeenCalled();
+  });
+
+  it('falha de auditoria rejeita a transação em vez de informar sucesso', async () => {
+    queryQueue.push(createResolvedChain([processo287()]));
+    const audit = createResolvedChain([]);
+    audit.then = (_resolve: unknown, reject: (error: Error) => void) =>
+      reject(new Error('audit failed'));
+    txQueue.push(createResolvedChain([{ id: 287 }]), audit);
+    await expect(runFollowUpSheetSync({ mode: 'apply' })).rejects.toThrow('audit failed');
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockTx.insert).toHaveBeenCalledTimes(1);
   });
 
   it('nao inventa processo: codigo da planilha que nao existe aqui e so relatado', async () => {

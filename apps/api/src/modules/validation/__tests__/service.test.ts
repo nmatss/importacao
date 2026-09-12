@@ -76,7 +76,12 @@ const mockFailingCheck = vi.fn().mockReturnValue({
 const completeCoreDocs = [
   { type: 'invoice', isProcessed: true, aiParsedData: { invoiceNumber: 'INV-001' } },
   { type: 'packing_list', isProcessed: true, aiParsedData: { packingListNumber: 'PL-001' } },
-  { type: 'ohbl', isProcessed: true, aiParsedData: { blNumber: 'BL-001' } },
+  {
+    type: 'ohbl',
+    confidenceScore: '0.90',
+    isProcessed: true,
+    aiParsedData: { blNumber: 'BL-001' },
+  },
 ];
 
 vi.mock('../checks/index.js', () => ({
@@ -178,6 +183,35 @@ describe('validationService', () => {
       );
     });
 
+    it.each([
+      ['ohbl', '0.89', 'failed'],
+      ['draft_bl', '0.89', 'failed'],
+      ['ohbl', '0.90', 'passed'],
+      ['draft_bl', '0.90', 'passed'],
+      ['ohbl', null, 'failed'],
+      ['draft_bl', 'invalid', 'failed'],
+    ])('gates %s at %s before supplying BL to checks', async (type, confidenceScore, status) => {
+      queryQueue.push(
+        createResolvedChain([{ id: 1, processCode: 'TEST', status: 'documents_received' }]),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          ...completeCoreDocs.filter((doc) => doc.type !== 'ohbl'),
+          { type, confidenceScore, isProcessed: true, aiParsedData: { blNumber: 'BL-BOUNDARY' } },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(createResolvedChain(undefined));
+      txQueue.push(createResolvedChain([{ id: 107 }]));
+      const results = await validationService.runAllChecks(1);
+      expect(results[0]).toMatchObject({ checkName: 'document-set-completeness', status });
+      expect(mockPassingCheck).toHaveBeenCalledWith(
+        expect.objectContaining({
+          blData: status === 'passed' ? { blNumber: 'BL-BOUNDARY' } : undefined,
+        }),
+      );
+    });
+
     it('should fail final validation when core documents are not usable', async () => {
       const mockProcess = {
         id: 1,
@@ -274,6 +308,7 @@ describe('validationService', () => {
           { type: 'packing_list', aiParsedData: { totalPackages: 10 } },
           {
             type: 'draft_bl',
+            confidenceScore: '0.90',
             aiParsedData: { blNumber: 'DRAFT-001', portOfLoading: 'Ningbo' },
           },
         ]),
@@ -318,10 +353,10 @@ describe('validationService', () => {
       queryQueue.push(createResolvedChain([mockProcess])); // process
       queryQueue.push(
         createResolvedChain([
-          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
+          { type: 'draft_bl', confidenceScore: '0.90', aiParsedData: { blNumber: 'DRAFT-001' } },
           { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
           { type: 'packing_list', aiParsedData: { totalPackages: 10 } },
-          { type: 'ohbl', aiParsedData: { blNumber: 'FINAL-001' } },
+          { type: 'ohbl', confidenceScore: '0.90', aiParsedData: { blNumber: 'FINAL-001' } },
         ]),
       ); // docs
       queryQueue.push(createResolvedChain([])); // followUp
@@ -421,6 +456,7 @@ describe('validationService', () => {
           {
             id: 6,
             type: 'ohbl',
+            confidenceScore: '0.90',
             isProcessed: true,
             updatedAt: new Date('2026-04-02T00:00:00Z'),
             aiParsedData: { blNumber: 'BL-FAILED', extractionFailed: true },
@@ -428,6 +464,7 @@ describe('validationService', () => {
           {
             id: 7,
             type: 'draft_bl',
+            confidenceScore: '0.90',
             isProcessed: true,
             updatedAt: new Date('2026-03-15T00:00:00Z'),
             aiParsedData: { blNumber: 'DRAFT-VALID' },
@@ -578,7 +615,7 @@ describe('validationService', () => {
         createResolvedChain([
           { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001', totalFobValue: 100 } },
           { type: 'packing_list', aiParsedData: { totalItems: 1 } },
-          { type: 'ohbl', aiParsedData: { blNumber: 'BL-001' } },
+          { type: 'ohbl', confidenceScore: '0.90', aiParsedData: { blNumber: 'BL-001' } },
         ]),
       );
 
@@ -599,7 +636,7 @@ describe('validationService', () => {
         createResolvedChain([
           { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
           { type: 'packing_list', aiParsedData: { totalItems: 1 } },
-          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
+          { type: 'draft_bl', confidenceScore: '0.90', aiParsedData: { blNumber: 'DRAFT-001' } },
         ]),
       );
 
@@ -620,8 +657,8 @@ describe('validationService', () => {
         createResolvedChain([
           { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
           { type: 'packing_list', aiParsedData: { totalItems: 1 } },
-          { type: 'draft_bl', aiParsedData: { blNumber: 'DRAFT-001' } },
-          { type: 'ohbl', aiParsedData: { blNumber: 'FINAL-001' } },
+          { type: 'draft_bl', confidenceScore: '0.90', aiParsedData: { blNumber: 'DRAFT-001' } },
+          { type: 'ohbl', confidenceScore: '0.90', aiParsedData: { blNumber: 'FINAL-001' } },
         ]),
       );
 
@@ -692,12 +729,14 @@ describe('validationService', () => {
           {
             id: 5,
             type: 'ohbl',
+            confidenceScore: '0.90',
             isProcessed: true,
             aiParsedData: { blNumber: 'BL-FAILED', extractionFailed: true },
           },
           {
             id: 6,
             type: 'draft_bl',
+            confidenceScore: '0.90',
             isProcessed: true,
             aiParsedData: { blNumber: 'DRAFT-VALID' },
           },
@@ -720,7 +759,7 @@ describe('validationService', () => {
         createResolvedChain([
           { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001' } },
           { type: 'packing_list', aiParsedData: {} },
-          { type: 'ohbl', aiParsedData: {} },
+          { type: 'ohbl', confidenceScore: '0.90', aiParsedData: {} },
         ]),
       );
 
@@ -738,7 +777,7 @@ describe('validationService', () => {
       createResolvedChain([
         { type: 'invoice', aiParsedData: { invoiceNumber: 'INV-001', items: [{ itemCode: 'A' }] } },
         { type: 'packing_list', aiParsedData: { items: [{ itemCode: 'B' }] } },
-        { type: 'ohbl', aiParsedData: { blNumber: 'BL-001' } },
+        { type: 'ohbl', confidenceScore: '0.90', aiParsedData: { blNumber: 'BL-001' } },
       ]);
 
     it('suppresses AI item-presence anomalies when deterministic comparison finds none', async () => {

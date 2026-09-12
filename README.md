@@ -310,9 +310,9 @@ O script:
 3. Sincroniza codigo via rsync, excluindo caches/worktrees locais e preservando dados remotos.
 4. Gera `.env` via SOPS + age a partir de `.env.sops.yaml`; se falhar, aborta.
 5. Renderiza Alertmanager quando configurado e valida `docker compose config`.
-6. Aplica migrations pendentes, builda/reinicia `api`, `web` e `cert-api`.
+6. Constrói imagens, aplica migrations API/certificação e reinicia `api`, `web` e `cert-api`.
 7. Verifica API `/health/ready`, web local/publica opcional e cert-api `/api/ready`.
-8. Atualiza observabilidade, grava `REVISION` e remove snapshot se tudo passar.
+8. Atualiza observabilidade, grava `REVISION` e retém snapshot para acompanhamento inicial.
 
 ### Portas Producao
 
@@ -447,3 +447,14 @@ Estado e backlog da entrega:
 ## Licenca
 
 Projeto privado - Grupo Uni.co. Todos os direitos reservados.
+
+### Contrato de migração da certificação (12/09/2026)
+
+O deploy constrói as imagens antes de migrar e executa, na imagem cert-api nova,
+`python -m app.db.release_migrations --apply`. O comando cria/verifica a base D11 e aplica
+`sql/20260912_certificate_item_restrictions.sql`, sem sincronizar fontes ou escrever no Linx.
+`python -m app.db.release_migrations --check` (também modo padrão) apenas verifica o contrato.
+O startup não aplica DDL; schema incompleto impede iniciar a nova versão. Executar pelo fluxo
+de deploy com backup obrigatório. A recuperação automática cobre falha de restart e readiness
+API/cert-api/web/proxy; restaura código, não migrations. Snapshot anterior é retido até o próximo
+deploy. Teste isolado do fluxo: `python3 scripts/test-deploy-release.py`.

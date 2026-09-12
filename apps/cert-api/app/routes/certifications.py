@@ -332,8 +332,8 @@ def trigger_sync_sheets(request: Request) -> dict:
     result = run_sheet_sync("manual", actor)
     if not result.get("locked"):
         raise HTTPException(409, "Ja existe uma sincronizacao da planilha em andamento")
-    if result.get("sheets", {}).get("error"):
-        raise HTTPException(500, result["sheets"]["error"])
+    if result.get("error") or result.get("sheets", {}).get("error"):
+        raise HTTPException(502, result.get("error") or result["sheets"]["error"])
     return result
 
 

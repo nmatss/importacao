@@ -1,5 +1,33 @@
 # Changelog
 
+### Revisão de fontes — 2026-09-12
+
+- Corrige origem do espelho no comparativo, Unicode de PDFs e penalização de avisos documentais comprovados.
+- Bloqueia carga bulk sem baseline/recuperação e alinha derivação de licenciamento no relatório ao snapshot da tela.
+- Registra auditoria dos30 pontos, divergências produtivas e piloto Vertex autorizado em STATUS-2026-09-12-RETOMADA-REUNIAO.md.
+
+## 2026-09-12 — Revisão antecipada adicional (local)
+
+- Recuperação digital Poppler com limites e preservação de layout; totais packing PK220.
+- Datas previstas e realizadas separadas no comparativo/capa; previsões e textos negados não avançam logística.
+- Registro rejeita aliases, versões e unidades conflitantes; caches atualizados após mutação documental.
+- Retry de certificado respeita vínculos atuais e conflitos ativos; restrição individual auditável com migration aditiva explícita.
+- Migration ainda não aplicada em produção; publicação e homologação permanecem pendentes.
+
+## 2026-09-12 — Retomada da reunião, sem publicação
+
+- BL exige 90% na API e interface; reprocessamento abaixo do piso retira projeção antiga.
+- Drive rejeita arquivo de outro processo antes da prioridade por tipo; CNPJ/endereço do
+  espelho e consulta SKU/Odoo corrigidos sem reescrever fonte.
+- Registro compara DUIMP, invoice e espelho com proveniência, formatos reais e pendências
+  explícitas; quantidade exata e divergência numérica dentro da tolerância exige revisão.
+- Licenciamento oficial protegido no cadastro e no serviço Linx; situação vigente prevalece
+  sobre histórico, ausência desconhecida não libera automaticamente.
+- Sync mostra erros/parcialidade, esquema ambíguo não promove snapshot; marketplace deixa
+  aplicabilidade pendente e remove regra automática por 500 peças.
+- Cronograma existente atualizado com evidência; fontes reais consultadas somente leitura.
+- [Validações e limites](docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md).
+
 ## 2026-09-11 — Certificacao: status pela situacao, trava pela menor data e cadastro por certificado
 
 - A aba "Puket escolares" deixou de ser lida (ficam Imaginario, PUC e Encerramentos) e o

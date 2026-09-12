@@ -90,11 +90,16 @@ describe('compareDates', () => {
 
   it('returns empty when only one date parses', () => {
     expect(compareDates(['2026-03-14', null])).toBe('empty');
-    expect(compareDates(['not-a-date'])).toBe('empty');
+    expect(compareDates(['not-a-date'])).toBe('warning');
   });
 
   it('handles 3 sources (invoice + PL + BL)', () => {
     const result = compareDates(['2026-03-14', '2026-03-15', '2026-03-16']);
     expect(result).toBe('match');
   });
+});
+
+it('invalid third date cannot disappear behind two agreeing sources', () => {
+  expect(compareDates(['2026-09-10', '2026-09-10', 'data invalida'])).toBe('warning');
+  expect(compareDates(['2026-09-10', '2026-12-10', 'data invalida'])).toBe('divergent');
 });

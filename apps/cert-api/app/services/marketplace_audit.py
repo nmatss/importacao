@@ -1,11 +1,8 @@
 """Auditoria dos quebra-cabecas de sellers terceiros no marketplace Imaginarium.
 
-Pedido da reuniao de 11/09/2026 (item 6): quebra-cabeca com MENOS de 500 pecas
-exige certificacao Inmetro (Portaria de brinquedos); a partir de 500 nao exige.
-A loja Imaginarium vende esses itens por marketplace — 173 produtos da categoria
-`jogos/quebra-cabeca` em 11/09, todos da marca "Grow Jogos" ofertados pelo
-seller `lojagrow`, enquanto o seller `1` (a propria Imaginarium) aparece com
-estoque zero.
+A aplicabilidade regulatoria, inclusive o criterio de 500 pecas, depende de
+validacao da area de Certificacao. A auditoria inventaria evidencia publicada;
+numero de registro presente nao comprova autenticidade nem dispensa.
 
 O validador existente so percorre os SKUs de `cert_products`, ou seja, o
 catalogo da planilha: item de marketplace NUNCA entrava. Este servico audita por
@@ -27,9 +24,7 @@ from app.db.postgres import db
 from app.services.cert_service import has_registration_number, strip_html
 from app.utils.logging import log
 
-# A regra fiscal e "< 500 pecas exige"; 500 exatas NAO exigem. O valor fica
-# parametrizavel porque a fronteira (< ou <=) ainda depende de confirmacao do
-# time fiscal — ver open_questions da reuniao.
+# Parametro legado preservado no contrato; nao determina aplicabilidade.
 DEFAULT_PIECES_THRESHOLD = 500
 
 # O seller `1` e a propria loja (item de catalogo proprio, coberto pelo painel).
@@ -159,32 +154,16 @@ def classify(
         Tupla `(verdict, reason)` com verdict em
         OK | NAO_OK | REVISAR | NAO_EXIGE.
     """
-    if _ACCESSORY_RE.search(name or ""):
-        return "NAO_EXIGE", "Acessorio, nao e quebra-cabeca"
-    if pieces is not None and pieces >= threshold:
-        return "NAO_EXIGE", f"{pieces} pecas (a partir de {threshold} nao exige certificacao)"
-
-    limite = f"menos de {threshold} pecas"
     quantas = f"{pieces} pecas" if pieces is not None else "quantidade de pecas nao informada"
-
     if not cert_text.strip():
-        if pieces is None:
-            # Sem saber quantas pecas, "sem certificacao" nao prova infracao:
-            # vai para revisao humana, nunca para OK.
-            return "REVISAR", "Sem numero de pecas e sem informacao de certificacao no site"
-        return "NAO_OK", f"{quantas} ({limite} exige certificacao) e nenhuma informacao no site"
-
-    if _NAO_POSSUI_RE.search(cert_text):
-        if pieces is None:
-            return "REVISAR", "O site declara dispensa, mas o numero de pecas nao foi identificado"
-        return "NAO_OK", f"{quantas}, mas o site declara que nao possui certificacao"
-
-    if has_certification_code(cert_text):
-        if pieces is None:
-            return "REVISAR", "Certificacao informada, mas o numero de pecas nao foi identificado"
-        return "OK", f"{quantas} com numero de registro informado"
-
-    return "REVISAR", "Texto de certificacao sem numero de registro reconhecivel"
+        evidencia = "informacao de certificacao ausente no site"
+    elif _NAO_POSSUI_RE.search(cert_text):
+        evidencia = "site declara dispensa, ainda nao validada"
+    elif has_certification_code(cert_text):
+        evidencia = "numero de registro informado; autenticidade nao verificada"
+    else:
+        evidencia = "informacao de certificacao presente, sem numero reconhecivel"
+    return "REVISAR", f"Aplicabilidade pendente de Certificacao; {quantas}; {evidencia}"
 
 
 def _store_config() -> dict[str, str]:
@@ -206,8 +185,8 @@ def fetch_category_products(
     request infinito.
 
     Raises:
-        requests.RequestException: falha de rede na primeira pagina; paginas
-            seguintes degradam para o que ja foi lido.
+        requests.RequestException: qualquer pagina indisponivel ou leitura
+            incompleta; nenhum inventario parcial e retornado como completo.
     """
     import time
 
@@ -216,27 +195,27 @@ def fetch_category_products(
     url = f"https://{domain}/api/io/_v/api/intelligent-search/product_search/{category_path}"
     headers = {"Accept": "application/json", "User-Agent": "CertAPI/2.0"}
 
+    if page_size < 1 or max_pages < 1:
+        raise ValueError("page_size e max_pages devem ser positivos")
     produtos: list[dict] = []
     for page in range(max_pages):
         if page and delay:
             time.sleep(delay)
-        try:
-            resp = requests.get(
-                url, params={"page": page + 1, "count": page_size}, headers=headers, timeout=20
-            )
-        except requests.RequestException:
-            if page == 0:
-                raise
-            log.warning(f"Marketplace audit: page {page + 1} failed, keeping {len(produtos)} items")
-            break
+        resp = requests.get(
+            url, params={"page": page + 1, "count": page_size}, headers=headers, timeout=20
+        )
         if resp.status_code != 200:
-            if page == 0:
-                resp.raise_for_status()
-            break
-        lote = resp.json().get("products") or []
+            raise requests.RequestException(f"Inventario marketplace incompleto: pagina {page + 1} HTTP {resp.status_code}")
+        payload = resp.json()
+        if not isinstance(payload, dict) or not isinstance(payload.get("products"), list):
+            raise requests.RequestException(f"Inventario marketplace invalido: pagina {page + 1} sem lista products")
+        lote = payload["products"]
         produtos.extend(lote)
         if len(lote) < page_size:
             break
+    else:
+        raise requests.RequestException("Inventario marketplace incompleto: teto de paginas atingido")
+
     return produtos
 
 

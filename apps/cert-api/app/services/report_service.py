@@ -353,6 +353,7 @@ def generate_products_report(
     status: str = "",
     license_map: dict | None = None,
     today: date | None = None,
+    sync_warning: str | None = None,
 ) -> Path:
     """Generate an Excel report for cert_products data.
 
@@ -367,8 +368,8 @@ def generate_products_report(
         brand: Optional brand filter label (used only in filename).
         status: Optional status filter label (used only in filename).
         license_map: Mapa legado de licenciamento (SKU -> status/prazo). A fonte
-            corrente e a propriedade do Linx; sem nenhuma das duas o status sai
-            como "Nao aplicavel".
+            corrente e o snapshot da propriedade do Linx; ausencia permanece
+            pendente, sem substituicao silenciosa por outra leitura.
         today: data de referencia do prazo de venda. Default: hoje em
             America/Sao_Paulo; explicitavel para o Excel de um cenario congelado
             (teste) nao mudar de veredito com a passagem do tempo.
@@ -380,16 +381,9 @@ def generate_products_report(
     stock_map = _fetch_stock_map()
     travas = _fetch_travas_faturamento(rows)
 
-    # O fim do licenciamento vem do Linx (D11): injeta a propriedade lida antes de
-    # derivar, para trava/status de venda do Excel serem os MESMOS do painel — que
-    # le a coluna `linx_fim_licenciamento` de cert_products.
-    enriched = []
-    for r in rows:
-        trava = travas.get(str(r.get("sku") or ""), {})
-        base = dict(r)
-        if base.get("linx_fim_licenciamento") is None and trava.get("lic"):
-            base["linx_fim_licenciamento"] = trava["lic"]
-        enriched.append({**base, **compute_status_dimensions(base, license_map, today)})
+    # Derive from the same persisted snapshot as the UI. Live Linx reads below
+    # remain evidence columns, and must not silently replace an unknown snapshot.
+    enriched = [{**row, **compute_status_dimensions(row, license_map, today)} for row in rows]
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -408,7 +402,7 @@ def generate_products_report(
     ws["A1"].font = Font(bold=True, size=14, color="059669")
     ws.append([f"Gerado em: {now.strftime('%d/%m/%Y %H:%M')}"])
     ws.append([f"Total: {len(rows)} produtos"])
-    ws.append([])
+    ws.append([_safe_text(sync_warning)] if sync_warning else [])
     ws.append(
         [
             f"Certificacao — Ativo: {ativos} | Encerrado: {encerrados}    "
@@ -457,7 +451,7 @@ def generate_products_report(
             _safe_text(_fmt_br(r.get("linx_fim_licenciamento")) or indisponivel or ""),
             _safe_text(_fmt_br(r.get("trava_venda"))),
             _safe_text(_TRAVA_ORIGEM_LABELS.get(r.get("trava_origem") or "", "")),
-            _safe_text(_STATUS_VENDA_LABELS.get(r.get("status_venda") or "", "")),
+            _safe_text("Pendente de validacao: " + r["status_venda_reason"] if r.get("status_venda_reason") else _STATUS_VENDA_LABELS.get(r.get("status_venda") or "", "")),
             _safe_text(trava.get("cert") or indisponivel or ""),
             _safe_text(_fmt_br(r.get("linx_fim_vendas")) or FIM_VENDAS_NAO_LIDO),
             _safe_text(_diverge_do_linx(r)),

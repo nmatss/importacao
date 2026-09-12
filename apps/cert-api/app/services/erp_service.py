@@ -170,7 +170,7 @@ def _find_col_by_header(headers: list[str], *candidates: str, contexto: str = ""
 
 
 def _resolve_columns(headers: list[str], fields: dict, sheet_name: str) -> dict[str, int | None]:
-    """Resolve o índice de cada campo do layout: cabeçalho primeiro, índice depois.
+    """Resolve cada campo por cabecalho exato e unico, sem fallback posicional.
 
     Args:
         headers: primeira linha da aba.
@@ -182,13 +182,11 @@ def _resolve_columns(headers: list[str], fields: dict, sheet_name: str) -> dict[
     """
     resolved: dict[str, int | None] = {}
     for field, (candidates, fallback) in fields.items():
-        idx = (
-            _find_col_by_header(headers, *candidates, contexto=f"Aba '{sheet_name}' / {field}")
-            if candidates
-            else None
-        )
+        normalized = [str(header).strip().lower() for header in headers]
+        matches = [i for i, header in enumerate(normalized) if header in candidates]
+        idx = matches[0] if len(matches) == 1 else None
         if idx is None:
-            idx = fallback
+            log.warning(f"Aba {sheet_name}: cabecalho ausente para {field}; sem fallback posicional")
         elif fallback is not None and idx != fallback:
             log.info(
                 f"Aba '{sheet_name}': coluna '{field}' encontrada em {idx} "
@@ -205,97 +203,33 @@ def _cell(row: list, idx: int | None) -> str:
     return str(row[idx]).strip()
 
 
-def read_encerramentos_prazos() -> list[dict]:
-    """Read SKU + PRAZO FINAL VENDA + MARCA from the 'Encerramentos' tab.
-
-    Fonte do prazo final de venda para o sync com o Linx. Le a aba direto, e nao
-    `cert_products`, por dois motivos: a marca decide em qual Linx gravar e chega
-    NULA na tabela (a linha de "Ativos" vence o upsert), e o prazo aqui e o dado
-    cru que o time fiscal mantem.
-
-    Returns:
-        Lista de dicts {sku, sale_deadline, brand, certificado}, um por SKU
-        (a coluna SKU pode trazer varios codigos separados por quebra de linha).
-        Lista vazia quando o Sheets nao esta configurado ou a aba nao existe.
-    """
+def _bulk_source_spreadsheet():
+    """Open the configured source; incomplete reads cannot prepare a load."""
     client = _get_sheets_client()
     if not client or not SHEETS_SPREADSHEET_ID:
-        log.warning("Sheets nao configurado; sync de prazo abortado")
-        return []
-
+        raise ValueError("Sheets nao configurado; preparacao da carga indisponivel")
     try:
-        ws = client.open_by_key(SHEETS_SPREADSHEET_ID).worksheet("Encerramentos")
-    except gspread.exceptions.WorksheetNotFound:
-        log.warning("Aba 'Encerramentos' nao encontrada")
-        return []
+        return client.open_by_key(SHEETS_SPREADSHEET_ID)
+    except Exception:
+        raise ValueError("Fonte Sheets indisponivel; preparacao da carga interrompida") from None
 
-    rows = ws.get_all_values()
-    if not rows:
-        return []
 
-    headers = rows[0]
-    i_sku = _find_col_by_header(headers, "sku", "código", "codigo", "ref")
-    i_prazo = _find_col_by_header(headers, "prazo final venda", "prazo final", "prazo venda")
-    i_marca = _find_col_by_header(headers, "marca", "brand")
-    i_cert = _find_col_by_header(headers, "certificado")
-    if i_sku is None or i_prazo is None or i_marca is None:
-        log.warning(
-            f"Aba 'Encerramentos' sem coluna obrigatoria (sku={i_sku} prazo={i_prazo} marca={i_marca})"
-        )
-        return []
+def read_encerramentos_prazos() -> list[dict]:
+    """Read the load source using the same strict schema gates as the main sync.
 
-    out: list[dict] = []
-    for row in rows[1:]:
-        prazo, marca = _cell(row, i_prazo), _cell(row, i_marca)
-        if not prazo or not marca:
-            continue
-        for sku in re.split(r"[\r\n]+", _cell(row, i_sku)):
-            sku = sku.strip()
-            if sku:
-                out.append(
-                    {
-                        "sku": sku,
-                        "sale_deadline": prazo,
-                        "brand": marca,
-                        "certificado": _cell(row, i_cert),
-                    }
-                )
-    log.info(f"Encerramentos: {len(out)} SKUs com prazo final de venda")
-    return out
+    Keep rows without deadlines visible; missing data is not an empty success.
+    Raw double-certification information is evidence, not approved association.
+    """
+    rows = _read_encerramentos_from_sheets(_bulk_source_spreadsheet(), strict=True)
+    if not rows or any(not row.get("brand") for row in rows):
+        raise ValueError("Encerramentos incompleto: confirmar dados e marca de cada SKU")
+    return [{**row, "certificado": row.get("numero_certificado", "")} for row in rows]
 
 
 def read_situacao_por_sku() -> dict[str, dict]:
-    """Le a SITUACAO (coluna U) vigente de cada SKU nas abas de produto.
-
-    O sync com o Linx precisa saber se o certificado esta ATIVO antes de gravar
-    qualquer data: certificado ativo nao tem trava ([39:17]). A aba
-    "Encerramentos" sozinha nao responde isso — ela so conhece encerramentos, e
-    um SKU recertificado aparece la pelo certificado ANTIGO.
-
-    Returns:
-        Dict {sku: {situacao, numero_certificado, brand, validade_certificado}},
-        ja com a dupla certificacao resolvida por `_linha_vigente`. Vazio quando
-        o Sheets nao esta configurado ou a leitura falha — o caller decide o que
-        fazer com a ausencia (nunca gravar as cegas).
-    """
-    client = _get_sheets_client()
-    if not client or not SHEETS_SPREADSHEET_ID:
-        log.warning("Sheets nao configurado; situacao por SKU indisponivel")
-        return {}
-    try:
-        spreadsheet = client.open_by_key(SHEETS_SPREADSHEET_ID)
-    except Exception as e:
-        log.error(f"Failed to open spreadsheet for situacao: {e}")
-        return {}
-    return {
-        p["sku"]: {
-            "situacao": p.get("situacao", ""),
-            "numero_certificado": p.get("numero_certificado", ""),
-            "brand": p.get("brand", ""),
-            "validade_certificado": p.get("validade_certificado"),
-        }
-        for p in _read_ativos_from_sheets(spreadsheet)
-    }
+    """Read current supplier/certificate identities; never resolve ambiguity by date."""
+    rows = _read_ativos_from_sheets(_bulk_source_spreadsheet(), strict=True)
+    return {row["sku"]: row for row in rows}
 
 
 def _resolve_ean_skus(items: list[dict]) -> int:
@@ -367,12 +301,12 @@ def _linha_vigente(linhas: list[dict]) -> dict:
     return (ativas or linhas)[-1]
 
 
-def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
+def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool = False) -> list[dict]:
     """Le o cadastro de certificacao das abas de produto ativo.
 
     Cobre "Imaginarium" e "Puket" (a aba "Puket escolares" foi abandonada — ver
     `_ATIVOS_SHEETS`). Cada campo e localizado pelo CABECALHO, com o indice do
-    layout apenas como fallback.
+    layout apenas como referencia para diagnostico.
 
     A MARCA vem da ABA, nunca da coluna A: ver `_BRAND_CANONICAL` (caso
     100400496 / 'Kayuan').
@@ -387,12 +321,20 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
             ws = spreadsheet.worksheet(cfg["name"])
             rows = ws.get_all_values()
         except Exception as e:
-            log.warning(f"Could not read worksheet '{cfg['name']}': {e}")
+            if strict:
+                raise ValueError(f"Leitura incompleta da aba {cfg['name']}") from None
+            log.warning(f"Could not read worksheet '{cfg['name']}': {type(e).__name__}")
             continue
         if not rows:
+            if strict:
+                raise ValueError(f"Aba {cfg['name']} sem cabecalho; sincronizacao nao aplicada")
             continue
 
         cols = _resolve_columns(rows[0], cfg["fields"], cfg["name"])
+        if strict and any(cols.get(field) is None for field in ("sku", "numero_certificado", "situacao", "validade_certificado")):
+            raise ValueError(f"Esquema de certificacao incompleto na aba {cfg['name']}")
+        if strict and not any(_cell(row, cols["sku"]) for row in rows[1:]):
+            raise ValueError(f"Aba {cfg['name']} com cabecalho mas sem dados; confirmar carga vazia")
         i_sku = cols["sku"]
         if i_sku is None:
             log.warning(f"Aba '{cfg['name']}' sem coluna de SKU; ignorada")
@@ -410,6 +352,7 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
                 validade = parse_data_real(validade_raw)
                 produtos.append({
                     "sku": sku,
+                    "supplier": _cell(row, _find_col_by_header(rows[0], "fornecedor")),
                     "name": _cell(row, cols["name"]),
                     "brand": cfg["brand"],
                     "certification_type": _cell(row, cols["certification_type"]),
@@ -424,6 +367,13 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
     por_sku: dict[str, list[dict]] = defaultdict(list)
     for p in produtos:
         por_sku[p["sku"]].append(p)
+    if strict:
+        for linhas in por_sku.values():
+            active = [p for p in linhas if derive_situacao_status(p.get("situacao")) == "ATIVO"]
+            candidates = active or linhas
+            identities = {(p.get("brand"), p.get("supplier"), _norm_certificado(p.get("numero_certificado"))) for p in candidates}
+            if len(identities) > 1:
+                raise ValueError("Vinculo de certificacao ambiguo; validar fornecedor e certificado antes da sincronizacao")
     vigentes = [_linha_vigente(linhas) for linhas in por_sku.values()]
     duplicados = len(produtos) - len(vigentes)
     if duplicados:
@@ -435,7 +385,7 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
     return vigentes
 
 
-def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[dict]:
+def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool = False) -> list[dict]:
     """Le a aba "Encerramentos" — prazo final de venda e permissao de venda.
 
     A leitura e SEMPRE por CABECALHO, nunca por letra de coluna: em 09/2026 a
@@ -458,16 +408,29 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[di
         ws = spreadsheet.worksheet("Encerramentos")
         rows = ws.get_all_values()
     except gspread.exceptions.WorksheetNotFound:
+        if strict:
+            raise ValueError("Aba Encerramentos indisponivel") from None
         log.info("Worksheet 'Encerramentos' not found, skipping")
         return []
     except Exception as e:
-        log.warning(f"Error reading 'Encerramentos' worksheet: {e}")
+        if strict:
+            raise ValueError("Leitura incompleta de Encerramentos") from None
+        log.warning(f"Error reading 'Encerramentos' worksheet: {type(e).__name__}")
         return []
 
     if not rows:
+        if strict:
+            raise ValueError("Aba Encerramentos sem cabecalho; sincronizacao nao aplicada")
         return []
 
     headers = rows[0]
+    if strict:
+        normalized = [str(header).strip().lower() for header in headers]
+        for required in ("sku", "certificado", "prazo final venda", "status", "dupla certificação?"):
+            if normalized.count(required) != 1:
+                raise ValueError(f"Esquema de Encerramentos invalido: {required}")
+    if strict and not any(_cell(row, normalized.index("sku")) for row in rows[1:]):
+        raise ValueError("Aba Encerramentos com cabecalho mas sem dados; confirmar carga vazia")
     ctx = "Aba 'Encerramentos'"
     i_sku = _find_col_by_header(headers, "sku", "código", "codigo", "ref", contexto=f"{ctx} / sku")
     i_prazo = _find_col_by_header(
@@ -479,6 +442,7 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[di
     i_marca = _find_col_by_header(headers, "marca", "brand", contexto=f"{ctx} / marca")
     i_cert = _find_col_by_header(headers, "certificado", contexto=f"{ctx} / certificado")
     i_nome = _find_col_by_header(headers, "nome", "produto", "descrição", "descricao")
+    i_dupla = _find_col_by_header(headers, "dupla certificação?", "dupla certificacao?")
     if i_sku is None:
         log.warning("Aba 'Encerramentos' sem coluna de SKU; ignorada")
         return []
@@ -499,13 +463,7 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[di
         if not prazo_str and not status_str:
             continue
 
-        prazo_date = None
-        for fmt in ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y"):
-            try:
-                prazo_date = datetime.strptime(prazo_str, fmt).date()
-                break
-            except ValueError:
-                continue
+        prazo_date = parse_data_real(prazo_str)
 
         venda = derive_venda_encerramento(status_str)
         if venda == "BLOQUEADA":
@@ -530,6 +488,7 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet) -> list[di
                 "sale_deadline": prazo_str,
                 "sale_deadline_date": prazo_date.isoformat() if prazo_date else None,
                 "encerramento_status": status_str,
+                "dupla_certificacao_raw": _cell(row, i_dupla),
                 "is_expired": is_expired,
             })
 
@@ -625,7 +584,7 @@ _UPSERT_ATIVOS_SQL = """
         situacao = EXCLUDED.situacao,
         expected_cert_text = EXCLUDED.expected_cert_text,
         ecommerce_description = EXCLUDED.ecommerce_description,
-        sheet_status = COALESCE(NULLIF(EXCLUDED.sheet_status, ''), cert_products.sheet_status),
+        sheet_status = EXCLUDED.sheet_status,
         -- Atribuicao direta (sem COALESCE): quando a planilha apaga a validade,
         -- o portal tem de apagar junto, senao sobra data de um certificado que
         -- nao existe mais.
@@ -733,8 +692,20 @@ def sync_sheets_to_db() -> dict:
         log.error(f"Failed to open spreadsheet: {e}")
         return {"synced": 0, "error": f"Failed to open spreadsheet: {e}"}
 
-    ativos = _read_ativos_from_sheets(spreadsheet)
-    encerramentos_lidos = _read_encerramentos_from_sheets(spreadsheet)
+    try:
+        ativos = _read_ativos_from_sheets(spreadsheet, strict=True)
+        encerramentos_lidos = _read_encerramentos_from_sheets(spreadsheet, strict=True)
+    except ValueError as exc:
+        return {"synced": 0, "error": str(exc)}
+    por_sku = {p["sku"]: p for p in ativos}
+    for encerramento in encerramentos_lidos:
+        produto = por_sku.get(encerramento["sku"])
+        if not produto:
+            continue
+        atual = _norm_certificado(produto.get("numero_certificado"))
+        antigo = _norm_certificado(encerramento.get("numero_certificado"))
+        if atual and antigo and atual != antigo:
+            return {"synced": 0, "error": "Dupla certificacao exige validacao do vinculo por fornecedor e certificado; coluna N nao autoriza selecao automatica"}
     # Encerramento de certificado ANTIGO nao pode travar SKU com certificado
     # ativo (dupla certificacao) — ver `resolver_encerramentos`.
     encerramentos, historicos = resolver_encerramentos(ativos, encerramentos_lidos)

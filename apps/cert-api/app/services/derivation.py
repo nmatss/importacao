@@ -78,8 +78,8 @@ REGULATED_KEYWORDS = (
 
 CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO"}
 SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME"}
-LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL"}
-COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA"}
+LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL", "PENDENTE"}
+COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA", "PENDENTE"}
 
 # D11: os dois valores gravados em cert_products.status_venda (o CHECK do banco
 # aceita exatamente estes) e as duas origens possíveis da trava.
@@ -347,6 +347,9 @@ def derive_within_sale_deadline(
     venda = derive_venda_encerramento(encerramento_status)
     if venda == "BLOQUEADA":
         return False
+    deadline = parse_data_real(sale_deadline_date) or parse_data_real(sale_deadline_raw)
+    if deadline is not None and deadline < (today or _today_sp()):
+        return False
     if venda in ("PERMITIDA", "FIM_LOTE"):
         return True
     if "vencido" in _norm(sale_deadline_raw):
@@ -393,28 +396,12 @@ def derive_cert_status(
     situacao: str | None = None,
     somente_encerramentos: bool = False,
 ) -> str:
-    """Status da certificação — colapsado em ATIVO | ENCERRADO.
+    """Situacao do certificado, independente de qualquer prazo comercial.
 
-    Reunião 2026-09-11: a coluna U (`situacao`) decide PRIMEIRO, antes de
-    qualquer sinal de prazo de venda. Só quando ela está vazia ou ilegível é que
-    valem as regras antigas (histórico, coluna de encerramento, prazo), abaixo.
-    `somente_encerramentos=True` (SKU que não tem linha em nenhuma aba de
-    produto) também é ENCERRADO por definição.
-
-    Feedback Eduarda 2026-06-19:
-    - "Ativo": certificação ativa OU dentro do prazo de venda.
-    - "Encerrado": certificação encerrada, SKU excluído OU fora do prazo de venda.
-
-    Mapeamento:
-    - SKU excluído (sem reinclusão)  → ENCERRADO
-    - Venda bloqueada (Encerramentos)→ ENCERRADO
-    - Venda permitida (Encerramentos)→ ATIVO (prazo de venda vigente)
-    - Em andamento                  → ENCERRADO (a menos que claramente ativo
-                                       por prazo de venda vigente)
-    - Expired / Vencido / Encerrado → ENCERRADO, salvo dentro da janela de venda
-    - Ativo / Finalizado / Expiring → ATIVO, salvo expirado e fora da janela
-    - Texto livre / desconhecido    → conservador: ENCERRADO se expirado e fora
-                                       da janela; senão ATIVO por prazo
+    Situacao declarada precede o historico. Na ausencia dela, somente sinais
+    afirmativos do historico podem indicar atividade. Validade vencida e
+    situacao ativa sao expostas como inconsistencia pelo orquestrador.
+    Parametros de prazo sao preservados por compatibilidade, sem decidir status.
     """
     # Coluna U: a fonte declarada pelo time fiscal. Precede tudo.
     por_situacao = derive_situacao_status(situacao)
@@ -424,29 +411,8 @@ def derive_cert_status(
         return "ENCERRADO"
 
     s = _norm(sheet_status)
-    within_window = _within_sale_window(sale_deadline_raw)
-    deadline = _norm(sale_deadline_raw)
-
-    # SKU excluído → SEMPRE encerrado (regra explícita Eduarda: "Encerrado =
-    # certificação encerrada, SKU excluído OU fora do prazo de venda"). Precede o
-    # short-circuit de janela de venda: um SKU excluído nunca volta a ATIVO mesmo
-    # com prazo de venda vigente. "Excluído e incluído novamente" NÃO conta —
-    # ver `_is_sku_excluded`.
     if _is_sku_excluded(sheet_status):
         return "ENCERRADO"
-
-    # A coluna 'STATUS' de "Encerramentos" é o veredito do time fiscal e
-    # vence o texto livre do histórico (que costuma descrever o processo de
-    # certificação, não a permissão de comercializar).
-    venda = derive_venda_encerramento(encerramento_status)
-    if venda == "BLOQUEADA":
-        return "ENCERRADO"
-    if venda in ("PERMITIDA", "FIM_LOTE"):
-        return "ATIVO"
-
-    # Dentro da janela de venda reativa (após excluir SKUs excluídos).
-    if within_window:
-        return "ATIVO"
 
     # O sheet_status frequentemente carrega o HISTÓRICO inteiro da planilha
     # (log multilinha, entrada mais recente PRIMEIRO). Fazer substring no texto
@@ -477,7 +443,7 @@ def derive_cert_status(
         if fragment == "ativo" or fragment == "expiring" or _afirmativo(
             fragment, "finalizad", "conce"
         ):
-            if is_expired or "vencido" in deadline:
+            if is_expired:
                 return "ENCERRADO"
             return "ATIVO"
         return None
@@ -500,29 +466,8 @@ def _fallback_from_expiration(
     sale_deadline_date: object = None,
     today: date | None = None,
 ) -> str:
-    """Quando sheet_status é vazio/texto livre, deduz pelo PRAZO — comparando a data.
-
-    A versão anterior fazia `if deadline: return "ATIVO"`: bastava o campo de
-    prazo não estar vazio e não conter a palavra literal "vencido". Isso dava
-    ATIVO para um prazo de "01/01/2020" (seis anos vencido) e para qualquer
-    texto solto como "a definir" — deixando o item com lixo no prazo MAIS
-    permissivo do que o item sem prazo nenhum, que caía em ENCERRADO.
-
-    Agora só concede ATIVO com evidência positiva: janela de venda aberta ou uma
-    data que efetivamente ainda não passou. Texto que não é data não concede
-    nada.
-    """
-    if _within_sale_window(sale_deadline_raw):
-        return "ATIVO"
-    if _tem_bloqueio(sale_deadline_raw) or "vencido" in _norm(sale_deadline_raw):
-        return "ENCERRADO"
-    if is_expired:
-        return "ENCERRADO"
-    prazo = _parse_deadline_date(sale_deadline_date) or _parse_deadline_date(sale_deadline_raw)
-    if prazo is not None:
-        return "ATIVO" if prazo >= (today or _today_sp()) else "ENCERRADO"
-    # Prazo ausente, ou preenchido com texto que não é data nem janela conhecida:
-    # sem evidência de que a venda esteja liberada, o veredito é ENCERRADO.
+    """Sem situacao reconhecida nao se infere atividade a partir da venda."""
+    # Prazo comercial nunca e evidencia de certificacao ativa.
     return "ENCERRADO"
 
 
@@ -683,7 +628,7 @@ def derive_status_venda(
     cert_status: str | None,
     trava_venda: date | None,
     venda_encerramento: str | None = None,
-    within_sale_deadline: bool = True,
+    within_sale_deadline: bool = False,
     today: date | None = None,
 ) -> str:
     """Status de venda — LIBERADA | BLOQUEADA (os dois valores que o banco aceita).
@@ -699,11 +644,13 @@ def derive_status_venda(
     4. Caso contrário LIBERADA. A trava que vence HOJE ainda permite vender no dia,
        igual a `derive_within_sale_deadline`.
     """
+    if cert_status not in CERT_STATUS_VALUES:
+        return "BLOQUEADA"
     if venda_encerramento == "BLOQUEADA":
         return "BLOQUEADA"
     if trava_venda is not None and trava_venda < (today or _today_sp()):
         return "BLOQUEADA"
-    if cert_status == "ENCERRADO" and not within_sale_deadline:
+    if cert_status != "ATIVO" and not within_sale_deadline and trava_venda is None:
         return "BLOQUEADA"
     return "LIBERADA"
 
@@ -711,20 +658,10 @@ def derive_status_venda(
 def derive_license_status_linx(
     fim_licenciamento: object, today: date | None = None
 ) -> tuple[str, str | None]:
-    """Status de licenciamento a partir da propriedade do Linx (00107 / 00225).
-
-    Reunião [58:01]: a aba "Licenciamentos Vencidos" não será mais atualizada — o
-    time de produto lança o licenciamento direto no Linx. Sem data real (vazio ou
-    sentinela) o produto simplesmente não tem licenciamento a controlar.
-
-    Returns:
-        Tupla (license_status, license_deadline ISO|None), no mesmo formato de
-        `derive_license_status`, para o painel e o Excel não precisarem saber de
-        qual fonte veio.
-    """
+    """Le prazo oficial do Linx; ausencia permanece pendente de aplicabilidade."""
     data = parse_data_real(fim_licenciamento)
     if data is None:
-        return "NAO_APLICAVEL", None
+        return "PENDENTE", None
     vencido = data < (today or _today_sp())
     return ("VENCIDO" if vencido else "VALIDO"), data.isoformat()
 
@@ -800,7 +737,8 @@ def compute_status_dimensions(
             explicitável para deixar o cálculo determinístico em teste.
     """
     sheet_status = row.get("sheet_status")
-    is_expired = bool(row.get("is_expired") or False)
+    validade = parse_data_real(row.get("validade_certificado"))
+    is_expired = bool(validade and validade < (today or _today_sp()))
     sale_deadline_raw = row.get("sale_deadline")
     certification_type = row.get("certification_type")
     expected_cert_text = row.get("expected_cert_text")
@@ -844,14 +782,28 @@ def compute_status_dimensions(
     ss, ss_reason = derive_site_status(
         last_vs, cs, expected_cert_text, certification_type, within_deadline
     )
-    # Licenciamento: a propriedade do Linx é a fonte da decisão D11. A aba
-    # "Licenciamentos Vencidos" só responde enquanto a coluna do Linx não estiver
-    # preenchida, para nenhum produto perder o status durante a virada de fonte.
+    # Licenciamento vem exclusivamente do Linx. Ausencia de data nao prova dispensa.
     fim_licenciamento = row.get("linx_fim_licenciamento")
+    ls_reason = None
     if parse_data_real(fim_licenciamento) is not None:
         ls, ls_deadline = derive_license_status_linx(fim_licenciamento, today)
+    elif row.get("licenciamento_aplicavel") is False:
+        ls, ls_deadline = "NAO_APLICAVEL", None
     else:
-        ls, ls_deadline = derive_license_status(_lookup_license_row(row, license_map))
+        ls, ls_deadline = "PENDENTE", None
+        ls_reason = "Licenciamento sem prazo valido ou aplicabilidade confirmada na fonte Linx"
+    cert_reason = None
+    validade = parse_data_real(row.get("validade_certificado"))
+    if cs == "ATIVO" and validade and validade < (today or _today_sp()):
+        cert_reason = "Situacao ativa com validade vencida; resolver inconsistencia com Certificacao"
+    elif derive_situacao_status(situacao) is None and not somente_encerramentos and (
+        not sheet_status or (
+            cs == "ENCERRADO" and not _tem_bloqueio(sheet_status)
+            and not any(marker in _norm(sheet_status) for marker in ("encerrad", "vencid", "expired", "exclu", "andamento"))
+            and not is_expired
+        )
+    ):
+        cert_reason = "Situacao da certificacao nao informada; confirmar vinculo vigente"
     cms = derive_comercializacao_status(
         cs, sale_deadline_raw, sheet_status, within_deadline, encerramento_status
     )
@@ -859,11 +811,33 @@ def compute_status_dimensions(
     trava, trava_origem = derive_trava_venda(
         row.get("sale_deadline_date") or sale_deadline_raw, fim_licenciamento, cs
     )
+    status_venda = derive_status_venda(cs, trava, venda, within_deadline, today)
+    venda_reason = None
+    if trava is None and ls == "PENDENTE":
+        status_venda = "BLOQUEADA"
+        venda_reason = ls_reason
+    if cert_reason:
+        status_venda = "BLOQUEADA"
+        venda_reason = cert_reason
+    exclusao_vigente = _is_sku_excluded(situacao) or (
+        derive_situacao_status(situacao) is None and _is_sku_excluded(sheet_status)
+    )
+    if exclusao_vigente or venda == "BLOQUEADA" or (trava is not None and trava < (today or _today_sp())):
+        status_venda = "BLOQUEADA"
+        venda_reason = None
+    if venda_reason:
+        cms = "PENDENTE"
+    elif status_venda == "BLOQUEADA":
+        cms = "ENCERRADA"
+    elif trava is not None:
+        cms = "DENTRO_PRAZO"
     return {
         "cert_status": cs,
+        "cert_status_reason": cert_reason,
         "site_status": ss,
         "site_status_reason": ss_reason,
         "license_status": ls,
+        "license_status_reason": ls_reason,
         "license_deadline": ls_deadline,
         "comercializacao_status": cms,
         "venda_encerramento": venda,
@@ -871,5 +845,6 @@ def compute_status_dimensions(
         # D11 — eixo de VENDA, independente do status do certificado.
         "trava_venda": trava.isoformat() if trava else None,
         "trava_origem": trava_origem,
-        "status_venda": derive_status_venda(cs, trava, venda, within_deadline, today),
+        "status_venda": status_venda,
+        "status_venda_reason": venda_reason,
     }

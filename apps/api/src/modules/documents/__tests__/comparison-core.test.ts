@@ -167,7 +167,7 @@ describe('mergeValidationChecks', () => {
   });
 
   it('nao deixa o rotulo tecnico do check aparecer', () => {
-    const rows = [row({ label: 'ETD / Shipped On Board', status: 'match' })];
+    const rows = [row({ label: 'Datas documentais (emissão / embarque)', status: 'match' })];
 
     const merged = mergeValidationChecks(rows, [
       {
@@ -257,7 +257,7 @@ describe('mergeValidationChecks', () => {
 
   it('soma as regras quando mais de uma reprova a mesma linha', () => {
     const merged = mergeValidationChecks(
-      [row({ label: 'ETD / Shipped On Board', status: 'match' })],
+      [row({ label: 'Datas documentais (emissão / embarque)', status: 'match' })],
       [
         { id: 20, checkName: 'dates-match', status: 'failed', message: 'ETD do BL diverge.' },
         {

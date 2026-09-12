@@ -31,8 +31,8 @@ SYNC_TRIGGERS = ("manual", "startup", "schedule", "hourly")
 
 
 @contextmanager
-def sheet_sync_lock() -> Generator[bool, None, None]:
-    """Tenta tomar o lock do sync da planilha e o devolve ao sair.
+def sheet_sync_lock(lock_key: int = SHEET_SYNC_LOCK_KEY) -> Generator[bool, None, None]:
+    """Tenta tomar um lock de operacao (padrao: sync) e o devolve ao sair.
 
     O lock e de SESSAO (`pg_try_advisory_lock`), nao de transacao: o sync faz
     varias transacoes curtas com `db()`, e um lock de transacao morreria na
@@ -54,7 +54,7 @@ def sheet_sync_lock() -> Generator[bool, None, None]:
     acquired = False
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_lock(%s) AS locked", [SHEET_SYNC_LOCK_KEY])
+            cur.execute("SELECT pg_try_advisory_lock(%s) AS locked", [lock_key])
             row = cur.fetchone()
             acquired = bool(row and row[0])
         conn.commit()
@@ -63,7 +63,7 @@ def sheet_sync_lock() -> Generator[bool, None, None]:
         if acquired:
             try:
                 with conn.cursor() as cur:
-                    cur.execute("SELECT pg_advisory_unlock(%s)", [SHEET_SYNC_LOCK_KEY])
+                    cur.execute("SELECT pg_advisory_unlock(%s)", [lock_key])
                 conn.commit()
             except Exception as e:
                 # A conexao volta ao pool mesmo assim; o lock cai sozinho quando
@@ -175,11 +175,47 @@ def run_sheet_sync(trigger: str, actor: str | None = None) -> dict:
             finish_sync_run(run_id, None, f"{type(e).__name__}: {e}")
             raise
 
+        if result["sheets"].get("error"):
+            result["linx"] = {"skipped": True, "reason": "Falha na leitura da certificacao"}
+            result["status"] = "error"
+            result["error"] = "Sincronizacao da planilha falhou; etapa Linx nao executada"
+            finish_sync_run(run_id, {"sheets": result["sheets"], "linx": result["linx"]}, result["error"])
+            return result
+
         try:
             result["linx"] = sync_linx_attributes()
         except Exception as e:
             log.warning(f"Linx attribute sync failed during {trigger} sync: {type(e).__name__}")
             result["linx"] = {"error": type(e).__name__}
 
-        finish_sync_run(run_id, {"sheets": result["sheets"], "linx": result["linx"]})
+        failed = bool(result["sheets"].get("error") or result["linx"].get("error") or result["linx"].get("errors"))
+        result["status"] = "error" if failed else "completed"
+        if failed:
+            result["error"] = "Atualizacao parcial: planilha aplicada, mas a leitura do Linx falhou ou ficou incompleta"
+        finish_sync_run(run_id, {"sheets": result["sheets"], "linx": result["linx"]}, result.get("error"))
         return result
+
+
+def snapshot_sync_warning() -> str | None:
+    """Aviso do snapshot sem inferir atualidade por prazo arbitrario."""
+    if not DATABASE_URL:
+        return "Atualidade das fontes nao verificada; relatorio baseado no snapshot disponivel"
+    try:
+        last = fetch_last_sync_run()
+    except Exception:
+        return "Historico de sincronizacao indisponivel; relatorio baseado no snapshot anterior"
+    if not last:
+        return "Sem sincronizacao registrada; atualidade das fontes nao verificada"
+    result = last.get("result") or {}
+    if (
+        last.get("error")
+        or result.get("sheets", {}).get("error")
+        or result.get("linx", {}).get("error")
+        or result.get("linx", {}).get("errors")
+    ):
+        if result.get("sheets", {}).get("error"):
+            return "Ultima sincronizacao da planilha falhou; etapa Linx nao executada, atualidade nao confirmada"
+        return "Ultima sincronizacao incompleta; pode haver dados atualizados parcialmente, atualidade conjunta nao confirmada"
+    if not last.get("finished_at"):
+        return "Sincronizacao ainda em andamento; dados podem estar atualizados parcialmente"
+    return None

@@ -68,35 +68,21 @@ def test_pieces_fall_back_to_the_componentes_spec():
     assert ma.extract_pieces(product) == 500
 
 
-@pytest.mark.parametrize(
-    ("name", "pieces", "cert_text", "verdict"),
-    [
-        # Menos de 500 pecas sem nenhuma informacao no site: nao conforme.
-        ("Puzzle 60 pecas Aventura", 60, "", "NAO_OK"),
-        # Menos de 500 com numero de registro: conforme.
-        ("Puzzle 300 pecas", 300, "CE-BRI/ICEPEX-N 01264-25", "OK"),
-        # 500 exatas nao exigem (a regra e "< 500 exige").
-        ("Puzzle 500 pecas", 500, "", "NAO_EXIGE"),
-        ("Puzzle 1000 pecas", 1000, "Não possui por se tratar de um quebra-cabeça com mais de 500 peças.", "NAO_EXIGE"),
-        # Menos de 500 declarando dispensa: contradicao, nao conforme.
-        ("Puzzle 200 pecas", 200, "Não possui por se tratar de um quebra-cabeça com mais de 500 peças.", "NAO_OK"),
-        # Sem numero de pecas: nunca OK, sempre revisao humana.
-        ("Quebra-cabeca Panoramico", None, "CE-BRI/ICEPEX-N 01264-25", "REVISAR"),
-        ("Quebra-cabeca Panoramico", None, "", "REVISAR"),
-        # Texto sem numero de registro reconhecivel.
-        ("Puzzle 100 pecas", 100, "Produto certificado", "REVISAR"),
-        # Acessorio da categoria.
-        ("Porta-Puzzle de Madeira", None, "", "NAO_EXIGE"),
-    ],
-)
-def test_classify(name, pieces, cert_text, verdict):
-    assert ma.classify(name, pieces, cert_text)[0] == verdict
+@pytest.mark.parametrize("pieces", [None, 60, 300, 499, 500, 501, 1000])
+@pytest.mark.parametrize("cert_text", ["", "CE-BRI/ICEPEX-N 01264-25", "Nao possui", "Produto certificado"])
+def test_applicability_requires_area_validation(pieces, cert_text):
+    verdict, reason = ma.classify("Quebra-cabeca", pieces, cert_text)
+    assert verdict == "REVISAR"
+    assert "Aplicabilidade pendente" in reason
+    if cert_text == "":
+        assert "ausente" in reason
+    elif cert_text.startswith("CE-"):
+        assert "autenticidade nao verificada" in reason
 
 
-def test_classify_threshold_is_configurable():
-    """A fronteira (< ou <= 500) ainda depende do time fiscal: e parametro."""
-    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=501)[0] == "NAO_OK"
-    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=500)[0] == "NAO_EXIGE"
+def test_legacy_threshold_does_not_approve_a_regulatory_rule():
+    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=501)[0] == "REVISAR"
+    assert ma.classify("Puzzle 500 pecas", 500, "", threshold=500)[0] == "REVISAR"
 
 
 def test_house_only_product_is_out_of_scope():
@@ -115,7 +101,7 @@ def test_audit_products_builds_the_row_for_persistence():
     rows = ma.audit_products([_product("Puzzle 60 pecas Aventura", cert_text="")])
     assert len(rows) == 1
     row = rows[0]
-    assert row["verdict"] == "NAO_OK"
+    assert row["verdict"] == "REVISAR"
     assert row["pieces"] == 60
     assert row["seller_id"] == "lojaparceira"
     assert row["url"].startswith("https://")
@@ -130,7 +116,7 @@ def test_summarize_always_has_the_four_verdicts():
             _product("Puzzle 1000 pecas", product_id="b", cert_text=""),
         ]
     )
-    assert ma.summarize(rows) == {"OK": 0, "NAO_OK": 1, "REVISAR": 0, "NAO_EXIGE": 1}
+    assert ma.summarize(rows) == {"OK": 0, "NAO_OK": 0, "REVISAR": 2, "NAO_EXIGE": 0}
 
 
 def test_fetch_stops_when_a_page_returns_less_than_the_page_size(mocker):
@@ -154,12 +140,13 @@ def test_fetch_respects_the_page_ceiling(mocker):
     )
     get = mocker.patch.object(ma.requests, "get", return_value=full)
 
-    ma.fetch_category_products(page_size=2, max_pages=3, sleep=0)
+    with pytest.raises(requests.RequestException, match="teto"):
+        ma.fetch_category_products(page_size=2, max_pages=3, sleep=0)
 
     assert get.call_count == 3
 
 
-def test_fetch_keeps_what_it_read_when_a_later_page_fails(mocker):
+def test_fetch_rejects_partial_inventory_when_a_later_page_fails(mocker):
     ok = mocker.MagicMock(
         status_code=200, **{"json.return_value": {"products": [{"productId": "x"}] * 2}}
     )
@@ -167,9 +154,9 @@ def test_fetch_keeps_what_it_read_when_a_later_page_fails(mocker):
         ma.requests, "get", side_effect=[ok, requests.RequestException("timeout")]
     )
 
-    produtos = ma.fetch_category_products(page_size=2, max_pages=5, sleep=0)
+    with pytest.raises(requests.RequestException):
+        ma.fetch_category_products(page_size=2, max_pages=5, sleep=0)
 
-    assert len(produtos) == 2
     assert get.call_count == 2
 
 
