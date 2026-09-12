@@ -86,6 +86,10 @@ describe('cert-api gateway access policy', () => {
     expect(requiredCertApiScope('POST', '/cert-api/api/sync-sheets')).toBe('cert.operate');
     expect(requiredCertApiScope('GET', '/cert-api/api/sync-sheets/last')).toBe('cert.read');
     expect(requiredCertApiScope('GET', '/cert-api/api/grifes')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/items')).toBe('cert.read');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/audit/run-1')).toBe('cert.read');
+    expect(requiredCertApiScope('POST', '/cert-api/api/marketplace/audit')).toBe('cert.operate');
+    expect(requiredCertApiScope('GET', '/cert-api/api/marketplace/audit/a%2Fb')).toBe('cert.admin');
     expect(requiredCertApiScope('POST', '/cert-api/api/certificates/cert-1/items')).toBe(
       'cert.operate',
     );
@@ -191,6 +195,8 @@ describe('cert-api gateway access policy', () => {
     ['POST', '/cert-api/api/sync-sheets'],
     ['GET', '/cert-api/api/sync-sheets/last'],
     ['GET', '/cert-api/api/grifes'],
+    ['GET', '/cert-api/api/marketplace/items'],
+    ['POST', '/cert-api/api/marketplace/audit'],
   ])('allows analyst access to %s %s and returns trusted actor identity', async (method, uri) => {
     const res = await certAccessRequest(method, uri);
 

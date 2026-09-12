@@ -15,7 +15,15 @@ from app.config import (
     SHEETS_PRIVATE_KEY,
     validate_linx_config,
 )
-from app.routes import certificates, certifications, health, reports, schedules, stock
+from app.routes import (
+    certificates,
+    certifications,
+    health,
+    marketplace,
+    reports,
+    schedules,
+    stock,
+)
 from app.routes.schedules import (
     load_schedules_into_scheduler,
     schedule_hourly_sheet_sync,
@@ -106,3 +114,4 @@ app.include_router(certificates.router)
 app.include_router(schedules.router)
 app.include_router(stock.router)
 app.include_router(reports.router)
+app.include_router(marketplace.router)

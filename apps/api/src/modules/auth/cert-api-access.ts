@@ -26,6 +26,8 @@ const READ_PATHS = new Set([
   // planilha foi lida pela última vez" — as duas são consulta pura.
   '/cert-api/api/grifes',
   '/cert-api/api/sync-sheets/last',
+  // Auditoria de marketplace: leitura pública da VTEX, resultado só de consulta.
+  '/cert-api/api/marketplace/items',
 ]);
 
 const OPERATE_PATHS = new Set([
@@ -38,6 +40,7 @@ const OPERATE_PATHS = new Set([
   // Sheets/Linx e grava no NOSSO banco; o lock advisory impede concorrência e
   // cada execução fica registrada em cert_sync_runs com o ator.
   '/cert-api/api/sync-sheets',
+  '/cert-api/api/marketplace/audit',
 ]);
 
 function originalPath(value: string | undefined): string | null {
@@ -67,7 +70,8 @@ function isReadPath(path: string): boolean {
     /^\/cert-api\/api\/schedules\/[^/%]+\/history$/.test(path) ||
     /^\/cert-api\/api\/certificates\/[^/%]+(?:\/pdf)?$/.test(path) ||
     /^\/cert-api\/api\/stock\/[^/%]+$/.test(path) ||
-    /^\/cert-api\/api\/licenciados\/[^/%]+$/.test(path)
+    /^\/cert-api\/api\/licenciados\/[^/%]+$/.test(path) ||
+    /^\/cert-api\/api\/marketplace\/audit\/[^/%]+$/.test(path)
   );
 }
 
