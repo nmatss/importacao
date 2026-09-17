@@ -1,14 +1,16 @@
 # Known Issues
 
-## 2026-09-16 — Login @imaginarium.com: SOPS atualizado, falta o deploy do codigo
+## 2026-09-16 — Login @imaginarium.com publicado em fcc6cc6
 
 - Causa confirmada: `ALLOWED_DOMAIN=grupounico.com` recusava contas @imaginarium.com
   antes da checagem de grupo; cadastro em Configuracoes > Usuarios nao concedia
   login Google.
 - Correcao: lista de dominios e acesso por cadastro ativo OU grupo Google.
-- SOPS do repositorio: `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`. O `.env`
-  gerado em producao ainda fica no dominio unico ate o deploy sincronizar o
-  arquivo e regenerar o env. Nao publicar so o env sem o codigo novo.
+- Producao: SHA `fcc6cc6`, `ALLOWED_DOMAIN=grupounico.com,imaginarium.com` no
+  `.env` gerado e codigo novo no container. Primeira tentativa com
+  `PUBLIC_WEB_HEALTH_ENDPOINT` falhou no curl local por CA interna ausente e
+  restaurou codigo antigo com env novo; o segundo deploy (checks internos)
+  concluiu.
 - Grupo Google observado no env local: `importacao@grupounico.com`. Incluir no
   grupo continua valido; nao substitui o cadastro para quem so foi adicionado
   na tela de usuarios.

@@ -37,11 +37,18 @@ Fora de escopo: colunas, documentos, follow-up, certificacao, Linx.
 - `npm test -w apps/api -- src/modules/auth src/modules/integrations/__tests__/google-groups.service.test.ts --run`: **124 passed**.
 - `npm run typecheck` e `npm run lint`: ok. Prettier nos arquivos do login: ok apos `--write` em SettingsPage e allowed-domain.test. `git diff --check`: ok.
 - Testes web LoginPage/Settings nao executaram: worker Vitest/jsdom falha com `ERR_REQUIRE_ESM` em `@exodus/bytes` via `html-encoding-sniffer`. Preexistente, nao e regressao do texto de login.
-- SOPS do repositorio atualizado para `grupounico.com,imaginarium.com` (extract so desse campo). Env gerado em producao permanece no dominio unico ate o deploy.
+- SOPS do repositorio: `grupounico.com,imaginarium.com` (extract so desse campo).
+- Deploy `fcc6cc6` em 192.168.168.124. REVISION e container com `parseAllowedDomains`.
+  `.env` remoto `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`. Health interno
+  web/api/ready 200. Curl publico estrito falha neste WSL por CA interna; `curl -k`
+  devolve 200/200.
+- Primeira tentativa com `PUBLIC_WEB_HEALTH_ENDPOINT` abortou no TLS local e
+  rollback deixou codigo antigo com env novo. Segundo deploy sem esse check
+  concluiu e alinhou codigo+env.
 
 ## Riscos
 
-- Publicar so o env novo com o codigo antigo quebraria o suffix check (`endsWith` da string inteira).
+- `PUBLIC_WEB_HEALTH_ENDPOINT` a partir deste WSL continua falso-negativo sem a CA.
 - Cadastro local passa a ser grant de acesso: desativar na aba Usuarios revoga
   mesmo quem permanece no grupo Google.
 - Dominios adicionais de marca (ex. Puket) nao foram incluidos; entram via env.

@@ -7,8 +7,8 @@
 - Cadastro ativo em Configuracoes > Usuarios libera o login Google; o grupo Google continua
   auto-provisionando quem ainda nao foi cadastrado.
 - Textos da tela de login e da aba Usuarios alinhados ao contrato. Sem mudanca de colunas,
-  documentos ou dados de importacao. SOPS do repositorio passa a listar
-  `grupounico.com,imaginarium.com`; o portal publico muda so apos o deploy.
+  documentos ou dados de importacao. Publicado em producao (`fcc6cc6`) com SOPS
+  `grupounico.com,imaginarium.com`.
 
 ## 2026-09-12 — Homologação técnica R7
 

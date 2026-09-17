@@ -6,9 +6,8 @@ Relato Eduarda/Isabela: tela recusava `isabela.hoehne@imaginarium.com` com
 "Acesso restrito a contas @grupounico.com"; cadastro em Configuracoes nao
 entrava no grupo Google (`not_in_group`). Causa: allowlist de um dominio e
 grupo como unica via de acesso. Corrigido: lista de dominios + usuario local
-ativo OU grupo. Colunas/dados de importacao nao foram alterados. SOPS do
-repositorio ja tem `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`; o portal
-publico so muda depois do deploy do codigo e da regeneracao do env.
+ativo OU grupo. Colunas/dados de importacao nao foram alterados. Publicado em
+producao `fcc6cc6` com SOPS/env `grupounico.com,imaginarium.com`.
 
 ## 12/09/2026 — R7 implantada e homologada tecnicamente
 
