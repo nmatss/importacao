@@ -1,5 +1,12 @@
 # Project Memory - Importacao
 
+## Contratos confirmados em 16/09/2026
+
+- Login Google aceita os dominios em `ALLOWED_DOMAIN` (lista; SOPS:
+  `grupounico.com,imaginarium.com`). Cadastro ativo em Configuracoes libera o
+  acesso; o grupo Google auto-provisiona quem ainda nao foi cadastrado.
+- Fonte: [login dominios](STATUS-2026-09-16-LOGIN-DOMINIOS.md).
+
 ## Contratos confirmados em 12/09/2026
 
 - BL abaixo de 90% não utilizável, e corte não garante campos completos.

@@ -180,7 +180,7 @@ export function LoginPage() {
               <div className="mt-6 flex items-center gap-2 justify-center">
                 <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
                 <span className="text-[11px] text-slate-500 dark:text-slate-400 px-2 font-medium">
-                  @grupounico.com
+                  @grupounico.com · @imaginarium.com
                 </span>
                 <div className="h-px flex-1 bg-slate-100 dark:bg-slate-700" />
               </div>
@@ -188,7 +188,7 @@ export function LoginPage() {
 
             {/* Help text */}
             <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-6 leading-relaxed">
-              Acesso restrito a colaboradores do Grupo Unico.
+              Acesso restrito a colaboradores do Grupo Unico, inclusive contas @imaginarium.com.
               <br />
               Problemas? Contate o administrador.
             </p>

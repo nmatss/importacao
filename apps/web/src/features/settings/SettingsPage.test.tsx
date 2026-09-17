@@ -102,6 +102,16 @@ describe('SettingsPage — aba Usuários', () => {
     expect(screen.getByText('Não foi possível carregar os usuários.')).toBeInTheDocument();
     expect(screen.queryByText(/usuários cadastrados/)).not.toBeInTheDocument();
   });
+
+  it('explica que o cadastro libera login Google além do grupo', async () => {
+    setupQueries();
+    renderSettings('1');
+    await openTab(/Usuários/);
+
+    expect(
+      screen.getByText(/O cadastro nesta aba libera o acesso mesmo fora do grupo Google/i),
+    ).toBeInTheDocument();
+  });
 });
 
 describe('SettingsPage — abas de Modelos e Assinaturas', () => {

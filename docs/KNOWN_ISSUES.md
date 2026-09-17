@@ -1,5 +1,18 @@
 # Known Issues
 
+## 2026-09-16 — Login @imaginarium.com: SOPS atualizado, falta o deploy do codigo
+
+- Causa confirmada: `ALLOWED_DOMAIN=grupounico.com` recusava contas @imaginarium.com
+  antes da checagem de grupo; cadastro em Configuracoes > Usuarios nao concedia
+  login Google.
+- Correcao: lista de dominios e acesso por cadastro ativo OU grupo Google.
+- SOPS do repositorio: `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`. O `.env`
+  gerado em producao ainda fica no dominio unico ate o deploy sincronizar o
+  arquivo e regenerar o env. Nao publicar so o env sem o codigo novo.
+- Grupo Google observado no env local: `importacao@grupounico.com`. Incluir no
+  grupo continua valido; nao substitui o cadastro para quem so foi adicionado
+  na tela de usuarios.
+
 ## 2026-09-12 — R7: correções técnicas e limites de conexão real
 
 - Leitura afetada pelos dois timeouts recuperada (um processo, 115 cabeçalhos); release 268eabd passa a devolver503 em falha de leitura, sem falso 404. Causa de rede original não demonstrada.

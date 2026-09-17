@@ -16,12 +16,20 @@ import {
 } from '../../shared/errors/index.js';
 import { isNetworkError } from '../../shared/utils/resilience.js';
 import { logger } from '../../shared/utils/logger.js';
+import {
+  domainOf,
+  evaluateCorporateAccount,
+  formatAllowedDomainsMessage,
+  parseAllowedDomains,
+} from './allowed-domain.js';
+
+export { domainOf } from './allowed-domain.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) throw new Error('JWT_SECRET environment variable is required');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
-const ALLOWED_DOMAIN = process.env.ALLOWED_DOMAIN || '';
+const ALLOWED_DOMAINS = parseAllowedDomains(process.env.ALLOWED_DOMAIN || '');
 
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -44,11 +52,6 @@ export type LoginFailureReason =
 export interface AuditActor {
   id: number | null;
   ip?: string | null;
-}
-
-export function domainOf(email: string): string {
-  const at = email.lastIndexOf('@');
-  return at >= 0 ? email.slice(at + 1).toLowerCase() : 'desconhecido';
 }
 
 /**
@@ -204,30 +207,32 @@ export const authService = {
       throw new UnauthorizedError('Token Google inválido');
     }
 
-    if (ALLOWED_DOMAIN) {
+    if (ALLOWED_DOMAINS.length > 0) {
       // `hd` (hosted domain) e o claim que o Google emite para conta Workspace.
       // A checagem e CONDICIONAL DE PROPOSITO — nao endureca para exigir a
       // presenca do claim sem entender o custo:
       //
-      // - `hd` PRESENTE e divergente => recusa dura. Este e o caso que importa:
-      //   conta de OUTRA organizacao tentando entrar.
-      // - `hd` AUSENTE => segue para as barreiras seguintes (sufixo do e-mail e
-      //   grupos do Google), sem recusar por isso.
+      // - `hd` PRESENTE e fora da allowlist => recusa dura. Este e o caso que
+      //   importa: conta de OUTRA organizacao tentando entrar.
+      // - `hd` AUSENTE => segue para as barreiras seguintes (sufixo do e-mail,
+      //   cadastro local e grupos do Google), sem recusar por isso.
       //
       // Exigir a presenca do claim tem modo de falha catastrofico e binario: se
       // o Google parar de emitir `hd` (mudanca de formato do token, conta que
       // nao e Workspace), NINGUEM entra, e a recuperacao exige mexer em
       // ALLOWED_DOMAIN no SOPS e redeployar no meio do incidente de login.
       //
-      // O que a exigencia dura acrescentaria ja esta coberto: a ameaca e conta
-      // de fora apresentando um e-mail do dominio, e `email_verified === true`
-      // acima ja e obrigatorio. O Google nao emite e-mail verificado
-      // @ALLOWED_DOMAIN para conta de consumidor — quem tem esse endereco
-      // verificado esta no Workspace e, ai sim, vem com `hd`.
-      const hostedDomainOk = payload.hd == null || payload.hd === ALLOWED_DOMAIN;
-      const emailSuffixOk = payload.email.endsWith(`@${ALLOWED_DOMAIN}`);
+      // ALLOWED_DOMAIN aceita lista (dominio primario + marcas). Conta
+      // @imaginarium.com no mesmo Workspace chega com hd=grupounico.com; os
+      // dois precisam estar na lista, senao o sufixo sozinho ou o hd sozinho
+      // derruba a colaboradora.
+      const { allowed, hostedDomainOk, emailSuffixOk } = evaluateCorporateAccount(
+        payload.email,
+        payload.hd,
+        ALLOWED_DOMAINS,
+      );
 
-      if (!hostedDomainOk || !emailSuffixOk) {
+      if (!allowed) {
         // Dominio de fora: guarda so o dominio, nunca o endereco completo. E
         // pessoa que nao e nossa, e o dominio ja basta para investigar.
         logger.warn(
@@ -240,26 +245,30 @@ export const authService = {
           'Google: conta fora do dominio corporativo',
         );
         await recordLoginFailure(null, 'wrong_domain', domainOf(payload.email));
-        throw new ForbiddenError(`Acesso restrito a contas @${ALLOWED_DOMAIN}`);
+        throw new ForbiddenError(formatAllowedDomainsMessage(ALLOWED_DOMAINS));
       }
-    }
-
-    const allowed = await googleGroupsService.isAllowed(payload.email);
-    if (!allowed) {
-      await auditService.log(
-        null,
-        'login_failed',
-        'user',
-        null,
-        { email: payload.email, reason: 'not_in_group' },
-        null,
-      );
-      throw new ForbiddenError('Acesso negado: usuário não pertence ao grupo autorizado');
     }
 
     let [user] = await db.select().from(users).where(eq(users.email, payload.email)).limit(1);
 
     if (!user) {
+      // Cadastro em Configuracoes > Usuarios libera o login Google sem exigir
+      // o grupo. O grupo continua sendo a via de auto-provisionamento para
+      // quem ainda nao foi cadastrado. Sem os dois, a recusa e a mesma de
+      // sempre (`not_in_group`) para nao vazar que o e-mail existe ou nao.
+      const inGroup = await googleGroupsService.isAllowed(payload.email);
+      if (!inGroup) {
+        await auditService.log(
+          null,
+          'login_failed',
+          'user',
+          null,
+          { email: payload.email, reason: 'not_in_group' },
+          null,
+        );
+        throw new ForbiddenError('Acesso negado: usuário não pertence ao grupo autorizado');
+      }
+
       const randomPassword = crypto.randomBytes(32).toString('hex');
       const passwordHash = await bcrypt.hash(randomPassword, 10);
       [user] = await db

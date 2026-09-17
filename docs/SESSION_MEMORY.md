@@ -1,5 +1,15 @@
 # Session Memory
 
+## 16/09/2026 — Login @imaginarium.com e cadastro local
+
+Relato Eduarda/Isabela: tela recusava `isabela.hoehne@imaginarium.com` com
+"Acesso restrito a contas @grupounico.com"; cadastro em Configuracoes nao
+entrava no grupo Google (`not_in_group`). Causa: allowlist de um dominio e
+grupo como unica via de acesso. Corrigido: lista de dominios + usuario local
+ativo OU grupo. Colunas/dados de importacao nao foram alterados. SOPS do
+repositorio ja tem `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`; o portal
+publico so muda depois do deploy do codigo e da regeneracao do env.
+
 ## 12/09/2026 — R7 implantada e homologada tecnicamente
 
 Release 268eabd implantada às 18:16:50 BRT. CI 34718917866/CodeQL 34718917855 passaram, incluindo74 E2EAPI,3 scans/SBOMs e gates novos. Homologação pelo agente com 22 testes novos;2.056API/379web/888cert/82browser,7 restore,4 HTTP,8 deploy,4 env e typecheck/lint/build/Ruff aprovados. HSTS único de 300 segundos comprovado em produção; Sheets503,leituraafetada recuperada: 115 colunas;restoreisolado42 tabelas / 117 processos. Fontes preservadas, SYDLE ativo,Linx off. IMAP/Odoo reais permanecem com placeholders. Documento 192: extração diagnóstica recuperou campos,sem sobrescrever estado documental; reprocessamento controlado permanece pendente. Limites e evidências na seção final R7 do STATUS; não declarar todos os dados reais aprovados.

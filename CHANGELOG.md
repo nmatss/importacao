@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-16 — Login Google para @imaginarium.com e cadastro local
+
+- `ALLOWED_DOMAIN` passa a aceitar lista (producao prevista: `grupounico.com,imaginarium.com`).
+- Conta Workspace de marca secundaria deixa de ser recusada so porque o e-mail nao e @grupounico.com.
+- Cadastro ativo em Configuracoes > Usuarios libera o login Google; o grupo Google continua
+  auto-provisionando quem ainda nao foi cadastrado.
+- Textos da tela de login e da aba Usuarios alinhados ao contrato. Sem mudanca de colunas,
+  documentos ou dados de importacao. SOPS do repositorio passa a listar
+  `grupounico.com,imaginarium.com`; o portal publico muda so apos o deploy.
+
 ## 2026-09-12 — Homologação técnica R7
 
 - Release `268eabd` implantada, com CI/CodeQL, scans/SBOMs e smoke HTTPS aprovados; limites operacionais registrados no STATUS.

@@ -214,16 +214,16 @@ Hierarquia de erros tipados com dispatch automatico no error handler:
 
 Copie `.env.example` para `.env` e configure:
 
-| Categoria       | Variaveis                                                                     |
-| --------------- | ----------------------------------------------------------------------------- |
-| **Banco**       | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`           |
-| **Auth**        | `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ALLOWED_DOMAIN`          |
-| **Google**      | `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_ADMIN_EMAIL` |
-| **Email**       | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`                            |
-| **VTEX/Sheets** | `GOOGLE_SHEETS_SPREADSHEET_ID`                                                |
-| **IA**          | `AI_PROVIDER`, `AI_ALLOW_EXTERNAL`, `IA_LOCAL_BASE_URL`, `IA_LOCAL_API_KEY`   |
-| **Odoo**        | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD`                           |
-| **Redis**       | `REDIS_URL`                                                                   |
+| Categoria       | Variaveis                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| **Banco**       | `DATABASE_URL`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`                                                            |
+| **Auth**        | `JWT_SECRET`, `JWT_EXPIRES_IN`, `GOOGLE_CLIENT_ID`, `ALLOWED_DOMAIN` (lista de domínios, ex. `grupounico.com,imaginarium.com`) |
+| **Google**      | `GOOGLE_DRIVE_CLIENT_EMAIL`, `GOOGLE_DRIVE_PRIVATE_KEY`, `GOOGLE_ADMIN_EMAIL`                                                  |
+| **Email**       | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`                                                                             |
+| **VTEX/Sheets** | `GOOGLE_SHEETS_SPREADSHEET_ID`                                                                                                 |
+| **IA**          | `AI_PROVIDER`, `AI_ALLOW_EXTERNAL`, `IA_LOCAL_BASE_URL`, `IA_LOCAL_API_KEY`                                                    |
+| **Odoo**        | `ODOO_URL`, `ODOO_DB`, `ODOO_USER`, `ODOO_PASSWORD`                                                                            |
+| **Redis**       | `REDIS_URL`                                                                                                                    |
 
 Em producao, secrets sao gerenciados via **SOPS + age** (arquivo `.env.sops.yaml`, regras em `.sops.yaml`); ver `docs/SECRETS.md`. HashiCorp Vault permanece como metodo legado.
 

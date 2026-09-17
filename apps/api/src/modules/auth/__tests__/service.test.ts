@@ -47,7 +47,7 @@ process.env.JWT_SECRET = 'test-secret';
 // A restricao de organizacao so existe quando ALLOWED_DOMAIN esta definido, e o
 // service le a variavel uma unica vez no import. Sem isto o caminho do claim
 // `hd` nunca era exercitado pelos testes.
-process.env.ALLOWED_DOMAIN = 'grupounico.com';
+process.env.ALLOWED_DOMAIN = 'grupounico.com,imaginarium.com';
 
 const { authService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
@@ -342,6 +342,109 @@ describe('authService', () => {
         { reason: 'wrong_domain', origem: 'outraempresa.com' },
         null,
       );
+    });
+
+    it('nao consulta o grupo quando o e-mail ja esta cadastrado e ativo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('ok@grupounico.com'));
+      queryQueue.push(
+        createResolvedChain([
+          { id: 6, name: 'Fulano', email: 'ok@grupounico.com', role: 'analyst', isActive: true },
+        ]),
+      );
+
+      await authService.loginWithGoogle('cred');
+
+      expect(googleGroupsService.isAllowed).not.toHaveBeenCalled();
+    });
+
+    it('auto-provisiona quem nao esta cadastrado mas pertence ao grupo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(ticketFor('nova@grupounico.com'));
+      queryQueue.push(createResolvedChain([]));
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 11,
+            name: 'Fulano',
+            email: 'nova@grupounico.com',
+            role: 'analyst',
+            isActive: true,
+          },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(googleGroupsService.isAllowed).toHaveBeenCalledWith('nova@grupounico.com');
+      expect(result.user.email).toBe('nova@grupounico.com');
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('aceita @imaginarium.com com hd do Workspace primario', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('isabela.hoehne@imaginarium.com', { hd: 'grupounico.com' }),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 12,
+            name: 'Isabela',
+            email: 'isabela.hoehne@imaginarium.com',
+            role: 'analyst',
+            isActive: true,
+          },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(result.user.email).toBe('isabela.hoehne@imaginarium.com');
+      expect(googleGroupsService.isAllowed).not.toHaveBeenCalled();
+    });
+
+    it('aceita @imaginarium.com cadastrada mesmo fora do grupo Google', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('isabela.hoehne@imaginarium.com', { hd: 'imaginarium.com' }),
+      );
+      vi.mocked(googleGroupsService.isAllowed).mockResolvedValue(false);
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 12,
+            name: 'Isabela',
+            email: 'isabela.hoehne@imaginarium.com',
+            role: 'analyst',
+            isActive: true,
+          },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(result.token).toBe('mock-jwt-token');
+      expect(googleGroupsService.isAllowed).not.toHaveBeenCalled();
+    });
+
+    it('recusa @imaginarium.com sem cadastro e sem grupo', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('isabela.hoehne@imaginarium.com', { hd: 'grupounico.com' }),
+      );
+      vi.mocked(googleGroupsService.isAllowed).mockResolvedValue(false);
+      queryQueue.push(createResolvedChain([]));
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect(err.message).toContain('grupo autorizado');
+    });
+
+    it('recusa hd de outra empresa mesmo com e-mail @imaginarium.com', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('isabela.hoehne@imaginarium.com', { hd: 'outraempresa.com' }),
+      );
+
+      const err = await authService.loginWithGoogle('cred').catch((e) => e);
+      expect(err).toBeInstanceOf(ForbiddenError);
+      expect(err.message).toContain('@imaginarium.com');
+      expect(googleGroupsService.isAllowed).not.toHaveBeenCalled();
     });
   });
 
