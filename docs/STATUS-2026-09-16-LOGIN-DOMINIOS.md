@@ -47,10 +47,11 @@ Fora de escopo: colunas, documentos, follow-up, certificacao, Linx.
 - SOPS do repositorio (extract so destes campos):
   `ALLOWED_DOMAIN=grupounico.com,imaginarium.com,imaginarium.com.br`;
   `GOOGLE_GROUP_ALLOWED=importacao.aut@grupounico.com,importacao@grupounico.com`.
-- Deploy `fcc6cc6` em 192.168.168.124. REVISION e container com `parseAllowedDomains`.
-  `.env` remoto `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`. Health interno
-  web/api/ready 200. Curl publico estrito falha neste WSL por CA interna; `curl -k`
-  devolve 200/200.
+- Deploy `6cbb9c2` em 192.168.168.124, sem `PUBLIC_WEB_HEALTH_ENDPOINT`.
+  REVISION e container com `parseAllowedGroups`. `.env` remoto:
+  `ALLOWED_DOMAIN=grupounico.com,imaginarium.com,imaginarium.com.br` e
+  `GOOGLE_GROUP_ALLOWED=importacao.aut@grupounico.com,importacao@grupounico.com`.
+  Health interno web/api/ready/cert 200. `curl -k` publico 200/200.
 - Primeira tentativa com `PUBLIC_WEB_HEALTH_ENDPOINT` abortou no TLS local e
   rollback deixou codigo antigo com env novo. Segundo deploy sem esse check
   concluiu e alinhou codigo+env.

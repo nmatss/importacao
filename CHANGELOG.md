@@ -2,7 +2,7 @@
 
 ## 2026-09-16 — Grupo Portal Importacao e dominio imaginarium.com.br
 
-- `GOOGLE_GROUP_ALLOWED` aceita lista. Producao prevista:
+- `GOOGLE_GROUP_ALLOWED` aceita lista. Producao `6cbb9c2`:
   `importacao.aut@grupounico.com,importacao@grupounico.com`.
 - `ALLOWED_DOMAIN` inclui `imaginarium.com.br` (OU real da Isabela no Workspace).
 - Quem esta so no grupo Portal Importacao deixa de ser recusado pelo grupo legado.

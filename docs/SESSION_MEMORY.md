@@ -3,9 +3,9 @@
 ## 16/09/2026 — Isabela: importacao.aut e imaginarium.com.br
 
 Google Admin confirma e-mail `isabela.hochheim@imaginarium.com.br` e grupo
-`importacao.aut@grupounico.com` (Portal Importacao). A API ainda checava
-`importacao@grupounico.com` e o dominio `.com`. Correcao: lista de grupos e
-`imaginarium.com.br` na allowlist. Sem alterar colunas/dados de importacao.
+`importacao.aut@grupounico.com` (Portal Importacao). Publicado em `6cbb9c2`
+com lista de grupos e `imaginarium.com.br` na allowlist. Sem alterar
+colunas/dados de importacao.
 
 ## 16/09/2026 — Login @imaginarium.com e cadastro local
 
