@@ -653,8 +653,9 @@ function UsersTab() {
   return (
     <div className="space-y-5">
       <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
-        Login Google aceita @grupounico.com e @imaginarium.com. O cadastro nesta aba libera o acesso
-        mesmo fora do grupo Google; o grupo continua valendo para quem ainda não foi cadastrado.
+        Login Google aceita @grupounico.com e @imaginarium.com.br. O cadastro nesta aba libera o
+        acesso mesmo fora do grupo. O grupo Portal Importação (importacao.aut@grupounico.com) libera
+        quem ainda não foi cadastrado.
       </p>
 
       {/* Action bar */}

@@ -74,8 +74,8 @@ describe('LoginPage', () => {
     await screen.findByText(/Conta não permitida/i);
   });
 
-  it('indica que contas @imaginarium.com tambem sao aceitas', () => {
+  it('indica que contas @imaginarium.com.br tambem sao aceitas', () => {
     renderLoginPage();
-    expect(screen.getByText('@grupounico.com · @imaginarium.com')).toBeInTheDocument();
+    expect(screen.getByText('@grupounico.com · @imaginarium.com.br')).toBeInTheDocument();
   });
 });

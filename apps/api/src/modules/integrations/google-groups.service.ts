@@ -5,12 +5,13 @@ import { isNetworkError, withRetry } from '../../shared/utils/resilience.js';
 import { integrationRetryOptions } from './retry-policy.js';
 import { cache } from '../../shared/cache/redis.js';
 import { ServiceUnavailableError } from '../../shared/errors/index.js';
+import { parseAllowedGroups } from './google-group-allowlist.js';
 
 const GOOGLE_DRIVE_CLIENT_EMAIL = process.env.GOOGLE_DRIVE_CLIENT_EMAIL || '';
 const GOOGLE_DRIVE_PRIVATE_KEY =
   normalizeGooglePrivateKey(process.env.GOOGLE_DRIVE_PRIVATE_KEY) || '';
 const GOOGLE_ADMIN_EMAIL = process.env.GOOGLE_ADMIN_EMAIL || '';
-const GOOGLE_GROUP_ALLOWED = process.env.GOOGLE_GROUP_ALLOWED || '';
+const ALLOWED_GROUPS = parseAllowedGroups(process.env.GOOGLE_GROUP_ALLOWED || '');
 const GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET = process.env.GOOGLE_GROUP_ALLOW_ALL_WHEN_UNSET === 'true';
 
 const SCOPE = 'https://www.googleapis.com/auth/admin.directory.group.member.readonly';
@@ -31,7 +32,7 @@ const GRACE_TTL_SECONDS = 12 * 60 * 60;
 let jwtClient: JWT | null = null;
 
 function cacheKey(userEmail: string): string {
-  return `google-groups:${GOOGLE_GROUP_ALLOWED}:${userEmail.toLowerCase()}`;
+  return `google-groups:${ALLOWED_GROUPS.join(',')}:${userEmail.toLowerCase()}`;
 }
 
 function getClient(): JWT {
@@ -53,8 +54,23 @@ function getClient(): JWT {
   return jwtClient;
 }
 
+async function hasMember(groupEmail: string, userEmail: string): Promise<boolean> {
+  const url = `https://admin.googleapis.com/admin/directory/v1/groups/${encodeURIComponent(groupEmail)}/hasMember/${encodeURIComponent(userEmail)}`;
+  const client = getClient();
+  // `hasMember` e GET puro: re-tentar nao muda nada no Workspace. Um 503 de
+  // dois segundos do admin.googleapis.com nao pode virar "acesso negado" nem
+  // consumir a sobrevida do cache. 404 (grupo/membro inexistente), 401 e 403
+  // NAO sao re-tentados — sao resposta definitiva, nao soluco.
+  const res = await withRetry(
+    () => client.request<{ isMember: boolean }>({ url }),
+    integrationRetryOptions,
+    'google-groups:hasMember',
+  );
+  return res.data.isMember === true;
+}
+
 async function isAllowed(userEmail: string): Promise<boolean> {
-  if (!GOOGLE_GROUP_ALLOWED) {
+  if (ALLOWED_GROUPS.length === 0) {
     // Fail-closed: sem grupo configurado ninguém entra. O allow-all antigo só
     // permanece atrás de opt-in explícito, para não virar porta aberta por
     // omissão de configuração.
@@ -75,55 +91,43 @@ async function isAllowed(userEmail: string): Promise<boolean> {
 
   if (cached && Date.now() < cached.freshUntil) return true;
 
-  const url = `https://admin.googleapis.com/admin/directory/v1/groups/${encodeURIComponent(GOOGLE_GROUP_ALLOWED)}/hasMember/${encodeURIComponent(userEmail)}`;
-
-  try {
-    const client = getClient();
-    // `hasMember` e GET puro: re-tentar nao muda nada no Workspace. Um 503 de
-    // dois segundos do admin.googleapis.com nao pode virar "acesso negado" nem
-    // consumir a sobrevida do cache. 404 (grupo/membro inexistente), 401 e 403
-    // NAO sao re-tentados — sao resposta definitiva, nao soluco.
-    const res = await withRetry(
-      () => client.request<{ isMember: boolean }>({ url }),
-      integrationRetryOptions,
-      'google-groups:hasMember',
-    );
-    const isMember = res.data.isMember === true;
-
-    if (isMember) {
-      await cache.set(
-        key,
-        JSON.stringify({ freshUntil: Date.now() + FRESH_TTL_SECONDS * 1000 }),
-        GRACE_TTL_SECONDS,
+  let lastError: unknown;
+  for (const groupEmail of ALLOWED_GROUPS) {
+    try {
+      const isMember = await hasMember(groupEmail, userEmail);
+      if (isMember) {
+        await cache.set(
+          key,
+          JSON.stringify({ freshUntil: Date.now() + FRESH_TTL_SECONDS * 1000 }),
+          GRACE_TTL_SECONDS,
+        );
+        return true;
+      }
+    } catch (err: any) {
+      if (err?.response?.status === 404) {
+        continue;
+      }
+      lastError = err;
+      logger.error(
+        { err, userEmail, groupEmail, network: isNetworkError(err), grace: Boolean(cached) },
+        'Google Groups: error checking membership',
       );
-    } else {
-      // Saiu do grupo: derruba a sobrevida junto, senao ele continuaria
-      // entrando enquanto o Google estivesse fora.
-      await cache.del(key);
     }
-    return isMember;
-  } catch (err: any) {
-    if (err?.response?.status === 404) {
-      await cache.del(key);
-      return false;
-    }
+  }
 
-    // Daqui para baixo nao sabemos se a pessoa tem acesso — sabemos que nao
-    // conseguimos perguntar. Isso nunca pode virar "acesso negado".
-    logger.error(
-      { err, userEmail, network: isNetworkError(err), grace: Boolean(cached) },
-      'Google Groups: error checking membership',
-    );
-
+  if (lastError) {
     if (cached) {
       logger.warn({ userEmail }, 'Google Groups: usando membership em cache (Google inacessivel)');
       return true;
     }
-
     throw new ServiceUnavailableError(
       'Nao foi possivel validar seu acesso com o Google agora. Tente novamente em alguns minutos.',
     );
   }
+
+  // Nao e membro de nenhum grupo da lista: derruba a sobrevida junto.
+  await cache.del(key);
+  return false;
 }
 
 async function readCache(key: string): Promise<{ freshUntil: number } | null> {

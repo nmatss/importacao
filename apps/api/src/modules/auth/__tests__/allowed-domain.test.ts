@@ -39,7 +39,7 @@ describe('parseAllowedDomains()', () => {
 });
 
 describe('evaluateCorporateAccount()', () => {
-  const allowed = ['grupounico.com', 'imaginarium.com'];
+  const allowed = ['grupounico.com', 'imaginarium.com', 'imaginarium.com.br'];
 
   it('aceita e-mail e hd do dominio primario', () => {
     expect(evaluateCorporateAccount('ana@grupounico.com', 'grupounico.com', allowed).allowed).toBe(
@@ -51,6 +51,13 @@ describe('evaluateCorporateAccount()', () => {
     // Caso real: conta @imaginarium.com no mesmo Workspace, hd=grupounico.com.
     expect(
       evaluateCorporateAccount('isabela.hoehne@imaginarium.com', 'grupounico.com', allowed).allowed,
+    ).toBe(true);
+  });
+
+  it('aceita OU imaginarium.com.br com hd do Workspace primario', () => {
+    expect(
+      evaluateCorporateAccount('isabela.hochheim@imaginarium.com.br', 'grupounico.com', allowed)
+        .allowed,
     ).toBe(true);
   });
 

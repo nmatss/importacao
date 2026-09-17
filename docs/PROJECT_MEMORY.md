@@ -2,10 +2,11 @@
 
 ## Contratos confirmados em 16/09/2026
 
-- Login Google aceita os dominios em `ALLOWED_DOMAIN` (lista; producao
-  `fcc6cc6` com `grupounico.com,imaginarium.com`). Cadastro ativo em
-  Configuracoes libera o acesso; o grupo Google auto-provisiona quem ainda nao
-  foi cadastrado.
+- Login Google aceita os dominios em `ALLOWED_DOMAIN` (lista; SOPS:
+  `grupounico.com,imaginarium.com,imaginarium.com.br`). Cadastro ativo em
+  Configuracoes libera o acesso; `GOOGLE_GROUP_ALLOWED` aceita lista
+  (`importacao.aut@grupounico.com,importacao@grupounico.com`) e
+  auto-provisiona quem ainda nao foi cadastrado.
 - Fonte: [login dominios](STATUS-2026-09-16-LOGIN-DOMINIOS.md).
 
 ## Contratos confirmados em 12/09/2026

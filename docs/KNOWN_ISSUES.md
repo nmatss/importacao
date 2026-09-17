@@ -1,5 +1,15 @@
 # Known Issues
 
+## 2026-09-16 — Grupo real e dominio .com.br da Isabela
+
+- Google Admin: `isabela.hochheim@imaginarium.com.br`, OU `imaginarium.com.br`,
+  grupo Portal Importacao `importacao.aut@grupounico.com`.
+- A release `fcc6cc6` aceitava `imaginarium.com` e consultava
+  `importacao@grupounico.com`. Isso nao casa com o cadastro oficial.
+- Correcao no repositorio: lista de grupos + `imaginarium.com.br`. SOPS do
+  repo ja tem `ALLOWED_DOMAIN=grupounico.com,imaginarium.com,imaginarium.com.br`
+  e `GOOGLE_GROUP_ALLOWED=importacao.aut@grupounico.com,importacao@grupounico.com`.
+
 ## 2026-09-16 — Login @imaginarium.com publicado em fcc6cc6
 
 - Causa confirmada: `ALLOWED_DOMAIN=grupounico.com` recusava contas @imaginarium.com

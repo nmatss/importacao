@@ -47,7 +47,7 @@ process.env.JWT_SECRET = 'test-secret';
 // A restricao de organizacao so existe quando ALLOWED_DOMAIN esta definido, e o
 // service le a variavel uma unica vez no import. Sem isto o caminho do claim
 // `hd` nunca era exercitado pelos testes.
-process.env.ALLOWED_DOMAIN = 'grupounico.com,imaginarium.com';
+process.env.ALLOWED_DOMAIN = 'grupounico.com,imaginarium.com,imaginarium.com.br';
 
 const { authService } = await import('../service.js');
 const { auditService } = await import('../../audit/service.js');
@@ -434,6 +434,28 @@ describe('authService', () => {
       const err = await authService.loginWithGoogle('cred').catch((e) => e);
       expect(err).toBeInstanceOf(ForbiddenError);
       expect(err.message).toContain('grupo autorizado');
+    });
+
+    it('aceita @imaginarium.com.br com hd do Workspace primario', async () => {
+      mockVerifyIdToken.mockResolvedValueOnce(
+        ticketFor('isabela.hochheim@imaginarium.com.br', { hd: 'grupounico.com' }),
+      );
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 13,
+            name: 'Isabela',
+            email: 'isabela.hochheim@imaginarium.com.br',
+            role: 'analyst',
+            isActive: true,
+          },
+        ]),
+      );
+
+      const result = await authService.loginWithGoogle('cred');
+
+      expect(result.user.email).toBe('isabela.hochheim@imaginarium.com.br');
+      expect(googleGroupsService.isAllowed).not.toHaveBeenCalled();
     });
 
     it('recusa hd de outra empresa mesmo com e-mail @imaginarium.com', async () => {

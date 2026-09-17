@@ -18,26 +18,35 @@ participava do login Google. Depois do dominio, so `GOOGLE_GROUP_ALLOWED`
 (`importacao@grupounico.com` no env local) autorizava. Quem era so cadastrado
 recebia `Acesso negado: usuário não pertence ao grupo autorizado`.
 
-Hipotese (confianca alta): `@imaginarium.com` e dominio de marca do mesmo
-grupo economico; o token Google pode trazer `hd=grupounico.com` com e-mail de
-marca, ou `hd=imaginarium.com`. Os dois casos precisavam estar na allowlist.
+Fato (Admin Google, 16/09): a conta operacional e
+`isabela.hochheim@imaginarium.com.br`, OU `imaginarium.com.br`, grupo
+**Portal Importacao** `importacao.aut@grupounico.com`. O login tentado como
+`@imaginarium.com` e a checagem de `importacao@grupounico.com` nao casam com
+esse cadastro.
+
+Hipotese (confianca alta): o Workspace emite `hd=grupounico.com` ou
+`hd=imaginarium.com.br` para essa OU. Os dois precisam estar na allowlist.
 
 Fora de escopo: colunas, documentos, follow-up, certificacao, Linx.
 
 ## Alteracoes
 
-- `ALLOWED_DOMAIN` parseado como lista. Codigo e exemplos:
-  `grupounico.com,imaginarium.com`.
+- `ALLOWED_DOMAIN` parseado como lista. SOPS/codigo:
+  `grupounico.com,imaginarium.com,imaginarium.com.br`.
+- `GOOGLE_GROUP_ALLOWED` parseado como lista. SOPS previsto:
+  `importacao.aut@grupounico.com,importacao@grupounico.com`.
 - Login Google: usuario local ativo cadastrado entra sem consultar o grupo;
-  ausente na base continua exigindo o grupo e e auto-provisionado como analista.
+  ausente na base continua exigindo um dos grupos e e auto-provisionado como analista.
 - Textos da LoginPage e da aba Usuarios.
 
 ## Validacao
 
-- `npm test -w apps/api -- src/modules/auth src/modules/integrations/__tests__/google-groups.service.test.ts --run`: **124 passed**.
-- `npm run typecheck` e `npm run lint`: ok. Prettier nos arquivos do login: ok apos `--write` em SettingsPage e allowed-domain.test. `git diff --check`: ok.
+- `npm test -w apps/api -- src/modules/auth` + testes de grupo/allowlist: **133 passed**.
+- `npm run typecheck` e `npm run lint`: ok. Prettier nos arquivos do login/grupo: ok apos `--write` em SettingsPage e allowed-domain.test. `git diff --check`: ok.
 - Testes web LoginPage/Settings nao executaram: worker Vitest/jsdom falha com `ERR_REQUIRE_ESM` em `@exodus/bytes` via `html-encoding-sniffer`. Preexistente, nao e regressao do texto de login.
-- SOPS do repositorio: `grupounico.com,imaginarium.com` (extract so desse campo).
+- SOPS do repositorio (extract so destes campos):
+  `ALLOWED_DOMAIN=grupounico.com,imaginarium.com,imaginarium.com.br`;
+  `GOOGLE_GROUP_ALLOWED=importacao.aut@grupounico.com,importacao@grupounico.com`.
 - Deploy `fcc6cc6` em 192.168.168.124. REVISION e container com `parseAllowedDomains`.
   `.env` remoto `ALLOWED_DOMAIN=grupounico.com,imaginarium.com`. Health interno
   web/api/ready 200. Curl publico estrito falha neste WSL por CA interna; `curl -k`
