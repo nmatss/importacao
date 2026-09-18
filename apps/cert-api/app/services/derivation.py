@@ -57,6 +57,14 @@ Reunião 2026-09-11 (decisão D11), que SEPARA os dois eixos que estavam colapsa
   Data nula ou com ano < 2000 (a sentinela 01/01/1900 do Linx) é AUSENTE, nunca
   "a menor data". Ver `derive_trava_venda` e `derive_status_venda`.
 
+Revisão 2026-09-18 (medição no Linx + regras R4/R8 da mesma reunião):
+- license_status ganha a leitura da APLICABILIDADE a partir de `grife` e
+  `linx_synced_at` (ver `derive_licenciamento`): Linx não lido → PENDENTE;
+  grife vazia/da casa → NAO_APLICAVEL; licenciador sem data → PENDENTE.
+- Licenciamento PENDENTE nunca bloqueia a venda sozinho: ~95% dos SKUs
+  certificados não são licenciados e apareciam BLOQUEADOS por falta de uma data
+  que nunca vai existir.
+
 Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 (não persiste no DB). Pode ser usado direto em routes ou em report_service.
 """
@@ -64,6 +72,7 @@ Sem efeitos colaterais; sem dependências externas; campos computados em runtime
 from __future__ import annotations
 
 import re
+import unicodedata
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -95,6 +104,17 @@ _DATE_FORMATS = ("%d/%m/%Y", "%Y-%m-%d", "%d-%m-%Y", "%d/%m/%y")
 # data real faria dela sempre "a menor data" — travando a venda de todo mundo em
 # 1900. Nenhum certificado vivo tem data anterior a 2000.
 DATA_ANO_MINIMO = 2000
+
+# Marcas da CASA, já normalizadas por `_norm_marca` (sem acento, sem caixa). No
+# Linx a coluna de grife (PRODUTOS.GRIFFE na Puket, IMG_LICENCIAMENTO na
+# Imaginarium) guarda o LICENCIADOR só quando o produto é licenciado (MINIONS,
+# SNOOPY, LILO & STITCH, HARRY POTTER); no resto vem a própria marca ou vazio.
+# Medição de 18/09/2026 nos SKUs certificados: Puket com grife "PUKET" em 381 de
+# 397; Imaginarium com grife vazia em 276 de 277 — ~95% do catálogo NÃO é
+# licenciado, e grife da casa/vazia significa "licenciamento não se aplica".
+MARCAS_DA_CASA = frozenset({"puket", "imaginarium", "ludi", "mind"})
+
+LICENSE_REASON_LINX_NAO_LIDO = "Licenciamento ainda nao foi lido do Linx"
 
 # Coluna 'STATUS' da aba "Encerramentos", normalizada. PERMITIDA e FIM_LOTE liberam a
 # venda; BLOQUEADA a proíbe. None = SKU sem linha de encerramento.
@@ -175,6 +195,15 @@ def _norm(s: str | None) -> str:
     if not s:
         return ""
     return str(s).strip().lower()
+
+
+def _norm_marca(value: object) -> str:
+    """Normaliza grife/marca para comparação: sem acento, sem caixa, espaço único."""
+    if value is None:
+        return ""
+    texto = unicodedata.normalize("NFKD", str(value))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return " ".join(texto.lower().split())
 
 
 # Negação em português. Aplicada DENTRO da cláusula, nunca numa janela de N
@@ -666,6 +695,49 @@ def derive_license_status_linx(
     return ("VENCIDO" if vencido else "VALIDO"), data.isoformat()
 
 
+def derive_licenciamento(
+    fim_licenciamento: object,
+    grife: object = None,
+    linx_synced_at: object = None,
+    aplicavel: bool | None = None,
+    today: date | None = None,
+) -> tuple[str, str | None, str | None]:
+    """Eixo de licenciamento completo: status, prazo e motivo da pendência.
+
+    Separa os três estados que a regra R8 da reunião de 11/09/2026 proíbe
+    misturar — "Linx não lido", "sem licenciamento" e "vencido" — usando só
+    colunas que já existem em `cert_products`:
+
+    1. Data real em `linx_fim_licenciamento` → VALIDO | VENCIDO (a data manda,
+       qualquer que seja a grife).
+    2. `aplicavel` explícito (True/False) → respeitado. Nenhuma coluna do banco o
+       alimenta hoje; existe para quem já sabe a resposta (testes, chamadores).
+    3. `linx_synced_at` vazio → o Linx NÃO FOI LIDO para este SKU: PENDENTE, com
+       motivo próprio. Não é "sem licenciamento".
+    4. Linx lido, grife vazia ou igual a uma marca da casa (`MARCAS_DA_CASA`) →
+       NAO_APLICAVEL: produto próprio, sem licenciador.
+    5. Linx lido, grife de licenciador e nenhuma data → PENDENTE, citando a
+       grife: é o caso que o time precisa cobrar no cadastro do Linx.
+
+    Returns:
+        Tupla (license_status, license_deadline_iso, reason). `reason` só vem
+        preenchido quando o status é PENDENTE.
+    """
+    if parse_data_real(fim_licenciamento) is not None:
+        status, deadline = derive_license_status_linx(fim_licenciamento, today)
+        return status, deadline, None
+    grife_txt = " ".join(str(grife or "").split())
+    if aplicavel is False:
+        return "NAO_APLICAVEL", None, None
+    if aplicavel is None:
+        if linx_synced_at is None or not str(linx_synced_at).strip():
+            return "PENDENTE", None, LICENSE_REASON_LINX_NAO_LIDO
+        if _norm_marca(grife_txt) in MARCAS_DA_CASA or not grife_txt:
+            return "NAO_APLICAVEL", None, None
+    licenciado = f"Produto licenciado ({grife_txt})" if grife_txt else "Produto licenciado"
+    return "PENDENTE", None, f"{licenciado} sem vencimento no Linx"
+
+
 def derive_comercializacao_status(
     cert_status: str,
     sale_deadline_raw: str | None,
@@ -729,9 +801,9 @@ def compute_status_dimensions(
 
     Args:
         row: linha de cert_products.
-        license_map: dict opcional {PROCESS_CODE/SKU(upper) -> {status, valid_until}}
-            vindo de `erp_service.read_licenciamentos_vencidos()`. Quando None ou
-            sem match, license_status defaulta para NAO_APLICAVEL.
+        license_map: mantido por compatibilidade de assinatura. Desde a D11 o
+            licenciamento vem só do Linx (`derive_licenciamento`); a aba
+            'Licenciamentos Vencidos' não decide mais nada aqui.
         today: data de referência do prazo de venda. Default: hoje em
             America/Sao_Paulo (`_today_sp()`);
             explicitável para deixar o cálculo determinístico em teste.
@@ -782,16 +854,19 @@ def compute_status_dimensions(
     ss, ss_reason = derive_site_status(
         last_vs, cs, expected_cert_text, certification_type, within_deadline
     )
-    # Licenciamento vem exclusivamente do Linx. Ausencia de data nao prova dispensa.
+    # Licenciamento vem exclusivamente do Linx. A aplicabilidade é DERIVADA de
+    # `grife` + `linx_synced_at`: a coluna `licenciamento_aplicavel` nunca existiu
+    # em cert_products, então lê-la sozinha dava PENDENTE para o catálogo inteiro.
+    # O valor explícito segue respeitado quando o chamador o informa.
     fim_licenciamento = row.get("linx_fim_licenciamento")
-    ls_reason = None
-    if parse_data_real(fim_licenciamento) is not None:
-        ls, ls_deadline = derive_license_status_linx(fim_licenciamento, today)
-    elif row.get("licenciamento_aplicavel") is False:
-        ls, ls_deadline = "NAO_APLICAVEL", None
-    else:
-        ls, ls_deadline = "PENDENTE", None
-        ls_reason = "Licenciamento sem prazo valido ou aplicabilidade confirmada na fonte Linx"
+    aplicavel = row.get("licenciamento_aplicavel")
+    ls, ls_deadline, ls_reason = derive_licenciamento(
+        fim_licenciamento,
+        row.get("grife"),
+        row.get("linx_synced_at"),
+        aplicavel if isinstance(aplicavel, bool) else None,
+        today,
+    )
     cert_reason = None
     validade = parse_data_real(row.get("validade_certificado"))
     if cs == "ATIVO" and validade and validade < (today or _today_sp()):
@@ -813,9 +888,13 @@ def compute_status_dimensions(
     )
     status_venda = derive_status_venda(cs, trava, venda, within_deadline, today)
     venda_reason = None
-    if trava is None and ls == "PENDENTE":
-        status_venda = "BLOQUEADA"
-        venda_reason = ls_reason
+    # Licenciamento PENDENTE (Linx não lido, ou licenciado sem data) NÃO bloqueia
+    # a venda nem torna a comercialização PENDENTE. R4: data vazia/NULL/1900 nunca
+    # entra no mínimo nem bloqueia; R8: "não lido" não é "vencido". O status de
+    # venda decorre só de datas e vereditos CONHECIDOS; a pendência fica visível
+    # no eixo dela (`license_status` + `license_status_reason`). Até 18/09/2026
+    # havia aqui um `if trava is None and ls == "PENDENTE": BLOQUEADA`, que exibia
+    # falso bloqueio em ~95% do catálogo (produtos sem licenciador).
     if cert_reason:
         status_venda = "BLOQUEADA"
         venda_reason = cert_reason
