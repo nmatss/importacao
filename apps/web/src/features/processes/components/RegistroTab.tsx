@@ -393,7 +393,12 @@ export function RegistroTab({ processId }: { processId: string }) {
             </span>
           )}
         </div>
-        <div className="overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Tributos do registro"
+          className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+        >
           <table className="min-w-full divide-y divide-slate-100 text-sm dark:divide-slate-700">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-900/40">
               <tr>

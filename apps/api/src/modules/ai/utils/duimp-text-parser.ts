@@ -1,5 +1,6 @@
 import { findLabeledDate, normalizeDate } from './dates.js';
 import { parseDecimal } from './numbers.js';
+import { parseDraftDuimpItems } from './duimp-item-text-parser.js';
 
 type ConfidenceField<T> = { value: T | null; confidence: number };
 
@@ -272,6 +273,10 @@ export function fillDUIMPNullsFromText(
   if (!fields) return data;
 
   const out = { ...data };
+  if (!Array.isArray(out.items) || out.items.length === 0) {
+    const items = parseDraftDuimpItems(text);
+    if (items) out.items = items;
+  }
   const confidenceByField: Record<(typeof DUIMP_FIELD_KEYS)[number], number> = {
     customsValue: 0.66,
     registrationDollar: 0.68,

@@ -118,6 +118,136 @@ def _rows(database):
         return {row["sku"]: dict(row) for row in cur.fetchall()}
 
 
+def test_cadastro_read_model_preserves_sheet_snapshot_and_resolves_links(isolated_postgres):
+    from app.services.effective_products import execute_product_query
+
+    database = isolated_postgres
+    database.ensure_tables()
+    release_migrations.apply_release_migrations()
+    with database.db() as (_conn, cur):
+        cur.execute("""
+            INSERT INTO cert_products (sku, brand, numero_certificado, situacao, sheet_status, sale_deadline_date)
+            VALUES ('SAME', 'Imaginarium', 'C1', 'Ativo', 'Original sheet history', '2020-01-01'),
+                   ('CONFLICT', 'Imaginarium', 'OLD', 'Ativo', 'Original source', NULL),
+                   ('NEW', 'Imaginarium', NULL, NULL, '__cadastro_snapshot__', NULL)
+        """)
+        certificates = {}
+        for sku, number in [('SAME', 'C1'), ('NEW', 'C2'), ('CONFLICT', 'C3'), ('LEGACY', 'C4')]:
+            cur.execute("""
+                INSERT INTO cert_certificates (sku, brand, numero_certificado, situacao, validade_certificado)
+                VALUES (%s, 'imaginarium', %s, 'ATIVO', '2030-01-01') RETURNING id
+            """, [sku, number])
+            certificates[sku] = cur.fetchone()['id']
+            if sku != 'LEGACY':
+                cur.execute("INSERT INTO cert_certificate_items (certificate_id, sku, brand) VALUES (%s, %s, 'imaginarium')",
+                            [certificates[sku], sku])
+
+    def effective():
+        with database.db() as (_conn, cur):
+            execute_product_query(cur, "SELECT * FROM cert_products ORDER BY sku")
+            return {row['sku']: dict(row) for row in cur.fetchall()}
+
+    rows = effective()
+    assert set(rows) == {'SAME', 'NEW', 'CONFLICT', 'LEGACY'}
+    assert rows['NEW']['numero_certificado'] == 'C2'
+    assert rows['LEGACY']['numero_certificado'] == 'C4'
+    assert rows['SAME']['sale_deadline_date'] is None
+    assert rows['SAME']['validade_certificado'] == date(2030, 1, 1)
+    assert rows['CONFLICT']['numero_certificado'] == 'OLD'
+    assert compute_status_dimensions(rows['CONFLICT'])['cert_status'] == 'PENDENTE'
+    assert 'C3' in rows['CONFLICT']['sheet_status']
+    assert _rows(database)['SAME']['sale_deadline_date'] == date(2020, 1, 1)
+    assert _rows(database)['CONFLICT']['sheet_status'] == 'Original source'
+
+    with database.db() as (_conn, cur):
+        # An individual closure does not close the parent certificate.
+        cur.execute("UPDATE cert_certificate_items SET situacao='ENCERRADO', fim_venda='2027-12-31' WHERE sku='SAME'")
+    assert effective()['SAME']['sale_deadline_date'] == date(2027, 12, 31)
+    assert effective()['SAME']['situacao'] == 'ENCERRADO'
+    with database.db() as (_conn, cur):
+        # Reverting/unlinking exposes the intact original. A removed item must
+        # never reappear through the parent's legacy SKU fallback.
+        cur.execute("UPDATE cert_certificate_items SET removed_at=NOW() WHERE sku IN ('SAME','NEW')")
+    rows = effective()
+    assert rows['SAME']['sheet_status'] == 'Original sheet history'
+    assert 'NEW' not in rows
+
+    with database.db() as (_conn, cur):
+        execute_product_query(cur, "SELECT COUNT(*) AS cnt FROM cert_products WHERE numero_certificado = %s", ['C4'])
+        assert cur.fetchone()['cnt'] == 1
+
+
+@pytest.mark.asyncio
+async def test_registration_to_product_restriction_and_unlink_http_cycle(
+    isolated_postgres, test_client, api_key_headers, monkeypatch, tmp_path
+):
+    from app.routes import certificates, certifications
+
+    database = isolated_postgres
+    database.ensure_tables()
+    release_migrations.apply_release_migrations()
+    monkeypatch.setattr(certificates, 'DATABASE_URL', 'isolated-test')
+    monkeypatch.setattr(certifications, 'DATABASE_URL', 'isolated-test')
+    monkeypatch.setattr(certifications, '_safe_license_map', lambda: {})
+    writer = MagicMock(return_value={'status': 'disabled', 'produto_codigo': None, 'error': 'test', 'details': []})
+    monkeypatch.setattr(certificates, 'write_certificate_to_linx', writer)
+    response = await test_client.post('/api/certificates', headers=api_key_headers, data={
+        'sku': 'HTTP-NEW', 'brand': 'imaginarium', 'numero_certificado': '12345/2026',
+        'validade_certificado': '2030-01-01', 'situacao': 'ATIVO', 'orgao_certificador': 'INMETRO',
+    })
+    assert response.status_code == 200, response.text
+    cert_id = response.json()['id']
+    response = await test_client.get('/api/products?search=12345%2F2026', headers=api_key_headers)
+    assert response.status_code == 200, response.text
+    rows = response.json()['products']
+    assert len(rows) == 1
+    assert rows[0]['sku'] == 'HTTP-NEW'
+    assert rows[0]['numero_certificado'] == '12345/2026'
+    assert rows[0]['cert_status'] == 'ATIVO'
+    assert rows[0]['sale_deadline_date'] is None
+    writer.reset_mock()
+    response = await test_client.patch(
+        f'/api/certificates/{cert_id}/items/HTTP-NEW/restriction', headers=api_key_headers,
+        json={'situacao': 'ENCERRADO', 'fim_venda': '2028-01-01', 'motivo': 'Synthetic item closure'},
+    )
+    assert response.status_code == 200, response.text
+    response = await test_client.get('/api/products/HTTP-NEW', headers=api_key_headers)
+    assert response.status_code == 200, response.text
+    product = response.json()
+    assert product['cert_status'] == 'ENCERRADO'
+    assert product['sale_deadline_date'] == '2028-01-01'
+    with database.db() as (_conn, cur):
+        cur.execute("UPDATE cert_products SET numero_certificado='OTHER-SOURCE', sheet_status='Preserved sheet' WHERE sku='HTTP-NEW'")
+    response = await test_client.get('/api/products?cert_status=PENDENTE', headers=api_key_headers)
+    assert response.status_code == 200, response.text
+    products = response.json()['products']
+    assert len(products) == 1
+    assert products[0]['numero_certificado'] == 'OTHER-SOURCE'
+    assert products[0]['cert_status'] == 'PENDENTE'
+    assert '12345/2026' in products[0]['cert_status_reason']
+    # The exported workbook uses the exact same effective row and preserves
+    # its existing columns; no ERP/site calls occur in this fixture.
+    import openpyxl
+
+    from app.services import report_service
+    monkeypatch.setattr(report_service, 'REPORTS_DIR', tmp_path)
+    monkeypatch.setattr(report_service, '_fetch_stock_map', lambda: {})
+    monkeypatch.setattr(report_service, '_fetch_travas_faturamento', lambda rows: {})
+    report = report_service.generate_products_report(products, today=date(2026, 9, 18))
+    workbook = openpyxl.load_workbook(report)
+    report_row = next(row for row in workbook.active.iter_rows(values_only=True) if row[0] == 'HTTP-NEW')
+    assert report_row[3] == 'Pendente de validacao'
+    assert report_row[8] == 'OTHER-SOURCE'
+    assert '12345/2026' in report_row[5]
+    workbook.close()
+    response = await test_client.delete(f'/api/certificates/{cert_id}/items/HTTP-NEW', headers=api_key_headers)
+    assert response.status_code == 200, response.text
+    response = await test_client.get('/api/products?search=HTTP-NEW', headers=api_key_headers)
+    assert response.json()['total'] == 1
+    assert response.json()['products'][0]['numero_certificado'] == 'OTHER-SOURCE'
+    writer.assert_not_called()
+
+
 def test_migration_sync_derivation_cleanup_and_legacy_projection(isolated_postgres, monkeypatch):
     database = isolated_postgres
     database.ensure_tables()

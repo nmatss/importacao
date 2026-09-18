@@ -139,11 +139,17 @@ function formatCompactNumber(value?: number): string {
   return num.toLocaleString('pt-BR');
 }
 
-function ErrorBanner({ message }: { message: string }) {
+function ErrorBanner({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-danger-100 bg-danger-50 dark:bg-danger-950/30 dark:border-danger-800/50 px-4 py-3 text-sm font-medium text-danger-700 dark:text-danger-400">
+    <div
+      role="alert"
+      className="flex items-center gap-3 rounded-2xl border border-danger-100 bg-danger-50 dark:bg-danger-950/30 dark:border-danger-800/50 px-4 py-3 text-sm font-medium text-danger-700 dark:text-danger-400"
+    >
       <XCircle className="h-4 w-4 shrink-0" />
       {message}
+      <button type="button" onClick={onRetry} className="underline underline-offset-2">
+        Tentar novamente
+      </button>
     </div>
   );
 }
@@ -321,15 +327,17 @@ export function PreConsPage() {
     `/api/pre-cons/summary?${summaryQueryString}`,
   );
 
-  const { data: divergences, isError: divergencesError } = useApiQuery<Divergence[]>(
-    ['pre-cons-divergences'],
-    '/api/pre-cons/divergences',
-  );
+  const {
+    data: divergences,
+    isError: divergencesError,
+    refetch: retryDivergences,
+  } = useApiQuery<Divergence[]>(['pre-cons-divergences'], '/api/pre-cons/divergences');
 
   const {
     data: syncLogs,
     isLoading: loadingLogs,
     isError: logsError,
+    refetch: retryLogs,
   } = useApiQuery<SyncLog[]>(['pre-cons-sync-logs'], '/api/pre-cons/sync-logs');
 
   const items = itemsResponse?.data ?? [];
@@ -500,7 +508,7 @@ export function PreConsPage() {
             <SlidersHorizontal className="h-3.5 w-3.5" />
             Filtros
             {lastSync && (
-              <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+              <span className="ml-auto text-[10px] font-medium normal-case tracking-normal text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                 <Clock className="h-3 w-3" />
                 Sync: {formatDate(lastSync.syncedAt)} via{' '}
                 {lastSync.source === 'email' ? 'e-mail' : 'upload'}
@@ -593,7 +601,7 @@ export function PreConsPage() {
                   className="w-full min-w-0 pl-9 pr-2 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 focus:border-primary-500 dark:focus:border-primary-400 focus:ring-2 focus:ring-primary-500/20 dark:focus:ring-primary-400/20 focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark]"
                 />
               </div>
-              <span className="text-xs text-slate-400 dark:text-slate-500 font-medium">ate</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">ate</span>
               <div className="relative min-w-0">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
                 <input
@@ -727,16 +735,19 @@ export function PreConsPage() {
 
       {/* Divergences error */}
       {divergencesError && (
-        <ErrorBanner message="Erro ao carregar divergencias. Verifique suas permissoes." />
+        <ErrorBanner
+          message="Não foi possível carregar as divergências. Tente novamente."
+          onRetry={() => void retryDivergences()}
+        />
       )}
 
       {/* Divergences */}
       {(divergences?.length ?? 0) > 0 && (
         <div className="rounded-2xl border border-amber-200/80 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-5 space-y-3">
-          <h3 className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             Divergencias Encontradas ({divergences!.length})
-          </h3>
+          </h2>
           <div className="space-y-2">
             {divergences!.map((d, i) => {
               const cfg = severityConfig[d.severity];
@@ -775,9 +786,9 @@ export function PreConsPage() {
       <div className="rounded-2xl border border-slate-200/60 bg-white dark:bg-slate-800 dark:border-slate-700/60 shadow-sm overflow-hidden">
         {/* Table header with inline summary */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-700 px-4 py-3">
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
             Itens Pre-Conferencia
-          </h3>
+          </h2>
           {/* Compact summary stats */}
           {summary && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
@@ -997,7 +1008,10 @@ export function PreConsPage() {
         {logsExpanded &&
           (logsError ? (
             <div className="px-4 pb-4">
-              <ErrorBanner message="Erro ao carregar historico. Verifique suas permissoes." />
+              <ErrorBanner
+                message="Não foi possível carregar o histórico. Tente novamente."
+                onRetry={() => void retryLogs()}
+              />
             </div>
           ) : loadingLogs ? (
             <LoadingSpinner className="py-8" />

@@ -58,13 +58,13 @@ export function LoginPage() {
               <span className="text-xs font-medium text-primary-300">Plataforma v1.0</span>
             </div>
 
-            <h1 className="text-4xl xl:text-5xl font-extrabold text-white leading-[1.08] tracking-tight">
+            <p className="text-4xl xl:text-5xl font-extrabold text-white leading-[1.08] tracking-tight">
               Sistema Integrado
               <br />
               <span className="bg-gradient-to-r from-primary-300 to-primary-500 bg-clip-text text-transparent">
                 de Importação
               </span>
-            </h1>
+            </p>
             <p className="text-sidebar-200/50 text-base mt-4 leading-relaxed max-w-md">
               Plataforma completa para gestão de processos de importação, validação documental e
               certificações.
@@ -110,9 +110,9 @@ export function LoginPage() {
               <div className="lg:hidden inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-primary-600 mb-5">
                 <Ship className="h-7 w-7 text-white" />
               </div>
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+              <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
                 Bem-vindo de volta
-              </h2>
+              </h1>
               <p className="text-slate-500 dark:text-slate-400 mt-2 text-sm">
                 Faça login com sua conta Google corporativa
               </p>
@@ -187,7 +187,7 @@ export function LoginPage() {
             </div>
 
             {/* Help text */}
-            <p className="text-center text-xs text-slate-400 dark:text-slate-500 mt-6 leading-relaxed">
+            <p className="text-center text-xs text-slate-600 dark:text-slate-400 mt-6 leading-relaxed">
               Acesso restrito a colaboradores do Grupo Unico, inclusive contas @imaginarium.com.br.
               <br />
               Problemas? Contate o administrador.

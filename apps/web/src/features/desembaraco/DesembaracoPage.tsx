@@ -299,7 +299,7 @@ export function DesembaracoPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     filter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}

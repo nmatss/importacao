@@ -211,7 +211,7 @@ function extractionFailureMessage(doc: Document): string | null {
     doc.aiProcessingStatus === 'completed' &&
     !isDocumentOperational(doc.aiConfidence, doc.documentType)
   ) {
-    const pct = Math.round((doc.aiConfidence ?? 0) * 100);
+    const pct = Math.floor((doc.aiConfidence ?? 0) * 1000) / 10;
     return `Confiança da extração (${pct}%) abaixo do piso operacional. Dados ficam apenas para revisão e não devem ser usados automaticamente.`;
   }
   if (doc.aiProcessingStatus !== 'failed') return null;

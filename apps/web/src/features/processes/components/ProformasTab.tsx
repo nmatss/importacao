@@ -194,7 +194,12 @@ export function ProformasTab({ processId }: { processId: string }) {
           </div>
 
           {pi.items.length > 0 ? (
-            <div className="overflow-x-auto">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Itens das proformas"
+              className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
               <table className="min-w-full text-sm">
                 <thead>
                   <tr className="bg-slate-50/40 dark:bg-slate-900/40 text-[11px] uppercase tracking-wider text-slate-400">

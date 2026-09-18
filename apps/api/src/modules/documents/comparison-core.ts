@@ -38,7 +38,7 @@ export type RowStatus =
 
 export type Criticality = 'critical' | 'secondary' | 'info';
 
-export type ComparisonKind = 'string' | 'numeric' | 'port' | 'date' | 'name' | 'taxId';
+export type ComparisonKind = 'string' | 'numeric' | 'money' | 'port' | 'date' | 'name' | 'taxId';
 
 export interface ComparisonCheckResult {
   id?: number | null;
@@ -54,9 +54,9 @@ export interface ComparisonCheckResult {
 const STATUS_SEVERITY: Record<RowStatus, number> = {
   divergent: 5,
   warning: 4,
-  match: 3,
-  single_source: 2,
-  skipped: 1,
+  skipped: 3,
+  match: 2,
+  single_source: 1,
   empty: 0,
 };
 
@@ -194,13 +194,18 @@ export function computeRowStatus(
     return allPrefix ? 'warning' : 'divergent';
   }
 
-  if (kind === 'numeric') {
-    const nums = values.map((v) => parseFloat(String(v).replace(',', '.')));
-    if (nums.some((n) => isNaN(n))) return 'divergent';
+  if (kind === 'numeric' || kind === 'money') {
+    const nums = values.map((v) => Number(String(v).replace(',', '.')));
+    if (nums.some((n) => !Number.isFinite(n))) return 'divergent';
     const max = Math.max(...nums);
     const min = Math.min(...nums);
     const diff = max - min;
     const denom = Math.max(Math.abs(max), 1);
+    // Different monetary totals require review even on a large invoice.
+    if (kind === 'money') {
+      if (Math.round(max * 100) === Math.round(min * 100)) return 'match';
+      return diff / denom < 0.02 ? 'warning' : 'divergent';
+    }
     if (diff < 0.5 || diff / denom < 0.005) return 'match';
     if (diff / denom < 0.02) return 'warning';
     return 'divergent';
@@ -665,11 +670,11 @@ function applyCheckToRow(
   rowsWithRule: Set<ComparisonRow>,
 ) {
   if (checkStatus === 'skipped') {
-    // Nao piora a linha: so explica que a regra nao rodou.
+    // An unexecuted cross-check cannot produce a green completed row.
     const reason = skippedMessage(check.message);
     row.message =
       row.status === 'empty' ? reason : `${row.message ?? ''} ${label}: ${reason}`.trim();
-    if (row.status === 'empty') row.status = 'skipped';
+    row.status = highestRowStatus(row.status, 'skipped');
     return;
   }
 
@@ -690,7 +695,7 @@ function applyCheckToRow(
 
   // Check conforme: a mensagem da linha so muda quando ela nao tinha nada a
   // dizer (evita apagar a explicacao de uma divergencia ja registrada).
-  if (previousStatus === 'empty' || previousStatus === 'skipped') {
+  if (previousStatus === 'empty') {
     row.message = check.message ?? aggregateMessage(row.status, row.criticality);
   }
 }

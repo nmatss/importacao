@@ -13,6 +13,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useApiQuery } from '@/shared/hooks/useApi';
+import { useSourceDocumentPicker } from './SourceDocumentPicker';
 import { api } from '@/shared/lib/api-client';
 import { cn } from '@/shared/lib/utils';
 import { CONFIDENCE_HIGH, CONFIDENCE_MEDIUM } from '@/shared/lib/confidence';
@@ -641,6 +642,12 @@ function passesFilter(status: DisplayStatus, filter: ComparisonFilter) {
 const JUSTIFICATIVA_MIN = 3;
 
 export function DocumentComparison({ processId }: { processId: string }) {
+  const selection = useSourceDocumentPicker(processId, [
+    'invoiceId',
+    'packingListId',
+    'blId',
+    'espelhoId',
+  ]);
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<ComparisonFilter>('all');
   const [acceptTarget, setAcceptTarget] = useState<AcceptTarget | null>(null);
@@ -652,8 +659,8 @@ export function DocumentComparison({ processId }: { processId: string }) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const { data, isLoading, isError, error, refetch } = useApiQuery<ComparisonData>(
-    ['doc-comparison', processId],
-    `/api/documents/process/${processId}/comparison`,
+    ['doc-comparison', processId, selection.query],
+    `/api/documents/process/${processId}/comparison${selection.query ? `?${selection.query}` : ''}`,
   );
   // A consulta a `process-events` saiu daqui junto com a derivacao do aceite.
   // Alem de virar codigo morto, ela colidia com `ProcessTimelineEvents`, que usa
@@ -915,6 +922,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
   };
 
   const renderAcceptanceCell = (target: AcceptTarget, accepted?: ComparisonAcceptance) => {
+    if (selection.isCustom) return null;
     if (accepted) {
       const note = accepted.resolutionNote?.trim() || null;
       return (
@@ -1018,7 +1026,10 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   if ((isError || error) && !data) {
     return (
-      <ErrorState message="Erro ao carregar comparativo documental." onRetry={() => refetch()} />
+      <>
+        {selection.picker}
+        <ErrorState message="Erro ao carregar comparativo documental." onRetry={() => refetch()} />
+      </>
     );
   }
 
@@ -1035,6 +1046,7 @@ export function DocumentComparison({ processId }: { processId: string }) {
 
   return (
     <div className="space-y-6">
+      {selection.picker}
       <div className="flex flex-wrap gap-3">
         <DocBadge label="Invoice" available={data.hasInvoice} confidence={data.invoiceConfidence} />
         <DocBadge
@@ -1193,7 +1205,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
           <table className="min-w-full">
             <thead>
               <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
-                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
+                <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8">
+                  <span className="sr-only">Status</span>
+                </th>
                 <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Campo
                 </th>
@@ -1281,13 +1295,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     status={field.displayStatus}
                     sourceLabel={SOURCE_LABELS.invoice}
                     edited={field.overrides?.some((item) => item.sourceColumn === 'invoice')}
-                    onEdit={() =>
-                      startEditingField({
-                        rowKey: field.rowKey,
-                        fieldLabel: field.label,
-                        sourceColumn: 'invoice',
-                        currentValue: field.invoice,
-                      })
+                    onEdit={
+                      selection.isCustom
+                        ? undefined
+                        : () =>
+                            startEditingField({
+                              rowKey: field.rowKey,
+                              fieldLabel: field.label,
+                              sourceColumn: 'invoice',
+                              currentValue: field.invoice,
+                            })
                     }
                   />
                   <StatusCell
@@ -1295,13 +1312,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     status={field.displayStatus}
                     sourceLabel={SOURCE_LABELS.packingList}
                     edited={field.overrides?.some((item) => item.sourceColumn === 'packingList')}
-                    onEdit={() =>
-                      startEditingField({
-                        rowKey: field.rowKey,
-                        fieldLabel: field.label,
-                        sourceColumn: 'packingList',
-                        currentValue: field.packingList,
-                      })
+                    onEdit={
+                      selection.isCustom
+                        ? undefined
+                        : () =>
+                            startEditingField({
+                              rowKey: field.rowKey,
+                              fieldLabel: field.label,
+                              sourceColumn: 'packingList',
+                              currentValue: field.packingList,
+                            })
                     }
                   />
                   <StatusCell
@@ -1309,13 +1329,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     status={field.displayStatus}
                     sourceLabel={SOURCE_LABELS.bl}
                     edited={field.overrides?.some((item) => item.sourceColumn === 'bl')}
-                    onEdit={() =>
-                      startEditingField({
-                        rowKey: field.rowKey,
-                        fieldLabel: field.label,
-                        sourceColumn: 'bl',
-                        currentValue: field.bl,
-                      })
+                    onEdit={
+                      selection.isCustom
+                        ? undefined
+                        : () =>
+                            startEditingField({
+                              rowKey: field.rowKey,
+                              fieldLabel: field.label,
+                              sourceColumn: 'bl',
+                              currentValue: field.bl,
+                            })
                     }
                   />
                   <StatusCell
@@ -1323,13 +1346,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                     status={field.displayStatus}
                     sourceLabel={SOURCE_LABELS.espelho}
                     edited={field.overrides?.some((item) => item.sourceColumn === 'espelho')}
-                    onEdit={() =>
-                      startEditingField({
-                        rowKey: field.rowKey,
-                        fieldLabel: field.label,
-                        sourceColumn: 'espelho',
-                        currentValue: field.espelho,
-                      })
+                    onEdit={
+                      selection.isCustom
+                        ? undefined
+                        : () =>
+                            startEditingField({
+                              rowKey: field.rowKey,
+                              fieldLabel: field.label,
+                              sourceColumn: 'espelho',
+                              currentValue: field.espelho,
+                            })
                     }
                   />
                   {systemDataAvailable ? (
@@ -1338,13 +1364,16 @@ export function DocumentComparison({ processId }: { processId: string }) {
                       status={field.displayStatus}
                       sourceLabel={SOURCE_LABELS.system}
                       edited={field.overrides?.some((item) => item.sourceColumn === 'system')}
-                      onEdit={() =>
-                        startEditingField({
-                          rowKey: field.rowKey,
-                          fieldLabel: field.label,
-                          sourceColumn: 'system',
-                          currentValue: field.system,
-                        })
+                      onEdit={
+                        selection.isCustom
+                          ? undefined
+                          : () =>
+                              startEditingField({
+                                rowKey: field.rowKey,
+                                fieldLabel: field.label,
+                                sourceColumn: 'system',
+                                currentValue: field.system,
+                              })
                       }
                     />
                   ) : (
@@ -1402,7 +1431,9 @@ export function DocumentComparison({ processId }: { processId: string }) {
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="bg-slate-50/50 dark:bg-slate-900/50 sticky top-0 z-10 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)]">
-                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8"></th>
+                  <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400 w-8">
+                    <span className="sr-only">Status</span>
+                  </th>
                   <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                     SKU/Codigo
                   </th>
@@ -1711,7 +1742,12 @@ export function DocumentComparison({ processId }: { processId: string }) {
               Conferencia por item entre Invoice, Packing List e Espelho.
             </p>
           </div>
-          <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Itens do comparativo"
+            className="overflow-x-auto max-h-[360px] overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+          >
             <table className="min-w-[780px] w-full text-sm">
               <thead>
                 <tr className="sticky top-0 bg-white shadow-[0_1px_3px_0_rgba(0,0,0,0.06)] dark:bg-slate-800">

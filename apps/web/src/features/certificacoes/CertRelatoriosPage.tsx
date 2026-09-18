@@ -449,7 +449,7 @@ export default function CertRelatoriosPage() {
                       <button
                         type="button"
                         onClick={() => handleDownloadJson(report.filename)}
-                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 transition-colors"
                       >
                         <FileJson className="w-3 h-3" />
                         JSON

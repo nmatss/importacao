@@ -313,7 +313,7 @@ export default function CertDashboardPage() {
               title="Percentual calculado apenas sobre os produtos já validados"
             >
               <TrendingUp className="w-4 h-4 text-emerald-500" />
-              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-300">
+              <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">
                 {okRate}%
               </span>
               <span className="text-xs text-slate-500 dark:text-slate-400">conformidade</span>
@@ -325,7 +325,7 @@ export default function CertDashboardPage() {
             <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 shadow-sm text-xs text-slate-500 dark:text-slate-400">
               <Clock className="w-3.5 h-3.5 text-slate-400" />
               <span>{formatDateTime(lastRun.date)}</span>
-              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 min-w-0 break-words text-slate-600 dark:text-slate-400 font-medium text-[10px]">
+              <span className="px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-700 min-w-0 break-words text-slate-600 dark:text-slate-300 font-medium text-[10px]">
                 {relativeTime(lastRun.date)}
               </span>
             </div>
@@ -387,7 +387,11 @@ export default function CertDashboardPage() {
                       stroke="none"
                     >
                       {pieData.map((entry, i) => (
-                        <Cell key={i} fill={PIE_COLORS[entry.name] ?? PIE_COLORS['Não validado']} />
+                        <Cell
+                          key={i}
+                          fill={PIE_COLORS[entry.name] ?? PIE_COLORS['Não validado']}
+                          aria-label={`${entry.name}: ${entry.value}`}
+                        />
                       ))}
                     </Pie>
                     <Tooltip

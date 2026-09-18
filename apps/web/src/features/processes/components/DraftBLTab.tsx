@@ -222,7 +222,7 @@ function DraftUploadSection({
                           : 'bg-danger-50 text-danger-700 dark:bg-danger-950/30 dark:text-danger-300',
                     )}
                   >
-                    {Math.round(draftDoc.aiConfidence * 100)}%
+                    {Math.floor(draftDoc.aiConfidence * 1000) / 10}%
                   </span>
                 )}
               </div>
@@ -494,7 +494,7 @@ function ExtractedField({ label, value, confidence, icon: Icon, warning }: Extra
                   : 'bg-danger-50 text-danger-600 dark:bg-danger-950/30 dark:text-danger-300',
             )}
           >
-            {Math.round(confidence * 100)}%
+            {Math.floor(confidence * 1000) / 10}%
           </span>
         )}
       </div>

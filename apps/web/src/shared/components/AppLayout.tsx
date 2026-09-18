@@ -220,6 +220,14 @@ export function AppLayout({
 
   const allNavItems = navSections.flatMap((s) => s.items);
   const { title: pageTitle, breadcrumbs = [] } = resolveHeader(location.pathname, allNavItems);
+  const previousPath = useRef(location.pathname);
+  useEffect(() => {
+    document.title = `${pageTitle} — Importação e Certificação`;
+    if (previousPath.current !== location.pathname) {
+      previousPath.current = location.pathname;
+      document.getElementById('main')?.focus({ preventScroll: true });
+    }
+  }, [pageTitle, location.pathname]);
   const visibleNavSections = navSections
     .map((section) => ({
       ...section,
@@ -240,6 +248,7 @@ export function AppLayout({
 
       {/* Sidebar — Dark Enterprise */}
       <aside
+        aria-label="Navegação principal"
         ref={sidebarRef}
         id={`${moduleKey}-navigation`}
         aria-hidden={!desktopViewport && !mobileOpen}
@@ -423,7 +432,7 @@ export function AppLayout({
 
             <div className="flex min-w-0 items-center gap-2">
               {breadcrumbs.length > 1 && (
-                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
+                <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
                   {breadcrumbs.slice(0, -1).map((crumb, i) => (
                     <span key={i} className="flex items-center gap-1.5">
                       {crumb.href ? (

@@ -62,9 +62,9 @@ export default function CertConfiguracoesPage() {
                 <Cpu className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                   Status do Sistema
-                </h3>
+                </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   Monitoramento dos serviços
                 </p>
@@ -197,7 +197,7 @@ export default function CertConfiguracoesPage() {
                     </p>
                   </div>
                 </div>
-                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-3 py-1.5 rounded-lg">
                   2 sites
                 </span>
               </div>
@@ -214,9 +214,9 @@ export default function CertConfiguracoesPage() {
               <Zap className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Verificação em Tempo Real
-              </h3>
+              </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Como funciona a validação
               </p>
@@ -305,9 +305,9 @@ export default function CertConfiguracoesPage() {
               <Info className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
                 Informações
-              </h3>
+              </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">Dados de configuração</p>
             </div>
           </div>

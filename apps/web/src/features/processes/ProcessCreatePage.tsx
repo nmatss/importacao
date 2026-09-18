@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +8,7 @@ import { ArrowLeft, Ship, Building2, Warehouse, FileText, DollarSign } from 'luc
 import { useQueryClient } from '@tanstack/react-query';
 import { SubmitButton } from '@/shared/components/SubmitButton';
 import { useApiMutation } from '@/shared/hooks/useApi';
+import { useAuth } from '@/shared/hooks/useAuth';
 
 const decimalPattern = /^(?:0|[1-9]\d*)(?:[.,]\d{1,4})?$/;
 
@@ -70,20 +72,70 @@ type ProcessFormData = z.infer<typeof processSchema>;
 export function ProcessCreatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [draftStorageFailed, setDraftStorageFailed] = useState(false);
+  const draftKey = `importacao:process-draft:${user?.id ?? 'anonymous'}`;
+  const saved = useRef(false);
+  const [draft] = useState<Partial<ProcessFormData>>(() => {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(draftKey) ?? '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+      const keys = Object.keys(processSchema.innerType().shape);
+      return Object.fromEntries(
+        Object.entries(parsed).filter(
+          ([key, value]) =>
+            keys.includes(key) && (typeof value === 'string' || typeof value === 'number'),
+        ),
+      );
+    } catch {
+      return {};
+    }
+  });
 
   const {
     register,
     handleSubmit,
-    formState: { errors, isSubmitting },
+    watch,
+    reset,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<ProcessFormData>({
     resolver: zodResolver(processSchema),
     defaultValues: {
       incoterm: 'FOB',
+      ...draft,
     },
   });
 
+  useEffect(() => {
+    const subscription = watch((value) => {
+      if (saved.current) return;
+      try {
+        sessionStorage.setItem(draftKey, JSON.stringify(value));
+        setDraftStorageFailed(false);
+      } catch {
+        setDraftStorageFailed(true);
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, draftKey]);
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (!isDirty || saved.current) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [isDirty]);
+
   const mutation = useApiMutation<{ id: string }, ProcessFormData>('/api/processes', 'post', {
     onSuccess: (data) => {
+      saved.current = true;
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {
+        /* No stored draft. */
+      }
       // Sem invalidar, voltar para a lista dentro dos 30s de staleTime mostra
       // o resultado sem o processo recem-criado.
       void queryClient.invalidateQueries({ queryKey: ['processes'] });
@@ -103,6 +155,30 @@ export function ProcessCreatePage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 animate-fade-in">
+      {(isDirty || Object.keys(draft).length > 0) && (
+        <div
+          role={draftStorageFailed ? 'alert' : 'status'}
+          className="rounded-lg bg-slate-100 p-3 text-sm text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+        >
+          {draftStorageFailed
+            ? 'O navegador não permitiu salvar o rascunho. Salve o processo antes de sair desta página para não perder os dados.'
+            : 'O rascunho fica nesta aba enquanto você navega e é removido ao criar o processo.'}
+          <button
+            type="button"
+            className="ml-2 underline"
+            onClick={() => {
+              reset({ incoterm: 'FOB' });
+              try {
+                sessionStorage.removeItem(draftKey);
+              } catch {
+                /* No stored draft. */
+              }
+            }}
+          >
+            Descartar rascunho
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-3">
         <button

@@ -22,6 +22,7 @@ from app.db.postgres import db
 from app.models.schemas import ValidateRequest, VerifyRequest
 from app.services.cert_service import validate_single_product
 from app.services.derivation import compute_status_dimensions
+from app.services.effective_products import execute_product_query
 from app.services.erp_service import (
     normalize_brand_filter,
 )
@@ -167,7 +168,7 @@ def _run_validation(run_id: str, brand_filter: str | None, limit: int | None, so
                 )
                 if limit:
                     sql += f" LIMIT {int(limit)}"
-                cur.execute(sql, params)
+                execute_product_query(cur, sql, params)
                 products = [dict(r) for r in cur.fetchall()]
 
         state["total"] = len(products)
@@ -376,7 +377,7 @@ def get_stats() -> dict:
         return {"total_products": 0, "total_expired": 0, "last_run": None, "by_brand": []}
     try:
         with db() as (conn, cur):
-            cur.execute("SELECT COUNT(*) as cnt FROM cert_products")
+            execute_product_query(cur, "SELECT COUNT(*) as cnt FROM cert_products")
             total = cur.fetchone()["cnt"]
 
             cur.execute("""
@@ -396,7 +397,7 @@ def get_stats() -> dict:
                     "not_found": (last_run_row.get("not_found") or 0) + (last_run_row.get("missing") or 0),
                 }
 
-            cur.execute("""
+            execute_product_query(cur, """
                 SELECT brand,
                     COUNT(*) FILTER (WHERE last_validation_status = 'OK') as ok,
                     COUNT(*) FILTER (WHERE last_validation_status = 'INCONSISTENT') as inconsistent,
@@ -417,7 +418,7 @@ def get_stats() -> dict:
             """)
             by_brand = [dict(r) for r in cur.fetchall()]
 
-            cur.execute("SELECT COUNT(*) as cnt FROM cert_products WHERE is_expired = TRUE")
+            execute_product_query(cur, "SELECT COUNT(*) as cnt FROM cert_products WHERE is_expired = TRUE")
             total_expired = cur.fetchone()["cnt"]
 
             return {
@@ -484,7 +485,7 @@ def list_expired_products(
         offset = (page - 1) * per_page
 
         if derived_filtering:
-            cur.execute(
+            execute_product_query(cur,
                 f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST",
                 params,
             )
@@ -495,9 +496,9 @@ def list_expired_products(
             total = len(filtered)
             rows = filtered[offset : offset + per_page]
         else:
-            cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+            execute_product_query(cur, f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
             total = cur.fetchone()["cnt"]
-            cur.execute(
+            execute_product_query(cur,
                 f"SELECT * FROM cert_products {where} ORDER BY sale_deadline_date ASC NULLS LAST LIMIT %s OFFSET %s",
                 params + [per_page, offset],
             )
@@ -611,7 +612,7 @@ def list_products(
             # filters), derive each row's status, filter by the requested derived
             # axes, then paginate the filtered set in Python so total/total_pages
             # are computed from the FILTERED count.
-            cur.execute(
+            execute_product_query(cur,
                 f"SELECT * FROM cert_products {where} ORDER BY sku",
                 params,
             )
@@ -626,9 +627,9 @@ def list_products(
             total = len(filtered)
             products_raw = filtered[offset : offset + per_page]
         else:
-            cur.execute(f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
+            execute_product_query(cur, f"SELECT COUNT(*) as cnt FROM cert_products {where}", params)
             total = cur.fetchone()["cnt"]
-            cur.execute(
+            execute_product_query(cur,
                 f"SELECT * FROM cert_products {where} ORDER BY sku LIMIT %s OFFSET %s",
                 params + [per_page, offset],
             )
@@ -660,7 +661,7 @@ def list_products(
                 p["stock_detail"] = s.get("stock_detail", [])
                 p["stock_synced_at"] = s.get("stock_synced_at")
 
-        cur.execute("SELECT MAX(last_validation_date) as last_date FROM cert_products")
+        execute_product_query(cur, "SELECT MAX(last_validation_date) as last_date FROM cert_products")
         last_date_row = cur.fetchone()
         last_date = last_date_row["last_date"].isoformat() if last_date_row and last_date_row["last_date"] else None
 
@@ -689,12 +690,12 @@ def list_grifes() -> dict:
     if not DATABASE_URL:
         return {"grifes": [], "sem_grife": 0}
     with db() as (conn, cur):
-        cur.execute(
+        execute_product_query(cur,
             "SELECT grife, COUNT(*) AS cnt FROM cert_products "
             "WHERE COALESCE(grife, '') <> '' GROUP BY grife ORDER BY grife"
         )
         grifes = [{"grife": r["grife"], "count": r["cnt"]} for r in cur.fetchall()]
-        cur.execute("SELECT COUNT(*) AS cnt FROM cert_products WHERE COALESCE(grife, '') = ''")
+        execute_product_query(cur, "SELECT COUNT(*) AS cnt FROM cert_products WHERE COALESCE(grife, '') = ''")
         sem = (cur.fetchone() or {}).get("cnt", 0)
     return {"grifes": grifes, "sem_grife": sem}
 
@@ -716,7 +717,7 @@ def get_product(sku: str) -> dict:
         raise HTTPException(404, "Product not found")
 
     with db() as (conn, cur):
-        cur.execute("SELECT * FROM cert_products WHERE sku = %s", [sku])
+        execute_product_query(cur, "SELECT * FROM cert_products WHERE sku = %s", [sku])
         row = cur.fetchone()
         if not row:
             raise HTTPException(404, "Product not found")
@@ -751,7 +752,7 @@ def verify_product(req: VerifyRequest) -> dict:
     if DATABASE_URL:
         try:
             with db() as (conn, cur):
-                cur.execute(
+                execute_product_query(cur,
                     "SELECT certification_type, brand, name, ecommerce_description, sheet_status, is_expired, sale_deadline_date FROM cert_products WHERE sku = %s",
                     [req.sku],
                 )

@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
+import { extractPopplerText } from '../pdf-text.js';
 
 const fixturesDir = process.env.EXT01_PDF_FIXTURES_DIR;
 const FILES = ['doc155.pdf', 'doc156.pdf', 'doc165.pdf', 'doc166.pdf'];
@@ -57,6 +58,12 @@ describe.skipIf(!fixturesDir)('EXT-01 — BLs reais sem camada de texto legível
   const pdfParse = require('pdf-parse') as (data: Buffer) => Promise<{ text: string }>;
 
   for (const file of FILES) {
+    it(`${file}: current extractor recovers the normalized digital text`, async () => {
+      const parsed = await extractPopplerText(path.join(fixturesDir!, file));
+      expect(parsed?.text.length).toBeGreaterThan(500);
+      expect(parsed?.text).toMatch(/CNPJ|CARTONS|CONTAINER/);
+      expect(parsed?.text).not.toMatch(/[Ａ-Ｚ０-９]/);
+    });
     it(`${file}: pdf-parse devolve zero caractere, mas o PDF tem camada de texto CID`, async () => {
       const buffer = fs.readFileSync(path.join(fixturesDir!, file));
 

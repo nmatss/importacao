@@ -312,7 +312,7 @@ export function MeuDiaPage() {
                         <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                           {task.title}
                         </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        <p className="text-[11px] text-slate-600 dark:text-slate-300">
                           {task.description}
                         </p>
                       </div>
@@ -336,7 +336,7 @@ export function MeuDiaPage() {
             {!alerts || alerts.length === 0 ? (
               <div className="p-6 text-center">
                 <Bell className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum alerta recente</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">Nenhum alerta recente</p>
               </div>
             ) : (
               alerts.slice(0, 8).map((alert) => (
@@ -355,7 +355,7 @@ export function MeuDiaPage() {
                     <p className="text-sm text-slate-600 dark:text-slate-400 truncate">
                       {alert.message}
                     </p>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
                       {formatDate(alert.createdAt)}
                     </p>
                   </div>
@@ -429,7 +429,7 @@ function SummaryCard({
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3">
         <div className="col-start-2 row-start-1">{icon}</div>
         <div className="contents">
-          <p className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+          <p className="text-xs font-medium text-slate-600 dark:text-slate-300 uppercase tracking-wider">
             {label}
           </p>
           <p className="col-span-2 row-start-2 mt-3 break-words text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">

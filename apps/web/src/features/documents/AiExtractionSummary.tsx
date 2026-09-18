@@ -276,7 +276,7 @@ function CargoDescriptionBlock({ text }: { text: string }) {
 
 function FieldConfidence({ confidence }: { confidence: number | null }) {
   if (confidence === null) return null;
-  const pct = Math.round(confidence * 100);
+  const pct = Math.floor(confidence * 1000) / 10;
   return (
     <span
       className={cn(
@@ -479,7 +479,7 @@ export function AiExtractionSummary({
           <strong>Baixa confiança</strong> —{' '}
           {confidence == null
             ? 'confiança não informada; o corte mínimo de leitura não foi comprovado.'
-            : `extração com ${Math.round(confidence * 100)}%, abaixo do piso operacional.`}{' '}
+            : `extração com ${Math.floor(confidence * 1000) / 10}%, abaixo do piso operacional.`}{' '}
           Use estes dados apenas para revisão manual.
         </div>
       )}

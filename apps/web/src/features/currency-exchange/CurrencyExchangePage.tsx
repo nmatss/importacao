@@ -18,6 +18,7 @@ import { api } from '@/shared/lib/api-client';
 import { formatCurrency, formatDate } from '@/shared/lib/utils';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
 import { EmptyState } from '@/shared/components/EmptyState';
+import { ErrorState } from '@/shared/components/ErrorState';
 import { ConfirmDialog } from '@/shared/components/ConfirmDialog';
 import { getErrorMessage } from '@/shared/utils/errors';
 import type { CurrencyExchange } from '@/shared/types';
@@ -57,13 +58,20 @@ export function CurrencyExchangePage() {
   // Sem `limit`, o default do schema do backend e 20: o seletor abaixo so
   // enxergava os 20 processos mais recentes e nenhum outro podia receber
   // lancamento de cambio. Busca paginada completa.
-  const { data: processResponse, isLoading: loadingProcesses } = useAllPagesQuery<Process>(
-    ['processes', 'todos'],
-    '/api/processes',
-  );
+  const {
+    data: processResponse,
+    isLoading: loadingProcesses,
+    isError: processesError,
+    refetch: retryProcesses,
+  } = useAllPagesQuery<Process>(['processes', 'todos'], '/api/processes');
   const processes = processResponse?.data;
 
-  const { data: exchanges, isLoading: loadingExchanges } = useApiQuery<CurrencyExchange[]>(
+  const {
+    data: exchanges,
+    isLoading: loadingExchanges,
+    isError: exchangesError,
+    refetch: retryExchanges,
+  } = useApiQuery<CurrencyExchange[]>(
     ['currency-exchange', selectedProcessId],
     `/api/currency-exchange/process/${selectedProcessId}`,
     { enabled: !!selectedProcessId },
@@ -171,6 +179,16 @@ export function CurrencyExchangePage() {
       bg: 'bg-amber-50 dark:bg-amber-950/30',
     },
   ];
+
+  if (processesError || (selectedProcessId && exchangesError)) {
+    return (
+      <ErrorState
+        message="Não foi possível carregar os dados de câmbio. Os saldos não estão disponíveis."
+        onRetry={() => void (processesError ? retryProcesses() : retryExchanges())}
+      />
+    );
+  }
+  if (selectedProcessId && loadingExchanges) return <LoadingSpinner className="py-8" />;
 
   return (
     <div className="space-y-6 animate-fade-in">

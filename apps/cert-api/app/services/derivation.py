@@ -89,7 +89,7 @@ REGULATED_KEYWORDS = (
 
 # ---------- Constantes / valores válidos ----------
 
-CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO"}
+CERT_STATUS_VALUES = {"ATIVO", "ENCERRADO", "PENDENTE"}
 SITE_STATUS_VALUES = {"CONFORME", "NAO_CONFORME"}
 LICENSE_STATUS_VALUES = {"VALIDO", "VENCIDO", "NAO_APLICAVEL", "PENDENTE"}
 COMERCIALIZACAO_STATUS_VALUES = {"LIBERADA", "DENTRO_PRAZO", "ENCERRADA", "NAO_APLICA", "PENDENTE"}
@@ -979,6 +979,18 @@ def compute_status_dimensions(
         cms = "ENCERRADA"
     elif trava is not None:
         cms = "DENTRO_PRAZO"
+    if situacao == "PENDENTE_CADASTRO":
+        # This is a read-model conflict, not an instruction to mutate the ERP.
+        # Licensing remains independent: a known expired license still blocks.
+        cs = "PENDENTE"
+        cert_reason = str(sheet_status or "Conflito entre cadastro e planilha; confirmar vínculo vigente")
+        cms = "PENDENTE"
+        ss, ss_reason = "NAO_CONFORME", cert_reason
+        within_deadline = False
+        trava = parse_data_real(fim_licenciamento)
+        trava_origem = "licenciamento" if trava else None
+        status_venda = "BLOQUEADA" if ls == "VENCIDO" else "PENDENTE"
+        venda_reason = cert_reason
     return {
         "cert_status": cs,
         "cert_status_reason": cert_reason,

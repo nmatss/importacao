@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import { hasOperationalConfidence } from './constants.js';
+import { independentEvidence } from './independent-evidence.js';
 import { computeRowStatus, type ComparisonKind, type RowStatus } from './comparison-core.js';
 
 export interface RegistroDocument {
@@ -141,6 +142,23 @@ export function buildRegistroComparison(
     }
     const parsed = record(doc?.aiParsedData);
     const items = Array.isArray(parsed.items) ? parsed.items : [];
+    if (
+      items.some((item) => {
+        const code = read(item, ['itemCode', 'codigo']).value;
+        return (
+          code instanceof Date ||
+          (typeof code === 'string' &&
+            /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{4}\b/.test(
+              code,
+            ))
+        );
+      })
+    ) {
+      blocked.add(source);
+      issues.push(
+        `${source}: código de item convertido em data; corrija o identificador textual na fonte e refaça a leitura.`,
+      );
+    }
     const references = [
       ...[parsed, record(parsed.summary), ...items.map(record)].flatMap((node) =>
         ['processReference', 'processCode', 'processo'].map((field) => read(node, [field]).value),
@@ -259,7 +277,7 @@ export function buildRegistroComparison(
     }
   }
   const data = (source: Source) => {
-    const parsed = record(selected[source]?.aiParsedData);
+    const parsed = record(independentEvidence(selected[source]?.aiParsedData));
     return !blocked.has(source) &&
       selected[source]?.isProcessed &&
       !parsed.extractionFailed &&

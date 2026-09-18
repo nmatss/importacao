@@ -22,6 +22,7 @@ from datetime import date, datetime
 
 from app.db.postgres import db
 from app.db.sqlserver import _brand_linx, _connect, _ident, fetch_produto_propriedades
+from app.services.effective_products import execute_product_query
 from app.utils.logging import log
 
 # Lote do IN (...) do SQL Server: o teto e 2100 parametros por comando e a
@@ -165,13 +166,13 @@ def _load_skus_by_brand(brand_filter: str | None) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     with db() as (conn, cur):
         if brand_filter:
-            cur.execute(
+            execute_product_query(cur,
                 "SELECT brand, sku FROM cert_products "
                 "WHERE brand <> '' AND LOWER(REPLACE(brand, '_', ' ')) = %s ORDER BY sku",
                 [" ".join(brand_filter.lower().replace("_", " ").split())],
             )
         else:
-            cur.execute("SELECT brand, sku FROM cert_products WHERE brand <> '' ORDER BY sku")
+            execute_product_query(cur, "SELECT brand, sku FROM cert_products WHERE brand <> '' ORDER BY sku")
         for row in cur.fetchall():
             out.setdefault(row["brand"], []).append(row["sku"])
     return out
@@ -213,6 +214,13 @@ def sync_linx_attributes(brand_filter: str | None = None) -> dict:
 
         updated = 0
         with db() as (conn, cur):
+            # Legacy registrations may not have a Sheets snapshot. Create only
+            # absent storage rows so a successful Linx read is retained too.
+            cur.execute(
+                "INSERT INTO cert_products (sku, brand, sheet_status) "
+                "SELECT unnest(%s::text[]), %s, '__cadastro_snapshot__' ON CONFLICT (sku) DO NOTHING",
+                [skus, brand],
+            )
             for sku in skus:
                 valores = props.get(sku, {})
                 extra = atributos.get(sku, {})

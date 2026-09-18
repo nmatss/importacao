@@ -295,7 +295,11 @@ function SubInfoDisplay({
   if (!info) return null;
   return (
     <div className="flex items-center gap-1 flex-wrap justify-center">
-      {info.text && <span className="text-[9px] tabular-nums leading-tight">{info.text}</span>}
+      {info.text && (
+        <span className="text-[9px] tabular-nums leading-tight text-slate-600 dark:text-slate-300">
+          {info.text}
+        </span>
+      )}
       {info.badge && (
         <span
           className={cn(
@@ -328,7 +332,7 @@ export function LogisticStatusBar(props: LogisticStatusBarProps) {
         <div className="relative">
           <button
             onClick={() => setShowDropdown(!showDropdown)}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-slate-400 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-400"
+            className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-700 hover:text-slate-600 dark:text-slate-300"
           >
             <Pencil className="h-3 w-3" />
             editar

@@ -945,6 +945,34 @@ describe('documentService', () => {
   });
 
   describe('getComparison()', () => {
+    it('inspects an explicitly selected attached packing without choosing the newer file', async () => {
+      queryQueue.push(
+        createResolvedChain([
+          {
+            id: 168,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.95',
+            createdAt: new Date('2026-09-01'),
+            aiParsedData: { totalCbm: 120.246 },
+          },
+          {
+            id: 348,
+            type: 'packing_list',
+            isProcessed: true,
+            confidenceScore: '0.95',
+            createdAt: new Date('2026-09-12'),
+            aiParsedData: { totalCbm: null },
+          },
+        ]),
+      );
+      queryQueue.push(createResolvedChain([{ id: 1, aiExtractedData: {} }]));
+      const result = await documentService.getComparison(1, { packingListId: 168 });
+      expect(result.sourceDocuments.packingList).toBe(168);
+      expect(
+        result.aggregateComparison.find((row: any) => row.label === 'CBM (m3)')?.packingList,
+      ).toBe('120.246');
+    });
     it.each([{ isProcessed: false }, { confidenceScore: '0.1' }, { failed: true }])(
       'does not revive an old source when its latest replacement is unusable: %j',
       async (failure) => {

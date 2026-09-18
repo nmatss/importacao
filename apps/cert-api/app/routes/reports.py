@@ -11,6 +11,7 @@ from slowapi.util import get_remote_address
 
 from app.config import DATABASE_URL, REPORTS_DIR
 from app.db.postgres import db
+from app.services.effective_products import execute_product_query
 from app.services.erp_service import (
     normalize_brand_filter as _normalize_brand,
 )
@@ -81,7 +82,7 @@ def export_products_report(
                 params.extend(statuses)
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        cur.execute(f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
+        execute_product_query(cur, f"SELECT * FROM cert_products {where} ORDER BY brand, sku", params)
         rows = [dict(r) for r in cur.fetchall()]
 
     try:
@@ -122,7 +123,7 @@ def export_stock_report(request: Request, brand: str = Query("")) -> FileRespons
             params.append(_normalize_brand(brand))
 
         where = "WHERE " + " AND ".join(conditions) if conditions else ""
-        cur.execute(
+        execute_product_query(cur,
             f"""
             SELECT cs.sku, cp.name, COALESCE(cp.brand, cs.brand) as brand,
                 cs.source, cs.warehouse, cs.quantity, cs.available,

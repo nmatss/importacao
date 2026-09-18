@@ -141,9 +141,11 @@ def _iso_date(value: str, label: str) -> str:
     if not clean:
         return ""
     try:
-        date.fromisoformat(clean)
+        parsed = date.fromisoformat(clean)
     except ValueError as exc:
         raise HTTPException(400, f"{label} deve estar no formato AAAA-MM-DD") from exc
+    if parsed.year <= 1900:
+        raise HTTPException(400, f"{label} contém data sentinela; deixe o campo vazio quando não houver data")
     return clean
 
 
@@ -187,6 +189,25 @@ def _item_restriction(item: dict, certificate: dict) -> dict:
 
 
 def _item_linx_result(brand: str, item: dict, certificate: dict) -> dict:
+    with db() as (_conn, cur):
+        cur.execute("SELECT numero_certificado, brand, situacao, encerramento_numero_certificado FROM cert_products WHERE sku = %s", [item["sku"]])
+        source = cur.fetchone()
+    if source:
+        source_number = re.sub(r"\s+", "", str(source.get("numero_certificado") or "")).upper()
+        registered_number = re.sub(r"\s+", "", str(certificate.get("numero_certificado") or "")).upper()
+        source_brand = normalize_brand_filter(source.get("brand") or "")
+        conflict = (source_number and registered_number and source_number != registered_number) or (
+            source_brand and source_brand.replace(" escolares", "") != normalize_brand_filter(brand).replace(" escolares", "")
+        )
+        ended_number = re.sub(r"\s+", "", str(source.get("encerramento_numero_certificado") or "")).upper()
+        if _item_restriction(item, certificate)["situacao_efetiva"] == 'ATIVO' and (
+            str(source.get('situacao') or '').strip().upper() == 'ENCERRADO'
+            or (registered_number and registered_number == ended_number)
+        ):
+            conflict = True
+        if conflict:
+            return {"status": "pending", "produto_codigo": item.get("produto_codigo"),
+                    "error": "Conflito de certificado ou marca entre cadastro e planilha; envio ao Linx pendente de confirmação", "details": []}
     restriction = _item_restriction(item, certificate)
     if restriction["restricao_pendente"]:
         return {"status": "pending", "produto_codigo": item.get("produto_codigo"),
@@ -442,6 +463,12 @@ def _link_skus_locked(cert: dict, skus: list[str], actor: str | None, dry_run: b
                         applied_at, actor,
                     ],
                 )
+                # A new product needs a local row to retain subsequent Linx/site
+                # observations. Never overwrite an existing Sheets snapshot.
+                cur.execute(
+                    "INSERT INTO cert_products (sku, brand, sheet_status) VALUES (%s, %s, '__cadastro_snapshot__') "
+                    "ON CONFLICT (sku) DO NOTHING", [sku, brand],
+                )
         except pg_errors.UniqueViolation:
             # Corrida com outro operador vinculando o mesmo SKU: o indice unico
             # parcial (certificate_id, sku) WHERE removed_at IS NULL e quem
@@ -551,6 +578,7 @@ def create_certificate(
     cert = {
         "id": cert_id,
         "brand": brand,
+        "numero_certificado": numero_certificado or None,
         "situacao": situacao,
         "fim_venda": fim_venda or None,
         "vencimento_licenciamento": vencimento_licenciamento or None,

@@ -31,6 +31,26 @@ function row(overrides: Partial<ComparisonRow> & { label: string }): ComparisonR
   };
 }
 
+describe('audit regressions — incomplete and monetary evidence', () => {
+  it('requires review for the PK220 monetary difference despite a small percentage', () => {
+    expect(computeRowStatus([101346.01, 101246.01], 'money')).toBe('warning');
+    expect(computeRowStatus([101346.01, 101346.01], 'money')).toBe('match');
+    expect(computeRowStatus(['100 garbage', 100], 'numeric')).toBe('divergent');
+  });
+
+  it('does not turn an unavailable cross-check green, regardless of check order', () => {
+    const checks = [
+      { checkName: 'cbm-vs-fup', status: 'skipped' as const, message: 'Fonte atual indisponível' },
+      { checkName: 'total-cbm-match', status: 'passed' as const, message: 'Documentos iguais' },
+    ];
+    for (const ordered of [checks, [...checks].reverse()]) {
+      const result = mergeValidationChecks([row({ label: 'CBM (m3)', status: 'match' })], ordered);
+      expect(result[0].status).toBe('skipped');
+      expect(result[0].message).toContain('Fonte atual indisponível');
+    }
+  });
+});
+
 describe('computeRowStatus — identificador fiscal', () => {
   it('CNPJ com e sem pontuacao e o MESMO CNPJ', () => {
     // Reuniao 11/09 [11:36]. Antes: comparacao de string + fallback
@@ -182,7 +202,7 @@ describe('mergeValidationChecks', () => {
     expect(JSON.stringify(merged)).not.toContain('invoice-pl-date-tolerance');
   });
 
-  it('check "skipped" vira "Nao verificado" e nao piora a linha', () => {
+  it('check "skipped" mantém a conferência pendente mesmo com um valor disponível', () => {
     const rows = [
       row({ label: 'Frete', bl: '156.94', status: 'single_source', message: 'Fonte unica.' }),
       row({ label: 'Tipo Container', status: 'empty' }),
@@ -203,7 +223,7 @@ describe('mergeValidationChecks', () => {
       },
     ]);
 
-    expect(merged[0].status).toBe('single_source');
+    expect(merged[0].status).toBe('skipped');
     expect(merged[0].message).toContain('Nao verificado — Nenhum valor de frete disponivel');
     // Linha que nao tinha dado nenhum fica visivel como "nao verificado".
     expect(merged[1].status).toBe('skipped');

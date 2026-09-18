@@ -5,13 +5,26 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CurrencyExchange } from '@/shared/types';
 import { CurrencyExchangePage } from './CurrencyExchangePage';
 
-const state = vi.hoisted(() => ({ rows: [] as CurrencyExchange[], mutate: vi.fn() }));
+const state = vi.hoisted(() => ({
+  rows: [] as CurrencyExchange[],
+  mutate: vi.fn(),
+  processesError: false,
+  exchangesError: false,
+  retry: vi.fn(),
+}));
 vi.mock('@/shared/hooks/useApi', () => ({
   useAllPagesQuery: () => ({
     data: { data: [{ id: 1, processCode: 'IMP-TEST-001', brand: 'puket' }] },
     isLoading: false,
+    isError: state.processesError,
+    refetch: state.retry,
   }),
-  useApiQuery: () => ({ data: state.rows, isLoading: false }),
+  useApiQuery: () => ({
+    data: state.rows,
+    isLoading: false,
+    isError: state.exchangesError,
+    refetch: state.retry,
+  }),
   useApiMutation: () => ({ mutate: state.mutate, isPending: false, error: null }),
 }));
 
@@ -47,10 +60,22 @@ async function openPage() {
 
 beforeEach(() => {
   state.rows = [];
+  state.processesError = false;
+  state.exchangesError = false;
   vi.clearAllMocks();
 });
 
 describe('CurrencyExchangePage — contrato decimal da API', () => {
+  it('does not show zero balances or an empty ledger after a failed request', async () => {
+    state.exchangesError = true;
+    const user = await openPage();
+    expect(screen.getByText(/saldos não estão disponíveis/)).toBeInTheDocument();
+    expect(screen.queryByText('Total Balance USD')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nenhum cambio registrado')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /tentar novamente/i }));
+    expect(state.retry).toHaveBeenCalled();
+  });
+
   it('soma varios decimais textuais e preserva centavos e BRL nulo', async () => {
     state.rows = [
       row(1, 'balance', '33775.10', null),

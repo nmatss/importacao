@@ -120,7 +120,7 @@ const statusConfig = {
 };
 
 const brandColors: Record<string, { bg: string; text: string; dot: string }> = {
-  puket: { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-400' },
+  puket: { bg: 'bg-pink-50', text: 'text-pink-700 dark:text-pink-300', dot: 'bg-pink-400' },
   imaginarium: {
     bg: 'bg-violet-50 dark:bg-violet-950/30',
     text: 'text-violet-700 dark:text-violet-300',
@@ -333,7 +333,7 @@ export function FollowUpPage() {
                                   {proc.brand}
                                 </span>
                               </div>
-                              <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                              <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
                                 <Clock className="h-3 w-3" />
                                 <span>
                                   {proc.daysSinceUpdate} dia{proc.daysSinceUpdate !== 1 ? 's' : ''}{' '}
@@ -419,7 +419,12 @@ export function FollowUpPage() {
                 </div>
               </div>
             </div>
-            <div className="max-h-[calc(100vh-300px)] overflow-y-auto">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Processos do follow-up"
+              className="max-h-[calc(100vh-300px)] overflow-y-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
               {loadingDeadlines ? (
                 <LoadingSpinner className="py-8" size="sm" />
               ) : !liDeadlines?.length ? (

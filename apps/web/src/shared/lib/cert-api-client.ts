@@ -5,7 +5,7 @@ import { redirectToLogin } from './session-expired';
 // Consumers may use their own local interfaces; functions are generic
 // so callers can override the return type when needed.
 
-export type CertStatusKind = 'ATIVO' | 'ENCERRADO';
+export type CertStatusKind = 'ATIVO' | 'ENCERRADO' | 'PENDENTE';
 
 export type SiteStatusKind = 'CONFORME' | 'NAO_CONFORME';
 
@@ -55,7 +55,7 @@ export interface CertProduct {
   validade_certificado?: string | null;
   /** Texto original da planilha, quando a data não pôde ser interpretada. */
   validade_certificado_raw?: string | null;
-  status_venda?: 'LIBERADA' | 'BLOQUEADA' | null;
+  status_venda?: 'LIBERADA' | 'BLOQUEADA' | 'PENDENTE' | null;
   status_venda_reason?: string | null;
   cert_status_reason?: string | null;
   license_status_reason?: string | null;

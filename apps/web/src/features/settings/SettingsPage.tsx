@@ -179,7 +179,7 @@ function SectionCard({
               <Icon className="h-4.5 w-4.5 text-slate-600 dark:text-slate-400" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h3>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h2>
               {description && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{description}</p>
               )}

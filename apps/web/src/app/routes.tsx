@@ -165,7 +165,7 @@ function ModuleNotFound({
     <div className="flex min-h-[360px] items-center justify-center">
       <div className="max-w-md rounded-2xl border border-slate-200/70 bg-white p-6 text-center shadow-sm dark:border-slate-700/70 dark:bg-slate-800">
         <p className="text-xs font-semibold uppercase tracking-wide text-primary-600 dark:text-primary-400">
-          Página não encontrada
+          {title === 'Acesso restrito' ? 'Permissão necessária' : 'Página não encontrada'}
         </p>
         <h2 className="mt-2 text-lg font-semibold text-slate-900 dark:text-slate-100">{title}</h2>
         <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{message}</p>

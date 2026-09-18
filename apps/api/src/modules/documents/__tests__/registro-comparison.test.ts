@@ -37,6 +37,15 @@ function doc(
 }
 const trio = () => [doc('draft_duimp', 1), doc('invoice', 2), doc('espelho', 3)];
 describe('Registro DUIMP x invoice x espelho', () => {
+  it('blocks legacy spreadsheet dates used as product identifiers', () => {
+    const docs = trio();
+    docs[2].aiParsedData = {
+      items: [{ itemCode: cf('Sat Jan 27 2007 00:00:00 GMT+0000'), quantity: cf(2) }],
+    };
+    const result = buildRegistroComparison(219, docs);
+    expect(result.status).toBe('pending');
+    expect(result.issues.join(' ')).toContain('código de item convertido em data');
+  });
   it('compares three real sources with file, version and field provenance', () => {
     const result = buildRegistroComparison(219, trio());
     expect(result.status).toBe('match');

@@ -415,6 +415,11 @@ function parseItems(
       if (NUMERIC_KEYS.has(key)) {
         (item as any)[key] = toNumber(cell);
       } else if (STRING_CODE_KEYS.has(key)) {
+        if (cell instanceof Date) {
+          throw new EspelhoParseError(
+            `Identificador ${key} na linha ${i + 1} foi convertido em data na planilha. Corrija a célula na fonte para texto; o código não será inferido.`,
+          );
+        }
         (item as any)[key] = toCodeString(cell);
       } else {
         // plain string fields

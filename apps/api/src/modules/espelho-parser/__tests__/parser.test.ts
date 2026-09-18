@@ -75,6 +75,20 @@ describe('parseLocaleNumber', () => {
 });
 
 describe('parseEspelhoBuffer', () => {
+  it('rejects a spreadsheet date in a product identifier instead of inventing a SKU', () => {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.aoa_to_sheet(
+      [
+        ['Process', 'Supplier', 'Code', 'Qty', 'Amount'],
+        ['PK2202608SZ', 'FORNECEDOR', new Date('2007-01-27T00:00:00Z'), 2, 100],
+      ],
+      { cellDates: true },
+    );
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Por processo');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    expect(() => parseEspelhoBuffer(buffer)).toThrow(/Identificador codigo.*convertido em data/);
+  });
+
   it('reads official summary layout without mixing CNPJ into address', () => {
     const rows = [
       ['IMPORTADOR TESTE', '', '', 'TOTAL PCS', 13963],

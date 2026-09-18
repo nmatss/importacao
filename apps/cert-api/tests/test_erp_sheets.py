@@ -80,6 +80,16 @@ def _linha_encerramento(sku, certificado, prazo="29/10/2026", status="Comerciaç
     return linha
 
 
+@pytest.mark.parametrize("header", ["DUPLA CERTIFICAÇÃO", "Dupla certificação?", "dupla certificacao"])
+def test_le_dupla_certificacao_com_cabecalho_oficial(header):
+    headers = [*ENCERRAMENTOS_HEADERS[:-1], header]
+    row = _linha_encerramento("PI0001Y", "CERT-1")
+    row[13] = "Sim"
+    sheet = _FakeSpreadsheet({"Encerramentos": [headers, row]})
+    result = _read_encerramentos_from_sheets(sheet, strict=True, exigir_dupla=False)
+    assert result[0]["dupla_certificacao_raw"] == "Sim"
+
+
 class TestFindColByHeader:
     def test_match_exato_vence_substring(self):
         """Na aba 'Puket escolares', 'certificado' casava com 'NOME COMERCIAL

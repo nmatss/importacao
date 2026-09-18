@@ -14,12 +14,14 @@ import { cache } from '../redis.js';
  */
 describe('cache.incr', () => {
   beforeEach(() => {
-    vi.useRealTimers();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-18T12:00:00Z'));
   });
 
   afterEach(async () => {
     await cache.del('t:incr');
     await cache.del('t:janela');
+    vi.useRealTimers();
   });
 
   it('devolve contadores SEQUENCIAIS, mesmo com chamadas concorrentes', async () => {
@@ -36,7 +38,7 @@ describe('cache.incr', () => {
 
   it('a janela e FIXA: incrementos seguintes nao empurram o vencimento', async () => {
     const primeiro = await cache.incr('t:janela', 60);
-    await new Promise((resolve) => setTimeout(resolve, 15));
+    vi.advanceTimersByTime(15);
     const segundo = await cache.incr('t:janela', 60);
 
     expect(segundo.count).toBe(2);
@@ -49,7 +51,7 @@ describe('cache.incr', () => {
     const primeiro = await cache.incr('t:janela', 1);
     expect(primeiro.count).toBe(1);
 
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    vi.advanceTimersByTime(1100);
 
     const depois = await cache.incr('t:janela', 1);
     expect(depois.count).toBe(1);

@@ -452,3 +452,90 @@ A coluna interna aditiva é compatível com código anterior, mas reimplantaçã
 
 Ainda não houve publicação Git, CI remoto da revisão nova, migration remota, deploy ou escrita
 SQL Server. Os resultados locais não devem ser apresentados como atualização produtiva concluída.
+
+### Escopo SQL confirmado pelo usuário após preparação da release
+
+O usuário confirmou: **somente cadastro/reenvio pelo portal** precisa gravar o fim de vendas
+no Linx. A carga da planilha permanece bloqueada para escrita no ERP e está fora deste aceite.
+A leitura/sincronização das fontes para o PostgreSQL continua parte da correção de certificação.
+O commit candidato `8bb9fda` atende esse limite sem mudança de implementação. A resposta sobre
+escopo não respondeu à autorização separada de push/integração, que permanece pendente.
+
+## 15. Release implantada e aceite operacional — 18/09/2026
+
+**Finalizado o deploy autorizado:** revisão `8bb9fdabcc9ec0b706794c5623239948202c21a0`
+implantada em 18/09/2026 às **11:49:52 BRT**, após push e integração explicitamente autorizados.
+PR [101](https://github.com/nmatss/importacao/pull/101) integrado por fast-forward; master no
+checkout `/tmp/importacao-release-20260918` limpo e igual a origin/master. O checkout original
+com trabalho concorrente de UX/documentos foi preservado.
+
+### CI e execução
+
+- CI do PR [35356810026](https://github.com/nmatss/importacao/actions/runs/35356810026) e CodeQL
+  [35356809877](https://github.com/nmatss/importacao/actions/runs/35356809877): sucesso para `8bb9fda`.
+- CI do master [35357738098](https://github.com/nmatss/importacao/actions/runs/35357738098) e
+  CodeQL [35357738345](https://github.com/nmatss/importacao/actions/runs/35357738345): sucesso.
+  Incluem testes/E2E, typechecks/lint, auditorias, três builds/scans Trivy e SBOMs.
+- `scripts/deploy.sh` concluiu exit 0, com backup obrigatório, snapshot, SOPS, gate de flag Linx,
+  migrations explícitas, readiness de API/certificação/web/proxy e HTTPS público. Sem notificação
+  de chat. SYDLE existente preservado. API APP_VERSION e arquivo remoto REVISION conferem `8bb9fda`.
+- Primeiro comando omitiu CURL_CA_BUNDLE e ficou em retry de HTTPS por CA interna não confiada
+  localmente; aplicação estava saudável. CA raiz pública foi obtida de `internal-ca` por SSH
+  autenticado; `curl --cacert` aprovou TLS/hostname e retornou 200. Somente o monitor próprio foi
+  interrompido (exit 143), sem parar containers ou declarar sucesso. O snapshot anterior `6cbb9c2`
+  foi preservado em `/home/nicolas/importacao.rollback-pre8bb9fda-20260918`; depois o procedimento
+  completo foi reexecutado com `CURL_CA_BUNDLE=/tmp/importacao-release-internal-ca-public.crt`,
+  sem remover gates e sem mudar trust stores. Essa segunda execução concluiu exit 0.
+- Lição operacional: antes de iniciar deploy com endpoint público, obter a CA interna por canal
+  autenticado e testar HTTPS com o MESMO CURL_CA_BUNDLE que o processo de deploy receberá.
+
+### Recuperação
+
+Backups completos mantidos no servidor: `importacao_2026-09-18_143200*` (ensaio),
+`importacao_2026-09-18_144102*` (pré-mudança) e `importacao_2026-09-18_144804*` (reexecução).
+Dump custom com catálogo legível e arquivos uploads/relatórios/certificados arquivados.
+Restauração real do backup 143200 em banco temporário recuperou 48 tabelas, 117 processos, 674 produtos e
+zero certificados de cadastro; banco temporário criado pelo ensaio removido com sucesso.
+O snapshot reservado acima mantém o código anterior. Rollback de código não desfaz dados nem DDL.
+
+### Atualização real de dados e contrato público
+
+Sync `470c3fbf-0429-4bd2-8fc0-56c2ad0b0ac5`, startup, de 14:44:53 a 14:45:18 UTC, terminou sem erro:
+
+| Verificação                              | Resultado                                 |
+| ---------------------------------------- | ----------------------------------------- |
+| Linhas de origem processadas             | 947 =566 abas de marca +381 encerramentos |
+| Produtos únicos                          | 674, preservando a quantidade anterior    |
+| Validade preenchida                      | 541 (antes0)                              |
+| Proveniência interna preenchida          | 381                                       |
+| Leitura Linx atualizada no PostgreSQL    | 674 (antes0)                              |
+| Prazos antigos limpos pelo resolver      | 15                                        |
+| Marca legada Puket Escolares no snapshot | 0 (antes167)                              |
+| Pendências de vínculo da fonte           | 5, preservadas e sinalizadas              |
+| API conferida contra derivação do banco  | 674 produtos, zero divergências           |
+| Campo interno no JSON público            | Ausente                                   |
+| Schema da proveniência                   | TEXT anulável, sem default                |
+
+Leitura Linx: 397 Puket + 277 Imaginarium, nenhuma marca com erro. O campo de validade do certificado
+continua separado do fim de vendas. Status de venda atuais: 391 LIBERADA e 283 BLOQUEADA; isso não é
+um objetivo de maximizar liberações. As travas válidas permanecem aplicadas pela regra.
+Confirmação repetida após a conclusão do deploy manteve os mesmos resultados, sem novo sync forçado.
+
+HTTPS com CA/hostname verificados: raiz, quatro assets JS/CSS e `/api/health` retornam 200;
+`/api/auth/me`, `/api/processes` e `/cert-api/api/products` sem autenticação retornam 401.
+HSTS único `max-age=300` e CSP presentes. API, web e cert-api saudáveis.
+
+### Limites expressamente preservados
+
+Usuário definiu escrita SQL **somente cadastro/reenvio pelo portal** e aprovou esta publicação
+**mantendo LINX_WRITE_ENABLED=false**. Flag false foi conferida em SOPS/Compose, gate de deploy e
+runtime final. Nenhum INSERT/UPDATE foi feito no SQL Server do ERP; não houve homologação de
+escrita produtiva nem limpeza de propriedades. O writer foi validado em SQL Server 2022 real
+isolado, incluindo fim de vendas, licença intacta, PK, duplicidade e confirmação pós-commit.
+A carga da planilha continua bloqueada para escrita ERP. Uma duplicidade produtiva de propriedade
+(Imaginarium, um produto do snapshot) e as cinco pendências da fonte não foram corrigidas por
+inferência. Permanecem as limitações funcionais anteriores documentadas na matriz de campos.
+
+Logs locais: `/tmp/importacao-release-deploy.log`, `...-deploy-retry.log`, `...-restore-real.log`,
+`...-postdeploy-data.log` e `...-postdeploy-final.log`. Estes arquivos são temporários; os
+resultados sanitizados ficam neste documento e na sessão dotcontext 5db6ff64-7243-44cd-b5f2-3071d25ed3d9.

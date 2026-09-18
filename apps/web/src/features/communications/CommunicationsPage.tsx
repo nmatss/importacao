@@ -598,14 +598,14 @@ export function CommunicationsPage() {
           <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
             {/* Gradient header */}
             <div className="bg-gradient-to-r from-primary-600 to-primary-700 px-4 sm:px-6 py-4">
-              <h3 className="flex items-center gap-2.5 text-lg font-semibold text-white">
+              <h2 className="flex items-center gap-2.5 text-lg font-semibold text-white">
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
                   <Mail className="h-4.5 w-4.5 text-white" />
                 </div>
                 {editingCommunicationId
                   ? 'Editar rascunho por e-mail'
                   : 'Novo atendimento por e-mail'}
-              </h3>
+              </h2>
             </div>
 
             <div className="space-y-5 p-4 sm:p-6">
@@ -647,7 +647,10 @@ export function CommunicationsPage() {
                     ))}
                   </datalist>
                 </div>
-                <div id="comm-process-hint" className="mt-1.5 text-xs text-slate-400">
+                <div
+                  id="comm-process-hint"
+                  className="mt-1.5 text-xs text-slate-600 dark:text-slate-300"
+                >
                   {processSearch.trim().length > 0 && !isProcessSearchReady ? (
                     'Digite pelo menos 2 caracteres para buscar.'
                   ) : loadingProcessOptions ? (
@@ -991,14 +994,14 @@ export function CommunicationsPage() {
             {/* Header */}
             <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="min-w-0 flex items-center gap-2.5 text-base font-semibold text-slate-900 dark:text-slate-100">
+                <h2 className="min-w-0 flex items-center gap-2.5 text-base font-semibold text-slate-900 dark:text-slate-100">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                     <Clock className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                   </div>
                   Histórico de atendimentos
-                </h3>
+                </h2>
                 {communications?.length ? (
-                  <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+                  <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
                     {totalCommunications}
                   </span>
                 ) : null}

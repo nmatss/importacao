@@ -14,6 +14,7 @@ import type { ValidationResult } from '../../shared/database/schema.js';
 import { allChecks } from './checks/index.js';
 import type { CheckInput, CheckResult } from './checks/index.js';
 import { aiService, flattenAiData } from '../ai/service.js';
+import { independentEvidence } from '../documents/independent-evidence.js';
 import { alertService } from '../alerts/service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { auditService } from '../audit/service.js';
@@ -265,9 +266,9 @@ export const validationService = {
     const rawBl = (blDoc?.aiParsedData as Record<string, any>) ?? undefined;
 
     const checkInput: CheckInput = {
-      invoiceData: rawInv ? flattenAiData(rawInv) : undefined,
-      packingListData: rawPl ? flattenAiData(rawPl) : undefined,
-      blData: rawBl ? flattenAiData(rawBl) : undefined,
+      invoiceData: rawInv ? flattenAiData(independentEvidence(rawInv)) : undefined,
+      packingListData: rawPl ? flattenAiData(independentEvidence(rawPl)) : undefined,
+      blData: rawBl ? flattenAiData(independentEvidence(rawBl)) : undefined,
       processData: { ...process },
       followUpData: followUp ? { ...followUp } : undefined,
     };
@@ -1064,9 +1065,14 @@ export const validationService = {
     const rawBlAnomaly = (blDoc?.aiParsedData as Record<string, any>) ?? {};
 
     // Flatten for anomaly detection (AI compares plain values)
-    const invoiceData = Object.keys(rawInvAnomaly).length > 0 ? flattenAiData(rawInvAnomaly) : {};
-    const packingListData = Object.keys(rawPlAnomaly).length > 0 ? flattenAiData(rawPlAnomaly) : {};
-    const blData = Object.keys(rawBlAnomaly).length > 0 ? flattenAiData(rawBlAnomaly) : {};
+    const invoiceData =
+      Object.keys(rawInvAnomaly).length > 0
+        ? flattenAiData(independentEvidence(rawInvAnomaly))
+        : {};
+    const packingListData =
+      Object.keys(rawPlAnomaly).length > 0 ? flattenAiData(independentEvidence(rawPlAnomaly)) : {};
+    const blData =
+      Object.keys(rawBlAnomaly).length > 0 ? flattenAiData(independentEvidence(rawBlAnomaly)) : {};
 
     logger.info({ processId }, 'Running AI anomaly detection');
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -35,7 +35,18 @@ function renderPage() {
   );
 }
 
+beforeEach(() => sessionStorage.clear());
+
 describe('ProcessCreatePage', () => {
+  it('restores an unfinished process after navigation', async () => {
+    const user = userEvent.setup();
+    const page = renderPage();
+    const input = screen.getByLabelText(/Codigo do Processo/i);
+    await user.type(input, 'PK2202608SZ');
+    page.unmount();
+    renderPage();
+    expect(screen.getByLabelText(/Codigo do Processo/i)).toHaveValue('PK2202608SZ');
+  });
   it('renders form fields', () => {
     renderPage();
     // "Novo Processo" appears in heading and document title

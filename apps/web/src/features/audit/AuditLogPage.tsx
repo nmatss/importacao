@@ -268,7 +268,7 @@ export function AuditLogPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 p-3 sm:p-5 shadow-sm">
         <div className="flex items-center gap-2 mb-4">
           <Search className="h-4 w-4 text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Filtros</h3>
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Filtros</h2>
           {hasFilters && (
             <button
               onClick={clearFilters}
@@ -400,12 +400,12 @@ export function AuditLogPage() {
         {/* Card header */}
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100">
+            <h2 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-800 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Histórico de auditoria
-            </h3>
+            </h2>
             {pagination && (
               <span className="rounded-lg bg-slate-100 dark:bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
                 {pagination.total.toLocaleString('pt-BR')} registro

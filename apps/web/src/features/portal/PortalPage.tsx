@@ -258,7 +258,7 @@ export function PortalPage() {
                   ativo{overview.activeProcesses !== 1 ? 's' : ''}
                 </span>
                 {overview.overdueProcesses > 0 && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 border border-danger-100 px-3 py-1 text-xs font-medium text-danger-600 dark:bg-danger-500/10 dark:border-danger-500/30 dark:text-danger-300">
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-danger-50 border border-danger-100 px-3 py-1 text-xs font-medium text-danger-700 dark:bg-danger-500/10 dark:border-danger-500/30 dark:text-danger-300">
                     <AlertTriangle className="h-3 w-3" />
                     {overview.overdueProcesses} atrasado{overview.overdueProcesses !== 1 ? 's' : ''}
                   </span>
@@ -274,7 +274,7 @@ export function PortalPage() {
             {certLoading ? (
               <Skeleton className="h-7 w-40 rounded-full" />
             ) : certStats ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-400">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-1 text-xs font-medium text-slate-600 dark:text-slate-300">
                 <Package className="h-3 w-3" />
                 {certStats.total_products} produtos monitorados
               </span>
@@ -408,7 +408,7 @@ export function PortalPage() {
 
               <Link
                 to="/certificacoes"
-                className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 active:scale-[0.98] transition-all shadow-sm"
+                className="flex items-center justify-center gap-2 w-full rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-800 active:scale-[0.98] transition-all shadow-sm"
               >
                 <ShieldCheck className="h-4 w-4" />
                 Acessar Certificações
@@ -457,7 +457,7 @@ export function PortalPage() {
               <span className="font-medium">Importação</span>
               {importHealth &&
                 (importHealth.connected ? (
-                  <span className="text-emerald-600 dark:text-emerald-300">
+                  <span className="text-emerald-700 dark:text-emerald-300">
                     {importHealth.latencyMs}ms
                   </span>
                 ) : (
@@ -478,7 +478,7 @@ export function PortalPage() {
               <span className="font-medium">Certificações</span>
               {certHealth &&
                 (certHealth.connected ? (
-                  <span className="text-emerald-600 dark:text-emerald-300">
+                  <span className="text-emerald-700 dark:text-emerald-300">
                     {certHealth.latencyMs}ms
                   </span>
                 ) : (

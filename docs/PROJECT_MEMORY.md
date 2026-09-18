@@ -1,5 +1,31 @@
 # Project Memory - Importacao
 
+## 2026-09-18 — Precedência aprovada para Cadastro→Produtos
+
+Cadastro validado é fonte dos novos certificados; conflitos com a planilha são pendências
+explícitas e não substituem o número original. Composição de leitura compartilhada por Produtos,
+filtros, validação e relatórios; restrição individual prevalece, remoção restaura fonte original.
+Licenciamento continua vindo do Linx. Implementação e testes locais concluídos para essa regra,
+publicação e aceite operacional global pendentes. Ver
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
+
+## Contrato interno confirmado em 18/09/2026
+
+- Usuário reforçou: propriedade de certificação do Linx recebe **fim de vendas do certificado**,
+  nunca validade. Propriedades 00106 Imaginarium/00224 Puket; restrição individual fornece o fim
+  efetivo do SKU, senão herda pai. Licenciamento separado 00107/00225, somente leitura.
+- Cadastro pai não possui edição; não atualiza diretamente o snapshot `cert_products`.
+  Matriz campo a campo e limites: [auditoria de parâmetros](CERT-CAMPOS-E-PARAMETROS.md).
+- Proveniência do encerramento: `cert_products.encerramento_numero_certificado`, TEXT nullable,
+  autorizada pelo usuário; pertence à aba Encerramentos, sem inferir pelo certificado atual.
+- Identidade igual (normalizada e não vazia) permite aplicar o prazo ao eixo comercial mesmo
+  com situação Ativo na fonte. Identidade antiga/ausente não autoriza herdar prazo de outro certificado.
+- Campo removido da resposta pública após derivação; relatório mantém suas 29 colunas.
+- Migration explícita antes do novo runtime, sem backfill inventado; sync bem-sucedido popula a
+  proveniência. Rollback de código mantém a coluna e requer reconciliação ao reimplantar.
+- Evidência local, sem implantação: seção 12 de
+  [STATUS certificação](STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md).
+
 ## Contratos confirmados em 16/09/2026
 
 - Login Google aceita os dominios em `ALLOWED_DOMAIN` (lista; SOPS:
@@ -711,3 +737,14 @@ produção ainda não executada.
 Evidência:
 `docs/operations/document-intake-contract-2026-08-28.md` e
 `docs/STATUS-2026-08-28-AUDITORIA-FEEDBACK-JONATHAN.md`.
+
+
+## Linx e preflight de release — confirmado em 18/09/2026
+
+O usuário limitou a escrita SQL de fim de vendas ao cadastro/reenvio pelo portal. Não ativar carga
+ERP da planilha por inferência. Release `8bb9fda` publicada com escrita Linx desligada por aprovação
+explícita; PostgreSQL sincronizado com fontes e conferido pela API. Ao validar o domínio público,
+obter raiz pública da CA interna por SSH autenticado (`internal-ca:/home/step/certs/root_ca.crt`)
+e testar HTTPS antes do deploy com o mesmo `CURL_CA_BUNDLE` fornecido ao script. Não usar `-k`
+nem alterar trust stores globais para resolver a confiança desse teste. Evidências: seção 15 do
+STATUS de certificação de 18/09.

@@ -1,5 +1,88 @@
 # Session Memory
 
+## 18/09/2026 — Correções locais e precedência aprovada
+
+Usuário confirmou integrar cadastro validado a Produtos e sinalizar conflitos. Implementados
+modelo comum Produtos/relatórios/validação sem sobrescrever snapshot, pendências, restrição por
+item e guardas Linx. Certificação: 1.207 testes aprovados sem skips, incluindo PostgreSQL/SQL Server
+isolados. API: 2.108 aprovados/1 live não habilitado; web432 mais regressão visual13; API E2E74.
+UX final: 92 varreduras Axe sem violações, smoke39. Correções de comparativo, DUIMP, SKU-data,
+seleção de versões e UX implementadas. BLs reais em diagnóstico sem persistência: PK22090,818%,
+PK21989,670%, IM07690,954%. PK219 permanece não utilizável. Follow-up prévia35 alterações,
+nenhuma aplicada. Propagação da trava no ERP ainda não comprovada. Sem push/deploy/alteração de
+fontes. Não declarar Finalizado global. Relatório e retomada:
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
+As seções anteriores descrevem a auditoria antes destas correções.
+
+## 18/09/2026 — Aceite da reunião de Odett/Eduarda: não concluído
+
+Nova auditoria somente leitura usando Cultura Builder, conectores Drive/Sheets e runtime/banco
+produtivo. Produção `6cbb9c2`, local `0e3434b` mais alterações preexistentes. Drive ativo: 994
+documentos vinculados; e-mail desligado. Porém 148/148 syncs cert falharam, 674 produtos sem
+validade/leitura Linx; Follow-up dry_run mantém FOB/CBM/datas desatualizados. BL operacional
+ausente nos três pilotos; CBM packing PK220 existe no PDF e parser recupera, mas comparativo usa
+XLSX sem CBM. Registro pending, rascunhos sem itens, fontes concorrentes. Identificados concordância
+circular via espelho, match com checks skipped, SKU convertido em data no espelho e alias da
+coluna N incompatível. Cronograma oficial existe, 30 tarefas; não foi alterado nem enviado.
+API repetição completa: 2.087 passaram/5 ignorados após falha temporal inicial de cache; web426;
+cert1.175/2 ignorados; typecheck/lint/build/Prettier/Ruff aprovados. Somente documentação alterada
+pela auditoria, sem carga, reprocessamento persistente, deploy ou fontes modificadas.
+Relatório e matriz de fechamento: [aceite Odett/Eduarda](STATUS-2026-09-18-ACEITE-ODETT-EDUARDA.md).
+
+## 18/09/2026 — Nova revisão de layout, UX e UI de ponta a ponta
+
+Cultura Builder `design-de-interfaces` aplicado. 63 testes responsivos/374 combinações,
+8 testes de extremos/32 combinações e Marketplace/6 combinações: 412 sem quebra global.
+Axe: 92 varreduras em 46 URLs/abas; 29 páginas com 503; 426 testes web e 4 E2E de e-mail
+aprovados. Nove grupos de achados, priorizando falso saldo zero/vazio em Câmbios (ALTO),
+contraste, teclado, gráficos, rascunho perdido e orientação incorreta de erro na Pré-Conferência.
+Somente documentação e artefatos alterados nesta rodada, sem correções de aplicação ou produção.
+Relatório: [revisão UX/UI](STATUS-2026-09-18-REVISAO-UX-UI.md); cobertura versionada em
+`docs/UX-UI-2026-09-18-COBERTURA.md`; galeria em
+`output/playwright/ux-review-20260918/galeria.html`. Aceite UX/UI parcial até tratar os achados.
+
+## 18/09/2026 — Revisão de parâmetros e data enviada ao Linx
+
+Usuário pediu todos os campos e reforçou fim de vendas do certificado na propriedade Linx.
+Três frentes rastrearam UI/API/cadastro, Sheets/snapshot e Linx. Confirmada escrita apenas de
+fim_venda efetivo em 00106/00224, nunca validade/licenciamento. Corrigidos reader que descartava
+encerramento identificado sem prazo/status e CLI que quebrava em ambiguidades. Sem escrita remota.
+Matriz com políticas de update/NULL, fontes e limitações em
+[CERT-CAMPOS-E-PARAMETROS](CERT-CAMPOS-E-PARAMETROS.md); gates na seção 13 do STATUS.
+
+## 18/09/2026 — Proveniência interna autorizada, implementação local
+
+Usuário aprovou explicitamente campo interno e testes locais. Implementada coluna nullable
+`encerramento_numero_certificado`, migration explícita, persistência/limpeza atômicas e uso na
+derivação comercial. Situação/número originais, API pública e 29 colunas Excel preservados.
+PostgreSQL 16 descartável validou migration 2x, snapshot legado, casos mesmo/outro certificado,
+limpeza e rollback integral após erro SQL; container removido. Sem escrita em produção.
+Estado e critérios de ativação na seção 12 do
+[STATUS certificação](STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md); substitui a decisão pendente abaixo.
+
+## 18/09/2026 — Validação independente do executivo e filtros
+
+Cultura Builder consultado: revisão de código, OWASP e design de interfaces. Smoke: 78 passaram;
+matriz de executivo e oito consumidores de DateRangeFilter: 54 combinações aprovadas após
+reexecução de cinco cenários afetados pelo encerramento do servidor local compartilhado.
+API: 2.087/5 ignorados; web: 426; integração API: 74. Nova implementação de proveniência foi
+feita por outra execução durante esta revisão: pytest mais recente 1.169/1 ignorado e teste
+PostgreSQL opcional executado separadamente, 1 aprovado. Prettier global aprovado após formatar
+os scripts exploratórios. Sem publicação; dados produtivos não revalidados. Comandos, falhas
+intermediárias e limites em [validação independente](STATUS-2026-09-18-VALIDACAO-INDEPENDENTE.md).
+
+## 18/09/2026 — Retomada certificação, revisão integrada local
+
+Branch `fix/cert-sync-quarentena-2026-09-18`, base `0e3434b`. A1 preexistente preservado;
+corrigidos conformidade com bloqueio explícito, resumo de lote e teste API com Poppler/fake timers.
+Gates locais API/web/Python aprovados; formatação global tem arquivos preexistentes e smoke teve
+duas falhas transitórias que passaram isoladamente. Sem commit/push/deploy/carga.
+Estado canônico, números e limitações: seção 11 de
+[certificação sync](STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md).
+Próximo passo: decisão sobre proveniência interna do certificado encerrado para tratar data
+vencida com STATUS permissivo/vazio sem confundir renovação com resíduo antigo.
+ai-memory/dotcontext consultados; Cultura Builder conectado e duas skills de revisão aplicadas.
+
 ## 16/09/2026 — Isabela: importacao.aut e imaginarium.com.br
 
 Google Admin confirma e-mail `isabela.hochheim@imaginarium.com.br` e grupo
@@ -2131,3 +2214,14 @@ Evidências:
 - Gate final: format/lint/typecheck/build 0; API 1.494 + 1 skip; web 226; E2E
   API 63/63 com Postgres real; cert-api 595 + ruff limpo; Playwright 82/82;
   npm audit 0. Nenhum commit, push, deploy, migration remota ou chamada externa.
+
+
+## Certificação publicada — 18/09/2026 11:49 BRT
+
+Release `8bb9fda`, PR #101 integrado, CI/CodeQL PR e master aprovados. Deploy oficial exit 0 com backup,
+restore ensaiado e HTTPS validado por CA interna. Sync real: 947 linhas / 674 produtos; 541 validades,
+381 proveniências, 674 leituras Linx; API: 674 produtos sem divergência e sem expor campo interno. Cinco pendências
+origem preservadas. Escopo SQL escolhido: somente cadastro/reenvio portal; flag Linx false
+mantida conforme autorização, nenhuma escrita ERP. Snapshot anterior reservado em
+`/home/nicolas/importacao.rollback-pre8bb9fda-20260918`. Detalhes, primeira tentativa de TLS,
+recuperação e limites na seção 15 de `docs/STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md`.

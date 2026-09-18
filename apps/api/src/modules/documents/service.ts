@@ -23,6 +23,8 @@ import {
 import { aiService, flattenAiData, AIBudgetExceededError } from '../ai/service.js';
 import { alertService } from '../alerts/service.js';
 import { tryParseEspelhoBuffer } from '../espelho-parser/parser.js';
+import { independentEvidence } from './independent-evidence.js';
+import { selectAttachedSources, type SourceSelection } from './source-selection.js';
 import { googleDriveService } from '../integrations/google-drive.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
@@ -3641,7 +3643,7 @@ export const documentService = {
     };
   },
 
-  async getComparison(processId: number) {
+  async getComparison(processId: number, selection: SourceSelection = {}) {
     const [docs, processRow, overrides, acceptanceRows] = await Promise.all([
       db.select().from(documents).where(eq(documents.processId, processId)),
       db.select().from(importProcesses).where(eq(importProcesses.id, processId)).limit(1),
@@ -3689,7 +3691,12 @@ export const documentService = {
         ),
     ]);
 
-    const acceptances = acceptanceRows ?? [];
+    const selectedDocs = selectAttachedSources(docs, selection);
+    const inspectingSources = Object.values(selection).some((value) => value != null);
+    // Overrides and acceptances belong to the canonical source evidence, never
+    // to an alternative document opened solely for inspection.
+    if (inspectingSources) overrides.length = 0;
+    const acceptances = inspectingSources ? [] : (acceptanceRows ?? []);
     const acceptanceByRow = new Map<string, (typeof acceptances)[number]>();
     for (const acceptance of acceptances) {
       const key = `${acceptance.scope}|${acceptance.rowKey}`;
@@ -3729,7 +3736,7 @@ export const documentService = {
 
     const selectComparisonDoc = (type: string) => {
       // Never fall back to an old source while its replacement is pending or invalid.
-      const doc = newestSource(docs, type);
+      const doc = newestSource(selectedDocs, type);
       if (
         !doc ||
         !doc.isProcessed ||
@@ -3762,8 +3769,8 @@ export const documentService = {
     const rawBl = (blDoc?.aiParsedData as Record<string, any>) ?? null;
     const rawDraftBl = (draftBlDoc?.aiParsedData as Record<string, any>) ?? null;
 
-    const inv = rawInv ? flattenAiData(rawInv) : null;
-    const pl = rawPl ? flattenAiData(rawPl) : null;
+    const inv = rawInv ? flattenAiData(independentEvidence(rawInv)) : null;
+    const pl = rawPl ? flattenAiData(independentEvidence(rawPl)) : null;
     const bl = rawBl ? flattenAiData(rawBl) : null;
     const draftBl = rawDraftBl ? flattenAiData(rawDraftBl) : null;
     const operationalBl = bl ?? draftBl;
@@ -3836,6 +3843,7 @@ export const documentService = {
       if (systemOnly) return check;
       const runTime = validation.runAt ? new Date(validation.runAt).getTime() : NaN;
       const stale =
+        inspectingSources ||
         dependencies.length === 0 ||
         dependencies.some(({ doc }) => {
           if (!doc || !doc.createdAt || !doc.updatedAt || !Number.isFinite(runTime)) return true;
@@ -4012,7 +4020,7 @@ export const documentService = {
         bl: null,
         espelho: espelhoSummary?.totalAmountUsd,
         system: systemNumber(processRecord?.totalFobValue, 2),
-        kind: 'numeric',
+        kind: 'money',
       },
       {
         label: 'Frete',
@@ -4020,7 +4028,7 @@ export const documentService = {
         pl: null,
         bl: operationalBl?.freightValue,
         system: systemNumber(processRecord?.freightValue, 2),
-        kind: 'numeric',
+        kind: 'money',
         criticality: 'info',
       },
       {
@@ -4203,7 +4211,7 @@ export const documentService = {
       // Para datas, Sistema e a fonte follow-up comparavel. Nao descartar a
       // data exibida justamente nas linhas previsto/realizado.
       const sources =
-        f.kind === 'date'
+        f.kind === 'date' || f.kind === 'numeric' || f.kind === 'money'
           ? [invoice, packingList, bl, espelho, system]
           : [invoice, packingList, bl, espelho];
       const values = sources.filter((v) => v != null && v !== '');
@@ -4403,10 +4411,10 @@ export const documentService = {
     // EXISTING raw extracted data ({ value, confidence }) — no AI re-run. Lets
     // the UI tell the operator exactly which fields were not read.
     const extractionCoverage = {
-      invoice: computeExtractionCoverage(rawInv, 'invoice'),
-      packingList: computeExtractionCoverage(rawPl, 'packing_list'),
-      bl: computeExtractionCoverage(rawBl, 'ohbl'),
-      draftBl: computeExtractionCoverage(rawDraftBl, 'draft_bl'),
+      invoice: computeExtractionCoverage(independentEvidence(rawInv), 'invoice'),
+      packingList: computeExtractionCoverage(independentEvidence(rawPl), 'packing_list'),
+      bl: computeExtractionCoverage(independentEvidence(rawBl), 'ohbl'),
+      draftBl: computeExtractionCoverage(independentEvidence(rawDraftBl), 'draft_bl'),
     };
 
     // Draft BL vs Final BL ("Revisado") — only when both are present

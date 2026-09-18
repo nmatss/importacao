@@ -122,11 +122,13 @@ function boost(
   if (!field || typeof field !== 'object' || !('confidence' in field)) return;
   if (cfValue(field) == null) return;
   if (field.confidence >= conf) {
-    if (!field.source) field.source = source; // record provenance once
     return;
   }
   field.confidence = conf;
-  field.source = source;
+  // Agreement does not change where the original value was read. Only fill()
+  // marks a copied value with source=espelho.
+  if (source === 'espelho') field.corroboratedBy = source;
+  else field.source = source;
   report.boosted.push({ path, confidence: conf, source });
   report.changed = true;
 }

@@ -1,5 +1,108 @@
 # Known Issues
 
+## 2026-09-18 — Atualização após correções locais
+
+Os achados abaixo são históricos do snapshot produtivo e da primeira auditoria. Correções locais
+já cobrem concordância circular, estados incompletos, tolerância monetária, alias de dupla
+certificação, SKU-data, leitura da tabela DUIMP, integração Cadastro→Produtos e UX. Não publicados.
+Permanecem: sync produtivo parado, Follow-up35 mudanças só em prévia, BL PK21989,670% (<90%),
+versões concorrentes sem escolha canônica persistente, divergência real de referência PK220 e
+propagação final de trava no ERP não homologada. Cadastro com certificado conflitante exige
+resolução explícita da área; manter fonte e pendência. Detalhamento e critérios:
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
+
+## 2026-09-18 — Aceite Odett/Eduarda confrontado com produção e fontes oficiais
+
+- **ALTO:** 148/148 syncs de certificação falharam desde 12/09; 674 produtos sem validade e sem
+  leitura Linx registrada; 167 ainda Puket Escolares. Correções locais não publicadas no snapshot.
+- **ALTO:** Follow-up em `dry_run`; PK220 Sistema mantém 179,670 m³ / USD 101.265,19 contra
+  120,25 m³ / USD 101.346,01 na fonte atual. ETA realizado e registro não chegaram aos pilotos.
+- **ALTO:** nenhum dos três comparativos tem BL operacional; packing selecionado continua sem
+  CBM. PDF PK220 contém 120,246 e o parser atual recupera, mas a fonte selecionada é XLSX.
+- **ALTO:** reconciliação pode preencher invoice/packing com espelho e o comparativo perde origem
+  por campo, produzindo concordância circular. `match` também prevalece sobre check `skipped`;
+  tolerância genérica aceita USD 100 de diferença no FOB PK220. Necessária política por campo.
+- **ALTO:** Registro continua pending nos três pilotos: documentos concorrentes, rascunhos sem
+  itens e unidades não demonstradas. Não basta extrato final importado.
+- **MEDIO:** espelho PK220 D13/F13 contém data 27.01.2007 no EAN/código, enquanto packing PDF
+  mostra código 27.01.0007; parser transforma Date em SKU textual. Corrigir origem com a área.
+- **MEDIO:** cabeçalho oficial `DUPLA CERTIFICAÇÃO` não casa com os aliases terminados em `?`
+  de `erp_service.py`; reprodução retorna None. Preencher N sozinho não resolverá esse caminho.
+- **MEDIO:** teste temporal `cache.incr` falhou na primeira suíte (2 em vez de 1); passou isolado
+  e na repetição completa. Instabilidade registrada, sem alteração de código nesta auditoria.
+- Matriz de 36 pedidos, evidência e critérios de fechamento:
+  [aceite Odett/Eduarda](STATUS-2026-09-18-ACEITE-ODETT-EDUARDA.md).
+
+## 2026-09-18 — Revisão UX/UI com Cultura Builder
+
+- **ALTO (UX-01):** Câmbios ignora erros das consultas de processos/câmbios; 503 após seleção
+  aparece como quatro totais zero e "Nenhum cambio registrado". Usar estado de erro/retry,
+  preservando a distinção de vazio confirmado. Reprodução local em navegador.
+- **MEDIO (UX-02 a UX-04):** contraste insuficiente em 36 das 46 URLs/abas avaliadas;
+  regiões roláveis sem acesso adequado por teclado e gráficos sem nome acessível.
+- **MEDIO (UX-05/06):** novo processo perde rascunho ao sair sem aviso; Pré-Conferência
+  atribui 503 a permissões e não oferece recuperação no banner.
+- **BAIXO (UX-07 a UX-09):** validação de intervalo junto aos inputs, título/foco na navegação,
+  hierarquia de headings, cabeçalhos auxiliares e mensagem de acesso negado.
+- 412 combinações visuais passaram; isso não elimina os achados de UX/acessibilidade.
+  Correções de aplicação ainda não realizadas nesta auditoria. Evidências, propostas e limites:
+  [revisão UX/UI](STATUS-2026-09-18-REVISAO-UX-UI.md).
+
+## 2026-09-18 — Auditoria de todos os parâmetros da certificação
+
+- **ALTO, corrigido localmente:** reader descartava SKU+certificado sem prazo/status, impedindo a
+  nova pendência e permitindo limpeza indevida. Linha identificada agora preservada; PostgreSQL real
+  isolado comprovou pendência após reader/sync/gravação.
+- **MEDIO, corrigido localmente:** CLI de preparação quebrava com `KeyError: certificados` para
+  uma das formas de ambiguidade; aceita ambos os formatos reais e informa gate de apply bloqueado.
+- **MEDIO, preexistente:** SKUs apenas em Encerramentos conservam número/nome/marca já preenchidos,
+  mesmo quando a aba muda; proveniência é atualizada separadamente. Regra não alterada nesta revisão.
+- **MEDIO, preexistente:** `is_expired` pode divergir da venda derivada com prazo vencido e STATUS
+  permissivo; `/expired`/contadores antigos usam flag persistida. Não equivale a venda liberada.
+- **BAIXO:** cadastro pai aceita sentinela ISO 1900, mas resolução efetiva impede seu envio ao ERP.
+- Limites funcionais: sem edição do certificado pai; cadastro não altera snapshot Produtos; ativo
+  não limpa data antiga do Linx; nenhuma propagação para PRODUTO_CORES foi homologada.
+- Matriz completa e evidência: [CERT-CAMPOS-E-PARAMETROS](CERT-CAMPOS-E-PARAMETROS.md).
+
+## 2026-09-18 — Proveniência interna autorizada e corrigida localmente
+
+O achado ALTO das rodadas abaixo está corrigido no código local: a coluna interna
+`encerramento_numero_certificado` identifica o encerramento vigente sem alterar `situacao` fonte,
+payload público ou layout Excel. Usuário autorizou expressamente a adição e a validação local.
+Migration explícita, nullable e sem backfill inferido; PostgreSQL 16 isolado comprovou repetição,
+preservação do legado, sync, limpeza e rollback de transação com erro.
+Ativação em produção ainda depende de publicação autorizada, migration e sync bem-sucedido.
+Snapshots antigos com proveniência NULL preservam a regra anterior até nova leitura da fonte.
+Se houver rollback só de código, manter a coluna e exigir nova reconciliação ao reimplantar.
+Evidências atuais: seção 12 do [STATUS certificação](STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md).
+
+## 2026-09-18 — Complemento da validação independente
+
+- `npm run format:check` passou após formatação dos dois scripts exploratórios preexistentes;
+  substitui apenas a pendência Prettier registrada na rodada abaixo. Ruff format permanece pendente.
+- **BAIXO:** o log final de `batch_certificate_items` calcula "vinculado(s)" com ações planejadas,
+  mesmo se uma linha falhou. A UI já usa estados efetivos. Revisar o resumo de log em correção
+  focada de observabilidade, sem alterar o contrato `resumo` da API.
+- O risco **ALTO** de encerramento vencido com STATUS vazio/permissivo foi reproduzido com dados
+  sintéticos. Implementação concorrente posterior adicionou proveniência interna e passou nos
+  testes locais, inclusive PostgreSQL isolado. Publicação da migration e preenchimento por sync
+  real continuam pendentes; os registros legados não ganham proveniência por inferência.
+  Evidência própria e limites em
+  [validação independente](STATUS-2026-09-18-VALIDACAO-INDEPENDENTE.md).
+
+## 2026-09-18 — Encerramento contraditório e limites da validação local
+
+- **ALTO:** mesmo certificado Ativo com encerramento de data vencida e STATUS vazio/permissivo
+  pode continuar com venda liberada. Snapshot não guarda a identidade do certificado encerrado;
+  proposta de proveniência interna pendente de decisão do usuário. Não modificar `situacao` fonte
+  nem tratar todos os resíduos de encerramentos antigos como vigentes.
+- **BAIXO:** smoke navegador depende de Google Fonts externo. Duas falhas rede/DNS no mobile
+  passaram em reexecução dirigida; host da falha original não comprovado.
+- `format:check` acusa somente `_offenders.spec.ts`/`_shot.spec.ts` preexistentes e não rastreados;
+  Ruff format acusa divergências preexistentes em arquivos Python, sem falha no Ruff lint.
+- Seção 11 de [STATUS certificação](STATUS-2026-09-18-CERTIFICACAO-SYNC-PARADO.md) é a evidência
+  atual. Não houve novo dry-run produtivo ou implantação; simulação anterior não prova gravação.
+
 ## 2026-09-16 — Grupo real e dominio .com.br da Isabela
 
 - Google Admin: `isabela.hochheim@imaginarium.com.br`, OU `imaginarium.com.br`,
@@ -1446,6 +1549,7 @@ Status:
 ## 12/09/2026 — Gate de segurança Node bloqueia publicação
 
 CI 34693884581, c0e9234: `npm audit --audit-level=high` falhou com 3 altas (js-yaml, multer, nodemailer) e 5 moderadas; auditoria local confirmou. Corrigir dependências e repetir gates antes do deploy já autorizado. Não houve deploy nem migration remota. Ver checkpoint final em `docs/STATUS-2026-09-12-RETOMADA-REUNIAO.md`.
+
 
 ## Preparação da release de certificação e SQL — 18/09/2026
 

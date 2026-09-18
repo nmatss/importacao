@@ -96,7 +96,12 @@ export function CambiosTab({ processId, initialData }: CambiosTabProps) {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Câmbios do processo"
+          className="overflow-x-auto rounded-xl border border-slate-200/60 dark:border-slate-700/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+        >
           <table className="min-w-full divide-y divide-slate-100 dark:divide-slate-700 text-sm">
             <thead className="bg-slate-50/80 dark:bg-slate-900/80">
               <tr>

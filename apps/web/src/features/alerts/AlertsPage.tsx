@@ -267,7 +267,7 @@ export function AlertsPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     severityFilter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}
@@ -313,7 +313,7 @@ export function AlertsPage() {
                     'rounded-lg px-3.5 py-1.5 text-sm font-medium transition-all',
                     ackFilter === opt.value
                       ? 'bg-slate-900 text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200',
+                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200',
                   )}
                 >
                   {opt.label}
@@ -328,14 +328,14 @@ export function AlertsPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Shield className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               Alertas encontrados
-            </h3>
+            </h2>
             {alerts?.length ? (
-              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
                 {alerts.length} alerta{alerts.length !== 1 ? 's' : ''}
               </span>
             ) : null}

@@ -1153,7 +1153,9 @@ export function SydlePaymentsPage() {
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-10">
           <label className="xl:col-span-2">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Busca</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Busca
+            </span>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -1165,7 +1167,9 @@ export function SydlePaymentsPage() {
             </div>
           </label>
           <label className="xl:col-span-2">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Fornecedor</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Fornecedor
+            </span>
             <input
               value={supplier}
               onChange={(event) => resetPageAnd(setSupplier, event.target.value)}
@@ -1174,7 +1178,9 @@ export function SydlePaymentsPage() {
             />
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Marca</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Marca
+            </span>
             <select
               value={brand}
               onChange={(event) => resetPageAnd(setBrand, event.target.value)}
@@ -1186,7 +1192,9 @@ export function SydlePaymentsPage() {
             </select>
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Status</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Status
+            </span>
             <select
               value={paymentStatus}
               onChange={(event) => resetPageAnd(setPaymentStatus, event.target.value)}
@@ -1201,7 +1209,9 @@ export function SydlePaymentsPage() {
             </select>
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Tipo</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Tipo
+            </span>
             <select
               value={paymentType}
               onChange={(event) => resetPageAnd(setPaymentType, event.target.value)}
@@ -1216,7 +1226,9 @@ export function SydlePaymentsPage() {
             </select>
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Conciliação</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Conciliação
+            </span>
             <select
               value={matchStatus}
               onChange={(event) => resetPageAnd(setMatchStatus, event.target.value)}
@@ -1231,7 +1243,9 @@ export function SydlePaymentsPage() {
             </select>
           </label>
           <label className="xl:col-span-2">
-            <span className="mb-1 block text-xs font-medium text-slate-500">Fase do processo</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Fase do processo
+            </span>
             <select
               value={logisticStatus}
               onChange={(event) => resetPageAnd(setLogisticStatus, event.target.value)}
@@ -1246,7 +1260,9 @@ export function SydlePaymentsPage() {
             </select>
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Moeda</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Moeda
+            </span>
             <input
               value={currency}
               onChange={(event) => resetPageAnd(setCurrency, event.target.value.toUpperCase())}
@@ -1256,7 +1272,9 @@ export function SydlePaymentsPage() {
             />
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Venc. início</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Venc. início
+            </span>
             <input
               type="date"
               value={dueFrom}
@@ -1265,7 +1283,9 @@ export function SydlePaymentsPage() {
             />
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Venc. fim</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Venc. fim
+            </span>
             <input
               type="date"
               value={dueTo}
@@ -1274,7 +1294,9 @@ export function SydlePaymentsPage() {
             />
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Atual. início</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Atual. início
+            </span>
             <input
               type="date"
               value={updatedFrom}
@@ -1283,7 +1305,9 @@ export function SydlePaymentsPage() {
             />
           </label>
           <label>
-            <span className="mb-1 block text-xs font-medium text-slate-500">Atual. fim</span>
+            <span className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+              Atual. fim
+            </span>
             <input
               type="date"
               value={updatedTo}
@@ -1293,7 +1317,9 @@ export function SydlePaymentsPage() {
           </label>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-slate-500">Vencimento:</span>
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            Vencimento:
+          </span>
           {(
             [
               { key: 'overdue', label: 'Vencidos' },
@@ -1401,7 +1427,12 @@ export function SydlePaymentsPage() {
               viewMode === 'table' ? 'block' : 'hidden',
             )}
           >
-            <div className="overflow-x-auto">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Compras e pagamentos"
+              className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
               <table className="min-w-[1800px] w-full divide-y divide-slate-200 dark:divide-slate-700">
                 <thead className="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900">
                   <tr>
@@ -1730,7 +1761,12 @@ export function SydlePaymentsPage() {
                 {rows.length} de {pagination?.total ?? rows.length} registro(s)
               </span>
             </header>
-            <div className="overflow-x-auto">
+            <div
+              tabIndex={0}
+              role="region"
+              aria-label="Resumo de pagamentos"
+              className="overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+            >
               <table className="min-w-[5600px] w-full table-fixed divide-y divide-slate-200 text-xs dark:divide-slate-700">
                 <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
                   <tr>

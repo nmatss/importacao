@@ -475,7 +475,7 @@ export function DashboardPage() {
                         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                           {alert.message}
                         </p>
-                        <p className="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500">
+                        <p className="mt-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                           {formatDate(alert.createdAt)}
                         </p>
                       </div>
@@ -606,8 +606,12 @@ export function DashboardPage() {
                     labelLine={false}
                     label={false}
                   >
-                    {fobByBrand.map((_entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    {fobByBrand.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+                        aria-label={`${entry.brand}: FOB ${entry.totalFob}`}
+                      />
                     ))}
                   </Pie>
                   <Tooltip

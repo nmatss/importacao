@@ -290,7 +290,7 @@ export function ExecutiveDashboardPage() {
       value: kpis?.espelhosGenerated ?? 0,
       icon: FileText,
       gradient: 'from-pink-500 to-pink-600',
-      valueColor: 'text-pink-700',
+      valueColor: 'text-pink-700 dark:text-pink-300',
       borderColor: 'border-l-pink-500',
     },
     {
@@ -398,7 +398,12 @@ export function ExecutiveDashboardPage() {
           </h3>
         </div>
         {pipelineData.length > 0 ? (
-          <div className="flex items-end gap-1.5 sm:gap-2 overflow-x-auto pb-2">
+          <div
+            tabIndex={0}
+            role="region"
+            aria-label="Etapas dos processos"
+            className="flex items-end gap-1.5 sm:gap-2 overflow-x-auto pb-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+          >
             {pipelineData.map((stage, index) => {
               const maxCount = Math.max(...pipelineData.map((s) => s.count), 1);
               const heightPercent = Math.max((stage.count / maxCount) * 100, 8);
@@ -561,8 +566,12 @@ export function ExecutiveDashboardPage() {
                     labelLine={false}
                     label={false}
                   >
-                    {fobByBrand.map((_entry, index) => (
-                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                    {fobByBrand.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={PIE_COLORS[index % PIE_COLORS.length]}
+                        aria-label={`${entry.brand}: FOB ${entry.totalFob}`}
+                      />
                     ))}
                   </Pie>
                   <Tooltip

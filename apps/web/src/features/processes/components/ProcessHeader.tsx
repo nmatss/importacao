@@ -261,7 +261,7 @@ export function ProcessHeader({ process, processId, onBack, onEdit }: ProcessHea
             <span
               className={cn(
                 CHIP,
-                'border-slate-200 bg-slate-100 font-mono text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
+                'border-slate-200 bg-slate-100 font-mono text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
               )}
               title={`Códigos anteriores: ${process.previousCodes.join(', ')}`}
             >

@@ -378,7 +378,12 @@ export function EspelhoPreview({ processId }: EspelhoPreviewProps) {
 
       {/* Table */}
       {espelho ? (
-        <div className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-x-auto">
+        <div
+          tabIndex={0}
+          role="region"
+          aria-label="Prévia dos itens do espelho"
+          className="rounded-lg border border-slate-200 dark:border-slate-600 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+        >
           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700 text-xs">
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-900">

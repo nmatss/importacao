@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-18 — Correções do aceite e integração Cadastro→Produtos (local)
+
+- Integra cadastro validado à leitura de Produtos e relatórios, com pendências explícitas para
+  conflitos; preserva snapshot da planilha, colunas públicas e licenciamento Linx.
+- Impede confirmação circular com valores copiados do espelho, expõe verificações incompletas,
+  compara valores monetários em centavos e permite inspeção explícita de versões documentais.
+- Recupera tabelas completas do rascunho DUIMP quando comprovadas pelo texto, recusa SKU
+  convertido em data e reconhece o cabeçalho DUPLA CERTIFICAÇÃO sem interrogação.
+- Corrige estados de erro, rascunho de processo, filtros e acessibilidade nos fluxos auditados.
+- Evidências e bloqueios operacionais em `docs/STATUS-2026-09-18-CORRECOES-ACEITE.md`.
+
 ## 2026-09-18 — Retomada da certificação (local, não implantada)
 
 - Fortalece escrita Linx: bloqueia cardinalidade inesperada, atualiza pela chave completa e

@@ -51,7 +51,7 @@ _STATUS_LABELS: dict[str, str] = {
 
 # Rotulos das dimensoes derivadas — os MESMOS textos que o painel exibe, para o
 # Excel poder ser conferido linha a linha contra a tela.
-_CERT_STATUS_LABELS: dict[str, str] = {"ATIVO": "Ativo", "ENCERRADO": "Encerrado"}
+_CERT_STATUS_LABELS: dict[str, str] = {"ATIVO": "Ativo", "ENCERRADO": "Encerrado", "PENDENTE": "Pendente de validacao"}
 _SITE_STATUS_LABELS: dict[str, str] = {"CONFORME": "Conforme", "NAO_CONFORME": "Nao conforme"}
 _LICENSE_STATUS_LABELS: dict[str, str] = {
     "VALIDO": "Valido",
@@ -396,6 +396,7 @@ def generate_products_report(
     # Meta rows — contagens pelas dimensoes de negocio, nao pelo status cru.
     ativos = sum(1 for r in enriched if r.get("cert_status") == "ATIVO")
     encerrados = sum(1 for r in enriched if r.get("cert_status") == "ENCERRADO")
+    pendentes = sum(1 for r in enriched if r.get("cert_status") == "PENDENTE")
     conformes = sum(1 for r in enriched if r.get("site_status") == "CONFORME")
     nao_conformes = sum(1 for r in enriched if r.get("site_status") == "NAO_CONFORME")
     lic_vencidos = sum(1 for r in enriched if r.get("license_status") == "VENCIDO")
@@ -409,7 +410,7 @@ def generate_products_report(
     ws.append([_safe_text(sync_warning)] if sync_warning else [])
     ws.append(
         [
-            f"Certificacao — Ativo: {ativos} | Encerrado: {encerrados}    "
+            f"Certificacao — Ativo: {ativos} | Encerrado: {encerrados} | Pendente: {pendentes}    "
             f"E-commerce — Conforme: {conformes} | Nao conforme: {nao_conformes}    "
             f"Licenciamento vencido: {lic_vencidos}    Venda bloqueada: {bloqueados}"
         ]

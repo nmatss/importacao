@@ -77,6 +77,12 @@ const STATUS_FILTER_GROUPS: StatusFilterGroup[] = [
         activeBg: 'bg-pink-600 text-white shadow-sm',
         dotColor: 'bg-pink-500',
       },
+      {
+        value: 'PENDENTE',
+        label: 'Pendente de vínculo',
+        activeBg: 'bg-amber-700 text-white shadow-sm',
+        dotColor: 'bg-amber-500',
+      },
     ],
   },
   {

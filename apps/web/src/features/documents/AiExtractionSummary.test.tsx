@@ -3,6 +3,17 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AiExtractionSummary } from './AiExtractionSummary';
 
 describe('AiExtractionSummary coverage header', () => {
+  it('does not round a BL below the operational threshold up to 90%', () => {
+    render(
+      <AiExtractionSummary
+        documentType="bl"
+        confidence={0.89999}
+        data={{ blNumber: { value: 'BL-TEST', confidence: 0.95 } }}
+      />,
+    );
+    expect(screen.getByText(/extração com 89.9%, abaixo do piso operacional/i)).toBeInTheDocument();
+  });
+
   it('shows the backend readPercent and lists missing and low-confidence fields when expanded', () => {
     render(
       <AiExtractionSummary

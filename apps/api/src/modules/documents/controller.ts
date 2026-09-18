@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { documentService } from './service.js';
+import { sourceSelectionSchema } from './source-selection.js';
 import { getDriveSweepStatusForProcess } from './drive-sweep-status.js';
 import { getDocumentSourcePolicy } from './source-policy.js';
 import { sendSuccess, sendError } from '../../shared/utils/response.js';
@@ -257,7 +258,12 @@ export const documentController = {
 
   async comparison(req: Request, res: Response) {
     try {
-      const result = await documentService.getComparison(Number(req.params.processId));
+      const selection = sourceSelectionSchema.safeParse(req.query);
+      if (!selection.success) return sendError(res, 'Seleção de documentos inválida.', 400);
+      const result = await documentService.getComparison(
+        Number(req.params.processId),
+        selection.data,
+      );
       sendSuccess(res, result);
     } catch (error: any) {
       const status = error.statusCode || 400;

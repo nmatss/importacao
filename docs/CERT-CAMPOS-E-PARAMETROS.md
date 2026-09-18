@@ -53,9 +53,13 @@ e fornece `fim_venda_certificacao`; a UI não usa esse alias para preencher a va
 
 O cadastro **cria** o certificado pai; não existe PUT/PATCH do pai para editar número, validade,
 OCP, órgão ou PDF. Existem operações de vínculos, restrições individuais e retry Linx.
-`cert_certificates`/`cert_certificate_items` não atualizam diretamente `cert_products`: este último
-é o snapshot alimentado pela planilha e pelas leituras do Linx. Portanto salvar um cadastro não
-equivale a editar a planilha nem a alterar imediatamente os dados do painel Produtos.
+`cert_certificates`/`cert_certificate_items` agora compõem a leitura efetiva de Produtos, filtros,
+validação e relatórios. O usuário aprovou cadastro validado como fonte dos novos certificados e
+conflitos explícitos. O snapshot original da planilha não é sobrescrito: número/marca divergentes
+e contradições de encerramento aparecem como Pendente de vínculo. Remover o vínculo restaura
+a fonte original. Novos SKUs ganham registro de suporte para futuras observações Linx/site.
+Implementação local, ainda não publicada; evidências em
+[correções do aceite](STATUS-2026-09-18-CORRECOES-ACEITE.md).
 
 ## Sheets e snapshot `cert_products`
 
@@ -133,10 +137,10 @@ relatório; a existência de colunas legadas com esses nomes não as torna a fon
   proveniência não atualiza automaticamente esses campos públicos. Política preservada nesta auditoria.
 - **MEDIO:** STATUS permissivo com prazo passado pode guardar `is_expired=false`, embora a venda
   derivada fique bloqueada. `/expired` e contadores baseados nessa flag não equivalem ao eixo de venda.
-- **BAIXO:** `_iso_date` do cadastro pai aceita `1900-01-01`, mas a resolução efetiva a trata como
-  ausência e impede envio. Validação de entrada inconsistente, sem escrita indevida demonstrada.
-- Edição de certificado pai e reconciliação automática cadastro→Produtos não existem; não foram
-  implementadas como efeito colateral desta revisão.
+- Datas sentinelas com ano até 1900 agora são recusadas na entrada do cadastro (HTTP 400);
+  campo vazio continua representando ausência.
+- Edição do certificado pai continua fora desta implementação. Cadastro→Produtos foi integrado
+  após autorização expressa; conflitos permanecem pendentes, sem resolução automática.
 - Ausência de remoção automática de data antiga no Linx é uma proteção existente, não autorização
   para limpar a propriedade durante esta revisão.
 

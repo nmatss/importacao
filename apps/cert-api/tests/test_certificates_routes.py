@@ -7,6 +7,32 @@ import pytest
 
 CREATE_URL = "/api/certificates"
 
+
+@pytest.mark.parametrize('source', [
+    {'numero_certificado': 'OLD', 'brand': 'imaginarium'},
+    {'numero_certificado': 'NEW', 'brand': 'puket'},
+    {'numero_certificado': 'NEW', 'brand': 'imaginarium', 'situacao': 'ENCERRADO'},
+])
+def test_linx_write_refuses_a_conflicting_sheet_source(mocker, source):
+    from app.routes.certificates import _item_linx_result
+    _, writer = _mock_certificates_env(mocker, row=source)
+    result = _item_linx_result('imaginarium', {'sku': 'S1'}, {
+        'numero_certificado': 'NEW', 'situacao': 'ATIVO',
+    })
+    assert result['status'] == 'pending'
+    assert 'Conflito' in result['error']
+    writer.assert_not_called()
+
+
+@pytest.fixture(autouse=True)
+def independent_rate_limit_window():
+    """Keep requests within each scenario counted, without sharing its quota
+    with unrelated scenarios that happen to run in the same minute."""
+    from app.routes.certificates import limiter
+    limiter.reset()
+    yield
+    limiter.reset()
+
 _ROW = {
     "id": "11111111-1111-1111-1111-111111111111",
     "sku": "SKU1",
@@ -157,6 +183,20 @@ async def test_create_requires_at_least_one_date(test_client, api_key_headers, m
     )
     assert resp.status_code == 400
     assert "ao menos uma data" in resp.json()["detail"]
+    linx.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["validade_certificado", "fim_venda"])
+@pytest.mark.parametrize("value", ["1899-12-30", "1900-01-01"])
+async def test_create_rejects_sentinel_dates_before_database(test_client, api_key_headers, mocker, field, value):
+    cur, linx = _mock_certificates_env(mocker)
+    resp = await test_client.post(
+        CREATE_URL, data={"sku": "S1", "brand": "puket", field: value}, headers=api_key_headers
+    )
+    assert resp.status_code == 400
+    assert "data sentinela" in resp.json()["detail"]
+    cur.execute.assert_not_called()
     linx.assert_not_called()
 
 

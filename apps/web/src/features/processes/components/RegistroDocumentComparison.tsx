@@ -1,6 +1,7 @@
 import { useApiQuery } from '@/shared/hooks/useApi';
 import { ErrorState } from '@/shared/components/ErrorState';
 import { LoadingSpinner } from '@/shared/components/LoadingSpinner';
+import { useSourceDocumentPicker } from '@/features/documents/SourceDocumentPicker';
 
 export interface RegistroComparisonResult {
   status: 'match' | 'divergent' | 'pending';
@@ -45,7 +46,12 @@ export function RegistroComparisonTable({ result }: { result: RegistroComparison
           ))}
         </ul>
       )}
-      <div className="mt-3 overflow-x-auto">
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Conferência de registro"
+        className="mt-3 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+      >
         <table className="min-w-full text-left text-sm">
           <thead>
             <tr>
@@ -107,17 +113,26 @@ export function RegistroComparisonTable({ result }: { result: RegistroComparison
 }
 
 export function RegistroDocumentComparison({ processId }: { processId: string }) {
+  const selection = useSourceDocumentPicker(processId, ['duimpId', 'invoiceId', 'espelhoId']);
   const { data, isLoading, isError, refetch } = useApiQuery<RegistroComparisonResult>(
-    ['documents', 'process', processId, 'registro-comparison'],
-    `/api/documents/process/${processId}/registro-comparison`,
+    ['documents', 'process', processId, 'registro-comparison', selection.query],
+    `/api/documents/process/${processId}/registro-comparison${selection.query ? `?${selection.query}` : ''}`,
   );
   if (isLoading) return <LoadingSpinner className="py-4" />;
   if (isError || !data)
     return (
-      <ErrorState
-        message="Não foi possível conferir DUIMP, invoice e espelho."
-        onRetry={() => void refetch()}
-      />
+      <>
+        {selection.picker}
+        <ErrorState
+          message="Não foi possível conferir DUIMP, invoice e espelho."
+          onRetry={() => void refetch()}
+        />
+      </>
     );
-  return <RegistroComparisonTable result={data} />;
+  return (
+    <div className="space-y-3">
+      {selection.picker}
+      <RegistroComparisonTable result={data} />
+    </div>
+  );
 }

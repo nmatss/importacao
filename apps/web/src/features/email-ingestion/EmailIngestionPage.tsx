@@ -303,11 +303,11 @@ export function EmailIngestionPage() {
                   <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-slate-600 dark:text-slate-400">
                     <span className="font-medium text-slate-500 dark:text-slate-400">Método:</span>
                     {status?.method === 'gmail_api' ? (
-                      <span className="min-w-0 break-all font-medium text-emerald-600 dark:text-emerald-300">
+                      <span className="min-w-0 break-all font-medium text-emerald-700 dark:text-emerald-300">
                         Gmail API{status.sharedMailbox ? ` (${status.sharedMailbox})` : ''}
                       </span>
                     ) : status?.method === 'imap' ? (
-                      <span className="min-w-0 break-all font-medium text-emerald-600 dark:text-emerald-300">
+                      <span className="min-w-0 break-all font-medium text-emerald-700 dark:text-emerald-300">
                         IMAP
                       </span>
                     ) : (
@@ -425,14 +425,14 @@ export function EmailIngestionPage() {
       <div className="rounded-2xl border border-slate-200/80 bg-white dark:bg-slate-800 dark:border-slate-700/80 shadow-sm overflow-hidden">
         <div className="border-b border-slate-100 dark:border-slate-700 px-4 sm:px-6 py-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="min-w-0 flex items-center gap-2.5 text-sm sm:text-base font-semibold text-slate-900 dark:text-slate-100">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700">
                 <Inbox className="h-4 w-4 text-slate-600 dark:text-slate-400" />
               </div>
               E-mails processados
-            </h3>
+            </h2>
             {pagination && (
-              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-300">
                 {pagination.total} registros
               </span>
             )}

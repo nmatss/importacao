@@ -527,7 +527,9 @@ def _read_encerramentos_from_sheets(
     i_marca = _find_col_by_header(headers, "marca", "brand", contexto=f"{ctx} / marca")
     i_cert = _find_col_by_header(headers, "certificado", contexto=f"{ctx} / certificado")
     i_nome = _find_col_by_header(headers, "nome", "produto", "descrição", "descricao")
-    i_dupla = _find_col_by_header(headers, "dupla certificação?", "dupla certificacao?")
+    i_dupla = _find_col_by_header(
+        headers, "dupla certificação", "dupla certificacao", "dupla certificação?", "dupla certificacao?"
+    )
     if i_sku is None:
         log.warning("Aba 'Encerramentos' sem coluna de SKU; ignorada")
         return []

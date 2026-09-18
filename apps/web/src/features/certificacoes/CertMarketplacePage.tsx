@@ -201,7 +201,7 @@ export default function CertMarketplacePage() {
           type="button"
           onClick={handleAudit}
           disabled={auditing}
-          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-emerald-700 px-4 text-sm font-semibold text-white transition-colors hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {auditing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
