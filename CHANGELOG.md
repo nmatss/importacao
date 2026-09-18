@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-09-18 — Produção fail-closed
+
+- Publicado `2700b31b4852` (PR 105, merge `2700b31b4852`; código `af98d39d8781`).
+- `LINX_WRITE_ENABLED` permanece false. Holds humanos inalterados.
+
 ## 2026-09-18 — Fail-closed no login e webhook do Chat
 
 - `ALLOWED_DOMAIN` vazio recusa login; em produção a API não sobe sem a lista.

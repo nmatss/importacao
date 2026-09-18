@@ -3,8 +3,7 @@
 ## 2026-09-18 — Holds após decisões profissionais
 
 Código do tenant e do webhook do Chat fecha fail-closed (ADR 0007). Produção
-`939714a` permanece o SHA publicado até haver autorização de deploy desta
-hardening. **Não** misturar `feat/ux-ui-revisao-2026-09-18` nem a árvore suja
+`2700b31b4852` (merge `2700b31b4852`, PR 105). **Não** misturar `feat/ux-ui-revisao-2026-09-18` nem a árvore suja
 `fix/cert-sync-quarentena-2026-09-18`.
 
 Permanecem humanos: BL PK219 89,670%; FIM_VENDAS no ERP; versões concorrentes;

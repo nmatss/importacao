@@ -1,6 +1,6 @@
 # Decisões profissionais — 18/09/2026
 
-Produção medida: `939714a`. Aplicação: `963f807`. Cultura Builder: revisão de
+Produção medida: `2700b31b4852`. Aplicação fail-closed: `af98d39d8781` (merge `2700b31b4852`). Cultura Builder: revisão de
 código, OWASP, design de interfaces. Planilhas-fonte e Linx write não alterados.
 
 ## O que o código fecha agora

@@ -1,11 +1,15 @@
 # Session Memory
 
+## 18/09/2026 — Deploy fail-closed (ADR 0007)
+
+Produção `2700b31b4852` (merge commit `2700b31b4852` do [PR 105](https://github.com/nmatss/importacao/pull/105)). Código `af98d39d8781`. LINX_WRITE false. Health ok. ALLOWED_DOMAIN e CORS inalterados. Holds humanos fora do escopo (BL PK219, FIM_VENDAS, item PK220, 5 SKUs). Sem Follow-up apply e sem alteração de Google Sheets. Detalhe: [decisões profissionais](STATUS-2026-09-18-DECISOES-PROFISSIONAIS.md).
+
 ## 18/09/2026 — Decisões profissionais (fail-closed)
 
 Login sem `ALLOWED_DOMAIN` recusa; produção não sobe sem a lista. Webhook do Chat
 restrito a `chat.googleapis.com`. Holds humanos inalterados. Sem Linx write, sem
 merge de UX leftover nem da árvore cert-sync suja. Sem push/deploy desta
-hardening até autorização. ADR 0007. Detalhe:
+hardening; autorizado e publicado em `2700b31b4852`. ADR 0007. Detalhe:
 [decisões profissionais](STATUS-2026-09-18-DECISOES-PROFISSIONAIS.md).
 
 ## 18/09/2026 — PR 104, follow-up dos pilotos e leitura de certificação
