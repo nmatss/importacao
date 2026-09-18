@@ -79,6 +79,25 @@ describe('CertRelatoriosPage', () => {
     );
   });
 
+  it('mostra "0 B" para arquivo vazio em vez de vazar um "0" solto na linha', async () => {
+    vi.mocked(fetchCertReports).mockResolvedValue([
+      { filename: 'validation_vazio.json', format: 'json', size_bytes: 0 },
+      { filename: 'validation_cheio.json', format: 'json', size_bytes: 2048 },
+      { filename: 'sem_tamanho.json', format: 'json' },
+    ]);
+
+    renderPage();
+
+    await screen.findByText('validation_vazio');
+    expect(screen.getByText('0 B')).toBeInTheDocument();
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    // `{0 && <jsx/>}` renderiza o numero 0 como texto.
+    expect(screen.queryByText('0')).not.toBeInTheDocument();
+    // Sem o campo, nao inventa tamanho.
+    const semTamanho = screen.getByText('sem_tamanho').parentElement as HTMLElement;
+    expect(semTamanho).not.toHaveTextContent(/\bB\b|KB|MB/);
+  });
+
   describe('exportacao sem produtos', () => {
     it('avisa que o filtro nao tem produtos em vez de dizer so "exportado"', async () => {
       vi.mocked(fetchCertProducts).mockResolvedValue({ products: [], total: 0 });

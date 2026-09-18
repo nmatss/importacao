@@ -151,7 +151,8 @@ export default function CertRelatoriosPage() {
       if (brandFilter) params.brand = brandFilter;
 
       const query = new URLSearchParams(params).toString();
-      const baseExportUrl = (exportType as any).exportUrl || '/api/reports/export';
+      const baseExportUrl =
+        'exportUrl' in exportType ? exportType.exportUrl : '/api/reports/export';
       const url = `${baseExportUrl}${query ? `?${query}` : ''}`;
 
       await downloadCertApiResource(
@@ -390,12 +391,12 @@ export default function CertRelatoriosPage() {
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {reports.map((report, i) => {
+            {reports.map((report) => {
               const format = report.format ?? report.filename.split('.').pop()?.toLowerCase() ?? '';
               const isJson = format === 'json';
               return (
                 <div
-                  key={i}
+                  key={report.filename}
                   className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between px-5 py-3.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors group"
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -408,9 +409,10 @@ export default function CertRelatoriosPage() {
                       </p>
                       <div className="flex flex-wrap items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                         {report.date && <span>{formatDateTime(report.date)}</span>}
-                        {report.size_bytes && (
+                        {/* `size_bytes &&` renderizava o numero 0 como texto. */}
+                        {typeof report.size_bytes === 'number' && (
                           <>
-                            <span className="text-slate-200">|</span>
+                            {report.date && <span className="text-slate-200">|</span>}
                             <span>{formatSize(report.size_bytes)}</span>
                           </>
                         )}
