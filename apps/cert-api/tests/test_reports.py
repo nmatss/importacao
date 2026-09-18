@@ -239,6 +239,34 @@ def test_products_report_mirrors_panel_status_columns(mocker, tmp_path):
     assert cell("Estoque Atualizado Em") == "2026-08-07T09:00:00"
 
 
+@pytest.mark.parametrize(
+    ("row_extra", "codigo", "rotulo"),
+    [
+        ({"linx_fim_licenciamento": "2999-12-31"}, "VALIDO", "Valido"),
+        ({"linx_fim_licenciamento": "2026-01-31"}, "VENCIDO", "Vencido"),
+        ({"licenciamento_aplicavel": False}, "NAO_APLICAVEL", "Nao aplicavel"),
+        # Sem data no Linx e sem aplicabilidade confirmada: a derivacao devolve
+        # PENDENTE. O mapa nao tinha essa chave e a celula saia com o codigo cru.
+        ({}, "PENDENTE", "Pendente de validacao"),
+    ],
+)
+def test_products_report_translates_every_license_status(mocker, tmp_path, row_extra, codigo, rotulo):
+    """'Status Licenciamento' sai com rotulo em portugues, nunca com o codigo."""
+    from app.services.derivation import compute_status_dimensions
+
+    row = {"sku": "PI7560Y", "name": "CANETA PANDA", "brand": "Imaginarium", **row_extra}
+    # Prova que o cenario exercita mesmo o codigo esperado na derivacao real.
+    assert compute_status_dimensions(dict(row))["license_status"] == codigo
+
+    _patch_products_report_io(mocker, tmp_path)
+    output = generate_products_report([row])
+
+    ws = openpyxl.load_workbook(output)["Produtos"]
+    valor = ws.cell(row=8, column=_header_index(ws, "Status Licenciamento")).value
+    assert valor == rotulo
+    assert valor != codigo
+
+
 def test_products_report_has_no_vencido_column_and_reports_travas(mocker, tmp_path):
     """A coluna 'Vencido' saiu; entrou o bloco de trava da decisao D11."""
     _patch_products_report_io(

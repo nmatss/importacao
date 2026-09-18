@@ -57,6 +57,10 @@ _LICENSE_STATUS_LABELS: dict[str, str] = {
     "VALIDO": "Valido",
     "VENCIDO": "Vencido",
     "NAO_APLICAVEL": "Nao aplicavel",
+    # `compute_status_dimensions` devolve PENDENTE quando o Linx nao tem prazo
+    # nem aplicabilidade confirmada. Sem a chave, a celula saia com o codigo cru.
+    # Mesmo texto do selo da tela (CertStatusBadge) e da "Situacao da Venda".
+    "PENDENTE": "Pendente de validacao",
 }
 
 _FORMULA_PREFIXES = ("=", "+", "-", "@")
