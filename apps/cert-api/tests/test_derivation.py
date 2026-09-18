@@ -159,7 +159,32 @@ class TestKnownBadProcesses:
             }
         )
         assert result["cert_status"] == "ATIVO"
+        # Ate 18/09/2026 este teste exigia status_venda == "BLOQUEADA". O bloqueio
+        # NAO vinha do "Vencido" do prazo (certificado ATIVO nao tem trava de
+        # certificacao, regra R3): vinha so do licenciamento PENDENTE — a mesma
+        # linha com `licenciamento_aplicavel=False` ja saia LIBERADA. Pela regra R4
+        # e pela medicao de 18/09 (~95% do catalogo sem licenciador), pendencia de
+        # licenciamento nao bloqueia sozinha; ela fica visivel no eixo dela.
+        assert result["license_status"] == "PENDENTE"
+        assert result["license_status_reason"]
+        assert result["status_venda"] == "LIBERADA"
+
+    def test_pi4257y_bloqueia_quando_o_linx_traz_o_licenciamento_vencido(self):
+        """O bloqueio legitimo do PI4257Y vem de DATA conhecida, nao de pendencia."""
+        result = compute_status_dimensions(
+            {
+                "sku": "PI4257Y",
+                "sheet_status": "Ativo",
+                "sale_deadline": "Vencido",
+                "last_validation_status": "OK",
+                "linx_fim_licenciamento": date(2024, 5, 1),
+            },
+            today=date(2026, 9, 18),
+        )
+        assert result["cert_status"] == "ATIVO"
+        assert result["license_status"] == "VENCIDO"
         assert result["status_venda"] == "BLOQUEADA"
+        assert result["trava_origem"] == "licenciamento"
 
     def test_pi5101y_was_em_andamento_now_encerrado(self):
         result = compute_status_dimensions(
@@ -1043,6 +1068,398 @@ class TestLicenciamentoVemDoLinx:
         )
         assert dims["license_status"] == "VALIDO"
         assert dims["license_deadline"] == "2027-01-31"
+
+
+class TestAplicabilidadeDoLicenciamento:
+    """A aplicabilidade sai de dados que JA existem (grife + linx_synced_at).
+
+    Medicao no Linx em 18/09/2026: na Puket a grife e "PUKET" (marca da casa) em
+    381 de 397 SKUs certificados; na Imaginarium a grife e vazia em 276 de 277.
+    Ou seja, ~95% do catalogo NAO e licenciado. O codigo lia
+    `row["licenciamento_aplicavel"]`, coluna que nao existe no banco (sempre
+    None), e por isso marcava PENDENTE + venda BLOQUEADA em todo ATIVO sem data
+    de licenciamento — o falso bloqueio que o time fiscal reclamou.
+    """
+
+    HOJE = date(2026, 9, 18)
+    LIDO = datetime(2026, 9, 18, 6, 0)
+
+    def _ativo(self, **overrides) -> dict:
+        row = {
+            "sku": "050404509",
+            "brand": "Puket",
+            "situacao": "Ativo",
+            "last_validation_status": "OK",
+            "grife": None,
+            "linx_fim_licenciamento": None,
+            "linx_synced_at": None,
+        }
+        row.update(overrides)
+        return row
+
+    @pytest.mark.parametrize("synced", [None, ""])
+    def test_linx_nao_lido_e_pendente_com_motivo_proprio(self, synced):
+        """R8: "Linx nao lido" nao e "sem licenciamento" nem "vencido"."""
+        dims = compute_status_dimensions(
+            self._ativo(grife="PUKET", linx_synced_at=synced), today=self.HOJE
+        )
+        assert dims["license_status"] == "PENDENTE"
+        assert "ainda nao foi lido do Linx" in dims["license_status_reason"]
+        assert dims["license_deadline"] is None
+
+    @pytest.mark.parametrize("grife", [None, "", "   "])
+    def test_linx_lido_com_grife_vazia_e_nao_aplicavel(self, grife):
+        dims = compute_status_dimensions(
+            self._ativo(brand="Imaginarium", grife=grife, linx_synced_at=self.LIDO),
+            today=self.HOJE,
+        )
+        assert dims["license_status"] == "NAO_APLICAVEL"
+        assert dims["license_status_reason"] is None
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["comercializacao_status"] == "LIBERADA"
+
+    @pytest.mark.parametrize(
+        "grife", ["PUKET", "puket", " Puket ", "IMAGINARIUM", "Imaginárium", "LUDI", "Mind", "MIND"]
+    )
+    def test_grife_igual_a_marca_da_casa_e_nao_aplicavel(self, grife):
+        dims = compute_status_dimensions(
+            self._ativo(grife=grife, linx_synced_at=self.LIDO), today=self.HOJE
+        )
+        assert dims["license_status"] == "NAO_APLICAVEL"
+        assert dims["license_status_reason"] is None
+        assert dims["status_venda"] == "LIBERADA"
+
+    @pytest.mark.parametrize("grife", ["MINIONS", "SNOOPY", "LILO & STITCH", "HARRY POTTER"])
+    def test_licenciador_sem_data_e_pendente_e_cita_a_grife(self, grife):
+        dims = compute_status_dimensions(
+            self._ativo(grife=grife, linx_synced_at=self.LIDO), today=self.HOJE
+        )
+        assert dims["license_status"] == "PENDENTE"
+        assert f"licenciado ({grife}) sem vencimento no Linx" in dims["license_status_reason"]
+
+    @pytest.mark.parametrize("sentinela", [None, "", "01/01/1900", date(1900, 1, 1), "a definir"])
+    def test_pendencia_de_licenciamento_nunca_bloqueia_sozinha(self, sentinela):
+        """R4: data vazia/NULL/01-01-1900 nunca entra no minimo nem bloqueia."""
+        for extra in (
+            {"linx_synced_at": None},  # Linx nao lido
+            {"linx_synced_at": self.LIDO, "grife": "MINIONS"},  # licenciado sem data
+        ):
+            dims = compute_status_dimensions(
+                self._ativo(linx_fim_licenciamento=sentinela, **extra), today=self.HOJE
+            )
+            assert dims["license_status"] == "PENDENTE", extra
+            assert dims["status_venda"] == "LIBERADA", extra
+            assert dims["status_venda_reason"] is None, extra
+            assert dims["comercializacao_status"] == "LIBERADA", extra
+            assert dims["trava_venda"] is None, extra
+
+    def test_pendencia_nao_bloqueia_encerrado_com_prazo_de_venda_vigente(self):
+        dims = compute_status_dimensions(
+            {
+                "situacao": "Encerrado",
+                "encerramento_status": "Comerciação Permitida",
+                "sale_deadline": "29/10/2026",
+                "sale_deadline_date": date(2026, 10, 29),
+                "grife": "SNOOPY",
+                "linx_synced_at": self.LIDO,
+                "last_validation_status": "OK",
+            },
+            today=self.HOJE,
+        )
+        assert dims["license_status"] == "PENDENTE"
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+        assert dims["trava_origem"] == "certificacao"
+
+    def test_pendencia_nao_esconde_bloqueio_real_da_certificacao(self):
+        """Tirar o bloqueio por pendencia nao pode virar liberacao indevida."""
+        dims = compute_status_dimensions(
+            {
+                "situacao": "Encerrado",
+                "encerramento_status": "Vencido - Venda Bloqueada",
+                "grife": "SNOOPY",
+                "linx_synced_at": self.LIDO,
+                "last_validation_status": "OK",
+            },
+            today=self.HOJE,
+        )
+        assert dims["license_status"] == "PENDENTE"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["comercializacao_status"] == "ENCERRADA"
+
+    @pytest.mark.parametrize(("explicito", "esperado"), [(False, "NAO_APLICAVEL"), (True, "PENDENTE")])
+    def test_aplicabilidade_explicita_no_row_e_respeitada(self, explicito, esperado):
+        """Compatibilidade: quem informa `licenciamento_aplicavel` manda na derivacao."""
+        dims = compute_status_dimensions(
+            # grife/sync apontariam o CONTRARIO do valor explicito nos dois casos.
+            self._ativo(
+                licenciamento_aplicavel=explicito,
+                grife="MINIONS" if explicito is False else "PUKET",
+                linx_synced_at=self.LIDO,
+            ),
+            today=self.HOJE,
+        )
+        assert dims["license_status"] == esperado
+        assert dims["status_venda"] == "LIBERADA"
+
+    def test_data_valida_mantem_o_comportamento_atual(self):
+        futuro = compute_status_dimensions(
+            self._ativo(grife="PUKET", linx_synced_at=self.LIDO, linx_fim_licenciamento=date(2027, 1, 31)),
+            today=self.HOJE,
+        )
+        assert (futuro["license_status"], futuro["license_deadline"]) == ("VALIDO", "2027-01-31")
+        assert futuro["status_venda"] == "LIBERADA"
+        vencido = compute_status_dimensions(
+            self._ativo(grife="MINIONS", linx_synced_at=None, linx_fim_licenciamento=date(2026, 9, 17)),
+            today=self.HOJE,
+        )
+        assert (vencido["license_status"], vencido["license_deadline"]) == ("VENCIDO", "2026-09-17")
+        assert vencido["status_venda"] == "BLOQUEADA"
+
+    def test_guarda_estatica_coluna_inexistente_nao_e_a_unica_fonte(self):
+        """A coluna `licenciamento_aplicavel` nao existe em cert_products.
+
+        Se a derivacao voltar a depender SO dela, todo o catalogo volta a PENDENTE.
+        A guarda exige que o orquestrador leia as colunas reais.
+        """
+        import inspect
+
+        from app.db import postgres
+
+        fonte = inspect.getsource(derivation.compute_status_dimensions)
+        for coluna in ("grife", "linx_synced_at"):
+            assert f'"{coluna}"' in fonte, coluna
+            assert f'"{coluna}"' in inspect.getsource(postgres), coluna
+        assert '"licenciamento_aplicavel"' not in inspect.getsource(postgres)
+
+
+class TestEncerradoSemPrazoDeCertificacaoNaoLibera:
+    """Falso LIBERADA: a trava vinda SO do licenciamento escondia a falta do prazo.
+
+    `derive_status_venda` bloqueava o ENCERRADO sem evidencia de venda testando
+    `trava_venda is None`. Com licenciamento futuro a trava deixa de ser None —
+    mas ela nao diz nada sobre a CERTIFICACAO, que continua sem prazo final de
+    venda conhecido. Licenca valida nao autoriza vender produto regulado com o
+    certificado encerrado.
+    """
+
+    HOJE = date(2026, 9, 18)
+    EIXO_VENDA = ("status_venda", "status_venda_reason", "comercializacao_status", "within_sale_deadline")
+
+    def _encerrado(self, **overrides) -> dict:
+        row = {
+            "sku": "PI9999Y",
+            "situacao": "Encerrado",
+            "sheet_status": "18/03/2026 - Certificado encerrado.",
+            "last_validation_status": "OK",
+            "grife": "HARRY POTTER",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+        }
+        row.update(overrides)
+        return row
+
+    @pytest.mark.parametrize(
+        "certificacao",
+        [
+            {},  # sem data e sem veredito
+            {"encerramento_status": "", "sale_deadline": "", "sale_deadline_date": None},
+            {"encerramento_status": "a confirmar com o fornecedor"},  # veredito nao reconhecido
+            {"sale_deadline": "Vencido"},
+            {"sale_deadline": "Vencido", "sale_deadline_date": date(2030, 1, 1)},  # data velha no banco
+        ],
+    )
+    def test_licenciamento_futuro_nao_libera_encerrado_sem_prazo_de_certificacao(self, certificacao):
+        com_licenca = compute_status_dimensions(
+            self._encerrado(linx_fim_licenciamento=date(2030, 1, 1), **certificacao), today=self.HOJE
+        )
+        sem_licenca = compute_status_dimensions(
+            self._encerrado(grife="", **certificacao), today=self.HOJE
+        )
+        assert com_licenca["license_status"] == "VALIDO"
+        assert sem_licenca["license_status"] == "NAO_APLICAVEL"
+        assert com_licenca["status_venda"] == "BLOQUEADA"
+        assert com_licenca["comercializacao_status"] == "ENCERRADA"
+        # O criterio do pedido: mesmo resultado de quando nao ha licenciamento.
+        for campo in self.EIXO_VENDA:
+            assert com_licenca[campo] == sem_licenca[campo], campo
+
+    def test_prazo_de_certificacao_vigente_continua_liberando_com_licenca(self):
+        """A correcao nao pode bloquear quem TEM prazo de certificacao vigente."""
+        dims = compute_status_dimensions(
+            self._encerrado(
+                encerramento_status="Comerciação Permitida",
+                sale_deadline="02/03/2028",
+                sale_deadline_date=date(2028, 3, 2),
+                linx_fim_licenciamento=date(2026, 12, 31),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["trava_venda"] == "2026-12-31"
+        assert dims["trava_origem"] == "licenciamento"
+        assert dims["comercializacao_status"] == "DENTRO_PRAZO"
+
+    def test_veredito_permissivo_sem_data_continua_liberando_com_licenca(self):
+        """28 SKUs tem 'Comerciacao Permitida' SEM data (caso PI7560Y)."""
+        dims = compute_status_dimensions(
+            self._encerrado(
+                encerramento_status="Comerciação Permitida",
+                linx_fim_licenciamento=date(2030, 1, 1),
+            ),
+            today=self.HOJE,
+        )
+        assert dims["status_venda"] == "LIBERADA"
+
+    def test_funcao_pura_distingue_componente_de_certificacao(self):
+        trava = date(2030, 1, 1)
+        # Trava so de licenciamento, certificacao sem prazo → bloqueia.
+        assert (
+            derivation.derive_status_venda(
+                "ENCERRADO", trava, today=self.HOJE, prazo_certificacao_conhecido=False
+            )
+            == "BLOQUEADA"
+        )
+        assert (
+            derivation.derive_status_venda(
+                "ENCERRADO", trava, today=self.HOJE, prazo_certificacao_conhecido=True
+            )
+            == "LIBERADA"
+        )
+        # ATIVO nunca depende do componente de certificacao (R3).
+        assert (
+            derivation.derive_status_venda(
+                "ATIVO", trava, today=self.HOJE, prazo_certificacao_conhecido=False
+            )
+            == "LIBERADA"
+        )
+        # Chamador antigo (sem o parametro) mantem o comportamento anterior.
+        assert derivation.derive_status_venda("ENCERRADO", trava, today=self.HOJE) == "LIBERADA"
+        assert derivation.derive_status_venda("ENCERRADO", None, today=self.HOJE) == "BLOQUEADA"
+
+
+class TestSiteStatusEnxergaOLicenciamentoVencido:
+    """A docstring de `derive_site_status` promete NAO_CONFORME quando "o prazo de
+    certificacao/LICENCIAMENTO acabou" com o produto no site — e so a metade da
+    certificacao estava implementada: venda BLOQUEADA pela licenca saia CONFORME.
+    """
+
+    HOJE = date(2026, 9, 18)
+    ONTEM = date(2026, 9, 17)
+
+    def _encerrado_permitido(self, **overrides) -> dict:
+        row = {
+            "sku": "PI4511Y",
+            "situacao": "Encerrado",
+            "encerramento_status": "Comerciação Permitida",
+            "last_validation_status": "OK",
+            "grife": "HARRY POTTER",
+            "linx_synced_at": datetime(2026, 9, 18, 6, 0),
+            "linx_fim_licenciamento": self.ONTEM,
+        }
+        row.update(overrides)
+        return row
+
+    def test_encerrado_permitido_com_licenca_vencida_ontem_e_nao_conforme(self):
+        dims = compute_status_dimensions(self._encerrado_permitido(), today=self.HOJE)
+        assert dims["license_status"] == "VENCIDO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "NAO_CONFORME"
+        assert "icenciamento vencido" in dims["site_status_reason"]
+
+    def test_ativo_com_licenca_vencida_no_site_e_nao_conforme(self):
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(situacao="Ativo", encerramento_status=None), today=self.HOJE
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "NAO_CONFORME"
+
+    def test_licenca_vencida_fora_do_site_continua_conforme(self):
+        """Nao esta no site = nada a corrigir no site, como na certificacao."""
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(last_validation_status="URL_NOT_FOUND"), today=self.HOJE
+        )
+        assert dims["status_venda"] == "BLOQUEADA"
+        assert dims["site_status"] == "CONFORME"
+        assert dims["site_status_reason"] is None
+
+    def test_licenca_que_vence_hoje_ainda_e_conforme(self):
+        """R5: venda permitida ate o fim do dia limite."""
+        dims = compute_status_dimensions(
+            self._encerrado_permitido(linx_fim_licenciamento=self.HOJE), today=self.HOJE
+        )
+        assert dims["status_venda"] == "LIBERADA"
+        assert dims["site_status"] == "CONFORME"
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"linx_fim_licenciamento": None},  # licenciado sem data → PENDENTE
+            {"linx_fim_licenciamento": None, "linx_synced_at": None},  # Linx nao lido
+            {"linx_fim_licenciamento": None, "grife": ""},  # nao aplicavel
+        ],
+    )
+    def test_licenca_pendente_ou_nao_aplicavel_nao_derruba_o_site(self, extra):
+        dims = compute_status_dimensions(self._encerrado_permitido(**extra), today=self.HOJE)
+        assert dims["license_status"] in ("PENDENTE", "NAO_APLICAVEL")
+        assert dims["site_status"] == "CONFORME"
+
+    def test_funcao_pura_aceita_o_parametro_opcional(self):
+        args = ("OK", "ATIVO", "INMETRO", "INMETRO")
+        assert derive_site_status(*args) == ("CONFORME", None)
+        assert derive_site_status(*args, licenciamento_vencido=False) == ("CONFORME", None)
+        status, reason = derive_site_status(*args, licenciamento_vencido=True)
+        assert status == "NAO_CONFORME"
+        assert reason
+        assert derive_site_status(
+            "URL_NOT_FOUND", "ATIVO", "INMETRO", "INMETRO", licenciamento_vencido=True
+        ) == ("CONFORME", None)
+
+
+class TestSituacaoToleraDigitacao:
+    """A coluna U e digitada a mao: ponto final, espaco e caixa nao mudam o status.
+
+    "Ativo." caia em None e o produto ia para o fallback historico — que, sem
+    marcador claro, devolve ENCERRADO. Um ponto final encerrava o certificado.
+    """
+
+    @pytest.mark.parametrize(
+        ("situacao", "esperado"),
+        [
+            ("Ativo", "ATIVO"),
+            ("Ativo.", "ATIVO"),
+            (" ativo ", "ATIVO"),
+            ("ATIVA", "ATIVO"),
+            ("Ativa.", "ATIVO"),
+            ("ATIVO;", "ATIVO"),
+            ("Vigente.", "ATIVO"),
+            ("Ativo - em manutenção", "ATIVO"),
+            ("Encerrado", "ENCERRADO"),
+            ("Encerrado.", "ENCERRADO"),
+            (" ENCERRADA ", "ENCERRADO"),
+            ("SKU excluído.", "ENCERRADO"),
+            # Desconhecido continua None: quem decide e o fallback, nao um palpite.
+            ("", None),
+            (None, None),
+            (".", None),
+            ("xpto", None),
+            ("a confirmar", None),
+            ("Inativo", None),
+            ("Não ativo", None),
+            ("Reativo", None),
+            ("Ativou o cadastro", None),
+        ],
+    )
+    def test_situacao_normalizada(self, situacao, esperado):
+        assert derivation.derive_situacao_status(situacao) == esperado
+
+    def test_ponto_final_nao_encerra_certificado_ativo(self):
+        dims = compute_status_dimensions(
+            {"situacao": "Ativo.", "sheet_status": "", "last_validation_status": "OK"},
+            today=date(2026, 9, 18),
+        )
+        assert dims["cert_status"] == "ATIVO"
+        assert dims["cert_status_reason"] is None
 
 
 class TestGuardasEstaticas:

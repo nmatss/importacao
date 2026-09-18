@@ -17,13 +17,25 @@ def test_sale_window_does_not_reactivate_a_closed_certificate(deadline):
 
 
 @pytest.mark.parametrize("raw", [None, "", "0", 0, "1900-01-01", "nao e data"])
-def test_unknown_license_is_pending_and_never_automatically_released(raw):
+def test_unknown_license_is_pending_but_does_not_block_active_certificate(raw):
+    """Licenciamento desconhecido fica PENDENTE no SEU eixo e nao bloqueia a venda.
+
+    Este teste se chamava `test_unknown_license_is_pending_and_never_automatically_released`
+    e cimentava o contrario (status_venda=BLOQUEADA, comercializacao=PENDENTE). Mudou porque:
+    - medicao no Linx em 18/09/2026: ~95% dos SKUs certificados NAO sao licenciados
+      (Puket: grife "PUKET" em 381 de 397; Imaginarium: grife vazia em 276 de 277), entao
+      a regra antiga exibia falso bloqueio em quase todo o catalogo;
+    - regra R4 da reuniao de 11/09: data vazia/NULL/01-01-1900 NUNCA entra no minimo nem
+      bloqueia; e R8: "Linx nao lido" != "sem licenciamento" != "vencido".
+    A pendencia continua visivel em license_status + license_status_reason.
+    """
     result = compute_status_dimensions({"situacao": "Ativo", "linx_fim_licenciamento": raw}, today=TODAY)
     assert result["license_status"] == "PENDENTE"
-    assert result["status_venda"] == "BLOQUEADA"
-    assert result["comercializacao_status"] == "PENDENTE"
-    assert "Linx" in result["status_venda_reason"]
+    assert "Linx" in result["license_status_reason"]
     assert result["trava_venda"] is None
+    assert result["status_venda"] == "LIBERADA"
+    assert result["status_venda_reason"] is None
+    assert result["comercializacao_status"] == "LIBERADA"
 
 
 def test_known_license_non_applicability_is_distinct_from_unknown():
