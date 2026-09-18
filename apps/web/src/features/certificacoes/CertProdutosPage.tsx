@@ -200,6 +200,38 @@ const SYNC_TRIGGER_LABEL: Record<CertSyncRun['trigger'], string> = {
   hourly: 'automática (a cada hora)',
 };
 
+/** Quantos SKUs pendentes o aviso da última sincronização nomeia. */
+const MAX_SYNC_PENDENCIAS_SHOWN = 12;
+
+function sheetsSyncResult(run: CertSyncRun | null): Record<string, unknown> | null {
+  const sheets = run?.result?.sheets;
+  return sheets && typeof sheets === 'object' ? (sheets as Record<string, unknown>) : null;
+}
+
+/**
+ * Motivo REAL da falha da planilha. `error` da execução só diz "a planilha
+ * falhou"; a causa acionável (aba, cabeçalho, SKU) mora em `result.sheets.error`
+ * — de 12 a 18/09/2026 ela ficou fora da tela e ninguém soube o que corrigir.
+ */
+export function sheetsSyncCause(run: CertSyncRun | null): string | null {
+  const cause = sheetsSyncResult(run)?.error;
+  return typeof cause === 'string' && cause.trim() ? cause.trim().replace(/\.$/, '') : null;
+}
+
+/** SKUs que sincronizaram mas têm vínculo de certificado a conferir na planilha. */
+export function sheetsSyncPendencias(run: CertSyncRun | null): { total: number; skus: string[] } {
+  const sheets = sheetsSyncResult(run);
+  const list = Array.isArray(sheets?.pendencias) ? sheets.pendencias : [];
+  const skus = list
+    .map((item) => (item && typeof item === 'object' ? (item as { sku?: unknown }).sku : null))
+    .filter((sku): sku is string => typeof sku === 'string' && sku.length > 0);
+  const total = Number(sheets?.pendencias_total ?? skus.length);
+  return {
+    total: Number.isFinite(total) ? total : skus.length,
+    skus: skus.slice(0, MAX_SYNC_PENDENCIAS_SHOWN),
+  };
+}
+
 /**
  * Quebra o "Nº Certificado" (coluna P das abas) em linhas.
  * Alguns produtos recertificados trazem DOIS números separados por quebra de
@@ -272,6 +304,8 @@ export default function CertProdutosPage() {
   const [semGrife, setSemGrife] = useState(0);
   const [syncing, setSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<CertSyncRun | null>(null);
+  const syncCause = sheetsSyncCause(lastSync);
+  const syncPendencias = sheetsSyncPendencias(lastSync);
 
   const latestRequest = useRef(0);
 
@@ -738,8 +772,16 @@ export default function CertProdutosPage() {
               : ` (${SYNC_TRIGGER_LABEL[lastSync.trigger]})`}
             {lastSync.error && (
               <span className="ml-2 font-medium text-danger-600 dark:text-danger-300">
-                falhou — {lastSync.error}. Os produtos exibem os últimos dados salvos; esta
-                tentativa não confirmou a atualização das fontes.
+                falhou — {lastSync.error}.{syncCause ? ` Motivo: ${syncCause}.` : ''} Os produtos
+                exibem os últimos dados salvos; esta tentativa não confirmou a atualização das
+                fontes.
+              </span>
+            )}
+            {!lastSync.error && syncPendencias.total > 0 && (
+              <span className="mt-1 block font-medium text-amber-700 dark:text-amber-400">
+                {syncPendencias.total} SKU(s) sincronizado(s) com vínculo de certificado a conferir
+                na planilha: {syncPendencias.skus.join(', ')}
+                {syncPendencias.total > syncPendencias.skus.length ? '…' : ''}
               </span>
             )}
             {!lastSync.finished_at && !lastSync.error && (

@@ -74,6 +74,16 @@ _BRAND_CANONICAL = {
     "puket_escolares": "Puket Escolares",
 }
 
+# Motivos de pendencia por SKU devolvidos pelo sync do painel (`pendencias`).
+_PENDENCIA_VINCULO = "mais de um fornecedor/certificado para o mesmo SKU"
+_PENDENCIA_CERTIFICADO_DIVERGENTE = (
+    "certificado da aba da marca difere do de Encerramentos e nao ha linha ativa"
+)
+# Teto de SKUs nomeados numa mensagem de erro e de pendencias gravadas no
+# `result` do sync (jsonb de `cert_sync_runs`).
+_MAX_SKUS_NA_MENSAGEM = 20
+_MAX_PENDENCIAS_NO_RESULTADO = 200
+
 # EAN-13 (e variações de 12/14 dígitos) aparecem na coluna SKU da aba
 # "Encerramentos" — 5 linhas em 2026-08-07, todas Puket. Sem tradução elas
 # viram produtos fantasma no painel e no relatório.
@@ -301,7 +311,41 @@ def _linha_vigente(linhas: list[dict]) -> dict:
     return (ativas or linhas)[-1]
 
 
-def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool = False) -> list[dict]:
+def _vinculos_ambiguos(por_sku: dict[str, list[dict]]) -> list[dict]:
+    """SKUs cujas linhas candidatas apontam para mais de um fornecedor/certificado.
+
+    Candidatas sao as linhas U='Ativo' do SKU ou, sem nenhuma ativa, todas. Em
+    18/09/2026 eram 4 SKUs reais, todos com DOIS certificados encerrados e nenhum
+    ativo (PI4368Y, PI6014Y, 100400422, 100400423).
+
+    Returns:
+        Uma pendencia por SKU, com os certificados envolvidos, na ordem da planilha.
+    """
+    pendencias: list[dict] = []
+    for sku, linhas in por_sku.items():
+        ativas = [p for p in linhas if derive_situacao_status(p.get("situacao")) == "ATIVO"]
+        candidatas = ativas or linhas
+        identidades = {
+            (p.get("brand"), p.get("supplier"), _norm_certificado(p.get("numero_certificado")))
+            for p in candidatas
+        }
+        if len(identidades) > 1:
+            pendencias.append({
+                "sku": sku,
+                "motivo": _PENDENCIA_VINCULO,
+                "certificados": list(dict.fromkeys(
+                    _norm_certificado(p.get("numero_certificado")) for p in candidatas
+                )),
+            })
+    return pendencias
+
+
+def _read_ativos_from_sheets(
+    spreadsheet: gspread.Spreadsheet,
+    *,
+    strict: bool = False,
+    pendencias: list[dict] | None = None,
+) -> list[dict]:
     """Le o cadastro de certificacao das abas de produto ativo.
 
     Cobre "Imaginarium" e "Puket" (a aba "Puket escolares" foi abandonada — ver
@@ -310,6 +354,13 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool =
 
     A MARCA vem da ABA, nunca da coluna A: ver `_BRAND_CANONICAL` (caso
     100400496 / 'Kayuan').
+
+    Vinculo ambiguo (ver `_vinculos_ambiguos`) e problema de UM SKU, nao da
+    planilha. Com `pendencias` informado, o SKU entra na lista e segue pela
+    regra deterministica de `_linha_vigente`; o restante da planilha sincroniza.
+    Sem `pendencias` (preparacao da carga do Linx) a leitura continua recusando
+    tudo, mas nomeando os SKUs. De 12/09 a 18/09/2026 o `raise` sem essa
+    separacao derrubou 145 de 145 sincronizacoes do painel por causa de 4 SKUs.
 
     Returns:
         Lista de dicts de cadastro, UM POR SKU: linhas repetidas do mesmo SKU
@@ -368,12 +419,16 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool =
     for p in produtos:
         por_sku[p["sku"]].append(p)
     if strict:
-        for linhas in por_sku.values():
-            active = [p for p in linhas if derive_situacao_status(p.get("situacao")) == "ATIVO"]
-            candidates = active or linhas
-            identities = {(p.get("brand"), p.get("supplier"), _norm_certificado(p.get("numero_certificado"))) for p in candidates}
-            if len(identities) > 1:
-                raise ValueError("Vinculo de certificacao ambiguo; validar fornecedor e certificado antes da sincronizacao")
+        ambiguos = _vinculos_ambiguos(por_sku)
+        if ambiguos and pendencias is None:
+            skus = ", ".join(a["sku"] for a in ambiguos[:_MAX_SKUS_NA_MENSAGEM])
+            resto = len(ambiguos) - _MAX_SKUS_NA_MENSAGEM
+            raise ValueError(
+                "Vinculo de certificacao ambiguo; validar fornecedor e certificado antes da "
+                f"sincronizacao: {skus}" + (f" e mais {resto}" if resto > 0 else "")
+            )
+        if ambiguos:
+            pendencias.extend(ambiguos)
     vigentes = [_linha_vigente(linhas) for linhas in por_sku.values()]
     duplicados = len(produtos) - len(vigentes)
     if duplicados:
@@ -385,7 +440,9 @@ def _read_ativos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool =
     return vigentes
 
 
-def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict: bool = False) -> list[dict]:
+def _read_encerramentos_from_sheets(
+    spreadsheet: gspread.Spreadsheet, *, strict: bool = False, exigir_dupla: bool = True
+) -> list[dict]:
     """Le a aba "Encerramentos" — prazo final de venda e permissao de venda.
 
     A leitura e SEMPRE por CABECALHO, nunca por letra de coluna: em 09/2026 a
@@ -426,7 +483,12 @@ def _read_encerramentos_from_sheets(spreadsheet: gspread.Spreadsheet, *, strict:
     headers = rows[0]
     if strict:
         normalized = [str(header).strip().lower() for header in headers]
-        for required in ("sku", "certificado", "prazo final venda", "status", "dupla certificação?"):
+        # 'Dupla certificação?' e evidencia para a carga do Linx, nao fonte do
+        # painel: renomear essa coluna nao pode derrubar o sync de todo mundo.
+        obrigatorios = ("sku", "certificado", "prazo final venda", "status")
+        if exigir_dupla:
+            obrigatorios += ("dupla certificação?",)
+        for required in obrigatorios:
             if normalized.count(required) != 1:
                 raise ValueError(f"Esquema de Encerramentos invalido: {required}")
     if strict and not any(_cell(row, normalized.index("sku")) for row in rows[1:]):
@@ -692,23 +754,35 @@ def sync_sheets_to_db() -> dict:
         log.error(f"Failed to open spreadsheet: {e}")
         return {"synced": 0, "error": f"Failed to open spreadsheet: {e}"}
 
+    pendencias: list[dict] = []
     try:
-        ativos = _read_ativos_from_sheets(spreadsheet, strict=True)
-        encerramentos_lidos = _read_encerramentos_from_sheets(spreadsheet, strict=True)
+        ativos = _read_ativos_from_sheets(spreadsheet, strict=True, pendencias=pendencias)
+        encerramentos_lidos = _read_encerramentos_from_sheets(
+            spreadsheet, strict=True, exigir_dupla=False
+        )
     except ValueError as exc:
         return {"synced": 0, "error": str(exc)}
+    # Encerramento de certificado ANTIGO nao pode travar SKU com certificado
+    # ativo (dupla certificacao) — ver `resolver_encerramentos`. Esse caso esta
+    # DECIDIDO (reuniao 11/09, "vale o ativo") e nao e pendencia. Pendencia e o
+    # SKU SEM linha ativa cujo certificado na aba da marca nao e o de
+    # "Encerramentos": o prazo do encerramento continua valendo (lado
+    # conservador) e o SKU e listado para o time conferir.
+    encerramentos, historicos = resolver_encerramentos(ativos, encerramentos_lidos)
     por_sku = {p["sku"]: p for p in ativos}
-    for encerramento in encerramentos_lidos:
-        produto = por_sku.get(encerramento["sku"])
-        if not produto:
+    ja_pendentes = {p["sku"] for p in pendencias}
+    for e in encerramentos:
+        produto = por_sku.get(e["sku"])
+        if not produto or e["sku"] in ja_pendentes:
             continue
         atual = _norm_certificado(produto.get("numero_certificado"))
-        antigo = _norm_certificado(encerramento.get("numero_certificado"))
+        antigo = _norm_certificado(e.get("numero_certificado"))
         if atual and antigo and atual != antigo:
-            return {"synced": 0, "error": "Dupla certificacao exige validacao do vinculo por fornecedor e certificado; coluna N nao autoriza selecao automatica"}
-    # Encerramento de certificado ANTIGO nao pode travar SKU com certificado
-    # ativo (dupla certificacao) — ver `resolver_encerramentos`.
-    encerramentos, historicos = resolver_encerramentos(ativos, encerramentos_lidos)
+            pendencias.append({
+                "sku": e["sku"],
+                "motivo": _PENDENCIA_CERTIFICADO_DIVERGENTE,
+                "certificados": [atual, antigo],
+            })
     if not ativos and not encerramentos_lidos:
         return {"synced": 0, "error": "No products found or Sheets not configured"}
     if not DATABASE_URL:
@@ -773,6 +847,11 @@ def sync_sheets_to_db() -> dict:
             f"Sync sheets: {len(ativos)} ativos, {len(encerramentos)} encerramentos "
             f"aplicados ({len(historicos)} historicos), {limpos} SKUs sem encerramento limpos"
         )
+        if pendencias:
+            log.warning(
+                f"Sync sheets: {len(pendencias)} SKU(s) com vinculo de certificado a conferir: "
+                + ", ".join(p["sku"] for p in pendencias[:_MAX_SKUS_NA_MENSAGEM])
+            )
         return {
             "synced": total,
             "total_rows": total,
@@ -780,6 +859,8 @@ def sync_sheets_to_db() -> dict:
             "encerramentos": len(encerramentos),
             "encerramentos_limpos": limpos,
             "skus_dupla_certificacao": len({h["sku"] for h in historicos}),
+            "pendencias_total": len(pendencias),
+            "pendencias": pendencias[:_MAX_PENDENCIAS_NO_RESULTADO],
         }
     except Exception as e:
         log.error(f"Failed to sync sheets to DB: {e}")

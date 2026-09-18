@@ -108,7 +108,7 @@ def test_strict_sync_rejects_two_active_suppliers_for_same_sku():
     sheets = _FakeSpreadsheet(
         {"Imaginarium": [MARCA_HEADERS, row, other], "Puket": [MARCA_HEADERS, ["", "", "SKU-OTHER"]]}
     )
-    with pytest.raises(ValueError, match="Vinculo.*ambiguo"):
+    with pytest.raises(ValueError, match="Vinculo.*ambiguo.*050404509"):
         _read_ativos_from_sheets(sheets, strict=True)
 
 

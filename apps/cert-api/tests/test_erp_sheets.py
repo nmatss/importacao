@@ -65,6 +65,19 @@ class _FakeSpreadsheet:
         return _FakeWorksheet(self._tabs[name])
 
 
+def _linha_marca(sku, fornecedor, certificado, situacao):
+    linha = [""] * len(MARCA_HEADERS)
+    linha[2], linha[4], linha[5], linha[15], linha[20] = sku, fornecedor, "NOME", certificado, situacao
+    return linha
+
+
+def _linha_encerramento(sku, certificado, prazo="29/10/2026", status="Comerciação Permitida", marca="Imaginarium"):
+    linha = [""] * len(ENCERRAMENTOS_HEADERS)
+    linha[I_CERT], linha[I_SKU], linha[I_NOME] = certificado, sku, "NOME"
+    linha[I_PRAZO], linha[I_STATUS], linha[I_MARCA] = prazo, status, marca
+    return linha
+
+
 class TestFindColByHeader:
     def test_match_exato_vence_substring(self):
         """Na aba 'Puket escolares', 'certificado' casava com 'NOME COMERCIAL
@@ -512,9 +525,77 @@ class TestSyncSheetsToDb:
 
         result = erp_service.sync_sheets_to_db()
 
-        assert result["synced"] == 0
-        assert "Dupla certificacao" in result["error"]
-        cur.execute.assert_not_called()
+        # Caso DECIDIDO na reuniao de 11/09 ("vale o ativo"): sincroniza, nao e
+        # pendencia e o encerramento do certificado antigo fica como historico.
+        assert "error" not in result
+        assert result["ativos"] == 1
+        assert result["encerramentos"] == 0
+        assert result["skus_dupla_certificacao"] == 1
+        assert result["pendencias_total"] == 0
+        sqls = [c.args[0] for c in cur.execute.call_args_list]
+        assert any("INSERT INTO cert_products" in s and "situacao" in s for s in sqls)
+        assert not any("encerramento_status, is_expired" in s and "INSERT" in s for s in sqls)
+        params = [p for c in cur.execute.call_args_list if len(c.args) > 1 for p in c.args[1]]
+        assert "29/10/2026" not in params and "2026-10-29" not in params
+
+    def test_certificado_divergente_sem_linha_ativa_sincroniza_e_vira_pendencia(self, mocker):
+        """050403623 (18/09/2026): situacao vazia na aba da marca e outro certificado em Encerramentos."""
+        from app.services import erp_service
+
+        cur = self._mock_db(mocker)
+        mocker.patch.object(
+            erp_service, "_read_ativos_from_sheets",
+            return_value=[{"sku": "050403623", "name": "LANCHEIRA", "brand": "Puket",
+                           "certification_type": "INMETRO",
+                           "numero_certificado": "10584/2024-AE-2", "situacao": "",
+                           "sheet_status": "S", "ecommerce_description": "D",
+                           "validade_certificado": None, "validade_certificado_raw": ""}],
+        )
+        mocker.patch.object(
+            erp_service, "_read_encerramentos_from_sheets",
+            return_value=[{"sku": "050403623", "name": "N", "brand": "Puket",
+                            "numero_certificado": "9459/2023-AE-3",
+                            "sale_deadline": "21/08/2026",
+                            "sale_deadline_date": "2026-08-21",
+                            "encerramento_status": "Vencido - Venda Bloqueada",
+                            "is_expired": True}],
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert "error" not in result
+        # Lado conservador: sem linha ativa, o prazo do encerramento continua valendo.
+        assert result["encerramentos"] == 1
+        params = [p for c in cur.execute.call_args_list if len(c.args) > 1 for p in c.args[1]]
+        assert "2026-08-21" in params
+        assert result["pendencias_total"] == 1
+        assert result["pendencias"][0]["sku"] == "050403623"
+        assert result["pendencias"][0]["certificados"] == ["10584/2024-AE-2", "9459/2023-AE-3"]
+
+    def test_um_sku_ambiguo_nao_derruba_o_sync_dos_demais(self, mocker):
+        """Incidente 12-18/09/2026: 4 SKUs ambiguos zeraram 145 de 145 sincronizacoes."""
+        from app.services import erp_service
+
+        self._mock_db(mocker)
+        mocker.patch("app.services.erp_service._get_sheets_client").return_value.open_by_key.return_value = (
+            _FakeSpreadsheet({
+                "Imaginarium": [
+                    MARCA_HEADERS,
+                    _linha_marca("PI4368Y", "Hesen", "6544/2021-BRI", "Encerrado"),
+                    _linha_marca("PI4368Y", "Hesen", "6788/2021-BRI", "Encerrado"),
+                    _linha_marca("PI5558Y", "Moderna", "MODERNA-0200/22", "Ativo"),
+                ],
+                "Puket": [MARCA_HEADERS, _linha_marca("100400496", "Kayuan", "C-1", "Ativo")],
+                "Encerramentos": [ENCERRAMENTOS_HEADERS[:-1], _linha_encerramento("PI9999Y", "C-9")],
+            })
+        )
+
+        result = erp_service.sync_sheets_to_db()
+
+        assert "error" not in result
+        assert result["ativos"] == 3
+        assert [p["sku"] for p in result["pendencias"]] == ["PI4368Y"]
+        assert result["pendencias"][0]["certificados"] == ["6544/2021-BRI", "6788/2021-BRI"]
 
     def test_grava_a_validade_do_certificado(self, mocker):
         from app.services import erp_service

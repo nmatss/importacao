@@ -553,6 +553,54 @@ describe('CertProdutosPage — numero do certificado, grife e sync', () => {
     expect(screen.queryByText(/hourly/)).not.toBeInTheDocument();
   });
 
+  it('mostra o motivo real da falha da planilha, nao so o resumo da execucao', async () => {
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-18T10:20:00+00:00',
+        finished_at: '2026-09-18T10:20:10+00:00',
+        result: {
+          sheets: { synced: 0, error: 'Esquema de Encerramentos invalido: prazo final venda' },
+          linx: { skipped: true },
+        },
+        error: 'Sincronizacao da planilha falhou; etapa Linx nao executada',
+      },
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(/Motivo: Esquema de Encerramentos invalido: prazo final venda\./),
+    ).toBeInTheDocument();
+  });
+
+  it('lista os SKUs com vinculo de certificado a conferir quando o sync passa', async () => {
+    mockedLastSync.mockResolvedValue({
+      last_run: {
+        id: 'r1',
+        trigger: 'hourly',
+        actor: null,
+        started_at: '2026-09-18T10:20:00+00:00',
+        finished_at: '2026-09-18T10:20:10+00:00',
+        result: {
+          sheets: {
+            synced: 947,
+            pendencias_total: 2,
+            pendencias: [{ sku: 'PI4368Y' }, { sku: '050403623' }],
+          },
+        },
+        error: null,
+      },
+    });
+    renderPage();
+
+    expect(
+      await screen.findByText(/2 SKU\(s\) sincronizado\(s\).*PI4368Y, 050403623/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/falhou/)).not.toBeInTheDocument();
+  });
+
   it('nao esconde a lista quando a ultima sincronizacao falha ao carregar', async () => {
     mockedLastSync.mockRejectedValue(new Error('Erro na API: 503'));
     renderPage();
